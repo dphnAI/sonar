@@ -168,6 +168,12 @@ TORCH_LIBRARY_EXPAND(TORCH_EXTENSION_NAME, ops) {
   ops.def("silu_and_mul(Tensor! result, Tensor input) -> ()");
   ops.impl("silu_and_mul", torch::kCUDA, &silu_and_mul);
 
+  // SwiGLU activation with input clamping.
+  ops.def(
+      "silu_and_mul_with_clamp(Tensor! result, Tensor input, float limit) "
+      "-> ()");
+  ops.impl("silu_and_mul_with_clamp", torch::kCUDA, &silu_and_mul_clamp);
+
   ops.def("silu_mul(Tensor! result, Tensor gate, Tensor up) -> ()");
   ops.impl("silu_mul", torch::kCUDA, &silu_mul);
 

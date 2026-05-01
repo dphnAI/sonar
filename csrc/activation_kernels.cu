@@ -11,29 +11,74 @@
 namespace aphrodite {
 
 template <typename scalar_t, scalar_t (*ACT_FN)(const scalar_t&),
-          bool act_first>
+          bool act_first, bool HAS_CLAMP>
 __device__ __forceinline__ scalar_t compute(const scalar_t& x,
-                                            const scalar_t& y) {
-  return act_first ? ACT_FN(x) * y : x * ACT_FN(y);
+                                            const scalar_t& y,
+                                            const float limit) {
+  if constexpr (act_first) {
+    scalar_t gate = x;
+    scalar_t up = y;
+    if constexpr (HAS_CLAMP) {
+      gate = (scalar_t)fminf((float)gate, limit);
+      up = (scalar_t)fmaxf(fminf((float)up, limit), -limit);
+    }
+    return ACT_FN(gate) * up;
+  } else {
+    scalar_t gate = x;
+    scalar_t up = y;
+    if constexpr (HAS_CLAMP) {
+      gate = (scalar_t)fmaxf(fminf((float)gate, limit), -limit);
+      up = (scalar_t)fminf((float)up, limit);
+    }
+    return gate * ACT_FN(up);
+  }
 }
 
 template <typename packed_t, packed_t (*PACKED_ACT_FN)(const packed_t&),
-          bool act_first>
+          bool act_first, bool HAS_CLAMP>
 __device__ __forceinline__ packed_t packed_compute(const packed_t& x,
-                                                   const packed_t& y) {
-  return act_first ? packed_mul(PACKED_ACT_FN(x), y)
-                   : packed_mul(x, PACKED_ACT_FN(y));
+                                                   const packed_t& y,
+                                                   const float limit) {
+  if constexpr (act_first) {
+    packed_t gate = x;
+    packed_t up = y;
+    if constexpr (HAS_CLAMP) {
+      float2 g = cast_to_float2(gate);
+      float2 u = cast_to_float2(up);
+      g.x = fminf(g.x, limit);
+      g.y = fminf(g.y, limit);
+      u.x = fmaxf(fminf(u.x, limit), -limit);
+      u.y = fmaxf(fminf(u.y, limit), -limit);
+      gate = cast_to_packed<packed_t>(g);
+      up = cast_to_packed<packed_t>(u);
+    }
+    return packed_mul(PACKED_ACT_FN(gate), up);
+  } else {
+    packed_t gate = x;
+    packed_t up = y;
+    if constexpr (HAS_CLAMP) {
+      float2 g = cast_to_float2(gate);
+      float2 u = cast_to_float2(up);
+      g.x = fmaxf(fminf(g.x, limit), -limit);
+      g.y = fmaxf(fminf(g.y, limit), -limit);
+      u.x = fminf(u.x, limit);
+      u.y = fminf(u.y, limit);
+      gate = cast_to_packed<packed_t>(g);
+      up = cast_to_packed<packed_t>(u);
+    }
+    return packed_mul(gate, PACKED_ACT_FN(up));
+  }
 }
 
 // Activation and gating kernel template.
 template <typename scalar_t, typename packed_t,
           scalar_t (*ACT_FN)(const scalar_t&),
           packed_t (*PACKED_ACT_FN)(const packed_t&), bool act_first,
-          bool use_vec, bool use_256b = false>
+          bool use_vec, bool HAS_CLAMP, bool use_256b = false>
 __global__ void act_and_mul_kernel(
     scalar_t* __restrict__ out,          // [..., d]
     const scalar_t* __restrict__ input,  // [..., 2, d]
-    const int d) {
+    const int d, const float limit) {
   const scalar_t* x_ptr = input + blockIdx.x * 2 * d;
   const scalar_t* y_ptr = x_ptr + d;
   scalar_t* out_ptr = out + blockIdx.x * d;
@@ -58,8 +103,9 @@ __global__ void act_and_mul_kernel(
       }
 #pragma unroll
       for (int j = 0; j < pvec_t::NUM_ELTS; j++) {
-        x.elts[j] = packed_compute<packed_t, PACKED_ACT_FN, act_first>(
-            x.elts[j], y.elts[j]);
+        x.elts[j] =
+            packed_compute<packed_t, PACKED_ACT_FN, act_first, HAS_CLAMP>(
+                x.elts[j], y.elts[j], limit);
       }
       if constexpr (use_256b) {
         st256(x, &out_vec[i]);
@@ -72,7 +118,8 @@ __global__ void act_and_mul_kernel(
     for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
       const scalar_t x = APHRODITE_LDG(&x_ptr[idx]);
       const scalar_t y = APHRODITE_LDG(&y_ptr[idx]);
-      out_ptr[idx] = compute<scalar_t, ACT_FN, act_first>(x, y);
+      out_ptr[idx] =
+          compute<scalar_t, ACT_FN, act_first, HAS_CLAMP>(x, y, limit);
     }
   }
 }
@@ -176,8 +223,11 @@ packed_gelu_tanh_kernel(const packed_t& val) {
 
 // Launch activation and gating kernel.
 // Use ACT_FIRST (bool) indicating whether to apply the activation function
-// first.
-#define LAUNCH_ACTIVATION_GATE_KERNEL(KERNEL, PACKED_KERNEL, ACT_FIRST)        \
+// first. HAS_CLAMP (bool) enables pre-activation clamping: gate input is
+// clamped (max only) and up input is clamped (both sides) before the
+// activation function is applied.
+#define LAUNCH_ACTIVATION_GATE_KERNEL(KERNEL, PACKED_KERNEL, ACT_FIRST,        \
+                                      HAS_CLAMP, LIMIT)                        \
   auto dtype = input.scalar_type();                                            \
   int d = input.size(-1) / 2;                                                  \
   int64_t num_tokens = input.numel() / input.size(-1);                         \
@@ -203,8 +253,8 @@ packed_gelu_tanh_kernel(const packed_t& val) {
             KERNEL<scalar_t>,                                                  \
             PACKED_KERNEL<                                                     \
                 typename aphrodite::PackedTypeConverter<scalar_t>::Type>,      \
-            ACT_FIRST, true, true><<<grid, block, 0, stream>>>(                \
-            out.data_ptr<scalar_t>(), input.data_ptr<scalar_t>(), d);          \
+            ACT_FIRST, true, HAS_CLAMP, true><<<grid, block, 0, stream>>>(     \
+            out.data_ptr<scalar_t>(), input.data_ptr<scalar_t>(), d, LIMIT);   \
       });                                                                      \
     } else {                                                                   \
       APHRODITE_DISPATCH_FLOATING_TYPES(dtype, "act_and_mul_kernel", [&] {     \
@@ -213,8 +263,8 @@ packed_gelu_tanh_kernel(const packed_t& val) {
             KERNEL<scalar_t>,                                                  \
             PACKED_KERNEL<                                                     \
                 typename aphrodite::PackedTypeConverter<scalar_t>::Type>,      \
-            ACT_FIRST, true, false><<<grid, block, 0, stream>>>(               \
-            out.data_ptr<scalar_t>(), input.data_ptr<scalar_t>(), d);          \
+            ACT_FIRST, true, HAS_CLAMP, false><<<grid, block, 0, stream>>>(    \
+            out.data_ptr<scalar_t>(), input.data_ptr<scalar_t>(), d, LIMIT);   \
       });                                                                      \
     }                                                                          \
   } else {                                                                     \
@@ -225,16 +275,24 @@ packed_gelu_tanh_kernel(const packed_t& val) {
           KERNEL<scalar_t>,                                                    \
           PACKED_KERNEL<                                                       \
               typename aphrodite::PackedTypeConverter<scalar_t>::Type>,        \
-          ACT_FIRST, false><<<grid, block, 0, stream>>>(                       \
-          out.data_ptr<scalar_t>(), input.data_ptr<scalar_t>(), d);            \
+          ACT_FIRST, false, HAS_CLAMP><<<grid, block, 0, stream>>>(            \
+          out.data_ptr<scalar_t>(), input.data_ptr<scalar_t>(), d, LIMIT);     \
     });                                                                        \
   }
 
 void silu_and_mul(torch::Tensor& out,    // [..., d]
                   torch::Tensor& input)  // [..., 2 * d]
 {
+  LAUNCH_ACTIVATION_GATE_KERNEL(
+      aphrodite::silu_kernel, aphrodite::packed_silu_kernel, true, false, 0.0f);
+}
+
+void silu_and_mul_clamp(torch::Tensor& out,    // [..., d]
+                        torch::Tensor& input,  // [..., 2 * d]
+                        double limit) {
   LAUNCH_ACTIVATION_GATE_KERNEL(aphrodite::silu_kernel,
-                                aphrodite::packed_silu_kernel, true);
+                                aphrodite::packed_silu_kernel, true, true,
+                                (float)limit);
 }
 
 void mul_and_silu(torch::Tensor& out,    // [..., d]
@@ -243,7 +301,8 @@ void mul_and_silu(torch::Tensor& out,    // [..., d]
   // The difference between mul_and_silu and silu_and_mul is that mul_and_silu
   // applies the silu to the latter half of the input.
   LAUNCH_ACTIVATION_GATE_KERNEL(aphrodite::silu_kernel,
-                                aphrodite::packed_silu_kernel, false);
+                                aphrodite::packed_silu_kernel, false, false,
+                                0.0f);
 }
 
 void silu_mul(torch::Tensor& out, torch::Tensor const& gate,
@@ -304,15 +363,16 @@ void make_gate_up_indices(torch::Tensor& out, torch::Tensor const& indices,
 void gelu_and_mul(torch::Tensor& out,    // [..., d]
                   torch::Tensor& input)  // [..., 2 * d]
 {
-  LAUNCH_ACTIVATION_GATE_KERNEL(aphrodite::gelu_kernel,
-                                aphrodite::packed_gelu_kernel, true);
+  LAUNCH_ACTIVATION_GATE_KERNEL(
+      aphrodite::gelu_kernel, aphrodite::packed_gelu_kernel, true, false, 0.0f);
 }
 
 void gelu_tanh_and_mul(torch::Tensor& out,    // [..., d]
                        torch::Tensor& input)  // [..., 2 * d]
 {
   LAUNCH_ACTIVATION_GATE_KERNEL(aphrodite::gelu_tanh_kernel,
-                                aphrodite::packed_gelu_tanh_kernel, true);
+                                aphrodite::packed_gelu_tanh_kernel, true, false,
+                                0.0f);
 }
 
 namespace aphrodite {

@@ -259,6 +259,8 @@ void rotary_embedding(torch::Tensor& positions, torch::Tensor& query,
 
 void silu_and_mul(torch::Tensor& out, torch::Tensor& input);
 
+void silu_and_mul_clamp(torch::Tensor& out, torch::Tensor& input, double limit);
+
 void silu_mul(torch::Tensor& out, torch::Tensor const& gate,
               torch::Tensor const& up);
 
