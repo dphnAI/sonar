@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-
 import torch
 
 import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
@@ -16,9 +15,7 @@ from aphrodite.model_executor.layers.fused_moe.config import (
     FusedMoEQuantConfig,
     RoutingMethodType,
 )
-from aphrodite.model_executor.layers.fused_moe.lora_experts_mixin import (
-    LoRAExpertsMixin,
-)
+from aphrodite.model_executor.layers.fused_moe.lora_experts_mixin import LoRAExpertsMixin
 from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )

@@ -58,17 +58,13 @@ class DeepSeekV32ToolParser(ToolParser):
         self.current_tool_index: int = 0
         self._sent_content_idx: int = 0
 
-        # Regex patterns for complete parsing.
-        #
-        # The wrapper tokens are class attributes so subclasses such as
-        # DeepSeekV4ToolParser can override them.
+        # Regex patterns for complete parsing
         self.tool_call_complete_regex = re.compile(
             re.escape(self.tool_call_start_token) + r"(.*?)" + re.escape(self.tool_call_end_token),
             re.DOTALL,
         )
         self.invoke_complete_regex = re.compile(
-            r'<｜DSML｜invoke\s+name="([^"]+)"\s*>(.*?)</｜DSML｜invoke>',
-            re.DOTALL,
+            r'<｜DSML｜invoke\s+name="([^"]+)"\s*>(.*?)</｜DSML｜invoke>', re.DOTALL
         )
         self.parameter_complete_regex = re.compile(
             r'<｜DSML｜parameter\s+name="([^"]+)"\s+string="(?:true|false)"\s*>(.*?)</｜DSML｜parameter>',
@@ -87,7 +83,7 @@ class DeepSeekV32ToolParser(ToolParser):
         if request.tools and request.tool_choice != "none":
             # Ensure tool call tokens
             # (e.g. <｜DSML｜function_calls>, </｜DSML｜function_calls>)
-            # are not skipped during decoding.
+            # are not skippedduring decoding.
             # Even though they are not marked as special tokens,
             # setting skip_special_tokens=False ensures proper handling in
             # transformers 5.x where decoding behavior may have changed.
@@ -98,8 +94,8 @@ class DeepSeekV32ToolParser(ToolParser):
         """Generate a unique tool call ID."""
         return f"call_{uuid.uuid4().hex[:24]}"
 
-    def _parse_invoke_params(self, invoke_str: str) -> dict[str, str]:
-        param_dict: dict[str, str] = {}
+    def _parse_invoke_params(self, invoke_str: str) -> dict:
+        param_dict = dict()
         for param_name, param_val in self.parameter_complete_regex.findall(invoke_str):
             param_dict[param_name] = param_val
         return param_dict
@@ -127,11 +123,8 @@ class DeepSeekV32ToolParser(ToolParser):
         else:
             return json.loads(value)
 
-    def _convert_param_value(self, value: Any, param_type: str | list[str]) -> Any:
+    def _convert_param_value(self, value: str, param_type: str | list[str]) -> Any:
         """Convert parameter value to the correct type."""
-        if not isinstance(value, str):
-            return value
-
         if not isinstance(param_type, list):
             param_type = [param_type]
         for current_type in param_type:
@@ -141,45 +134,6 @@ class DeepSeekV32ToolParser(ToolParser):
                 continue
         # return value as fallback
         return value
-
-    def _normalize_arguments_wrapper(
-        self,
-        converted: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Normalize model-generated nested arguments wrapper.
-
-        DeepSeek V4 Flash may generate DSML parameters like:
-
-            <｜DSML｜parameter name="arguments" string="false">
-            {"path": "/tmp/a", "content": "hello"}
-            </｜DSML｜parameter>
-
-        The parser would otherwise produce:
-
-            {"arguments": {"path": "/tmp/a", "content": "hello"}}
-
-        OpenAI-compatible function.arguments should be:
-
-            {"path": "/tmp/a", "content": "hello"}
-        """
-        if set(converted.keys()) != {"arguments"}:
-            return converted
-
-        wrapped = converted.get("arguments")
-
-        if isinstance(wrapped, dict):
-            return wrapped
-
-        if isinstance(wrapped, str):
-            try:
-                parsed = json.loads(wrapped)
-            except Exception:
-                return converted
-
-            if isinstance(parsed, dict):
-                return parsed
-
-        return converted
 
     def _convert_params_with_schema(
         self,
@@ -206,8 +160,7 @@ class DeepSeekV32ToolParser(ToolParser):
             if name in param_config and isinstance(param_config[name], dict):
                 param_type = param_config[name].get("type", "string")
             converted[name] = self._convert_param_value(value, param_type)
-
-        return self._normalize_arguments_wrapper(converted)
+        return converted
 
     def extract_tool_calls(
         self,
@@ -227,16 +180,13 @@ class DeepSeekV32ToolParser(ToolParser):
                 # Find all invokes within this tool_call
                 for invoke_name, invoke_content in self.invoke_complete_regex.findall(tool_call_match):
                     param_dict = self._parse_invoke_params(invoke_content)
-                    converted = self._convert_params_with_schema(
-                        invoke_name,
-                        param_dict,
-                    )
+                    params = self._convert_params_with_schema(invoke_name, param_dict)
                     tool_calls.append(
                         ToolCall(
                             type="function",
                             function=FunctionCall(
                                 name=invoke_name,
-                                arguments=json.dumps(converted, ensure_ascii=False),
+                                arguments=json.dumps(params, ensure_ascii=False),
                             ),
                         )
                     )
@@ -300,29 +250,15 @@ class DeepSeekV32ToolParser(ToolParser):
 
         return delta_tool_calls
 
-    def _extract_content(
-        self,
-        current_text: str,
-        *,
-        is_final: bool = False,
-    ) -> str | None:
+    def _extract_content(self, current_text: str) -> str | None:
         """Return unsent non-tool-call text, or None.
 
         Holds back any suffix that could be a partial start marker
         so that split markers are never leaked as content.
-
-        On final streaming step, flush the held-back suffix because it
-        cannot form a complete tool-call start marker anymore.
         """
         if self.tool_call_start_token not in current_text:
-            if is_final:
-                sendable_idx = len(current_text)
-            else:
-                overlap = partial_tag_overlap(
-                    current_text,
-                    self.tool_call_start_token,
-                )
-                sendable_idx = len(current_text) - overlap
+            overlap = partial_tag_overlap(current_text, self.tool_call_start_token)
+            sendable_idx = len(current_text) - overlap
         else:
             sendable_idx = current_text.index(self.tool_call_start_token)
 
@@ -353,11 +289,7 @@ class DeepSeekV32ToolParser(ToolParser):
         if not previous_text:
             self._reset_streaming_state()
 
-        # Empty delta with token ids means EOS or a skipped/closing token.
-        # Treat it as final for content flushing purposes.
-        is_final = not delta_text and bool(delta_token_ids)
-
-        content = self._extract_content(current_text, is_final=is_final)
+        content = self._extract_content(current_text)
         delta_tool_calls = self._extract_delta_tool_calls(current_text, request)
 
         if delta_tool_calls or content:
@@ -365,7 +297,7 @@ class DeepSeekV32ToolParser(ToolParser):
 
         # Empty delta with token ids means EOS or closing tag; return
         # non-None so the serving framework can finalize finish_reason.
-        if is_final and self.prev_tool_call_arr:
+        if not delta_text and delta_token_ids and self.prev_tool_call_arr:
             return DeltaMessage(content="")
 
         return None

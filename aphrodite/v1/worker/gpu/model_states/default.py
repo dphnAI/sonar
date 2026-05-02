@@ -67,9 +67,7 @@ class DefaultModelState(ModelState):
             supports_realtime,
             supports_transcription,
         )
-        from aphrodite.model_executor.models.interfaces_base import (
-            is_text_generation_model,
-        )
+        from aphrodite.model_executor.models.interfaces_base import is_text_generation_model
 
         supported_tasks = list[GenerationTask]()
 

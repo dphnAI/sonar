@@ -37,7 +37,10 @@ class StructuredOutputManager:
 
     def __init__(self, aphrodite_config: AphroditeConfig):
         self.backend: StructuredOutputBackend | None = None
-        self.reasoner: ReasoningParser | None = None
+        # We only store the class of the reasoner in the manager.
+        # The parser instance is request-scoped because some reasoning parsers
+        # depend on per-request chat-template kwargs.
+        self.reasoner_cls: type[ReasoningParser] | None = None
         self.aphrodite_config = aphrodite_config
 
         # When in external_launcher mode, async grammar compilation causes deadlocks
@@ -78,10 +81,24 @@ class StructuredOutputManager:
 
             reasoning_parser = self.aphrodite_config.structured_outputs_config.reasoning_parser
             if reasoning_parser:
-                reasoner_cls = ReasoningParserManager.get_reasoning_parser(reasoning_parser)
-                self.reasoner = reasoner_cls(tokenizer=self.tokenizer)
+                self.reasoner_cls = ReasoningParserManager.get_reasoning_parser(reasoning_parser)
 
         self.enable_in_reasoning = self.aphrodite_config.structured_outputs_config.enable_in_reasoning
+
+    def _get_reasoner(self, request: "Request") -> "ReasoningParser | None":
+        structured_req = request.structured_output_request
+        if structured_req is None or self.reasoner_cls is None:
+            return None
+
+        if structured_req.reasoner is None:
+            # Lazily build the request-local parser so the structured-output
+            # gate observes the same template kwargs used by the frontend.
+            parser_kwargs = structured_req.reasoning_parser_kwargs or {}
+            structured_req.reasoner = self.reasoner_cls(
+                tokenizer=self.tokenizer,
+                **parser_kwargs,
+            )
+        return structured_req.reasoner
 
     def grammar_init(self, request: "Request") -> None:
         if request.structured_output_request is None:
@@ -260,7 +277,8 @@ class StructuredOutputManager:
         # NOTE (Hanchen) if enable_in_reasoning is True, it means that
         # the model needs to be constrained in reasoning. So we should always
         # enable the bitmask filling.
-        if self.reasoner is not None:
+        reasoner = self._get_reasoner(request)
+        if reasoner is not None:
             if self.enable_in_reasoning:
                 return True
             assert request.structured_output_request is not None
@@ -269,7 +287,7 @@ class StructuredOutputManager:
                 # is an independent code path, it is kept for now.
                 # After unifying the `openai_gptoss` and non-`openai_gptoss` styles,
                 # it can be removed.
-                request.structured_output_request.reasoning_ended = self.reasoner.is_reasoning_end(
+                request.structured_output_request.reasoning_ended = reasoner.is_reasoning_end(
                     request.prompt_token_ids or []
                 )
             return request.structured_output_request.reasoning_ended
@@ -286,7 +304,8 @@ class StructuredOutputManager:
             assert request.structured_output_request.grammar is not None
         # by default, we should always advance
         # for cases that don't use thinking mode.
-        if self.reasoner is None:
+        reasoner = self._get_reasoner(request)
+        if reasoner is None:
             return True
 
         # if the model needs structured in reasoning, we should advance
@@ -301,7 +320,7 @@ class StructuredOutputManager:
         delta_from = request.num_computed_tokens - request.num_output_placeholders
         all_token_ids = request.all_token_ids
         start = delta_from if delta_from >= 0 else max(len(all_token_ids) + delta_from, 0)
-        if self.reasoner.is_reasoning_end_streaming(all_token_ids, itertools.islice(all_token_ids, start, None)):
+        if reasoner.is_reasoning_end_streaming(all_token_ids, itertools.islice(all_token_ids, start, None)):
             # Reasoning just ended, so we shouldn't advance til
             # next pass
             structured_req.reasoning_ended = True

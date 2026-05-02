@@ -5,7 +5,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from aphrodite.logger import init_logger
-from aphrodite.v1.kv_offload.spec import OffloadingSpec
+from aphrodite.v1.kv_offload.base import OffloadingSpec
 
 if TYPE_CHECKING:
     from aphrodite.config import AphroditeConfig

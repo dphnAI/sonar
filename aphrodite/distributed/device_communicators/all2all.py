@@ -10,7 +10,6 @@ import aphrodite.envs as envs
 from aphrodite.distributed import get_dp_group, get_ep_group
 from aphrodite.forward_context import get_forward_context
 from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
 from aphrodite.utils.flashinfer import (
     has_flashinfer_nvlink_one_sided,
     has_flashinfer_nvlink_two_sided,
@@ -218,11 +217,8 @@ class DeepEPHTAll2AllManager(DeepEPAll2AllManagerBase):
             num_rdma_bytes=num_rdma_bytes,
             low_latency_mode=False,
             num_qps_per_rank=num_qps_per_rank,
+            explicitly_destroy=True,
         )
-        if not current_platform.is_rocm():
-            kwargs.update(
-                explicitly_destroy=True,
-            )
         return kwargs
 
     def get_handle(self, kwargs):
@@ -293,13 +289,10 @@ class DeepEPLLAll2AllManager(DeepEPAll2AllManagerBase):
             num_rdma_bytes=num_rdma_bytes,
             low_latency_mode=True,
             num_qps_per_rank=num_qps_per_rank,
+            allow_nvlink_for_low_latency_mode=True,
+            allow_mnnvl=envs.APHRODITE_DEEPEP_LOW_LATENCY_USE_MNNVL,
+            explicitly_destroy=True,
         )
-        if not current_platform.is_rocm():
-            kwargs.update(
-                allow_nvlink_for_low_latency_mode=True,
-                allow_mnnvl=envs.APHRODITE_DEEPEP_LOW_LATENCY_USE_MNNVL,
-                explicitly_destroy=True,
-            )
         return kwargs
 
     def get_handle(self, kwargs):
@@ -552,6 +545,8 @@ class FlashInferNVLinkOneSidedManager(All2AllManagerBase):
         top_k: int,
         num_experts: int,
         hidden_size: int,
+        dispatch_dtype_bytes_per_elem: int = 0,
+        dispatch_scale_bytes_per_token: int = 0,
     ):
         """Initialize the MoeAlltoAll workspace."""
         if self.initialized:
@@ -582,9 +577,13 @@ class FlashInferNVLinkOneSidedManager(All2AllManagerBase):
         ep_config = MnnvlConfig(
             comm_backend=CustomCommunicator(self.cpu_group),
         )
+        if dispatch_dtype_bytes_per_elem == 0:
+            hidden_bytes = hidden_size // 2
+        else:
+            hidden_bytes = hidden_size * dispatch_dtype_bytes_per_elem
         total_dispatch_payload_size_per_token = (
-            hidden_size // 2  # nvfp4 hidden states
-            + hidden_size // 16  # fp8 scaling factors
+            hidden_bytes
+            + dispatch_scale_bytes_per_token
             + top_k * 4  # int32 topks ids
             + top_k * 4  # float32 topk weights
         )

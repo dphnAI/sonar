@@ -83,14 +83,20 @@ def _mxfp8_e4m3_quantize_torch(
 
 
 def _mxfp8_e4m3_quantize_impl(
-    x: torch.Tensor, is_sf_swizzled_layout: bool = False
+    x: torch.Tensor,
+    is_sf_swizzled_layout: bool = False,
+    alignment: int = 0,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     from aphrodite.platforms import current_platform
 
     if current_platform.has_device_capability(100):
         from flashinfer import mxfp8_quantize as flashinfer_mxfp8_quantize
 
-        x_q, x_scales = flashinfer_mxfp8_quantize(x, is_sf_swizzled_layout=is_sf_swizzled_layout)
+        x_q, x_scales = flashinfer_mxfp8_quantize(
+            x,
+            is_sf_swizzled_layout=is_sf_swizzled_layout,
+            alignment=alignment if alignment > 0 else 32,
+        )
         if x_scales.ndim == 1 and x.ndim == 2 and not is_sf_swizzled_layout:
             x_scales = x_scales.view(x.size(0), -1)
         return x_q, x_scales
@@ -98,8 +104,12 @@ def _mxfp8_e4m3_quantize_impl(
     return _mxfp8_e4m3_quantize_torch(x, is_sf_swizzled_layout)
 
 
-def mxfp8_e4m3_quantize(x: torch.Tensor, is_sf_swizzled_layout: bool = False) -> tuple[torch.Tensor, torch.Tensor]:
-    return torch.ops.aphrodite.mxfp8_quantize(x, is_sf_swizzled_layout)
+def mxfp8_e4m3_quantize(
+    x: torch.Tensor,
+    is_sf_swizzled_layout: bool = False,
+    alignment: int = 0,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    return torch.ops.aphrodite.mxfp8_quantize(x, is_sf_swizzled_layout, alignment)
 
 
 def dequant_mxfp8_to_bf16(x: torch.Tensor, scales: torch.Tensor) -> torch.Tensor:
@@ -118,7 +128,11 @@ def dequant_mxfp8_to_bf16(x: torch.Tensor, scales: torch.Tensor) -> torch.Tensor
     return dequantized.to(torch.bfloat16)
 
 
-def mxfp8_e4m3_quantize_fake(x: torch.Tensor, is_sf_swizzled_layout: bool = False) -> tuple[torch.Tensor, torch.Tensor]:
+def mxfp8_e4m3_quantize_fake(
+    x: torch.Tensor,
+    is_sf_swizzled_layout: bool = False,
+    alignment: int = 0,
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Fake implementation for torch.compile tracing."""
     fp_data = torch.empty_like(x, dtype=MXFP8_VALUE_DTYPE)
 

@@ -267,16 +267,20 @@ class RejectionSampler(nn.Module):
     ) -> torch.Tensor:
         has_penalties = not sampling_metadata.no_penalties
         any_penalties_or_bad_words = sampling_metadata.bad_words_token_ids or has_penalties
+        holder = sampling_metadata.thinking_budget_state_holder
+        needs_thinking = holder is not None and holder.has_tracked_requests()
 
         output_token_ids = sampling_metadata.output_token_ids
-        if any_penalties_or_bad_words:
+        if any_penalties_or_bad_words or needs_thinking:
             output_token_ids = self._combine_outputs_with_spec_tokens(
                 output_token_ids,
                 sampling_metadata.spec_token_ids,
             )
 
         # Calculate indices of target logits.
-        if sampling_metadata.allowed_token_ids_mask is not None or has_penalties:
+        repeat_indices: torch.Tensor | None = None
+        need_repeat_indices = sampling_metadata.allowed_token_ids_mask is not None or has_penalties or needs_thinking
+        if need_repeat_indices:
             num_requests = len(sampling_metadata.output_token_ids)
             num_draft_tokens = torch.tensor(metadata.num_draft_tokens, device="cpu")
             original_indices = torch.arange(num_requests, device="cpu")
@@ -292,7 +296,12 @@ class RejectionSampler(nn.Module):
         # Apply bad words exclusion.
         if bad_words_token_ids := sampling_metadata.bad_words_token_ids:
             apply_bad_words_with_drafts(logits, bad_words_token_ids, output_token_ids, metadata.num_draft_tokens)
-
+        if holder is not None and holder.has_tracked_requests():
+            logits = holder.apply_to_logits(
+                logits,
+                predict_bonus_token=False,
+                spec_token_ids=sampling_metadata.spec_token_ids,
+            )
         return logits
 
     @staticmethod

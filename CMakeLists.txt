@@ -948,7 +948,6 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA")
   list(APPEND APHRODITE_MOE_EXT_SRC
     "csrc/moe/moe_wna16.cu"
     "csrc/moe/grouped_topk_kernels.cu"
-    "csrc/moe/router_gemm.cu"
     "csrc/moe/topk_softplus_sqrt_kernels.cu")
 endif()
 

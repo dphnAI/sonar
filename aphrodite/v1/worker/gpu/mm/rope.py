@@ -20,7 +20,7 @@ class RopeState:
     NOTE: `positions` is implemented with one additional dummy position on
     purpose to make it non-contiguous so that it can work with torch compile.
     See detailed explanation in
-    https://github.com/vllm-project/vllm/pull/12128#discussion_r1926431923
+    https://github.com/aphrodite-project/aphrodite/pull/12128#discussion_r1926431923
 
     NOTE: When M-RoPE is enabled, position ids are 3D regardless of the
     modality of inputs. For text-only inputs, each dimension has identical

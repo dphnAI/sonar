@@ -14,7 +14,6 @@ from aphrodite.model_executor.layers.layernorm import RMSNorm
 from aphrodite.model_executor.layers.linear import (
     MergedColumnParallelLinear,
 )
-from aphrodite.model_executor.layers.utils import cublas_gemm_bf16_bf16_fp32
 from aphrodite.platforms import current_platform
 from aphrodite.triton_utils import tl, triton
 from aphrodite.v1.attention.backend import (
@@ -263,16 +262,12 @@ class DeepseekCompressor(nn.Module):
 
     def forward(
         self,
-        # [num_tokens, hidden_size]
-        x: torch.Tensor,
+        # [num_tokens, 2 * self.coff * self.head_dim]
+        kv_score: torch.Tensor,
         # [num_tokens]
         positions: torch.Tensor,
         rotary_emb,
     ) -> None:
-        num_tokens, _ = x.shape
-        # bf16 weights/activations but fp32 output for numerical stability of
-        # the downstream compressor math.
-        kv_score = cublas_gemm_bf16_bf16_fp32(x, self.fused_wkv_wgate.weight)
         # Each of shape [num_tokens, coff * self.head_dim]
         # input bf16, output are fp32
         kv, score = kv_score.split([self.coff * self.head_dim, self.coff * self.head_dim], dim=-1)

@@ -16,9 +16,7 @@ from aphrodite.model_executor.layers.fused_moe.config import (
 from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
-from aphrodite.model_executor.layers.fused_moe.utils import (
-    trtllm_moe_pack_topk_ids_weights,
-)
+from aphrodite.model_executor.layers.fused_moe.utils import trtllm_moe_pack_topk_ids_weights
 from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
     activation_to_flashinfer_int,
 )
@@ -106,8 +104,12 @@ class TrtLlmNvFp4ExpertsBase:
 
     @staticmethod
     def _supports_activation(activation: MoEActivation) -> bool:
-        """Supports only SiLU and RELU^2 non-gated activation."""
-        return activation in [MoEActivation.SILU, MoEActivation.RELU2_NO_MUL]
+        """Supports only SiLU, RELU^2 non-gated and GELU activation."""
+        return activation in [
+            MoEActivation.SILU,
+            MoEActivation.RELU2_NO_MUL,
+            MoEActivation.GELU,
+        ]
 
     @staticmethod
     def _supports_shape(hidden_dim: int) -> bool:
@@ -184,20 +186,13 @@ class TrtLlmNvFp4ExpertsModular(TrtLlmNvFp4ExpertsBase, mk.FusedMoEExpertsModula
     ):
         import flashinfer
 
-        assert activation in [MoEActivation.SILU, MoEActivation.RELU2_NO_MUL]
+        assert self._supports_activation(activation)
         assert a1q_scale is not None
         assert self.quant_config.w1_scale is not None
         assert self.quant_config.w2_scale is not None
 
         # Pack topk ids and weights into format expected by the kernel.
         packed_tensor = trtllm_moe_pack_topk_ids_weights(topk_ids, topk_weights)
-
-        # trtllm_fp4_block_scale_routed_moe does not support autotuning
-        # so skip this kernel during dummy run for autotuning.
-        import aphrodite.utils.flashinfer as fi_utils
-
-        if fi_utils._is_fi_autotuning:
-            return
 
         # Invoke kernel.
         flashinfer.fused_moe.trtllm_fp4_block_scale_routed_moe(
@@ -225,7 +220,7 @@ class TrtLlmNvFp4ExpertsModular(TrtLlmNvFp4ExpertsBase, mk.FusedMoEExpertsModula
             local_expert_offset=self.ep_rank * self.local_num_experts,
             local_num_experts=self.local_num_experts,
             routed_scaling_factor=None,
-            routing_method_type=1,
+            routing_method_type=1,  # not used
             do_finalize=True,
             activation_type=activation_to_flashinfer_int(activation),
             output=output,
@@ -254,7 +249,10 @@ class TrtLlmNvFp4ExpertsMonolithic(TrtLlmNvFp4ExpertsBase, mk.FusedMoEExpertsMon
             RoutingMethodType.Renormalize,
             RoutingMethodType.RenormalizeNaive,
             RoutingMethodType.Llama4,
+            RoutingMethodType.SigmoidRenorm,
+            RoutingMethodType.MiniMax2,
             RoutingMethodType.Simulated,
+            RoutingMethodType.SigmoidRenorm,
         ]
 
     @staticmethod
@@ -262,20 +260,6 @@ class TrtLlmNvFp4ExpertsMonolithic(TrtLlmNvFp4ExpertsBase, mk.FusedMoEExpertsMon
         router_logits_dtype: torch.dtype | None,
         routing_method: RoutingMethodType,
     ) -> bool:
-        """
-        The FlashInfer TRTLLM NvFp4 kernel expects bfloat16 router_logits by default.
-        DeepSeekV3 routing supports float32 router_logits (converted internally).
-        Simulated routing generates synthetic decisions and is agnostic to dtype.
-        """
-        if router_logits_dtype == torch.float32:
-            # DeepSeekV3 routing handles float32 logits internally.
-            # Simulated routing generates synthetic decisions, so the
-            # kernel doesn't care about the actual logits dtype.
-            # https://github.com/flashinfer-ai/flashinfer/issues/2469
-            return routing_method in (
-                RoutingMethodType.DeepSeekV3,
-                RoutingMethodType.Simulated,
-            )
         return True
 
     def apply(
@@ -297,19 +281,12 @@ class TrtLlmNvFp4ExpertsMonolithic(TrtLlmNvFp4ExpertsBase, mk.FusedMoEExpertsMon
     ) -> torch.Tensor:
         import flashinfer
 
-        assert activation in [MoEActivation.SILU, MoEActivation.RELU2_NO_MUL]
+        assert self._supports_activation(activation)
         assert a1q_scale is not None
         assert self.quant_config.w1_scale is not None
         assert self.quant_config.w2_scale is not None
         assert (apply_router_weight_on_input and self.routing_method_type == RoutingMethodType.Llama4) or (
             not apply_router_weight_on_input and self.routing_method_type != RoutingMethodType.Llama4
-        )
-
-        # Prepare router logits for kernel format.
-        router_logits = (
-            router_logits.to(torch.float32)
-            if self.routing_method_type == RoutingMethodType.DeepSeekV3
-            else router_logits
         )
 
         # Currently FI requires bfloat16 routing bias.

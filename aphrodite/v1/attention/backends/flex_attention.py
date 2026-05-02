@@ -35,6 +35,7 @@ from aphrodite.v1.attention.backend import (
     AttentionMetadataBuilder,
     AttentionType,
     CommonAttentionMetadata,
+    MultipleOf,
 )
 from aphrodite.v1.kv_cache_interface import AttentionSpec, EncoderOnlyAttentionSpec
 
@@ -96,6 +97,10 @@ class FlexAttentionBackend(AttentionBackend):
         return attn_type in (AttentionType.DECODER, AttentionType.ENCODER_ONLY)
 
     @classmethod
+    def supports_batch_invariance(cls) -> bool:
+        return True
+
+    @classmethod
     def supports_mm_prefix(cls) -> bool:
         """FlexAttention supports full attention for image tokens."""
         return True
@@ -125,6 +130,10 @@ class FlexAttentionBackend(AttentionBackend):
     @classmethod
     def get_supported_head_sizes(cls) -> list[int]:
         return []
+
+    @staticmethod
+    def get_supported_kernel_block_sizes() -> list[int | MultipleOf]:
+        return [MultipleOf(16)]
 
 
 # @torch.compile(fullgraph=True, mode="reduce-overhead")
@@ -307,14 +316,9 @@ class BlockSparsityHint(NamedTuple):
 
 
 def copy_to_persistent(dst, src):
-    try:
-        dst = dst.as_strided(src.shape, src.stride())
-    except RuntimeError as e:
-        raise RuntimeError(
-            f"Fail to re-stride a persistent tensor of shape {dst.shape} for a tensor of shape {src.shape}"
-        ) from e
-    dst.copy_(src)
-    return dst
+    sliced = dst[tuple(slice(0, s) for s in src.shape)]
+    sliced.copy_(src)
+    return sliced
 
 
 @dataclass

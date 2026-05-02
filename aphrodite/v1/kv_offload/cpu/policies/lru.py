@@ -3,8 +3,8 @@
 from collections import OrderedDict
 from collections.abc import Iterable
 
-from aphrodite.v1.kv_offload.abstract import OffloadKey
-from aphrodite.v1.kv_offload.cpu.policies.abstract import BlockStatus, CachePolicy
+from aphrodite.v1.kv_offload.base import OffloadKey
+from aphrodite.v1.kv_offload.cpu.policies.base import BlockStatus, CachePolicy
 
 
 class LRUCachePolicy(CachePolicy):

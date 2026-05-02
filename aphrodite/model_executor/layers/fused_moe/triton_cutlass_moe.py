@@ -10,9 +10,7 @@ from aphrodite.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
-    CutlassExpertsFp8,
-)
+from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import CutlassExpertsFp8
 from aphrodite.model_executor.layers.fused_moe.fallback import FallbackExperts
 from aphrodite.model_executor.layers.fused_moe.fused_moe import TritonExperts
 from aphrodite.platforms import current_platform

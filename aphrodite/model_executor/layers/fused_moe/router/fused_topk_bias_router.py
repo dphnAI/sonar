@@ -195,12 +195,10 @@ def fused_topk_bias(
         scores = F.softplus(gating_output).sqrt()
     else:
         raise ValueError(f"Unsupported scoring function: {scoring_func}")
-
     if e_score_correction_bias is not None:
         scores_for_choice = scores.view(-1, n_routed_experts) + e_score_correction_bias.unsqueeze(0)
     else:
         scores_for_choice = scores.view(-1, n_routed_experts)
-
     # For batch invariance, use sorted=True to ensure deterministic expert selection
     if hash_indices_table is not None:
         topk_indices = hash_indices_table[input_tokens]

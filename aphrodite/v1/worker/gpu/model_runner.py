@@ -27,6 +27,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from aphrodite.compilation.counter import compilation_counter
 from aphrodite.config import AphroditeConfig
 from aphrodite.config.compilation import CUDAGraphMode
 from aphrodite.distributed.parallel_state import (
@@ -265,8 +266,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             logger.info("Loading model from scratch...")
 
             self.model = model_loader.load_model(
-                aphrodite_config=self.aphrodite_config,
-                model_config=self.aphrodite_config.model_config,
+                aphrodite_config=self.aphrodite_config, model_config=self.aphrodite_config.model_config
             )
             if self.lora_config:
                 self.model = self.load_lora_model(self.model, self.aphrodite_config, self.device)
@@ -413,7 +413,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             # HACK(lucas): for now since the worker is shared between MRV1 and MRV2,
             # and for spec-decode with MTP we want to make sure the dummy runs use
             # 1+num_speculative_tokens we use max here, this will likely be eventually
-            # changed in the worker: https://github.com/vllm-project/vllm/pull/35243
+            # changed in the worker: https://github.com/aphrodite-project/aphrodite/pull/35243
             num_tokens = max(num_tokens, self.decode_query_len)
             num_reqs = num_tokens // self.decode_query_len
             assert num_tokens % self.decode_query_len == 0
@@ -534,6 +534,9 @@ class GPUModelRunner(LoRAModelRunnerMixin):
         del hidden_states, sample_hidden_states
         gc.collect()
 
+    def post_kv_cache_wake_up(self) -> None:
+        self.block_tables.init_block_table_layout_tensors()
+
     def reset_mm_cache(self) -> None:
         if self.encoder_cache is not None:
             self.encoder_cache.reset_mm_cache()
@@ -560,13 +563,15 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             )
             return 0
 
+        compilation_counter.num_gpu_runner_capture_triggers += 1
+
         start_time = time.perf_counter()
         gc.collect()
         torch.accelerator.empty_cache()
         start_free_gpu_memory = torch.cuda.mem_get_info()[0]
 
         with self.maybe_setup_dummy_loras(self.lora_config):
-            self.cudagraph_manager.capture(
+            captured_attn_states = self.cudagraph_manager.capture(
                 self.model,
                 self.model_state,
                 self.input_buffers,
@@ -578,7 +583,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
                 use_aux_hidden_state_outputs=self.use_aux_hidden_state_outputs,
             )
             if self.speculator is not None:
-                self.speculator.capture_model()
+                self.speculator.capture(captured_attn_states)
 
         end_time = time.perf_counter()
         end_free_gpu_memory = torch.cuda.mem_get_info()[0]
@@ -779,7 +784,6 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             out=seq_lens_cpu_upper_bound_np[:num_reqs],
         )
         seq_lens_cpu_upper_bound = torch.from_numpy(seq_lens_cpu_upper_bound_np)
-
         return InputBatch(
             req_ids=req_ids,
             num_reqs=num_reqs,
@@ -901,6 +905,8 @@ class GPUModelRunner(LoRAModelRunnerMixin):
         computed_prefill = self.req_states.num_computed_prefill_tokens
         computed_prefill[idx_mapping_np] += input_batch.num_scheduled_tokens
         np.minimum(computed_prefill, self.req_states.prefill_len.np, out=computed_prefill)
+        # Advance the CPU mirror optimistically (assume all scheduled accepted).
+        self.req_states.num_computed_tokens_np[idx_mapping_np] += input_batch.num_scheduled_tokens
 
     @torch.inference_mode()
     def execute_model(
@@ -1264,6 +1270,8 @@ class GPUModelRunner(LoRAModelRunnerMixin):
         computed_prefill = self.req_states.num_computed_prefill_tokens
         computed_prefill[idx_mapping_np] += input_batch.num_scheduled_tokens
         np.minimum(computed_prefill, self.req_states.prefill_len.np, out=computed_prefill)
+        # Advance the CPU mirror optimistically (assume all scheduled accepted).
+        self.req_states.num_computed_tokens_np[idx_mapping_np] += input_batch.num_scheduled_tokens
 
     ########### EPLB methods start ###########
     @property

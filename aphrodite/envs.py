@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     APHRODITE_CONFIGURE_LOGGING: bool = True
     NO_COLOR: bool = False
     APHRODITE_TRACE_FUNCTION: int = 0
-    APHRODITE_USE_FLASHINFER_SAMPLER: bool | None = None
+    APHRODITE_USE_FLASHINFER_SAMPLER: bool = True
     APHRODITE_PP_LAYER_PARTITION: str | None = None
     APHRODITE_CPU_KVCACHE_SPACE: int | None = 0
     APHRODITE_CPU_OMP_THREADS_BIND: str = "auto"
@@ -243,6 +243,7 @@ if TYPE_CHECKING:
     APHRODITE_DEBUG_WORKSPACE: bool = False
     APHRODITE_DISABLE_SHARED_EXPERTS_STREAM: bool = False
     APHRODITE_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD: int = 256
+    APHRODITE_MULTI_STREAM_GEMM_TOKEN_THRESHOLD: int = 4096
     APHRODITE_COMPILE_CACHE_SAVE_FORMAT: Literal["binary", "unpacked"] = "binary"
     APHRODITE_USE_V2_MODEL_RUNNER: bool = False
     APHRODITE_LOG_MODEL_INSPECTION: bool = False
@@ -254,6 +255,10 @@ if TYPE_CHECKING:
     APHRODITE_LORA_DISABLE_PDL: bool = False
     APHRODITE_ENABLE_CUDA_COMPATIBILITY: bool = False
     APHRODITE_CUDA_COMPATIBILITY_PATH: str | None = None
+    APHRODITE_SKIP_MODEL_NAME_VALIDATION: bool = False
+    """If set, Aphrodite will skip model name validation in API requests.
+    This allows any model name to be accepted in the 'model' field of requests,
+    making the server model-name agnostic. Useful for proxy/gateway scenarios."""
     APHRODITE_ELASTIC_EP_SCALE_UP_LAUNCH: bool = False
     APHRODITE_ELASTIC_EP_DRAIN_REQUESTS: bool = False
     APHRODITE_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: bool = True
@@ -693,11 +698,13 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # If set to 1, aphrodite will trace function calls
     # Useful for debugging
     "APHRODITE_TRACE_FUNCTION": lambda: int(os.getenv("APHRODITE_TRACE_FUNCTION", "0")),
-    # If set, aphrodite will use flashinfer sampler
+    # Whether to use the FlashInfer top-k / top-p sampler on CUDA. Enabled
+    # by default when the hardware supports it — set to 0 to opt out
+    # explicitly, which forces the PyTorch-native (Triton for bs>=8) path.
     "APHRODITE_USE_FLASHINFER_SAMPLER": lambda: (
         bool(int(os.environ["APHRODITE_USE_FLASHINFER_SAMPLER"]))
         if "APHRODITE_USE_FLASHINFER_SAMPLER" in os.environ
-        else None
+        else True
     ),
     # Pipeline stage partition strategy
     "APHRODITE_PP_LAYER_PARTITION": lambda: os.getenv("APHRODITE_PP_LAYER_PARTITION", None),
@@ -919,6 +926,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # use aiter linear op if aiter ops are enabled
     # The following list of related ops
     # - scaled_mm (per-tensor / rowwise)
+    # - use aiter tuned gemms for unquantized gemms
     "APHRODITE_ROCM_USE_AITER_LINEAR": lambda: (
         os.getenv("APHRODITE_ROCM_USE_AITER_LINEAR", "True").lower() in ("true", "1")
     ),
@@ -1443,9 +1451,17 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "APHRODITE_DEEPEP_LOW_LATENCY_USE_MNNVL": lambda: bool(
         int(os.getenv("APHRODITE_DEEPEP_LOW_LATENCY_USE_MNNVL", "0"))
     ),
-    # The number of SMs to allocate for communication kernels when running DBO
-    # the rest of the SMs on the device will be allocated to compute
-    "APHRODITE_DBO_COMM_SMS": lambda: int(os.getenv("APHRODITE_DBO_COMM_SMS", "20")),
+    # The number of SMs/CUs to allocate for communication kernels when
+    # running DBO; the rest will be allocated to compute.
+    # Default: 20 on CUDA (SMs), 64 on ROCm (CUs).
+    "APHRODITE_DBO_COMM_SMS": lambda: int(
+        os.getenv(
+            "APHRODITE_DBO_COMM_SMS",
+            "64"
+            if hasattr(__import__("torch").version, "hip") and __import__("torch").version.hip is not None
+            else "20",
+        )
+    ),
     # Enable max_autotune & coordinate_descent_tuning in inductor_config
     # to compile static shapes passed from compile_sizes in compilation_config
     # If set to 1, enable max_autotune; By default, this is enabled (1)
@@ -1482,6 +1498,17 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # TODO(alexm-redhat): Tune to be more dynamic based on GPU type
     "APHRODITE_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD": lambda: int(
         int(os.getenv("APHRODITE_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD", 256))
+    ),
+    # Token-count cutoff for multi-stream overlap of the attention input
+    # GEMM with auxiliary GEMMs (e.g. fused_wqa_wkv overlapped with indexer
+    # weights / kv-score projections in DeepSeek-V4). At or below this many
+    # tokens the FP8 main GEMM has idle SMs to share with the bf16 aux GEMMs
+    # and overlap is a 5-45% win; above it the FP8 GEMM saturates the device
+    # and the cross-stream sync becomes pure overhead. Set to 0 to disable
+    # the multi-stream path entirely. Empirical crossover on B300 (148 SMs)
+    # is ~4096; B200 (132 SMs) is expected ~3072.
+    "APHRODITE_MULTI_STREAM_GEMM_TOKEN_THRESHOLD": lambda: int(
+        os.getenv("APHRODITE_MULTI_STREAM_GEMM_TOKEN_THRESHOLD", "4096")
     ),
     # Format for saving torch.compile cache artifacts
     # - "binary": saves as binary file
@@ -1525,6 +1552,13 @@ environment_variables: dict[str, Callable[[], Any]] = {
     ),
     # Path to the CUDA compatibility libraries when CUDA compatibility is enabled.
     "APHRODITE_CUDA_COMPATIBILITY_PATH": lambda: os.environ.get("APHRODITE_CUDA_COMPATIBILITY_PATH", None),
+    # Skip model name validation in OpenAI API requests.
+    # When set to 1, any model name will be accepted in the 'model' field
+    # of API requests. This is useful for proxy/gateway scenarios where
+    # the actual model is served but different names may be used in requests.
+    "APHRODITE_SKIP_MODEL_NAME_VALIDATION": lambda: (
+        os.getenv("APHRODITE_SKIP_MODEL_NAME_VALIDATION", "0").strip().lower() in ("1", "true")
+    ),
     # Whether it is a scale up launch engine for elastic EP,
     # Should only be set by EngineCoreClient.
     "APHRODITE_ELASTIC_EP_SCALE_UP_LAUNCH": lambda: bool(int(os.getenv("APHRODITE_ELASTIC_EP_SCALE_UP_LAUNCH", "0"))),
@@ -1692,6 +1726,7 @@ def compile_factors() -> dict[str, object]:
         "APHRODITE_TEST_FORCE_LOAD_FORMAT",
         "APHRODITE_ENABLE_CUDA_COMPATIBILITY",
         "APHRODITE_CUDA_COMPATIBILITY_PATH",
+        "APHRODITE_SKIP_MODEL_NAME_VALIDATION",
         "LOCAL_RANK",
         "CUDA_VISIBLE_DEVICES",
         "NO_COLOR",

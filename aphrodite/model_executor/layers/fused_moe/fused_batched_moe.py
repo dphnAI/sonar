@@ -11,9 +11,7 @@ from aphrodite.model_executor.layers.fused_moe.config import (
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe import (
-    try_get_optimal_moe_config,
-)
+from aphrodite.model_executor.layers.fused_moe.fused_moe import try_get_optimal_moe_config
 from aphrodite.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceDelegate,
 )

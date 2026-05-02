@@ -67,9 +67,17 @@ async def init_generate_state(
     )
     from aphrodite.entrypoints.openai.chat_completion.serving import OpenAIServingChat
     from aphrodite.entrypoints.openai.completion.serving import OpenAIServingCompletion
+    from aphrodite.entrypoints.openai.fingerprint import set_default_fingerprint_mode
     from aphrodite.entrypoints.openai.kobold.serving import OpenAIServingKobold
     from aphrodite.entrypoints.openai.responses.serving import OpenAIServingResponses
     from aphrodite.entrypoints.serve.disagg.serving import ServingTokens
+
+    # Applied before any serving class is constructed so that each one picks
+    # up the chosen mode on its first cache miss.
+    set_default_fingerprint_mode(
+        getattr(args, "fingerprint_mode", "full"),
+        getattr(args, "fingerprint_value", None),
+    )
 
     if args.tool_server == "demo":
         tool_server: ToolServer | None = DemoToolServer()

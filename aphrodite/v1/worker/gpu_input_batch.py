@@ -8,6 +8,7 @@ from typing import Any, cast
 import numpy as np
 import torch
 
+from aphrodite.config.reasoning import ReasoningConfig
 from aphrodite.lora.request import LoRARequest
 from aphrodite.multimodal.inputs import MultiModalFeatureSpec
 from aphrodite.pooling_params import PoolingParams
@@ -23,6 +24,9 @@ from aphrodite.v1.sample.logits_processor import (
 )
 from aphrodite.v1.sample.metadata import SamplingMetadata
 from aphrodite.v1.sample.ops.dry import init_dry_state
+from aphrodite.v1.sample.thinking_budget_state import (
+    maybe_create_thinking_budget_state_holder,
+)
 from aphrodite.v1.utils import copy_slice
 from aphrodite.v1.worker.block_table import MultiGroupBlockTable
 
@@ -48,6 +52,10 @@ class CachedRequestState:
 
     lora_request: LoRARequest | None = None
     prompt_embeds: torch.Tensor | None = None
+
+    # Per-position mask for mixed-mode inputs (e.g chat completion with
+    # prompt_embeds content parts). See `Request.prompt_is_token_ids`.
+    prompt_is_token_ids: list[bool] | None = None
 
     # Used when both async_scheduling and spec_decode are enabled.
     prev_num_draft_len: int = 0
@@ -96,12 +104,20 @@ class InputBatch:
         max_num_blocks_per_req: list[int] | None = None,
         logitsprocs: LogitsProcessors | None = None,
         logitsprocs_need_output_token_ids: bool = False,
-        is_spec_decode: bool = False,
+        num_spec_tokens: int = 0,
         is_pooling_model: bool = False,
         cp_kv_cache_interleave_size: int = 1,
+        reasoning_config: ReasoningConfig | None = None,
     ):
+        self.thinking_budget_state_holder = maybe_create_thinking_budget_state_holder(
+            reasoning_config,
+            max_num_reqs,
+            num_spec_tokens,
+            device,
+            pin_memory,
+        )
+        self.thinking_token_budget_reqs: set[str] = set()
         self.is_pooling_model = is_pooling_model
-        self.is_spec_decode = is_spec_decode
         self.max_num_reqs = max_num_reqs
         self.max_model_len = max_model_len
         self.max_num_batched_tokens = max_num_batched_tokens
@@ -484,7 +500,10 @@ class InputBatch:
         end_idx = start_idx + len(request.output_token_ids)
         if request.prompt_token_ids is not None:
             self.token_ids_cpu[req_index, :num_prompt_tokens] = request.prompt_token_ids
-            self.is_token_ids[req_index, :num_prompt_tokens] = True
+            if request.prompt_is_token_ids is not None:
+                self.is_token_ids[req_index, :num_prompt_tokens] = request.prompt_is_token_ids
+            else:
+                self.is_token_ids[req_index, :num_prompt_tokens] = True
         else:
             self.is_token_ids[req_index, :num_prompt_tokens] = False
         if request.prompt_embeds is not None:
@@ -750,6 +769,7 @@ class InputBatch:
             # False means we don't fill with -inf.
             self.allowed_token_ids_mask_cpu_tensor[req_index].fill_(False)
         self.bad_words_token_ids.pop(req_index, None)
+        self.thinking_token_budget_reqs.discard(req_id)
         self.logit_bias.pop(req_index, None)
         self.dry_sequence_breaker_ids.pop(req_index, None)
         self.persistent_data.pop(req_index, None)
@@ -1116,6 +1136,8 @@ class InputBatch:
         # reset batch update tracking.
         # Update sampling metadata if batch state is changed.
         batch_update = self.batch_update_builder.get_and_reset(self.num_reqs)
+        if self.thinking_budget_state_holder is not None and batch_update:
+            self.thinking_budget_state_holder.sync_batch(batch_update)
         for logit_proc in self.logitsprocs.all:
             logit_proc.update_state(batch_update)
         if batch_update:
@@ -1219,12 +1241,15 @@ class InputBatch:
 
         # Only set output_token_ids if required by the current requests'
         # sampling parameters.
+        holder = self.thinking_budget_state_holder
+        thinking_budget_tracks_reqs = holder is not None and holder.has_tracked_requests()
         needs_output_token_ids = (
             not self.no_penalties
             or not self.no_dry
             or not self.no_no_repeat_ngram
             or bool(self.bad_words_token_ids)
             or self.logitsprocs_need_output_token_ids
+            or not thinking_budget_tracks_reqs
         )
         output_token_ids = cast(list[list[int]], self.req_output_token_ids) if needs_output_token_ids else []
         output_token_ids_tensor = None
@@ -1312,6 +1337,7 @@ class InputBatch:
             bad_words_token_ids=self.bad_words_token_ids,
             logit_bias=self.logit_bias,
             logitsprocs=self.logitsprocs,
+            thinking_budget_state_holder=self.thinking_budget_state_holder,
             temperature_last=self.temperature_last[:num_reqs],
             persistent_data=self.persistent_data,
         )
@@ -1562,6 +1588,10 @@ class InputBatch:
             and len(self.frequency_penalties_reqs) == 0
             and len(self.repetition_penalties_reqs) == 0
         )
+
+    @property
+    def no_thinking_budget(self) -> bool:
+        return self.thinking_budget_state_holder is None or len(self.thinking_token_budget_reqs) == 0
 
     @property
     def max_num_logprobs(self) -> int | None:

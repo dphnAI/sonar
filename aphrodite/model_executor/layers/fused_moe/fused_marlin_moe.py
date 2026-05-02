@@ -17,9 +17,7 @@ from aphrodite.model_executor.layers.fused_moe.config import (
     FusedMoEParallelConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.lora_experts_mixin import (
-    LoRAExpertsMixin,
-)
+from aphrodite.model_executor.layers.fused_moe.lora_experts_mixin import LoRAExpertsMixin
 from aphrodite.model_executor.layers.fused_moe.moe_align_block_size import (
     batched_moe_align_block_size,
     moe_align_block_size,

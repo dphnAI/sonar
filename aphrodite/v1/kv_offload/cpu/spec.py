@@ -5,12 +5,17 @@ from collections.abc import Iterator
 from aphrodite.config import AphroditeConfig
 from aphrodite.platforms import current_platform
 from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.kv_offload.abstract import LoadStoreSpec, OffloadingManager
+from aphrodite.v1.kv_offload.base import (
+    CanonicalKVCaches,
+    GPULoadStoreSpec,
+    LoadStoreSpec,
+    OffloadingManager,
+    OffloadingSpec,
+)
+from aphrodite.v1.kv_offload.cpu.common import CPULoadStoreSpec
+from aphrodite.v1.kv_offload.cpu.gpu_worker import CpuGpuOffloadingHandlers
 from aphrodite.v1.kv_offload.cpu.manager import CPUOffloadingManager
-from aphrodite.v1.kv_offload.mediums import CPULoadStoreSpec, GPULoadStoreSpec
 from aphrodite.v1.kv_offload.reuse_manager import FilterReusedOffloadingManager
-from aphrodite.v1.kv_offload.spec import CanonicalKVCaches, OffloadingSpec
-from aphrodite.v1.kv_offload.worker.cpu_gpu import CpuGpuOffloadingHandlers
 from aphrodite.v1.kv_offload.worker.worker import OffloadingHandler
 
 

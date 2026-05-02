@@ -148,6 +148,17 @@ class OpenAIServing:
         self.renderer = engine_client.renderer
         self.input_processor = engine_client.input_processor
 
+        # Computed once at startup (cached by ``aphrodite_config`` identity) and
+        # stamped on non-streaming responses. Streaming chunks deliberately
+        # omit it to avoid per-chunk overhead.
+        from aphrodite.entrypoints.openai.fingerprint import get_system_fingerprint
+
+        try:
+            self.system_fingerprint: str | None = get_system_fingerprint(engine_client.aphrodite_config)
+        except Exception:
+            # Never fail server startup over the fingerprint.
+            self.system_fingerprint = None
+
     async def beam_search(
         self,
         prompt: EngineInput,
@@ -691,6 +702,8 @@ class OpenAIServing:
 
     def _is_model_supported(self, model_name: str | None) -> bool:
         if not model_name:
+            return True
+        if envs.APHRODITE_SKIP_MODEL_NAME_VALIDATION:
             return True
         return self.models.is_base_model(model_name)
 

@@ -105,8 +105,8 @@ def ReadTargets(log, show_all):
     """Reads all targets from .ninja_log file |log_file|, sorted by duration.
 
     The result is a list of Target objects."""
-    header = log.readline()
-    assert header == "# ninja log v5\n", "unrecognized ninja log version {!r}".format(header)
+    # header = log.readline()
+    # assert header == "# ninja log v5\n", "unrecognized ninja log version {!r}".format(header)
     targets_dict = {}
     last_end_seen = 0.0
     for line in log:

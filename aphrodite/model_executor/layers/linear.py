@@ -1053,7 +1053,10 @@ class QKVParallelLinear(ColumnParallelLinear):
             # Special case for Quantization.
             # If quantized, we need to adjust the offset and size to account
             # for the packing.
-            if (
+            if isinstance(param, BlockQuantScaleParameter):
+                weight_block_size = getattr(self, "weight_block_size", None)
+                shard_size, shard_offset = adjust_block_scale_shard(weight_block_size, shard_size, shard_offset)
+            elif (
                 isinstance(param, (PackedColumnParameter, PackedAphroditeParameter))
                 and param.packed_dim == param.output_dim
             ):

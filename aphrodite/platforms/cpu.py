@@ -16,7 +16,6 @@ from aphrodite.utils.cpu_resource_utils import (
     get_memory_node_info,
 )
 from aphrodite.utils.mem_constants import GiB_bytes
-from aphrodite.utils.torch_utils import is_quantized_kv_cache
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 
 from .interface import CpuArchEnum, Platform, PlatformEnum
@@ -126,16 +125,6 @@ class CpuPlatform(Platform):
         scheduler_config = aphrodite_config.scheduler_config
         # async scheduling is not required on CPU
         scheduler_config.async_scheduling = False
-        if (scheduler_config.enable_chunked_prefill or cache_config.enable_prefix_caching) and is_quantized_kv_cache(
-            cache_config.cache_dtype
-        ):
-            raise RuntimeError(
-                "Chunked-prefill and prefix-cache on the CPU backend is not compatible with FP8 KV cache."
-            )
-
-        if is_quantized_kv_cache(cache_config.cache_dtype):
-            logger.warning("CPU backend doesn't support KV cache quantization fallback to auto.")
-            cache_config.cache_dtype = "auto"
 
         parallel_config = aphrodite_config.parallel_config
         # OMP requires the MP executor to function correctly, UniProc is not
@@ -429,6 +418,8 @@ class CpuPlatform(Platform):
         block_offsets = torch.arange(block_size, device="cpu", dtype=torch.long)
         num_blocks = len(block_ids)
         slot_mapping = (block_offsets.reshape(1, block_size) + indices.reshape(num_blocks, 1) * block_size).flatten()
+        if key_cache.dtype == torch.uint8:
+            raise NotImplementedError("FP8 KV cache is not yet supported with KV transfer on CPU")
         cpu_attn_reshape_and_cache(
             key,
             value,

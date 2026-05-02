@@ -80,9 +80,6 @@ def get_attn_backend(
     else:
         block_size = None
 
-    speculative_config = aphrodite_config.speculative_config
-    use_non_causal = speculative_config is not None and speculative_config.method == "dflash"
-
     attn_selector_config = AttentionSelectorConfig(
         head_size=head_size,
         dtype=dtype,
@@ -94,7 +91,7 @@ def get_attn_backend(
         use_mm_prefix=use_mm_prefix,
         use_per_head_quant_scales=use_per_head_quant_scales,
         attn_type=attn_type or AttentionType.DECODER,
-        use_non_causal=use_non_causal,
+        use_non_causal=aphrodite_config.attention_config.use_non_causal,
         use_batch_invariant=envs.APHRODITE_BATCH_INVARIANT,
     )
 

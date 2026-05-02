@@ -6,6 +6,7 @@ from itertools import islice
 import torch
 from torch import nn
 
+from aphrodite.compilation.decorators import support_torch_compile
 from aphrodite.config import (
     AphroditeConfig,
     CacheConfig,
@@ -254,7 +255,7 @@ class MiMoV2Attention(nn.Module):
             self.total_num_heads * self.v_head_dim,
             hidden_size,
             bias=False,
-            quant_config=quant_config,
+            quant_config=quant_config if "mtp.layers" not in prefix else None,
             reduce_results=True,
             prefix=f"{prefix}.o_proj",
         )
@@ -422,6 +423,7 @@ class MiMoV2FlashDecoderLayer(nn.Module):
         return self.config.hybrid_layer_pattern[self.layer_id] == 1
 
 
+@support_torch_compile
 class MiMoV2Model(nn.Module):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
@@ -577,7 +579,13 @@ class MiMoV2Model(nn.Module):
 
             if expert_matched:
                 continue
-
+            # Support fused qkv_proj checkpoint (Pro format)
+            if "qkv_proj" in name:
+                if name in params_dict:
+                    param = params_dict[name]
+                    loaded_weight = loaded_weight.chunk(tp_size, dim=0)[tp_rank]
+                    default_weight_loader(param, loaded_weight)
+                continue
             stacked_matched = False
             for param_name, weight_name, shard_id in stacked_params_mapping:
                 if weight_name not in name:
@@ -633,6 +641,11 @@ class MiMoV2Model(nn.Module):
 
 
 class MiMoV2FlashForCausalLM(nn.Module, SupportsPP, MixtureOfExperts):
+    packed_modules_mapping = {
+        "qkv_proj": ["q_proj", "k_proj", "v_proj"],
+        "gate_up_proj": ["gate_proj", "up_proj"],
+    }
+
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
         config = aphrodite_config.model_config.hf_config
@@ -685,3 +698,10 @@ class MiMoV2FlashForCausalLM(nn.Module, SupportsPP, MixtureOfExperts):
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
         return loader.load_weights(weights)
+
+
+class MiMoV2ForCausalLM(MiMoV2FlashForCausalLM):
+    packed_modules_mapping = {
+        "qkv_proj": ["qkv_proj"],
+        "gate_up_proj": ["gate_proj", "up_proj"],
+    }

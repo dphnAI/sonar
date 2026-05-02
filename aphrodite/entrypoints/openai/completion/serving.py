@@ -369,6 +369,7 @@ class OpenAIServingCompletion(OpenAIServing):
 
                     chunk = CompletionStreamResponse(
                         id=request_id,
+                        object="text_completion",
                         created=created_time,
                         model=model_name,
                         choices=[
@@ -383,6 +384,10 @@ class OpenAIServingCompletion(OpenAIServing):
                             )
                         ],
                     )
+                    # Stamp on terminal chunk only when no trailing usage chunk
+                    # will follow (that one is the true final message).
+                    if not include_usage and self.system_fingerprint is not None and finish_reason is not None:
+                        chunk.system_fingerprint = self.system_fingerprint
                     if include_continuous_usage:
                         prompt_tokens = num_prompt_tokens[prompt_idx]
                         completion_tokens = previous_num_tokens[i]
@@ -392,7 +397,7 @@ class OpenAIServingCompletion(OpenAIServing):
                             total_tokens=prompt_tokens + completion_tokens,
                         )
 
-                    response_json = chunk.model_dump_json(exclude_unset=False)
+                    response_json = chunk.model_dump_json(exclude_unset=True)
                     yield f"data: {response_json}\n\n"
 
             total_prompt_tokens = sum(num_prompt_tokens)
@@ -413,6 +418,7 @@ class OpenAIServingCompletion(OpenAIServing):
                     model=model_name,
                     choices=[],
                     usage=final_usage_info,
+                    system_fingerprint=self.system_fingerprint,
                 )
                 final_usage_data = final_usage_chunk.model_dump_json(exclude_unset=False, exclude_none=True)
                 yield f"data: {final_usage_data}\n\n"
@@ -530,6 +536,7 @@ class OpenAIServingCompletion(OpenAIServing):
             model=model_name,
             choices=choices,
             usage=usage,
+            system_fingerprint=self.system_fingerprint,
             kv_transfer_params=kv_transfer_params,
         )
 

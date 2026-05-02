@@ -38,6 +38,10 @@ from aphrodite.logger import init_logger
 from aphrodite.reasoning.abs_reasoning_parsers import ReasoningParser
 from aphrodite.tokenizers import TokenizerLike
 from aphrodite.tool_parsers.abstract_tool_parser import ToolParser
+from aphrodite.tool_parsers.streaming import (
+    extract_named_tool_call_streaming,
+    extract_required_tool_call_streaming,
+)
 from aphrodite.tool_parsers.utils import Tool
 from aphrodite.utils import random_uuid
 
@@ -53,6 +57,11 @@ class StreamState:
     prompt_reasoning_checked: bool = False
     previous_text: str = ""
     previous_token_ids: list[int] = field(default_factory=list)
+    history_tool_call_cnt: int = 0
+    tool_call_id_type: str = "random"
+    # only used for "required" and "named tool" choices,
+    # tracks whether function name has been fully returned in the stream yet
+    function_name_returned: bool = False
 
 
 class Parser:
@@ -413,6 +422,13 @@ class DelegatingParser(Parser):
 
         return outputs
 
+    def _get_function_name(self, request: ChatCompletionRequest | ResponsesRequest) -> str:
+        if request.tool_choice and isinstance(request.tool_choice, ToolChoiceFunction):
+            return request.tool_choice.name
+        if request.tool_choice and isinstance(request.tool_choice, ChatCompletionNamedToolChoiceParam):
+            return request.tool_choice.function.name
+        raise ValueError("Invalid tool_choice for function name extraction.")
+
     def _parse_tool_calls(
         self,
         request: ResponsesRequest,
@@ -430,16 +446,13 @@ class DelegatingParser(Parser):
         """
         function_calls: list[FunctionCall] = []
 
-        if request.tool_choice and isinstance(request.tool_choice, ToolChoiceFunction):
-            # Forced Function Call (Responses API style)
+        if request.tool_choice and isinstance(
+            request.tool_choice,
+            (ToolChoiceFunction, ChatCompletionNamedToolChoiceParam),
+        ):
+            # Forced Function Call
             assert content is not None
-            function_calls.append(FunctionCall(name=request.tool_choice.name, arguments=content))
-            return function_calls, None  # Clear content since tool is called.
-
-        if request.tool_choice and isinstance(request.tool_choice, ChatCompletionNamedToolChoiceParam):
-            # Forced Function Call (Chat Completion API style)
-            assert content is not None
-            function_calls.append(FunctionCall(name=request.tool_choice.function.name, arguments=content))
+            function_calls.append(FunctionCall(name=self._get_function_name(request), arguments=content))
             return function_calls, None  # Clear content since tool is called.
 
         if request.tool_choice == "required":
@@ -544,6 +557,55 @@ class DelegatingParser(Parser):
             request,
         )
 
+    def _extract_tool_calls_streaming(
+        self,
+        previous_text: str,
+        current_text: str,
+        delta_text: str,
+        previous_token_ids: Sequence[int],
+        current_token_ids: Sequence[int],
+        delta_token_ids: Sequence[int],
+        request: ChatCompletionRequest | ResponsesRequest,
+        # The following parameters are used for "required" tool choice parsing and are
+        # tracked in StreamState for streaming parsing.
+        tool_call_idx: int | None = None,
+        tool_call_id_type: str = "random",
+        function_name_returned: bool = False,
+    ) -> tuple[DeltaMessage | None, bool]:
+        if request.tool_choice and isinstance(
+            request.tool_choice,
+            (ToolChoiceFunction, ChatCompletionNamedToolChoiceParam),
+        ):
+            delta_message, function_name_returned = extract_named_tool_call_streaming(
+                delta_text=delta_text,
+                function_name=self._get_function_name(request),
+                function_name_returned=function_name_returned,
+                tool_call_idx=tool_call_idx,
+                tool_call_id_type=tool_call_id_type,
+                tokenizer=self.model_tokenizer,
+            )
+            return delta_message, function_name_returned
+
+        if request.tool_choice == "required":
+            delta_message, function_name_returned = extract_required_tool_call_streaming(
+                previous_text=previous_text,
+                current_text=current_text,
+                delta_text=delta_text,
+                function_name_returned=function_name_returned,
+                tool_call_idx=tool_call_idx,
+                tool_call_id_type=tool_call_id_type,
+            )
+            return delta_message, function_name_returned
+        return self.extract_tool_calls_streaming(
+            previous_text,
+            current_text,
+            delta_text,
+            previous_token_ids,
+            current_token_ids,
+            delta_token_ids,
+            request,  # type: ignore[arg-type]
+        ), False
+
     def is_reasoning_end(self, input_ids: list[int]) -> bool:
         if self._reasoning_parser is None:
             return False
@@ -614,7 +676,8 @@ class DelegatingParser(Parser):
                 state.previous_token_ids = []
                 delta_text = current_text
                 delta_token_ids = current_token_ids
-            delta_message = self.extract_tool_calls_streaming(
+
+            delta_message, state.function_name_returned = self._extract_tool_calls_streaming(
                 previous_text=state.previous_text,
                 current_text=current_text,
                 delta_text=delta_text,
@@ -622,6 +685,9 @@ class DelegatingParser(Parser):
                 current_token_ids=current_token_ids,
                 delta_token_ids=delta_token_ids,
                 request=request,  # type: ignore[arg-type]
+                tool_call_idx=state.history_tool_call_cnt,
+                tool_call_id_type=state.tool_call_id_type,
+                function_name_returned=state.function_name_returned,
             )
 
         # No parsers: pass through as content

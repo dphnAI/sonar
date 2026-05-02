@@ -20,9 +20,7 @@ from aphrodite.model_executor.layers.fused_moe.config import FusedMoEParallelCon
 from aphrodite.model_executor.layers.fused_moe.moe_align_block_size import (
     moe_align_block_size,
 )
-from aphrodite.model_executor.layers.fused_moe.moe_fused_mul_sum import (
-    moe_fused_mul_sum,
-)
+from aphrodite.model_executor.layers.fused_moe.moe_fused_mul_sum import moe_fused_mul_sum
 from aphrodite.model_executor.layers.fused_moe.moe_permute_unpermute import (
     moe_permute,
     moe_unpermute,

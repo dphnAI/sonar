@@ -826,13 +826,12 @@ class SpecDecodeBaseProposer:
         is not sampled and comes from `request.get_token_id()` instead. This is denoted
         the "backup" token id. It also counts rejected tokens via `sampled_token_ids`.
         """
-        # Precompute get_token_id for when there is no valid next token
+        # Precompute backup token IDs for discarded requests.
         num_reqs = gpu_input_batch.num_reqs
-        seq_lens_list = (gpu_input_batch.num_tokens_no_spec[:num_reqs] - 1).tolist()
-        self.backup_next_token_ids.np[:num_reqs] = np.array(
-            [requests[gpu_input_batch.req_ids[i]].get_token_id(seq_lens_list[i]) for i in range(num_reqs)],
-            dtype=np.int32,
-        )
+        for i in range(num_reqs):
+            self.backup_next_token_ids.np[i] = requests[gpu_input_batch.req_ids[i]].get_token_id(
+                gpu_input_batch.num_tokens_no_spec[i] - 1
+            )
         self.backup_next_token_ids.copy_to_gpu(num_reqs)
         backup_tokens_gpu = self.backup_next_token_ids.gpu
 
@@ -1173,15 +1172,29 @@ class SpecDecodeBaseProposer:
         Subclasses may override to apply additional config changes.
         """
         spec_cfg = self.speculative_config
+        base = self.aphrodite_config
+
         if spec_cfg.moe_backend is not None:
-            return replace(
-                self.aphrodite_config,
+            base = replace(
+                base,
                 kernel_config=replace(
-                    self.aphrodite_config.kernel_config,
+                    base.kernel_config,
                     moe_backend=spec_cfg.moe_backend,
                 ),
             )
-        return self.aphrodite_config
+
+        # Note (matt): Never inherit the attention backend from base, because there are
+        # many opportunities for incompatibility, so we always independently autoselect
+        # unless explicitly specified in the speculative config.
+        base = replace(
+            base,
+            attention_config=replace(
+                base.attention_config,
+                backend=spec_cfg.attention_backend,
+            ),
+        )
+
+        return base
 
     def _get_model(self) -> nn.Module:
         """
@@ -1238,6 +1251,7 @@ class SpecDecodeBaseProposer:
                 "Exaone4_5_ForConditionalGeneration",
                 "GlmOcrForConditionalGeneration",
                 "HunYuanVLForConditionalGeneration",
+                "MiMoV2OmniForCausalLM",
                 "Qwen2_5_VLForConditionalGeneration",
                 "Qwen3_5ForConditionalGeneration",
                 "Qwen3_5MoeForConditionalGeneration",

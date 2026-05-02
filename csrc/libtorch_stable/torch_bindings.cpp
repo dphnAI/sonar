@@ -8,6 +8,10 @@
 // torch.ops._C.<op_name> for compatibility with existing code.
 STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
 #ifndef USE_ROCM
+  ops.def("permute_cols(Tensor A, Tensor perm) -> Tensor");
+#endif
+
+#ifndef USE_ROCM
   // Compute per-token-group FP8 quantized tensor and scaling factor.
   // The dummy arguments are here so we can correctly fuse with RMSNorm.
   ops.def(
@@ -218,6 +222,10 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
 }
 
 STABLE_TORCH_LIBRARY_IMPL(_C, CUDA, ops) {
+#ifndef USE_ROCM
+  ops.impl("permute_cols", TORCH_BOX(&permute_cols));
+#endif
+
 #ifndef USE_ROCM
   // Per-token group quantization
   ops.impl("per_token_group_fp8_quant", TORCH_BOX(&per_token_group_quant_fp8));

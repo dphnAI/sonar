@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Any
 
 import torch
 
 from aphrodite.v1.sample.logits_processor import LogitsProcessors
+from aphrodite.v1.sample.thinking_budget_state import ThinkingBudgetStateHolder
 
 
 @dataclass
@@ -105,6 +108,9 @@ class SamplingMetadata:
 
     # Speculative token ids
     spec_token_ids: list[list[int]] | None = None
+    # When non-None, use ``holder.has_tracked_requests()`` to see if this batch applies
+    # thinking-token-budget logits (holder may exist with an empty tracking set).
+    thinking_budget_state_holder: ThinkingBudgetStateHolder | None = None
 
     # Cached padded token-history tensor for GPU-side sampler ops.
     output_token_ids_tensor: torch.Tensor | None = None

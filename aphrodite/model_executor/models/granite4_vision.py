@@ -814,8 +814,9 @@ class Granite4VisionForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMu
         # including during CUDA graph capture (buffers are zero → no-op injection).
         # This ensures the graph captures the injection code path.
         if inputs_embeds is not None and get_pp_group().is_first_rank and self._ds_layer_indices:
+            n = inputs_embeds.size(0)
             ds: IntermediateTensors | None = IntermediateTensors(
-                {f"ds_{llm_layer}": self._ds_buffers[lvl] for lvl, llm_layer in enumerate(self._ds_layer_indices)}
+                {f"ds_{llm_layer}": self._ds_buffers[lvl][:n] for lvl, llm_layer in enumerate(self._ds_layer_indices)}
             )
         else:
             ds = None

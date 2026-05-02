@@ -35,7 +35,6 @@ from aphrodite.model_executor.layers.vocab_parallel_embedding import (
 from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 from aphrodite.platforms import current_platform
 from aphrodite.sequence import IntermediateTensors
-from aphrodite.utils.multi_stream_utils import AuxStreamType
 
 from .deepseek_mtp import SharedHead
 from .deepseek_v2 import get_spec_layer_idx_from_weight_name
@@ -48,9 +47,14 @@ from .utils import maybe_prefix
 
 logger = init_logger(__name__)
 
-# MoE expert scales are fused into per-layer w13/w2 tensors; other FP8 linear
-# scales use `.weight_scale_inv`. Mirrors the regex in
-# DeepseekV4ForCausalLM.hf_to_aphrodite_mapper.
+# MoE expert scales are fused into per-layer w13/w2 tensors. The exact
+# parameter suffix depends on which FusedMoE method handles the experts:
+# - fp4 experts (Mxfp4MoEMethod) register ``w{1,2,3}_weight_scale``;
+# - fp8 experts (Fp8MoEMethod with block_quant=True) register
+#   ``w{1,2,3}_weight_scale_inv``.
+# Other FP8 linear scales (including shared experts) always use
+# ``.weight_scale_inv``. Mirrors the per-instance mapper built by
+# ``_make_deepseek_v4_weights_mapper`` in deepseek_v4.py.
 _EXPERT_SCALE_RE = re.compile(r"\.experts\.\d+\.w[123]\.scale$")
 
 
@@ -60,6 +64,7 @@ class DeepSeekV4MultiTokenPredictorLayer(nn.Module):
         aphrodite_config: AphroditeConfig,
         topk_indices_buffer: torch.Tensor,
         prefix: str,
+        aux_stream_list: list[torch.cuda.Stream] | None = None,
     ) -> None:
         super().__init__()
 
@@ -105,14 +110,11 @@ class DeepSeekV4MultiTokenPredictorLayer(nn.Module):
         )
 
         self.shared_head = SharedHead(config=config, prefix=prefix, quant_config=quant_config)
-        self.aux_stream_dict = {
-            AuxStreamType.Attention: torch.cuda.Stream(),
-        }
         self.mtp_block = DeepseekV4DecoderLayer(
             aphrodite_config,
             prefix,
             topk_indices_buffer=topk_indices_buffer,
-            aux_stream_dict=self.aux_stream_dict,
+            aux_stream_list=aux_stream_list,
         )
 
     def forward(
@@ -156,6 +158,10 @@ class DeepSeekV4MultiTokenPredictor(nn.Module):
             device=self.device,
         )
 
+        # Three aux streams shared across all MTP layers, mirroring
+        # DeepseekV4Model.
+        aux_stream_list = [torch.cuda.Stream() for _ in range(3)]
+
         # to map the exact layer index from weights
         self.layers = torch.nn.ModuleDict(
             {
@@ -163,6 +169,7 @@ class DeepSeekV4MultiTokenPredictor(nn.Module):
                     aphrodite_config,
                     self.topk_indices_buffer,
                     f"{prefix}.layers.{idx}",
+                    aux_stream_list=aux_stream_list,
                 )
                 for idx in range(
                     self.mtp_start_layer_idx,
@@ -310,6 +317,13 @@ class DeepSeekV4MTP(nn.Module):
                 num_experts=self.config.n_routed_experts,
             )
 
+        # FP8 experts register ``..._weight_scale_inv`` (block_quant) while
+        # FP4/MXFP4 experts register ``..._weight_scale``. Choose the suffix
+        # for the rename below based on the model's expert dtype.
+        expert_scale_suffix = (
+            ".weight_scale" if getattr(self.config, "expert_dtype", "fp4") == "fp4" else ".weight_scale_inv"
+        )
+
         for name, loaded_weight in weights:
             mtp_layer_idx = _find_mtp_layer_idx(name)
             # V4 checkpoints store MTP weights as `mtp.{i}.*`; remap to
@@ -330,7 +344,7 @@ class DeepSeekV4MTP(nn.Module):
             if spec_layer != self.model.mtp_start_layer_idx and ".layers" not in name:
                 continue
             if name.endswith(".scale"):
-                suffix = ".weight_scale" if _EXPERT_SCALE_RE.search(name) else ".weight_scale_inv"
+                suffix = expert_scale_suffix if _EXPERT_SCALE_RE.search(name) else ".weight_scale_inv"
                 name = name.removesuffix(".scale") + suffix
             for param_name, weight_name, shard_id in stacked_params_mapping:
                 # Skip non-stacked layers and experts (experts handled below).

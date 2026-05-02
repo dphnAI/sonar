@@ -6,7 +6,6 @@ import torch
 
 import aphrodite.envs as envs
 from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
 )
@@ -65,13 +64,6 @@ class SharedExperts:
         self._moe_config = moe_config
         self._quant_method = quant_method
 
-        # Shared expert MLPs often use a plain SiluAndMul custom op. When
-        # custom ops are globally disabled for torch.compile, that activation
-        # may try to compile its native fallback during CUDA graph capture.
-        act_fn = getattr(self._layer, "act_fn", None)
-        if isinstance(act_fn, SiluAndMul) and not getattr(act_fn, "_enforce_enable", False):
-            self._layer.act_fn = SiluAndMul(enforce_enable=True)
-
         # Allow disabling of the separate shared experts stream for
         # debug purposes.
         # TODO: Remove this after more extensive testings with TP/DP
@@ -100,13 +92,7 @@ class SharedExperts:
         self,
         hidden_states: torch.Tensor,
     ) -> SharedExpertsOrder:
-        is_capturing = current_platform.is_cuda() and torch.cuda.is_current_stream_capturing()
-        if (
-            self._disable_shared_experts_overlap
-            or not self._quant_method.supports_shared_expert_overlap
-            or torch.compiler.is_compiling()
-            or is_capturing
-        ):
+        if self._disable_shared_experts_overlap:
             return SharedExpertsOrder.NO_OVERLAP
 
         if self._quant_method.mk_owns_shared_expert:

@@ -5,7 +5,7 @@ import ast
 import copy
 from typing import TYPE_CHECKING, Any, Literal, get_args
 
-from pydantic import Field, SkipValidation, model_validator
+from pydantic import Field, SkipValidation, field_validator, model_validator
 from typing_extensions import Self
 
 from aphrodite.config.kernel import MoEBackend
@@ -17,6 +17,7 @@ from aphrodite.logger import init_logger
 from aphrodite.transformers_utils.config import get_hf_text_config
 from aphrodite.utils.hashing import safe_hash
 from aphrodite.utils.import_utils import LazyLoader, has_arctic_inference
+from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 
 if TYPE_CHECKING:
     from transformers import PretrainedConfig
@@ -32,6 +33,7 @@ logger = init_logger(__name__)
 MTPModelTypes = Literal[
     "deepseek_mtp",
     "mimo_mtp",
+    "mimo_v2_mtp",
     "glm4_moe_mtp",
     "glm4_moe_lite_mtp",
     "glm_ocr_mtp",
@@ -101,6 +103,10 @@ class SpeculativeConfig:
     inherits the target model's `--moe-backend` setting. Useful when the
     drafter and generator require different MoE kernels (e.g. quantized
     generator with unquantized drafter)."""
+    attention_backend: AttentionBackendEnum | None = None
+    """Attention backend to use for the draft model. When `None`, the backend is
+    automatically selected. Useful when the drafter requires a different attention
+    backend (e.g. DFlash needs a non-causal-capable backend like FLASH_ATTN)."""
     max_model_len: int | None = Field(default=None, ge=1)
     """The maximum model length of the draft model. Used when testing the
     ability to skip speculation for some sequences."""
@@ -308,6 +314,48 @@ class SpeculativeConfig:
                     "num_hidden_layers": 0,
                     "n_predict": n_predict,
                     "architectures": ["MiMoMTPModel"],
+                }
+            )
+
+        if (arch := hf_config.architectures[0]) in (
+            "MiMoV2ForCausalLM",
+            "MiMoV2OmniForCausalLM",
+        ):
+            from aphrodite.model_executor.models.mimo_v2_mtp import (
+                _MIMO_V2_PRO_NUM_MTP_LAYERS,
+            )
+
+            mtp_arch_maps = {
+                "MiMoV2ForCausalLM": "MiMoV2MTPModel",
+                "MiMoV2OmniForCausalLM": "MiMoV2OmniMTPModel",
+            }
+
+            hf_config.model_type = "mimo_v2_mtp"
+            # Aphrodite currently supports only the first MiMo-V2 MTP layer.
+            n_predict = _MIMO_V2_PRO_NUM_MTP_LAYERS
+            hf_config.update(
+                {
+                    "num_hidden_layers": 0,
+                    "n_predict": n_predict,
+                    "num_nextn_predict_layers": n_predict,
+                    "architectures": [mtp_arch_maps[arch]],
+                }
+            )
+
+        if hf_config.architectures[0] == "MiMoV2FlashForCausalLM":
+            from aphrodite.model_executor.models.mimo_v2_mtp import (
+                _MIMO_V2_FLASH_NUM_MTP_LAYERS,
+            )
+
+            hf_config.model_type = "mimo_v2_mtp"
+            # Aphrodite currently supports only the first MiMo-V2 MTP layer.
+            n_predict = _MIMO_V2_FLASH_NUM_MTP_LAYERS
+            hf_config.update(
+                {
+                    "num_hidden_layers": 0,
+                    "n_predict": n_predict,
+                    "num_nextn_predict_layers": n_predict,
+                    "architectures": ["MiMoV2MTPModel"],
                 }
             )
 
@@ -774,6 +822,15 @@ class SpeculativeConfig:
         )
 
         return draft_parallel_config
+
+    @field_validator("attention_backend", mode="before")
+    @classmethod
+    def _parse_attention_backend(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            if value.lower() == "auto":
+                return None
+            return AttentionBackendEnum[value.upper()]
+        return value
 
     @model_validator(mode="after")
     def _verify_args(self) -> Self:

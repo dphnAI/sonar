@@ -14,6 +14,7 @@ from aphrodite.utils.platform_utils import is_pin_memory_available
 from aphrodite.v1.outputs import LogprobsTensors, SamplerOutput
 from aphrodite.v1.sample.metadata import SamplingMetadata
 from aphrodite.v1.sample.ops import SamplingOps
+from aphrodite.v1.sample.ops.bad_words import apply_bad_words
 from aphrodite.v1.sample.ops.logprobs import batched_count_greater_than
 from aphrodite.v1.sample.ops.temperatures import apply_all_temperatures
 from aphrodite.v1.sample.ops.topk_topp_sampler import TopKTopPSampler
@@ -501,3 +502,60 @@ class Sampler(nn.Module):
         indices = indices.to(torch.int32)
 
         return LogprobsTensors(indices, logprobs, token_ranks)
+
+    @staticmethod
+    def _combine_outputs_with_spec_tokens(
+        output_token_ids: list[list[int]],
+        spec_token_ids: list[list[int]] | None = None,
+    ) -> list[list[int]]:
+        if spec_token_ids is None:
+            return output_token_ids
+
+        return [[*out, *spec] if spec else out for out, spec in zip(output_token_ids, spec_token_ids)]
+
+    def apply_logits_processors(
+        self,
+        logits: torch.Tensor,
+        sampling_metadata: SamplingMetadata,
+        predict_bonus_token: bool,
+    ) -> torch.Tensor:
+        bad_words_token_ids = sampling_metadata.bad_words_token_ids
+        any_penalties_or_bad_words = bool(bad_words_token_ids) or not sampling_metadata.no_penalties
+        holder = sampling_metadata.thinking_budget_state_holder
+        needs_thinking_combine = holder is not None and holder.has_tracked_requests()
+
+        output_token_ids = sampling_metadata.output_token_ids
+        if predict_bonus_token and (any_penalties_or_bad_words or needs_thinking_combine):
+            # Combine base outputs with spec tokens when speculative decoding
+            # is enabled.
+            output_token_ids = self._combine_outputs_with_spec_tokens(
+                output_token_ids,
+                sampling_metadata.spec_token_ids,
+            )
+
+        # Apply allowed token ids.
+        if sampling_metadata.allowed_token_ids_mask is not None:
+            logits.masked_fill_(sampling_metadata.allowed_token_ids_mask, float("-inf"))
+
+        # Apply bad words exclusion.
+        if bad_words_token_ids:
+            apply_bad_words(logits, bad_words_token_ids, output_token_ids)
+
+        # Apply logits processors which can impact greedy sampling.
+        for processor in sampling_metadata.logitsprocs.non_argmax_invariant:
+            logits = processor.apply(logits)
+
+        # Apply penalties (e.g., freq_penalties).
+        logits = self.apply_penalties(logits, sampling_metadata, output_token_ids)
+        if holder is not None and holder.has_tracked_requests():
+            holder.update_state(
+                output_token_ids,
+                sampling_metadata.spec_token_ids,
+                repeat_indices=None,
+            )
+            logits = holder.apply_to_logits(
+                logits,
+                predict_bonus_token,
+                sampling_metadata.spec_token_ids,
+            )
+        return logits

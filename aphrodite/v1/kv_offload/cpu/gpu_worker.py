@@ -11,9 +11,13 @@ from aphrodite import _custom_ops as ops
 from aphrodite.logger import init_logger
 from aphrodite.utils.math_utils import cdiv
 from aphrodite.utils.platform_utils import is_pin_memory_available
+from aphrodite.v1.kv_offload.base import (
+    BlockIDsLoadStoreSpec,
+    CanonicalKVCacheRef,
+    CanonicalKVCaches,
+    GPULoadStoreSpec,
+)
 from aphrodite.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
-from aphrodite.v1.kv_offload.mediums import BlockIDsLoadStoreSpec, GPULoadStoreSpec
-from aphrodite.v1.kv_offload.spec import CanonicalKVCacheRef, CanonicalKVCaches
 from aphrodite.v1.kv_offload.worker.worker import (
     OffloadingHandler,
     TransferResult,

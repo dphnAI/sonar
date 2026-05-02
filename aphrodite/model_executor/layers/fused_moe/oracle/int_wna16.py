@@ -27,9 +27,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.model_executor.layers.quantization.gptq_marlin import (
-        GPTQMarlinConfig,
-    )
+    from aphrodite.model_executor.layers.quantization.gptq_marlin import GPTQMarlinConfig
 
 logger = init_logger(__name__)
 
