@@ -15,6 +15,7 @@ import torch
 from packaging.version import Version, parse
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
+from setuptools_rust import Binding, RustExtension
 from setuptools_scm import get_version
 from torch.utils.cpp_extension import CUDA_HOME, ROCM_HOME
 
@@ -29,6 +30,8 @@ def load_module_from_path(module_name, path):
 
 ROOT_DIR = Path(os.path.dirname(__file__))
 logger = logging.getLogger(__name__)
+
+PRECOMPILED_RUST_FRONTEND_PATH = ROOT_DIR / "aphrodite" / "aphrodite-rs"
 
 _VERSION_OVERRIDE = os.getenv("APHRODITE_VERSION_OVERRIDE")
 if _VERSION_OVERRIDE:
@@ -66,6 +69,15 @@ embed_commit_hash()
 envs = load_module_from_path("envs", os.path.join(ROOT_DIR, "aphrodite", "envs.py"))
 
 APHRODITE_TARGET_DEVICE = envs.APHRODITE_TARGET_DEVICE
+USE_PRECOMPILED_EXTENSIONS = envs.APHRODITEUSE_PRECOMPILED
+# APHRODITEUSE_PRECOMPILED implies precompiled rust frontend too.
+USE_PRECOMPILED_RUST_FRONTEND = envs.APHRODITEUSE_PRECOMPILED or envs.APHRODITEUSE_PRECOMPILED_RUST
+
+
+def should_require_rust_frontend() -> bool:
+    value = os.getenv("APHRODITEREQUIRE_RUST_FRONTEND", "")
+    return value.lower() not in ("", "0", "false", "no")
+
 
 if sys.platform.startswith("darwin") and APHRODITE_TARGET_DEVICE != "cpu":
     logger.warning("APHRODITE_TARGET_DEVICE automatically set to `cpu` due to macOS")
@@ -691,6 +703,21 @@ package_data = {
         "third_party/deep_gemm/include/**/*.hpp",
     ]
 }
+
+# Rust frontend binary, built via setuptools-rust and installed into the
+# package directory alongside the Python modules.
+# TODO: we may use `RustBin` to directly install it into `bin` directory, but this
+# requires extra work on using precompiled binaries.
+rust_extensions = [
+    RustExtension(
+        target="aphrodite.aphrodite-rs",
+        path="rust/src/cmd/Cargo.toml",
+        args=["--bin", "aphrodite-rs"],
+        features=["native-tls-vendored"],
+        binding=Binding.Exec,
+        optional=not should_require_rust_frontend(),
+    ),
+]
 
 setup(
     # static metadata should rather go to pyproject.toml

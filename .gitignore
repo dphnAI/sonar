@@ -225,3 +225,5 @@ aphrodite/third_party/deep_gemm/
 .triton
 
 benchmarks/results/**
+
+aphrodite/aphrodite-rs

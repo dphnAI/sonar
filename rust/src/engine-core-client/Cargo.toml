@@ -1,0 +1,43 @@
+[package]
+name = "aphrodite-engine-core-client"
+version.workspace = true
+edition.workspace = true
+
+[features]
+test-util = ["dep:tempfile"]
+
+[dependencies]
+arc-swap.workspace = true
+byteorder.workspace = true
+bytes.workspace = true
+enum-as-inner.workspace = true
+futures.workspace = true
+hex.workspace = true
+parking_lot.workspace = true
+rmp-serde.workspace = true
+rmpv.workspace = true
+serde.workspace = true
+serde_default.workspace = true
+serde_json.workspace = true
+serde_repr.workspace = true
+serde_tuple.workspace = true
+task-local.workspace = true
+tempfile = { workspace = true, optional = true }
+thiserror.workspace = true
+thiserror-ext.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+aphrodite-metrics.workspace = true
+zeromq.workspace = true
+
+[dev-dependencies]
+anyhow.workspace = true
+clap.workspace = true
+expect-test.workspace = true
+hex.workspace = true
+tempfile.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true

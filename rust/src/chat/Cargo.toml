@@ -1,0 +1,63 @@
+[package]
+name = "aphrodite-chat"
+version.workspace = true
+edition.workspace = true
+
+[features]
+test-util = []
+
+[dependencies]
+anyhow.workspace = true
+easy-ext.workspace = true
+futures.workspace = true
+futures-async-stream.workspace = true
+minijinja.workspace = true
+minijinja-contrib.workspace = true
+openai-harmony.workspace = true
+openai-protocol.workspace = true # TODO: currently only serve as the input format for `tool-parser`
+serde.workspace = true
+serde-json-fmt.workspace = true
+serde_json.workspace = true
+serde_with.workspace = true
+subenum.workspace = true
+thiserror.workspace = true
+thiserror-ext.workspace = true
+tool-parser.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+aphrodite-engine-core-client.workspace = true
+aphrodite-llm.workspace = true
+aphrodite-text.workspace = true
+winnow.workspace = true
+
+[dev-dependencies]
+anyhow.workspace = true
+bytes.workspace = true
+clap.workspace = true
+criterion.workspace = true
+expect-test.workspace = true
+rmp-serde.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+aphrodite-engine-core-client = { workspace = true, features = ["test-util"] }
+zeromq.workspace = true
+
+[[bench]]
+name = "deepseek_v32_tool_parser"
+harness = false
+required-features = ["test-util"]
+
+[[bench]]
+name = "qwen3_coder_tool_parser"
+harness = false
+required-features = ["test-util"]
+
+[[bench]]
+name = "minimax_m2_tool_parser"
+harness = false
+required-features = ["test-util"]
+
+[lints]
+workspace = true
