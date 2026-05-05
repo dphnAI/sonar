@@ -64,9 +64,10 @@ class ModelAdapter(Protocol):
 # gemma4: mlx_vlm forward path produces garbled output vs mlx_lm.
 _TEXT_BACKBONE_OVERRIDE_TYPES: frozenset[str] = frozenset({"gemma4"})
 # Qwen3.5/Qwen3.6 conditional-generation wrappers expose a multimodal config,
-# but vllm-metal only serves them in text-only mode. Their FP8 checkpoints ship
-# `*_weight_scale_inv` tensors that the mlx_vlm qwen3_5 loader does not
-# currently sanitize, while mlx_lm's qwen3_5 text loader handles them.
+# but vllm-metal only serves them in text-only mode. Route them through
+# mlx_lm's qwen3_5 text loader; the mlx_vlm wrapper adds multimodal processing
+# overhead and some local text-only MLX checkpoints do not behave correctly
+# through the VLM forward path.
 _TEXT_BACKBONE_OVERRIDE_ARCHITECTURES: frozenset[str] = frozenset(
     {
         "Qwen3_5ForConditionalGeneration",
@@ -109,12 +110,7 @@ class DefaultModelAdapter(ModelAdapter):
         ):
             return False
 
-        quantization_config = getattr(hf_config, "quantization_config", None)
-        if isinstance(quantization_config, dict):
-            quant_method = quantization_config.get("quant_method")
-        else:
-            quant_method = getattr(quantization_config, "quant_method", None)
-        return quant_method == "fp8"
+        return True
 
     def should_force_text_backbone(self, hf_config: Any) -> bool:
         """Whether the current serve mode should use the text-only path.

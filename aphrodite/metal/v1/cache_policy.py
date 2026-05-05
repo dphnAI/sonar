@@ -636,19 +636,46 @@ class WorkerCachePlanner:
                     "Paged attention backend not initialized for capacity reporting"
                 )
             block_size_bytes = self._worker.get_cache_block_size_bytes()
-            available = backend.num_blocks() * block_size_bytes
-            logger.info(
-                "Paged attention: reporting MPS cache capacity "
-                "(%d blocks × %d bytes = %.2f GB)",
-                backend.num_blocks(),
-                block_size_bytes,
-                available / 1e9,
-            )
+            paged_available = backend.num_blocks() * block_size_bytes
+            linear_available = 0
+            if self._worker.model_runner.is_hybrid:
+                linear_available = self._hybrid_scheduler_linear_capacity(
+                    block_size_bytes
+                )
+            available = paged_available + linear_available
+            if linear_available:
+                logger.info(
+                    "Paged attention: reporting MPS cache capacity "
+                    "(%d blocks × %d bytes + %.2f GB hybrid linear state "
+                    "= %.2f GB)",
+                    backend.num_blocks(),
+                    block_size_bytes,
+                    linear_available / 1e9,
+                    available / 1e9,
+                )
+            else:
+                logger.info(
+                    "Paged attention: reporting MPS cache capacity "
+                    "(%d blocks × %d bytes = %.2f GB)",
+                    backend.num_blocks(),
+                    block_size_bytes,
+                    available / 1e9,
+                )
             return available
 
-        one_sequence_bytes = self._worker._one_sequence_kv_bytes()
         max_num_seqs = self._worker.model_runner.scheduler_config.max_num_seqs
-        available = one_sequence_bytes * max_num_seqs
+        if self._worker.model_runner.is_hybrid:
+            block_size = self._worker.aphrodite_config.cache_config.block_size
+            max_model_len = self._worker.model_config.max_model_len
+            num_blocks = -(-max_model_len // block_size)
+            block_size_bytes = self._worker.get_cache_block_size_bytes()
+            available = (
+                num_blocks * block_size_bytes * max_num_seqs
+                + self._hybrid_scheduler_linear_capacity(block_size_bytes)
+            )
+        else:
+            one_sequence_bytes = self._worker._one_sequence_kv_bytes()
+            available = one_sequence_bytes * max_num_seqs
         logger.info(
             "MLX path: reporting %.2f GB for scheduler admission control "
             "(%d max-length sequence%s, max_model_len=%d)",
@@ -658,6 +685,28 @@ class WorkerCachePlanner:
             self._worker.model_config.max_model_len,
         )
         return available
+
+    def _hybrid_scheduler_linear_capacity(self, block_size_bytes: int) -> int:
+        """Return scheduler-visible bytes for hybrid linear state.
+
+        The Metal GDN state cache stores the compact recurrent tensors, but the
+        v1 scheduler unifies hybrid page sizes so each linear layer is budgeted
+        as one padded page per active sequence.  Capacity reporting must mirror
+        that padded scheduler view or startup can fail after the Metal cache has
+        already been allocated successfully.
+        """
+        runner = self._worker.model_runner
+        if runner.num_sdpa_layers <= 0:
+            return (
+                runner.linear_cache_bytes_per_slot()
+                * runner.scheduler_config.max_num_seqs
+            )
+        attention_page_size = block_size_bytes // runner.num_sdpa_layers
+        return (
+            runner.num_linear_layers
+            * attention_page_size
+            * runner.scheduler_config.max_num_seqs
+        )
 
     def _paged_attention_plan(self, *, overhead: int) -> _PagedAttentionPlan:
         block_size = self._worker.aphrodite_config.cache_config.block_size
