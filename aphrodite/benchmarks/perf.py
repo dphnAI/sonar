@@ -286,6 +286,9 @@ def main(args: argparse.Namespace) -> None:
 
     if args.max_num_batched_tokens is None:
         args.max_num_batched_tokens = args.chunk_size
+    max_required_len = args.max_length + args.gen_tokens + 1
+    if args.max_model_len is None:
+        args.max_model_len = max_required_len
 
     # Keep request-level timing metrics enabled, but avoid interleaving the
     # normal "Request completed" log line with the perf.py-style table.
@@ -300,7 +303,6 @@ def main(args: argparse.Namespace) -> None:
             engine_args = EngineArgs.from_cli_args(args)
             llm = LLM.from_engine_args(engine_args)
 
-        max_required_len = args.max_length + args.gen_tokens + 1
         assert llm.llm_engine.model_config.max_model_len >= max_required_len, (
             f"Please ensure max_model_len is at least {max_required_len} tokens for this benchmark."
         )

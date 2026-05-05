@@ -4,9 +4,11 @@ include requirements/cuda.txt
 include requirements/rocm.txt
 include requirements/neuron.txt
 include requirements/cpu.txt
+include requirements/metal.txt
 include CMakeLists.txt
 include aphrodite/endpoints/kobold/klite.embd
 
 recursive-include kernels *
 recursive-include cmake *
+recursive-include csrc/metal *
 prune csrc/xqa/cubin

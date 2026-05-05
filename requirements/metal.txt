@@ -1,0 +1,8 @@
+-r common.txt
+
+# MLX - Required for Apple Silicon GPU acceleration.
+# Upper-bound: csrc/metal/paged_ops.cpp uses MLX private Metal APIs.
+mlx>=0.31.0,<0.32.0; platform_system == "Darwin" and platform_machine == "arm64"
+mlx-lm>=0.31.3; platform_system == "Darwin" and platform_machine == "arm64"
+mlx-vlm>=0.4.0; platform_system == "Darwin" and platform_machine == "arm64"
+nanobind==2.10.2; platform_system == "Darwin" and platform_machine == "arm64"

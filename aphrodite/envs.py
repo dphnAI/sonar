@@ -499,7 +499,7 @@ logger = logging.getLogger(__name__)
 environment_variables: dict[str, Callable[[], Any]] = {
     # ================== Installation Time Env Vars ==================
     # Target device of Aphrodite, supporting [cuda (by default),
-    # rocm, cpu]
+    # rocm, cpu, metal]
     "APHRODITE_TARGET_DEVICE": lambda: os.getenv("APHRODITE_TARGET_DEVICE", "cuda").lower(),
     # Main CUDA version of Aphrodite. This follows PyTorch but can be overridden.
     "APHRODITE_MAIN_CUDA_VERSION": lambda: os.getenv("APHRODITE_MAIN_CUDA_VERSION", "").lower() or "13.0",

@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: Apache-2.0
+"""STT runtime adapter contract used by the vLLM runner.
+
+The vLLM runner delegates STT execution to model-owned runtime adapters under
+`stt/<model>/adapter.py` so shared code does not accumulate per-model branches.
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from collections.abc import Sequence
+from typing import TypeAlias
+
+import mlx.core as mx
+import numpy as np
+import torch
+from numpy.typing import NDArray
+
+STTAudioInput: TypeAlias = (
+    mx.array
+    | torch.Tensor
+    | NDArray[np.generic]
+    | Sequence[float]
+    | Sequence[Sequence[float]]
+)
+
+
+class STTRuntimeAdapter(ABC):
+    """Model-owned bridge between vLLM STT inputs and per-model STT execution.
+
+    Concrete implementations live under `stt/<model>/adapter.py` and own:
+    - input_features normalization to the model's expected encoder input shape
+    - decoding strategy (prompt handling, token extraction, EOT selection)
+    """
+
+    def __init__(self, model: object, model_path: str) -> None:
+        self.model = model
+        self._model_path = model_path
+
+    @staticmethod
+    def _to_mx_float16(value: STTAudioInput) -> mx.array:
+        """Convert common multimodal payload types into ``mx.float16``."""
+        if isinstance(value, torch.Tensor):
+            from aphrodite.metal.pytorch_backend.tensor_bridge import torch_to_mlx
+
+            return torch_to_mlx(value).astype(mx.float16)
+
+        if not isinstance(value, mx.array):
+            return mx.array(value, dtype=mx.float16)
+
+        if value.dtype != mx.float16:
+            return value.astype(mx.float16)
+
+        return value
+
+    @property
+    @abstractmethod
+    def transcriber(self) -> object: ...
+
+    @property
+    @abstractmethod
+    def eot_token(self) -> int: ...
+
+    @abstractmethod
+    def extract_audio_features(self, input_features: STTAudioInput) -> mx.array: ...
+
+    @abstractmethod
+    def decode_tokens(
+        self,
+        audio_features: mx.array,
+        prompt_token_ids: list[int],
+    ) -> list[int]: ...
+
+    @abstractmethod
+    def warm_up(self) -> None:
+        """Run a dummy encode to JIT-compile the model at startup."""
+        ...

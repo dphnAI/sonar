@@ -9,6 +9,8 @@ requires = [
     "torch == 2.11.0",
     "wheel",
     "jinja2",
+    "mlx>=0.31.0,<0.32.0; platform_system == 'Darwin' and platform_machine == 'arm64'",
+    "nanobind==2.10.2; platform_system == 'Darwin' and platform_machine == 'arm64'",
 ]
 build-backend = "setuptools.build_meta"
 

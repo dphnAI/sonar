@@ -10,7 +10,7 @@ from pydantic import ConfigDict, SkipValidation
 from aphrodite.config.utils import config
 from aphrodite.utils.hashing import safe_hash
 
-Device = Literal["auto", "cuda", "cpu", "tpu", "xpu"]
+Device = Literal["auto", "cuda", "cpu", "tpu", "xpu", "metal"]
 
 
 @config(config=ConfigDict(arbitrary_types_allowed=True))
@@ -65,9 +65,13 @@ class DeviceConfig:
             elif isinstance(self.device, torch.device):
                 self.device_type = self.device.type
 
-        # Some device types require processing inputs on CPU
+        # Some device types require processing inputs on CPU. Metal is an
+        # MLX-backed platform, but Aphrodite tensors still flow through CPU/MPS
+        # compatible paths rather than a torch "metal" device.
         if self.device_type in ["tpu"]:
             self.device = None
+        elif self.device_type == "metal":
+            self.device = torch.device("cpu")
         else:
             # Set device with device type
             self.device = torch.device(self.device_type)

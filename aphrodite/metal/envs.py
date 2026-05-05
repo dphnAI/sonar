@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Environment variable definitions for the vLLM Metal plugin.
+
+This module is the single source of truth for all ``APHRODITE_METAL_*`` (and
+``APHRODITE_MLX_*``) environment variables.  It mirrors the lazy-evaluation
+pattern used by ``vllm/envs.py``: each variable is read from
+``os.environ`` on access via ``__getattr__``, so values are never stale
+and ``monkeypatch.setenv`` works in tests without extra resets.
+
+During plugin registration (``aphrodite.metal._register``), the
+``environment_variables`` dict is merged into
+``aphrodite.envs.environment_variables`` so that ``validate_environ()``
+recognises our variables and does not emit spurious "Unknown vLLM
+environment variable" warnings.
+"""
+
+import os
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    APHRODITE_METAL_MEMORY_FRACTION: str = "auto"
+    APHRODITE_METAL_USE_MLX: bool = True
+    APHRODITE_MLX_DEVICE: str = "gpu"
+    APHRODITE_METAL_DEBUG: bool = False
+    APHRODITE_METAL_USE_PAGED_ATTENTION: bool = True
+    APHRODITE_METAL_KV_SHARING_FAST_PREFILL: bool = True
+    APHRODITE_METAL_MULTIMODAL_MODE: str = "auto"
+    APHRODITE_METAL_PREFIX_CACHE: bool = False
+    APHRODITE_METAL_PREFIX_CACHE_FRACTION: str = ""
+    APHRODITE_METAL_MODELSCOPE_CACHE: str | None = None
+    APHRODITE_METAL_SOURCE_DIR: str | None = None
+
+environment_variables: dict[str, Callable[[], Any]] = {
+    # Fraction of unified memory to use.  "auto" (the default) means the
+    # plugin calculates the minimal amount needed at startup.
+    # Returns the raw string; config.py handles "auto" → sentinel conversion.
+    "APHRODITE_METAL_MEMORY_FRACTION": lambda: os.getenv(
+        "APHRODITE_METAL_MEMORY_FRACTION", "auto"
+    ),
+    # Whether to use MLX as the compute backend (default True).
+    "APHRODITE_METAL_USE_MLX": lambda: os.getenv("APHRODITE_METAL_USE_MLX", "1") == "1",
+    # MLX device type: "gpu" (default) or "cpu".
+    "APHRODITE_MLX_DEVICE": lambda: os.getenv("APHRODITE_MLX_DEVICE", "gpu"),
+    # Enable verbose debug logging (default False).
+    "APHRODITE_METAL_DEBUG": lambda: os.getenv("APHRODITE_METAL_DEBUG", "0") == "1",
+    # Use native Metal paged attention (default True).
+    "APHRODITE_METAL_USE_PAGED_ATTENTION": lambda: (
+        os.getenv("APHRODITE_METAL_USE_PAGED_ATTENTION", "1") == "1"
+    ),
+    # Experimental YOCO/KV-sharing fast prefill. Default on for eligible
+    # paged-attention models.
+    "APHRODITE_METAL_KV_SHARING_FAST_PREFILL": lambda: (
+        os.getenv("APHRODITE_METAL_KV_SHARING_FAST_PREFILL", "1") == "1"
+    ),
+    # Multimodal serving mode:
+    # - "auto": known-incompatible multimodal checkpoints fall back to the
+    #   text-only compatibility path.
+    # - "text-only-compat": force known-safe multimodal checkpoints onto the
+    #   text-only compatibility path.
+    # - "multimodal-native": keep native multimodal loading enabled.
+    "APHRODITE_METAL_MULTIMODAL_MODE": lambda: os.getenv(
+        "APHRODITE_METAL_MULTIMODAL_MODE", "auto"
+    ),
+    # Enable content-hash prefix caching (presence-based: set to any
+    # value to enable, unset to disable).
+    "APHRODITE_METAL_PREFIX_CACHE": lambda: "APHRODITE_METAL_PREFIX_CACHE" in os.environ,
+    # Fraction of MLX working set for the prefix cache (raw string;
+    # the consumer in model_runner.py validates and applies a default).
+    "APHRODITE_METAL_PREFIX_CACHE_FRACTION": lambda: os.getenv(
+        "APHRODITE_METAL_PREFIX_CACHE_FRACTION", ""
+    ),
+    # Custom cache directory for ModelScope downloads (None if unset).
+    "APHRODITE_METAL_MODELSCOPE_CACHE": lambda: os.getenv("APHRODITE_METAL_MODELSCOPE_CACHE"),
+    # Optional source directory for csrc/metal when running from unusual installs.
+    "APHRODITE_METAL_SOURCE_DIR": lambda: os.getenv("APHRODITE_METAL_SOURCE_DIR"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name in environment_variables:
+        return environment_variables[name]()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    # Mirrors vllm/envs.py; enables tab-completion and introspection.
+    return list(environment_variables.keys())
