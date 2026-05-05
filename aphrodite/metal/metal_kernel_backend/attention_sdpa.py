@@ -104,7 +104,7 @@ def _pick_kernel_block_size(cache_block_size: int) -> int:
 
 
 def _build_block_tables(
-    raw_block_tables: list[list[int]],
+    ctx: PagedAttentionContext,
     cache_block_size: int,
 ) -> tuple[mx.array, int]:
     """Build kernel-compatible block tables, translating if necessary.
@@ -117,14 +117,23 @@ def _build_block_tables(
     Returns:
         (block_tables, kernel_block_size)
     """
+    cached = ctx.block_tables_cache.get(cache_block_size)
+    if cached is not None:
+        return cached
+
+    raw_block_tables = ctx.block_tables
     if not raw_block_tables:
-        return mx.zeros((0, 0), dtype=mx.int32), cache_block_size
+        result = (mx.zeros((0, 0), dtype=mx.int32), cache_block_size)
+        ctx.block_tables_cache[cache_block_size] = result
+        return result
 
     if cache_block_size in _KERNEL_BLOCK_SIZES:
         # Fast path — no translation needed.
         max_blocks = max(len(bt) for bt in raw_block_tables)
         padded = [bt + [0] * (max_blocks - len(bt)) for bt in raw_block_tables]
-        return mx.array(padded, dtype=mx.int32), cache_block_size
+        result = (mx.array(padded, dtype=mx.int32), cache_block_size)
+        ctx.block_tables_cache[cache_block_size] = result
+        return result
 
     # Hybrid path — translate large block_size to a kernel-compatible one.
     # Vectorized: each vLLM block b → [b*ratio, b*ratio+1, …, b*ratio+ratio-1].
@@ -139,7 +148,9 @@ def _build_block_tables(
     expanded = (bt_arr[:, :, None] * ratio + offsets[None, None, :]).reshape(
         bt_arr.shape[0], -1
     )
-    return expanded, kernel_bs
+    result = (expanded, kernel_bs)
+    ctx.block_tables_cache[cache_block_size] = result
+    return result
 
 
 # === Q/K/V preparation (YOCO, K-eq-V, v_norm variants) ===
@@ -424,10 +435,16 @@ def sdpa_forward(
     k_3d = mx.contiguous(keys[0].transpose(1, 0, 2).astype(kv_cache.dtype))
     v_3d = mx.contiguous(values[0].transpose(1, 0, 2).astype(kv_cache.dtype))
 
-    slot_mapping = mx.array(ctx.slot_mapping, dtype=mx.int64)
-    seq_lens = mx.array(ctx.context_lens, dtype=mx.int32)
-    cu_seqlens_q = mx.array(ctx.cu_seqlens, dtype=mx.int32)
-    max_seq_len = max(ctx.context_lens)
+    slot_mapping = ctx.slot_mapping_mx
+    if slot_mapping is None:
+        slot_mapping = mx.array(ctx.slot_mapping, dtype=mx.int64)
+    seq_lens = ctx.context_lens_mx
+    if seq_lens is None:
+        seq_lens = mx.array(ctx.context_lens, dtype=mx.int32)
+    cu_seqlens_q = ctx.cu_seqlens_mx
+    if cu_seqlens_q is None:
+        cu_seqlens_q = mx.array(ctx.cu_seqlens, dtype=mx.int32)
+    max_seq_len = ctx.max_context_len or max(ctx.context_lens)
 
     # --- Block tables (with hybrid block-size translation) ---
     # vLLM may inflate block_size (e.g. 544) to align attention pages with
@@ -435,9 +452,7 @@ def sdpa_forward(
     # block sizes (8, 16, 32).  _build_block_tables handles the translation:
     # it expands each vLLM block into multiple kernel blocks and returns the
     # kernel-compatible block_size.  The cache is reshaped to match (zero-copy).
-    block_tables, kernel_block_size = _build_block_tables(
-        ctx.block_tables, kv_cache.block_size
-    )
+    block_tables, kernel_block_size = _build_block_tables(ctx, kv_cache.block_size)
 
     if shared_kv is not None:
         # YOCO shared layer: the reference layer already scattered the

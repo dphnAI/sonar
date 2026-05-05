@@ -17,6 +17,7 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any
 
+import mlx.core as mx
 from mlx_lm.models.base import create_causal_mask
 
 # ---------------------------------------------------------------------------
@@ -52,6 +53,13 @@ class PagedAttentionContext:
     # GDN state pool slot mapping: request batch position → stable slot ID.
     # Populated by model_runner for hybrid models; None for non-hybrid.
     gdn_slot_mapping: list[int] | None = None
+    # MLX forms of per-step metadata.  These are shared by all layers in the
+    # same forward pass to avoid rebuilding identical arrays per layer.
+    slot_mapping_mx: mx.array | None = None
+    context_lens_mx: mx.array | None = None
+    cu_seqlens_mx: mx.array | None = None
+    max_context_len: int = 0
+    block_tables_cache: dict[int, tuple[mx.array, int]] = field(default_factory=dict)
 
 
 def set_context(ctx: PagedAttentionContext) -> None:
@@ -200,12 +208,15 @@ def prepare_unified(
         context_lens.append(start_pos + num_tokens)
         offsets.append(start_pos)
 
-    set_context(
-        PagedAttentionContext(
-            slot_mapping=slot_mapping,
-            block_tables=block_tables,
-            context_lens=context_lens,
-            cu_seqlens=cu_seqlens,
-            offsets=offsets,
-        )
+    ctx = PagedAttentionContext(
+        slot_mapping=slot_mapping,
+        block_tables=block_tables,
+        context_lens=context_lens,
+        cu_seqlens=cu_seqlens,
+        offsets=offsets,
+        slot_mapping_mx=mx.array(slot_mapping, dtype=mx.int64),
+        context_lens_mx=mx.array(context_lens, dtype=mx.int32),
+        cu_seqlens_mx=mx.array(cu_seqlens, dtype=mx.int32),
+        max_context_len=max(context_lens, default=0),
     )
+    set_context(ctx)

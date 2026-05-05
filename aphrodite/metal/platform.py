@@ -9,7 +9,11 @@ import psutil
 import torch
 from aphrodite.platforms.interface import DeviceCapability, Platform, PlatformEnum
 
-from aphrodite.metal.config import get_config
+from aphrodite.metal.config import (
+    enable_contiguous_kv_fast_path,
+    get_config,
+    should_use_contiguous_kv_fast_path,
+)
 
 if TYPE_CHECKING:
     from aphrodite.config import AphroditeConfig
@@ -253,6 +257,20 @@ class MetalPlatform(Platform):
                 f"k_quant={config.k_quant}, v_quant={config.v_quant}"
             )
 
+        scheduler_config = aphrodite_config.scheduler_config
+        if should_use_contiguous_kv_fast_path(
+            config,
+            model_config=model_config,
+            scheduler_config=scheduler_config,
+        ):
+            enable_contiguous_kv_fast_path(config)
+            logger.info(
+                "Metal: using contiguous MLX KV cache for low-concurrency "
+                "dense serving (max_num_seqs=%d). Set "
+                "APHRODITE_METAL_USE_PAGED_ATTENTION=1 to force paged attention.",
+                scheduler_config.max_num_seqs,
+            )
+
         if config.debug:
             logger.info(f"Metal config: {config}")
 
@@ -267,7 +285,6 @@ class MetalPlatform(Platform):
         # Disable features not supported on Metal
         parallel_config.disable_custom_all_reduce = True
 
-        scheduler_config = aphrodite_config.scheduler_config
         if getattr(scheduler_config, "enable_chunked_prefill", False):
             if config.use_paged_attention:
                 # The paged path uses a unified varlen Metal kernel that
