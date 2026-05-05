@@ -646,11 +646,15 @@ class WorkerCachePlanner:
             )
             return available
 
-        available = self._worker._one_sequence_kv_bytes()
+        one_sequence_bytes = self._worker._one_sequence_kv_bytes()
+        max_num_seqs = self._worker.model_runner.scheduler_config.max_num_seqs
+        available = one_sequence_bytes * max_num_seqs
         logger.info(
             "MLX path: reporting %.2f GB for scheduler admission control "
-            "(one max-length sequence, max_model_len=%d)",
+            "(%d max-length sequence%s, max_model_len=%d)",
             available / 1e9,
+            max_num_seqs,
+            "" if max_num_seqs == 1 else "s",
             self._worker.model_config.max_model_len,
         )
         return available

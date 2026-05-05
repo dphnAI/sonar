@@ -160,3 +160,33 @@ def reset_config() -> None:
     """Reset the global config (useful for testing)."""
     global _config
     _config = None
+
+
+def should_use_contiguous_kv_fast_path(
+    config: MetalConfig,
+    *,
+    model_config: object | None,
+    scheduler_config: object,
+) -> bool:
+    """Return whether Metal should prefer MLX's contiguous KV cache.
+
+    Paged attention is still the default for higher concurrency and features
+    that need block-managed KV state.  For dense, low-concurrency text serving,
+    MLX's contiguous cache is currently much faster on decode and does not
+    require an environment variable from the user.
+    """
+    return (
+        "APHRODITE_METAL_USE_PAGED_ATTENTION" not in os.environ
+        and config.use_paged_attention
+        and config.is_auto_memory
+        and not config.turboquant
+        and model_config is not None
+        and not getattr(model_config, "is_hybrid", False)
+        and getattr(scheduler_config, "max_num_seqs") <= 2
+    )
+
+
+def enable_contiguous_kv_fast_path(config: MetalConfig) -> None:
+    """Switch a Metal config to the contiguous MLX KV cache path."""
+    config.use_paged_attention = False
+    config.kv_sharing_fast_prefill = False

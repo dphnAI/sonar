@@ -22,7 +22,11 @@ from aphrodite.v1.kv_cache_interface import KVCacheConfig, KVCacheSpec
 from aphrodite.v1.outputs import ModelRunnerOutput
 from aphrodite.v1.worker.worker_base import CompilationTimes, WorkerBase
 
-from aphrodite.metal.config import get_config
+from aphrodite.metal.config import (
+    enable_contiguous_kv_fast_path,
+    get_config,
+    should_use_contiguous_kv_fast_path,
+)
 from aphrodite.metal.platform import MetalPlatform
 from aphrodite.metal.utils import set_wired_limit
 from aphrodite.metal.v1.cache_policy import WorkerCachePlanner
@@ -94,6 +98,19 @@ class MetalWorker(WorkerBase):
             self.metal_config.k_quant = add.get("k_quant", "q8_0")
             self.metal_config.v_quant = add.get("v_quant", "q3_0")
             self.metal_config._validate_turboquant()
+
+        if should_use_contiguous_kv_fast_path(
+            self.metal_config,
+            model_config=self.model_config,
+            scheduler_config=self.scheduler_config,
+        ):
+            enable_contiguous_kv_fast_path(self.metal_config)
+            logger.info(
+                "Metal: using contiguous MLX KV cache for low-concurrency "
+                "dense serving (max_num_seqs=%d). Set "
+                "APHRODITE_METAL_USE_PAGED_ATTENTION=1 to force paged attention.",
+                self.scheduler_config.max_num_seqs,
+            )
 
         # Disable custom all reduce (not supported on Metal)
         self.parallel_config.disable_custom_all_reduce = True

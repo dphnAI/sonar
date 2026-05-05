@@ -418,6 +418,47 @@ class SamplingBatch:
             vocab_size=self.vocab_size,
         )
 
+    def can_use_native_random_for_batch(self) -> bool:
+        """Return whether MLX can handle this random-sampling request.
+
+        This fast path intentionally covers the common serving case:
+        temperature + top-k/top-p sampling without request-specific logits
+        processors, penalties, constraints, or logprob output.  Everything
+        else stays on Aphrodite's torch sampler for feature parity.
+        """
+        if not self.all_random:
+            return False
+        if not (
+            self.no_dynatemp
+            and self.no_top_a
+            and self.no_dry
+            and self.no_no_repeat_ngram
+            and self.no_tfs
+            and self.no_eta_cutoff
+            and self.no_epsilon_cutoff
+            and self.no_typical_p
+            and self.no_quadratic
+            and self.no_xtc
+            and self.no_top_nsigma
+            and self.no_mirostat
+            and self.no_skew
+            and self.no_allowed_token_ids
+            and self.no_bad_words
+            and self.no_logit_bias
+            and self.no_logprob_token_ids
+            and self.no_penalties
+        ):
+            return False
+        return all(
+            sampling_params.min_p == 0.0
+            and sampling_params.min_tokens == 0
+            and sampling_params.logprobs is None
+            and sampling_params.logprob_token_ids is None
+            and sampling_params.seed is None
+            and not sampling_params.temperature_last
+            for sampling_params in self.sampling_params_list
+        )
+
     def make_sampling_metadata(self) -> SamplingMetadata:
         """Create vLLM ``SamplingMetadata`` for this batch."""
         self._refresh_logits_processors()
@@ -541,6 +582,86 @@ def _mlx_greedy_sample(logits: mx.array) -> mx.array:
     return mx.argmax(logits, axis=-1)
 
 
+def _mlx_random_sample(logits: mx.array, batch: SamplingBatch) -> mx.array:
+    """Native MLX temperature/top-k/top-p sampling for the common path."""
+    logits = logits.astype(mx.float32)
+    temperatures = mx.array(
+        [sampling_params.temperature for sampling_params in batch.sampling_params_list],
+        dtype=mx.float32,
+    )[:, None]
+    logits = logits / temperatures
+
+    if not batch.no_top_k:
+        top_ks = [
+            sampling_params.top_k
+            if 0 < sampling_params.top_k < batch.vocab_size
+            else batch.vocab_size
+            for sampling_params in batch.sampling_params_list
+        ]
+        max_top_k = max(top_ks)
+        if max_top_k < batch.vocab_size:
+            topk_indices = mx.argpartition(-logits, max_top_k - 1, axis=-1)[
+                :, :max_top_k
+            ]
+            logits = mx.take_along_axis(logits, topk_indices, axis=-1)
+            if len(set(top_ks)) != 1:
+                positions = mx.arange(max_top_k)[None, :]
+                row_top_ks = mx.array(top_ks, dtype=mx.int32)[:, None]
+                logits = mx.where(positions < row_top_ks, logits, -float("inf"))
+
+            if not batch.no_top_p:
+                sorted_positions = mx.argsort(-logits, axis=-1)
+                sorted_logits = mx.take_along_axis(logits, sorted_positions, axis=-1)
+                sorted_indices = mx.take_along_axis(
+                    topk_indices, sorted_positions, axis=-1
+                )
+                sorted_probs = mx.softmax(sorted_logits, axis=-1)
+                top_ps = mx.array(
+                    [
+                        sampling_params.top_p
+                        for sampling_params in batch.sampling_params_list
+                    ],
+                    dtype=mx.float32,
+                )[:, None]
+                # Keep the first token that crosses top-p, matching nucleus
+                # sampling's usual "cumulative probability before this token"
+                # test.
+                remove = (mx.cumsum(sorted_probs, axis=-1) - sorted_probs) > top_ps
+                sorted_logits = mx.where(remove, -float("inf"), sorted_logits)
+                sampled_positions = mx.random.categorical(sorted_logits, axis=-1)
+                return mx.take_along_axis(
+                    sorted_indices, sampled_positions[:, None], axis=-1
+                )[:, 0]
+
+            sampled_positions = mx.random.categorical(logits, axis=-1)
+            return mx.take_along_axis(
+                topk_indices, sampled_positions[:, None], axis=-1
+            )[:, 0]
+
+        topk_values = mx.topk(logits, max_top_k, axis=-1)
+        topk_thresholds = mx.min(topk_values, axis=-1, keepdims=True)
+        logits = mx.where(logits < topk_thresholds, -float("inf"), logits)
+
+    if not batch.no_top_p:
+        sorted_indices = mx.argsort(-logits, axis=-1)
+        sorted_logits = mx.take_along_axis(logits, sorted_indices, axis=-1)
+        sorted_probs = mx.softmax(sorted_logits, axis=-1)
+        top_ps = mx.array(
+            [sampling_params.top_p for sampling_params in batch.sampling_params_list],
+            dtype=mx.float32,
+        )[:, None]
+        # Keep the first token that crosses top-p, matching nucleus sampling's
+        # usual "cumulative probability before this token" test.
+        remove = (mx.cumsum(sorted_probs, axis=-1) - sorted_probs) > top_ps
+        sorted_logits = mx.where(remove, -float("inf"), sorted_logits)
+        sampled_positions = mx.random.categorical(sorted_logits, axis=-1)
+        return mx.take_along_axis(
+            sorted_indices, sampled_positions[:, None], axis=-1
+        )[:, 0]
+
+    return mx.random.categorical(logits, axis=-1)
+
+
 def sample_from_logits(
     logits_2d: mx.array,
     batch: SamplingBatch,
@@ -554,6 +675,13 @@ def sample_from_logits(
     """
     if batch.can_use_native_greedy_for_batch():
         tokens = _mlx_greedy_sample(logits_2d)
+        mx.eval(tokens)
+        if tokens.ndim == 0:
+            return MetalSamplerResult([int(tokens.item())], None)
+        return MetalSamplerResult(tokens.tolist(), None)  # type: ignore[arg-type]
+
+    if batch.can_use_native_random_for_batch():
+        tokens = _mlx_random_sample(logits_2d, batch)
         mx.eval(tokens)
         if tokens.ndim == 0:
             return MetalSamplerResult([int(tokens.item())], None)
