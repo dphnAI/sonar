@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Whisper runtime adapter for vLLM STT execution."""
+"""Whisper runtime adapter for Aphrodite STT execution."""
 
 from __future__ import annotations
 

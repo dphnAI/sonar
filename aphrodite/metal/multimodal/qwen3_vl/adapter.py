@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Qwen3-VL multimodal adapter for vLLM Metal."""
+"""Qwen3-VL multimodal adapter for Aphrodite Metal."""
 
 from __future__ import annotations
 
@@ -30,10 +30,10 @@ class Qwen3VLMultimodalAdapter:
     ) -> tuple[mx.array, int]:
         """Return ``((3, seq_len) int32 positions, mrope_position_delta)``.
 
-        Calls upstream vLLM's mm_features-driven Qwen3-VL M-RoPE helper with a
+        Calls upstream Aphrodite's mm_features-driven Qwen3-VL M-RoPE helper with a
         minimal image-only config shim, then converts the returned torch tensor
         to an MLX array.  This keeps the position-building policy upstream-owned
-        while the vllm-metal runner can consume MLX arrays.
+        while the aphrodite metal runner can consume MLX arrays.
         """
         if not input_tokens:
             return mx.zeros((3, 0), dtype=mx.int32), 0

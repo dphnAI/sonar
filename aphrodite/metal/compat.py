@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Compatibility patches for vLLM + transformers version mismatches.
+"""Compatibility patches for Aphrodite + transformers version mismatches.
 
 Applied once at platform registration time. Optional missing dependencies are
 logged; unexpected runtime errors are allowed to surface so regressions remain
@@ -146,8 +146,7 @@ def _stack_qwen36_moe_per_expert_weights(
     and ``...mlp.experts.down_proj``, both stacked along axis 0 over experts.
 
     Mirrors the (scan -> validate -> walk) structure of upstream
-    ml-explore/mlx-lm#1224. Removable once vllm-metal's mlx-lm pin bumps
-    past that merge.
+    ml-explore/mlx-lm#1224.
 
     No-op when no per-expert keys are present (dense Qwen3.5/3.6 or already-
     stacked MoE checkpoints).

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Configuration for vLLM Metal plugin via environment variables."""
+"""Configuration for Aphrodite Metal plugin via environment variables."""
 
 import os
 from dataclasses import dataclass
@@ -37,7 +37,7 @@ VALID_MULTIMODAL_MODES: frozenset[MultimodalMode] = frozenset(
 
 @dataclass
 class MetalConfig:
-    """Configuration for vLLM Metal plugin."""
+    """Configuration for Aphrodite Metal plugin."""
 
     memory_fraction: float  # -1.0 means "auto" (calculate minimal needed)
     use_mlx: bool

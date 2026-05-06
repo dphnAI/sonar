@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Speech-to-Text support for vLLM Metal."""
+"""Speech-to-Text support for Aphrodite Metal."""
 
 from aphrodite.metal.stt.loader import load_model
 from aphrodite.metal.stt.protocol import TranscriptionResult, TranscriptionSegment

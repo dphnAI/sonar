@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Qwen3-ASR runtime adapter for vLLM STT execution."""
+"""Qwen3-ASR runtime adapter for Aphrodite STT execution."""
 
 from __future__ import annotations
 

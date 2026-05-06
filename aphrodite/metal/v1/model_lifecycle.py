@@ -104,7 +104,7 @@ def _mlx_lm_compatible_model_path(model_name: str):
         yield model_name
         return
 
-    with TemporaryDirectory(prefix="vllm-metal-mlx-lm-") as tmpdir:
+    with TemporaryDirectory(prefix="aphrodite-metal-mlx-lm-") as tmpdir:
         compat_path = Path(tmpdir)
 
         for src in model_path.iterdir():
@@ -147,7 +147,7 @@ class ModelLifecycle:
             return
 
         model_config = runner.model_config
-        # vLLM model_config shape varies across backends.
+        # Aphrodite model_config shape varies across backends.
         hf_config = getattr(model_config, "hf_config", None)
         is_vlm = bool(getattr(model_config, "is_multimodal_model", False))
         if self._model_adapter.should_force_text_backbone(hf_config):

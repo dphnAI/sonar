@@ -9,15 +9,15 @@ from dataclasses import dataclass
 
 import mlx.core as mx
 import torch
+
+from aphrodite.metal.pytorch_backend.tensor_bridge import mlx_to_torch
 from aphrodite.sampling_params import SamplingParams
 from aphrodite.utils.torch_utils import make_tensor_with_pad
+from aphrodite.v1.outputs import LogprobsTensors
 from aphrodite.v1.sample.logits_processor import LogitsProcessors
 from aphrodite.v1.sample.logits_processor.interface import BatchUpdate
 from aphrodite.v1.sample.metadata import SamplingMetadata
 from aphrodite.v1.sample.sampler import Sampler
-from aphrodite.v1.outputs import LogprobsTensors
-
-from aphrodite.metal.pytorch_backend.tensor_bridge import mlx_to_torch
 
 GREEDY_TEMPERATURE_EPS = 1e-5
 
@@ -74,85 +74,46 @@ class SamplingBatch:
         self.logitsprocs = logitsprocs or LogitsProcessors()
         self.generators = {} if generators is None else generators
         self.all_greedy = all(
-            sampling_params.temperature < GREEDY_TEMPERATURE_EPS
-            for sampling_params in self.sampling_params_list
+            sampling_params.temperature < GREEDY_TEMPERATURE_EPS for sampling_params in self.sampling_params_list
         )
         self.all_random = not self.all_greedy and all(
-            sampling_params.temperature >= GREEDY_TEMPERATURE_EPS
-            for sampling_params in self.sampling_params_list
+            sampling_params.temperature >= GREEDY_TEMPERATURE_EPS for sampling_params in self.sampling_params_list
         )
-        self.no_top_p = all(
-            sampling_params.top_p == 1.0
-            for sampling_params in self.sampling_params_list
-        )
+        self.no_top_p = all(sampling_params.top_p == 1.0 for sampling_params in self.sampling_params_list)
         self.no_top_k = all(
-            not (0 < sampling_params.top_k < self.vocab_size)
-            for sampling_params in self.sampling_params_list
+            not (0 < sampling_params.top_k < self.vocab_size) for sampling_params in self.sampling_params_list
         )
         self.no_dynatemp = all(
-            sampling_params.dynatemp_min <= 0.0
-            and sampling_params.dynatemp_max <= 0.0
+            sampling_params.dynatemp_min <= 0.0 and sampling_params.dynatemp_max <= 0.0
             for sampling_params in self.sampling_params_list
         )
-        self.no_top_a = all(
-            sampling_params.top_a <= 0.0 for sampling_params in self.sampling_params_list
-        )
-        self.no_dry = all(
-            sampling_params.dry_multiplier <= 0.0
-            for sampling_params in self.sampling_params_list
-        )
+        self.no_top_a = all(sampling_params.top_a <= 0.0 for sampling_params in self.sampling_params_list)
+        self.no_dry = all(sampling_params.dry_multiplier <= 0.0 for sampling_params in self.sampling_params_list)
         self.no_no_repeat_ngram = all(
-            sampling_params.no_repeat_ngram_size <= 0
-            for sampling_params in self.sampling_params_list
+            sampling_params.no_repeat_ngram_size <= 0 for sampling_params in self.sampling_params_list
         )
-        self.no_tfs = all(
-            sampling_params.tfs >= 1.0 for sampling_params in self.sampling_params_list
-        )
-        self.no_eta_cutoff = all(
-            sampling_params.eta_cutoff <= 0.0
-            for sampling_params in self.sampling_params_list
-        )
+        self.no_tfs = all(sampling_params.tfs >= 1.0 for sampling_params in self.sampling_params_list)
+        self.no_eta_cutoff = all(sampling_params.eta_cutoff <= 0.0 for sampling_params in self.sampling_params_list)
         self.no_epsilon_cutoff = all(
-            sampling_params.epsilon_cutoff <= 0.0
-            for sampling_params in self.sampling_params_list
+            sampling_params.epsilon_cutoff <= 0.0 for sampling_params in self.sampling_params_list
         )
-        self.no_typical_p = all(
-            sampling_params.typical_p >= 1.0
-            for sampling_params in self.sampling_params_list
-        )
+        self.no_typical_p = all(sampling_params.typical_p >= 1.0 for sampling_params in self.sampling_params_list)
         self.no_quadratic = all(
-            sampling_params.smoothing_factor <= 0.0
-            for sampling_params in self.sampling_params_list
+            sampling_params.smoothing_factor <= 0.0 for sampling_params in self.sampling_params_list
         )
-        self.no_xtc = all(
-            sampling_params.xtc_probability <= 0.0
-            for sampling_params in self.sampling_params_list
-        )
-        self.no_top_nsigma = all(
-            sampling_params.nsigma <= 0.0 for sampling_params in self.sampling_params_list
-        )
-        self.no_mirostat = all(
-            sampling_params.mirostat_mode == 0
-            for sampling_params in self.sampling_params_list
-        )
-        self.no_skew = all(
-            sampling_params.skew == 0.0 for sampling_params in self.sampling_params_list
-        )
+        self.no_xtc = all(sampling_params.xtc_probability <= 0.0 for sampling_params in self.sampling_params_list)
+        self.no_top_nsigma = all(sampling_params.nsigma <= 0.0 for sampling_params in self.sampling_params_list)
+        self.no_mirostat = all(sampling_params.mirostat_mode == 0 for sampling_params in self.sampling_params_list)
+        self.no_skew = all(sampling_params.skew == 0.0 for sampling_params in self.sampling_params_list)
         self.no_allowed_token_ids = all(
-            not sampling_params.allowed_token_ids
-            for sampling_params in self.sampling_params_list
+            not sampling_params.allowed_token_ids for sampling_params in self.sampling_params_list
         )
         self.no_bad_words = all(
-            not sampling_params.bad_words_token_ids
-            for sampling_params in self.sampling_params_list
+            not sampling_params.bad_words_token_ids for sampling_params in self.sampling_params_list
         )
-        self.no_logit_bias = all(
-            not sampling_params.logit_bias
-            for sampling_params in self.sampling_params_list
-        )
+        self.no_logit_bias = all(not sampling_params.logit_bias for sampling_params in self.sampling_params_list)
         self.no_logprob_token_ids = all(
-            sampling_params.logprob_token_ids is None
-            for sampling_params in self.sampling_params_list
+            sampling_params.logprob_token_ids is None for sampling_params in self.sampling_params_list
         )
         self.no_penalties = all(
             sampling_params.frequency_penalty == 0.0
@@ -170,10 +131,7 @@ class SamplingBatch:
         """Return whether MLX argmax matches the requested sampling behavior."""
         return all(
             sampling_params.temperature < GREEDY_TEMPERATURE_EPS
-            and (
-                sampling_params.top_k <= 0
-                or (vocab_size is not None and sampling_params.top_k >= vocab_size)
-            )
+            and (sampling_params.top_k <= 0 or (vocab_size is not None and sampling_params.top_k >= vocab_size))
             and sampling_params.top_p == 1.0
             and sampling_params.min_p == 0.0
             and sampling_params.top_a == 0.0
@@ -207,10 +165,7 @@ class SamplingBatch:
             return None
 
         return torch.tensor(
-            [
-                sampling_params.temperature
-                for sampling_params in self.sampling_params_list
-            ],
+            [sampling_params.temperature for sampling_params in self.sampling_params_list],
             dtype=torch.float32,
             device=self.device,
         )
@@ -231,9 +186,7 @@ class SamplingBatch:
 
         return torch.tensor(
             [
-                sampling_params.top_k
-                if 0 < sampling_params.top_k < self.vocab_size
-                else self.vocab_size
+                sampling_params.top_k if 0 < sampling_params.top_k < self.vocab_size else self.vocab_size
                 for sampling_params in self.sampling_params_list
             ],
             dtype=torch.int32,
@@ -251,10 +204,7 @@ class SamplingBatch:
             return None
         field_name = source_attr or attr
         return torch.tensor(
-            [
-                float(getattr(sampling_params, field_name))
-                for sampling_params in self.sampling_params_list
-            ],
+            [float(getattr(sampling_params, field_name)) for sampling_params in self.sampling_params_list],
             dtype=torch.float32,
             device=self.device,
         )
@@ -271,10 +221,7 @@ class SamplingBatch:
             return None
         field_name = source_attr or attr
         return torch.tensor(
-            [
-                int(getattr(sampling_params, field_name))
-                for sampling_params in self.sampling_params_list
-            ],
+            [int(getattr(sampling_params, field_name)) for sampling_params in self.sampling_params_list],
             dtype=dtype,
             device=self.device,
         )
@@ -295,26 +242,17 @@ class SamplingBatch:
         self,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         frequency_penalties = torch.tensor(
-            [
-                sampling_params.frequency_penalty
-                for sampling_params in self.sampling_params_list
-            ],
+            [sampling_params.frequency_penalty for sampling_params in self.sampling_params_list],
             dtype=torch.float32,
             device=self.device,
         )
         presence_penalties = torch.tensor(
-            [
-                sampling_params.presence_penalty
-                for sampling_params in self.sampling_params_list
-            ],
+            [sampling_params.presence_penalty for sampling_params in self.sampling_params_list],
             dtype=torch.float32,
             device=self.device,
         )
         repetition_penalties = torch.tensor(
-            [
-                sampling_params.repetition_penalty
-                for sampling_params in self.sampling_params_list
-            ],
+            [sampling_params.repetition_penalty for sampling_params in self.sampling_params_list],
             dtype=torch.float32,
             device=self.device,
         )
@@ -460,7 +398,7 @@ class SamplingBatch:
         )
 
     def make_sampling_metadata(self) -> SamplingMetadata:
-        """Create vLLM ``SamplingMetadata`` for this batch."""
+        """Create Aphrodite ``SamplingMetadata`` for this batch."""
         self._refresh_logits_processors()
         (
             frequency_penalties,
@@ -482,41 +420,23 @@ class SamplingBatch:
             top_p=self._make_top_p(),
             top_k=self._make_top_k(),
             top_a=self._make_float_tensor("top_a", disabled=self.no_top_a),
-            dry_multiplier=self._make_float_tensor(
-                "dry_multiplier", disabled=self.no_dry
-            ),
+            dry_multiplier=self._make_float_tensor("dry_multiplier", disabled=self.no_dry),
             dry_base=self._make_float_tensor("dry_base", disabled=self.no_dry),
-            dry_allowed_length=self._make_int_tensor(
-                "dry_allowed_length", disabled=self.no_dry
-            ),
+            dry_allowed_length=self._make_int_tensor("dry_allowed_length", disabled=self.no_dry),
             dry_sequence_breaker_ids=self._make_dry_sequence_breaker_ids(),
             dry_ranges=self._make_int_tensor(
                 "dry_ranges",
                 disabled=self.no_dry,
                 source_attr="dry_range",
             ),
-            dry_max_ngram=self._make_int_tensor(
-                "dry_max_ngram", disabled=self.no_dry
-            ),
-            dry_max_occurrences=self._make_int_tensor(
-                "dry_max_occurrences", disabled=self.no_dry
-            ),
-            dry_early_exit_match_len=self._make_int_tensor(
-                "dry_early_exit_match_len", disabled=self.no_dry
-            ),
-            no_repeat_ngram_size=self._make_int_tensor(
-                "no_repeat_ngram_size", disabled=self.no_no_repeat_ngram
-            ),
+            dry_max_ngram=self._make_int_tensor("dry_max_ngram", disabled=self.no_dry),
+            dry_max_occurrences=self._make_int_tensor("dry_max_occurrences", disabled=self.no_dry),
+            dry_early_exit_match_len=self._make_int_tensor("dry_early_exit_match_len", disabled=self.no_dry),
+            no_repeat_ngram_size=self._make_int_tensor("no_repeat_ngram_size", disabled=self.no_no_repeat_ngram),
             tfs=self._make_float_tensor("tfs", disabled=self.no_tfs),
-            eta_cutoff=self._make_float_tensor(
-                "eta_cutoff", disabled=self.no_eta_cutoff
-            ),
-            epsilon_cutoff=self._make_float_tensor(
-                "epsilon_cutoff", disabled=self.no_epsilon_cutoff
-            ),
-            typical_p=self._make_float_tensor(
-                "typical_p", disabled=self.no_typical_p
-            ),
+            eta_cutoff=self._make_float_tensor("eta_cutoff", disabled=self.no_eta_cutoff),
+            epsilon_cutoff=self._make_float_tensor("epsilon_cutoff", disabled=self.no_epsilon_cutoff),
+            typical_p=self._make_float_tensor("typical_p", disabled=self.no_typical_p),
             quadratic_smoothing_factor=self._make_float_tensor(
                 "quadratic_smoothing_factor",
                 disabled=self.no_quadratic,
@@ -527,26 +447,16 @@ class SamplingBatch:
                 disabled=self.no_quadratic,
                 source_attr="smoothing_curve",
             ),
-            xtc_threshold=self._make_float_tensor(
-                "xtc_threshold", disabled=self.no_xtc
-            ),
-            xtc_probability=self._make_float_tensor(
-                "xtc_probability", disabled=self.no_xtc
-            ),
+            xtc_threshold=self._make_float_tensor("xtc_threshold", disabled=self.no_xtc),
+            xtc_probability=self._make_float_tensor("xtc_probability", disabled=self.no_xtc),
             top_nsigma=self._make_float_tensor(
                 "top_nsigma",
                 disabled=self.no_top_nsigma,
                 source_attr="nsigma",
             ),
-            mirostat_mode=self._make_int_tensor(
-                "mirostat_mode", disabled=self.no_mirostat
-            ),
-            mirostat_tau=self._make_float_tensor(
-                "mirostat_tau", disabled=self.no_mirostat
-            ),
-            mirostat_eta=self._make_float_tensor(
-                "mirostat_eta", disabled=self.no_mirostat
-            ),
+            mirostat_mode=self._make_int_tensor("mirostat_mode", disabled=self.no_mirostat),
+            mirostat_tau=self._make_float_tensor("mirostat_tau", disabled=self.no_mirostat),
+            mirostat_eta=self._make_float_tensor("mirostat_eta", disabled=self.no_mirostat),
             skew=self._make_float_tensor("skew", disabled=self.no_skew),
             generators=self.generators,
             max_num_logprobs=self._make_max_num_logprobs(),
@@ -561,13 +471,8 @@ class SamplingBatch:
             logit_bias=self._make_logit_bias(),
             logitsprocs=self.logitsprocs,
             logprob_token_ids=self._make_logprob_token_ids(),
-            temperature_last=[
-                sampling_params.temperature_last
-                for sampling_params in self.sampling_params_list
-            ],
-            persistent_data={
-                index: {} for index in range(len(self.sampling_params_list))
-            },
+            temperature_last=[sampling_params.temperature_last for sampling_params in self.sampling_params_list],
+            persistent_data={index: {} for index in range(len(self.sampling_params_list))},
             spec_token_ids=None,
         )
 
@@ -593,16 +498,12 @@ def _mlx_random_sample(logits: mx.array, batch: SamplingBatch) -> mx.array:
 
     if not batch.no_top_k:
         top_ks = [
-            sampling_params.top_k
-            if 0 < sampling_params.top_k < batch.vocab_size
-            else batch.vocab_size
+            sampling_params.top_k if 0 < sampling_params.top_k < batch.vocab_size else batch.vocab_size
             for sampling_params in batch.sampling_params_list
         ]
         max_top_k = max(top_ks)
         if max_top_k < batch.vocab_size:
-            topk_indices = mx.argpartition(-logits, max_top_k - 1, axis=-1)[
-                :, :max_top_k
-            ]
+            topk_indices = mx.argpartition(-logits, max_top_k - 1, axis=-1)[:, :max_top_k]
             logits = mx.take_along_axis(logits, topk_indices, axis=-1)
             if len(set(top_ks)) != 1:
                 positions = mx.arange(max_top_k)[None, :]
@@ -612,15 +513,10 @@ def _mlx_random_sample(logits: mx.array, batch: SamplingBatch) -> mx.array:
             if not batch.no_top_p:
                 sorted_positions = mx.argsort(-logits, axis=-1)
                 sorted_logits = mx.take_along_axis(logits, sorted_positions, axis=-1)
-                sorted_indices = mx.take_along_axis(
-                    topk_indices, sorted_positions, axis=-1
-                )
+                sorted_indices = mx.take_along_axis(topk_indices, sorted_positions, axis=-1)
                 sorted_probs = mx.softmax(sorted_logits, axis=-1)
                 top_ps = mx.array(
-                    [
-                        sampling_params.top_p
-                        for sampling_params in batch.sampling_params_list
-                    ],
+                    [sampling_params.top_p for sampling_params in batch.sampling_params_list],
                     dtype=mx.float32,
                 )[:, None]
                 # Keep the first token that crosses top-p, matching nucleus
@@ -629,14 +525,10 @@ def _mlx_random_sample(logits: mx.array, batch: SamplingBatch) -> mx.array:
                 remove = (mx.cumsum(sorted_probs, axis=-1) - sorted_probs) > top_ps
                 sorted_logits = mx.where(remove, -float("inf"), sorted_logits)
                 sampled_positions = mx.random.categorical(sorted_logits, axis=-1)
-                return mx.take_along_axis(
-                    sorted_indices, sampled_positions[:, None], axis=-1
-                )[:, 0]
+                return mx.take_along_axis(sorted_indices, sampled_positions[:, None], axis=-1)[:, 0]
 
             sampled_positions = mx.random.categorical(logits, axis=-1)
-            return mx.take_along_axis(
-                topk_indices, sampled_positions[:, None], axis=-1
-            )[:, 0]
+            return mx.take_along_axis(topk_indices, sampled_positions[:, None], axis=-1)[:, 0]
 
         topk_values = mx.topk(logits, max_top_k, axis=-1)
         topk_thresholds = mx.min(topk_values, axis=-1, keepdims=True)
@@ -655,9 +547,7 @@ def _mlx_random_sample(logits: mx.array, batch: SamplingBatch) -> mx.array:
         remove = (mx.cumsum(sorted_probs, axis=-1) - sorted_probs) > top_ps
         sorted_logits = mx.where(remove, -float("inf"), sorted_logits)
         sampled_positions = mx.random.categorical(sorted_logits, axis=-1)
-        return mx.take_along_axis(
-            sorted_indices, sampled_positions[:, None], axis=-1
-        )[:, 0]
+        return mx.take_along_axis(sorted_indices, sampled_positions[:, None], axis=-1)[:, 0]
 
     return mx.random.categorical(logits, axis=-1)
 
@@ -671,7 +561,7 @@ def sample_from_logits(
     """Sample tokens from pre-sliced 2D logits ``(batch_size, vocab)``.
 
     Single entry point for all sampling paths.  Chooses native MLX greedy
-    when possible, otherwise bridges to the vLLM torch sampler.
+    when possible, otherwise bridges to the Aphrodite torch sampler.
     """
     if batch.can_use_native_greedy_for_batch():
         tokens = _mlx_greedy_sample(logits_2d)
@@ -713,7 +603,7 @@ def sample_decode_tokens(
         logits: Full logits array, shape ``(1, total_tokens, vocab)``.
         decode_reqs: ``(req_id, RequestState)`` pairs for decode requests.
         num_decode: Number of decode requests (prefix of the token dimension).
-        sampler: vLLM Sampler instance.
+        sampler: Aphrodite Sampler instance.
         device: PyTorch device for the torch bridge path.
         vocab_size: Model vocabulary size.
         logitsprocs: Optional logits processors.
@@ -727,17 +617,9 @@ def sample_decode_tokens(
     decode_logits = logits[0, :num_decode, :]  # (num_decode, vocab)
 
     sampling_params_list = [state.sampling_params for _, state in decode_reqs]
-    prompt_token_ids_list = [
-        state.token_ids[: state.prompt_len] for _, state in decode_reqs
-    ]
-    output_tokens_list = [
-        state.token_ids[state.prompt_len :] for _, state in decode_reqs
-    ]
-    generators = {
-        i: state.generator
-        for i, (_, state) in enumerate(decode_reqs)
-        if state.generator is not None
-    }
+    prompt_token_ids_list = [state.token_ids[: state.prompt_len] for _, state in decode_reqs]
+    output_tokens_list = [state.token_ids[state.prompt_len :] for _, state in decode_reqs]
+    generators = {i: state.generator for i, (_, state) in enumerate(decode_reqs) if state.generator is not None}
 
     batch = SamplingBatch(
         sampling_params_list,
@@ -769,7 +651,7 @@ def sample_prefill_tokens(
         prefill_reqs: List of ``PrefillRequest`` objects.
         cu_seqlens: Cumulative sequence lengths for logit position lookup.
         num_decode: Number of decode requests (offset into cu_seqlens).
-        sampler: vLLM Sampler instance.
+        sampler: Aphrodite Sampler instance.
         device: PyTorch device for the torch bridge path.
         vocab_size: Model vocabulary size.
         logitsprocs: Optional logits processors.
@@ -790,11 +672,7 @@ def sample_prefill_tokens(
         else:
             prompt_len = len(pr.token_ids)
 
-        prompt_for_meta = (
-            pr.full_prompt_token_ids
-            if pr.full_prompt_token_ids is not None
-            else pr.token_ids
-        )
+        prompt_for_meta = pr.full_prompt_token_ids if pr.full_prompt_token_ids is not None else pr.token_ids
         generators = {} if pr.generator is None else {0: pr.generator}
 
         batch = SamplingBatch(
@@ -839,9 +717,7 @@ def _merge_single_row_logprobs(
             continue
         pad = width - row.logprobs.shape[1]
         if pad:
-            token_rows.append(
-                torch.nn.functional.pad(row.logprob_token_ids[:1], (0, pad))
-            )
+            token_rows.append(torch.nn.functional.pad(row.logprob_token_ids[:1], (0, pad)))
             logprob_rows.append(torch.nn.functional.pad(row.logprobs[:1], (0, pad)))
         else:
             token_rows.append(row.logprob_token_ids[:1])

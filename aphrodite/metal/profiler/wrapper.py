@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Metal frame-capture wrapper for vLLM's WorkerProfiler abstraction.
+"""Metal frame-capture wrapper for Aphrodite's WorkerProfiler abstraction.
 
 Subclasses ``aphrodite.profiler.wrapper.WorkerProfiler`` so that the manual
 start/stop surface — ``LLM.start_profile`` / ``LLM.stop_profile``, the
@@ -35,7 +35,7 @@ logger = init_logger(__name__)
 
 
 class MetalProfilerWrapper(WorkerProfiler):
-    """Metal frame-capture flavor of vLLM's WorkerProfiler.
+    """Metal frame-capture flavor of Aphrodite's WorkerProfiler.
 
     Trace output: ``<profiler_config.torch_profiler_dir>/<trace_name>.gputrace``
     """

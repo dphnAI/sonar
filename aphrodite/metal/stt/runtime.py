@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-"""STT runtime adapter contract used by the vLLM runner.
+"""STT runtime adapter contract used by the Aphrodite runner.
 
-The vLLM runner delegates STT execution to model-owned runtime adapters under
+The Aphrodite runner delegates STT execution to model-owned runtime adapters under
 `stt/<model>/adapter.py` so shared code does not accumulate per-model branches.
 """
 
@@ -26,7 +26,7 @@ STTAudioInput: TypeAlias = (
 
 
 class STTRuntimeAdapter(ABC):
-    """Model-owned bridge between vLLM STT inputs and per-model STT execution.
+    """Model-owned bridge between Aphrodite STT inputs and per-model STT execution.
 
     Concrete implementations live under `stt/<model>/adapter.py` and own:
     - input_features normalization to the model's expected encoder input shape

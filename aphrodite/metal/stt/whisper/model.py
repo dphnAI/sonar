@@ -273,7 +273,7 @@ class WhisperModel(nn.Module):
         self._alignment_heads = mx.array(np.asarray(all_heads.nonzero()).T)
 
     def create_runtime_adapter(self, model_path: str) -> STTRuntimeAdapter:
-        """Create the model-owned runtime adapter used by the vLLM runner."""
+        """Create the model-owned runtime adapter used by the Aphrodite runner."""
         # Local import: avoid import-time cycles (adapter imports transcriber).
         from .adapter import WhisperRuntimeAdapter
 

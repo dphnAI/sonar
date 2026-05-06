@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Environment variable definitions for the vLLM Metal plugin.
+"""Environment variable definitions for the Aphrodite Metal plugin.
 
 This module is the single source of truth for all ``APHRODITE_METAL_*`` (and
 ``APHRODITE_MLX_*``) environment variables.  It mirrors the lazy-evaluation
-pattern used by ``vllm/envs.py``: each variable is read from
+pattern used by ``aphrodite/envs.py``: each variable is read from
 ``os.environ`` on access via ``__getattr__``, so values are never stale
 and ``monkeypatch.setenv`` works in tests without extra resets.
 
 During plugin registration (``aphrodite.metal._register``), the
 ``environment_variables`` dict is merged into
 ``aphrodite.envs.environment_variables`` so that ``validate_environ()``
-recognises our variables and does not emit spurious "Unknown vLLM
+recognises our variables and does not emit spurious "Unknown Aphrodite
 environment variable" warnings.
 """
 
@@ -84,5 +84,5 @@ def __getattr__(name: str) -> Any:
 
 
 def __dir__() -> list[str]:
-    # Mirrors vllm/envs.py; enables tab-completion and introspection.
+    # Mirrors aphrodite/envs.py; enables tab-completion and introspection.
     return list(environment_variables.keys())

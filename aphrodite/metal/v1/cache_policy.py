@@ -66,7 +66,7 @@ class TurboQuantAttentionSpec(FullAttentionSpec):
     """FullAttentionSpec for TurboQuant-compressed KV cache.
 
     Reports the true packed byte count per page via an override of
-    ``real_page_size_bytes`` so vLLM's scheduler can budget more blocks
+    ``real_page_size_bytes`` so Aphrodite's scheduler can budget more blocks
     than the FP16 formula would allow — without lying about ``head_size``
     (the ``head_size_v`` reverse-engineering trick the previous version
     used produced negative values for aggressive 2-bit configs).
@@ -146,9 +146,9 @@ def _build_turboquant_attention_spec(
 
 
 def _register_turboquant_spec_manager() -> None:
-    """Register ``TurboQuantAttentionSpec`` in vLLM's spec→manager map.
+    """Register ``TurboQuantAttentionSpec`` in Aphrodite's spec→manager map.
 
-    vLLM's ``get_manager_for_kv_cache_spec`` uses strict-type lookup
+    Aphrodite's ``get_manager_for_kv_cache_spec`` uses strict-type lookup
     (``spec_manager_map[type(spec)]``), not ``isinstance``, so the
     ``FullAttentionSpec`` entry does not cover subclasses.  We reuse
     ``FullAttentionManager`` because a TurboQuant cache is accessed
@@ -157,7 +157,7 @@ def _register_turboquant_spec_manager() -> None:
     inside the Metal kernel).
 
     Mirrors the upstream registration for ``MLAAttentionSpec`` (which
-    vLLM also maps to ``FullAttentionManager``).
+    Aphrodite also maps to ``FullAttentionManager``).
     """
     try:
         from aphrodite.v1.core.single_type_kv_cache_manager import (
@@ -165,7 +165,7 @@ def _register_turboquant_spec_manager() -> None:
             spec_manager_map,
         )
     except ImportError:
-        # vLLM shape changed; let the scheduler raise its own clearer error.
+        # Aphrodite shape changed; let the scheduler raise its own clearer error.
         return
     spec_manager_map.setdefault(TurboQuantAttentionSpec, FullAttentionManager)
 

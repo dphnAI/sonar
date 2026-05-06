@@ -558,7 +558,7 @@ class Qwen3ASRModel(nn.Module):
         return self.language_model.forward_embeds(embeds, cache)
 
     def create_runtime_adapter(self, model_path: str) -> STTRuntimeAdapter:
-        """Create the model-owned runtime adapter used by the vLLM runner."""
+        """Create the model-owned runtime adapter used by the Aphrodite runner."""
         # Local import: avoid import-time cycles (adapter imports transcriber).
         from .adapter import Qwen3ASRRuntimeAdapter
 

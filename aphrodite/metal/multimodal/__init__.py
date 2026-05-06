@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Generic multimodal helpers for vLLM Metal."""
+"""Generic multimodal helpers for Aphrodite Metal."""
 
 from __future__ import annotations
 

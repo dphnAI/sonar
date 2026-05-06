@@ -29,6 +29,28 @@ else:
 
 logger = init_logger(__name__)
 
+_EXTENSION_IMPORT_FAILURES_WARNED: set[str] = set()
+
+
+def log_extension_import_failure(
+    module_name: str,
+    exc: ImportError,
+    *,
+    target_logger: Any = logger,
+) -> None:
+    """Log extension import failures once at warning level per process.
+
+    Several platform probes can legitimately try the same optional extension
+    during startup.  Keep the first failure visible, but demote repeat failures
+    to debug so missing optional extensions do not flood server logs.
+    """
+    message = "Failed to import from %s: %r"
+    if module_name in _EXTENSION_IMPORT_FAILURES_WARNED:
+        target_logger.debug(message, module_name, exc)
+        return
+    _EXTENSION_IMPORT_FAILURES_WARNED.add(module_name)
+    target_logger.warning(message, module_name, exc)
+
 
 def in_wsl() -> bool:
     # Reference: https://github.com/microsoft/WSL/issues/4071
@@ -241,7 +263,7 @@ class Platform:
         try:
             import aphrodite._C  # noqa: F401
         except ImportError as e:
-            logger.warning("Failed to import from aphrodite._C: %r", e)
+            log_extension_import_failure("aphrodite._C", e)
         with contextlib.suppress(ImportError):
             import aphrodite._moe_C  # noqa: F401
 

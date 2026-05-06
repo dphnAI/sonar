@@ -60,11 +60,11 @@ class ModelAdapter(Protocol):
         """Return per-layer sliding window sizes, or None for no enforcement."""
 
 
-# Models/configs that vLLM flags as multimodal but must be loaded via mlx_lm.
+# Models/configs that Aphrodite flags as multimodal but must be loaded via mlx_lm.
 # gemma4: mlx_vlm forward path produces garbled output vs mlx_lm.
 _TEXT_BACKBONE_OVERRIDE_TYPES: frozenset[str] = frozenset({"gemma4"})
 # Qwen3.5/Qwen3.6 conditional-generation wrappers expose a multimodal config,
-# but vllm-metal only serves them in text-only mode. Route them through
+# but Aphrodite metal only serves them in text-only mode. Route them through
 # mlx_lm's qwen3_5 text loader; the mlx_vlm wrapper adds multimodal processing
 # overhead and some local text-only MLX checkpoints do not behave correctly
 # through the VLM forward path.
@@ -135,7 +135,7 @@ class DefaultModelAdapter(ModelAdapter):
 
         When the active serve mode routes a multimodal checkpoint through the
         text-only compatibility path, leaving ``multimodal_config`` populated
-        causes vLLM to eagerly initialize multimodal processors that the
+        causes Aphrodite to eagerly initialize multimodal processors that the
         compatibility path intentionally bypasses. Clearing it here makes
         ``is_multimodal_model`` ``False`` so the input processor skips that
         setup. The ``should_force_text_backbone`` predicate is the single

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""vLLM v1 compatibility module for Metal platform."""
+"""Aphrodite v1 compatibility module for Metal platform."""
 
 __all__ = ["MetalWorker"]
 

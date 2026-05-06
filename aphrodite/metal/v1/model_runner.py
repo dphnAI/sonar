@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """
-Metal vLLM v1 model runner.
+Metal Aphrodite v1 model runner.
 
 Orchestration only: coordinates scheduling, dispatch, and output assembly.
 Model-specific behavior belongs in adapters; backend-specific kernels live in
@@ -87,8 +87,8 @@ def _create_request_generator(
 ) -> torch.Generator | None:
     """Create a per-request generator for seeded sampling.
 
-    vLLM uses a per-request generator only when an explicit seed is provided.
-    For unseeded sampling, vLLM relies on the global RNG state.
+    Aphrodite uses a per-request generator only when an explicit seed is provided.
+    For unseeded sampling, Aphrodite relies on the global RNG state.
     """
     if sampling_params.seed is None:
         return None
@@ -105,7 +105,7 @@ class RequestState:
 
     token_ids: list[int]
     # Length of the original prompt (prefix) within `token_ids`.
-    # vLLM applies repetition penalties to both prompt+output tokens, but applies
+    # Aphrodite applies repetition penalties to both prompt+output tokens, but applies
     # presence/frequency penalties only to generated (output) tokens.
     prompt_len: int
     cache: list[AnyCache]  # Per-layer caches (KVCache, RotatingKVCache, or ArraysCache)
@@ -315,7 +315,7 @@ def _slice_logprobs_row(
 class MetalModelRunner:
     """Model runner for MLX-based inference on Metal.
 
-    Implements the vLLM v1 model runner interface for Apple Silicon.
+    Implements the Aphrodite v1 model runner interface for Apple Silicon.
     Uses true batched decode with BatchKVCache for efficient parallel processing.
     """
 
@@ -327,7 +327,7 @@ class MetalModelRunner:
         """Initialize model runner.
 
         Args:
-            aphrodite_config: vLLM configuration
+            aphrodite_config: Aphrodite configuration
             device: PyTorch device (CPU for Metal interop)
         """
         self.aphrodite_config = aphrodite_config
@@ -359,7 +359,7 @@ class MetalModelRunner:
         self._gdn_free_slots: list[int] = []
         self._gdn_needs_materialize = False
 
-        # vLLM Sampler for token sampling with temperature, top_k, top_p support
+        # Aphrodite Sampler for token sampling with temperature, top_k, top_p support
         self._sampler = Sampler()
 
         # Build logits processors (includes custom plugins from entry-points)
@@ -375,7 +375,7 @@ class MetalModelRunner:
             custom_logitsprocs,
         )
 
-        # vLLM v1 async scheduling calls sample_tokens after execute_model.
+        # Aphrodite v1 async scheduling calls sample_tokens after execute_model.
         # Keep the latest execution output so sample_tokens can return it.
         self._pending_output: ModelRunnerOutput | None = None
 
@@ -1705,7 +1705,7 @@ class MetalModelRunner:
             )
             return None
 
-        # Defensive invariant: the vLLM scheduler sets has_structured_output_requests
+        # Defensive invariant: the Aphrodite scheduler sets has_structured_output_requests
         # only when at least one SO request is present in the *current* scheduled
         # batch (not the global queue). Any such request on the paged path must
         # contribute a paged decode or prefill entry, so has_paged_work() must be
@@ -1736,7 +1736,7 @@ class MetalModelRunner:
     ) -> ModelRunnerOutput | None:
         """Wait for GPU forward, sample tokens, and postprocess.
 
-        Called by the vLLM v1 engine after ``execute_model`` returns ``None``.
+        Called by the Aphrodite v1 engine after ``execute_model`` returns ``None``.
         For the paged path, this is where the actual GPU synchronization,
         token sampling, and request state updates happen — allowing the
         scheduler to run while the GPU was computing the forward pass.
@@ -1755,7 +1755,7 @@ class MetalModelRunner:
             return output
 
         # Async scheduling: execute_model may have failed; return None so
-        # vLLM can surface the original exception.
+        # Aphrodite can surface the original exception.
         logger.error(
             "sample_tokens called with no pending state — "
             "neither _execute_model_state nor _pending_output was set."

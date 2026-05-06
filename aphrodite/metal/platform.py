@@ -220,10 +220,10 @@ class MetalPlatform(Platform):
 
     @classmethod
     def check_and_update_config(cls, aphrodite_config: "AphroditeConfig") -> None:
-        """Check and update vLLM configuration for Metal compatibility.
+        """Check and update Aphrodite configuration for Metal compatibility.
 
         Args:
-            aphrodite_config: vLLM configuration object
+            aphrodite_config: Aphrodite configuration object
         """
         config = get_config()
         parallel_config = aphrodite_config.parallel_config
@@ -231,13 +231,10 @@ class MetalPlatform(Platform):
         compilation_config = aphrodite_config.compilation_config
 
         # Metal execution is MLX-backed. Torch Inductor/CUDAGraph settings do
-        # not apply to the actual model path, so normalize them here rather
-        # than requiring users to pass --enforce-eager.
+        # not apply to the actual model path, so disable those compilation
+        # surfaces without overriding the user's eager-mode flag here.
         from aphrodite.config.compilation import CompilationMode, CUDAGraphMode
 
-        if model_config is not None and not model_config.enforce_eager:
-            logger.info("Metal: forcing eager mode; torch.compile/CUDAGraphs are not used on MLX.")
-            model_config.enforce_eager = True
         compilation_config.mode = CompilationMode.NONE
         compilation_config.cudagraph_mode = CUDAGraphMode.NONE
         compilation_config.max_cudagraph_capture_size = 0
@@ -385,7 +382,7 @@ class MetalPlatform(Platform):
     def update_block_size_for_backend(cls, aphrodite_config: "AphroditeConfig") -> None:
         """Update block_size for Metal platform.
 
-        Delegates to vLLM's base implementation, which reads the Metal kernel
+        Delegates to Aphrodite's base implementation, which reads the Metal kernel
         alignment (MultipleOf(16)) from our :meth:`_find_non_ssm_backend`
         override. Adds a one-time warning when paged attention is enabled for
         a hybrid model, explaining the cache-block-size translation mechanism
@@ -403,16 +400,16 @@ class MetalPlatform(Platform):
         # block-size translation mechanism.
         #
         # Background:
-        # - vLLM requires block_size=160 (or larger) for hybrid models to satisfy
+        # - Aphrodite requires block_size=160 (or larger) for hybrid models to satisfy
         #   page size divisibility validation between SDPA and Mamba layers.
         #
-        # Solution (PR #235):
-        # - vLLM sees a large block_size (e.g., 144 = 16 * 9) for its scheduler
+        # Solution:
+        # - Aphrodite sees a large block_size (e.g., 144 = 16 * 9) for its scheduler
         #   validation.
         # - The Metal kernel uses a translated block_size (16, the kernel sweet
         #   spot) that it supports.
-        # - Each vLLM block is split into ratio = cache_block_size / kernel_block_size
-        #   kernel blocks. For example, one vLLM block of 144 tokens becomes 9 kernel
+        # - Each Aphrodite block is split into ratio = cache_block_size / kernel_block_size
+        #   kernel blocks. For example, one Aphrodite block of 144 tokens becomes 9 kernel
         #   blocks of 16 tokens each.
         # - The KV cache is reshaped (zero-copy) to match: [num_blocks, 144, ...] →
         #   [num_blocks*9, 16, ...]. The physical memory layout is unchanged.
@@ -423,17 +420,17 @@ class MetalPlatform(Platform):
         if model_config.is_hybrid and metal_config.use_paged_attention:
             logger.warning(
                 "Hybrid model (e.g., Qwen3.5) with paged attention enabled. "
-                "Using block-size translation (PR #235) to convert vLLM's large "
+                "Using block-size translation (PR #235) to convert Aphrodite's large "
                 "block_size to a Metal kernel-compatible size.\n"
-                "  Mechanism: Each vLLM block is split into multiple kernel blocks.\n"
-                "  Example: vLLM block_size=144 → kernel block_size=16 (ratio=9).\n"
+                "  Mechanism: Each Aphrodite block is split into multiple kernel blocks.\n"
+                "  Example: Aphrodite block_size=144 → kernel block_size=16 (ratio=9).\n"
                 "  The KV cache is reshaped (zero-copy) and block tables are expanded.\n"
                 "  This is a logical transformation — physical memory is unchanged."
             )
 
         # Delegate the rest to upstream. With our ``_find_non_ssm_backend``
         # returning :class:`MetalBackend` (which advertises ``MultipleOf(16)``),
-        # vLLM's Phase 1 picks a kernel-aligned default of 16 for non-hybrid
+        # Aphrodite's Phase 1 picks a kernel-aligned default of 16 for non-hybrid
         # models (matching the kernel sweet spot), and Phase 2
         # (``_align_hybrid_block_size``) handles hybrid alignment. The kernel
         # layer (``_pick_kernel_block_size``) validates the final
@@ -453,10 +450,10 @@ class MetalPlatform(Platform):
         if selected_backend and selected_backend != AttentionBackendEnum.CPU_ATTN:
             logger.info(f"Cannot use {selected_backend} backend on Metal/MLX.")
         if attn_selector_config.use_mla:
-            # MLA attention is handled by the vllm-metal model runner (MLAPagedAttentionWrapper),
-            # not by vLLM's attention backend selector. Continue to return CPU_ATTN below.
+            # MLA attention is handled by the aphrodite metal model runner (MLAPagedAttentionWrapper),
+            # not by Aphrodite's attention backend selector. Continue to return CPU_ATTN below.
             logger.info(
-                "MLA model detected; attention handled by vllm-metal model runner"
+                "MLA model detected; attention handled by aphrodite metal model runner"
             )
         if attn_selector_config.use_sparse:
             raise NotImplementedError("Sparse Attention is not supported on Metal/MLX.")

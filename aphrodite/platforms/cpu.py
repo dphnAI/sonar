@@ -18,7 +18,12 @@ from aphrodite.utils.cpu_resource_utils import (
 from aphrodite.utils.mem_constants import GiB_bytes
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 
-from .interface import CpuArchEnum, Platform, PlatformEnum
+from .interface import (
+    CpuArchEnum,
+    Platform,
+    PlatformEnum,
+    log_extension_import_failure,
+)
 
 logger = init_logger(__name__)
 
@@ -371,24 +376,32 @@ class CpuPlatform(Platform):
                     try:
                         import aphrodite._C  # noqa: F401
                     except ImportError as e:
-                        logger.warning("Failed to import from aphrodite._C: %r", e)
+                        log_extension_import_failure(
+                            "aphrodite._C", e, target_logger=logger
+                        )
                 else:
                     try:
                         import aphrodite._C_AVX512  # noqa: F401
                     except ImportError as e:
                         if ignored_msg not in e.msg:
-                            logger.warning("Failed to import from aphrodite._C_AVX512: %r", e)
+                            log_extension_import_failure(
+                                "aphrodite._C_AVX512", e, target_logger=logger
+                            )
             else:
                 try:
                     import aphrodite._C_AVX2  # noqa: F401
                 except ImportError as e:
                     if ignored_msg not in e.msg:
-                        logger.warning("Failed to import from aphrodite._C_AVX2: %r", e)
+                        log_extension_import_failure(
+                            "aphrodite._C_AVX2", e, target_logger=logger
+                        )
         else:
             try:
                 import aphrodite._C  # noqa: F401
             except ImportError as e:
-                logger.warning("Failed to import from aphrodite._C: %r", e)
+                log_extension_import_failure(
+                    "aphrodite._C", e, target_logger=logger
+                )
 
     @classmethod
     def pack_kv_cache(

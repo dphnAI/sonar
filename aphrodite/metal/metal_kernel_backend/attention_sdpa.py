@@ -110,7 +110,7 @@ def _build_block_tables(
     """Build kernel-compatible block tables, translating if necessary.
 
     When ``cache_block_size`` exceeds the kernel's compiled block sizes,
-    each vLLM block ``b`` is expanded into ``ratio`` kernel blocks
+    each Aphrodite block ``b`` is expanded into ``ratio`` kernel blocks
     ``[b*ratio, b*ratio+ratio)``.  The cache is reshaped later to
     match (zero-copy).
 
@@ -136,7 +136,7 @@ def _build_block_tables(
         return result
 
     # Hybrid path — translate large block_size to a kernel-compatible one.
-    # Vectorized: each vLLM block b → [b*ratio, b*ratio+1, …, b*ratio+ratio-1].
+    # Vectorized: each Aphrodite block b → [b*ratio, b*ratio+1, …, b*ratio+ratio-1].
     kernel_bs = _pick_kernel_block_size(cache_block_size)
     ratio = cache_block_size // kernel_bs
 
@@ -447,10 +447,10 @@ def sdpa_forward(
     max_seq_len = ctx.max_context_len or max(ctx.context_lens)
 
     # --- Block tables (with hybrid block-size translation) ---
-    # vLLM may inflate block_size (e.g. 544) to align attention pages with
+    # Aphrodite may inflate block_size (e.g. 544) to align attention pages with
     # mamba pages in hybrid models.  The Metal kernel only supports small
     # block sizes (8, 16, 32).  _build_block_tables handles the translation:
-    # it expands each vLLM block into multiple kernel blocks and returns the
+    # it expands each Aphrodite block into multiple kernel blocks and returns the
     # kernel-compatible block_size.  The cache is reshaped to match (zero-copy).
     block_tables, kernel_block_size = _build_block_tables(ctx, kv_cache.block_size)
 

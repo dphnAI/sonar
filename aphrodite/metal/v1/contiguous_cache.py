@@ -320,7 +320,7 @@ def _merge_rotating_kv_caches(
     mlx-lm <= 0.29.1 uses ``c.offset`` which can exceed the underlying array size
     after the cache has rotated, causing a broadcast shape error.
 
-    This workaround can be removed once vllm-metal can depend on an mlx-lm version
+    This workaround can be removed once aphrodite metal can depend on an mlx-lm version
     that includes the upstream fix (ml-explore/mlx-lm#738) and has been verified
     to work with gpt-oss models end-to-end.
     """

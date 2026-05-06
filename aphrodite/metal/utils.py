@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Metal utility functions for vLLM Metal plugin."""
+"""Metal utility functions for Aphrodite Metal plugin."""
 
 import logging
 import os
@@ -24,7 +24,7 @@ def get_model_download_path(model_repo_name: str) -> str:
     Example:
 
     ```bash
-    APHRODITE_USE_MODELSCOPE=True APHRODITE_METAL_MODELSCOPE_CACHE=/path/to/cache vllm serve Qwen/Qwen2.5-0.5B
+    APHRODITE_USE_MODELSCOPE=True APHRODITE_METAL_MODELSCOPE_CACHE=/path/to/cache aphrodite run Qwen/Qwen2.5-0.5B
     ```
     """
     if Path(model_repo_name).exists():

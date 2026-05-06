@@ -18,7 +18,7 @@ class MetalBackend(AttentionBackend):
     block_size, and the hybrid-block-size math via
     Platform._align_hybrid_block_size) can read Metal's MultipleOf(16)
     alignment constraint. The Metal paged-attention kernels are tuned for
-    block_size=16; advertising MultipleOf(16) makes vLLM's selector default
+    block_size=16; advertising MultipleOf(16) makes Aphrodite's selector default
     to 16 and lets hybrid models align to multiples of 16. It is never
     dispatched to as a real attention backend — the actual Metal paged
     attention lives in metal_kernel_backend/paged_attention.py. The
