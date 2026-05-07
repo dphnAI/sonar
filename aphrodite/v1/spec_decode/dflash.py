@@ -268,7 +268,33 @@ class DFlashProposer(SpecDecodeBaseProposer):
         self, cad: CommonAttentionMetadata, draft_index: int = 0
     ) -> tuple[list[object], dict[str, object]]:
         per_group, per_layer = super().build_per_group_and_layer_attn_metadata(cad, draft_index)
+        sliding_layer_names: set[str] = getattr(
+            self.model, "sliding_attention_layer_names", set()
+        )
+        if sliding_layer_names:
+            # DFlash layers consume attention metadata through the per-layer
+            # forward context. Keep the base non-causal group metadata for
+            # group-level spec decode checks, and specialize only the SWA
+            # layers that need a causal sliding-window mask.
+            causal_cad = cad.replace(causal=True)
+            for attn_group in self.draft_attn_groups:
+                causal_layers = sliding_layer_names & set(attn_group.layer_names)
+                if not causal_layers:
+                    continue
+                attn_metadata = attn_group.get_metadata_builder().build_for_drafting(
+                    common_attn_metadata=causal_cad,
+                    draft_index=draft_index,
+                )
+                for layer_name in causal_layers:
+                    per_layer[layer_name] = attn_metadata
+
         for layer_name, attn_metadata in per_layer.items():
+            if layer_name in sliding_layer_names:
+                assert getattr(attn_metadata, "causal", None) is True, (
+                    f"Attention metadata for sliding layer {layer_name} does not have"
+                    " causal support, which is required for DFlash SWA."
+                )
+                continue
             assert getattr(attn_metadata, "causal", None) is False, (
                 f"Attention metadata for layer {layer_name} does not have"
                 " non-causal support, which is required for DFlash."

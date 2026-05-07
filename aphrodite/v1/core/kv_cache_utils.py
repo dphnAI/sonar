@@ -6,6 +6,7 @@ import copy
 import hashlib
 import math
 import os
+import re
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, replace
@@ -77,6 +78,8 @@ def maybe_convert_block_hash(hash_bytes: BlockHash) -> ExternalBlockHash:
 
 
 logger = init_logger(__name__)
+
+_LAYER_INDEX_RE = re.compile(r"(?:^|\.)layers\.(\d+)(?:\.|$)")
 
 # The hash seed for the first block of any prefix block sequence.
 #
@@ -846,7 +849,10 @@ def may_override_num_blocks(aphrodite_config: AphroditeConfig, num_blocks: int) 
     return num_blocks
 
 
-def _pool_bytes_per_block(kv_cache_groups: list[KVCacheGroupSpec]) -> int:
+def _pool_bytes_per_block(
+    kv_cache_groups: list[KVCacheGroupSpec],
+    aphrodite_config: AphroditeConfig | None = None,
+) -> int:
     """
     Bytes consumed by one block in the worker's shared KV cache pool, mirroring
     the divisor used by `get_kv_cache_config_from_groups` to convert
@@ -863,7 +869,22 @@ def _pool_bytes_per_block(kv_cache_groups: list[KVCacheGroupSpec]) -> int:
             cast(UniformTypeKVCacheSpecs, g.kv_cache_spec).get_num_layer_tuples() for g in kv_cache_groups
         )
         return layer_tuple_page_bytes * num_layer_tuples
-    group_size = max(len(g.layer_names) for g in kv_cache_groups)
+    if aphrodite_config is not None:
+        isolated_group_ids = _get_dflash_isolated_group_ids(
+            aphrodite_config, kv_cache_groups
+        )
+        shared_group_size = max(
+            (
+                len(group.layer_names)
+                for group_id, group in enumerate(kv_cache_groups)
+                if group_id not in isolated_group_ids
+            ),
+            default=0,
+        )
+        isolated_layers = sum(len(kv_cache_groups[group_id].layer_names) for group_id in isolated_group_ids)
+        group_size = shared_group_size + isolated_layers
+    else:
+        group_size = max(len(g.layer_names) for g in kv_cache_groups)
     page_size = get_uniform_page_size([g.kv_cache_spec for g in kv_cache_groups])
     return page_size * group_size
 
@@ -895,6 +916,35 @@ def get_uniform_page_size(kv_cache_specs: Iterable[KVCacheSpec]) -> int:
     page_sizes = {layer.page_size_bytes for layer in kv_cache_specs}
     assert len(page_sizes) == 1
     return page_sizes.pop()
+
+
+def _get_dflash_isolated_group_ids(
+    aphrodite_config: AphroditeConfig,
+    kv_cache_groups: list[KVCacheGroupSpec],
+) -> set[int]:
+    spec_config = aphrodite_config.speculative_config
+    if spec_config is None or spec_config.method != "dflash":
+        return set()
+
+    try:
+        target_num_layers = aphrodite_config.model_config.get_num_layers(
+            aphrodite_config.parallel_config
+        )
+    except Exception:
+        return set()
+
+    group_ids: set[int] = set()
+    for group_id, group in enumerate(kv_cache_groups):
+        layer_indices: list[int] = []
+        for layer_name in group.layer_names:
+            match = _LAYER_INDEX_RE.search(layer_name)
+            if match is None:
+                layer_indices = []
+                break
+            layer_indices.append(int(match.group(1)))
+        if layer_indices and all(idx >= target_num_layers for idx in layer_indices):
+            group_ids.add(group_id)
+    return group_ids
 
 
 def _get_kv_cache_groups_uniform_spec(
@@ -1222,18 +1272,41 @@ def get_kv_cache_config_from_groups(
         # (sw.1, padding) will be: (group_size = 2)
         # full.0, sw.0, sw.1: share a Tensor with size=available_memory//2
         # full.1, sw.2: share another Tensor with size=available_memory//2
-        group_size = max(len(group.layer_names) for group in kv_cache_groups)
+        # DFlash writes draft context KVs directly into cache using the draft
+        # block table. Do not row-share those tensors with target KV groups, or
+        # overlapping physical block ids can overwrite target KVs under batching.
+        isolated_group_ids = _get_dflash_isolated_group_ids(
+            aphrodite_config, kv_cache_groups
+        )
+        shared_groups = [
+            group
+            for group_id, group in enumerate(kv_cache_groups)
+            if group_id not in isolated_group_ids
+        ]
+        isolated_layer_names = [
+            layer_name
+            for group_id in sorted(isolated_group_ids)
+            for layer_name in kv_cache_groups[group_id].layer_names
+        ]
+        shared_group_size = (
+            max(len(group.layer_names) for group in shared_groups)
+            if shared_groups
+            else 0
+        )
+        group_size = shared_group_size + len(isolated_layer_names)
 
         page_size = get_uniform_page_size([group.kv_cache_spec for group in kv_cache_groups])
         assert group_size > 0, "group_size must be greater than 0"
         num_blocks = get_num_blocks(aphrodite_config, group_size, available_memory, page_size)
         kv_cache_tensors = []
-        for i in range(group_size):
+        for i in range(shared_group_size):
             shared_by = []
-            for j in range(len(kv_cache_groups)):
-                if i < len(kv_cache_groups[j].layer_names):
-                    shared_by.append(kv_cache_groups[j].layer_names[i])
+            for group in shared_groups:
+                if i < len(group.layer_names):
+                    shared_by.append(group.layer_names[i])
             kv_cache_tensors.append(KVCacheTensor(size=page_size * num_blocks, shared_by=shared_by))
+        for layer_name in isolated_layer_names:
+            kv_cache_tensors.append(KVCacheTensor(size=page_size * num_blocks, shared_by=[layer_name]))
 
     return KVCacheConfig(
         num_blocks=num_blocks,
@@ -1839,7 +1912,7 @@ def get_kv_cache_configs(
             if not groups:
                 adjusted_memory.append(avail_mem)
                 continue
-            bytes_per_block = _pool_bytes_per_block(groups)
+            bytes_per_block = _pool_bytes_per_block(groups, aphrodite_config)
             logger.info(
                 "Overriding num_gpu_blocks=%d with num_gpu_blocks_override=%d",
                 avail_mem // bytes_per_block,
