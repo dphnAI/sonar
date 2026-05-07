@@ -936,6 +936,10 @@ class SpeculativeConfig:
     def use_eagle(self) -> bool:
         return self.method in ("eagle", "eagle3", "mtp", "dflash")
 
+    def requires_eagle_cache_drop(self) -> bool:
+        """Whether prefix cache hits must drop one block for hidden states."""
+        return self.use_eagle() and not self.use_dflash()
+
     def use_dflash(self) -> bool:
         return self.method == "dflash"
 
