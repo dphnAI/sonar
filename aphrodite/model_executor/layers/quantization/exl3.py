@@ -461,7 +461,13 @@ class Exl3Config(QuantizationConfig):
 
         if prefix.endswith(".qkv_proj"):
             base = prefix.removesuffix(".qkv_proj")
-            return all(self._is_exl3_prefix(f"{base}.{proj}") for proj in ("q_proj", "k_proj", "v_proj"))
+            has_q = self._is_exl3_prefix(f"{base}.q_proj")
+            has_k = self._is_exl3_prefix(f"{base}.k_proj")
+            has_v = self._is_exl3_prefix(f"{base}.v_proj")
+            # Gemma 4 full-attention layers can use K=V attention and store
+            # only q_proj/k_proj tensors. The model loader duplicates K into
+            # V, so the fused qkv_proj still needs EXL3 parameters.
+            return has_q and has_k and (has_v or self._storage_entry(f"{base}.v_proj") is None)
 
         if prefix.endswith(".gate_up_proj"):
             base = prefix.removesuffix(".gate_up_proj")
