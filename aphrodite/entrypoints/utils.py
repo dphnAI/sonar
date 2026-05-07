@@ -258,6 +258,9 @@ def sanitize_message(message: str) -> str:
 
 def log_version_and_model(lgr: Logger, version: str, model_name: str) -> None:
     logo = r"""                                                                          
+     ▄▄▄  ▄▄▄▄  ▄▄ ▄▄ ▄▄▄▄   ▄▄▄  ▄▄▄▄  ▄▄ ▄▄▄▄▄▄ ▄▄▄▄▄ 
+    ██▀██ ██▄█▀ ██▄██ ██▄█▄ ██▀██ ██▀██ ██   ██   ██▄▄  
+    ██▀██ ██    ██ ██ ██ ██ ▀███▀ ████▀ ██   ██   ██▄▄▄ 
                                                                                                    
     """
     if envs.APHRODITE_DISABLE_LOG_LOGO or current_formatter_type(lgr) is None:
