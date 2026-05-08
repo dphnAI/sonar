@@ -131,6 +131,32 @@ def get_distributed_init_method(ip: str, port: int) -> str:
     return get_tcp_uri(ip, port)
 
 
+def get_ifname_for_ip(ip: str) -> str | None:
+    """Return the local network interface name that owns ``ip``."""
+    try:
+        target_ip = ipaddress.ip_address(ip.split("%", 1)[0])
+    except ValueError:
+        return None
+
+    for ifname, addrs in psutil.net_if_addrs().items():
+        for addr in addrs:
+            try:
+                candidate_ip = ipaddress.ip_address(addr.address.split("%", 1)[0])
+            except ValueError:
+                continue
+            if candidate_ip == target_ip:
+                return ifname
+    return None
+
+
+def get_ifname_for_tcp_uri(uri: str) -> str | None:
+    """Return the local interface for a ``tcp://host:port`` URI, if any."""
+    parsed = parse_url(uri)
+    if parsed.scheme != "tcp" or parsed.host is None:
+        return None
+    return get_ifname_for_ip(parsed.host)
+
+
 def get_tcp_uri(ip: str, port: int) -> str:
     if is_valid_ipv6_address(ip):
         return f"tcp://[{ip}]:{port}"

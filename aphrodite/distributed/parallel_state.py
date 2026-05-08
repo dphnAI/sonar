@@ -25,7 +25,9 @@ If you only need to use the distributed environment without model/pipeline
 
 import contextlib
 import gc
+import os
 import pickle
+import sys
 import weakref
 from collections import namedtuple
 from collections.abc import Callable
@@ -52,7 +54,10 @@ from aphrodite.distributed.utils import (
 )
 from aphrodite.logger import init_logger
 from aphrodite.utils.import_utils import resolve_obj_by_qualname
-from aphrodite.utils.network_utils import get_distributed_init_method
+from aphrodite.utils.network_utils import (
+    get_distributed_init_method,
+    get_ifname_for_tcp_uri,
+)
 from aphrodite.utils.system_utils import suppress_stdout
 from aphrodite.utils.torch_utils import (
     direct_register_custom_op,
@@ -1218,6 +1223,21 @@ logger = init_logger(__name__)
 _ENABLE_CUSTOM_ALL_REDUCE = True
 
 
+def _maybe_set_macos_gloo_socket_ifname(distributed_init_method: str) -> None:
+    if sys.platform != "darwin" or "GLOO_SOCKET_IFNAME" in os.environ:
+        return
+
+    ifname = get_ifname_for_tcp_uri(distributed_init_method)
+    if ifname is None:
+        return
+
+    os.environ["GLOO_SOCKET_IFNAME"] = ifname
+    logger.info_once(
+        "Setting GLOO_SOCKET_IFNAME=%s for macOS Gloo distributed initialization.",
+        ifname,
+    )
+
+
 def set_custom_all_reduce(enable: bool):
     global _ENABLE_CUSTOM_ALL_REDUCE
     _ENABLE_CUSTOM_ALL_REDUCE = enable
@@ -1302,6 +1322,7 @@ def init_distributed_environment(
                 rank,
                 distributed_init_method,
             )
+    _maybe_set_macos_gloo_socket_ifname(distributed_init_method)
     if not torch.distributed.is_initialized():
         logger.info_once(
             "world_size=%d rank=%d local_rank=%d distributed_init_method=%s backend=%s",
