@@ -207,7 +207,7 @@ from aphrodite.v1.worker.ubatch_utils import (
     split_attn_metadata,
 )
 from aphrodite.v1.worker.utils import is_residual_scattered_for_sp
-from aphrodite.v1.worker.workspace import lock_workspace
+from aphrodite.v1.worker.workspace import current_workspace_manager, lock_workspace
 
 from .utils import (
     AttentionGroup,
@@ -224,6 +224,8 @@ if TYPE_CHECKING:
     from aphrodite.v1.worker.encoder_cudagraph import EncoderCudaGraphManager
 
 logger = init_logger(__name__)
+
+_TURBOQUANT_CONTINUATION_DECODE_THRESHOLD = 128
 
 AttnMetadataDict: TypeAlias = dict[str, AttentionMetadata]
 # list when ubatching is enabled
@@ -5669,6 +5671,8 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
 
     @instrument(span_name="Capture model")
     def capture_model(self) -> int:
+        self._reserve_turboquant_decode_workspace()
+
         if self.compilation_config.cudagraph_mode == CUDAGraphMode.NONE:
             logger.warning(
                 "Skipping CUDA graph capture. To turn on CUDA graph capture, "
@@ -5757,6 +5761,55 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
             cuda_graph_size / (1 << 30),
         )
         return cuda_graph_size
+
+    def _reserve_turboquant_decode_workspace(self) -> None:
+        if not self.cache_config.cache_dtype.startswith("turboquant_"):
+            return
+        if not self.attn_groups:
+            return
+
+        max_num_reqs = self.scheduler_config.max_num_seqs
+        max_num_tokens = self.scheduler_config.max_num_batched_tokens
+        max_model_len = self.model_config.max_model_len
+        num_heads = self.model_config.get_num_attention_heads(self.parallel_config)
+        num_kv_heads = self.model_config.get_num_kv_heads(self.parallel_config)
+        head_size = self.model_config.get_head_size()
+        max_num_splits = self.aphrodite_config.attention_config.tq_max_kv_splits_for_cuda_graph
+
+        for groups in self.attn_groups:
+            for group in groups:
+                if group.backend.get_name() != "TURBOQUANT":
+                    continue
+
+                current_workspace_manager().get_simultaneous(
+                    (
+                        (max_num_reqs, num_heads, max_num_splits, head_size + 1),
+                        torch.float32,
+                    ),
+                    ((max_num_reqs, num_heads, head_size), self.dtype),
+                    ((max_num_reqs, num_heads), torch.float32),
+                )
+                reserve_continuation_prefill = (
+                    self.scheduler_config.enable_chunked_prefill
+                    and max_num_tokens > _TURBOQUANT_CONTINUATION_DECODE_THRESHOLD
+                )
+                if reserve_continuation_prefill:
+                    kernel_block_sizes = getattr(self, "_kernel_block_sizes", None)
+                    group_id = getattr(group, "kv_cache_group_id", 0)
+                    block_size = (
+                        kernel_block_sizes[group_id]
+                        if kernel_block_sizes is not None and group_id < len(kernel_block_sizes)
+                        else self.cache_config.block_size
+                    )
+                    if block_size is not None:
+                        max_cached_len = max(0, max_model_len - 1)
+                        alloc_len = round_up(max_cached_len, block_size)
+                        cache_buf_shape = (1, num_kv_heads, alloc_len, head_size)
+                        current_workspace_manager().get_simultaneous(
+                            (cache_buf_shape, torch.float16),
+                            (cache_buf_shape, torch.float16),
+                        )
+                return
 
     def _warmup_and_capture(
         self,
