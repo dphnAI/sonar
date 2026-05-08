@@ -144,6 +144,23 @@ def xpu_platform_plugin() -> str | None:
     return "aphrodite.platforms.xpu.XPUPlatform" if is_xpu else None
 
 
+def metal_platform_plugin() -> str | None:
+    logger.debug("Checking if Metal platform is available.")
+    try:
+        from aphrodite.metal import _apply_macos_defaults
+        from aphrodite.metal.envs import environment_variables as metal_env_vars
+        from aphrodite.metal.platform import MetalPlatform
+
+        envs.environment_variables.update(metal_env_vars)
+        _apply_macos_defaults()
+        if MetalPlatform.is_available():
+            logger.debug("Confirmed Metal platform is available.")
+            return "aphrodite.platforms.metal.MetalPlatform"
+    except Exception as e:
+        logger.debug("Metal platform is not available because: %s", str(e))
+    return None
+
+
 def _is_amd_zen_cpu() -> bool:
     """Detect AMD CPU with AVX-512 via /proc/cpuinfo."""
     if not os.path.exists("/proc/cpuinfo"):
@@ -157,12 +174,22 @@ def cpu_platform_plugin() -> str | None:
     is_cpu = False
     logger.debug("Checking if CPU platform is available.")
     try:
+        import sys
+
+        if sys.platform.startswith("darwin") and envs.APHRODITE_TARGET_DEVICE != "cpu":
+            try:
+                from aphrodite.metal.platform import MetalPlatform
+
+                if MetalPlatform.is_available():
+                    logger.debug("CPU platform is not activated because Metal is available.")
+                    return None
+            except Exception:
+                pass
+
         is_cpu = aphrodite_version_matches_substr("cpu")
         if is_cpu:
             logger.debug("Confirmed CPU platform is available because Aphrodite is built with CPU.")
         if not is_cpu:
-            import sys
-
             is_cpu = sys.platform.startswith("darwin")
             if is_cpu:
                 logger.debug("Confirmed CPU platform is available because the machine is MacOS.")
@@ -189,6 +216,7 @@ builtin_platform_plugins = {
     "cuda": cuda_platform_plugin,
     "rocm": rocm_platform_plugin,
     "xpu": xpu_platform_plugin,
+    "metal": metal_platform_plugin,
     "cpu": cpu_platform_plugin,
 }
 

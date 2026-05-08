@@ -79,9 +79,9 @@ def should_require_rust_frontend() -> bool:
     return value.lower() not in ("", "0", "false", "no")
 
 
-if sys.platform.startswith("darwin") and APHRODITE_TARGET_DEVICE != "cpu":
-    logger.warning("APHRODITE_TARGET_DEVICE automatically set to `cpu` due to macOS")
-    APHRODITE_TARGET_DEVICE = "cpu"
+if sys.platform.startswith("darwin") and APHRODITE_TARGET_DEVICE not in ("cpu", "metal"):
+    logger.warning("APHRODITE_TARGET_DEVICE automatically set to `metal` due to macOS")
+    APHRODITE_TARGET_DEVICE = "metal"
 elif not (sys.platform.startswith("linux") or sys.platform.startswith("darwin")):
     logger.warning(
         "Aphrodite only supports Linux platform (including WSL) and MacOS."
@@ -183,7 +183,8 @@ def is_url_available(url: str) -> bool:
 
 class CMakeExtension(Extension):
     def __init__(self, name: str, cmake_lists_dir: str = ".", **kwa) -> None:
-        super().__init__(name, sources=[], py_limited_api=True, **kwa)
+        py_limited_api = kwa.pop("py_limited_api", True)
+        super().__init__(name, sources=[], py_limited_api=py_limited_api, **kwa)
         self.cmake_lists_dir = os.path.abspath(cmake_lists_dir)
 
 
@@ -339,6 +340,8 @@ class cmake_build_ext(build_ext):
         targets = []
 
         def target_name(s: str) -> str:
+            if s.endswith("._paged_ops"):
+                return "_paged_ops"
             return s.removeprefix("aphrodite.").removeprefix("vllm_flash_attn.").removeprefix("aphrodite_flash_attn.")
 
         # Build all the extensions
@@ -486,11 +489,15 @@ def _is_xpu() -> bool:
     return APHRODITE_TARGET_DEVICE == "xpu"
 
 
+def _is_metal() -> bool:
+    return APHRODITE_TARGET_DEVICE == "metal"
+
+
 def _build_custom_ops() -> bool:
     # Skip building custom ops if using precompiled binaries
     if envs.APHRODITE_USE_PRECOMPILED:
         return False
-    return _is_cuda() or _is_hip() or _is_cpu()
+    return _is_cuda() or _is_hip() or _is_cpu() or _is_metal()
 
 
 def get_rocm_version():
@@ -590,6 +597,8 @@ def get_aphrodite_version() -> str:
             version += f"{sep}cpu"
     elif _is_xpu():
         version += f"{sep}xpu"
+    elif _is_metal():
+        version += f"{sep}metal"
     else:
         raise RuntimeError("Unknown runtime environment")
 
@@ -635,14 +644,25 @@ def get_requirements() -> list[str]:
         requirements = _read_requirements("cpu.txt")
     elif _is_xpu():
         requirements = _read_requirements("xpu.txt")
+    elif _is_metal():
+        requirements = _read_requirements("metal.txt")
     else:
-        raise ValueError("Unsupported platform, please use CUDA, ROCm, or CPU.")
+        raise ValueError("Unsupported platform, please use CUDA, ROCm, Metal, or CPU.")
 
     return requirements
 
 
 ext_modules = []
 if _build_custom_ops():
+    if _is_metal():
+        ext_modules.append(
+            CMakeExtension(
+                name="aphrodite.metal.metal._paged_ops",
+                cmake_lists_dir=".",
+                py_limited_api=False,
+            )
+        )
+
     if _is_cuda() or _is_hip():
         ext_modules.append(CMakeExtension(name="aphrodite._moe_C", cmake_lists_dir="."))
         # Optional: this target vendors the triton_kernels Python package.
@@ -687,7 +707,8 @@ if _build_custom_ops():
             ext_modules.append(CMakeExtension(name="aphrodite._deep_gemm_C", cmake_lists_dir=".", optional=True))
         ext_modules.append(CMakeExtension(name="aphrodite.cumem_allocator", cmake_lists_dir="."))
 
-    ext_modules.append(CMakeExtension(name="aphrodite._C", cmake_lists_dir="."))
+    if not _is_metal():
+        ext_modules.append(CMakeExtension(name="aphrodite._C", cmake_lists_dir="."))
 
 if _no_device():
     ext_modules = []

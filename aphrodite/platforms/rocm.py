@@ -15,7 +15,12 @@ import aphrodite.envs as envs
 from aphrodite.logger import init_logger
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 
-from .interface import DeviceCapability, Platform, PlatformEnum
+from .interface import (
+    DeviceCapability,
+    Platform,
+    PlatformEnum,
+    log_extension_import_failure,
+)
 
 if TYPE_CHECKING:
     from aphrodite.config import AphroditeConfig
@@ -36,18 +41,18 @@ try:
         amdsmi_topo_get_numa_node_number,
     )
 except ImportError as e:
-    logger.warning("Failed to import from amdsmi with %r", e)
+    logger.warning_once("Failed to import from amdsmi with %r", e)
 
 try:
     import aphrodite._C  # noqa: F401
 except ImportError as e:
-    logger.warning("Failed to import from aphrodite._C with %r", e)
+    log_extension_import_failure("aphrodite._C", e, target_logger=logger)
 
 # import custom ops, trigger op registration
 try:
     import aphrodite._rocm_C  # noqa: F401
 except ImportError as e:
-    logger.warning("Failed to import from aphrodite._rocm_C with %r", e)
+    log_extension_import_failure("aphrodite._rocm_C", e, target_logger=logger)
 
 # Models not supported by ROCm.
 _ROCM_UNSUPPORTED_MODELS: list[str] = []

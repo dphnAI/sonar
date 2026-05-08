@@ -105,6 +105,8 @@ if (NOT APHRODITE_TARGET_DEVICE STREQUAL "cuda" AND
     NOT APHRODITE_TARGET_DEVICE STREQUAL "rocm")
     if (APHRODITE_TARGET_DEVICE STREQUAL "cpu")
         include(${CMAKE_CURRENT_LIST_DIR}/cmake/cpu_extension.cmake)
+    elseif (APHRODITE_TARGET_DEVICE STREQUAL "metal")
+        include(${CMAKE_CURRENT_LIST_DIR}/cmake/metal_extension.cmake)
     else()
         return()
     endif()
