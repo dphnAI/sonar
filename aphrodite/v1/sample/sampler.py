@@ -171,22 +171,44 @@ class Sampler(nn.Module):
         Returns:
             Modified logits tensor after applying samplers in priority order
         """
-        # Check if mirostat is active - if so, disable other samplers
-        has_mirostat = False
+        # apply_mirostat only touches its own (mode==2) rows, so the remaining
+        # rows in a mixed batch must still go through the normal sampler order
+        mirostat_rows: list[int] = []
         if (
             sampling_metadata.mirostat_mode is not None
             and sampling_metadata.mirostat_tau is not None
             and sampling_metadata.mirostat_eta is not None
         ):
             batch_size = len(sampling_metadata.output_token_ids)
-            has_mirostat = any(sampling_metadata.mirostat_mode[i].item() == 2 for i in range(batch_size))
+            mirostat_rows = [
+                i for i in range(batch_size) if sampling_metadata.mirostat_mode[i].item() == 2
+            ]
 
-        if has_mirostat:
-            # Mirostat is active - only apply mirostat and skip other samplers
-            logger.debug("Mirostat active - applying mirostat only")
+        if mirostat_rows:
+            logger.debug("Mirostat active for %d request(s)", len(mirostat_rows))
             logits = self.sampling_ops.apply_mirostat(logits, sampling_metadata)
+
+            mirostat_set = set(mirostat_rows)
+            non_mirostat_indices = [
+                i for i in range(len(sampling_metadata.output_token_ids)) if i not in mirostat_set
+            ]
+            if non_mirostat_indices:
+                non_mirostat_metadata = self._subset_sampling_metadata(
+                    sampling_metadata, non_mirostat_indices
+                )
+                logits[non_mirostat_indices] = self._apply_normal_sampler_order(
+                    logits[non_mirostat_indices], non_mirostat_metadata
+                )
             return logits
 
+        return self._apply_normal_sampler_order(logits, sampling_metadata)
+
+    def _apply_normal_sampler_order(
+        self,
+        logits: torch.Tensor,
+        sampling_metadata: SamplingMetadata,
+    ) -> torch.Tensor:
+        """Apply the standard sampler order, honoring per-row temperature_last."""
         temperature_last_flags = sampling_metadata.temperature_last
         if not temperature_last_flags:
             return self._apply_sampler_order(logits, sampling_metadata, do_temperature_last=False)
