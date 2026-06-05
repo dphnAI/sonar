@@ -676,3 +676,33 @@ def test_input_batch_keeps_token_history_for_no_repeat_ngram_only():
     assert metadata.no_repeat_ngram_size is not None
     assert metadata.prompt_token_ids is not None
     assert metadata.output_token_ids == [[]]
+
+
+def test_mixed_mirostat_batch_still_runs_normal_samplers_on_other_rows():
+    from types import SimpleNamespace
+
+    sampler = Sampler.__new__(Sampler)
+    normal_calls = []
+    sampler._apply_normal_sampler_order = lambda logits, md: (
+        normal_calls.append(list(md.indices)) or logits
+    )
+    sampler._subset_sampling_metadata = lambda md, indices: SimpleNamespace(indices=indices)
+    sampler.sampling_ops = SimpleNamespace(apply_mirostat=lambda logits, md: logits)
+
+    def meta(modes):
+        return SimpleNamespace(
+            mirostat_mode=torch.tensor(modes),
+            mirostat_tau=torch.ones(len(modes)),
+            mirostat_eta=torch.ones(len(modes)),
+            output_token_ids=[[] for _ in modes],
+        )
+
+    # row 0 uses mirostat v2, row 1 does not -> row 1 must still get the normal order
+    normal_calls.clear()
+    sampler._execute_samplers_in_order(torch.randn(2, 5), meta([2, 0]))
+    assert normal_calls == [[1]]
+
+    # every row uses mirostat -> nothing left for the normal order
+    normal_calls.clear()
+    sampler._execute_samplers_in_order(torch.randn(2, 5), meta([2, 2]))
+    assert normal_calls == []
