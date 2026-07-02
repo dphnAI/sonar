@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-# Copyright 2025 The Aphrodite team.
+# Copyright 2025 The vLLM team.
 # Copyright 2025 The Qwen Team.
 # Copyright 2025 The HuggingFace Inc. team.
 # All rights reserved.
@@ -32,7 +32,7 @@ import torch
 from torch import nn
 from transformers import AutoProcessor, PretrainedConfig
 
-from aphrodite.config import AphroditeConfig, CacheConfig
+from aphrodite.config import CacheConfig, AphroditeConfig
 from aphrodite.distributed import (
     get_ep_group,
     get_tensor_model_parallel_world_size,
@@ -117,7 +117,9 @@ class InternS1ProMoeMLP(nn.Module):
             prefix=f"{prefix}.down_proj",
         )
         if hidden_act != "silu":
-            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu is supported for now.")
+            raise ValueError(
+                f"Unsupported activation: {hidden_act}. Only silu is supported for now."
+            )
         self.act_fn = SiluAndMul()
 
     def forward(self, x):
@@ -150,7 +152,8 @@ class InternS1ProMoeSparseMoeBlock(nn.Module):
 
         if self.tp_size > config.num_experts:
             raise ValueError(
-                f"Tensor parallel size {self.tp_size} is greater than the number of experts {config.num_experts}."
+                f"Tensor parallel size {self.tp_size} is greater than "
+                f"the number of experts {config.num_experts}."
             )
 
         # Load balancing settings.
@@ -163,7 +166,9 @@ class InternS1ProMoeSparseMoeBlock(nn.Module):
         self.n_local_physical_experts = self.n_physical_experts // self.ep_size
 
         self.physical_expert_start = self.ep_rank * self.n_local_physical_experts
-        self.physical_expert_end = self.physical_expert_start + self.n_local_physical_experts
+        self.physical_expert_end = (
+            self.physical_expert_start + self.n_local_physical_experts
+        )
 
         # For custom routing function
         self.n_groups = getattr(config, "router_n_groups", -1)
@@ -192,7 +197,9 @@ class InternS1ProMoeSparseMoeBlock(nn.Module):
     @staticmethod
     @functools.lru_cache
     def get_group_offsets(n_groups: int, group_size: int, device: str):
-        group_offsets = (torch.arange(n_groups, device=device) * group_size).view(1, -1, 1)  # [1, n_groups, 1]
+        group_offsets = (torch.arange(n_groups, device=device) * group_size).view(
+            1, -1, 1
+        )  # [1, n_groups, 1]
         return group_offsets
 
     # TODO: zhouxinyu, use aphrodite routing functions
@@ -211,9 +218,13 @@ class InternS1ProMoeSparseMoeBlock(nn.Module):
             )
             per_group_top_k = topk // self.n_groups
             group_size = routing_weights.shape[-1] // self.n_groups
-            group_offsets = self.get_group_offsets(self.n_groups, group_size, routing_weights.device)
+            group_offsets = self.get_group_offsets(
+                self.n_groups, group_size, routing_weights.device
+            )
             routing_weights = routing_weights.unflatten(-1, (self.n_groups, group_size))
-            topk_weights, topk_ids = torch.topk(routing_weights, per_group_top_k, dim=-1)
+            topk_weights, topk_ids = torch.topk(
+                routing_weights, per_group_top_k, dim=-1
+            )
             topk_ids = (topk_ids + group_offsets).flatten(-2, -1)
             topk_weights = topk_weights.flatten(-2, -1)
         else:
@@ -225,7 +236,9 @@ class InternS1ProMoeSparseMoeBlock(nn.Module):
         return topk_weights, topk_ids
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        assert hidden_states.dim() <= 2, "InternS1ProMoeSparseMoeBlock only supports 1D or 2D inputs"
+        assert hidden_states.dim() <= 2, (
+            "InternS1ProMoeSparseMoeBlock only supports 1D or 2D inputs"
+        )
         is_input_1d = hidden_states.dim() == 1
         num_tokens, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
@@ -235,10 +248,14 @@ class InternS1ProMoeSparseMoeBlock(nn.Module):
 
         # router_logits: (num_tokens, n_experts)
         router_logits, _ = self.gate(hidden_states)
-        final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=router_logits)
+        final_hidden_states = self.experts(
+            hidden_states=hidden_states, router_logits=router_logits
+        )
 
         if self.is_sequence_parallel:
-            final_hidden_states = tensor_model_parallel_all_gather(final_hidden_states, 0)
+            final_hidden_states = tensor_model_parallel_all_gather(
+                final_hidden_states, 0
+            )
             final_hidden_states = final_hidden_states[:num_tokens]
 
         # return to 1d if input is 1d
@@ -360,7 +377,9 @@ class InternS1ProMoeDecoderLayer(nn.Module):
 
         self.hidden_size = config.hidden_size
         max_position_embeddings = getattr(config, "max_position_embeddings", 32768)
-        dual_chunk_attention_config = getattr(config, "dual_chunk_attention_config", None)
+        dual_chunk_attention_config = getattr(
+            config, "dual_chunk_attention_config", None
+        )
 
         # update rope related parameters
         rope_scaling = config.rope_scaling
@@ -393,11 +412,15 @@ class InternS1ProMoeDecoderLayer(nn.Module):
 
         # `mlp_only_layers` in the config.
         layer_idx = extract_layer_index(prefix)
-        mlp_only_layers = [] if not hasattr(config, "mlp_only_layers") else config.mlp_only_layers
+        mlp_only_layers = (
+            [] if not hasattr(config, "mlp_only_layers") else config.mlp_only_layers
+        )
         if (layer_idx not in mlp_only_layers) and (
             config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
         ):
-            self.mlp = InternS1ProMoeSparseMoeBlock(aphrodite_config=aphrodite_config, prefix=f"{prefix}.mlp")
+            self.mlp = InternS1ProMoeSparseMoeBlock(
+                aphrodite_config=aphrodite_config, prefix=f"{prefix}.mlp"
+            )
         else:
             self.mlp = InternS1ProMoeMLP(
                 hidden_size=config.hidden_size,
@@ -407,7 +430,9 @@ class InternS1ProMoeDecoderLayer(nn.Module):
                 prefix=f"{prefix}.mlp",
             )
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
     def forward(
         self,
@@ -452,7 +477,9 @@ class InternS1ProMoeLLMForCausalLM(Qwen3MoeForCausalLM):
         super(Qwen3MoeForCausalLM, self).__init__()
         self.config = aphrodite_config.model_config.hf_config.text_config
         self.quant_config = aphrodite_config.quant_config
-        self.model = InternS1ProMoeLLMModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = InternS1ProMoeLLMModel(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
+        )
         self.lm_head = ParallelLMHead(
             self.config.vocab_size,
             self.config.hidden_size,
@@ -462,7 +489,9 @@ class InternS1ProMoeLLMForCausalLM(Qwen3MoeForCausalLM):
         if self.config.tie_word_embeddings:
             self.lm_head.weight = self.model.embed_tokens.weight
         self.logits_processor = LogitsProcessor(self.config.vocab_size)
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
 
 
 class InternS1ProMoeMixtureOfExperts(MixtureOfExperts):
@@ -484,12 +513,12 @@ class InternS1ProMoeMixtureOfExperts(MixtureOfExperts):
                 moe.experts.update_expert_map()
 
     def set_moe_parameters(self):
-        self.expert_weights = []
-
         self.moe_layers = []
         example_moe = None
         for layer in self.language_model.model.layers:
-            if hasattr(layer, "mlp") and isinstance(layer.mlp, InternS1ProMoeSparseMoeBlock):
+            if hasattr(layer, "mlp") and isinstance(
+                layer.mlp, InternS1ProMoeSparseMoeBlock
+            ):
                 example_moe = layer.mlp
                 self.moe_layers.append(layer.mlp.experts)
 
@@ -512,7 +541,9 @@ class InternS1ProMoeMixtureOfExperts(MixtureOfExperts):
     info=InternS1ProProcessingInfo,
     dummy_inputs=Qwen3VLDummyInputsBuilder,
 )
-class InternS1ProForConditionalGeneration(Qwen3VLForConditionalGeneration, InternS1ProMoeMixtureOfExperts):
+class InternS1ProForConditionalGeneration(
+    Qwen3VLForConditionalGeneration, InternS1ProMoeMixtureOfExperts
+):
     is_3d_moe_weight: bool = True
     packed_modules_mapping = {
         "qkv_proj": [
@@ -540,7 +571,9 @@ class InternS1ProForConditionalGeneration(Qwen3VLForConditionalGeneration, Inter
         self.multimodal_config = multimodal_config
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
         self.video_pruning_rate = multimodal_config.video_pruning_rate
-        self.is_multimodal_pruning_enabled = multimodal_config.is_multimodal_pruning_enabled()
+        self.is_multimodal_pruning_enabled = (
+            multimodal_config.is_multimodal_pruning_enabled()
+        )
 
         with self._mark_tower_model(aphrodite_config, {"image", "video"}):
             self.visual = Qwen3_VisionTransformer(
@@ -557,12 +590,20 @@ class InternS1ProForConditionalGeneration(Qwen3VLForConditionalGeneration, Inter
 
         # Whether to include the gate_up_proj mapping is determined by
         # the language model.
-        self.packed_modules_mapping = self.packed_modules_mapping | self.language_model.packed_modules_mapping
+        self.packed_modules_mapping = (
+            self.packed_modules_mapping | self.language_model.packed_modules_mapping
+        )
 
-        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.language_model.make_empty_intermediate_tensors
+        )
 
         self.use_deepstack = hasattr(config.vision_config, "deepstack_visual_indexes")
-        self.deepstack_num_level = len(config.vision_config.deepstack_visual_indexes) if self.use_deepstack else 0
+        self.deepstack_num_level = (
+            len(config.vision_config.deepstack_visual_indexes)
+            if self.use_deepstack
+            else 0
+        )
         self.visual_dim = config.vision_config.out_hidden_size
         self.multiscale_dim = self.visual_dim * self.deepstack_num_level
 
@@ -573,9 +614,13 @@ class InternS1ProForConditionalGeneration(Qwen3VLForConditionalGeneration, Inter
         mapper = {}
         for name, params in self.language_model.model.named_parameters():
             if "rotary_emb.sin_coef" in name:
-                mapper["language_model.model.rotary_emb.sin_coef"] = f"language_model.model.{name}"
+                mapper["language_model.model.rotary_emb.sin_coef"] = (
+                    f"language_model.model.{name}"
+                )
             if "rotary_emb.cos_coef" in name:
-                mapper["language_model.model.rotary_emb.cos_coef"] = f"language_model.model.{name}"
+                mapper["language_model.model.rotary_emb.cos_coef"] = (
+                    f"language_model.model.{name}"
+                )
         return mapper
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):

@@ -3,7 +3,7 @@
 
 # coding=utf-8
 # Copyright 2024 The HunYuan team.
-# Copyright 2023 The Aphrodite team.
+# Copyright 2023 The vLLM team.
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -34,7 +34,7 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
+from aphrodite.config import CacheConfig, AphroditeConfig, get_current_aphrodite_config
 from aphrodite.distributed import (
     get_ep_group,
     get_pp_group,
@@ -132,7 +132,9 @@ class HunYuanMLP(nn.Module):
             reduce_results=reduce_results,
         )
         if hidden_act != "silu":
-            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu is supported for now.")
+            raise ValueError(
+                f"Unsupported activation: {hidden_act}. Only silu is supported for now."
+            )
         self.act_fn = SiluAndMul()
 
     def forward(self, x):
@@ -235,8 +237,12 @@ class HunYuanAttention(nn.Module):
         q, k = self.rotary_emb(positions, q, k)
         ori_k = k
         if self.use_qk_norm:
-            q = self.query_layernorm(q.view(-1, self.num_heads, self.head_dim).contiguous())
-            k = self.key_layernorm(k.view(-1, self.num_kv_heads, self.head_dim).contiguous())
+            q = self.query_layernorm(
+                q.view(-1, self.num_heads, self.head_dim).contiguous()
+            )
+            k = self.key_layernorm(
+                k.view(-1, self.num_kv_heads, self.head_dim).contiguous()
+            )
 
         attn_output = self.attn(q, k, v)
         # For o_proj
@@ -339,8 +345,12 @@ class HunYuanCrossAttention(nn.Module):
         k_tmp = torch.empty_like(k)  # Todo: reduant rotary embedding
         q, _ = self.rotary_emb(positions, q, k_tmp)
         if self.use_qk_norm:
-            q = self.query_layernorm(q.view(-1, self.num_heads, self.head_dim).contiguous())
-            k = self.key_layernorm(k.view(-1, self.num_kv_heads, self.head_dim).contiguous())
+            q = self.query_layernorm(
+                q.view(-1, self.num_heads, self.head_dim).contiguous()
+            )
+            k = self.key_layernorm(
+                k.view(-1, self.num_kv_heads, self.head_dim).contiguous()
+            )
 
         attn_output = self.attn(q, k, v)
         # For o_proj
@@ -368,7 +378,8 @@ class HunYuanSparseMoeBlock(nn.Module):
 
         if self.tp_size > config.num_experts:
             raise ValueError(
-                f"Tensor parallel size {self.tp_size} is greater than the number of experts {config.num_experts}."
+                f"Tensor parallel size {self.tp_size} is greater than "
+                f"the number of experts {config.num_experts}."
             )
 
         # Get layer_id topk if config.moe_topk is a list
@@ -398,7 +409,9 @@ class HunYuanSparseMoeBlock(nn.Module):
         self.n_physical_experts = self.n_logical_experts + self.n_redundant_experts
         self.n_local_physical_experts = self.n_physical_experts // self.ep_size
         self.physical_expert_start = self.ep_rank * self.n_local_physical_experts
-        self.physical_expert_end = self.physical_expert_start + self.n_local_physical_experts
+        self.physical_expert_end = (
+            self.physical_expert_start + self.n_local_physical_experts
+        )
 
         self.gate = ReplicatedLinear(
             config.hidden_size,
@@ -449,7 +462,9 @@ class HunYuanSparseMoeBlock(nn.Module):
 
         # router_logits: (num_tokens, n_experts)
         router_logits, _ = self.gate(hidden_states)
-        final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=router_logits)
+        final_hidden_states = self.experts(
+            hidden_states=hidden_states, router_logits=router_logits
+        )
 
         return final_hidden_states.view(orig_shape)
 
@@ -474,17 +489,23 @@ class HunYuanDecoderLayer(nn.Module):
             else config.intermediate_size[layer_id]
         )
         max_position_embeddings = getattr(config, "max_position_embeddings", 8192)
-        attention_bias = getattr(config, "attention_bias", False) or getattr(config, "bias", False)
+        attention_bias = getattr(config, "attention_bias", False) or getattr(
+            config, "bias", False
+        )
         cla_factor = _get_cla_factor(config)
         attention_type = (
-            AttentionType.ENCODER_DECODER if layer_id >= 0 and layer_id % cla_factor != 0 else AttentionType.DECODER
+            AttentionType.ENCODER_DECODER
+            if layer_id >= 0 and layer_id % cla_factor != 0
+            else AttentionType.DECODER
         )
         if attention_type == AttentionType.DECODER:
             self.self_attn = HunYuanAttention(
                 config=config,
                 hidden_size=self.hidden_size,
                 num_heads=config.num_attention_heads,
-                num_kv_heads=getattr(config, "num_key_value_heads", config.num_attention_heads),
+                num_kv_heads=getattr(
+                    config, "num_key_value_heads", config.num_attention_heads
+                ),
                 max_position_embeddings=max_position_embeddings,
                 quant_config=quant_config,
                 bias=attention_bias,
@@ -497,7 +518,9 @@ class HunYuanDecoderLayer(nn.Module):
                 config=config,
                 hidden_size=self.hidden_size,
                 num_heads=config.num_attention_heads,
-                num_kv_heads=getattr(config, "num_key_value_heads", config.num_attention_heads),
+                num_kv_heads=getattr(
+                    config, "num_key_value_heads", config.num_attention_heads
+                ),
                 max_position_embeddings=max_position_embeddings,
                 quant_config=quant_config,
                 bias=attention_bias,
@@ -527,7 +550,9 @@ class HunYuanDecoderLayer(nn.Module):
             )
 
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
     def forward(
         self,
@@ -581,7 +606,9 @@ class HunYuanModel(nn.Module, EagleModelMixin):
 
         self.vocab_size = config.vocab_size
 
-        if get_pp_group().is_first_rank or (config.tie_word_embeddings and get_pp_group().is_last_rank):
+        if get_pp_group().is_first_rank or (
+            config.tie_word_embeddings and get_pp_group().is_last_rank
+        ):
             self.embed_tokens = VocabParallelEmbedding(
                 self.vocab_size,
                 config.hidden_size,
@@ -630,7 +657,9 @@ class HunYuanModel(nn.Module, EagleModelMixin):
         cla_factor = _get_cla_factor(self.config)
         prev_kv_states = None
         aux_hidden_states = self._maybe_add_hidden_state([], 0, hidden_states, residual)
-        for i, layer in enumerate(islice(self.layers, self.start_layer, self.end_layer)):
+        for i, layer in enumerate(
+            islice(self.layers, self.start_layer, self.end_layer)
+        ):
             hidden_states, residual, kv_states = layer(
                 positions,
                 hidden_states,
@@ -643,10 +672,14 @@ class HunYuanModel(nn.Module, EagleModelMixin):
             else:
                 prev_kv_states = None
 
-            self._maybe_add_hidden_state(aux_hidden_states, i + 1, hidden_states, residual)
+            self._maybe_add_hidden_state(
+                aux_hidden_states, i + 1, hidden_states, residual
+            )
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
+            return IntermediateTensors(
+                {"hidden_states": hidden_states, "residual": residual}
+            )
 
         hidden_states, _ = self.norm(hidden_states, residual)
 
@@ -656,7 +689,9 @@ class HunYuanModel(nn.Module, EagleModelMixin):
 
     def _split_qkv_weight(self, qkv: torch.Tensor):
         num_attention_heads = self.config.num_attention_heads
-        num_kv_heads = getattr(self.config, "num_key_value_heads", self.config.num_attention_heads)
+        num_kv_heads = getattr(
+            self.config, "num_key_value_heads", self.config.num_attention_heads
+        )
         num_key_value_groups = num_attention_heads // num_kv_heads
         hidden_size = self.config.hidden_size
 
@@ -667,7 +702,9 @@ class HunYuanModel(nn.Module, EagleModelMixin):
         else:
             attention_head_dim = self.config.hidden_size // num_attention_heads
 
-        qkv = qkv.reshape(num_kv_heads, num_key_value_groups + 2, attention_head_dim, hidden_size)
+        qkv = qkv.reshape(
+            num_kv_heads, num_key_value_groups + 2, attention_head_dim, hidden_size
+        )
         q, k, v = torch.split(qkv, (num_key_value_groups, 1, 1), dim=1)
         q = q.reshape(-1, hidden_size)
         k = k.reshape(-1, hidden_size)
@@ -701,7 +738,9 @@ class HunYuanModel(nn.Module, EagleModelMixin):
         ]
 
         num_attention_heads = self.config.num_attention_heads
-        num_kv_heads = getattr(self.config, "num_key_value_heads", self.config.num_attention_heads)
+        num_kv_heads = getattr(
+            self.config, "num_key_value_heads", self.config.num_attention_heads
+        )
         split_params_mapping = [
             (".gate_up_proj", ".gate_and_up_proj", 2, [(1, 1), (0, 1)], None),
             (
@@ -731,13 +770,6 @@ class HunYuanModel(nn.Module, EagleModelMixin):
             # The weight might appear unnecessarily in the files if the model is
             # processed with quantization, LoRA, fine-tuning, etc.
             if self.config.tie_word_embeddings and "lm_head.weight" in name:
-                continue
-            if self.quant_config is not None and (scale_name := self.quant_config.get_cache_scale(name)):
-                # Loading kv cache scales for compressed-tensors quantization
-                param = params_dict[scale_name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                loaded_weight = loaded_weight[0]
-                weight_loader(param, loaded_weight)
                 continue
 
             is_found = False
@@ -796,7 +828,9 @@ class HunYuanModel(nn.Module, EagleModelMixin):
                 for shard_id, num in split_param:
                     new_offset = offset + num * units
                     if func:
-                        weight_loader(param, func(loaded_weight)[offset:new_offset], shard_id)
+                        weight_loader(
+                            param, func(loaded_weight)[offset:new_offset], shard_id
+                        )
                     else:
                         weight_loader(param, loaded_weight[offset:new_offset], shard_id)
                     offset = new_offset
@@ -824,7 +858,9 @@ class HunYuanModel(nn.Module, EagleModelMixin):
                     # We should ask the weight loader to return success or not
                     # here since otherwise we may skip experts with other
                     # available replicas.
-                    weight_loader = typing.cast(Callable[..., bool], param.weight_loader)
+                    weight_loader = typing.cast(
+                        Callable[..., bool], param.weight_loader
+                    )
                     success = weight_loader(
                         param,
                         loaded_weight,
@@ -854,13 +890,17 @@ class HunYuanModel(nn.Module, EagleModelMixin):
                         name = name.replace("wg.", "")
 
                     param = params_dict[name]
-                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
+                    weight_loader = getattr(
+                        param, "weight_loader", default_weight_loader
+                    )
                     weight_loader(param, loaded_weight)
             loaded_params.add(name)
         return loaded_params
 
 
-class HunyuanV1ModelBase(nn.Module, SupportsLoRA, SupportsPP, SupportsEagle, SupportsEagle3):
+class HunyuanV1ModelBase(
+    nn.Module, SupportsLoRA, SupportsPP, SupportsEagle, SupportsEagle3
+):
     packed_modules_mapping = {
         "qkv_proj": [
             "q_proj",
@@ -881,7 +921,10 @@ class HunyuanV1ModelBase(nn.Module, SupportsLoRA, SupportsPP, SupportsEagle, Sup
         self.config = config
         self.quant_config = quant_config
 
-        self.model = HunYuanModel(aphrodite_config=aphrodite_config, prefix="model")
+        self.model = HunYuanModel(
+            aphrodite_config=aphrodite_config,
+            prefix=maybe_prefix(prefix, "model"),
+        )
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
@@ -893,7 +936,9 @@ class HunyuanV1ModelBase(nn.Module, SupportsLoRA, SupportsPP, SupportsEagle, Sup
                 self.lm_head.weight = self.model.embed_tokens.weight
 
             logit_scale = getattr(config, "logit_scale", 1.0)
-            self.logits_processor = LogitsProcessor(config.vocab_size, scale=logit_scale)
+            self.logits_processor = LogitsProcessor(
+                config.vocab_size, scale=logit_scale
+            )
         else:
             self.lm_head = PPMissingLayer()
 
@@ -904,7 +949,9 @@ class HunyuanV1ModelBase(nn.Module, SupportsLoRA, SupportsPP, SupportsEagle, Sup
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        model_output = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
+        model_output = self.model(
+            input_ids, positions, intermediate_tensors, inputs_embeds
+        )
         return model_output
 
     def compute_logits(
@@ -919,8 +966,12 @@ class HunyuanV1ModelBase(nn.Module, SupportsLoRA, SupportsPP, SupportsEagle, Sup
     ) -> IntermediateTensors:
         return IntermediateTensors(
             {
-                "hidden_states": torch.zeros((batch_size, self.config.hidden_size), dtype=dtype, device=device),
-                "residual": torch.zeros((batch_size, self.config.hidden_size), dtype=dtype, device=device),
+                "hidden_states": torch.zeros(
+                    (batch_size, self.config.hidden_size), dtype=dtype, device=device
+                ),
+                "residual": torch.zeros(
+                    (batch_size, self.config.hidden_size), dtype=dtype, device=device
+                ),
             }
         )
 
@@ -940,7 +991,6 @@ class HunYuanMoEV1Base(HunyuanV1ModelBase, MixtureOfExperts):
         super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
 
         # Set MoE hyperparameters
-        self.expert_weights = []
         self.num_expert_groups = 1
         self.moe_layers = []
         example_layer = None

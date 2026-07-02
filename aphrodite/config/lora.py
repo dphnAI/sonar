@@ -71,6 +71,12 @@ class LoRAConfig:
     for variable LoRA usage patterns at the cost of increased startup time and
     memory usage. Only takes effect when cudagraph_specialize_lora is True.
     """
+    enable_mixed_moe_lora_format: bool = False
+    """If True, force the engine to use the universal 2D MoE LoRA wrapper
+    (`FusedMoEWithLoRA`) regardless of the model's `is_3d_moe_weight` flag, so
+    that 2D-format and 3D-format MoE LoRA adapters can be served in the same
+    deployment. Only meaningful forMoE models; ignored otherwise. Default False 
+    keeps the existing model-driven behavior."""
 
     def compute_hash(self) -> str:
         """
@@ -90,8 +96,11 @@ class LoRAConfig:
         factors.append(self.fully_sharded_loras)
         factors.append(self.lora_dtype)
         factors.append(self.enable_tower_connector_lora)
+        factors.append(self.enable_mixed_moe_lora_format)
         # target_modules affects which modules get LoRA applied
-        factors.append(tuple(sorted(self.target_modules)) if self.target_modules else None)
+        factors.append(
+            tuple(sorted(self.target_modules)) if self.target_modules else None
+        )
 
         hash_str = safe_hash(str(factors).encode(), usedforsecurity=False).hexdigest()
         return hash_str
@@ -101,7 +110,10 @@ class LoRAConfig:
         if self.max_cpu_loras is None:
             self.max_cpu_loras = self.max_loras
         elif self.max_cpu_loras < self.max_loras:
-            raise ValueError(f"max_cpu_loras ({self.max_cpu_loras}) must be >= max_loras ({self.max_loras}).")
+            raise ValueError(
+                f"max_cpu_loras ({self.max_cpu_loras}) must be >= "
+                f"max_loras ({self.max_loras})."
+            )
         if envs.APHRODITE_LORA_ENABLE_DUAL_STREAM and not current_platform.is_cuda_alike():
             raise ValueError("Dual CUDA streams are only supported on CUDA platforms.")
         if envs.APHRODITE_LORA_ENABLE_DUAL_STREAM and self.fully_sharded_loras:

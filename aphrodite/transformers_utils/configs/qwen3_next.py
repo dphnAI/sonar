@@ -249,16 +249,10 @@ class Qwen3NextConfig(PretrainedConfig):
         self.layer_types = layer_types
         if self.layer_types is None:
             self.layer_types = [
-                "linear_attention" if bool((i + 1) % 4) else "full_attention" for i in range(self.num_hidden_layers)
+                "linear_attention" if bool((i + 1) % 4) else "full_attention"
+                for i in range(self.num_hidden_layers)
             ]
-        if hasattr(self, "validate_layer_type"):
-            # Transformers v5
-            self.validate_layer_type()
-        else:
-            # Transformers v4
-            from transformers.configuration_utils import layer_type_validation
-
-            layer_type_validation(self.layer_types)
+        self.validate_layer_type()
 
         # linear attention part
         self.linear_conv_kernel_dim = linear_conv_kernel_dim

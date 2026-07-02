@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-# Copyright 2024 The Aphrodite team.
+# Copyright 2024 The vLLM team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -55,6 +55,8 @@ if TYPE_CHECKING:
 
 logger = init_logger(__name__)
 
+_MODALITY_TO_TOKEN_TYPE_ID = {"image": 1, "video": 2, "audio": 3}
+
 
 class MultiModalProcessingInfo(BaseProcessingInfo):
     def get_supported_mm_limits(self):
@@ -68,7 +70,9 @@ class MultiModalProcessingInfo(BaseProcessingInfo):
         processor = self.get_hf_processor()
         multimodal_config = self.ctx.model_config.multimodal_config
         mm_processor_kwargs = multimodal_config.mm_processor_kwargs or {}
-        mm_tokens = processor._get_num_multimodal_tokens(image_sizes=([height, width],), **mm_processor_kwargs)
+        mm_tokens = processor._get_num_multimodal_tokens(
+            image_sizes=([height, width],), **mm_processor_kwargs
+        )
         image_tokens = mm_tokens["num_image_tokens"][0]
         return image_tokens
 
@@ -139,13 +143,20 @@ class MultiModalProcessor(BaseMultiModalProcessor[MultiModalProcessingInfo]):
         # HF Processors always return a mask but Aphrodite doesn't need it
         hf_inputs.pop("attention_mask", None)
         num_image_patches = hf_inputs.get("num_image_patches")
-        mm_fields = {key: MultiModalFieldConfig.flat_from_sizes("image", num_image_patches) for key in hf_inputs}
-        mm_fields["image_embeds"] = MultiModalFieldConfig.flat_from_sizes("image", num_image_patches)
+        mm_fields = {
+            key: MultiModalFieldConfig.flat_from_sizes("image", num_image_patches)
+            for key in hf_inputs
+        }
+        mm_fields["image_embeds"] = MultiModalFieldConfig.flat_from_sizes(
+            "image", num_image_patches
+        )
 
         # Keep these as batched, as they always have batch size as first dim
         mm_fields["image_grid_thw"] = MultiModalFieldConfig.batched("image")
         mm_fields["video_grid_thw"] = MultiModalFieldConfig.batched("image")
-        mm_fields["num_image_patches"] = MultiModalFieldConfig.batched("image")
+        mm_fields["num_image_patches"] = MultiModalFieldConfig.batched(
+            "image", keep_on_cpu=True
+        )
         return mm_fields
 
     def _get_hf_mm_data(
@@ -197,8 +208,8 @@ class MultiModalProcessor(BaseMultiModalProcessor[MultiModalProcessingInfo]):
             )
 
         # For gemma3 we check `token_type_ids` as the key
-        token_type_key = "mm_token_type_ids" if "mm_token_type_ids" in processed_data else "token_type_ids"
-        mm_token_type_ids = processed_data.get(token_type_key)
+        mm_token_type_ids = processed_data.pop("token_type_ids", None)
+        mm_token_type_ids = processed_data.pop("mm_token_type_ids", mm_token_type_ids)
 
         # We can infer Aphrodite style placeholder from token type ids, if we split
         # it for each input `mm_data`.
@@ -230,7 +241,9 @@ class MultiModalProcessor(BaseMultiModalProcessor[MultiModalProcessingInfo]):
             ]
             mm_placeholders = {"image": ranges}
 
-        processed_data["num_image_patches"] = torch.tensor(mm_tokens_per_modality["num_image_patches"])
+        processed_data["num_image_patches"] = torch.tensor(
+            mm_tokens_per_modality["num_image_patches"]
+        )
         mm_kwargs = MultiModalKwargsItems.from_hf_inputs(
             processed_data,
             self._get_mm_fields_config(processed_data, hf_processor_mm_kwargs),
@@ -249,13 +262,13 @@ class MultiModalProcessor(BaseMultiModalProcessor[MultiModalProcessingInfo]):
 
 
 class MultiModalMixin(SupportsMultiModal, SupportsMRoPE):
-    supports_multimodal_raw_input_only = True
-
     def __init__(self, *, aphrodite_config: "AphroditeConfig", prefix: str = ""):
         # Skip SupportsMRoPE.__init__ and call the next class in MRO
         super(SupportsMRoPE, self).__init__(aphrodite_config=aphrodite_config, prefix=prefix)
 
-    def _get_encoder_cls(self, modality: str = "image", **kwargs: dict) -> type["PreTrainedModel"]:
+    def _get_encoder_cls(
+        self, modality: str = "image", **kwargs: dict
+    ) -> type["PreTrainedModel"]:
         """
         Get the encoder class from the model.
 
@@ -321,14 +334,13 @@ class MultiModalMixin(SupportsMultiModal, SupportsMRoPE):
         inputs_embeds: torch.Tensor | None = None,
         **kwargs: object,
     ) -> torch.Tensor | IntermediateTensors:
-        # Gemma3 and PaliGemma needs `token_type_ids` to work correctly
-        # Other models will not have `token_type_ids` in kwargs
-        kwargs = {k: v for k, v in kwargs.items() if k == "token_type_ids"}
         # Positions shape handling for MRoPE models
         if self.model_config.uses_mrope:
             # [3, seq_len] -> [3, 1, seq_len]
             positions = positions[:, None]
-        model_output = super().forward(input_ids, positions, intermediate_tensors, inputs_embeds, **kwargs)
+        model_output = super().forward(
+            input_ids, positions, intermediate_tensors, inputs_embeds
+        )
         return model_output
 
     def get_language_model(self) -> torch.nn.Module:
@@ -366,8 +378,6 @@ class MultiModalMixin(SupportsMultiModal, SupportsMRoPE):
             return None
 
         num_image_patches = kwargs.pop("num_image_patches")
-        kwargs.pop("token_type_ids", None)  # used only in `forward`
-        kwargs.pop("mm_token_type_ids", None)  # used only in `model.get_rope_index`
 
         if pixel_values is not None:
             # ROCm: Force math SDP backend for vision encoder to avoid accuracy issues
@@ -379,12 +389,18 @@ class MultiModalMixin(SupportsMultiModal, SupportsMRoPE):
                     "for vision encoder. Currently ROCm platform has "
                     "accuracy issues with `flash_sdp` and"
                     "`mem_efficient_sdp` backends. See issue: "
-                    "https://github.com/vllm-project/vllm/issues/30167"
+                    "https://github.com/vllm-project/aphrodite/issues/30167"
                 )
-                with torch.nn.attention.sdpa_kernel(backends=[torch.nn.attention.SDPBackend.MATH]):
-                    vision_embeddings = self.model.get_image_features(pixel_values, **kwargs)
+                with torch.nn.attention.sdpa_kernel(
+                    backends=[torch.nn.attention.SDPBackend.MATH]
+                ):
+                    vision_embeddings = self.model.get_image_features(
+                        pixel_values, **kwargs
+                    )
             else:
-                vision_embeddings = self.model.get_image_features(pixel_values, **kwargs)
+                vision_embeddings = self.model.get_image_features(
+                    pixel_values, **kwargs
+                )
 
             # Transformers `v5`, `self.get_image_features` returns a tuple
             # containing the features and optionally attentions/hidden_states
@@ -401,7 +417,9 @@ class MultiModalMixin(SupportsMultiModal, SupportsMRoPE):
 
                 # Flatten to 2D: [total_tokens, hidden_dim]
                 if vision_embeddings.ndim == 3:
-                    vision_embeddings = vision_embeddings.view(-1, vision_embeddings.shape[-1])
+                    vision_embeddings = vision_embeddings.view(
+                        -1, vision_embeddings.shape[-1]
+                    )
 
                 total_tokens = vision_embeddings.shape[0]
                 if total_tokens == total_patches:
@@ -422,7 +440,9 @@ class MultiModalMixin(SupportsMultiModal, SupportsMRoPE):
                             f"num_image_patches={split_sizes}"
                         )
                     if total_tokens < total_patches:
-                        repeat_factor = (total_patches + total_tokens - 1) // total_tokens
+                        repeat_factor = (
+                            total_patches + total_tokens - 1
+                        ) // total_tokens
                         vision_embeddings = vision_embeddings.repeat(repeat_factor, 1)
                     vision_embeddings = vision_embeddings[:total_patches]
                     token_split_sizes = split_sizes
@@ -433,7 +453,9 @@ class MultiModalMixin(SupportsMultiModal, SupportsMRoPE):
 
             return vision_embeddings
         else:
-            logger.debug("No pixel values or image embeddings provided for multimodal embedding.")
+            logger.debug(
+                "No pixel values or image embeddings provided for multimodal embedding."
+            )
             return None
 
     def get_mrope_input_positions(
@@ -446,39 +468,45 @@ class MultiModalMixin(SupportsMultiModal, SupportsMRoPE):
             {
                 "image_grid_thw",
                 "video_grid_thw",
-                "mm_token_type_ids",
                 "second_per_grid_ts",
                 "audio_feature_lengths",
                 "use_audio_in_video",
             },
         )
-        if any(v for k, v in kwargs.items() if k not in {"image_grid_thw", "mm_token_type_ids"}):
-            raise NotImplementedError("Transformers modeling backend only supports images.")
+        if any(v for k, v in kwargs.items() if k not in {"image_grid_thw"}):
+            raise NotImplementedError(
+                "Transformers modeling backend only supports images."
+            )
 
         image_grid_thw = kwargs.get("image_grid_thw", [])
         video_grid_thw = kwargs.get("video_grid_thw", [])
-        mm_token_type_ids = kwargs.get("mm_token_type_ids")
 
-        image_grid_thw = (torch.stack if image_grid_thw else torch.tensor)(image_grid_thw)
-        video_grid_thw = (torch.stack if video_grid_thw else torch.tensor)(video_grid_thw)
+        image_grid_thw = (torch.stack if image_grid_thw else torch.tensor)(
+            image_grid_thw
+        )
+        video_grid_thw = (torch.stack if video_grid_thw else torch.tensor)(
+            video_grid_thw
+        )
 
-        # In v4 `get_rope_index` doesn't have wildcard `kwargs`, and
-        # can't accept arbitrary args, even if its value is `None`
+        # `get_rope_index` doesn't always accept arbitrary `kwargs`
         kwargs = {}
         if not hasattr(self, "_get_rope_index_accepts_mm_token_type_ids"):
             import inspect
 
             sig = inspect.signature(self.model.get_rope_index)
             params = sig.parameters
-            self._get_rope_index_accepts_mm_token_type_ids = "mm_token_type_ids" in params or any(
-                p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
+            self._get_rope_index_accepts_mm_token_type_ids = (
+                "mm_token_type_ids" in params
+                or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
             )
         if self._get_rope_index_accepts_mm_token_type_ids:
-            if mm_token_type_ids:
-                kwargs["mm_token_type_ids"] = torch.cat(mm_token_type_ids)
-            else:
-                shape = (1, len(input_tokens))
-                kwargs["mm_token_type_ids"] = torch.zeros(*shape, dtype=torch.int)
+            mm_token_type_ids = torch.zeros(len(input_tokens), dtype=torch.int)
+            for feature in mm_features:
+                position = feature.mm_position
+                offset, length = position.offset, position.length
+                mm_token_type_id = _MODALITY_TO_TOKEN_TYPE_ID[feature.modality]
+                mm_token_type_ids[offset : offset + length] = mm_token_type_id
+            kwargs["mm_token_type_ids"] = mm_token_type_ids.unsqueeze(0)
 
         mrope_positions, mrope_position_delta = self.model.get_rope_index(
             input_ids=torch.tensor(input_tokens).unsqueeze(0),

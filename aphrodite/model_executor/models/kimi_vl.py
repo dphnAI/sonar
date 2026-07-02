@@ -56,7 +56,11 @@ from aphrodite.config import AphroditeConfig
 from aphrodite.config.multimodal import BaseDummyOptions
 from aphrodite.inputs import MultiModalDataDict
 from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.models.interfaces import SupportsMultiModal, SupportsPP
+from aphrodite.model_executor.models.interfaces import (
+    SupportsEncoderCudaGraph,
+    SupportsMultiModal,
+    SupportsPP,
+)
 from aphrodite.model_executor.models.moonvit import MoonVitPretrainedModel
 from aphrodite.multimodal import MULTIMODAL_REGISTRY
 from aphrodite.multimodal.inputs import (
@@ -79,6 +83,7 @@ from aphrodite.multimodal.processing import (
 from aphrodite.sequence import IntermediateTensors
 from aphrodite.transformers_utils.configs.kimi_vl import KimiVLConfig, MoonViTConfig
 from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
+from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphReplayBuffers
 
 from .utils import AutoWeightsLoader, init_aphrodite_registered_model, maybe_prefix
 from .vision import is_vit_use_data_parallel, run_dp_sharded_mrope_vision_model
@@ -177,14 +182,20 @@ class KimiVLProcessingInfo(BaseProcessingInfo):
         assert kernel_size is not None, "kernel_size must be specified"
 
         if (width // patch_size) * (height // patch_size) > in_token_limit:
-            scale = math.sqrt(in_token_limit / ((width // patch_size) * (height // patch_size)))
+            scale = math.sqrt(
+                in_token_limit / ((width // patch_size) * (height // patch_size))
+            )
             new_w, new_h = int(width * scale), int(height * scale)
             width, height = new_w, new_h
 
         kernel_height, kernel_width = kernel_size
 
-        pad_height = (kernel_height * patch_size - height % (kernel_height * patch_size)) % (kernel_height * patch_size)
-        pad_width = (kernel_width * patch_size - width % (kernel_width * patch_size)) % (kernel_width * patch_size)
+        pad_height = (
+            kernel_height * patch_size - height % (kernel_height * patch_size)
+        ) % (kernel_height * patch_size)
+        pad_width = (
+            kernel_width * patch_size - width % (kernel_width * patch_size)
+        ) % (kernel_width * patch_size)
 
         # Calculate new dimensions after padding and patching
         token_height = (height + pad_height) // (kernel_size[0] * patch_size)
@@ -237,7 +248,9 @@ class KimiVLMultiModalProcessor(BaseMultiModalProcessor[KimiVLProcessingInfo]):
         # pixel_values is merged as a single large tensor
         # image_grid_hws is shapes for each subtensor in pixel_values
         return dict(
-            pixel_values=MultiModalFieldConfig.flat_from_sizes("image", image_grid_sizes),
+            pixel_values=MultiModalFieldConfig.flat_from_sizes(
+                "image", image_grid_sizes
+            ),
             image_grid_hws=MultiModalFieldConfig.batched("image"),
         )
 
@@ -250,7 +263,9 @@ class KimiVLMultiModalProcessor(BaseMultiModalProcessor[KimiVLProcessingInfo]):
         image_token_id = self.info.image_token_id
 
         def get_replacement(item_idx: int):
-            images = mm_items.get_items("image", (ImageEmbeddingItems, ImageProcessorItems))
+            images = mm_items.get_items(
+                "image", (ImageEmbeddingItems, ImageProcessorItems)
+            )
 
             if isinstance(images, ImageEmbeddingItems):
                 num_image_tokens = images.get_feature_size(item_idx)
@@ -277,7 +292,9 @@ class KimiVLMultiModalProcessor(BaseMultiModalProcessor[KimiVLProcessingInfo]):
     info=KimiVLProcessingInfo,
     dummy_inputs=KimiVLDummyInputsBuilder,
 )
-class KimiVLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP):
+class KimiVLForConditionalGeneration(
+    nn.Module, SupportsMultiModal, SupportsEncoderCudaGraph, SupportsPP
+):
     supports_encoder_tp_data = True
 
     @classmethod
@@ -301,7 +318,9 @@ class KimiVLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP):
         self.quant_config = quant_config
 
         assert isinstance(config.vision_config, MoonViTConfig)
-        self.use_data_parallel = model_config.multimodal_config.mm_encoder_tp_mode == "data"
+        self.use_data_parallel = (
+            model_config.multimodal_config.mm_encoder_tp_mode == "data"
+        )
         self.hidden_size = config.text_config.hidden_size
 
         with self._mark_tower_model(aphrodite_config, "image"):
@@ -322,11 +341,201 @@ class KimiVLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP):
                 architectures=["DeepseekV2ForCausalLM"],
             )
 
-        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.language_model.make_empty_intermediate_tensors
+        )
 
         self.media_placeholder: int = self.config.media_placeholder_token_id
 
-    def _parse_and_validate_image_input(self, **kwargs: object) -> KimiVLImageInputs | None:
+        self.model_config = model_config
+
+    # -- SupportsEncoderCudaGraph protocol methods --
+
+    def get_encoder_cudagraph_config(self):
+        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+            EncoderCudaGraphConfig,
+        )
+
+        return EncoderCudaGraphConfig(
+            modalities=["image"],
+            buffer_keys=[
+                "pixel_values",
+                "pos_embeds",
+                "rope_freqs_cis",
+                "cu_seqlens",
+                "max_seqlen",
+                "merge_gather_idx",
+            ],
+            out_hidden_size=self.hidden_size,
+        )
+
+    def get_encoder_cudagraph_budget_range(
+        self,
+        aphrodite_config,
+    ) -> tuple[int, int]:
+        # Min: estimated smallest possible encoder input.
+        # 224x224 image with patch_size=14 -> 16x16 patches, then merge
+        # kernel (2,2) -> 8x8 = 64 output tokens.
+        min_budget = 64
+        max_budget = min(
+            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            self.model_config.max_model_len,
+        )
+        return (min_budget, max_budget)
+
+    def _get_grid_hws(
+        self,
+        mm_kwargs: dict[str, Any],
+    ) -> list[tuple[int, int]]:
+        grid_hws = mm_kwargs["image_grid_hws"]
+        if not isinstance(grid_hws, list):
+            grid_hws = grid_hws.tolist()
+        return grid_hws
+
+    def get_encoder_cudagraph_item_specs(
+        self,
+        mm_kwargs: dict[str, Any],
+    ):
+        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
+
+        kh, kw = self.config.vision_config.merge_kernel_size
+        return [
+            EncoderItemSpec(
+                input_size=h * w,
+                output_tokens=(h // kh) * (w // kw),
+            )
+            for h, w in self._get_grid_hws(mm_kwargs)
+        ]
+
+    def select_encoder_cudagraph_items(
+        self,
+        mm_kwargs: dict[str, Any],
+        indices: list[int],
+    ) -> dict[str, Any]:
+        grid_hws = self._get_grid_hws(mm_kwargs)
+        pixel_values = mm_kwargs["pixel_values"]
+
+        if len(indices) == 0:
+            return {
+                "pixel_values": pixel_values[:0],
+                "image_grid_hws": pixel_values.new_zeros((0, 2), dtype=torch.long),
+            }
+
+        patches_per_item = [h * w for h, w in grid_hws]
+        cum_patches = [0]
+        for p in patches_per_item:
+            cum_patches.append(cum_patches[-1] + p)
+
+        selected_pv = torch.cat(
+            [pixel_values[cum_patches[i] : cum_patches[i + 1]] for i in indices]
+        )
+        selected_grid = torch.tensor(
+            [grid_hws[i] for i in indices],
+            dtype=torch.long,
+            device=pixel_values.device,
+        )
+        return {
+            "pixel_values": selected_pv,
+            "image_grid_hws": selected_grid,
+        }
+
+    def prepare_encoder_cudagraph_capture_inputs(
+        self,
+        token_budget: int,
+        max_batch_size: int,
+        max_frames_per_batch: int,
+        device: torch.device,
+        dtype: torch.dtype,
+        path: str = "default",
+    ):
+        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+            EncoderCudaGraphCaptureInputs,
+        )
+
+        kh, kw = self.config.vision_config.merge_kernel_size
+        # Ceil so the buffer fits the worst case of one item using the full
+        # budget. Floor under-allocates when budget is not a multiple of
+        # max_batch_size.
+        per_mm_item_output = (token_budget + max_batch_size - 1) // max_batch_size
+
+        # Shape the synthetic grid so neither dimension exceeds Rope2DPosEmb's
+        # precomputed range. Pack as wide a row as fits, then add rows.
+        rope = self.vision_tower.encoder.rope_2d
+        max_wo = rope.max_width // kw
+        wo = min(per_mm_item_output, max_wo)
+        ho = (per_mm_item_output + wo - 1) // wo
+        assert ho * kh <= rope.max_height, (
+            f"per_mm_item_output={per_mm_item_output} exceeds RoPE grid capacity "
+            f"(max {(rope.max_height // kh) * (rope.max_width // kw)} tokens)"
+        )
+        grid_hws_list = [(ho * kh, wo * kw) for _ in range(max_batch_size)]
+
+        patch_size = self.config.vision_config.patch_size
+        if isinstance(patch_size, int):
+            patch_size = (patch_size, patch_size)
+
+        total_patches = sum(h * w for h, w in grid_hws_list)
+        in_channels = 3
+        dummy_pixel_values = torch.randn(
+            total_patches,
+            in_channels,
+            patch_size[0],
+            patch_size[1],
+            device=device,
+            dtype=dtype,
+        )
+
+        buffers = self.vision_tower.prepare_encoder_metadata(
+            grid_hws_list,
+            max_batch_size=max_batch_size,
+            max_seqlen_override=token_budget,
+            device=device,
+        )
+        values = buffers | {"pixel_values": dummy_pixel_values}
+
+        return EncoderCudaGraphCaptureInputs(values=values)
+
+    def prepare_encoder_cudagraph_replay_buffers(
+        self,
+        mm_kwargs: dict[str, Any],
+        max_batch_size: int,
+        max_frames_per_batch: int,
+        path: str = "default",
+    ):
+        grid_hws_list = self._get_grid_hws(mm_kwargs)
+        buffers = self.vision_tower.prepare_encoder_metadata(
+            grid_hws_list,
+            max_batch_size=max_batch_size,
+            device=mm_kwargs["pixel_values"].device,
+        )
+        values = buffers | {"pixel_values": mm_kwargs["pixel_values"]}
+        return EncoderCudaGraphReplayBuffers(values=values)
+
+    def encoder_cudagraph_forward(
+        self,
+        values: dict[str, torch.Tensor],
+        path: str = "default",
+    ) -> torch.Tensor:
+        pixel_values = values.pop("pixel_values")
+        metadata = values
+        image_features = self.vision_tower(
+            pixel_values, grid_hw=None, encoder_metadata=metadata
+        )
+        return self.multi_modal_projector(image_features)
+
+    def encoder_eager_forward(
+        self,
+        mm_kwargs: dict[str, Any],
+        path: str = "default",
+    ) -> torch.Tensor:
+        pixel_values = mm_kwargs["pixel_values"]
+        image_grid_hws = mm_kwargs["image_grid_hws"]
+        image_features = self.vision_tower(pixel_values, image_grid_hws)
+        return self.multi_modal_projector(torch.cat(image_features))
+
+    def _parse_and_validate_image_input(
+        self, **kwargs: object
+    ) -> KimiVLImageInputs | None:
         # image input type must be pixel values now
         pixel_values = kwargs.pop("pixel_values", None)
         image_grid_hws = kwargs.pop("image_grid_hws", None)

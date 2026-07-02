@@ -24,7 +24,9 @@ def xpu_is_initialized() -> bool:
     return torch.xpu.is_initialized()
 
 
-def cuda_get_device_properties(device, names: Sequence[str], init_cuda=False) -> tuple[Any, ...]:
+def cuda_get_device_properties(
+    device, names: Sequence[str], init_cuda=False
+) -> tuple[Any, ...]:
     """Get specified CUDA device property values without initializing CUDA in
     the current process."""
     if init_cuda or cuda_is_initialized():
@@ -48,8 +50,10 @@ def is_pin_memory_available() -> bool:
 def is_uva_available() -> bool:
     """Check if Unified Virtual Addressing (UVA) is available."""
     # UVA requires pinned memory.
+    from aphrodite.platforms import current_platform
+
     # TODO: Add more requirements for UVA if needed.
-    return is_pin_memory_available()
+    return is_pin_memory_available() or current_platform.is_cpu()
 
 
 @cache

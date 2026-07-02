@@ -221,7 +221,13 @@ aphrodite/vllm_flash_attn/*
 
 aphrodite/third_party/triton_kernels/*
 aphrodite/third_party/deep_gemm/
+# FlashMLA interface copied from source
+aphrodite/third_party/flashmla/flash_mla_interface.py
+# fmha_sm100 vendored package built from source (fetched from vllm-project/MSA)
+aphrodite/third_party/fmha_sm100/
 
 .triton
 
 benchmarks/results/**
+# Rust frontend build artifacts
+aphrodite/aphrodite-rs

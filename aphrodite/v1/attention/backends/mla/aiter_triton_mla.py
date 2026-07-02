@@ -46,7 +46,9 @@ class AiterTritonMLAImpl(AiterMLAImpl):
 
         self.flash_attn_varlen_func = flash_attn_varlen_func
 
-    def _flash_attn_varlen_diff_headdims(self, q, k, v, return_softmax_lse=False, softmax_scale=None, **kwargs):
+    def _flash_attn_varlen_diff_headdims(
+        self, q, k, v, return_softmax_lse=False, softmax_scale=None, **kwargs
+    ):
         result = self.flash_attn_varlen_func(  # type: ignore[call-arg]
             q,
             k,

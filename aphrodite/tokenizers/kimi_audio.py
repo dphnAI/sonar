@@ -10,18 +10,20 @@ from typing import Any, overload
 
 import pybase64
 import tiktoken
-from huggingface_hub import hf_hub_download
 from transformers import AddedToken, BatchEncoding
 from transformers.utils import chat_template_utils as hf_chat_utils
 
 from aphrodite.entrypoints.chat_utils import ChatCompletionMessageParam
 from aphrodite.logger import init_logger
 from aphrodite.tokenizers.protocol import TokenizerLike
+from aphrodite.transformers_utils.repo_utils import hf_api
 
 logger = init_logger(__name__)
 
 
-def _load_tiktoken_encoding(vocab_file: Path, special_tokens: dict[str, int]) -> tuple[Any, dict[str, int]]:
+def _load_tiktoken_encoding(
+    vocab_file: Path, special_tokens: dict[str, int]
+) -> tuple[Any, dict[str, int]]:
     """Load TikToken encoding from vocab file."""
     mergeable_ranks: dict[bytes, int] = {}
     with open(vocab_file, encoding="utf-8") as f:
@@ -76,7 +78,7 @@ class KimiAudioTokenizer(TokenizerLike):
 
             # Try to download tiktoken.model or tokenizer.model
             try:
-                vocab_path = hf_hub_download(
+                vocab_path = hf_api().hf_hub_download(
                     repo_id=repo_id,
                     filename="tiktoken.model",
                     revision=revision,
@@ -85,7 +87,7 @@ class KimiAudioTokenizer(TokenizerLike):
                 vocab_file = Path(vocab_path)
             except Exception:
                 try:
-                    vocab_path = hf_hub_download(
+                    vocab_path = hf_api().hf_hub_download(
                         repo_id=repo_id,
                         filename="tokenizer.model",
                         revision=revision,
@@ -93,11 +95,13 @@ class KimiAudioTokenizer(TokenizerLike):
                     )
                     vocab_file = Path(vocab_path)
                 except Exception as exc:
-                    raise ValueError(f"Could not find tiktoken.model or tokenizer.model in {repo_id}") from exc
+                    raise ValueError(
+                        f"Could not find tiktoken.model or tokenizer.model in {repo_id}"
+                    ) from exc
 
             # Also download tokenizer_config.json if available
             with contextlib.suppress(Exception):
-                hf_hub_download(
+                hf_api().hf_hub_download(
                     repo_id=repo_id,
                     filename="tokenizer_config.json",
                     revision=revision,
@@ -139,7 +143,9 @@ class KimiAudioTokenizer(TokenizerLike):
                     if content:
                         special_tokens[content] = token_id
 
-        self._tokenizer, self._special_tokens = _load_tiktoken_encoding(vocab_file, special_tokens)
+        self._tokenizer, self._special_tokens = _load_tiktoken_encoding(
+            vocab_file, special_tokens
+        )
 
         # Build token <-> ID mappings
         self._token_to_id: dict[str, int] = {}
@@ -161,7 +167,9 @@ class KimiAudioTokenizer(TokenizerLike):
         self._pad_token_id = self._eos_token_id
         self._unk_token_id = self._pad_token_id
 
-        self._max_chars_per_token = max((len(tok) for tok in self._token_to_id), default=10)
+        self._max_chars_per_token = max(
+            (len(tok) for tok in self._token_to_id), default=10
+        )
 
     def _add_kimiaudio_special_tokens(self) -> None:
         """Add Kimi-Audio special tokens to the tokenizer."""
@@ -255,7 +263,10 @@ class KimiAudioTokenizer(TokenizerLike):
         return self._tokenizer.n_vocab
 
     def get_added_vocab(self) -> dict[str, int]:
-        return {str(token): token_id for token_id, token in self._added_tokens_decoder.items()}
+        return {
+            str(token): token_id
+            for token_id, token in self._added_tokens_decoder.items()
+        }
 
     def _maybe_truncate(self, tokens: list[int], max_length: int | None) -> list[int]:
         if max_length is None or len(tokens) <= max_length:
@@ -289,7 +300,9 @@ class KimiAudioTokenizer(TokenizerLike):
             tokens = self._maybe_truncate(tokens, max_length)
         return tokens
 
-    def decode(self, ids: Sequence[int] | int, skip_special_tokens: bool = False) -> str:
+    def decode(
+        self, ids: Sequence[int] | int, skip_special_tokens: bool = False
+    ) -> str:
         """Decode token IDs to text, optionally skipping special tokens."""
         if isinstance(ids, int):
             ids = [ids]
@@ -310,7 +323,9 @@ class KimiAudioTokenizer(TokenizerLike):
             return self._token_to_id.get(tokens, self._unk_token_id)
         return [self._token_to_id.get(token, self._unk_token_id) for token in tokens]
 
-    def convert_ids_to_tokens(self, ids: Sequence[int], skip_special_tokens: bool = False) -> list[str]:
+    def convert_ids_to_tokens(
+        self, ids: Sequence[int], skip_special_tokens: bool = False
+    ) -> list[str]:
         tokens = []
         for token_id in ids:
             if skip_special_tokens and token_id in self._added_tokens_decoder:
@@ -332,7 +347,9 @@ class KimiAudioTokenizer(TokenizerLike):
         **kwargs,
     ) -> BatchEncoding:
         if text_pair is not None:
-            raise NotImplementedError("text_pair is not supported for KimiAudioTokenizer.")
+            raise NotImplementedError(
+                "text_pair is not supported for KimiAudioTokenizer."
+            )
 
         if isinstance(text, list):
             input_ids_batch: list[list[int]] = [
@@ -345,7 +362,9 @@ class KimiAudioTokenizer(TokenizerLike):
                 for item in text
             ]
             attention_mask_batch = [[1] * len(ids) for ids in input_ids_batch]
-            return BatchEncoding({"input_ids": input_ids_batch, "attention_mask": attention_mask_batch})
+            return BatchEncoding(
+                {"input_ids": input_ids_batch, "attention_mask": attention_mask_batch}
+            )
 
         input_ids = self.encode(
             text,
@@ -356,7 +375,9 @@ class KimiAudioTokenizer(TokenizerLike):
         attention_mask = [1] * len(input_ids)
         return BatchEncoding({"input_ids": input_ids, "attention_mask": attention_mask})
 
-    def get_chat_template(self, chat_template: str | None, tools: list[dict[str, Any]] | None = None) -> str | None:
+    def get_chat_template(
+        self, chat_template: str | None, tools: list[dict[str, Any]] | None = None
+    ) -> str | None:
         del tools
         return chat_template
 
@@ -374,7 +395,9 @@ class KimiAudioTokenizer(TokenizerLike):
             raise ValueError("Either 'messages' or 'conversation' must be provided.")
         template = self.get_chat_template(chat_template, tools=tools)
         if template is None:
-            raise ValueError("No chat template available. Provide `chat_template` explicitly.")
+            raise ValueError(
+                "No chat template available. Provide `chat_template` explicitly."
+            )
         # Use render_jinja_template instead of apply_chat_template
         # Note: render_jinja_template returns ([prompts], [generation_indices])
         rendered, _ = hf_chat_utils.render_jinja_template(

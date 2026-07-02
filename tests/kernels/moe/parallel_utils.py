@@ -15,12 +15,21 @@ from torch.distributed import ProcessGroup
 from torch.multiprocessing import spawn  # pyright: ignore[reportPrivateImportUsage]
 from typing_extensions import ParamSpec
 
-from aphrodite.utils.import_utils import has_deep_ep
+from aphrodite.utils.import_utils import has_deep_ep, has_deep_ep_v2
 from aphrodite.utils.network_utils import get_open_port
 
 if has_deep_ep():
-    from aphrodite.modeling.layers.fused_moe.deepep_ht_prepare_finalize import DeepEPHTPrepareAndFinalize
-    from aphrodite.modeling.layers.fused_moe.deepep_ll_prepare_finalize import DeepEPLLPrepareAndFinalize
+    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_ht import (
+        DeepEPHTPrepareAndFinalize,
+    )
+    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_ll import (
+        DeepEPLLPrepareAndFinalize,
+    )
+
+if has_deep_ep_v2():
+    from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_v2 import (
+        DeepEPV2PrepareAndFinalize,
+    )
 
 ## Parallel Processes Utils
 
@@ -48,14 +57,13 @@ def _worker_parallel_launch(
     **kwargs: P.kwargs,
 ) -> None:
     rank = node_rank * world_local_size + local_rank
-    torch.cuda.set_device(local_rank)
+    torch.accelerator.set_device_index(local_rank)
     device = torch.device("cuda", local_rank)
     torch.distributed.init_process_group(
-        backend="cpu:gloo,cuda:nccl",
+        backend="nccl",
         init_method=init_method,
         rank=rank,
         world_size=world_size,
-        device_id=device,
     )
     barrier = torch.tensor([rank], device=device)
     torch.distributed.all_reduce(barrier)
@@ -190,7 +198,48 @@ def make_deepep_a2a(
 ):
     if deepep_ht_args is not None:
         assert deepep_ll_args is None
-        return make_deepep_ht_a2a(pg, pgi, dp_size, deepep_ht_args, q_dtype, block_shape)
+        return make_deepep_ht_a2a(
+            pg, pgi, dp_size, deepep_ht_args, q_dtype, block_shape
+        )
 
     assert deepep_ll_args is not None
     return make_deepep_ll_a2a(pg, pgi, deepep_ll_args, q_dtype, block_shape)
+
+
+@dataclasses.dataclass
+class DeepEPV2Args:
+    num_local_experts: int
+    num_experts: int
+    num_topk: int
+    hidden_size: int
+    max_tokens_per_rank: int
+    use_fp8_dispatch: bool
+
+
+def make_deepep_v2_a2a(
+    pg: ProcessGroup,
+    pgi: ProcessGroupInfo,
+    dp_size: int,
+    v2_args: DeepEPV2Args,
+    use_cudagraph: bool = False,
+):
+    import deep_ep
+
+    buffer = deep_ep.ElasticBuffer(
+        group=pg,
+        num_max_tokens_per_rank=v2_args.max_tokens_per_rank,
+        hidden=v2_args.hidden_size,
+        num_topk=v2_args.num_topk,
+        use_fp8_dispatch=v2_args.use_fp8_dispatch,
+        explicitly_destroy=True,
+    )
+    return DeepEPV2PrepareAndFinalize(
+        buffer=buffer,
+        num_dispatchers=pgi.world_size,
+        dp_size=dp_size,
+        rank_expert_offset=pgi.rank * v2_args.num_local_experts,
+        num_experts=v2_args.num_experts,
+        num_topk=v2_args.num_topk,
+        use_fp8_dispatch=v2_args.use_fp8_dispatch,
+        use_cudagraph=use_cudagraph,
+    )

@@ -4,12 +4,14 @@ import asyncio
 import time
 
 import pytest
-from aphrodite.endpoints.openai.api_server import build_async_engine_client_from_engine_args
-from aphrodite.engine.args_tools import AsyncEngineArgs
 
-from aphrodite.common.sampling_params import SamplingParams
+from aphrodite.engine.arg_utils import AsyncEngineArgs
+from aphrodite.entrypoints.openai.api_server import (
+    build_async_engine_client_from_engine_args,
+)
 from aphrodite.inputs import TextPrompt
 from aphrodite.lora.request import LoRARequest
+from aphrodite.sampling_params import SamplingParams
 from aphrodite.utils.async_utils import merge_async_iterators
 
 MODEL_PATH = "zai-org/chatglm3-6b"
@@ -19,13 +21,16 @@ DEFAULT_MAX_LORAS = 4 * 3
 
 def get_lora_requests(lora_path) -> list[LoRARequest]:
     lora_requests: list[LoRARequest] = [
-        LoRARequest(lora_name=f"{i}", lora_int_id=i, lora_path=lora_path) for i in range(1, DEFAULT_MAX_LORAS + 1)
+        LoRARequest(lora_name=f"{i}", lora_int_id=i, lora_path=lora_path)
+        for i in range(1, DEFAULT_MAX_LORAS + 1)
     ]
     return lora_requests
 
 
 async def requests_processing_time(llm, lora_requests: list[LoRARequest]) -> float:
-    sampling_params = SamplingParams(n=1, temperature=0.0, top_p=1.0, ignore_eos=True, max_tokens=1)
+    sampling_params = SamplingParams(
+        n=1, temperature=0.0, top_p=1.0, ignore_eos=True, max_tokens=1
+    )
 
     generators = []
     start = time.perf_counter()

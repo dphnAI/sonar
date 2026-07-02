@@ -25,7 +25,9 @@ def wrap_kv_caches(kv_caches: dict[str, torch.Tensor]) -> KVCache:
     return [CudaIPCWrapper(tensor) for tensor in kv_caches.values()]
 
 
-def striding_block_hashes(block_hashes: list[bytes], blocks_in_chunk: int) -> Iterable[bytes]:
+def striding_block_hashes(
+    block_hashes: list[bytes], blocks_in_chunk: int
+) -> Iterable[bytes]:
     """Extract chunk-level hashes from block hashes by striding.
 
     In hash-based Aphrodite, each Aphrodite block has its own hash.  LMCache chunks
@@ -54,7 +56,9 @@ def send_lmcache_request(
         A messaging future for the request
     """
 
-    future = mq_client.submit_request(request_type, payloads, get_response_class(request_type))
+    future = mq_client.submit_request(
+        request_type, payloads, get_response_class(request_type)
+    )
     return future
 
 
@@ -226,8 +230,12 @@ class LMCacheMPSchedulerAdapter:
 
         if block_hashes is not None:
             # Hash mode: stride block hashes -> N hash-mode keys
-            chunk_hashes = list(striding_block_hashes(block_hashes, self.blocks_in_chunk))
-            keys = [self._create_hash_key(ch, request_id=request_id) for ch in chunk_hashes]
+            chunk_hashes = list(
+                striding_block_hashes(block_hashes, self.blocks_in_chunk)
+            )
+            keys = [
+                self._create_hash_key(ch, request_id=request_id) for ch in chunk_hashes
+            ]
         else:
             # Token mode: truncate to chunk-aligned length
             assert token_ids is not None
@@ -264,7 +272,9 @@ class LMCacheMPSchedulerAdapter:
             in LMCache (prefix matching), or
             None if the lookup request is not finished yet.
         """
-        assert request_id in self.lookup_futures, f"Lookup request for request_id={request_id} has not been submitted"
+        assert request_id in self.lookup_futures, (
+            f"Lookup request for request_id={request_id} has not been submitted"
+        )
 
         future = self.lookup_futures[request_id]
         if not future.query():
@@ -321,7 +331,9 @@ class LMCacheMPSchedulerAdapter:
             tp_size=self.tp_size,
         )
 
-    def _create_hash_key(self, chunk_hash: bytes, request_id: str | None = None) -> IPCCacheEngineKey:
+    def _create_hash_key(
+        self, chunk_hash: bytes, request_id: str | None = None
+    ) -> IPCCacheEngineKey:
         """Create a hash-mode IPC cache engine key"""
         return IPCCacheEngineKey(
             model_name=self.model_name,
@@ -352,8 +364,12 @@ class LMCacheMPWorkerAdapter:
 
         # Request futures
         # request_id -> (future, other merged requests)
-        self.store_futures: dict[str, tuple[MessagingFuture[StoreResult], list[str]]] = {}
-        self.retrieve_futures: dict[str, tuple[MessagingFuture[RetrieveResult], list[str]]] = {}
+        self.store_futures: dict[
+            str, tuple[MessagingFuture[StoreResult], list[str]]
+        ] = {}
+        self.retrieve_futures: dict[
+            str, tuple[MessagingFuture[RetrieveResult], list[str]]
+        ] = {}
 
         # The store requests that have finished execution in LMCache
         self.finished_stores: set[str] = set()
@@ -366,7 +382,9 @@ class LMCacheMPWorkerAdapter:
 
         # Read chunk size from lmcache
         chunk_size = get_lmcache_chunk_size(self.mq_client)
-        assert chunk_size % aphrodite_block_size == 0, "LMCache chunk size should be a multiple of Aphrodite block size"
+        assert chunk_size % aphrodite_block_size == 0, (
+            "LMCache chunk size should be a multiple of Aphrodite block size"
+        )
         self.blocks_in_chunk = chunk_size // aphrodite_block_size
 
     @property
@@ -387,7 +405,10 @@ class LMCacheMPWorkerAdapter:
     @property
     def is_first_rank_of_pp_group(self) -> bool:
         """Is the first rank of the pipeline parallel group."""
-        return self.parallel_strategy.actual_worker_id % self.parallel_strategy.tp_size == 0
+        return (
+            self.parallel_strategy.actual_worker_id % self.parallel_strategy.tp_size
+            == 0
+        )
 
     def register_kv_caches(self, kv_caches: dict[str, torch.Tensor]):
         """
@@ -408,7 +429,9 @@ class LMCacheMPWorkerAdapter:
         future.result()
 
     @_lmcache_nvtx_annotate
-    def submit_store_request(self, request_id: str, op: LoadStoreOp, event: torch.cuda.Event):
+    def submit_store_request(
+        self, request_id: str, op: LoadStoreOp, event: torch.Event
+    ):
         """
         Submit a KV cache store request to LMCache
 
@@ -420,12 +443,18 @@ class LMCacheMPWorkerAdapter:
         """
         if op.block_hashes is not None:
             # Hash mode
-            chunk_hashes = list(striding_block_hashes(op.block_hashes, self.blocks_in_chunk))
-            keys = [self._create_hash_key(ch, request_id=request_id) for ch in chunk_hashes]
+            chunk_hashes = list(
+                striding_block_hashes(op.block_hashes, self.blocks_in_chunk)
+            )
+            keys = [
+                self._create_hash_key(ch, request_id=request_id) for ch in chunk_hashes
+            ]
         else:
             # Token mode
             assert op.token_ids is not None
-            keys = [self._create_key(op.token_ids, op.start, op.end, request_id=request_id)]
+            keys = [
+                self._create_key(op.token_ids, op.start, op.end, request_id=request_id)
+            ]
         future = send_lmcache_request(
             self.mq_client,
             RequestType.STORE,
@@ -434,7 +463,9 @@ class LMCacheMPWorkerAdapter:
         self.store_futures[request_id] = (future, [])
 
     @_lmcache_nvtx_annotate
-    def submit_retrieve_request(self, request_id: str, op: LoadStoreOp, event: torch.cuda.Event):
+    def submit_retrieve_request(
+        self, request_id: str, op: LoadStoreOp, event: torch.Event
+    ):
         """
         Submit a KV cache retrieve request to LMCache
 
@@ -446,12 +477,18 @@ class LMCacheMPWorkerAdapter:
         """
         if op.block_hashes is not None:
             # Hash mode
-            chunk_hashes = list(striding_block_hashes(op.block_hashes, self.blocks_in_chunk))
-            keys = [self._create_hash_key(ch, request_id=request_id) for ch in chunk_hashes]
+            chunk_hashes = list(
+                striding_block_hashes(op.block_hashes, self.blocks_in_chunk)
+            )
+            keys = [
+                self._create_hash_key(ch, request_id=request_id) for ch in chunk_hashes
+            ]
         else:
             # Token mode
             assert op.token_ids is not None
-            keys = [self._create_key(op.token_ids, op.start, op.end, request_id=request_id)]
+            keys = [
+                self._create_key(op.token_ids, op.start, op.end, request_id=request_id)
+            ]
         future = send_lmcache_request(
             self.mq_client,
             RequestType.RETRIEVE,
@@ -464,7 +501,7 @@ class LMCacheMPWorkerAdapter:
         self,
         request_ids: list[str],
         ops: list[LoadStoreOp],
-        event: torch.cuda.Event,
+        event: torch.Event,
     ):
         """
         Submit a batched store request to LMCache
@@ -480,12 +517,21 @@ class LMCacheMPWorkerAdapter:
         block_ids: list[int] = []
         for request_id, op in zip(request_ids, ops, strict=False):
             if op.block_hashes is not None:
-                chunk_hashes = list(striding_block_hashes(op.block_hashes, self.blocks_in_chunk))
-                keys = [self._create_hash_key(ch, request_id=request_id) for ch in chunk_hashes]
+                chunk_hashes = list(
+                    striding_block_hashes(op.block_hashes, self.blocks_in_chunk)
+                )
+                keys = [
+                    self._create_hash_key(ch, request_id=request_id)
+                    for ch in chunk_hashes
+                ]
                 all_keys.extend(keys)
             else:
                 assert op.token_ids is not None
-                all_keys.append(self._create_key(op.token_ids, op.start, op.end, request_id=request_id))
+                all_keys.append(
+                    self._create_key(
+                        op.token_ids, op.start, op.end, request_id=request_id
+                    )
+                )
             block_ids.extend(op.block_ids)
         future = send_lmcache_request(
             self.mq_client,
@@ -504,7 +550,7 @@ class LMCacheMPWorkerAdapter:
         self,
         request_ids: list[str],
         ops: list[LoadStoreOp],
-        event: torch.cuda.Event,
+        event: torch.Event,
     ):
         """
         Submit a batched retrieve request to LMCache
@@ -520,12 +566,21 @@ class LMCacheMPWorkerAdapter:
         block_ids: list[int] = []
         for request_id, op in zip(request_ids, ops, strict=False):
             if op.block_hashes is not None:
-                chunk_hashes = list(striding_block_hashes(op.block_hashes, self.blocks_in_chunk))
-                keys = [self._create_hash_key(ch, request_id=request_id) for ch in chunk_hashes]
+                chunk_hashes = list(
+                    striding_block_hashes(op.block_hashes, self.blocks_in_chunk)
+                )
+                keys = [
+                    self._create_hash_key(ch, request_id=request_id)
+                    for ch in chunk_hashes
+                ]
                 all_keys.extend(keys)
             else:
                 assert op.token_ids is not None
-                all_keys.append(self._create_key(op.token_ids, op.start, op.end, request_id=request_id))
+                all_keys.append(
+                    self._create_key(
+                        op.token_ids, op.start, op.end, request_id=request_id
+                    )
+                )
             block_ids.extend(op.block_ids)
         future = send_lmcache_request(
             self.mq_client,
@@ -540,7 +595,9 @@ class LMCacheMPWorkerAdapter:
         self.retrieve_futures[request_ids[0]] = (future, list(request_ids[1:]))
 
     @_lmcache_nvtx_annotate
-    def get_finished(self, finished_req_ids_from_engine: set[str]) -> tuple[set[str] | None, set[str] | None]:
+    def get_finished(
+        self, finished_req_ids_from_engine: set[str]
+    ) -> tuple[set[str] | None, set[str] | None]:
         """
         Check and get the finished store and retrieve requests.
 
@@ -574,7 +631,8 @@ class LMCacheMPWorkerAdapter:
             if not s_result:
                 # TODO: add error handling here
                 logger.error(
-                    "Something went wrong when processing the store request for request_id=%s",
+                    "Something went wrong when processing the "
+                    "store request for request_id=%s",
                     request_id,
                 )
 
@@ -589,7 +647,8 @@ class LMCacheMPWorkerAdapter:
             if not all(r_result):
                 # TODO: add error handing here
                 logger.error(
-                    "Something went wrong when processing the retrieve request for request_id=%s, result=%s",
+                    "Something went wrong when processing the "
+                    "retrieve request for request_id=%s, result=%s",
                     request_id,
                     r_result,
                 )
@@ -627,7 +686,9 @@ class LMCacheMPWorkerAdapter:
         Shutdown the LMCache MP worker adapter
         """
         logger.info("Unregistering kv caches")
-        send_lmcache_request(self.mq_client, RequestType.UNREGISTER_KV_CACHE, [self.instance_id]).result()
+        send_lmcache_request(
+            self.mq_client, RequestType.UNREGISTER_KV_CACHE, [self.instance_id]
+        ).result()
 
         self.mq_client.close()
 
@@ -662,7 +723,9 @@ class LMCacheMPWorkerAdapter:
             request_id=request_id,
         )
 
-    def _create_hash_key(self, chunk_hash: bytes, request_id: str | None = None) -> IPCCacheEngineKey:
+    def _create_hash_key(
+        self, chunk_hash: bytes, request_id: str | None = None
+    ) -> IPCCacheEngineKey:
         """Create a hash-mode IPC cache engine key"""
         return IPCCacheEngineKey(
             model_name=self.model_name,

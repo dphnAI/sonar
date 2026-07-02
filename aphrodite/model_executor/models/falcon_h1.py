@@ -10,7 +10,7 @@ from torch import nn
 from transformers import FalconH1Config
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
+from aphrodite.config import CacheConfig, ModelConfig, AphroditeConfig
 from aphrodite.distributed import get_tensor_model_parallel_world_size
 from aphrodite.distributed.parallel_state import get_pp_group
 from aphrodite.model_executor.layers.activation import SiluAndMul
@@ -35,10 +35,6 @@ from aphrodite.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
-    default_weight_loader,
-    maybe_remap_kv_scale_name,
-)
 from aphrodite.sequence import IntermediateTensors
 from aphrodite.transformers_utils.config import set_default_rope_theta
 
@@ -52,7 +48,7 @@ from .interfaces import (
 from .utils import (
     AutoWeightsLoader,
     PPMissingLayer,
-    is_pp_missing_parameter,
+    WeightsMapper,
     make_empty_intermediate_tensors_factory,
     make_layers,
     maybe_prefix,
@@ -86,7 +82,10 @@ class FalconH1MLP(nn.Module):
         self.intermediate_size = config.intermediate_size
         self.gate_multiplier, self.down_multiplier = config.mlp_multipliers
         if config.hidden_act != "silu":
-            raise ValueError(f"Unsupported activation: {config.hidden_act}. Only silu is supported for now.")
+            raise ValueError(
+                f"Unsupported activation: {config.hidden_act}. "
+                "Only silu is supported for now."
+            )
         self.act_fn = SiluAndMul()
 
     def forward(self, x):
@@ -111,7 +110,11 @@ class FalconH1SSMDecoderLayer(nn.Module):
         self.config = config
         self.tp_size = get_tensor_model_parallel_world_size()
 
-        self.d_ssm = int(config.mamba_expand * config.hidden_size) if config.mamba_d_ssm is None else config.mamba_d_ssm
+        self.d_ssm = (
+            int(config.mamba_expand * config.hidden_size)
+            if config.mamba_d_ssm is None
+            else config.mamba_d_ssm
+        )
 
         self.mamba = MambaMixer2(
             hidden_size=config.hidden_size,
@@ -156,16 +159,23 @@ class FalconH1SSMDecoderLayer(nn.Module):
             - S:         SSM state size per group
             - All indices are divided by tp_size to support tensor parallelism
         """
-        vector_shape = (2 * self.d_ssm + 2 * self.groups_time_state_size + self.config.mamba_n_heads) // self.tp_size
+        vector_shape = (
+            2 * self.d_ssm + 2 * self.groups_time_state_size + self.config.mamba_n_heads
+        ) // self.tp_size
         mup_vector = torch.ones(1, vector_shape)
         # Z vector 0 -> d_ssm
         mup_vector[:, : self.d_ssm // self.tp_size] *= self.zxbcdt_multipliers[0]
         # X vector d_ssm -> 2 * d_ssm
-        mup_vector[:, (self.d_ssm // self.tp_size) : (2 * self.d_ssm // self.tp_size)] *= self.zxbcdt_multipliers[1]
+        mup_vector[
+            :, (self.d_ssm // self.tp_size) : (2 * self.d_ssm // self.tp_size)
+        ] *= self.zxbcdt_multipliers[1]
         # B vector 2 * d_ssm -> 2 * d_ssm + (n_group * d_state)
         mup_vector[
             :,
-            (2 * self.d_ssm) // self.tp_size : (2 * self.d_ssm + self.groups_time_state_size) // self.tp_size,
+            (2 * self.d_ssm) // self.tp_size : (
+                2 * self.d_ssm + self.groups_time_state_size
+            )
+            // self.tp_size,
         ] *= self.zxbcdt_multipliers[2]
         # C vector 2 * d_ssm + (n_group * d_state)
         # -> 2 * d_ssm + 2 * (n_group * d_state)
@@ -225,7 +235,9 @@ class FalconH1AttentionDecoderLayer(nn.Module):
             assert tp_size % self.total_num_kv_heads == 0
         self.num_kv_heads = max(1, self.total_num_kv_heads // tp_size)
         self.head_dim = (
-            config.hidden_size // self.total_num_heads if getattr(config, "head_dim", None) is None else config.head_dim
+            config.hidden_size // self.total_num_heads
+            if getattr(config, "head_dim", None) is None
+            else config.head_dim
         )
         self.q_size = self.num_heads * self.head_dim
         self.kv_size = self.num_kv_heads * self.head_dim
@@ -349,7 +361,9 @@ class FalconH1ParallelHybrid(nn.Module):
         self.attention_in_multiplier = config.attention_in_multiplier
         self.attn_out_multiplier = config.attention_out_multiplier
 
-        self.feed_forward = FalconH1MLP(config, quant_config=quant_config, prefix=f"{prefix}.feed_forward")
+        self.feed_forward = FalconH1MLP(
+            config, quant_config=quant_config, prefix=f"{prefix}.feed_forward"
+        )
 
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.pre_ff_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -383,7 +397,9 @@ class FalconH1ParallelHybrid(nn.Module):
         # Sum the outputs from both branches.
         # We assume both branches produce outputs of the same
         # dimensionality (config.hidden_size).
-        hidden_states = (attn_hidden * self.attn_out_multiplier) + (ssm_hidden * self.ssm_out_multiplier)
+        hidden_states = (attn_hidden * self.attn_out_multiplier) + (
+            ssm_hidden * self.ssm_out_multiplier
+        )
         hidden_states = hidden_states + residual
 
         # feed-forward
@@ -455,7 +471,9 @@ class FalconH1Model(nn.Module):
             if inputs_embeds is not None:
                 hidden_states = inputs_embeds * self.embedding_multiplier
             else:
-                hidden_states = self.embed_input_ids(input_ids) * self.embedding_multiplier
+                hidden_states = (
+                    self.embed_input_ids(input_ids) * self.embedding_multiplier
+                )
         else:
             assert intermediate_tensors is not None
             hidden_states = intermediate_tensors["hidden_states"]
@@ -474,63 +492,6 @@ class FalconH1Model(nn.Module):
         hidden_states = self.final_layernorm(hidden_states)
         return hidden_states
 
-    def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            # (param_name, shard_name, shard_id)
-            ("qkv_proj", "q_proj", "q"),
-            ("qkv_proj", "k_proj", "k"),
-            ("qkv_proj", "v_proj", "v"),
-            ("gate_up_proj", "gate_proj", 0),
-            ("gate_up_proj", "up_proj", 1),
-        ]
-
-        params_dict = dict(self.named_parameters())
-        loaded_params: set[str] = set()
-        for name, loaded_weight in weights:
-            if "rotary_emb.inv_freq" in name:
-                continue
-
-            if "A_log" in name:
-                name = name.replace("A_log", "A")
-
-            if "mamba" in name:
-                name = name.replace("mamba", "mamba.mamba")
-
-            if "scale" in name:
-                # Remapping the name of kv-scale.
-                name = maybe_remap_kv_scale_name(name, params_dict)
-                if name is None:
-                    continue
-
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                if weight_name not in name:
-                    continue
-
-                name = name.replace(weight_name, param_name)
-                # Skip loading extra bias for GPTQ models.
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-                # Skip layers on other devices.
-                if is_pp_missing_parameter(name, self):
-                    continue
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                # Skip loading extra bias for GPTQ models.
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-                if is_pp_missing_parameter(name, self):
-                    continue
-
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-
-        return loaded_params
-
 
 class FalconH1ForCausalLM(
     nn.Module,
@@ -544,6 +505,20 @@ class FalconH1ForCausalLM(
         "qkv_proj": ["q_proj", "k_proj", "v_proj"],
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
+
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_substr={
+            "A_log": "A",
+            "mamba": "mamba.mamba",
+        },
+        orig_to_new_stacked={
+            ".q_proj": (".qkv_proj", "q"),
+            ".k_proj": (".qkv_proj", "k"),
+            ".v_proj": (".qkv_proj", "v"),
+            ".gate_proj": (".gate_up_proj", 0),
+            ".up_proj": (".gate_up_proj", 1),
+        },
+    )
 
     embedding_modules = {
         "embed_tokens": "input_embeddings",
@@ -611,7 +586,9 @@ class FalconH1ForCausalLM(
         super().__init__()
         self.config = config
         self.scheduler_config = scheduler_config
-        self.model = FalconH1Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = FalconH1Model(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
+        )
         self.tie_word_embeddings = config.tie_word_embeddings
 
         if get_pp_group().is_last_rank:
@@ -633,7 +610,9 @@ class FalconH1ForCausalLM(
         else:
             self.lm_head = PPMissingLayer()
 
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -668,4 +647,4 @@ class FalconH1ForCausalLM(
             self,
             skip_prefixes=(["lm_head."] if self.tie_word_embeddings else None),
         )
-        return loader.load_weights(weights)
+        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)

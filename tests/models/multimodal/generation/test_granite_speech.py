@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 from collections.abc import Sequence
 
 import pytest
@@ -7,19 +8,20 @@ from transformers import AutoModelForSpeechSeq2Seq
 
 from aphrodite.logprobs import SampleLogprobs
 from aphrodite.lora.request import LoRARequest
+from aphrodite.platforms import current_platform
 
-from ....conftest import AphroditeRunner, AudioTestAssets, HfRunner, PromptAudioInput
+from ....conftest import AudioTestAssets, HfRunner, PromptAudioInput, AphroditeRunner
 from ...registry import HF_EXAMPLE_MODELS
 from ...utils import check_logprobs_close
 
 HF_AUDIO_PROMPT = "<|start_of_role|>system<|end_of_role|>Knowledge Cutoff Date: April 2024.\nToday's Date: December 19, 2024.\nYou are Granite, developed by IBM. You are a helpful AI assistant<|end_of_text|>\n<|start_of_role|>user<|end_of_role|><|audio|>can you transcribe the speech into a written format?<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|>"  # noqa: E501
 
 
-def aphrodite_to_hf_output(
-    aphrodite_output: tuple[list[int], str, SampleLogprobs | None],
+def vllm_to_hf_output(
+    vllm_output: tuple[list[int], str, SampleLogprobs | None],
 ) -> tuple[list[int], str, SampleLogprobs | None]:
     """Sanitize hf output to be comparable with aphrodite output."""
-    output_ids, output_str, out_logprobs = aphrodite_output
+    output_ids, output_str, out_logprobs = vllm_output
 
     hf_output_str = output_str + "<|end_of_text|>"
 
@@ -27,15 +29,33 @@ def aphrodite_to_hf_output(
 
 
 MODEL_NAME = "ibm-granite/granite-speech-3.3-2b"
-# Audio lora co-exists directly in the model directory, but
-# currently still needs to be passed directly to Aphrodite.
-audio_lora_path = MODEL_NAME
-models = [MODEL_NAME]
+MODEL_NAME_4_0 = "ibm-granite/granite-4.0-1b-speech"
+# "plus" variant of granite speech (uses GraniteSpeechPlusForConditionalGeneration).
+MODEL_NAME_4_1_PLUS = "ibm-granite/granite-speech-4.1-2b-plus"
+# Audio lora co-exists directly in the 3.3 model directory,
+# the 4.0 and 4.1-plus models have adapters merged into the weights.
+models: dict[str, str | None] = {
+    MODEL_NAME: MODEL_NAME,
+    MODEL_NAME_4_0: None,
+    MODEL_NAME_4_1_PLUS: None,
+}
+
+
+@pytest.fixture
+def granite_speech_attention_config():
+    """Return attention config for Granite Speech tests on ROCm."""
+    if current_platform.is_rocm():
+        from aphrodite.platforms.rocm import on_mi3xx
+
+        if on_mi3xx():
+            return {"backend": "ROCM_AITER_FA"}
+        return {"backend": "TRITON_ATTN"}
+    return None
 
 
 def run_test(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    vllm_runner: type[AphroditeRunner],
     inputs: Sequence[tuple[list[str], PromptAudioInput]],
     model: str,
     *,
@@ -45,6 +65,8 @@ def run_test(
     num_logprobs: int,
     tensor_parallel_size: int,
     distributed_executor_backend: str | None = None,
+    attention_config: dict | None = None,
+    audio_lora_path: str | None = None,
 ):
     """Inference result should be the same between hf and aphrodite.
 
@@ -60,7 +82,7 @@ def run_test(
     # if we run HF first, the cuda initialization will be done and it
     # will hurt multiprocessing backend with fork method (the default method).
     # max_model_len should be greater than image_feature_size
-    with aphrodite_runner(
+    with vllm_runner(
         model,
         runner="generate",
         max_model_len=max_model_len,
@@ -69,13 +91,16 @@ def run_test(
         limit_mm_per_prompt={"audio": 1},
         tensor_parallel_size=tensor_parallel_size,
         distributed_executor_backend=distributed_executor_backend,
-        enable_lora=True,
+        enable_lora=audio_lora_path is not None,
         max_lora_rank=64,
         enforce_eager=True,
-    ) as aphrodite_model:
-        lora_request = LoRARequest("audio", 1, audio_lora_path)
-        aphrodite_outputs_per_case = [
-            aphrodite_model.generate_greedy_logprobs(
+        attention_config=attention_config,
+    ) as vllm_model:
+        lora_request = (
+            LoRARequest("audio", 1, audio_lora_path) if audio_lora_path else None
+        )
+        vllm_outputs_per_case = [
+            vllm_model.generate_greedy_logprobs(
                 prompts,
                 max_tokens,
                 num_logprobs=num_logprobs,
@@ -100,25 +125,31 @@ def run_test(
             for prompts, audios in inputs
         ]
 
-    for hf_outputs, aphrodite_outputs in zip(hf_outputs_per_case, aphrodite_outputs_per_case):
+    for hf_outputs, vllm_outputs in zip(hf_outputs_per_case, vllm_outputs_per_case):
         check_logprobs_close(
             outputs_0_lst=hf_outputs,
-            outputs_1_lst=[aphrodite_to_hf_output(output) for output in aphrodite_outputs],
+            outputs_1_lst=[vllm_to_hf_output(output) for output in vllm_outputs],
             name_0="hf",
             name_1="aphrodite",
         )
 
 
-@pytest.mark.parametrize("model", models)
-@pytest.mark.parametrize("dtype", ["bfloat16"])
-@pytest.mark.parametrize("max_model_len", [2048])
+@pytest.mark.parametrize("model,audio_lora_path", models.items())
+@pytest.mark.parametrize(
+    "dtype", ["float16"] if current_platform.is_rocm() else ["bfloat16"]
+)
+@pytest.mark.parametrize(
+    "max_model_len", [512] if current_platform.is_rocm() else [2048]
+)
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("num_logprobs", [10])
 def test_models(
     hf_runner,
-    aphrodite_runner,
+    vllm_runner,
     model: str,
+    audio_lora_path: str | None,
     audio_assets: AudioTestAssets,
+    granite_speech_attention_config,
     dtype: str,
     max_model_len: int,
     max_tokens: int,
@@ -135,7 +166,7 @@ def test_models(
     assert sr == 16000
     run_test(
         hf_runner,
-        aphrodite_runner,
+        vllm_runner,
         [
             ([HF_AUDIO_PROMPT], [audio]),
         ],
@@ -145,4 +176,6 @@ def test_models(
         max_tokens=max_tokens,
         num_logprobs=num_logprobs,
         tensor_parallel_size=1,
+        attention_config=granite_speech_attention_config,
+        audio_lora_path=audio_lora_path,
     )

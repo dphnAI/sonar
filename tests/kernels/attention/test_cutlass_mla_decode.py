@@ -9,6 +9,7 @@ import torch
 import aphrodite._custom_ops as ops
 from aphrodite.platforms import current_platform
 from aphrodite.triton_utils import triton
+from aphrodite.utils.platform_utils import num_compute_units
 
 
 def cal_diff(
@@ -32,8 +33,8 @@ def cal_diff(
 
 
 CUTLASS_MLA_UNSUPPORTED_REASON = (
-    "Cutlass MLA Requires compute capability of 10 or above."
-    if not current_platform.is_device_capability(100)
+    "Cutlass MLA Requires compute capability of 100 or above."
+    if not current_platform.is_device_capability_family(100)
     else "Cutlass MLA is supported"
 )
 
@@ -61,16 +62,21 @@ CUTLASS_MLA_UNSUPPORTED_REASON = (
     ],
 )
 @torch.inference_mode()
-def test_cutlass_mla_decode(b, s_q, mean_sk, h_q, h_kv, d, dv, block_size, causal, varlen, torch_dtype):
+def test_cutlass_mla_decode(
+    b, s_q, mean_sk, h_q, h_kv, d, dv, block_size, causal, varlen, torch_dtype
+):
     device = torch.device("cuda:0")
     init_dtype = torch.bfloat16 if torch_dtype == torch.float8_e4m3fn else torch_dtype
     torch.set_default_dtype(init_dtype)
     torch.set_default_device(device)
-    torch.cuda.set_device(device)
+    torch.accelerator.set_device_index(device)
     torch.manual_seed(42)
     random.seed(42)
 
-    print(f"{b=}, {s_q=}, {mean_sk=}, {h_q=}, {h_kv=}, {d=}, {dv=}, {causal=}, {varlen=}, {torch_dtype=}")
+    print(
+        f"{b=}, {s_q=}, {mean_sk=}, {h_q=}, {h_kv=}, "
+        f"{d=}, {dv=}, {causal=}, {varlen=}, {torch_dtype=}"
+    )
 
     use_fp8 = torch_dtype == torch.float8_e4m3fn
     scale = math.sqrt(d) ** (-1)
@@ -83,9 +89,9 @@ def test_cutlass_mla_decode(b, s_q, mean_sk, h_q, h_kv, d, dv, block_size, causa
     max_seqlen_pad = triton.cdiv(max_seqlen, 256) * 256
 
     q = torch.randn(b, s_q, h_q, d)
-    block_table = torch.arange(b * max_seqlen_pad // block_size, dtype=torch.int32).view(
-        b, max_seqlen_pad // block_size
-    )
+    block_table = torch.arange(
+        b * max_seqlen_pad // block_size, dtype=torch.int32
+    ).view(b, max_seqlen_pad // block_size)
     blocked_k = torch.randn(block_table.numel(), block_size, h_kv, d)
     blocked_v = blocked_k[..., :dv]
 
@@ -119,13 +125,16 @@ def test_cutlass_mla_decode(b, s_q, mean_sk, h_q, h_kv, d, dv, block_size, causa
             q_pe = q_pe_padded
 
         kv_cache_flat = blocked_k.squeeze(2)
-        device_properties = torch.cuda.get_device_properties(torch.device("cuda:0"))
-        sm_count = device_properties.multi_processor_count
-        workspace_size = ops.sm100_cutlass_mla_get_workspace_size(max_seqlen * block_size, b, sm_count, num_kv_splits=1)
+        sm_count = num_compute_units(device.index)
+        workspace_size = ops.sm100_cutlass_mla_get_workspace_size(
+            max_seqlen * block_size, b, sm_count, num_kv_splits=1
+        )
         workspace = torch.empty(workspace_size, device="cuda", dtype=torch.uint8)
 
         out_ans = torch.empty(b, MAX_HEADS, dv, dtype=init_dtype)
-        output_lse = torch.empty((b, MAX_HEADS), dtype=torch.float32, device=q_nope.device)
+        output_lse = torch.empty(
+            (b, MAX_HEADS), dtype=torch.float32, device=q_nope.device
+        )
         ops.sm100_cutlass_mla_decode(
             out_ans,
             output_lse,
@@ -161,8 +170,16 @@ def test_cutlass_mla_decode(b, s_q, mean_sk, h_q, h_kv, d, dv, block_size, causa
 
     def ref_mla():
         q_ = (q.to(torch.float) * descale_q).to(init_dtype) if use_fp8 else q
-        blocked_k_ = (blocked_k.to(torch.float) * descale_k).to(init_dtype) if use_fp8 else blocked_k
-        blocked_v_ = (blocked_v.to(torch.float) * descale_k).to(init_dtype) if use_fp8 else blocked_v
+        blocked_k_ = (
+            (blocked_k.to(torch.float) * descale_k).to(init_dtype)
+            if use_fp8
+            else blocked_k
+        )
+        blocked_v_ = (
+            (blocked_v.to(torch.float) * descale_k).to(init_dtype)
+            if use_fp8
+            else blocked_v
+        )
         out = torch.empty(b, s_q, h_q, dv, dtype=torch.float32)
         lse = torch.empty(b, h_q, s_q, dtype=torch.float32)
         for i in range(b):
@@ -189,7 +206,75 @@ def test_cutlass_mla_decode(b, s_q, mean_sk, h_q, h_kv, d, dv, block_size, causa
 
     t = triton.testing.do_bench(cutlass_mla)
     FLOPS = s_q * total_seqlens * h_q * (d + dv) * 2
-    bytes = (total_seqlens * h_kv * d + b * s_q * h_q * d) * (torch.finfo(torch_dtype).bits // 8) + (
-        b * s_q * h_q * dv
-    ) * (torch.finfo(init_dtype).bits // 8)
-    print(f"{t:.3f} ms, {FLOPS / 10**9 / t:.0f} TFLOPS,", f"{bytes / 10**6 / t:.0f} GB/s")
+    bytes = (total_seqlens * h_kv * d + b * s_q * h_q * d) * (
+        torch.finfo(torch_dtype).bits // 8
+    ) + (b * s_q * h_q * dv) * (torch.finfo(init_dtype).bits // 8)
+    print(
+        f"{t:.3f} ms, {FLOPS / 10**9 / t:.0f} TFLOPS,", f"{bytes / 10**6 / t:.0f} GB/s"
+    )
+
+
+@pytest.mark.skipif(
+    not current_platform.has_device_capability(100),
+    reason=CUTLASS_MLA_UNSUPPORTED_REASON,
+)
+@torch.inference_mode()
+def test_cutlass_mla_decode_cross_layer_view():
+    """The kernel must read the cache's page-dim stride instead of assuming
+    pages are packed back-to-back. A per-layer view into a cross-layer
+    (block-major) cache has stride(0) inflated by num_layers; outputs must
+    match a contiguous cache holding the same data exactly."""
+    device = torch.device("cuda:0")
+    torch.set_default_dtype(torch.bfloat16)
+    torch.set_default_device(device)
+    torch.manual_seed(42)
+
+    b, mean_sk, d, dv, block_size = 4, 512, 576, 512, 64
+    num_layers, layer_idx = 3, 1
+    scale = math.sqrt(d) ** (-1)
+
+    num_pages = b * (mean_sk // block_size)
+    cache_seqlens = torch.full((b,), mean_sk, dtype=torch.int32)
+    block_table = torch.arange(num_pages, dtype=torch.int32).view(
+        b, mean_sk // block_size
+    )
+
+    kv_contig = torch.randn(num_pages, block_size, d)
+    # Neighbor layers hold random data so packed-pages addressing reads
+    # garbage rather than zeros.
+    kv_cross_layer = torch.randn(num_pages, num_layers, block_size, d)
+    kv_view = kv_cross_layer[:, layer_idx]
+    kv_view.copy_(kv_contig)
+    assert kv_view.stride(0) == num_layers * block_size * d
+
+    q_nope = torch.randn(b, 128, dv)
+    q_pe = torch.randn(b, 128, d - dv)
+    sm_count = num_compute_units(device.index)
+    workspace_size = ops.sm100_cutlass_mla_get_workspace_size(
+        mean_sk, b, sm_count, num_kv_splits=1
+    )
+    workspace = torch.empty(workspace_size, dtype=torch.uint8)
+
+    def run(cache):
+        out = torch.empty(b, 128, dv)
+        lse = torch.empty(b, 128, dtype=torch.float32)
+        ops.sm100_cutlass_mla_decode(
+            out,
+            lse,
+            q_nope,
+            q_pe,
+            cache,
+            cache_seqlens,
+            block_table,
+            workspace,
+            scale,
+            1,
+        )
+        return out, lse
+
+    out_contig, lse_contig = run(kv_contig)
+    out_view, lse_view = run(kv_view)
+
+    # Same data and same compute order; only addressing differs.
+    assert torch.equal(out_contig, out_view)
+    assert torch.equal(lse_contig, lse_view)

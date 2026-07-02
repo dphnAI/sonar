@@ -3,7 +3,7 @@
 
 # Adapted from
 # https://github.com/huggingface/transformers/blob/v4.28.0/src/transformers/models/bloom/modeling_bloom.py
-# Copyright 2023 The Aphrodite team.
+# Copyright 2023 The vLLM team.
 # Copyright 2022 HuggingFace Inc. team and BigScience workshop.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +28,7 @@ from torch import nn
 from transformers import BloomConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
+from aphrodite.config import CacheConfig, AphroditeConfig
 from aphrodite.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
@@ -74,8 +74,12 @@ def _get_alibi_slopes(total_num_heads: int) -> torch.Tensor:
             2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))),
             dtype=torch.float32,
         )
-        num_remaining_heads = min(closest_power_of_2, total_num_heads - closest_power_of_2)
-        extra_powers = torch.arange(start=1, end=1 + 2 * num_remaining_heads, step=2, dtype=torch.int32)
+        num_remaining_heads = min(
+            closest_power_of_2, total_num_heads - closest_power_of_2
+        )
+        extra_powers = torch.arange(
+            start=1, end=1 + 2 * num_remaining_heads, step=2, dtype=torch.int32
+        )
         slopes = torch.cat([slopes, torch.pow(extra_base, extra_powers)], dim=0)
     return slopes
 
@@ -187,10 +191,16 @@ class BloomBlock(nn.Module):
         hidden_size = config.hidden_size
 
         self.input_layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.self_attention = BloomAttention(config, cache_config, quant_config, prefix=f"{prefix}.self_attention")
-        self.post_attention_layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.self_attention = BloomAttention(
+            config, cache_config, quant_config, prefix=f"{prefix}.self_attention"
+        )
+        self.post_attention_layernorm = nn.LayerNorm(
+            hidden_size, eps=config.layer_norm_epsilon
+        )
         self.mlp = BloomMLP(config, quant_config, prefix=f"{prefix}.mlp")
-        self.apply_residual_connection_post_layernorm = config.apply_residual_connection_post_layernorm
+        self.apply_residual_connection_post_layernorm = (
+            config.apply_residual_connection_post_layernorm
+        )
 
     def forward(
         self,
@@ -242,12 +252,16 @@ class BloomModel(nn.Module):
             config.vocab_size,
             self.embed_dim,
         )
-        self.word_embeddings_layernorm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.word_embeddings_layernorm = nn.LayerNorm(
+            self.embed_dim, eps=config.layer_norm_epsilon
+        )
 
         # Transformer blocks
         self.start_layer, self.end_layer, self.h = make_layers(
             config.num_hidden_layers,
-            lambda prefix: BloomBlock(config, cache_config, quant_config, prefix=prefix),
+            lambda prefix: BloomBlock(
+                config, cache_config, quant_config, prefix=prefix
+            ),
             prefix=f"{prefix}.h",
         )
 
@@ -301,7 +315,9 @@ class BloomModel(nn.Module):
                 if output_dim is not None:
                     loaded_weight_shape = loaded_weight.shape
                     loaded_weight = loaded_weight.view(
-                        loaded_weight_shape[:output_dim] + (num_heads, 3, -1) + loaded_weight_shape[output_dim + 1 :]
+                        loaded_weight_shape[:output_dim]
+                        + (num_heads, 3, -1)
+                        + loaded_weight_shape[output_dim + 1 :]
                     )
                     loaded_weight = loaded_weight.transpose(output_dim, output_dim + 1)
                     loaded_weight = loaded_weight.reshape(loaded_weight_shape)
@@ -320,7 +336,9 @@ class BloomForCausalLM(nn.Module, SupportsPP, SupportsQuant):
         quant_config = aphrodite_config.quant_config
         self.config = config
         self.quant_config = quant_config
-        self.transformer = BloomModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "transformer"))
+        self.transformer = BloomModel(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "transformer")
+        )
         if self.config.tie_word_embeddings:
             self.lm_head = self.transformer.word_embeddings
         else:
@@ -331,7 +349,9 @@ class BloomForCausalLM(nn.Module, SupportsPP, SupportsQuant):
             )
 
         self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.make_empty_intermediate_tensors = self.transformer.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.transformer.make_empty_intermediate_tensors
+        )
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.transformer.embed_input_ids(input_ids)
@@ -343,7 +363,9 @@ class BloomForCausalLM(nn.Module, SupportsPP, SupportsQuant):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.transformer(input_ids, positions, intermediate_tensors, inputs_embeds)
+        hidden_states = self.transformer(
+            input_ids, positions, intermediate_tensors, inputs_embeds
+        )
         return hidden_states
 
     def compute_logits(

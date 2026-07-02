@@ -7,7 +7,11 @@ import numpy as np
 import pytest
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
-from aphrodite.benchmarks.datasets import RandomDataset, RandomMultiModalDataset, SampleRequest
+from aphrodite.benchmarks.datasets import (
+    RandomDataset,
+    RandomMultiModalDataset,
+    SampleRequest,
+)
 
 
 @pytest.fixture(scope="session")
@@ -26,7 +30,9 @@ class Params(NamedTuple):
 
 @pytest.fixture(scope="session")
 def random_dataset_params() -> Params:
-    return Params(num_requests=16, prefix_len=7, range_ratio=0.3, input_len=50, output_len=20)
+    return Params(
+        num_requests=16, prefix_len=7, range_ratio=0.3, input_len=50, output_len=20
+    )
 
 
 def _fingerprint_sample(req: SampleRequest) -> tuple[str, int, int]:
@@ -55,7 +61,9 @@ def _collect_samples(
 
 
 @pytest.mark.benchmark
-def test_random_dataset_same_seed(hf_tokenizer: PreTrainedTokenizerBase, random_dataset_params: Params) -> None:
+def test_random_dataset_same_seed(
+    hf_tokenizer: PreTrainedTokenizerBase, random_dataset_params: Params
+) -> None:
     """Same seed should yield identical outputs, even if global RNGs change.
 
     This guards against accidental reliance on Python's random or np.random
@@ -94,7 +102,9 @@ def test_random_dataset_same_seed(hf_tokenizer: PreTrainedTokenizerBase, random_
 
 
 @pytest.mark.benchmark
-def test_random_dataset_different_seeds(hf_tokenizer: PreTrainedTokenizerBase, random_dataset_params: Params) -> None:
+def test_random_dataset_different_seeds(
+    hf_tokenizer: PreTrainedTokenizerBase, random_dataset_params: Params
+) -> None:
     """Different seeds should change outputs with overwhelming likelihood."""
     p = random_dataset_params
     seed_a = 0

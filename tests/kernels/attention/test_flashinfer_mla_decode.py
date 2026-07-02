@@ -3,7 +3,6 @@
 import pytest
 import torch
 import torch.nn.functional as F
-from flashinfer.decode import trtllm_batch_decode_with_kv_cache_mla
 from torch import Tensor
 
 from aphrodite.platforms import current_platform
@@ -15,6 +14,8 @@ if not current_platform.has_device_capability(100):
         reason="FlashInfer MLA Requires compute capability of 10 or above.",
         allow_module_level=True,
     )
+else:
+    from flashinfer.decode import trtllm_batch_decode_with_kv_cache_mla
 
 
 def ref_mla(
@@ -81,7 +82,9 @@ def test_flashinfer_mla_decode(dtype: torch.dtype, bs: int, block_size: int):
     block_id = 0
     for i in range(bs):
         num_blocks_needed = blocks_per_seq[i]
-        block_tables[i, :num_blocks_needed] = all_block_ids[block_id : block_id + num_blocks_needed]
+        block_tables[i, :num_blocks_needed] = all_block_ids[
+            block_id : block_id + num_blocks_needed
+        ]
         block_id += num_blocks_needed
 
     kv_cache = torch.randn(block_tables.numel(), block_size, qk_head_dim).to(dtype)

@@ -25,7 +25,7 @@ from ..layers.pooler.tokwise import (
 from .interfaces import SupportsLateInteraction
 from .interfaces_base import AphroditeModelForPooling
 from .qwen3 import Qwen3ForCausalLM, Qwen3Model
-from .utils import AutoWeightsLoader, maybe_prefix
+from .utils import AutoWeightsLoader, WeightsMapper, maybe_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,9 @@ class JinaForRanking(nn.Module, SupportsLateInteraction):
 
         self.aphrodite_config = aphrodite_config
         self.quant_config = quant_config
-        self.model = Qwen3Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Qwen3Model(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
+        )
 
         self.projector = nn.Sequential(
             nn.Linear(config.hidden_size, config.hidden_size // 2, bias=False),
@@ -69,7 +71,9 @@ class JinaForRanking(nn.Module, SupportsLateInteraction):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
+        hidden_states = self.model(
+            input_ids, positions, intermediate_tensors, inputs_embeds
+        )
         return hidden_states
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
@@ -189,6 +193,9 @@ class JinaEmbeddingsV5Model(Qwen3ForCausalLM, AphroditeModelForPooling):
     """
 
     is_pooling_model = True
+    hf_to_aphrodite_mapper = Qwen3ForCausalLM.hf_to_aphrodite_mapper | WeightsMapper(
+        orig_to_new_prefix={"": "model."}
+    )
 
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
@@ -196,7 +203,9 @@ class JinaEmbeddingsV5Model(Qwen3ForCausalLM, AphroditeModelForPooling):
         self._model_name = aphrodite_config.model_config.model
         self._revision = aphrodite_config.model_config.revision
 
-        self._task = getattr(aphrodite_config.model_config.hf_config, "jina_task", _DEFAULT_TASK)
+        self._task = getattr(
+            aphrodite_config.model_config.hf_config, "jina_task", _DEFAULT_TASK
+        )
         if self._task not in _SUPPORTED_TASKS:
             logger.warning(
                 "Unknown jina_task=%r. Falling back to %r.",
@@ -248,5 +257,6 @@ class JinaEmbeddingsV5Model(Qwen3ForCausalLM, AphroditeModelForPooling):
                         tensor = tensor + (lora_B @ lora_A) * scaling
                 yield name, tensor
 
-        loaded = self.model.load_weights(_merge_weights(weights))
-        return {f"model.{name}" for name in loaded}
+        loader = AutoWeightsLoader(self, ignore_unexpected_prefixes=["lm_head."])
+        weights = _merge_weights(weights)
+        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)

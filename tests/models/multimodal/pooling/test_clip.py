@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
+import torch
 from transformers import CLIPModel
 
-from ....conftest import IMAGE_ASSETS, AphroditeRunner, HfRunner, PromptImageInput
+from ....conftest import IMAGE_ASSETS, HfRunner, PromptImageInput, AphroditeRunner
 from ...utils import check_embeddings_close
 
 HF_TEXT_PROMPTS = [
@@ -23,7 +25,7 @@ MODELS = ["openai/clip-vit-base-patch32"]
 
 def _run_test(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    vllm_runner: type[AphroditeRunner],
     input_texts: list[str],
     input_images: PromptImageInput,
     model: str,
@@ -34,10 +36,10 @@ def _run_test(
     # Aphrodite needs a fresh new process without cuda initialization.
     # if we run HF first, the cuda initialization will be done and it
     # will hurt multiprocessing backend with fork method (the default method).
-    with aphrodite_runner(
+    with vllm_runner(
         model, runner="pooling", dtype=dtype, enforce_eager=True, max_model_len=77
-    ) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.embed(input_texts, images=input_images)
+    ) as vllm_model:
+        vllm_outputs = vllm_model.embed(input_texts, images=input_images)
 
     with hf_runner(model, dtype=dtype, auto_cls=CLIPModel) as hf_model:
         all_inputs = hf_model.get_inputs(input_texts, images=input_images)
@@ -49,20 +51,23 @@ def _run_test(
             if "pixel_values" in inputs:
                 pooled_output = hf_model.model.get_image_features(
                     pixel_values=inputs.pixel_values,
-                ).squeeze(0)
+                )
             else:
                 pooled_output = hf_model.model.get_text_features(
                     input_ids=inputs.input_ids,
                     attention_mask=inputs.attention_mask,
-                ).squeeze(0)
+                )
 
+            if not isinstance(pooled_output, torch.Tensor):
+                pooled_output = pooled_output.pooler_output
+            pooled_output = pooled_output.squeeze(0)
             all_outputs.append(pooled_output.tolist())
 
         hf_outputs = all_outputs
 
     check_embeddings_close(
         embeddings_0_lst=hf_outputs,
-        embeddings_1_lst=aphrodite_outputs,
+        embeddings_1_lst=vllm_outputs,
         name_0="hf",
         name_1="aphrodite",
     )
@@ -72,7 +77,7 @@ def _run_test(
 @pytest.mark.parametrize("dtype", ["float"])
 def test_models_text(
     hf_runner,
-    aphrodite_runner,
+    vllm_runner,
     image_assets,
     model: str,
     dtype: str,
@@ -83,7 +88,7 @@ def test_models_text(
 
     _run_test(
         hf_runner,
-        aphrodite_runner,
+        vllm_runner,
         input_texts,
         input_images,  # type: ignore
         model,
@@ -95,18 +100,20 @@ def test_models_text(
 @pytest.mark.parametrize("dtype", ["float"])
 def test_models_image(
     hf_runner,
-    aphrodite_runner,
+    vllm_runner,
     image_assets,
     model: str,
     dtype: str,
 ) -> None:
-    input_texts_images = [(text, asset.pil_image) for text, asset in zip(HF_IMAGE_PROMPTS, image_assets)]
+    input_texts_images = [
+        (text, asset.pil_image) for text, asset in zip(HF_IMAGE_PROMPTS, image_assets)
+    ]
     input_texts = [text for text, _ in input_texts_images]
     input_images = [image for _, image in input_texts_images]
 
     _run_test(
         hf_runner,
-        aphrodite_runner,
+        vllm_runner,
         input_texts,
         input_images,
         model,
@@ -117,7 +124,7 @@ def test_models_image(
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("dtype", ["float"])
 def test_models_text_image_no_crash(
-    aphrodite_runner,
+    vllm_runner,
     image_assets,
     model: str,
     dtype: str,
@@ -125,12 +132,12 @@ def test_models_text_image_no_crash(
     texts = [HF_TEXT_PROMPTS[0]]
     images = [image_assets[0].pil_image]
 
-    with aphrodite_runner(
+    with vllm_runner(
         model, runner="pooling", dtype=dtype, enforce_eager=True, max_model_len=77
-    ) as aphrodite_model:
+    ) as vllm_model:
         with pytest.raises(ValueError, match="not both"):
-            aphrodite_model.embed(texts, images=images)
+            vllm_model.embed(texts, images=images)
 
         # Should still be able to run subsequent requests
-        aphrodite_model.embed(texts)
-        aphrodite_model.embed([""], images=images)
+        vllm_model.embed(texts)
+        vllm_model.embed([""], images=images)

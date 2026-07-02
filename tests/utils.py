@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import asyncio
+import atexit
 import contextlib
 import copy
 import functools
@@ -13,13 +15,14 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import warnings
-from collections.abc import Callable, Iterable
-from contextlib import ExitStack, contextmanager, suppress
-from multiprocessing import Process
+from collections.abc import Callable, Iterable, MutableMapping, Sequence
+from contextlib import ExitStack, contextmanager
+from multiprocessing import Process, get_context
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from unittest.mock import patch
 
 import anthropic
@@ -30,34 +33,85 @@ import pytest
 import requests
 import torch
 import torch.nn.functional as F
-from aphrodite.endpoints.cli.run import ServeSubcommand
-from aphrodite.engine.args_tools import AsyncEngineArgs
-from aphrodite.modeling.model_loader import get_model_loader
+from huggingface_hub import hf_hub_download
+from huggingface_hub.constants import HF_HUB_OFFLINE
 from openai.types.completion import Completion
 from typing_extensions import ParamSpec
 
 import aphrodite.envs as envs
-from aphrodite.distributed import ensure_model_parallel_initialized, init_distributed_environment
+from tests.models.utils import TextTextLogprobs
+from aphrodite.distributed import (
+    ensure_model_parallel_initialized,
+    init_distributed_environment,
+)
+from aphrodite.engine.arg_utils import AsyncEngineArgs
+from aphrodite.entrypoints.cli.serve import ServeSubcommand
+from aphrodite.logger import init_logger
+from aphrodite.model_executor.kernels.linear import (
+    _KernelT,
+    init_fp8_linear_kernel,
+)
+from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    QuantKey,
+)
+from aphrodite.model_executor.model_loader import get_model_loader
 from aphrodite.platforms import current_platform
-from aphrodite.transformers_utils.tokenizer import get_tokenizer
+from aphrodite.tokenizers import get_tokenizer
 from aphrodite.utils.argparse_utils import FlexibleArgumentParser
 from aphrodite.utils.mem_constants import GB_bytes
 from aphrodite.utils.network_utils import get_open_port
-from aphrodite.utils.torch_utils import cuda_device_count_stateless
-from tests.models.utils import TextTextLogprobs
+from aphrodite.utils.torch_utils import (
+    set_random_seed,  # noqa: F401 - re-exported for use in test files
+)
+
+logger = init_logger(__name__)
+
+FP8_DTYPE = current_platform.fp8_dtype()
+
+
+def prewarm_hf_cache(assets: list[tuple[str, str]]) -> None:
+    """Pre-populate the HF cache for (repo_id, filename) pairs that upstream
+    trust_remote_code modules would otherwise fetch from third-party CDNs
+    (often unreachable from US-based CI)."""
+    if HF_HUB_OFFLINE:
+        return
+    for repo_id, filename in assets:
+        try:
+            hf_hub_download(repo_id=repo_id, filename=filename)
+        except Exception as e:
+            logger.warning(
+                "Failed to prefetch %s/%s: %r. Tests depending on this asset may fail.",
+                repo_id,
+                filename,
+                e,
+            )
+
 
 if current_platform.is_rocm():
-    from amdsmi import amdsmi_get_gpu_vram_usage, amdsmi_get_processor_handles, amdsmi_init, amdsmi_shut_down
+    from amdsmi import (
+        amdsmi_get_gpu_vram_usage,
+        amdsmi_get_processor_handles,
+        amdsmi_init,
+        amdsmi_shut_down,
+    )
+
+    _amdsmi_lock = threading.Lock()
 
     @contextmanager
     def _nvml():
-        try:
-            amdsmi_init()
-            yield
-        finally:
-            amdsmi_shut_down()
+        with _amdsmi_lock:
+            try:
+                amdsmi_init()
+                yield
+            finally:
+                amdsmi_shut_down()
 elif current_platform.is_cuda():
-    from aphrodite.third_party.pynvml import nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo, nvmlInit, nvmlShutdown
+    from aphrodite.third_party.pynvml import (
+        nvmlDeviceGetHandleByIndex,
+        nvmlDeviceGetMemoryInfo,
+        nvmlInit,
+        nvmlShutdown,
+    )
 
     @contextmanager
     def _nvml():
@@ -76,73 +130,109 @@ else:
 APHRODITE_PATH = Path(__file__).parent.parent
 """Path to root of the Aphrodite repository."""
 
+# ROCm: disable skinny GEMM to avoid non-deterministic results from
+# atomic reductions in wvSplitKrc kernel.
+# See: https://github.com/vllm-project/aphrodite/pull/33493#issuecomment-3906083975
+ROCM_ENV_OVERRIDES = (
+    {"APHRODITE_ROCM_USE_SKINNY_GEMM": "0"} if current_platform.is_rocm() else {}
+)
+# ROCm: disable prefix caching and eliminate batch variance to reduce
+# test flakiness.
+ROCM_EXTRA_ARGS = (
+    ["--no-enable-prefix-caching", "--max-num-seqs", "1"]
+    if current_platform.is_rocm()
+    else []
+)
+# Python-API equivalent of ROCM_EXTRA_ARGS for use with EngineArgs kwargs.
+ROCM_ENGINE_KWARGS: dict = (
+    {"enable_prefix_caching": False, "max_num_seqs": 1}
+    if current_platform.is_rocm()
+    else {}
+)
+_TILELANG_TVM_PYTHONPATH_FRAGMENT = os.path.join(
+    "tilelang", "3rdparty", "tvm", "python"
+)
 
-class RemoteOpenAIServer:
-    DUMMY_API_KEY = "token-abc123"  # Aphrodite's OpenAI server does not need API key
 
-    def _start_server(self, model: str, aphrodite_serve_args: list[str], env_dict: dict[str, str] | None) -> None:
-        """Subclasses override this method to customize server process launch"""
-        env = os.environ.copy()
-        # the current process might initialize cuda,
-        # to be safe, we should use spawn method
-        env["APHRODITE_WORKER_MULTIPROC_METHOD"] = "spawn"
-        if env_dict is not None:
-            env.update(env_dict)
-        serve_cmd = ["aphrodite", "run", model, *aphrodite_serve_args]
-        print(f"Launching RemoteOpenAIServer with: {' '.join(serve_cmd)}")
-        self.proc: subprocess.Popen = subprocess.Popen(
-            serve_cmd,
-            env=env,
-            stdout=sys.stdout,
-            stderr=sys.stderr,
-        )
+def _sanitize_pythonpath_value(pythonpath: str | None) -> str:
+    if not pythonpath:
+        return ""
+    entries = []
+    for entry in pythonpath.split(os.pathsep):
+        normalized = entry.replace(os.sep, "/")
+        if _TILELANG_TVM_PYTHONPATH_FRAGMENT.replace(os.sep, "/") in normalized:
+            continue
+        entries.append(entry)
+    return os.pathsep.join(entries)
 
-    def __init__(
-        self,
-        model: str,
-        aphrodite_serve_args: list[str],
-        *,
-        env_dict: dict[str, str] | None = None,
-        seed: int | None = 0,
-        auto_port: bool = True,
-        max_wait_seconds: float | None = None,
-        override_hf_configs: dict[str, Any] | None = None,
-    ) -> None:
-        if auto_port:
-            if "-p" in aphrodite_serve_args or "--port" in aphrodite_serve_args:
-                raise ValueError("You have manually specified the port when `auto_port=True`.")
 
-            # No need for a port if using unix sockets
-            if "--uds" not in aphrodite_serve_args:
-                # Don't mutate the input args
-                aphrodite_serve_args = aphrodite_serve_args + ["--port", str(get_open_port())]
-        if seed is not None:
-            if "--seed" in aphrodite_serve_args:
-                raise ValueError(f"You have manually specified the seed when `seed={seed}`.")
+def _sanitize_pythonpath_env(env: MutableMapping[str, str]) -> None:
+    cleaned = _sanitize_pythonpath_value(env.get("PYTHONPATH"))
+    if cleaned:
+        env["PYTHONPATH"] = cleaned
+    else:
+        env.pop("PYTHONPATH", None)
 
-            aphrodite_serve_args = aphrodite_serve_args + ["--seed", str(seed)]
 
-        if override_hf_configs is not None:
-            aphrodite_serve_args = aphrodite_serve_args + [
-                "--hf-overrides",
-                json.dumps(override_hf_configs),
-            ]
+def _sanitize_current_pythonpath_env() -> None:
+    _sanitize_pythonpath_env(os.environ)
 
-        parser = FlexibleArgumentParser(description="Aphrodite's remote OpenAI server.")
-        subparsers = parser.add_subparsers(required=False, dest="subparser")
-        parser = ServeSubcommand().subparser_init(subparsers)
-        args = parser.parse_args(["--model", model, *aphrodite_serve_args])
-        self.uds = args.uds
-        if args.uds:
-            self.host = None
-            self.port = None
+
+@contextmanager
+def _temporarily_sanitized_pythonpath_env():
+    original = os.environ.get("PYTHONPATH")
+    _sanitize_current_pythonpath_env()
+    try:
+        yield
+    finally:
+        if original is None:
+            os.environ.pop("PYTHONPATH", None)
         else:
-            self.host = str(args.host or "127.0.0.1")
-            self.port = int(args.port)
+            os.environ["PYTHONPATH"] = original
 
-        self.show_hidden_metrics = args.show_hidden_metrics_for_version is not None
 
-        # download the model before starting the server to avoid timeout
+def requires_spawn_multiprocessing() -> bool:
+    """Whether this platform requires spawn instead of fork for test processes."""
+    return current_platform.is_rocm() or current_platform.is_xpu()
+
+
+def _run_in_new_process_group(
+    child_process_fxn: Callable[[dict[str, str] | None, str, list[str]], None],
+    env_dict: dict[str, str] | None,
+    model: str,
+    vllm_serve_args: list[str],
+) -> None:
+    os.setsid()
+    child_process_fxn(env_dict, model, vllm_serve_args)
+
+
+class RemoteVLLMServer:
+    """Base class for launching Aphrodite server subprocesses for testing.
+
+    Subclasses must override ``_create_cli_subcommand`` and
+    ``_start_server``.
+    """
+
+    DUMMY_API_KEY = "token-abc123"  # Aphrodite's OpenAI server does not need API key
+    _active_servers: set["RemoteVLLMServer"] = set()
+    _active_servers_lock = threading.RLock()
+    _cleanup_hooks_registered = False
+    _signal_hooks_registered = False
+    _previous_signal_handlers: dict[int, Any] = {}
+    proc: subprocess.Popen
+
+    def _create_cli_subcommand(self):
+        """Return a CLISubcommand instance used to parse CLI args."""
+        raise NotImplementedError
+
+    def _start_server(
+        self, model: str, vllm_serve_args: list[str], env_dict: dict[str, str] | None
+    ) -> None:
+        """Subclasses override this method to customize server process launch"""
+        raise NotImplementedError
+
+    def _pre_download_model(self, model: str, args) -> None:
+        """Download model weights before starting the server to avoid timeout."""
         is_local = os.path.isdir(model)
         if not is_local:
             engine_args = AsyncEngineArgs.from_cli_args(args)
@@ -152,20 +242,444 @@ class RemoteOpenAIServer:
             model_loader = get_model_loader(load_config)
             model_loader.download_model(model_config)
 
-        self._start_server(model, aphrodite_serve_args, env_dict)
-        max_wait_seconds = max_wait_seconds or 240
-        self._wait_for_server(url=self.url_for("health"), timeout=max_wait_seconds)
+    def __init__(
+        self,
+        model: str,
+        vllm_serve_args: list[str],
+        *,
+        env_dict: dict[str, str] | None = None,
+        seed: int = 0,
+        auto_port: bool = True,
+        max_wait_seconds: float | None = None,
+        override_hf_configs: dict[str, Any] | None = None,
+    ) -> None:
+        if auto_port:
+            if "-p" in vllm_serve_args or "--port" in vllm_serve_args:
+                raise ValueError(
+                    "You have manually specified the port when `auto_port=True`."
+                )
+
+            # No need for a port if using unix sockets
+            if "--uds" not in vllm_serve_args:
+                # Don't mutate the input args
+                vllm_serve_args = vllm_serve_args + ["--port", str(get_open_port())]
+        if seed is not None:
+            if "--seed" in vllm_serve_args:
+                raise ValueError(
+                    f"You have manually specified the seed when `seed={seed}`."
+                )
+
+            vllm_serve_args = vllm_serve_args + ["--seed", str(seed)]
+
+        if override_hf_configs is not None:
+            vllm_serve_args = vllm_serve_args + [
+                "--hf-overrides",
+                json.dumps(override_hf_configs),
+            ]
+
+        parser = FlexibleArgumentParser(description="Aphrodite's remote server.")
+        subparsers = parser.add_subparsers(required=False, dest="subparser")
+        parser = self._create_cli_subcommand().subparser_init(subparsers)
+        args = parser.parse_args(["--model", model, *vllm_serve_args])
+        self.uds = args.uds
+        if args.uds:
+            self.host = None
+            self.port = None
+        else:
+            self.host = str(args.host or "127.0.0.1")
+            self.port = int(args.port)
+
+        self.show_hidden_metrics = (
+            getattr(args, "show_hidden_metrics_for_version", None) is not None
+        )
+
+        with _temporarily_sanitized_pythonpath_env():
+            self._pre_download_model(model, args)
+        self._shutdown_complete = False
+
+        # Record GPU memory before server start so we know what
+        # "released" looks like.
+        self._pre_server_gpu_memory = self._get_gpu_memory_used()
+        if self._pre_server_gpu_memory is not None:
+            pre_gb = self._pre_server_gpu_memory / 1e9
+            print(
+                f"[{type(self).__name__}] GPU memory before server start: "
+                f"{pre_gb:.2f} GB"
+            )
+
+        self._start_server(model, vllm_serve_args, env_dict)
+        self._register_active_server()
+        max_wait_seconds = max_wait_seconds or 480
+        try:
+            self._wait_for_server(url=self.url_for("health"), timeout=max_wait_seconds)
+        except Exception:
+            # If the server never became healthy, we must still clean up
+            # the subprocess tree. Without this, a timeout in __init__
+            # leaks the server + EngineCore processes (and their GPU
+            # memory), because __exit__ is never called when __init__
+            # raises inside a ``with`` statement.
+            self._shutdown()
+            raise
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.proc.terminate()
+        self._shutdown()
+
+    def _shutdown(self) -> None:
+        """Kill the server process tree and wait for GPU memory release.
+
+        Called from both ``__exit__`` (normal path) and ``__init__``
+        (when the server fails to start). Must be safe to call even if
+        the process is already dead.
+        """
+        if self._shutdown_complete:
+            return
+
+        self._shutdown_complete = True
         try:
-            self.proc.wait(8)
+            self._terminate_process_tree()
+            self._wait_for_gpu_memory_release()
+        finally:
+            self._unregister_active_server()
+
+    @classmethod
+    def _ensure_cleanup_hooks_registered(cls) -> None:
+        """Register process-exit cleanup for detached server subprocesses."""
+        root_cls = RemoteVLLMServer
+        with root_cls._active_servers_lock:
+            if not root_cls._cleanup_hooks_registered:
+                atexit.register(root_cls._shutdown_active_servers)
+                root_cls._cleanup_hooks_registered = True
+
+            if (
+                threading.current_thread() is threading.main_thread()
+                and not root_cls._signal_hooks_registered
+            ):
+                for signum in (signal.SIGTERM, signal.SIGINT):
+                    root_cls._previous_signal_handlers[signum] = signal.getsignal(
+                        signum
+                    )
+                    signal.signal(signum, root_cls._handle_parent_signal)
+                root_cls._signal_hooks_registered = True
+
+    def _register_active_server(self) -> None:
+        """Track this server so parent-process exits still clean it up."""
+        RemoteVLLMServer._ensure_cleanup_hooks_registered()
+        with RemoteVLLMServer._active_servers_lock:
+            RemoteVLLMServer._active_servers.add(self)
+
+    def _unregister_active_server(self) -> None:
+        with RemoteVLLMServer._active_servers_lock:
+            RemoteVLLMServer._active_servers.discard(self)
+
+    @classmethod
+    def _shutdown_active_servers(cls) -> None:
+        """Best-effort shutdown for all live RemoteVLLMServer instances."""
+        with cls._active_servers_lock:
+            servers = list(cls._active_servers)
+
+        for server in servers:
+            with contextlib.suppress(Exception):
+                server._shutdown()
+
+    @classmethod
+    def _handle_parent_signal(cls, signum, frame) -> None:
+        """Clean up detached servers before letting the signal terminate pytest."""
+        cls._shutdown_active_servers()
+
+        previous_handler = cls._previous_signal_handlers.get(signum, signal.SIG_DFL)
+        if callable(previous_handler):
+            previous_handler(signum, frame)
+        elif previous_handler == signal.SIG_IGN:
+            return
+        elif signum == signal.SIGINT:
+            raise KeyboardInterrupt
+        else:
+            raise SystemExit(128 + signum)
+
+    def _terminate_process_tree(self) -> None:
+        """Kill the server process tree without waiting for GPU memory release.
+
+        Split out from ``_shutdown`` so that ``shutdown_many`` can run this
+        phase in parallel for sibling servers and then wait for GPU memory
+        release once at the end.
+        """
+        pid = self.proc.pid
+
+        # Get the process group ID. Because we used
+        # start_new_session=True the pgid equals the server's pid.
+        try:
+            pgid = os.getpgid(pid)
+        except (ProcessLookupError, OSError):
+            pgid = None
+
+        # Phase 1: graceful SIGTERM to the root process
+        with contextlib.suppress(ProcessLookupError, OSError):
+            self.proc.terminate()
+            print(f"[RemoteOpenAIServer] Sent SIGTERM to process {pid}")
+
+        try:
+            self.proc.wait(timeout=15)
+            print(f"[RemoteOpenAIServer] Server {pid} terminated gracefully")
         except subprocess.TimeoutExpired:
-            # force kill if needed
-            self.proc.kill()
+            # Phase 2: SIGKILL the entire process group
+            print(
+                f"[RemoteOpenAIServer] Server {pid} did not respond "
+                "to SIGTERM, sending SIGKILL to process group"
+            )
+            if pgid is not None:
+                with contextlib.suppress(ProcessLookupError, OSError):
+                    os.killpg(pgid, signal.SIGKILL)
+            else:
+                self.proc.kill()
+
+            try:
+                self.proc.wait(timeout=10)
+                print(f"[RemoteOpenAIServer] Server {pid} killed")
+            except subprocess.TimeoutExpired:
+                pass
+
+        # After killing the root process, ensure all children in the
+        # process group (e.g. EngineCore workers) are also dead.
+        # On ROCm especially, surviving children hold GPU contexts and
+        # prevent VRAM from being reclaimed by the driver.
+        self._kill_process_group_survivors(pgid)
+
+    @classmethod
+    def shutdown_many(cls, servers: Sequence["RemoteVLLMServer"]) -> None:
+        """Shut down multiple sibling servers and wait for GPU memory once.
+
+        Test fixtures that hold several ``RemoteVLLMServer`` instances at
+        once must NOT shut them down by calling each server's ``__exit__``
+        sequentially: every server measures total GPU memory across all
+        visible devices in ``_wait_for_gpu_memory_release``, so the first
+        server's wait blocks the full timeout because later sibling
+        servers are still holding GPU memory.
+
+        Instead, this method terminates every server's process tree in
+        parallel, then runs the GPU-memory-release wait once against the
+        earliest recorded baseline (memory before any server started).
+        """
+        if not servers:
+            return
+
+        for server in servers:
+            server._shutdown_complete = True
+
+        threads = [
+            threading.Thread(
+                target=s._terminate_process_tree,
+                name=f"shutdown-{s.proc.pid}",
+                daemon=True,
+            )
+            for s in servers
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Use the smallest pre-server baseline so the wait targets memory
+        # usage before *any* of these sibling servers started, not after
+        # earlier siblings had already allocated.
+        earliest = min(
+            servers,
+            key=lambda s: (
+                float("inf")
+                if s._pre_server_gpu_memory is None
+                else s._pre_server_gpu_memory
+            ),
+        )
+        try:
+            earliest._wait_for_gpu_memory_release()
+        finally:
+            for server in servers:
+                server._unregister_active_server()
+
+    def _kill_process_group_survivors(
+        self, pgid: int | None, timeout: float = 15.0
+    ) -> None:
+        """SIGKILL any processes still in the server's process group
+        and wait for them to exit.
+
+        Because the server is launched with ``start_new_session=True``,
+        all its children (EngineCore, workers, etc.) share the same
+        pgid. After the root process is killed, stragglers -- especially
+        on ROCm where GPU contexts linger until the *process* exits --
+        must be reaped explicitly.
+
+        Uses ``/proc`` to scan for pgid members so this works even after
+        the parent has been reaped (unlike ``psutil.Process.children``).
+        """
+        if pgid is None:
+            return
+
+        # Send SIGKILL to the entire process group one more time.
+        # This is cheap and harmless if everyone is already dead.
+        with contextlib.suppress(ProcessLookupError, OSError):
+            os.killpg(pgid, signal.SIGKILL)
+
+        # Collect surviving PIDs by scanning /proc for matching pgid.
+        # This works on Linux even after the parent has been waited on
+        # and is more reliable than psutil.Process(parent).children().
+        survivor_pids = self._find_pgid_members(pgid)
+
+        if not survivor_pids:
+            return
+
+        print(
+            f"[RemoteOpenAIServer] {len(survivor_pids)} process(es) still "
+            f"in pgid {pgid} after SIGKILL: {survivor_pids}"
+        )
+
+        # Wait for each survivor to actually exit so the GPU driver
+        # releases its VRAM.
+        deadline = time.time() + timeout
+        while survivor_pids and time.time() < deadline:
+            still_alive = []
+            for spid in survivor_pids:
+                try:
+                    os.kill(spid, 0)  # Check if still alive
+                    still_alive.append(spid)
+                except (ProcessLookupError, OSError):
+                    pass
+            survivor_pids = still_alive
+            if survivor_pids:
+                time.sleep(0.5)
+
+        if survivor_pids:
+            print(
+                f"[RemoteOpenAIServer] WARNING: processes {survivor_pids} "
+                f"in pgid {pgid} could not be killed within {timeout}s"
+            )
+
+    @staticmethod
+    def _find_pgid_members(pgid: int) -> list[int]:
+        """Return PIDs of all living processes whose pgid matches."""
+        members: list[int] = []
+        proc_path = Path("/proc")
+        if not proc_path.is_dir():
+            return members
+        for entry in proc_path.iterdir():
+            if not entry.name.isdigit():
+                continue
+            pid = int(entry.name)
+            try:
+                if os.getpgid(pid) == pgid:
+                    members.append(pid)
+            except OSError:
+                continue
+        return members
+
+    def _get_gpu_memory_used(self) -> float | None:
+        """Get total GPU memory used across all visible devices in bytes."""
+        try:
+            if current_platform.is_rocm():
+                with _nvml():
+                    handles = amdsmi_get_processor_handles()
+                    devices = get_physical_device_indices(
+                        list(range(current_platform.device_count()))
+                    )
+                    total_used_mib = 0
+                    for device in devices:
+                        handle = handles[device]
+                        vram_info = amdsmi_get_gpu_vram_usage(handle)
+                        total_used_mib += vram_info["vram_used"]
+                    # amdsmi reports VRAM in MiB; convert to bytes so this
+                    # matches the CUDA/nvml branch (already bytes) and the
+                    # byte-based target in _wait_for_gpu_memory_release. Without
+                    # this, that wait compares MiB against a ~2e9-byte target,
+                    # is always satisfied instantly, and returns "released to
+                    # 0.00 GB" while the previous server's VRAM is still
+                    # resident -- OOMing the next server's startup on ROCm.
+                    return total_used_mib * 1024 * 1024
+            elif current_platform.is_cuda():
+                with _nvml():
+                    total_used = 0
+                    device_count = current_platform.device_count()
+                    for i in range(device_count):
+                        handle = nvmlDeviceGetHandleByIndex(i)
+                        mem_info = nvmlDeviceGetMemoryInfo(handle)
+                        total_used += mem_info.used
+                    return total_used
+            elif current_platform.is_xpu():
+                total_used = 0
+                device_count = current_platform.device_count()
+                for i in range(device_count):
+                    free, total = torch.xpu.mem_get_info(i)
+                    total_used += total - free
+                return total_used
+        except Exception as e:
+            print(f"[RemoteOpenAIServer] Could not query GPU memory: {e}")
+            return None
+        return None
+
+    def _wait_for_gpu_memory_release(
+        self, timeout: float = 120.0, log_interval: float = 10.0
+    ):
+        """Wait for GPU memory to drop back toward pre-server levels.
+
+        Waits the full timeout for memory to return close to the
+        pre-server baseline. Does NOT fall back to a "stabilization"
+        heuristic -- if memory is still held when the timeout expires,
+        the test fails so the problem is surfaced immediately rather
+        than causing cascading OOM failures in every subsequent test.
+        """
+        baseline = self._pre_server_gpu_memory
+        if baseline is None:
+            # Can't query GPU memory - nothing to do
+            return
+
+        # Allow up to 2 GiB overhead above baseline for driver/context state
+        # that may persist between server instances.
+        headroom_bytes = 2 * 1024 * 1024 * 1024
+        target = baseline + headroom_bytes
+
+        start = time.time()
+        next_log_time = start + log_interval
+
+        while time.time() - start < timeout:
+            used = self._get_gpu_memory_used()
+
+            if used is None:
+                return  # Can't query, assume ok
+
+            used_gb = used / 1e9
+            target_gb = target / 1e9
+            elapsed = time.time() - start
+
+            if used <= target:
+                print(
+                    f"[RemoteOpenAIServer] GPU memory released to "
+                    f"{used_gb:.2f} GB (target: {target_gb:.2f} GB) "
+                    f"in {elapsed:.1f}s"
+                )
+                return
+
+            now = time.time()
+            if now >= next_log_time:
+                print(
+                    f"[RemoteOpenAIServer] Waiting for GPU memory release: "
+                    f"{used_gb:.2f} GB (target: {target_gb:.2f} GB) "
+                    f"[{elapsed:.0f}s/{timeout:.0f}s]"
+                )
+                next_log_time = now + log_interval
+
+            time.sleep(1.0)
+
+        # Timeout -- raise so the current test fails with a clear
+        # message instead of silently poisoning subsequent tests.
+        final_used = self._get_gpu_memory_used()
+        final_gb = final_used / 1e9 if final_used else 0.0
+        raise RuntimeError(
+            f"[RemoteOpenAIServer] GPU memory did not release within "
+            f"{timeout}s. Current: {final_gb:.2f} GB, "
+            f"target: {target / 1e9:.2f} GB, "
+            f"baseline: {baseline / 1e9:.2f} GB. "
+            f"Child processes may still be holding GPU memory."
+        )
 
     def _poll(self) -> int | None:
         """Subclasses override this method to customize process polling"""
@@ -174,7 +688,11 @@ class RemoteOpenAIServer:
     def _wait_for_server(self, *, url: str, timeout: float):
         # run health check
         start = time.time()
-        client = httpx.Client(transport=httpx.HTTPTransport(uds=self.uds)) if self.uds else requests
+        client = (
+            httpx.Client(transport=httpx.HTTPTransport(uds=self.uds))
+            if self.uds
+            else requests
+        )
         while True:
             try:
                 if client.get(url).status_code == 200:
@@ -194,10 +712,15 @@ class RemoteOpenAIServer:
 
     @property
     def url_root(self) -> str:
-        return f"http://{self.uds.split('/')[-1]}" if self.uds else f"http://{self.host}:{self.port}"
+        return (
+            f"http://{self.uds.split('/')[-1]}"
+            if self.uds
+            else f"http://{self.host}:{self.port}"
+        )
 
     def url_for(self, *parts: str) -> str:
-        return self.url_root + "/" + "/".join(parts)
+        path = "/".join(part.strip("/") for part in parts if part)
+        return f"{self.url_root}/{path}"
 
     def get_client(self, **kwargs):
         if "timeout" not in kwargs:
@@ -219,152 +742,7 @@ class RemoteOpenAIServer:
             **kwargs,
         )
 
-
-class RemoteOpenAIServerCustom(RemoteOpenAIServer):
-    """Launch test server with custom child process"""
-
-    def _start_server(self, model: str, aphrodite_serve_args: list[str], env_dict: dict[str, str] | None) -> None:
-        self.proc: Process = Process(target=self.child_process_fxn, args=(env_dict, model, aphrodite_serve_args))  # type: ignore[assignment]
-        self.proc.start()
-
-    def __init__(
-        self,
-        model: str,
-        aphrodite_serve_args: list[str],
-        child_process_fxn: Callable[[dict[str, str] | None, str, list[str]], None],
-        *,
-        env_dict: dict[str, str] | None = None,
-        seed: int | None = 0,
-        auto_port: bool = True,
-        max_wait_seconds: float | None = None,
-    ) -> None:
-        """Store custom child process function then invoke superclass
-        constructor which will indirectly launch it."""
-        self.child_process_fxn = child_process_fxn
-        super().__init__(
-            model=model,
-            aphrodite_serve_args=aphrodite_serve_args,
-            env_dict=env_dict,
-            seed=seed,
-            auto_port=auto_port,
-            max_wait_seconds=max_wait_seconds,
-        )
-
-    def _poll(self) -> int | None:
-        return self.proc.exitcode
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.proc.terminate()
-        self.proc.join(8)
-        if self.proc.is_alive():
-            # force kill if needed
-            self.proc.kill()
-
-
-class RemoteAnthropicServer:
-    DUMMY_API_KEY = "token-abc123"  # Aphrodite's Anthropic server does not need API key
-
-    def __init__(
-        self,
-        model: str,
-        aphrodite_serve_args: list[str],
-        *,
-        env_dict: dict[str, str] | None = None,
-        seed: int | None = 0,
-        auto_port: bool = True,
-        max_wait_seconds: float | None = None,
-    ) -> None:
-        if auto_port:
-            if "-p" in aphrodite_serve_args or "--port" in aphrodite_serve_args:
-                raise ValueError("You have manually specified the port when `auto_port=True`.")
-
-            # Don't mutate the input args
-            aphrodite_serve_args = aphrodite_serve_args + ["--port", str(get_open_port())]
-        if seed is not None:
-            if "--seed" in aphrodite_serve_args:
-                raise ValueError(f"You have manually specified the seed when `seed={seed}`.")
-
-            aphrodite_serve_args = aphrodite_serve_args + ["--seed", str(seed)]
-
-        parser = FlexibleArgumentParser(description="Aphrodite's remote Anthropic server.")
-        subparsers = parser.add_subparsers(required=False, dest="subparser")
-        parser = ServeSubcommand().subparser_init(subparsers)
-        args = parser.parse_args(["--model", model, *aphrodite_serve_args])
-        self.host = str(args.host or "localhost")
-        self.port = int(args.port)
-
-        self.show_hidden_metrics = args.show_hidden_metrics_for_version is not None
-
-        # download the model before starting the server to avoid timeout
-        is_local = os.path.isdir(model)
-        if not is_local:
-            engine_args = AsyncEngineArgs.from_cli_args(args)
-            model_config = engine_args.create_model_config()
-            load_config = engine_args.create_load_config()
-
-            model_loader = get_model_loader(load_config)
-            model_loader.download_model(model_config)
-
-        env = os.environ.copy()
-        # the current process might initialize cuda,
-        # to be safe, we should use spawn method
-        env["APHRODITE_WORKER_MULTIPROC_METHOD"] = "spawn"
-        if env_dict is not None:
-            env.update(env_dict)
-        self.proc = subprocess.Popen(
-            [
-                sys.executable,
-                "-m",
-                "aphrodite.endpoints.anthropic.api_server",
-                model,
-                *aphrodite_serve_args,
-            ],
-            env=env,
-            stdout=sys.stdout,
-            stderr=sys.stderr,
-        )
-        max_wait_seconds = max_wait_seconds or 240
-        self._wait_for_server(url=self.url_for("health"), timeout=max_wait_seconds)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.proc.terminate()
-        try:
-            self.proc.wait(8)
-        except subprocess.TimeoutExpired:
-            # force kill if needed
-            self.proc.kill()
-
-    def _wait_for_server(self, *, url: str, timeout: float):
-        # run health check
-        start = time.time()
-        while True:
-            try:
-                if requests.get(url).status_code == 200:
-                    break
-            except Exception:
-                # this exception can only be raised by requests.get,
-                # which means the server is not ready yet.
-                # the stack trace is not useful, so we suppress it
-                # by using `raise from None`.
-                result = self.proc.poll()
-                if result is not None and result != 0:
-                    raise RuntimeError("Server exited unexpectedly.") from None
-
-                time.sleep(0.5)
-                if time.time() - start > timeout:
-                    raise RuntimeError("Server failed to start in time.") from None
-
-    @property
-    def url_root(self) -> str:
-        return f"http://{self.host}:{self.port}"
-
-    def url_for(self, *parts: str) -> str:
-        return self.url_root + "/" + "/".join(parts)
-
-    def get_client(self, **kwargs):
+    def get_client_anthropic(self, **kwargs):
         if "timeout" not in kwargs:
             kwargs["timeout"] = 600
         return anthropic.Anthropic(
@@ -374,10 +752,162 @@ class RemoteAnthropicServer:
             **kwargs,
         )
 
-    def get_async_client(self, **kwargs):
+    def get_async_client_anthropic(self, **kwargs):
         if "timeout" not in kwargs:
             kwargs["timeout"] = 600
-        return anthropic.AsyncAnthropic(base_url=self.url_for(), api_key=self.DUMMY_API_KEY, max_retries=0, **kwargs)
+        return anthropic.AsyncAnthropic(
+            base_url=self.url_for(), api_key=self.DUMMY_API_KEY, max_retries=0, **kwargs
+        )
+
+
+class RemoteOpenAIServer(RemoteVLLMServer):
+    """Launches ``aphrodite serve`` for testing OpenAI-compatible endpoints."""
+
+    def _create_cli_subcommand(self):
+        return ServeSubcommand()
+
+    def _start_server(
+        self, model: str, vllm_serve_args: list[str], env_dict: dict[str, str] | None
+    ) -> None:
+        env = os.environ.copy()
+        # the current process might initialize cuda,
+        # to be safe, we should use spawn method
+        env["APHRODITE_WORKER_MULTIPROC_METHOD"] = "spawn"
+        if env_dict is not None:
+            env.update(env_dict)
+        _sanitize_pythonpath_env(env)
+        serve_cmd = ["aphrodite", "serve", model, *vllm_serve_args]
+        print(f"Launching RemoteOpenAIServer with: {' '.join(serve_cmd)}")
+        print(f"Environment variables: {env}")
+        self.proc: subprocess.Popen = subprocess.Popen(
+            serve_cmd,
+            env=env,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+            # Create a dedicated process group so we can kill
+            # the entire tree (parent + EngineCore + workers) at once.
+            start_new_session=True,
+        )
+
+
+class RemoteLaunchRenderServer(RemoteVLLMServer):
+    """Launches ``aphrodite launch render`` for GPU-less serving tests."""
+
+    def _create_cli_subcommand(self):
+        return ServeSubcommand()
+
+    def _start_server(
+        self, model: str, vllm_serve_args: list[str], env_dict: dict[str, str] | None
+    ) -> None:
+        env = os.environ.copy()
+        env["APHRODITE_WORKER_MULTIPROC_METHOD"] = "spawn"
+        if env_dict is not None:
+            env.update(env_dict)
+        _sanitize_pythonpath_env(env)
+        serve_cmd = ["aphrodite", "launch", "render", model, *vllm_serve_args]
+        print(f"Launching RemoteLaunchRenderServer with: {' '.join(serve_cmd)}")
+        self.proc: subprocess.Popen = subprocess.Popen(
+            serve_cmd,
+            env=env,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+            start_new_session=True,
+        )
+
+    def _pre_download_model(self, model: str, args) -> None:
+        """Download only the tokenizer files (no model weights needed)."""
+        is_local = os.path.isdir(model)
+        if not is_local:
+            engine_args = AsyncEngineArgs.from_cli_args(args)
+            model_config = engine_args.create_model_config()
+            get_tokenizer(
+                model_config.tokenizer,
+                tokenizer_mode=model_config.tokenizer_mode,
+                trust_remote_code=model_config.trust_remote_code,
+                revision=model_config.tokenizer_revision,
+            )
+
+    def _wait_for_gpu_memory_release(
+        self, timeout: float = 30.0, log_interval: float = 10.0
+    ):
+        pass  # No GPU used
+
+
+class RemoteOpenAIServerCustom(RemoteOpenAIServer):
+    """Launch test server with custom child process"""
+
+    def _start_server(
+        self, model: str, vllm_serve_args: list[str], env_dict: dict[str, str] | None
+    ) -> None:
+        method = "spawn" if requires_spawn_multiprocessing() else "fork"
+        ctx = get_context(method)
+        self.proc: Process = cast(Any, ctx).Process(
+            target=_run_in_new_process_group,
+            args=(self.child_process_fxn, env_dict, model, vllm_serve_args),
+        )  # type: ignore[assignment]
+        with _temporarily_sanitized_pythonpath_env():
+            self.proc.start()
+
+    def __init__(
+        self,
+        model: str,
+        vllm_serve_args: list[str],
+        child_process_fxn: Callable[[dict[str, str] | None, str, list[str]], None],
+        *,
+        env_dict: dict[str, str] | None = None,
+        seed: int = 0,
+        auto_port: bool = True,
+        max_wait_seconds: float | None = None,
+    ) -> None:
+        """Store custom child process function then invoke superclass
+        constructor which will indirectly launch it."""
+        self.child_process_fxn = child_process_fxn
+        super().__init__(
+            model=model,
+            vllm_serve_args=vllm_serve_args,
+            env_dict=env_dict,
+            seed=seed,
+            auto_port=auto_port,
+            max_wait_seconds=max_wait_seconds,
+        )
+
+    def _poll(self) -> int | None:
+        return self.proc.exitcode
+
+    def _terminate_process_tree(self) -> None:
+        pid = self.proc.pid
+        if pid is None:
+            return
+
+        pgid: int | None
+        try:
+            pgid = os.getpgid(pid)
+            # _run_in_new_process_group should make the child the group
+            # leader. Avoid signaling pytest's process group if startup failed
+            # before os.setsid() ran.
+            if pgid != pid:
+                pgid = None
+        except (ProcessLookupError, OSError):
+            pgid = None
+
+        with contextlib.suppress(ProcessLookupError, OSError):
+            self.proc.terminate()
+            print(f"[RemoteOpenAIServerCustom] Sent SIGTERM to process {pid}")
+
+        self.proc.join(15)
+        if self.proc.is_alive():
+            print(
+                f"[RemoteOpenAIServerCustom] Server {pid} did not respond "
+                "to SIGTERM, sending SIGKILL to process group"
+            )
+            if pgid is not None:
+                with contextlib.suppress(ProcessLookupError, OSError):
+                    os.killpg(pgid, signal.SIGKILL)
+            else:
+                self.proc.kill()
+            self.proc.join(10)
+
+        self._kill_process_group_survivors(pgid)
 
 
 def _test_completion(
@@ -385,11 +915,14 @@ def _test_completion(
     model: str,
     prompt: str,
     token_ids: list[int],
+    include_seeded_sampling: bool = True,
 ):
     results = []
 
     # test with text prompt
-    completion = client.completions.create(model=model, prompt=prompt, max_tokens=5, temperature=0.0)
+    completion = client.completions.create(
+        model=model, prompt=prompt, max_tokens=5, temperature=0.0
+    )
 
     results.append(
         {
@@ -417,29 +950,40 @@ def _test_completion(
         }
     )
 
-    # test seeded random sampling
-    completion = client.completions.create(model=model, prompt=prompt, max_tokens=5, seed=33, temperature=1.0)
+    if include_seeded_sampling:
+        # test seeded random sampling
+        completion = client.completions.create(
+            model=model, prompt=prompt, max_tokens=5, seed=33, temperature=1.0
+        )
 
-    results.append(
-        {
-            "test": "seeded_sampling",
-            "text": completion.choices[0].text,
-            "finish_reason": completion.choices[0].finish_reason,
-            "usage": completion.usage,
-        }
-    )
+        results.append(
+            {
+                "test": "seeded_sampling",
+                "text": completion.choices[0].text,
+                "finish_reason": completion.choices[0].finish_reason,
+                "usage": completion.usage,
+            }
+        )
 
-    # test seeded random sampling with multiple prompts
-    completion = client.completions.create(model=model, prompt=[prompt, prompt], max_tokens=5, seed=33, temperature=1.0)
+        # test seeded random sampling with multiple prompts
+        completion = client.completions.create(
+            model=model,
+            prompt=[prompt, prompt],
+            max_tokens=5,
+            seed=33,
+            temperature=1.0,
+        )
 
-    results.append(
-        {
-            "test": "seeded_sampling",
-            "text": [choice.text for choice in completion.choices],
-            "finish_reason": [choice.finish_reason for choice in completion.choices],
-            "usage": completion.usage,
-        }
-    )
+        results.append(
+            {
+                "test": "seeded_sampling",
+                "text": [choice.text for choice in completion.choices],
+                "finish_reason": [
+                    choice.finish_reason for choice in completion.choices
+                ],
+                "usage": completion.usage,
+            }
+        )
 
     # test simple list
     batch = client.completions.create(
@@ -490,7 +1034,9 @@ def _test_completion_close(
     results = []
 
     # test with text prompt
-    completion = client.completions.create(model=model, prompt=prompt, max_tokens=1, logprobs=5, temperature=0.0)
+    completion = client.completions.create(
+        model=model, prompt=prompt, max_tokens=1, logprobs=5, temperature=0.0
+    )
 
     logprobs = completion.choices[0].logprobs.top_logprobs[0]
     logprobs = {k: round(v, 2) for k, v in logprobs.items()}
@@ -515,7 +1061,9 @@ def _test_chat(
     messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
 
     # test with text prompt
-    chat_response = client.chat.completions.create(model=model, messages=messages, max_tokens=5, temperature=0.0)
+    chat_response = client.chat.completions.create(
+        model=model, messages=messages, max_tokens=5, temperature=0.0
+    )
 
     results.append(
         {
@@ -630,6 +1178,8 @@ def compare_two_settings(
     *,
     method: str = "generate",
     max_wait_seconds: float | None = None,
+    include_seeded_sampling: bool = True,
+    force_v1_runner: bool = False,
 ) -> None:
     """
     Launch API server with two different sets of arguments/environments
@@ -641,6 +1191,11 @@ def compare_two_settings(
         arg2: The second set of arguments to pass to the API server.
         env1: The first set of environment variables to pass to the API server.
         env2: The second set of environment variables to pass to the API server.
+        include_seeded_sampling: Whether to include temperature=1.0 seeded
+            sampling checks in the default generate comparison.
+        force_v1_runner: Whether to pin all compared settings to the v1 model
+            runner to avoid mixing model runner differences into correctness
+            tests.
     """
 
     compare_all_settings(
@@ -649,6 +1204,8 @@ def compare_two_settings(
         [env1, env2],
         method=method,
         max_wait_seconds=max_wait_seconds,
+        include_seeded_sampling=include_seeded_sampling,
+        force_v1_runner=force_v1_runner,
     )
 
 
@@ -659,6 +1216,8 @@ def compare_all_settings(
     *,
     method: str = "generate",
     max_wait_seconds: float | None = None,
+    include_seeded_sampling: bool = True,
+    force_v1_runner: bool = False,
 ) -> None:
     """
     Launch API server with several different sets of arguments/environments
@@ -667,7 +1226,17 @@ def compare_all_settings(
         model: The model to test.
         all_args: A list of argument lists to pass to the API server.
         all_envs: A list of environment dictionaries to pass to the API server.
+        include_seeded_sampling: Whether to include temperature=1.0 seeded
+            sampling checks in the default generate comparison.
+        force_v1_runner: Whether to pin all compared settings to the v1 model
+            runner to avoid mixing model runner differences into correctness
+            tests.
     """
+
+    if force_v1_runner:
+        all_envs = [
+            {"APHRODITE_USE_V2_MODEL_RUNNER": "0", **(env or {})} for env in all_envs
+        ]
 
     trust_remote_code = False
     for args in all_args:
@@ -709,7 +1278,9 @@ def compare_all_settings(
             args = args + ["--load-format", envs.APHRODITE_TEST_FORCE_LOAD_FORMAT]
         compare_results: list = []
         results = ref_results if i == 0 else compare_results
-        with RemoteOpenAIServer(model, args, env_dict=env, max_wait_seconds=max_wait_seconds) as server:
+        with RemoteOpenAIServer(
+            model, args, env_dict=env, max_wait_seconds=max_wait_seconds
+        ) as server:
             client = server.get_client()
 
             # test models list
@@ -725,7 +1296,13 @@ def compare_all_settings(
             )
 
             if method == "generate":
-                results += _test_completion(client, model, prompt, token_ids)
+                results += _test_completion(
+                    client,
+                    model,
+                    prompt,
+                    token_ids,
+                    include_seeded_sampling=include_seeded_sampling,
+                )
             elif method == "generate_close":
                 results += _test_completion_close(client, model, prompt)
             elif method == "generate_chat":
@@ -734,7 +1311,7 @@ def compare_all_settings(
                 results += _test_image_text(
                     client,
                     model,
-                    "https://upload.wikimedia.org/wikipedia/commons/0/0b/RGBA_comp.png",
+                    "https://aphrodite-public-assets.s3.us-west-2.amazonaws.com/vision_model_images/RGBA_comp.png",
                 )
             elif method == "encode":
                 results += _test_embeddings(client, model, prompt)
@@ -756,7 +1333,10 @@ def compare_all_settings(
                             torch.tensor(compare_result["embedding"]),
                             dim=0,
                         )
-                        assert sim >= 0.999, f"Embedding for {model=} are not the same.\ncosine_similarity={sim}\n"
+                        assert sim >= 0.999, (
+                            f"Embedding for {model=} are not the same.\n"
+                            f"cosine_similarity={sim}\n"
+                        )
                         del ref_result["embedding"]
                         del compare_result["embedding"]
                     assert ref_result == compare_result, (
@@ -768,6 +1348,36 @@ def compare_all_settings(
                     )
 
 
+@contextmanager
+def ensure_current_vllm_config():
+    """Ensures a aphrodite config is set for the duration of the context.
+
+    If a config is already set, this is a no-op. Otherwise, it creates a default
+    AphroditeConfig and sets it for the duration of the context.
+
+    Used for tests that call functions which require a aphrodite config but don't
+    need a specific config.
+
+    Example:
+        with ensure_current_vllm_config():
+            init_distributed_environment(...)
+            ensure_model_parallel_initialized(...)
+    """
+    from aphrodite.config import (
+        AphroditeConfig,
+        get_current_vllm_config_or_none,
+        set_current_vllm_config,
+    )
+
+    if get_current_vllm_config_or_none() is not None:
+        # Config already set, just yield
+        yield
+    else:
+        # No config set, create a default one for the duration
+        with set_current_vllm_config(AphroditeConfig()):
+            yield
+
+
 def init_test_distributed_environment(
     tp_size: int,
     pp_size: int,
@@ -775,14 +1385,36 @@ def init_test_distributed_environment(
     distributed_init_port: str,
     local_rank: int = -1,
 ) -> None:
-    distributed_init_method = f"tcp://localhost:{distributed_init_port}"
-    init_distributed_environment(
-        world_size=pp_size * tp_size,
-        rank=rank,
-        distributed_init_method=distributed_init_method,
-        local_rank=local_rank,
+    # Note: This function is often called from Ray worker processes, so we
+    # can't rely on pytest fixtures to set the config. We check if the config
+    # is already set and only create a default one if needed.
+    from aphrodite.config import (
+        AphroditeConfig,
+        get_current_vllm_config_or_none,
+        set_current_vllm_config,
     )
-    ensure_model_parallel_initialized(tp_size, pp_size)
+
+    distributed_init_method = f"tcp://localhost:{distributed_init_port}"
+
+    if get_current_vllm_config_or_none() is not None:
+        # Config already set, use it directly
+        init_distributed_environment(
+            world_size=pp_size * tp_size,
+            rank=rank,
+            distributed_init_method=distributed_init_method,
+            local_rank=local_rank,
+        )
+        ensure_model_parallel_initialized(tp_size, pp_size)
+    else:
+        # No config set, create a default one for the test
+        with set_current_vllm_config(AphroditeConfig()):
+            init_distributed_environment(
+                world_size=pp_size * tp_size,
+                rank=rank,
+                distributed_init_method=distributed_init_method,
+                local_rank=local_rank,
+            )
+            ensure_model_parallel_initialized(tp_size, pp_size)
 
 
 def multi_process_parallel(
@@ -793,43 +1425,38 @@ def multi_process_parallel(
 ) -> None:
     import ray
 
-    # Using ray helps debugging the error when it failed
-    # as compared to multiprocessing.
-    # NOTE: We need to set working_dir for distributed tests,
-    # otherwise we may get import errors on ray workers
-    # NOTE: Force ray not to use gitignore file as excluding, otherwise
-    # it will not move .so files to working dir.
-    # So we have to manually add some of large directories
-    os.environ["RAY_RUNTIME_ENV_IGNORE_GITIGNORE"] = "1"
+    # Using ray helps debugging the error when it failed as compared to
+    # multiprocessing. For local Ray workers, putting the repo root on
+    # PYTHONPATH is enough and avoids uploading the full source tree, which
+    # exceeds Ray's working_dir package size limit on CI.
+    env_vars = {
+        "PYTHONPATH": os.pathsep.join(
+            filter(None, [str(APHRODITE_PATH), os.environ.get("PYTHONPATH")])
+        ),
+        **{env_var: "1" for env_var in current_platform.ray_noset_device_env_vars},
+    }
     ray.init(
         runtime_env={
-            "working_dir": APHRODITE_PATH,
-            "excludes": [
-                "build",
-                ".git",
-                "cmake-build-*",
-                "shellcheck",
-                "dist",
-                "ep_kernels_workspace",
-            ],
+            "env_vars": env_vars,
         }
     )
 
     distributed_init_port = get_open_port()
-    refs = []
-    for rank in range(tp_size * pp_size):
-        refs.append(
-            test_target.remote(
-                monkeypatch,
-                tp_size,
-                pp_size,
-                rank,
-                distributed_init_port,
-            ),
-        )
-    ray.get(refs)
-
-    ray.shutdown()
+    try:
+        refs = []
+        for rank in range(tp_size * pp_size):
+            refs.append(
+                test_target.remote(
+                    monkeypatch,
+                    tp_size,
+                    pp_size,
+                    rank,
+                    distributed_init_port,
+                ),
+            )
+        ray.get(refs)
+    finally:
+        ray.shutdown()
 
 
 @contextmanager
@@ -844,7 +1471,7 @@ def error_on_warning(category: type[Warning] = Warning):
         yield
 
 
-def get_physical_device_indices(devices):
+def get_physical_device_indices(devices: list[int]):
     visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
     if visible_devices is None:
         return devices
@@ -855,56 +1482,185 @@ def get_physical_device_indices(devices):
 
 
 @_nvml()
+def record_gpu_memory_usage_stats(
+    *,
+    devices: list[int],
+) -> dict[int, tuple[float, float]]:
+    output: dict[int, tuple[float, float]] = {}
+    for device in devices:
+        if current_platform.is_rocm():
+            dev_handle = amdsmi_get_processor_handles()[device]
+            mem_info = amdsmi_get_gpu_vram_usage(dev_handle)
+            gb_used = mem_info["vram_used"] / 2**10
+            gb_total = mem_info["vram_total"] / 2**10
+        else:
+            dev_handle = nvmlDeviceGetHandleByIndex(device)
+            mem_info = nvmlDeviceGetMemoryInfo(dev_handle)
+            gb_used = mem_info.used / 2**30
+            gb_total = mem_info.total / 2**30
+        output[device] = (gb_used, gb_total)
+    return output
+
+
 def wait_for_gpu_memory_to_clear(
     *,
     devices: list[int],
-    threshold_bytes: int | None = None,
-    threshold_ratio: float | None = None,
+    threshold_bytes: int | dict[int, int] | None = None,
+    threshold_ratio: float | dict[int, float] | None = None,
     timeout_s: float = 120,
+    stable_duration_s: float = 0,
+    stable_tolerance_bytes: int = 512 * 1024**2,
+    poll_interval_s: float = 5,
 ) -> None:
     assert threshold_bytes is not None or threshold_ratio is not None
+    devices = get_physical_device_indices(devices)
+    if isinstance(threshold_bytes, int):
+        threshold_bytes = {device: threshold_bytes for device in devices}
+    elif isinstance(threshold_bytes, dict):
+        assert threshold_bytes.keys() == set(devices)
+    if isinstance(threshold_ratio, float):
+        threshold_ratio = {device: threshold_ratio for device in devices}
+    elif isinstance(threshold_ratio, dict):
+        assert threshold_ratio.keys() == set(devices)
+    if current_platform.is_rocm() and threshold_ratio is not None:
+        # ROCm can keep a small runtime/driver footprint resident even after
+        # all model allocations are gone. On MI300 this has been observed
+        # around 2.5 GiB, which is above a strict 1% idle threshold but nowhere
+        # near the amount of free memory needed by the next Aphrodite runner.
+        min_threshold_b = 4 * 1024**3
+        if threshold_bytes is None:
+            threshold_bytes = {}
+        for device, ratio in threshold_ratio.items():
+            threshold_bytes[device] = max(
+                threshold_bytes.get(device, 0), min_threshold_b if ratio < 0.05 else 0
+            )
+
     # Use nvml instead of pytorch to reduce measurement error from torch cuda
     # context.
-    devices = get_physical_device_indices(devices)
     start_time = time.time()
+    stable_since: float | None = None
+    stable_used_bytes: dict[int, int] | None = None
     while True:
-        output: dict[int, str] = {}
-        output_raw: dict[int, tuple[float, float]] = {}
-        for device in devices:
-            if current_platform.is_rocm():
-                dev_handle = amdsmi_get_processor_handles()[device]
-                mem_info = amdsmi_get_gpu_vram_usage(dev_handle)
-                gb_used = mem_info["vram_used"] / 2**10
-                gb_total = mem_info["vram_total"] / 2**10
-            else:
-                dev_handle = nvmlDeviceGetHandleByIndex(device)
-                mem_info = nvmlDeviceGetMemoryInfo(dev_handle)
-                gb_used = mem_info.used / 2**30
-                gb_total = mem_info.total / 2**30
-            output_raw[device] = (gb_used, gb_total)
-            output[device] = f"{gb_used:.02f}/{gb_total:.02f}"
-
+        output_raw = record_gpu_memory_usage_stats(devices=devices)
+        used_bytes_by_device = {
+            device: int(gb_used * 2**30) for device, (gb_used, _) in output_raw.items()
+        }
+        output = {
+            device: f"{gb_used:.02f}/{gb_total:.02f}"
+            for device, (gb_used, gb_total) in output_raw.items()
+        }
         print("gpu memory used/total (GiB): ", end="")
         for k, v in output.items():
             print(f"{k}={v}; ", end="")
         print("")
 
-        if threshold_bytes is not None:
-            is_free = lambda used, total: used <= threshold_bytes / 2**30
-            threshold = f"{threshold_bytes / 2**30} GiB"
+        if threshold_bytes is not None and threshold_ratio is not None:
+            threshold_gib = {
+                device: threshold_b / 2**30
+                for device, threshold_b in threshold_bytes.items()
+            }
+            threshold = "; ".join(
+                f"{device=}: max({threshold_gib[device]:.2f} GiB, "
+                f"{threshold_ratio[device]:.3f})"
+                for device in devices
+            )
+            all_free = all(
+                used <= max(threshold_gib[device], total * threshold_ratio[device])
+                for device, (used, total) in output_raw.items()
+            )
+        elif threshold_bytes is not None:
+            threshold_gib = {
+                device: threshold_b / 2**30
+                for device, threshold_b in threshold_bytes.items()
+            }
+            threshold = "; ".join(
+                f"{device=}: {threshold_gib[device]:.2f} GiB" for device in devices
+            )
+            all_free = all(
+                used <= threshold_gib[device]
+                for device, (used, _) in output_raw.items()
+            )
         else:
-            is_free = lambda used, total: used / total <= threshold_ratio
-            threshold = f"{threshold_ratio:.2f}"
+            assert threshold_ratio is not None
+            threshold = "; ".join(
+                f"{device=}: {threshold_ratio[device]:.3f}" for device in devices
+            )
+            all_free = all(
+                used / total <= threshold_ratio[device]
+                for device, (used, total) in output_raw.items()
+            )
 
         dur_s = time.time() - start_time
-        if all(is_free(used, total) for used, total in output_raw.values()):
-            print(f"Done waiting for free GPU memory on devices {devices=} ({threshold=}) {dur_s=:.02f}")
-            break
+        if all_free:
+            if stable_duration_s <= 0:
+                print(
+                    f"Done waiting for free GPU memory on devices {devices=} "
+                    f"({threshold=}) {dur_s=:.02f}"
+                )
+                break
+
+            now = time.time()
+            if stable_used_bytes is None:
+                stable_since = now
+                stable_used_bytes = used_bytes_by_device
+            else:
+                memory_changed = any(
+                    abs(used_bytes_by_device[device] - stable_used_bytes[device])
+                    > stable_tolerance_bytes
+                    for device in devices
+                )
+                if memory_changed:
+                    stable_since = now
+                    stable_used_bytes = used_bytes_by_device
+                elif (
+                    stable_since is not None and now - stable_since >= stable_duration_s
+                ):
+                    print(
+                        f"Done waiting for stable free GPU memory on devices "
+                        f"{devices=} ({threshold=}) {dur_s=:.02f}"
+                    )
+                    break
+        else:
+            stable_since = None
+            stable_used_bytes = None
 
         if dur_s >= timeout_s:
-            raise ValueError(f"Memory of devices {devices=} not free after {dur_s=:.02f} ({threshold=})")
+            raise ValueError(
+                f"Memory of devices {devices=} not free after "
+                f"{dur_s=:.02f} ({threshold=})"
+            )
 
-        time.sleep(5)
+        time.sleep(poll_interval_s)
+
+
+def wait_for_rocm_memory_to_settle(
+    *,
+    threshold_ratio: float | dict[int, float] | None = 0.1,
+    timeout_s: float = 240,
+) -> None:
+    """Block until ROCm device VRAM usage drops below ``threshold_ratio``.
+
+    ROCm reclaims GPU memory more lazily than CUDA, so back-to-back model
+    loads in a single test process can OOM the *next* engine/model startup
+    even after ``cleanup_dist_env_and_memory``. This gives the driver time to
+    actually release VRAM before the next allocation. No-op off ROCm.
+    """
+    if not current_platform.is_rocm():
+        return
+
+    num_gpus = current_platform.device_count()
+    if num_gpus == 0:
+        return
+    if threshold_ratio is None:
+        threshold_ratio = 0.1
+
+    wait_for_gpu_memory_to_clear(
+        devices=list(range(num_gpus)),
+        threshold_ratio=threshold_ratio,
+        timeout_s=timeout_s,
+        stable_duration_s=2.0,
+        poll_interval_s=1.0,
+    )
 
 
 _P = ParamSpec("_P")
@@ -912,14 +1668,11 @@ _P = ParamSpec("_P")
 
 def fork_new_process_for_each_test(func: Callable[_P, None]) -> Callable[_P, None]:
     """Decorator to fork a new process for each test function.
-    See https://github.com/vllm-project/vllm/issues/7053 for more details.
+    See https://github.com/vllm-project/aphrodite/issues/7053 for more details.
     """
 
     @functools.wraps(func)
     def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> None:
-        # Make the process the leader of its own process group
-        # to avoid sending SIGTERM to the parent process
-        os.setpgrp()
         from _pytest.outcomes import Skipped
 
         # Create a unique temporary file to store exception info from child
@@ -928,7 +1681,7 @@ def fork_new_process_for_each_test(func: Callable[_P, None]) -> Callable[_P, Non
             tempfile.NamedTemporaryFile(
                 delete=False,
                 mode="w+b",
-                prefix=f"aphrodite_test_{func.__name__}_{os.getpid()}_",
+                prefix=f"vllm_test_{func.__name__}_{os.getpid()}_",
                 suffix=".exc",
             ) as exc_file,
             ExitStack() as delete_after,
@@ -939,6 +1692,9 @@ def fork_new_process_for_each_test(func: Callable[_P, None]) -> Callable[_P, Non
             pid = os.fork()
             print(f"Fork a new process to run a test {pid}")
             if pid == 0:
+                # Make the child process the leader of its own process group
+                # to avoid sending SIGTERM to the parent process
+                os.setpgrp()
                 # Parent process responsible for deleting, don't delete
                 # in child.
                 delete_after.pop_all()
@@ -978,14 +1734,12 @@ def fork_new_process_for_each_test(func: Callable[_P, None]) -> Callable[_P, Non
                 else:
                     os._exit(0)
             else:
-                pgid = os.getpgid(pid)
+                # After setpgrp(), the child's pgid equals its pid
+                pgid = pid
                 _pid, _exitcode = os.waitpid(pid, 0)
-                # ignore SIGTERM signal itself
-                old_signal_handler = signal.signal(signal.SIGTERM, signal.SIG_IGN)
-                # kill all child processes
-                os.killpg(pgid, signal.SIGTERM)
-                # restore the signal handler
-                signal.signal(signal.SIGTERM, old_signal_handler)
+                # kill all child processes - but they may already have exited cleanly
+                with contextlib.suppress(ProcessLookupError):
+                    os.killpg(pgid, signal.SIGTERM)
                 if _exitcode != 0:
                     # Try to read the exception from the child process
                     exc_info = {}
@@ -996,7 +1750,9 @@ def fork_new_process_for_each_test(func: Callable[_P, None]) -> Callable[_P, Non
                         ):
                             exc_info = cloudpickle.load(f)
 
-                    if (original_exception := exc_info.get("pickled_exception")) is not None:
+                    if (
+                        original_exception := exc_info.get("pickled_exception")
+                    ) is not None:
                         # Re-raise the actual exception object if it was
                         # successfully pickled.
                         assert isinstance(original_exception, Exception)
@@ -1020,49 +1776,110 @@ def fork_new_process_for_each_test(func: Callable[_P, None]) -> Callable[_P, Non
     return wrapper
 
 
+def _format_subprocess_exit(returncode: int) -> str:
+    """Render a subprocess exit code, naming the signal for negative codes."""
+    if returncode >= 0:
+        return f"exit code {returncode}"
+    try:
+        return f"killed by {signal.Signals(-returncode).name} ({returncode})"
+    except ValueError:
+        return f"exit code {returncode}"
+
+
+# Set on the spawn-child interpreter so the wrapper short-circuits when the
+# child resolves `module.qualname` back to its own decorated form, instead of
+# launching another subprocess.
+_SPAWN_CHILD_ENV = "APHRODITE_TEST_SPAWN_CHILD"
+
+
 def spawn_new_process_for_each_test(f: Callable[_P, None]) -> Callable[_P, None]:
-    """Decorator to spawn a new process for each test function."""
+    """Decorator to spawn a new process for each test function.
+
+    Uses subprocess to run each test in a fresh interpreter and propagates
+    exceptions back to the parent, so test failures are never silently
+    swallowed (fixes https://github.com/vllm-project/aphrodite/issues/41415).
+
+    The child resolves the test function by importing its module and looking
+    it up by qualified name, rather than reconstructing it from a cloudpickle
+    blob. Pickling the function by value would also pickle its ``__globals__``
+    by value — turning module-level singletons (e.g.
+    ``aphrodite.compilation.counter.compilation_counter``) into stale clones in
+    the child, so increments performed by the production code in the child
+    would never be observable to the test.
+
+    The child inherits the parent's stdout/stderr so its output (engine
+    cores, NCCL, CUDA, ...) reaches the test runner live; the Python-level
+    traceback is serialized to ``tb_file`` for structured re-raising. A
+    native crash leaves ``tb_file`` empty — the diagnostic is then only in
+    the inherited subprocess output.
+    """
 
     @functools.wraps(f)
     def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> None:
-        # Check if we're already in a subprocess
-        if os.environ.get("RUNNING_IN_SUBPROCESS") == "1":
-            # If we are, just run the function directly
+        if os.environ.get(_SPAWN_CHILD_ENV) == "1":
             return f(*args, **kwargs)
 
-        import torch.multiprocessing as mp
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".tb", mode="wb") as tmp:
+            tb_file = tmp.name
 
-        with suppress(RuntimeError):
-            mp.set_start_method("spawn")
+        try:
+            payload = cloudpickle.dumps(
+                {
+                    "module": f.__module__,
+                    "qualname": f.__qualname__,
+                    "args": args,
+                    "kwargs": kwargs,
+                    "tb_file": tb_file,
+                }
+            )
 
-        # Get the module
-        module_name = f.__module__
-
-        # Create a process with environment variable set
-        env = os.environ.copy()
-        env["RUNNING_IN_SUBPROCESS"] = "1"
-
-        with tempfile.TemporaryDirectory() as tempdir:
-            output_filepath = os.path.join(tempdir, "new_process.tmp")
-
-            # `cloudpickle` allows pickling complex functions directly
-            input_bytes = cloudpickle.dumps((f, output_filepath))
+            child_script = (
+                "import sys, importlib, cloudpickle, traceback\n"
+                "try:\n"
+                "    from _pytest.outcomes import Skipped\n"
+                "except ImportError:\n"
+                "    class Skipped(BaseException): pass\n"
+                "data = cloudpickle.loads(sys.stdin.buffer.read())\n"
+                "mod = importlib.import_module(data['module'])\n"
+                "target = mod\n"
+                "for name in data['qualname'].split('.'):\n"
+                "    target = getattr(target, name)\n"
+                "try:\n"
+                "    target(*data['args'], **data['kwargs'])\n"
+                "except Skipped:\n"
+                "    sys.exit(0)\n"
+                "except BaseException:\n"
+                "    with open(data['tb_file'], 'w') as fp:\n"
+                "        fp.write(traceback.format_exc())\n"
+                "    sys.exit(1)\n"
+            )
 
             repo_root = str(APHRODITE_PATH.resolve())
-
-            env = dict(env or os.environ)
+            env = os.environ.copy()
             env["PYTHONPATH"] = repo_root + os.pathsep + env.get("PYTHONPATH", "")
+            env[_SPAWN_CHILD_ENV] = "1"
 
-            cmd = [sys.executable, "-m", f"{module_name}"]
+            result = subprocess.run(
+                [sys.executable, "-c", child_script],
+                input=payload,
+                env=env,
+            )
 
-            returned = subprocess.run(cmd, input=input_bytes, capture_output=True, env=env)
-
-            # check if the subprocess is successful
-            try:
-                returned.check_returncode()
-            except Exception as e:
-                # wrap raised exception to provide more information
-                raise RuntimeError(f"Error raised in subprocess:\n{returned.stderr.decode()}") from e
+            if result.returncode != 0:
+                try:
+                    with open(tb_file) as fp:
+                        tb = fp.read()
+                except OSError:
+                    tb = ""
+                if not tb:
+                    tb = "<no Python traceback; see subprocess output above>"
+                raise RuntimeError(
+                    f"Test subprocess '{f.__name__}' failed "
+                    f"({_format_subprocess_exit(result.returncode)}):\n{tb}"
+                )
+        finally:
+            with contextlib.suppress(OSError):
+                os.remove(tb_file)
 
     return wrapper
 
@@ -1081,8 +1898,7 @@ def create_new_process_for_each_test(
         A decorator to run test functions in separate processes.
     """
     if method is None:
-        use_spawn = current_platform.is_rocm() or current_platform.is_xpu()
-        method = "spawn" if use_spawn else "fork"
+        method = "spawn" if requires_spawn_multiprocessing() else "fork"
 
     assert method in ["spawn", "fork"], "Method must be either 'spawn' or 'fork'"
 
@@ -1118,6 +1934,13 @@ def large_gpu_mark(min_gb: int) -> pytest.MarkDecorator:
     )
 
 
+requires_fp8 = pytest.mark.skipif(
+    not current_platform.supports_fp8(),
+    reason="FP8 is not supported on this GPU (requires Hopper or "
+    "Ada architecture, compute capability 8.9+)",
+)
+
+
 def large_gpu_test(*, min_gb: int):
     """
     Decorate a test to be skipped if no GPU is available or it does not have
@@ -1137,7 +1960,7 @@ def multi_gpu_marks(*, num_gpus: int):
     """Get a collection of pytest marks to apply for `@multi_gpu_test`."""
     test_selector = pytest.mark.distributed(num_gpus=num_gpus)
     test_skipif = pytest.mark.skipif(
-        cuda_device_count_stateless() < num_gpus,
+        current_platform.device_count() < num_gpus,
         reason=f"Need at least {num_gpus} GPUs to run the test.",
     )
 
@@ -1156,6 +1979,57 @@ def multi_gpu_test(*, num_gpus: int):
             func = mark(func)
 
         return func
+
+    return wrapper
+
+
+def gpu_tier_mark(*, min_gpus: int = 1, max_gpus: int | None = None):
+    """
+    Mark a test to only run when the GPU count falls within [min_gpus, max_gpus].
+
+    Examples:
+        @gpu_tier_mark(min_gpus=2)          # only on multi-GPU
+        @gpu_tier_mark(max_gpus=1)          # only on single-GPU
+        @gpu_tier_mark(min_gpus=2, max_gpus=4)  # 2-4 GPUs only
+    """
+    gpu_count = current_platform.device_count()
+    marks = []
+
+    if min_gpus > 1:
+        marks.append(pytest.mark.distributed(num_gpus=min_gpus))
+
+    reasons = []
+    if gpu_count < min_gpus:
+        reasons.append(f"Need at least {min_gpus} GPUs (have {gpu_count})")
+    if max_gpus is not None and gpu_count > max_gpus:
+        reasons.append(f"Need at most {max_gpus} GPUs (have {gpu_count})")
+
+    if reasons:
+        marks.append(pytest.mark.skipif(True, reason="; ".join(reasons)))
+
+    return marks
+
+
+def single_gpu_only(f=None):
+    """Skip this test when running in a multi-GPU environment."""
+    marks = gpu_tier_mark(max_gpus=1)
+
+    def wrapper(func):
+        for mark in reversed(marks):
+            func = mark(func)
+        return func
+
+    return wrapper(f) if f is not None else wrapper
+
+
+def multi_gpu_only(*, num_gpus: int = 2):
+    """Skip this test when running on fewer than num_gpus GPUs."""
+    marks = gpu_tier_mark(min_gpus=num_gpus)
+
+    def wrapper(f):
+        for mark in reversed(marks):
+            f = mark(f)
+        return f
 
     return wrapper
 
@@ -1192,7 +2066,9 @@ async def completions_with_server_args(
     assert len(max_tokens) == len(prompts)
 
     outputs = None
-    with RemoteOpenAIServer(model_name, server_cli_args, max_wait_seconds=max_wait_seconds) as server:
+    with RemoteOpenAIServer(
+        model_name, server_cli_args, max_wait_seconds=max_wait_seconds
+    ) as server:
         client = server.get_async_client()
         outputs = [
             client.completions.create(
@@ -1253,15 +2129,15 @@ def has_module_attribute(module_name, attribute_name):
 
 def get_attn_backend_list_based_on_platform() -> list[str]:
     if current_platform.is_cuda():
-        return ["FLASH_ATTN", "TRITON_ATTN", "TREE_ATTN"]
+        return ["FLASH_ATTN", "TRITON_ATTN"]
     elif current_platform.is_rocm():
         attn_backend_list = ["TRITON_ATTN"]
         try:
             import aiter  # noqa: F401
 
-            attn_backend_list.append("FLASH_ATTN")
+            attn_backend_list.append("ROCM_AITER_FA")
         except Exception:
-            print("Skip FLASH_ATTN on ROCm as aiter is not installed")
+            print("Skip ROCM_AITER_FA on ROCm as aiter is not installed")
 
         return attn_backend_list
     elif current_platform.is_xpu():
@@ -1273,10 +2149,45 @@ def get_attn_backend_list_based_on_platform() -> list[str]:
 @contextmanager
 def override_cutlass_fp8_supported(value: bool):
     with patch(
-        "aphrodite.quantization.utils.w8a8_utils.cutlass_fp8_supported",
+        "aphrodite.model_executor.layers.quantization.utils.w8a8_utils.cutlass_fp8_supported",
         return_value=value,
     ):
         yield
+
+
+def disable_aiter_plain_rmsnorm(monkeypatch) -> None:
+    """Patch dispatch_rocm_rmsnorm_func so the plain (non-fused) rms_norm path
+    always uses the native float32 kernel for the duration of a test.
+
+    The fused path (rms_norm2d_with_add, selected when with_fused_add=True) is
+    left on AITER -- only the plain path is redirected to native.
+
+    AITER's plain rms_norm accumulates variance in bfloat16 (~1 ULP/call),
+    which drifts the KV cache over many decode steps. This drift is irrelevant
+    for a trained model (rank-1/rank-2 gap ~1-3 nats >> 1 ULP), but breaks
+    logprob comparison tests with randomly-initialised models like
+    TitanML/tiny-mixtral whose rank-1/rank-2 gap is only O(1/sqrt(V)) ~0.006
+    nats -- smaller than the accumulated per-step error.
+    """
+    import torch
+
+    import aphrodite.model_executor.layers.layernorm as _ln_mod
+    from aphrodite.model_executor.layers.layernorm import rms_norm as _native
+
+    _orig = _ln_mod.dispatch_rocm_rmsnorm_func
+
+    def _native_plain(
+        with_fused_add: bool, dtype: torch.dtype, use_aiter: bool = False
+    ):
+        if (
+            use_aiter
+            and not with_fused_add
+            and dtype in (torch.float16, torch.bfloat16)
+        ):
+            return _native
+        return _orig(with_fused_add, dtype, use_aiter)
+
+    monkeypatch.setattr(_ln_mod, "dispatch_rocm_rmsnorm_func", _native_plain)
 
 
 def prep_prompts(batch_size: int, ln_range: tuple[int, int] = (800, 1100)):
@@ -1296,7 +2207,10 @@ def prep_prompts(batch_size: int, ln_range: tuple[int, int] = (800, 1100)):
     for _ in range(batch_size):
         idx = random.randint(30, 90)
         indices.append(idx)
-        prompt = "```python\n# We set a number of variables, " + f"x{idx} will be important later\n"
+        prompt = (
+            "```python\n# We set a number of variables, "
+            f"x{idx} will be important later\n"
+        )
         ln = random.randint(*ln_range)
         for k in range(30, ln):
             v = random.randint(10, 99)
@@ -1309,7 +2223,9 @@ def prep_prompts(batch_size: int, ln_range: tuple[int, int] = (800, 1100)):
     return prompts, answer, indices
 
 
-def check_answers(indices: list[int], answer: list[int], outputs: list[str], accept_rate: float = 0.7):
+def check_answers(
+    indices: list[int], answer: list[int], outputs: list[str], accept_rate: float = 0.7
+):
     answer2 = [int(text[0:2].strip()) for text in outputs]
     print(list(zip(indices, zip(answer, answer2))))
     numok = 0
@@ -1339,3 +2255,82 @@ def flat_product(*iterables: Iterable[Any]):
     for element in itertools.product(*iterables):
         normalized = (e if isinstance(e, tuple) else (e,) for e in element)
         yield tuple(itertools.chain(*normalized))
+
+
+class TestFP8Layer(torch.nn.Module):
+    """
+    Test helper for FP8 linear operations. Creates random weights and scales
+    based on quantization configuration.
+
+    Args:
+        weight_shape: Shape of the weight tensor (out_features, in_features).
+        activation_quant_key: Activation quantization configuration.
+        weight_quant_key: Weight quantization configuration.
+        out_dtype: Output dtype. Defaults to current default dtype.
+        force_kernel: Optional kernel to force use of specific implementation.
+    """
+
+    def __init__(
+        self,
+        weight_shape: tuple[int, int],
+        activation_quant_key: QuantKey,
+        weight_quant_key: QuantKey,
+        input_dtype: torch.dtype,
+        out_dtype: torch.dtype | None = None,
+        transpose_weights: bool = False,
+        device: torch.device | None = None,
+        force_kernel: type[_KernelT] | None = None,
+    ):
+        super().__init__()
+        act_scale_desc = activation_quant_key.scale
+        weight_scale_desc = weight_quant_key.scale
+        is_block_wise = act_scale_desc.group_shape.is_per_group()
+        if is_block_wise:
+            block_size = weight_scale_desc.group_shape.col
+            weight_scale_shape = weight_shape[0] // block_size
+            self.weight_scale_inv = torch.rand(
+                (weight_scale_shape, weight_scale_shape), dtype=torch.float32
+            )
+            self.weight = torch.rand(weight_shape).to(dtype=FP8_DTYPE)
+            self.input_scale = None
+            self.weight_scale = None
+            self.weight_block_size = [block_size, block_size]
+            if transpose_weights:
+                self.weight = self.weight.t()
+        else:
+            per_tensor_weights = weight_scale_desc.group_shape.is_per_tensor()
+            is_static_activation_scale = act_scale_desc.static
+            weight_scale_shape = (1,) if per_tensor_weights else (weight_shape[0], 1)
+            self.weight_scale_inv = None
+            self.weight_scale = torch.rand(
+                weight_scale_shape, dtype=torch.float32, device=device
+            )
+            self.input_scale = (
+                torch.rand(1, dtype=torch.float32, device=device)
+                if is_static_activation_scale
+                else None
+            )
+            self.weight = (
+                torch.rand(weight_shape, device=device).to(dtype=FP8_DTYPE).t()
+            )
+            self.input_scale_ub = None
+
+        out_dtype = torch.get_default_dtype() if out_dtype is None else out_dtype
+
+        self.kernel = init_fp8_linear_kernel(
+            activation_quant_key=activation_quant_key,
+            weight_quant_key=weight_quant_key,
+            weight_shape=weight_shape,
+            input_dtype=input_dtype,
+            out_dtype=out_dtype,
+            force_kernel=force_kernel,
+        )
+        self.kernel.process_weights_after_loading(self)
+
+    def is_quant_fp8_enabled(self) -> bool:
+        return self.kernel.quant_fp8.enabled()
+
+    def forward(
+        self, y: torch.Tensor, bias: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        return self.kernel.apply_weights(self, y, bias)

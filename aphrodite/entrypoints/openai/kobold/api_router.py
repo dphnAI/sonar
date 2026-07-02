@@ -12,7 +12,7 @@ from aphrodite.entrypoints.openai.kobold.protocol import (
     KAITokenizeRequest,
 )
 from aphrodite.entrypoints.openai.kobold.serving import OpenAIServingKobold
-from aphrodite.entrypoints.openai.utils import validate_json_request
+from aphrodite.entrypoints.serve.utils.api_utils import validate_json_request
 from aphrodite.entrypoints.utils import create_error_response
 
 router = APIRouter()

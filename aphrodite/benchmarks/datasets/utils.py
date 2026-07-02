@@ -31,7 +31,8 @@ def _resolve_range_ratios(
             return float(range_ratio["input"]), float(range_ratio["output"])
         except KeyError as exc:
             raise ValueError(
-                f"When range_ratio is a dict it must contain 'input' and 'output' keys, got: {sorted(range_ratio)}"
+                "When range_ratio is a dict it must contain 'input' and "
+                f"'output' keys, got: {sorted(range_ratio)}"
             ) from exc
     ratio = float(range_ratio)
     return ratio, ratio
@@ -78,9 +79,13 @@ def get_sampling_params(
     output_high = max(output_high, 1)
 
     if input_low > input_high:
-        raise ValueError(f"Invalid input sampling interval: low={input_low} > high={input_high}")
+        raise ValueError(
+            f"Invalid input sampling interval: low={input_low} > high={input_high}"
+        )
     if output_low > output_high:
-        raise ValueError(f"Invalid output sampling interval: low={output_low} > high={output_high}")
+        raise ValueError(
+            f"Invalid output sampling interval: low={output_low} > high={output_high}"
+        )
 
     logger.info(
         "Sampling input_len from [%s, %s] and output_len from [%s, %s]",

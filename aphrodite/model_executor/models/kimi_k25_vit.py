@@ -74,7 +74,9 @@ def get_rope_shape(org, interpolation_mode, shape):
     )
 
 
-def apply_rope(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def apply_rope(
+    xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Args: (The leading dimensions of all inputs should be the same)
         xq: query, tensor of shape (..., num_heads, head_dim)
@@ -141,7 +143,9 @@ class Learnable2DInterpPosEmbDivided_fixed(nn.Module):
         self.weight = nn.Parameter(torch.empty(height, width, dim))
         self.register_buffer(
             "time_weight",
-            torch.from_numpy(get_1d_sincos_pos_embed(self.dim, self.num_frames)).float().unsqueeze(1),
+            torch.from_numpy(get_1d_sincos_pos_embed(self.dim, self.num_frames))
+            .float()
+            .unsqueeze(1),
             persistent=False,
         )
 
@@ -150,9 +154,12 @@ class Learnable2DInterpPosEmbDivided_fixed(nn.Module):
     def reset_parameters(self):
         nn.init.normal_(self.weight)
 
-    def forward(self, x: torch.Tensor, grid_thws: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, grid_thws: torch.Tensor | list[list[int]]
+    ) -> torch.Tensor:
         pos_embs = []
-        for t, h, w in grid_thws.tolist():
+        grid_thw_list = grid_thws if isinstance(grid_thws, list) else grid_thws.tolist()
+        for t, h, w in grid_thw_list:
             assert t <= self.num_frames, f"t:{t} > self.num_frames:{self.num_frames}"
             if (h, w) == self.weight.shape[:-1]:
                 pos_emb_2d = self.weight.flatten(end_dim=1)
@@ -166,7 +173,9 @@ class Learnable2DInterpPosEmbDivided_fixed(nn.Module):
             if t == 1:
                 pos_emb_3d = pos_emb_2d
             else:
-                pos_emb_3d = pos_emb_2d.unsqueeze(0).repeat(t, 1, 1) + self.time_weight[0:t]
+                pos_emb_3d = (
+                    pos_emb_2d.unsqueeze(0).repeat(t, 1, 1) + self.time_weight[0:t]
+                )
 
             pos_embs.append(pos_emb_3d.reshape(-1, pos_emb_3d.shape[-1]))
 
@@ -188,13 +197,19 @@ class MoonVision3dPatchEmbed(nn.Module):
         pos_emb_type: str = "divided_fixed",
     ):
         super().__init__()
-        assert isinstance(patch_size, int | Sequence), f"Invalid patch_size type: {type(patch_size)}"
+        assert isinstance(patch_size, int | Sequence), (
+            f"Invalid patch_size type: {type(patch_size)}"
+        )
         if isinstance(patch_size, int):
             patch_size = (patch_size, patch_size)
-        assert len(patch_size) == 2, f"Expected patch_size to be a tuple of 2, got {patch_size}"
+        assert len(patch_size) == 2, (
+            f"Expected patch_size to be a tuple of 2, got {patch_size}"
+        )
         self.patch_size = patch_size
 
-        self.proj = nn.Conv2d(in_dim, out_dim, kernel_size=patch_size, stride=patch_size)
+        self.proj = nn.Conv2d(
+            in_dim, out_dim, kernel_size=patch_size, stride=patch_size
+        )
 
         if pos_emb_type == "divided_fixed":
             self.pos_emb = Learnable2DInterpPosEmbDivided_fixed(
@@ -206,7 +221,9 @@ class MoonVision3dPatchEmbed(nn.Module):
         else:
             raise NotImplementedError(f"Not support pos_emb_type: {pos_emb_type}")
 
-    def forward(self, x: torch.Tensor, grid_thws: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, grid_thws: torch.Tensor | list[list[int]]
+    ) -> torch.Tensor:
         x = self.proj(x).view(x.size(0), -1)
         # apply positional embedding
         x = self.pos_emb(x, grid_thws)
@@ -225,7 +242,10 @@ class Rope2DPosEmbRepeated(nn.Module):
         self.theta_base = theta_base
 
     def extra_repr(self):
-        return f"dim={self.dim}, max_height={self.max_height}, max_width={self.max_width}, theta_base={self.theta_base}"
+        return (
+            f"dim={self.dim}, max_height={self.max_height}, "
+            f"max_width={self.max_width}, theta_base={self.theta_base}"
+        )
 
     def _precompute_freqs_cis(self, device: torch.device) -> torch.Tensor:
         """Calculate the cis(freqs) for each position in the 2D grid."""
@@ -233,19 +253,25 @@ class Rope2DPosEmbRepeated(nn.Module):
         flat_pos = torch.arange(0, N).float().to(device)
         x_pos = flat_pos % self.max_width
         y_pos = flat_pos // self.max_width
-        dim_range = torch.arange(0, self.dim, 4)[: (self.dim // 4)].float().to(device)  # C/4
+        dim_range = (
+            torch.arange(0, self.dim, 4)[: (self.dim // 4)].float().to(device)
+        )  # C/4
         freqs = 1.0 / (self.theta_base ** (dim_range / self.dim))
         x_freqs = torch.outer(x_pos, freqs).float()  # N, C/4
         y_freqs = torch.outer(y_pos, freqs).float()  # N, C/4
         x_cis = torch.polar(torch.ones_like(x_freqs), x_freqs)  # N, C/4
         y_cis = torch.polar(torch.ones_like(y_freqs), y_freqs)  # N, C/4
         # N, C/4, 2
-        freqs_cis = torch.cat([x_cis.unsqueeze(dim=-1), y_cis.unsqueeze(dim=-1)], dim=-1)
+        freqs_cis = torch.cat(
+            [x_cis.unsqueeze(dim=-1), y_cis.unsqueeze(dim=-1)], dim=-1
+        )
         # max_height, max_width, C/2
         freqs_cis = freqs_cis.reshape(self.max_height, self.max_width, -1)
         return freqs_cis
 
-    def get_freqs_cis(self, grid_thws: torch.Tensor, device: torch.device) -> torch.Tensor:
+    def get_freqs_cis(
+        self, grid_thws: torch.Tensor | list[list[int]], device: torch.device
+    ) -> torch.Tensor:
         """
         Args:
             grid_thws (torch.Tensor): grid time, height and width
@@ -254,16 +280,23 @@ class Rope2DPosEmbRepeated(nn.Module):
             freqs_cis: tensor of shape (sum(t * height * width), dim//2)
         """
         if not hasattr(self, "freqs_cis"):
-            self.register_buffer("freqs_cis", self._precompute_freqs_cis(device), persistent=False)
+            self.register_buffer(
+                "freqs_cis", self._precompute_freqs_cis(device), persistent=False
+            )
 
-        shapes = grid_thws.tolist()
-        assert all(1 <= h <= self.max_height and 1 <= w <= self.max_width for t, h, w in shapes), (
+        shapes = grid_thws if isinstance(grid_thws, list) else grid_thws.tolist()
+        assert all(
+            1 <= h <= self.max_height and 1 <= w <= self.max_width for t, h, w in shapes
+        ), (
             shapes,
             self.max_height,
             self.max_width,
         )
         freqs_cis = torch.cat(
-            [self.freqs_cis[:h, :w].reshape(-1, self.dim // 2).repeat(t, 1) for t, h, w in shapes],
+            [
+                self.freqs_cis[:h, :w].reshape(-1, self.dim // 2).repeat(t, 1)
+                for t, h, w in shapes
+            ],
             dim=0,
         )
         return freqs_cis
@@ -329,7 +362,9 @@ class MoonViTEncoderLayer(nn.Module):
         self.num_heads = num_heads
         self.hidden_dim = hidden_dim
         self.hidden_size_per_attention_head = self.hidden_dim // self.num_heads
-        self.tp_size = 1 if self.use_data_parallel else get_tensor_model_parallel_world_size()
+        self.tp_size = (
+            1 if self.use_data_parallel else get_tensor_model_parallel_world_size()
+        )
         self.num_attention_heads_per_partition = divide(num_heads, self.tp_size)
 
         self.norm0 = nn.LayerNorm(hidden_dim)
@@ -371,6 +406,8 @@ class MoonViTEncoderLayer(nn.Module):
         x: torch.Tensor,
         cu_seqlens: torch.Tensor,
         rope_freqs_cis: torch.Tensor | None = None,
+        max_seqlen: torch.Tensor | None = None,
+        sequence_lengths: torch.Tensor | None = None,
     ):
         """Compute self-attention with packed QKV.
 
@@ -392,17 +429,20 @@ class MoonViTEncoderLayer(nn.Module):
 
         xq, xk = apply_rope(xq, xk, rope_freqs_cis)
 
-        max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+        if max_seqlen is None:
+            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
         attn_out = self.attn(
             xq.unsqueeze(0),
             xk.unsqueeze(0),
             xv.unsqueeze(0),
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
+            sequence_lengths=sequence_lengths,
         )
         attn_out = attn_out.reshape(
             seq_length,
-            self.num_attention_heads_per_partition * self.hidden_size_per_attention_head,
+            self.num_attention_heads_per_partition
+            * self.hidden_size_per_attention_head,
         )
         attn_out, _ = self.wo(attn_out)
         return attn_out
@@ -412,11 +452,19 @@ class MoonViTEncoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
         rope_freqs_cis: torch.Tensor | None = None,
+        max_seqlen: torch.Tensor | None = None,
+        sequence_lengths: torch.Tensor | None = None,
     ):
         residual = hidden_states
         hidden_states = self.norm0(hidden_states)
 
-        hidden_states = self.attention_qkvpacked(hidden_states, cu_seqlens, rope_freqs_cis)
+        hidden_states = self.attention_qkvpacked(
+            hidden_states,
+            cu_seqlens,
+            rope_freqs_cis,
+            max_seqlen=max_seqlen,
+            sequence_lengths=sequence_lengths,
+        )
         hidden_states = residual + hidden_states
 
         residual = hidden_states
@@ -445,7 +493,9 @@ class MoonViT3dEncoder(nn.Module):
             f'video_attn_type must be "spatial_temporal", got {video_attn_type}'
         )
         self.video_attn_type = video_attn_type
-        self.rope_2d = Rope2DPosEmbRepeated(block_cfg["hidden_dim"] // block_cfg["num_heads"], 512, 512)
+        self.rope_2d = Rope2DPosEmbRepeated(
+            block_cfg["hidden_dim"] // block_cfg["num_heads"], 512, 512
+        )
         self.blocks = nn.ModuleList(
             [
                 MoonViTEncoderLayer(
@@ -458,24 +508,71 @@ class MoonViT3dEncoder(nn.Module):
         )
         self.final_layernorm = nn.LayerNorm(hidden_dim)
 
+    def prepare_encoder_metadata(
+        self,
+        grid_thw_list: list[list[int]],
+        *,
+        device: torch.device,
+    ) -> dict[str, torch.Tensor | None]:
+        metadata: dict[str, torch.Tensor | None] = {}
+        metadata["rope_freqs_cis"] = self.rope_2d.get_freqs_cis(
+            grid_thw_list, device=device
+        )
+
+        grid_thw_np = np.array(grid_thw_list, dtype=np.int32)
+        lengths = grid_thw_np[:, 0] * grid_thw_np[:, 1] * grid_thw_np[:, 2]
+        cu_seqlens = np.concatenate(
+            [np.zeros(1, dtype=np.int32), lengths.cumsum(dtype=np.int32)]
+        )
+
+        attn_backend = self.blocks[0].attn.attn_backend
+        metadata["sequence_lengths"] = MMEncoderAttention.maybe_compute_seq_lens(
+            attn_backend, cu_seqlens, device
+        )
+        metadata["max_seqlen"] = torch.tensor(
+            MMEncoderAttention.compute_max_seqlen(attn_backend, cu_seqlens),
+            dtype=torch.int32,
+        )
+        metadata["cu_seqlens"] = MMEncoderAttention.maybe_recompute_cu_seqlens(
+            attn_backend,
+            cu_seqlens,
+            self.blocks[0].hidden_dim,
+            self.blocks[0].tp_size,
+            device,
+        )
+        return metadata
+
     def forward(
         self,
         hidden_states: torch.Tensor,
-        grid_thws: torch.Tensor,
+        grid_thws: torch.Tensor | list[list[int]],
+        *,
+        encoder_metadata: dict[str, torch.Tensor | None] | None = None,
     ) -> torch.Tensor:
-        rope_freqs_cis = self.rope_2d.get_freqs_cis(grid_thws=grid_thws, device=hidden_states.device)
-
-        lengths = torch.cat(
-            (
-                torch.zeros(1, dtype=grid_thws.dtype, device=grid_thws.device),
-                grid_thws[:, 0] * grid_thws[:, 1] * grid_thws[:, 2],
+        if encoder_metadata is None:
+            grid_thw_list = (
+                grid_thws if isinstance(grid_thws, list) else grid_thws.tolist()
             )
-        )
+            encoder_metadata = self.prepare_encoder_metadata(
+                grid_thw_list, device=hidden_states.device
+            )
 
-        cu_seqlens = lengths.to(hidden_states.device).cumsum(dim=0, dtype=torch.int32)
+        rope_freqs_cis = encoder_metadata["rope_freqs_cis"]
+        cu_seqlens = encoder_metadata["cu_seqlens"]
+        max_seqlen = encoder_metadata["max_seqlen"]
+        sequence_lengths = encoder_metadata.get("sequence_lengths")
+        assert rope_freqs_cis is not None
+        assert cu_seqlens is not None
+        assert max_seqlen is not None
 
         for block in self.blocks:
-            hidden_states = block(hidden_states, cu_seqlens, rope_freqs_cis=rope_freqs_cis)
+            hidden_states = block(
+                hidden_states,
+                cu_seqlens,
+                rope_freqs_cis=rope_freqs_cis,
+                max_seqlen=max_seqlen,
+                sequence_lengths=sequence_lengths,
+            )
 
         hidden_states = self.final_layernorm(hidden_states)
 
@@ -484,16 +581,17 @@ class MoonViT3dEncoder(nn.Module):
 
 def tpool_patch_merger(
     x: torch.Tensor,
-    grid_thws: torch.Tensor,
+    grid_thws: torch.Tensor | list[list[int]],
     merge_kernel_size: tuple[int, int] = (2, 2),
 ) -> list[torch.Tensor]:
     """Temporal pooling patch merger."""
     kh, kw = merge_kernel_size
-    lengths = (grid_thws[:, 0] * grid_thws[:, 1] * grid_thws[:, 2]).tolist()
+    grid_thw_list = grid_thws if isinstance(grid_thws, list) else grid_thws.tolist()
+    lengths = [t * h * w for t, h, w in grid_thw_list]
     seqs = x.split(lengths, dim=0)
 
     outputs = []
-    for seq, (t, h, w) in zip(seqs, grid_thws.tolist()):
+    for seq, (t, h, w) in zip(seqs, grid_thw_list):
         nh, nw = h // kh, w // kw
         # Reshape: (t*h*w, d) -> (t, nh, kh, nw, kw, d)
         v = seq.view(t, nh, kh, nw, kw, -1)
@@ -549,7 +647,13 @@ class MoonViT3dPretrainedModel(nn.Module):
             prefix=maybe_prefix(prefix, "encoder"),
         )
 
-    def forward(self, pixel_values: torch.Tensor, grid_thws: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        grid_thws: torch.Tensor | list[list[int]],
+        *,
+        encoder_metadata: dict[str, torch.Tensor | None] | None = None,
+    ) -> torch.Tensor:
         """
         Args:
             pixel_values (torch.Tensor): The input pixel values.
@@ -558,10 +662,24 @@ class MoonViT3dPretrainedModel(nn.Module):
         Returns:
             torch.Tensor: The output tokens.
         """
-        hidden_states = self.patch_embed(pixel_values, grid_thws)
-        hidden_states = self.encoder(hidden_states, grid_thws)
-        if self.merge_type == "sd2_tpool":  # spatial downsampling 2x with temporal pooling all
-            hidden_states = tpool_patch_merger(hidden_states, grid_thws, merge_kernel_size=self.merge_kernel_size)
+        grid_thw_list = grid_thws if isinstance(grid_thws, list) else grid_thws.tolist()
+        if encoder_metadata is None:
+            encoder_metadata = self.encoder.prepare_encoder_metadata(
+                grid_thw_list, device=pixel_values.device
+            )
+
+        hidden_states = self.patch_embed(pixel_values, grid_thw_list)
+        hidden_states = self.encoder(
+            hidden_states,
+            grid_thw_list,
+            encoder_metadata=encoder_metadata,
+        )
+        if (
+            self.merge_type == "sd2_tpool"
+        ):  # spatial downsampling 2x with temporal pooling all
+            hidden_states = tpool_patch_merger(
+                hidden_states, grid_thw_list, merge_kernel_size=self.merge_kernel_size
+            )
         else:
             raise NotImplementedError(f"Not support {self.merge_type}")
 
@@ -573,6 +691,9 @@ def mm_projector_forward(mm_projector: torch.nn.Module, vt_output: list[torch.Te
     """Apply MM projector to vision tower outputs."""
     num_embedding_list = [x.shape[0] for x in vt_output]
     batched = torch.cat(vt_output, dim=0)
+    projector_dtype = mm_projector.pre_norm.weight.dtype
+    if batched.dtype != projector_dtype:
+        batched = batched.to(projector_dtype)
     proj_out = mm_projector(batched)
     proj_out = proj_out.reshape(-1, proj_out.shape[-1])
     proj_out = torch.split(proj_out, num_embedding_list)
@@ -601,7 +722,15 @@ def vision_tower_forward(
             rope_type="rope_2d",
         )
     else:
-        vt_outputs = vision_tower(pixel_values, grid_thw)
+        grid_thw_list = grid_thw.tolist()
+        encoder_metadata = vision_tower.encoder.prepare_encoder_metadata(
+            grid_thw_list, device=pixel_values.device
+        )
+        vt_outputs = vision_tower(
+            pixel_values,
+            grid_thw_list,
+            encoder_metadata=encoder_metadata,
+        )
     tensors = mm_projector_forward(mm_projector, list(vt_outputs))
     return list(tensors)
 

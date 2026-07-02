@@ -1,14 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import random
 from dataclasses import dataclass
 from typing import TypeAlias
 
+import numpy as np
 import torch
-from aphrodite.engine.args_tools import EngineArgs
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
+from aphrodite.engine.arg_utils import EngineArgs
 from aphrodite.v1.engine import EngineCoreOutput, FinishReason
+from aphrodite.v1.metrics.stats import PrefillStats
 from aphrodite.v1.outputs import LogprobsLists, LogprobsTensors
 
 GeneralTokenizerType: TypeAlias = PreTrainedTokenizer | PreTrainedTokenizerFast
@@ -127,7 +130,9 @@ def _create_random_top_token_test_vector(
 
     # Check if the sampled_token_id occurs in choice_tensor[1:]
     if sampled_token_id in choice_tensor[1:]:
-        sampled_token_rank = (choice_tensor[1:] == sampled_token_id).nonzero(as_tuple=True)[0].item()
+        sampled_token_rank = (
+            (choice_tensor[1:] == sampled_token_id).nonzero(as_tuple=True)[0].item()
+        )
     else:
         # If not found, assign a random int between num_logprobs and 50700
         sampled_token_rank = random.randint(num_logprobs, 50700)
@@ -230,7 +235,9 @@ def generate_dummy_sample_logprobs(
         (
             token_vector,
             sampled_token_rank,
-        ) = _create_random_top_token_test_vector(num_logprobs, 0, len(tokenizer.vocab) - 1, sampled_token_id)
+        ) = _create_random_top_token_test_vector(
+            num_logprobs, 0, len(tokenizer.vocab) - 1, sampled_token_id
+        )
 
         res.append(
             (
@@ -290,7 +297,9 @@ def generate_dummy_prompt_logprobs_tensors(
     )
     return LogprobsTensors(
         token_vector,
-        _create_random_top_logprob_test_matrix((num_prompt_logprobs, num_logprobs + 1), -100, 0),
+        _create_random_top_logprob_test_matrix(
+            (num_prompt_logprobs, num_logprobs + 1), -100, 0
+        ),
         prompt_token_ranks,
     )
 
@@ -300,7 +309,7 @@ class DummyOutputProcessorTestVectors:
     """Dummy test vectors for output processor tests"""
 
     tokenizer: GeneralTokenizerType
-    aphrodite_config: EngineArgs
+    vllm_config: EngineArgs
     full_tokens: list[list[int]]  # Prompt + generated tokens
     prompt_tokens: list[list[int]]
     generation_tokens: list[list[int]]
@@ -322,10 +331,12 @@ class MockEngineCore:
     def __init__(
         self,
         tokens_list: list[list[int]],
+        prompts_list: list[list[int]],
         # For each request, for each sampled token offset,
         # a tuple of
         # (list of topk token ids, list of sample logprob vals, rank)
-        generated_logprobs_raw: list[list[tuple[list[int], list[float], int]]] | None = None,
+        generated_logprobs_raw: list[list[tuple[list[int], list[float], int]]]
+        | None = None,
         # For each request, a tuple of
         # (prompt logprob val matrix, prompt logprob tok id matrix);
         # each matrix has dimensions
@@ -333,59 +344,81 @@ class MockEngineCore:
         prompt_logprobs_raw: list[LogprobsTensors] | None = None,
         eos_token_id: int | None = None,
         stop_token_ids: list[int] | None = None,
-        ignore_eos: bool = False,
+        request_ids: list[str] | None = None,
     ) -> None:
         self.num_requests = len(tokens_list)
         self.tokens_list = tokens_list
-        self.current_idx = 0
+        self.prompts_list = prompts_list
         self.generated_logprobs_raw = generated_logprobs_raw
         self.do_logprobs = generated_logprobs_raw is not None
         self.prompt_logprobs_raw = prompt_logprobs_raw
         self.do_prompt_logprobs = prompt_logprobs_raw is not None
         self.request_finished = [False for _ in range(self.num_requests)]
+        self.request_token_idx = [0 for _ in range(self.num_requests)]
         self.eos_token_id = eos_token_id
         self.stop_token_ids = stop_token_ids
-        self.ignore_eos = ignore_eos
+        self.request_ids = (
+            request_ids
+            if request_ids is not None
+            else [f"request-{i}" for i in range(self.num_requests)]
+        )
 
-    def get_outputs(self) -> list[EngineCoreOutput]:
+    def get_outputs(self, num_active: int = -1) -> list[EngineCoreOutput]:
         do_logprobs = self.do_logprobs
         do_prompt_logprobs = self.do_prompt_logprobs
-        token_idx = self.current_idx
 
         outputs = []
-        for req_idx, token_ids in enumerate(self.tokens_list):
+        for req_idx, (token_ids, prompt_token_ids) in enumerate(
+            zip(self.tokens_list, self.prompts_list)
+        ):
+            if num_active != -1 and req_idx >= num_active:
+                break
             if not self.request_finished[req_idx]:
+                token_idx = self.request_token_idx[req_idx]
                 if do_logprobs:
                     assert self.generated_logprobs_raw is not None
-                    (logprobs_token_ids_, logprobs_, sampled_token_ranks_) = self.generated_logprobs_raw[req_idx][
-                        token_idx
-                    ]
+                    (logprobs_token_ids_, logprobs_, sampled_token_ranks_) = (
+                        self.generated_logprobs_raw[req_idx][token_idx]
+                    )
                     logprobs = LogprobsLists(
-                        [logprobs_token_ids_],
-                        [logprobs_],
-                        [sampled_token_ranks_],
+                        np.array([logprobs_token_ids_]),
+                        np.array([logprobs_]),
+                        np.array([sampled_token_ranks_]),
                     )
                 else:
                     logprobs = None
                 if do_prompt_logprobs:
-                    if self.current_idx == 0:
+                    if token_idx == 0:
                         assert self.prompt_logprobs_raw is not None
                         prompt_logprobs = self.prompt_logprobs_raw[req_idx]
                     else:
                         prompt_logprobs = None
                 else:
                     prompt_logprobs = None
+
+                # Add prefill_stats on first output (prefill) for this request
+                if token_idx == 0:
+                    prefill_stats = PrefillStats()
+                    prefill_stats.set(
+                        num_prompt_tokens=len(prompt_token_ids),
+                        num_local_cached_tokens=0,
+                        num_external_cached_tokens=0,
+                    )
+                else:
+                    prefill_stats = None
+
                 new_token_id = token_ids[token_idx]
                 output = EngineCoreOutput(
-                    request_id=f"request-{req_idx}",
+                    request_id=self.request_ids[req_idx],
                     new_token_ids=[new_token_id],
                     new_logprobs=logprobs,
                     new_prompt_logprobs_tensors=prompt_logprobs,
+                    prefill_stats=prefill_stats,
                 )
                 if token_idx == len(token_ids) - 1:
                     output.finish_reason = FinishReason.LENGTH
                     self.request_finished[req_idx] = True
-                if not self.ignore_eos and new_token_id == self.eos_token_id:
+                if new_token_id == self.eos_token_id:
                     output.finish_reason = FinishReason.STOP
                     self.request_finished[req_idx] = True
                 if new_token_id in (self.stop_token_ids or ()):
@@ -394,5 +427,6 @@ class MockEngineCore:
                     self.request_finished[req_idx] = True
                 outputs.append(output)
 
-        self.current_idx += 1
+                self.request_token_idx[req_idx] += 1
+
         return outputs

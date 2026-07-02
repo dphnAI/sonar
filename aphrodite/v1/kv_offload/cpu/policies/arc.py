@@ -3,6 +3,8 @@
 from collections import OrderedDict
 from collections.abc import Iterable
 
+from typing_extensions import override
+
 from aphrodite.v1.kv_offload.base import OffloadKey
 from aphrodite.v1.kv_offload.cpu.policies.base import BlockStatus, CachePolicy
 
@@ -54,18 +56,22 @@ class ARCCachePolicy(CachePolicy):
         self.b1: OrderedDict[OffloadKey, None] = OrderedDict()
         self.b2: OrderedDict[OffloadKey, None] = OrderedDict()
 
+    @override
     def get(self, key: OffloadKey) -> BlockStatus | None:
         return self.t1.get(key) or self.t2.get(key)
 
+    @override
     def insert(self, key: OffloadKey, block: BlockStatus) -> None:
         self.t1[key] = block
         self.b1.pop(key, None)
         self.b2.pop(key, None)
 
+    @override
     def remove(self, key: OffloadKey) -> None:
         if self.t1.pop(key, None) is None:
             self.t2.pop(key, None)
 
+    @override
     def touch(self, keys: Iterable[OffloadKey]) -> None:
         for key in reversed(list(keys)):
             if key in self.t1:
@@ -82,7 +88,9 @@ class ARCCachePolicy(CachePolicy):
 
             elif key in self.b1:
                 delta = max(1, len(self.b2) / len(self.b1))
-                self.target_t1_size = min(self.target_t1_size + delta, self.cache_capacity)
+                self.target_t1_size = min(
+                    self.target_t1_size + delta, self.cache_capacity
+                )
                 # move to MRU position (end) to keep it fresh in the ghost list
                 self.b1.move_to_end(key)
 
@@ -92,13 +100,26 @@ class ARCCachePolicy(CachePolicy):
                 # move to MRU position (end) to keep it fresh in the ghost list
                 self.b2.move_to_end(key)
 
-    def evict(self, n: int, protected: set[OffloadKey]) -> list[tuple[OffloadKey, BlockStatus]] | None:
+    @override
+    def clear(self) -> None:
+        self.t1.clear()
+        self.t2.clear()
+        self.b1.clear()
+        self.b2.clear()
+        self.target_t1_size = 0.0
+
+    @override
+    def evict(
+        self, n: int, protected: set[OffloadKey]
+    ) -> list[tuple[OffloadKey, BlockStatus]] | None:
         if n == 0:
             return []
 
         # Collect candidates atomically: simulate T1 size changes as we select,
         # but do not modify actual data structures until all n are found.
-        candidates: list[tuple[OffloadKey, BlockStatus, bool]] = []  # (key, block, from_t1)
+        candidates: list[
+            tuple[OffloadKey, BlockStatus, bool]
+        ] = []  # (key, block, from_t1)
         already_selected: set[OffloadKey] = set()
         virtual_t1_size = len(self.t1)
 
@@ -107,14 +128,22 @@ class ARCCachePolicy(CachePolicy):
 
             if virtual_t1_size >= int(self.target_t1_size):
                 for key, block in self.t1.items():
-                    if block.ref_cnt == 0 and key not in protected and key not in already_selected:
+                    if (
+                        block.ref_cnt == 0
+                        and key not in protected
+                        and key not in already_selected
+                    ):
                         candidate = (key, block, True)
                         virtual_t1_size -= 1
                         break
 
             if candidate is None:
                 for key, block in self.t2.items():
-                    if block.ref_cnt == 0 and key not in protected and key not in already_selected:
+                    if (
+                        block.ref_cnt == 0
+                        and key not in protected
+                        and key not in already_selected
+                    ):
                         candidate = (key, block, False)
                         break
                 if candidate is None:

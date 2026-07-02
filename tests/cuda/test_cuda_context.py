@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import ctypes
 from concurrent.futures import ThreadPoolExecutor
 
@@ -28,7 +29,8 @@ def run_cuda_test_in_thread(device_input, expected_device_id):
         if valid_before:
             return (
                 False,
-                f"CUDA context should not exist in new thread, got device {device_before}",
+                "CUDA context should not exist in new thread, "
+                f"got device {device_before}",
             )
 
         # Test setting CUDA context
@@ -62,7 +64,9 @@ class TestSetCudaContext:
     def test_set_cuda_context_parametrized(self, device_input, expected_device_id):
         """Test setting CUDA context in isolated threads."""
         with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(run_cuda_test_in_thread, device_input, expected_device_id)
+            future = executor.submit(
+                run_cuda_test_in_thread, device_input, expected_device_id
+            )
             success, message = future.result(timeout=30)
         assert success, message
 

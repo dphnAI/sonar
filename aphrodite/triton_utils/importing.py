@@ -3,14 +3,18 @@
 
 import os
 import types
+from importlib.metadata import version
 from importlib.util import find_spec
 
 from aphrodite.logger import init_logger
+from aphrodite.platforms import current_platform
+from aphrodite.utils.math_utils import cdiv
 
 logger = init_logger(__name__)
 
 HAS_TRITON = (
-    find_spec("triton") is not None or find_spec("pytorch-triton-xpu") is not None  # Not compatible
+    find_spec("triton") is not None
+    or find_spec("pytorch-triton-xpu") is not None  # Not compatible
 )
 if HAS_TRITON:
     try:
@@ -19,19 +23,30 @@ if HAS_TRITON:
         # It's generally expected that x.driver exists and has
         # an is_active method.
         # The `x.driver and` check adds a small layer of safety.
-        active_drivers = [x.driver for x in backends.values() if x.driver and x.driver.is_active()]
+        active_drivers = [
+            x.driver for x in backends.values() if x.driver and x.driver.is_active()
+        ]
 
         # Check if we're in a distributed environment where CUDA_VISIBLE_DEVICES
-        # might be temporarily empty (e.g., Ray sets it to "" during actor init)
-        cuda_visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
-        is_distributed_env = cuda_visible_devices is not None and len(cuda_visible_devices.strip()) == 0
+        # or HIP_VISIBLE_DEVICES might be temporarily empty (e.g., Ray sets it to ""
+        # during actor init)
+        visible_devices_env = (
+            "HIP_VISIBLE_DEVICES"
+            if current_platform.is_rocm()
+            else "CUDA_VISIBLE_DEVICES"
+        )
+        visible_devices = os.environ.get(visible_devices_env)
+        is_distributed_env = (
+            visible_devices is not None and len(visible_devices.strip()) == 0
+        )
 
         # Apply lenient driver check for distributed environments
         if is_distributed_env and len(active_drivers) == 0:
             # Allow 0 drivers in distributed environments - they may become
             # active later when CUDA context is properly initialized
             logger.debug(
-                "Triton found 0 active drivers in distributed environment. This is expected during initialization."
+                "Triton found 0 active drivers in distributed environment. "
+                "This is expected during initialization."
             )
         elif not is_distributed_env and len(active_drivers) != 1:
             # Strict check for non-distributed environments
@@ -41,21 +56,39 @@ if HAS_TRITON:
                 len(active_drivers),
             )
             HAS_TRITON = False
+
+        # Check Triton CPU
+        if "cpu" in version("aphrodite-engine"):
+            if "cpu" in backends:
+                HAS_TRITON = True
+            else:
+                logger.warning(
+                    "Triton is installed, but doesn't include CPU backend. "
+                    "Disabling Triton."
+                )
+                HAS_TRITON = False
     except ImportError:
         # This can occur if Triton is partially installed or triton.backends
         # is missing.
-        logger.warning("Triton is installed, but `triton.backends` could not be imported. Disabling Triton.")
+        logger.warning(
+            "Triton is installed, but `triton.backends` could not be imported. "
+            "Disabling Triton."
+        )
         HAS_TRITON = False
     except Exception as e:
         # Catch any other unexpected errors during the check.
         logger.warning(
-            "An unexpected error occurred while checking Triton active drivers: %s. Disabling Triton.",
+            "An unexpected error occurred while checking Triton active drivers:"
+            " %s. Disabling Triton.",
             e,
         )
         HAS_TRITON = False
 
 if not HAS_TRITON:
-    logger.info("Triton not installed or not compatible; certain GPU-related functions will not be available.")
+    logger.info(
+        "Triton not installed or not compatible; certain GPU-related"
+        " functions will not be available."
+    )
 
 
 class TritonPlaceholder(types.ModuleType):
@@ -66,6 +99,7 @@ class TritonPlaceholder(types.ModuleType):
         self.autotune = self._dummy_decorator("autotune")
         self.heuristics = self._dummy_decorator("heuristics")
         self.Config = self._dummy_decorator("Config")
+        self.cdiv = cdiv
         self.language = TritonLanguagePlaceholder()
 
     def _dummy_decorator(self, name):
@@ -86,5 +120,6 @@ class TritonLanguagePlaceholder(types.ModuleType):
         self.int32 = None
         self.tensor = None
         self.exp = None
+        self.exp2 = None
         self.log = None
         self.log2 = None

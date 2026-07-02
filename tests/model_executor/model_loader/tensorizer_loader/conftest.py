@@ -3,11 +3,11 @@
 from collections.abc import Callable
 
 import pytest
-from aphrodite.modeling.model_loader import tensorizer as tensorizer_mod
-from aphrodite.modeling.model_loader.tensorizer import TensorizerConfig
 
 from aphrodite import LLM, EngineArgs
 from aphrodite.distributed import cleanup_dist_env_and_memory
+from aphrodite.model_executor.model_loader import tensorizer as tensorizer_mod
+from aphrodite.model_executor.model_loader.tensorizer import TensorizerConfig
 from aphrodite.utils.network_utils import get_distributed_init_method, get_ip, get_open_port
 from aphrodite.v1.executor import UniProcExecutor
 from aphrodite.v1.worker.worker_base import WorkerWrapperBase
@@ -40,7 +40,7 @@ def just_serialize_model_tensors(model_ref, monkeypatch, tmp_path):
 
     monkeypatch.setattr(tensorizer_mod, "serialize_extra_artifacts", noop)
 
-    tensorizer_mod.tensorize_aphrodite_model(args, tc)
+    tensorizer_mod.tensorize_vllm_model(args, tc)
     yield tmp_path
 
 
@@ -67,17 +67,17 @@ def assert_from_collective_rpc(engine: LLM, closure: Callable, closure_kwargs: d
 class DummyExecutor(UniProcExecutor):
     def _init_executor(self) -> None:
         """Initialize the worker and load the model."""
-        self.driver_worker = WorkerWrapperBase(aphrodite_config=self.aphrodite_config, rpc_rank=0)
+        self.driver_worker = WorkerWrapperBase(rpc_rank=0)
         distributed_init_method = get_distributed_init_method(get_ip(), get_open_port())
         local_rank = 0
         # set local rank as the device index if specified
-        device_info = self.aphrodite_config.device_config.device.__str__().split(":")
+        device_info = self.vllm_config.device_config.device.__str__().split(":")
         if len(device_info) > 1:
             local_rank = int(device_info[1])
         rank = 0
         is_driver_worker = True
         kwargs = dict(
-            aphrodite_config=self.aphrodite_config,
+            vllm_config=self.vllm_config,
             local_rank=local_rank,
             rank=rank,
             distributed_init_method=distributed_init_method,
@@ -86,10 +86,6 @@ class DummyExecutor(UniProcExecutor):
         self.mm_receiver_cache = None
         self.collective_rpc("init_worker", args=([kwargs],))
         self.collective_rpc("init_device")
-
-    @property
-    def max_concurrent_batches(self) -> int:
-        return 2
 
     def shutdown(self):
         if hasattr(self, "thread_pool"):

@@ -19,17 +19,21 @@
 import numpy as np
 import pytest
 import torch
-from aphrodite.quantization.qutlass_utils import to_blocked
 from compressed_tensors.transform.utils.hadamard import deterministic_hadamard_matrix
 
 from aphrodite import _custom_ops as ops  # use existing nvfp4 gemm in aphrodite
 from aphrodite._custom_ops import fusedQuantizeNv
+from aphrodite.model_executor.layers.quantization.qutlass_utils import to_blocked
 from aphrodite.platforms import current_platform
+from aphrodite.utils.torch_utils import set_random_seed
 
 if not torch.cuda.is_available():
     pytest.skip("CUDA required for these tests.", allow_module_level=True)
 
-if not (current_platform.has_device_capability(100) or current_platform.has_device_capability(120)):
+if not (
+    current_platform.has_device_capability(100)
+    or current_platform.has_device_capability(120)
+):
     pytest.skip(
         reason="Tests require compute capability 10.0 (100) or 12.0 (120).",
         allow_module_level=True,
@@ -38,7 +42,10 @@ if not (current_platform.has_device_capability(100) or current_platform.has_devi
 
 # ----- Helpers -----
 def get_hadamard_matrix(group_size: int, dtype: torch.dtype, device: torch.device):
-    return deterministic_hadamard_matrix(group_size, dtype=dtype, device=device) * group_size**-0.5
+    return (
+        deterministic_hadamard_matrix(group_size, dtype=dtype, device=device)
+        * group_size**-0.5
+    )
 
 
 def _rtne_fp4(x: torch.Tensor):
@@ -84,7 +91,9 @@ def _dq_fp4(x_e2m1: torch.Tensor, x_e4m3: torch.Tensor, alpha: float):
     device = x_e2m1.device
 
     x_e2m1_i32 = x_e2m1.view(dtype=torch.uint8).to(dtype=torch.int32)
-    x_e2m1_unpacked = torch.stack([x_e2m1_i32 & 0xF, (x_e2m1_i32 >> 4) & 0xF], dim=-1).flatten(start_dim=-2)
+    x_e2m1_unpacked = torch.stack(
+        [x_e2m1_i32 & 0xF, (x_e2m1_i32 >> 4) & 0xF], dim=-1
+    ).flatten(start_dim=-2)
 
     grid_dq = torch.tensor(
         [
@@ -142,12 +151,16 @@ def _forward_quantize_ref(x: torch.Tensor, h: torch.Tensor, rot_size: int):
 
     xh_e4m3_ref = scales_ref64_.to(dtype=torch.float8_e4m3fn)
     scales_ref64 = xh_e4m3_ref.to(dtype=torch.float64)
-    xh_scaled_ref64 = (xh_ref64.unflatten(dim=-1, sizes=(-1, 16)) / scales_ref64[..., None]).flatten(start_dim=-2)
+    xh_scaled_ref64 = (
+        xh_ref64.unflatten(dim=-1, sizes=(-1, 16)) / scales_ref64[..., None]
+    ).flatten(start_dim=-2)
 
     xh_scaled_ref64 *= 6.0
 
     clip_mask_unpacked_ref = xh_scaled_ref64.abs() < 6.0
-    clip_mask_ref = torch.zeros(*x.shape[:-1], x.size(-1) // 8, dtype=torch.uint8, device=device)
+    clip_mask_ref = torch.zeros(
+        *x.shape[:-1], x.size(-1) // 8, dtype=torch.uint8, device=device
+    )
     for i in range(8):
         clip_mask_ref |= clip_mask_unpacked_ref[..., i::8].to(dtype=torch.uint8) << i
 
@@ -181,7 +194,7 @@ LLAMA_MODELS = {
 
 @pytest.fixture(autouse=True)
 def _seed_each_test():
-    current_platform.seed_everything(0)
+    set_random_seed(0)
     np.random.seed(0)
     torch.random.manual_seed(0)
 
@@ -217,7 +230,9 @@ def test_fused_quantization(rot_size: int, global_scale_value: float):
     a_scale_block = to_blocked(a_e4m3, backend="triton").view(-1, k // 16)
     b_scale_block = to_blocked(b_e4m3, backend="triton").view(-1, k // 16)
     alpha = torch.tensor([1.0], device=device)
-    out = ops.cutlass_scaled_fp4_mm(a_e2m1, b_e2m1, a_scale_block, b_scale_block, alpha, torch.bfloat16)
+    out = ops.cutlass_scaled_fp4_mm(
+        a_e2m1, b_e2m1, a_scale_block, b_scale_block, alpha, torch.bfloat16
+    )
     assert out.equal(out_ref.to(dtype=out.dtype))
 
 
@@ -248,5 +263,7 @@ def test_llama_shapes(model: str, layer_idx: int, batch: int, rot_size: int):
     a_scale_block = to_blocked(a_e4m3, backend="triton").view(-1, k // 16)
     b_scale_block = to_blocked(b_e4m3, backend="triton").view(-1, k // 16)
     alpha = torch.tensor([1.0], device=device)
-    out = ops.cutlass_scaled_fp4_mm(a_e2m1, b_e2m1, a_scale_block, b_scale_block, alpha, torch.bfloat16)
+    out = ops.cutlass_scaled_fp4_mm(
+        a_e2m1, b_e2m1, a_scale_block, b_scale_block, alpha, torch.bfloat16
+    )
     assert out.equal(out_ref.to(dtype=out.dtype))

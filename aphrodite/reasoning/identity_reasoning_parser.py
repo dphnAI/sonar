@@ -7,16 +7,11 @@ from typing import TYPE_CHECKING
 from transformers import PreTrainedTokenizerBase
 
 from aphrodite.entrypoints.openai.engine.protocol import DeltaMessage
-from aphrodite.logger import init_logger
 from aphrodite.reasoning import ReasoningParser
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.openai.chat_completion.protocol import (
-        ChatCompletionRequest,
-    )
+    from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
     from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-
-logger = init_logger(__name__)
 
 
 class IdentityReasoningParser(ReasoningParser):
@@ -31,7 +26,8 @@ class IdentityReasoningParser(ReasoningParser):
         super().__init__(tokenizer, *args, **kwargs)
         if not self.model_tokenizer:
             raise ValueError(
-                "The model tokenizer must be passed to the ReasoningParser constructor during construction."
+                "The model tokenizer must be passed to the ReasoningParser "
+                "constructor during construction."
             )
 
     @property
@@ -46,7 +42,9 @@ class IdentityReasoningParser(ReasoningParser):
         # Always return True, since we never treat reasoning specially
         return True
 
-    def is_reasoning_end_streaming(self, input_ids: Sequence[int], delta_ids: Iterable[int]) -> bool:
+    def is_reasoning_end_streaming(
+        self, input_ids: Sequence[int], delta_ids: Iterable[int]
+    ) -> bool:
         return True
 
     def extract_content_ids(self, input_ids: list[int]) -> list[int]:

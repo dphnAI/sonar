@@ -50,8 +50,8 @@ class MPLinearKernel(ABC):
             assert w_zp_param_name is not None
         if c.has_g_idx:
             assert w_gidx_param_name is not None
-        self.w_zp_name = w_zp_param_name
-        self.w_gidx_name = w_gidx_param_name
+        self.w_zp_name: str | None = w_zp_param_name
+        self.w_gidx_name: str | None = w_gidx_param_name
 
     @abstractmethod
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
@@ -66,13 +66,17 @@ class MPLinearKernel(ABC):
     ) -> torch.Tensor:
         raise NotImplementedError
 
-    def _transform_param(self, layer: torch.nn.Module, name: str | None, fn: Callable) -> None:
+    def _transform_param(
+        self, layer: torch.nn.Module, name: str | None, fn: Callable
+    ) -> None:
         if name is not None and getattr(layer, name, None) is not None:
             old_param = getattr(layer, name)
             new_param = fn(old_param)
             # replace the parameter with torch.nn.Parameter for TorchDynamo
             # compatibility
-            replace_parameter(layer, name, torch.nn.Parameter(new_param.data, requires_grad=False))
+            replace_parameter(
+                layer, name, torch.nn.Parameter(new_param.data, requires_grad=False)
+            )
 
     def _get_weight_params(
         self, layer: torch.nn.Module

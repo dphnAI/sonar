@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-# Copyright 2024 The Aphrodite team.
+# Copyright 2024 The vLLM team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -54,7 +54,9 @@ class TransformersMultiModalForCausalLM(MultiModalMixin, CausalMixin, Base): ...
     info=MultiModalProcessingInfo,
     dummy_inputs=MultiModalDummyInputsBuilder,
 )
-class TransformersMultiModalMoEForCausalLM(MoEMixin, MultiModalMixin, CausalMixin, Base): ...
+class TransformersMultiModalMoEForCausalLM(
+    MoEMixin, MultiModalMixin, CausalMixin, Base
+): ...
 
 
 # Embedding models
@@ -73,10 +75,14 @@ class TransformersMultiModalEmbeddingModel(EmbeddingMixin, MultiModalMixin, Base
 
 
 # Sequence classification models
-class TransformersForSequenceClassification(SequenceClassificationMixin, LegacyMixin, Base): ...
+class TransformersForSequenceClassification(
+    SequenceClassificationMixin, LegacyMixin, Base
+): ...
 
 
-class TransformersMoEForSequenceClassification(SequenceClassificationMixin, MoEMixin, Base): ...
+class TransformersMoEForSequenceClassification(
+    SequenceClassificationMixin, MoEMixin, Base
+): ...
 
 
 @MULTIMODAL_REGISTRY.register_processor(
@@ -84,7 +90,9 @@ class TransformersMoEForSequenceClassification(SequenceClassificationMixin, MoEM
     info=MultiModalProcessingInfo,
     dummy_inputs=MultiModalDummyInputsBuilder,
 )
-class TransformersMultiModalForSequenceClassification(SequenceClassificationMixin, MultiModalMixin, Base): ...
+class TransformersMultiModalForSequenceClassification(
+    SequenceClassificationMixin, MultiModalMixin, Base
+): ...
 
 
 def __getattr__(name: str):
@@ -93,6 +101,6 @@ def __getattr__(name: str):
         raise AttributeError(
             "The Transformers modeling backend does not currently have a class to "
             f"handle the requested model type: {name}. Please open an issue at "
-            "https://github.com/vllm-project/vllm/issues/new"
+            "https://github.com/vllm-project/aphrodite/issues/new"
         )
     return globals()[name]

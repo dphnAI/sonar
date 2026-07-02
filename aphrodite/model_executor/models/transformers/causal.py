@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-# Copyright 2024 The Aphrodite team.
+# Copyright 2024 The vLLM team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 # limitations under the License.
 """Transformers modeling backend mixin for causal language models."""
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
@@ -32,7 +33,9 @@ if TYPE_CHECKING:
 class CausalMixin(AphroditeModelForTextGeneration):
     def __init__(self, *, aphrodite_config: "AphroditeConfig", prefix: str = ""):
         # Skip AphroditeModelForTextGeneration.__init__ and call the next class in MRO
-        super(AphroditeModelForTextGeneration, self).__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+        super(AphroditeModelForTextGeneration, self).__init__(
+            aphrodite_config=aphrodite_config, prefix=prefix
+        )
 
         # Tell `Base.load_weights` to skip
         # `lm_head` if the model has tied word embeddings
@@ -48,13 +51,33 @@ class CausalMixin(AphroditeModelForTextGeneration):
                 prefix=maybe_prefix(prefix, "lm_head"),
             )
             if tie_word_embeddings:
-                self.lm_head = self.lm_head.tie_weights(self.model.get_input_embeddings())
+                self.lm_head = self.lm_head.tie_weights(
+                    self.model.get_input_embeddings()
+                )
 
             logit_scale = getattr(self.text_config, "logit_scale", 1.0)
-            self.logits_processor = LogitsProcessor(self.text_config.vocab_size, scale=logit_scale)
+            self.logits_processor = LogitsProcessor(
+                self.text_config.vocab_size, scale=logit_scale
+            )
         else:
             self.lm_head = PPMissingLayer()
 
+    def load_weights(self, weights: Iterable[tuple[str, "torch.Tensor"]]) -> set[str]:
+        """A thin wrapper around `Base.load_weights` to handle the lm_head bias."""
+
+        lm_head_bias = set()
+
+        def auto_load_lm_head_bias(weights):
+            for name, weight in weights:
+                if name.endswith("lm_head.bias") and self.pp_group.is_last_rank:
+                    self.lm_head._register_bias()
+                    self.lm_head.bias.weight_loader(self.lm_head.bias, weight)
+                    lm_head_bias.add(name)
+                else:
+                    yield name, weight
+
+        return super().load_weights(auto_load_lm_head_bias(weights)) | lm_head_bias
+
     def compute_logits(self, hidden_states: "torch.Tensor") -> "torch.Tensor | None":
-        logits = self.logits_processor(self.lm_head, hidden_states)
+        logits = self.logits_processor(self.lm_head, hidden_states, self.lm_head.bias)
         return logits

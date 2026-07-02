@@ -10,7 +10,8 @@ from compressed_tensors.quantization import (
 import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.fused_moe import (
-    FusedMoE,
+    RoutedExperts,
+    SharedExperts,
 )
 from aphrodite.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
@@ -46,7 +47,9 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
         self.group_size = weight_quant.group_size
         # grouped actorder isn't supported by this kernel
         assert weight_quant.actorder != "group"
-        assert weight_quant.symmetric, "Only symmetric quantization is supported for MoE"
+        assert weight_quant.symmetric, (
+            "Only symmetric quantization is supported for MoE"
+        )
 
     def create_weights(
         self,
@@ -60,7 +63,9 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
         # Will transpose the loaded weight along the
         # intermediate and hidden dim sizes. Will
         # shard for TP along the transposed dims
-        extra_weight_attrs.update({"is_transposed": True, "quant_method": self.strategy})
+        extra_weight_attrs.update(
+            {"is_transposed": True, "quant_method": self.strategy}
+        )
         w13_num_shards = 2 if self.moe.is_act_and_mul else 1
         w13_weight = torch.nn.Parameter(
             torch.empty(
@@ -92,6 +97,21 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
             num_groups_w2 = num_groups_w13 = 1
             self.group_size = -1
         else:
+            if hidden_size % self.group_size != 0:
+                raise ValueError(
+                    "CompressedTensors WNA16 MoE requires hidden_size "
+                    f"({hidden_size}) to be divisible by group_size "
+                    f"({self.group_size})."
+                )
+            if intermediate_size_per_partition % self.group_size != 0:
+                raise ValueError(
+                    "CompressedTensors WNA16 MoE with static group scales "
+                    "requires the MoE intermediate size per tensor-parallel "
+                    f"partition ({intermediate_size_per_partition}) to be "
+                    f"divisible by group_size ({self.group_size}). Scale "
+                    "groups would otherwise cross TP shard boundaries; use a "
+                    "compatible TP size or enable expert parallelism."
+                )
             num_groups_w2 = w2_scales_size // self.group_size
             num_groups_w13 = hidden_size // self.group_size
 
@@ -115,10 +135,14 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
         set_weight_attrs(w2_scale, extra_weight_attrs)
         set_weight_attrs(w2_scale, {"load_full_w2": False})
 
-        w2_weight_shape = torch.nn.Parameter(torch.empty(num_experts, 2), requires_grad=False)
+        w2_weight_shape = torch.nn.Parameter(
+            torch.empty(num_experts, 2), requires_grad=False
+        )
         layer.register_parameter("w2_weight_shape", w2_weight_shape)
         set_weight_attrs(w2_weight_shape, extra_weight_attrs)
-        w13_weight_shape = torch.nn.Parameter(torch.empty(num_experts, 2), requires_grad=False)
+        w13_weight_shape = torch.nn.Parameter(
+            torch.empty(num_experts, 2), requires_grad=False
+        )
 
         layer.register_parameter("w13_weight_shape", w13_weight_shape)
         set_weight_attrs(w13_weight_shape, extra_weight_attrs)
@@ -187,9 +211,15 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
             layer.w2_weight_scale.transpose(1, 2).contiguous(), requires_grad=False
         )
 
-    def get_fused_moe_quant_config(self, layer: torch.nn.Module) -> FusedMoEQuantConfig | None:
+    def get_fused_moe_quant_config(
+        self, layer: torch.nn.Module
+    ) -> FusedMoEQuantConfig | None:
         assert self.num_bits == 4 or self.num_bits == 8
-        config_builder = int4_w4a16_moe_quant_config if self.num_bits == 4 else int8_w8a16_moe_quant_config
+        config_builder = (
+            int4_w4a16_moe_quant_config
+            if self.num_bits == 4
+            else int8_w8a16_moe_quant_config
+        )
 
         return config_builder(
             w1_scale=layer.w13_weight_scale,
@@ -213,18 +243,24 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
 
                 layer.w13_weight = layer.w13_weight_packed
                 layer.w2_weight = layer.w2_weight_packed
-                return TritonWNA16Experts(moe_config=self.moe, quant_config=self.moe_quant_config)
+                return TritonWNA16Experts(
+                    moe_config=self.moe, quant_config=self.moe_quant_config
+                )
             else:
-                raise NotImplementedError("TritonExperts requires Triton. Install triton or disable LoRA for MoE.")
+                raise NotImplementedError(
+                    "TritonExperts requires Triton. "
+                    "Install triton or disable LoRA for MoE."
+                )
 
         raise NotImplementedError
 
     def apply(
         self,
-        layer: FusedMoE,
+        layer: RoutedExperts,
         x: torch.Tensor,
         topk_weights: torch.Tensor,
         topk_ids: torch.Tensor,
+        shared_experts: SharedExperts | None,
         shared_experts_input: torch.Tensor | None,
     ) -> torch.Tensor:
         from aphrodite.model_executor.layers.fused_moe import fused_experts
@@ -235,7 +271,6 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
             layer.w2_weight_packed,
             topk_weights=topk_weights,
             topk_ids=topk_ids,
-            inplace=not self.moe.disable_inplace,
             activation=layer.activation,
             apply_router_weight_on_input=layer.apply_router_weight_on_input,
             global_num_experts=layer.global_num_experts,

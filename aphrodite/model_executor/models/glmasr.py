@@ -10,7 +10,7 @@ from transformers import BatchFeature
 from transformers.models.glmasr import GlmAsrConfig, GlmAsrProcessor
 from transformers.models.whisper import WhisperFeatureExtractor
 
-from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
+from aphrodite.config import ModelConfig, SpeechToTextConfig, AphroditeConfig
 from aphrodite.config.multimodal import BaseDummyOptions
 from aphrodite.config.speech_to_text import SpeechToTextParams
 from aphrodite.distributed.parallel_state import get_tensor_model_parallel_world_size
@@ -83,14 +83,20 @@ class GlmAsrEncoderRotaryEmbedding(nn.Module):
         super().__init__()
 
         # Compute inverse frequencies following transformers implementation
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        head_dim = getattr(
+            config, "head_dim", config.hidden_size // config.num_attention_heads
+        )
 
         # Handle rope_parameters if present (for compatibility with transformers config)
         if hasattr(config, "rope_parameters") and config.rope_parameters:
             base = config.rope_parameters.get("rope_theta", 10000.0)
-            partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+            partial_rotary_factor = config.rope_parameters.get(
+                "partial_rotary_factor", 1.0
+            )
             dim = int(head_dim * partial_rotary_factor)
-            self.attention_scaling = config.rope_parameters.get("attention_scaling", 1.0)
+            self.attention_scaling = config.rope_parameters.get(
+                "attention_scaling", 1.0
+            )
         else:
             base = getattr(config, "rope_theta", 10000.0)
             dim = head_dim
@@ -115,7 +121,9 @@ class GlmAsrEncoderRotaryEmbedding(nn.Module):
             .sin() to get the rotary embedding components.
         """
         # Compute on the same device as inv_freq (automatically correct after .to())
-        seq = torch.arange(seq_len, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        seq = torch.arange(
+            seq_len, device=self.inv_freq.device, dtype=self.inv_freq.dtype
+        )
         freqs = torch.outer(seq, self.inv_freq)
         return freqs * self.attention_scaling
 
@@ -139,7 +147,9 @@ class GlmAsrEncoderAttention(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.num_kv_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        self.num_kv_heads = getattr(
+            config, "num_key_value_heads", config.num_attention_heads
+        )
         self.head_dim = self.hidden_size // self.num_heads
 
         self.tp_size = get_tensor_model_parallel_world_size()
@@ -310,7 +320,9 @@ class GlmAsrEncoderLayer(nn.Module):
 
         layer_norm_eps = getattr(config, "layer_norm_eps", 1e-5)
         self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=layer_norm_eps)
-        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(
+            self.hidden_size, eps=layer_norm_eps
+        )
 
     def forward(
         self,
@@ -426,7 +438,9 @@ class GlmAsrEncoder(nn.Module):
         # Rotary position embeddings
         self.rotary_emb = GlmAsrEncoderRotaryEmbedding(config)
 
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def _get_feat_extract_output_lengths(
+        self, input_lengths: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Compute the output length after convolutions.
 
@@ -471,7 +485,9 @@ class GlmAsrEncoder(nn.Module):
 
         # Apply transformer layers
         for encoder_layer in self.layers:
-            hidden_states = encoder_layer(hidden_states, rotary_pos_emb_cos, rotary_pos_emb_sin)
+            hidden_states = encoder_layer(
+                hidden_states, rotary_pos_emb_cos, rotary_pos_emb_sin
+            )
 
         # Final layer norm
         hidden_states = self.norm(hidden_states)
@@ -481,9 +497,7 @@ class GlmAsrEncoder(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         """Custom weight loading to handle q_proj/k_proj/v_proj -> qkv_proj mapping."""
-        from aphrodite.model_executor.model_loader.weight_utils import (
-            default_weight_loader,
-        )
+        from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 
         weights = _create_fake_bias_for_k_proj(weights, ".k_proj.weight")
 
@@ -627,8 +641,12 @@ def _glmasr_field_config(
     if chunk_counts is not None:
         return dict(
             audio_embeds=MultiModalFieldConfig.batched("audio"),
-            input_features=MultiModalFieldConfig.flat_from_sizes("audio", chunk_counts, dim=0),
-            feature_attention_mask=MultiModalFieldConfig.flat_from_sizes("audio", chunk_counts, dim=0),
+            input_features=MultiModalFieldConfig.flat_from_sizes(
+                "audio", chunk_counts, dim=0
+            ),
+            feature_attention_mask=MultiModalFieldConfig.flat_from_sizes(
+                "audio", chunk_counts, dim=0
+            ),
             chunk_counts=MultiModalFieldConfig.batched("audio"),
         )
     return dict(
@@ -715,7 +733,9 @@ class GlmAsrDummyInputsBuilder(BaseDummyInputsBuilder[GlmAsrProcessingInfo]):
         num_audios = mm_counts.get("audio", 0)
         audio_overrides = mm_options.get("audio")
 
-        max_audio_len = getattr(self.info.get_hf_processor(), "max_audio_len", DEFAULT_MAX_AUDIO_LEN_S)
+        max_audio_len = getattr(
+            self.info.get_hf_processor(), "max_audio_len", DEFAULT_MAX_AUDIO_LEN_S
+        )
         audio_len = int(max_audio_len * sampling_rate)
 
         return {
@@ -807,7 +827,9 @@ class GlmAsrMultiModalProcessor(BaseMultiModalProcessor["GlmAsrProcessingInfo"])
         processor = self.info.get_hf_processor(**mm_kwargs)
 
         # Override chunk counts calculation with GLM-ASR specific logic
-        chunk_counts = self._calculate_chunk_counts(audio_list, processor.feature_extractor, processor)
+        chunk_counts = self._calculate_chunk_counts(
+            audio_list, processor.feature_extractor, processor
+        )
         outputs["chunk_counts"] = torch.tensor(chunk_counts, dtype=torch.long)
 
         return outputs
@@ -858,7 +880,9 @@ class GlmAsrMultiModalProcessor(BaseMultiModalProcessor["GlmAsrProcessingInfo"])
                     if isinstance(mask, list):
                         mask = torch.stack(mask)
 
-                    lengths = _get_audio_output_lengths_from_mask(mask, merge_factor, conv_params)
+                    lengths = _get_audio_output_lengths_from_mask(
+                        mask, merge_factor, conv_params
+                    )
                     audio_output_lengths.append(int(lengths.sum().item()))
                     start_idx = end_idx
             else:
@@ -867,7 +891,9 @@ class GlmAsrMultiModalProcessor(BaseMultiModalProcessor["GlmAsrProcessingInfo"])
                     mask = feature_attention_mask[idx : idx + 1]
                     if isinstance(mask, list):
                         mask = torch.tensor(mask).unsqueeze(0)
-                    lengths = _get_audio_output_lengths_from_mask(mask, merge_factor, conv_params)
+                    lengths = _get_audio_output_lengths_from_mask(
+                        mask, merge_factor, conv_params
+                    )
                     audio_output_lengths.append(int(lengths.sum().item()))
 
         def get_replacement_glmasr(item_idx: int):
@@ -880,7 +906,9 @@ class GlmAsrMultiModalProcessor(BaseMultiModalProcessor["GlmAsrProcessingInfo"])
                     embed = audio_embeds[item_idx]
                     num_features = embed.shape[0]
                 else:
-                    raise ValueError("Either feature_attention_mask or audio_embeds must be provided")
+                    raise ValueError(
+                        "Either feature_attention_mask or audio_embeds must be provided"
+                    )
 
             if num_features == 0:
                 raise ValueError("Audio is too short")
@@ -905,7 +933,9 @@ class GlmAsrMultiModalProcessor(BaseMultiModalProcessor["GlmAsrProcessingInfo"])
     info=GlmAsrProcessingInfo,
     dummy_inputs=GlmAsrDummyInputsBuilder,
 )
-class GlmAsrForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA, SupportsTranscription):
+class GlmAsrForConditionalGeneration(
+    nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA, SupportsTranscription
+):
     supported_languages = ISO639_1_SUPPORTED_LANGS
 
     packed_modules_mapping = {
@@ -942,7 +972,9 @@ class GlmAsrForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, 
                 architectures=["LlamaForCausalLM"],
             )
 
-        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.language_model.make_empty_intermediate_tensors
+        )
 
     @classmethod
     def get_placeholder_str(cls, modality: str, i: int) -> str | None:
@@ -974,7 +1006,9 @@ class GlmAsrForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, 
             chunk_counts=kwargs.pop("chunk_counts", None),
         )
 
-    def _process_audio_input(self, audio_input: GlmAsrInputs) -> torch.Tensor | tuple[torch.Tensor, ...]:
+    def _process_audio_input(
+        self, audio_input: GlmAsrInputs
+    ) -> torch.Tensor | tuple[torch.Tensor, ...]:
         if audio_input["type"] == "audio_embeds":
             return tuple(audio_input["audio_embeds"])
 
@@ -986,7 +1020,9 @@ class GlmAsrForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, 
             feature_attention_mask = torch.cat(feature_attention_mask, dim=0)
 
         num_chunks = input_features.shape[0]
-        chunk_counts = _normalize_chunk_counts(audio_input.get("chunk_counts"), num_chunks=num_chunks)
+        chunk_counts = _normalize_chunk_counts(
+            audio_input.get("chunk_counts"), num_chunks=num_chunks
+        )
 
         # Convert input_features to model dtype (e.g., bfloat16) to match model weights
         input_features = input_features.to(dtype=self.audio_tower.conv1.weight.dtype)
@@ -1025,9 +1061,13 @@ class GlmAsrForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, 
             conv_params,
         )
 
-        masked_audio_features = _flatten_audio_features_by_length(audio_features, audio_output_lengths)
+        masked_audio_features = _flatten_audio_features_by_length(
+            audio_features, audio_output_lengths
+        )
 
-        chunk_embeddings = torch.split(masked_audio_features, audio_output_lengths.flatten().tolist())
+        chunk_embeddings = torch.split(
+            masked_audio_features, audio_output_lengths.flatten().tolist()
+        )
         return _group_audio_embeddings(chunk_embeddings, chunk_counts)
 
     def embed_multimodal(self, **kwargs: object) -> MultiModalEmbeddings:
@@ -1079,7 +1119,9 @@ class GlmAsrForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, 
         return getattr(processor, "audio_token", "<|pad|>")
 
     @classmethod
-    def get_speech_to_text_config(cls, model_config: ModelConfig, task_type: str) -> SpeechToTextConfig:
+    def get_speech_to_text_config(
+        cls, model_config: ModelConfig, task_type: str
+    ) -> SpeechToTextConfig:
         processor = cached_processor_from_config(model_config)
         feature_extractor = processor.feature_extractor
         max_audio_clip_s = getattr(processor, "max_audio_len", DEFAULT_MAX_AUDIO_LEN_S)
@@ -1102,12 +1144,16 @@ class GlmAsrForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, 
             full_lang_name_to = cls.supported_languages.get(to_language, to_language)
             user_content = f"{audio_token}translate the speech to {full_lang_name_to}"
         elif task_type == "transcribe":
-            user_content = f"{audio_token}can you transcribe the speech into a written format?"
+            user_content = (
+                f"{audio_token}can you transcribe the speech into a written format?"
+            )
         else:
             raise ValueError(f"Unsupported task type {task_type}")
 
         messages = [{"role": "user", "content": user_content}]
-        prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        prompt = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
 
         prompt_token_ids = tokenizer.encode(prompt)
 

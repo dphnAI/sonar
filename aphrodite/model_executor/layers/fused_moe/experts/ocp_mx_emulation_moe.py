@@ -20,13 +20,13 @@ from aphrodite.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
     FusedMoEQuantConfig,
 )
-from aphrodite.model_executor.layers.fused_moe.fused_moe import TritonExperts
-from aphrodite.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
+from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
 from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import dequant_mxfp4
 from aphrodite.model_executor.layers.quantization.utils.mxfp6_utils import dequant_mxfp6
 from aphrodite.model_executor.layers.quantization.utils.ocp_mx_utils import (
     OCP_MX_Scheme,
 )
+from aphrodite.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -54,7 +54,8 @@ class OCP_MXQuantizationEmulationTritonExperts(TritonExperts):
 
         self.ocp_mx_scheme = quant_config.ocp_mx_scheme
         assert self.ocp_mx_scheme is not None, (
-            "ocp_mx_scheme must be set in quant_config for OCP_MXQuantizationEmulationTritonExperts"
+            "ocp_mx_scheme must be set in quant_config for"
+            " OCP_MXQuantizationEmulationTritonExperts"
         )
 
         # `TritonExperts.apply` expects pre-dequantized weights,
@@ -83,8 +84,7 @@ class OCP_MXQuantizationEmulationTritonExperts(TritonExperts):
             OCP_MX_Scheme.w_mxfp4_a_fp8,
             OCP_MX_Scheme.w_mxfp6_e3m2_a_fp8,
         ]:
-            # TODO: double check this one
-            self._quant_dtype = "mxfp8"
+            self._quant_dtype = current_platform.fp8_dtype()
 
     @property
     def quant_dtype(self) -> torch.dtype | str | None:
@@ -147,17 +147,11 @@ class OCP_MXQuantizationEmulationTritonExperts(TritonExperts):
         assert w2.dtype == torch.uint8
 
         # Dequantize w1 and w2 from packed OCP MX format to bf16/fp16
-        w1_dequant = self._dequantize_weights(w1, self.w1_scale_val, hidden_states.dtype)
-        w2_dequant = self._dequantize_weights(w2, self.w2_scale_val, hidden_states.dtype)
-
-        # Apply activation QDQ if needed by the OCP MX scheme
-        hidden_states, _ = moe_kernel_quantize_input(
-            A=hidden_states,
-            A_scale=None,
-            quant_dtype=self.quant_config.quant_dtype,
-            per_act_token_quant=False,
-            ocp_mx_scheme=self.ocp_mx_scheme,
-            quantization_emulation=True,
+        w1_dequant = self._dequantize_weights(
+            w1, self.w1_scale_val, hidden_states.dtype
+        )
+        w2_dequant = self._dequantize_weights(
+            w2, self.w2_scale_val, hidden_states.dtype
         )
 
         # Activation quantization/dequantization is deferred to

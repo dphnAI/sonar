@@ -18,6 +18,7 @@ from transformers.audio_utils import AudioInput
 from transformers.feature_extraction_utils import FeatureExtractionMixin
 from transformers.image_processing_utils import BaseImageProcessor
 from transformers.image_utils import ImageInput
+from transformers.models.auto.video_processing_auto import VIDEO_PROCESSOR_MAPPING_NAMES
 from transformers.processing_utils import ProcessorMixin
 from transformers.video_processing_utils import BaseVideoProcessor
 from transformers.video_utils import VideoInput
@@ -25,7 +26,6 @@ from typing_extensions import TypeVar
 
 from aphrodite.logger import init_logger
 from aphrodite.transformers_utils import processors
-from aphrodite.transformers_utils.gguf_utils import is_gguf
 from aphrodite.transformers_utils.repo_utils import get_hf_file_to_dict
 from aphrodite.transformers_utils.utils import convert_model_repo_to_path
 from aphrodite.utils.func_utils import get_allowed_kwarg_only_overrides
@@ -59,10 +59,6 @@ def _transformers_v4_compatibility_init() -> Any:
 
     This can be removed if `Molmo2ForConditionalGeneration` is upstreamed to
     Transformers."""
-    # Transformers v4
-    if hasattr(ProcessorMixin, "optional_attributes"):
-        return
-    # Transformers v5
     if hasattr(ProcessorMixin.__init__, "_aphrodite_patched"):
         return
 
@@ -161,6 +157,44 @@ def get_processor_cls_name_from_config(
     return None
 
 
+def get_video_processor_cls_name_from_config(
+    processor_name: str,
+    revision: str | None = "main",
+) -> str | None:
+    processor_name = convert_model_repo_to_path(processor_name)
+    config_file = [
+        "video_preprocessor_config.json",
+        "preprocessor_config.json",
+    ]
+    for file in config_file:
+        config = get_hf_file_to_dict(file, processor_name, revision=revision)
+        if config and "video_processor_type" in config:
+            return config["video_processor_type"]
+
+    # Some models ship no explicit ``video_processor_type`` in their
+    # preprocessor config. Fall back to transformers' ``model_type`` -> video
+    # processor mapping so these still resolve to their registered loader
+    # instead of the generic opencv fallback. The mapping is ``None`` for a
+    # given type when torchvision is unavailable; callers then use opencv.
+    model_config = get_hf_file_to_dict("config.json", processor_name, revision=revision)
+    if model_config and "model_type" in model_config:
+        return VIDEO_PROCESSOR_MAPPING_NAMES.get(model_config["model_type"])
+    return None
+
+
+_cached_get_video_processor_cls_name = lru_cache(
+    get_video_processor_cls_name_from_config
+)
+
+
+def get_video_processor_cls_name(
+    model_config: "ModelConfig",
+) -> str | None:
+    model = model_config.model
+    revision = model_config.revision
+    return _cached_get_video_processor_cls_name(model, revision=revision)
+
+
 def get_processor(
     processor_name: str,
     *args: Any,
@@ -174,8 +208,14 @@ def get_processor(
         revision = "main"
     try:
         processor_name = convert_model_repo_to_path(processor_name)
-        registered_cls_name = get_processor_cls_name_from_config(processor_name, revision=revision)
-        registered_processor_cls = getattr(processors, registered_cls_name, None) if registered_cls_name else None
+        registered_cls_name = get_processor_cls_name_from_config(
+            processor_name, revision=revision
+        )
+        registered_processor_cls = (
+            getattr(processors, registered_cls_name, None)
+            if registered_cls_name
+            else None
+        )
         registered_processor_cls = cast(type[_P] | None, registered_processor_cls)
         # Use registered processor class when it's available
         # and explicit processor_cls is not set.
@@ -217,7 +257,9 @@ def get_processor(
 
     if not isinstance(processor, processor_cls):
         raise TypeError(
-            f"Invalid type of HuggingFace processor. Expected type: {processor_cls}, but found type: {type(processor)}"
+            "Invalid type of HuggingFace processor. "
+            f"Expected type: {processor_cls}, but "
+            f"found type: {type(processor)}"
         )
 
     return processor
@@ -333,19 +375,9 @@ def cached_processor_from_config(
     processor_cls: type[_P] | tuple[type[_P], ...] = ProcessorMixin,
     **kwargs: Any,
 ) -> _P:
-    if is_gguf(model_config.model):
-        assert not is_gguf(model_config.tokenizer), (
-            "For multimodal GGUF models, the original tokenizer should be used to correctly load processor."
-        )
-        model = model_config.tokenizer
-        revision = model_config.tokenizer_revision
-    else:
-        model = model_config.model
-        revision = model_config.revision
-
     return cached_get_processor_without_dynamic_kwargs(
-        model,
-        revision=revision,
+        model_config.model,
+        revision=model_config.revision,
         trust_remote_code=model_config.trust_remote_code,
         processor_cls=processor_cls,  # type: ignore[arg-type]
         **_merge_mm_kwargs(model_config, processor_cls, **kwargs),
@@ -446,18 +478,9 @@ def cached_image_processor_from_config(
     model_config: "ModelConfig",
     **kwargs: Any,
 ):
-    if is_gguf(model_config.model):
-        assert not is_gguf(model_config.tokenizer), (
-            "For multimodal GGUF models, the original tokenizer should be used to correctly load image processor."
-        )
-        model = model_config.tokenizer
-        revision = model_config.tokenizer_revision
-    else:
-        model = model_config.model
-        revision = model_config.revision
     return cached_get_image_processor(
-        model,
-        revision=revision,
+        model_config.model,
+        revision=model_config.revision,
         trust_remote_code=model_config.trust_remote_code,
         **_merge_mm_kwargs(model_config, AutoImageProcessor, **kwargs),
     )
@@ -530,18 +553,24 @@ def call_hf_processor_mm_only(
         **kwargs,
     )
 
-    if audio is not None and (feature_extractor := getattr(processor, "feature_extractor", None)):
+    if audio is not None and (
+        feature_extractor := getattr(processor, "feature_extractor", None)
+    ):
         audio_inputs = feature_extractor(audio, **output_kwargs["audio_kwargs"])
         audio_inputs["feature_attention_mask"] = audio_inputs.pop("attention_mask")
     else:
         audio_inputs = {}
 
-    if images is not None and (image_processor := getattr(processor, "image_processor", None)):
+    if images is not None and (
+        image_processor := getattr(processor, "image_processor", None)
+    ):
         images_inputs = image_processor(images=images, **output_kwargs["images_kwargs"])
     else:
         images_inputs = {}
 
-    if videos is not None and (video_processor := getattr(processor, "video_processor", None)):
+    if videos is not None and (
+        video_processor := getattr(processor, "video_processor", None)
+    ):
         videos_inputs = video_processor(videos=videos, **output_kwargs["videos_kwargs"])
     else:
         videos_inputs = {}

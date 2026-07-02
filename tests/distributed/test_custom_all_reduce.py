@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import random
 
 import pytest
@@ -10,7 +11,11 @@ import torch.distributed as dist
 from aphrodite.distributed.communication_op import tensor_model_parallel_all_reduce  # noqa
 from aphrodite.distributed.parallel_state import get_tp_group, graph_capture
 
-from ..utils import ensure_model_parallel_initialized, init_test_distributed_environment, multi_process_parallel
+from ..utils import (
+    ensure_model_parallel_initialized,
+    init_test_distributed_environment,
+    multi_process_parallel,
+)
 
 random.seed(42)
 test_sizes = [random.randint(1024, 2048 * 1024) for _ in range(8)]
@@ -28,8 +33,9 @@ def graph_allreduce(
 ):
     with monkeypatch.context() as m:
         m.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+        m.delenv("HIP_VISIBLE_DEVICES", raising=False)
         device = torch.device(f"cuda:{rank}")
-        torch.cuda.set_device(device)
+        torch.accelerator.set_device_index(device)
         init_test_distributed_environment(tp_size, pp_size, rank, distributed_init_port)
         ensure_model_parallel_initialized(tp_size, pp_size)
         group = get_tp_group().device_group
@@ -42,7 +48,7 @@ def graph_allreduce(
         data = torch.zeros(1)
         data = data.to(device=device)
         torch.distributed.all_reduce(data, group=group)
-        torch.cuda.synchronize()
+        torch.accelerator.synchronize()
         del data
 
         # we use the first group to communicate once
@@ -56,9 +62,11 @@ def graph_allreduce(
             for dtype in [torch.float32, torch.float16, torch.bfloat16]:
                 with graph_capture(device=device) as graph_capture_context:
                     # use integers so result matches NCCL exactly
-                    inp1 = torch.randint(1, 16, (sz,), dtype=dtype, device=torch.cuda.current_device())
-                    inp2 = torch.randint(1, 16, (sz,), dtype=dtype, device=torch.cuda.current_device())
-                    torch.cuda.synchronize()
+                    device_idx = torch.accelerator.current_device_index()
+                    inp1 = torch.randint(1, 16, (sz,), dtype=dtype, device=device_idx)
+                    inp2 = torch.randint(1, 16, (sz,), dtype=dtype, device=device_idx)
+
+                    torch.accelerator.synchronize()
                     graph = torch.cuda.CUDAGraph()
                     with torch.cuda.graph(graph, stream=graph_capture_context.stream):
                         for i in range(num_communication):
@@ -83,8 +91,9 @@ def eager_allreduce(
 ):
     with monkeypatch.context() as m:
         m.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+        m.delenv("HIP_VISIBLE_DEVICES", raising=False)
         device = torch.device(f"cuda:{rank}")
-        torch.cuda.set_device(device)
+        torch.accelerator.set_device_index(device)
         init_test_distributed_environment(tp_size, pp_size, rank, distributed_init_port)
 
         # we use the first group to communicate once
@@ -118,6 +127,6 @@ def test_custom_allreduce(
     test_target,
 ):
     world_size = tp_size * pipeline_parallel_size
-    if world_size > torch.cuda.device_count():
+    if world_size > torch.accelerator.device_count():
         pytest.skip("Not enough GPUs to run the test.")
     multi_process_parallel(monkeypatch, tp_size, pipeline_parallel_size, test_target)

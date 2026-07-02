@@ -18,11 +18,14 @@ from torch._inductor.pattern_matcher import PatternMatcherPass, PatternPrettyPri
 
 from aphrodite.config import AphroditeConfig
 from aphrodite.logger import init_logger
+from aphrodite.platforms import current_platform
 
 from .fx_utils import is_func
 from .inductor_pass import InductorPass, enable_fake_mode
 
 logger = init_logger(__name__)
+
+DEVICE_TYPE = current_platform.device_type
 
 
 @dataclass
@@ -49,7 +52,9 @@ class AphroditeInductorPass(InductorPass):
         )
         self.pass_config = config.compilation_config.pass_config
         self.model_dtype = config.model_config.dtype if config.model_config else None
-        self.device: str | None = config.device_config.device if config.device_config else None
+        self.device: str | None = (
+            config.device_config.device if config.device_config else None
+        )
         self.pass_name = self.__class__.__name__
 
     @staticmethod
@@ -69,7 +74,9 @@ class AphroditeInductorPass(InductorPass):
     def dump_graph(self, graph: torch.fx.Graph, stage: str) -> None:
         i = AphroditeInductorPass.dump_prefix
         i_str = "" if i is None else f".{i}"
-        lazy_format_graph_code(f"post_grad{i_str}.{self.pass_name}.{stage}", graph.owning_module)
+        lazy_format_graph_code(
+            f"post_grad{i_str}.{self.pass_name}.{stage}", graph.owning_module
+        )
 
     def begin(self) -> None:
         self._start_time = time.perf_counter_ns()
@@ -97,7 +104,9 @@ class AphroditePatternMatcherPass(AphroditeInductorPass):
     match_table: ClassVar[defaultdict[str, int]] = defaultdict(int)
     """Global table mapping pass name to its total match count."""
 
-    _OP_OVERLOAD_PATTERN: ClassVar[re.Pattern] = re.compile(r"<OpOverload\(op='([^']*)', overload='([^']*)'\)>")
+    _OP_OVERLOAD_PATTERN: ClassVar[re.Pattern] = re.compile(
+        r"<OpOverload\(op='([^']*)', overload='([^']*)'\)>"
+    )
 
     def _replace_op_overloads(self, string: str) -> str:
         """Replace <OpOverload(..., ...)> with nicer formulations"""
@@ -132,7 +141,9 @@ class AphroditePatternMatcherPass(AphroditeInductorPass):
 
         from aphrodite.utils.system_utils import unique_filepath
 
-        file_path = unique_filepath(lambda i: debug_dump_path / f"patterns.{self.pass_name}.{i}.py")
+        file_path = unique_filepath(
+            lambda i: debug_dump_path / f"patterns.{self.pass_name}.{i}.py"
+        )
 
         with file_path.open("w") as f:
             print(
@@ -168,7 +179,8 @@ class AphroditePatternMatcherPass(AphroditeInductorPass):
                     pattern_repr = "\n".join(
                         [f"def pattern_{i}():"]
                         + [
-                            f"{pp.memoized_objs_names[key]} = {pp.memoized_objs_pp[key]}"
+                            f"{pp.memoized_objs_names[key]} = "
+                            f"{pp.memoized_objs_pp[key]}"
                             for key in pp.memoized_objs_names
                         ]
                         + [f"return {out_node}"]
@@ -218,29 +230,56 @@ class AphroditePatternReplacement(ABC, Generic[P, R]):
     # Helpers for get_inputs: uninitialized tensors of common dtypes.
     @staticmethod
     def empty(*args, **kwargs) -> torch.Tensor:
-        return torch.empty(*args, device="cuda", **kwargs)
+        return torch.empty(*args, device=DEVICE_TYPE, **kwargs)
 
     @staticmethod
     def empty_bf16(*args, **kwargs) -> torch.Tensor:
-        return torch.empty(*args, dtype=torch.bfloat16, device="cuda", **kwargs)
+        return torch.empty(*args, dtype=torch.bfloat16, device=DEVICE_TYPE, **kwargs)
 
     @staticmethod
     def empty_fp16(*args, **kwargs) -> torch.Tensor:
-        return torch.empty(*args, dtype=torch.float16, device="cuda", **kwargs)
+        return torch.empty(*args, dtype=torch.float16, device=DEVICE_TYPE, **kwargs)
 
     @staticmethod
     def empty_fp32(*args, **kwargs) -> torch.Tensor:
-        return torch.empty(*args, dtype=torch.float32, device="cuda", **kwargs)
+        return torch.empty(*args, dtype=torch.float32, device=DEVICE_TYPE, **kwargs)
 
     @staticmethod
     def empty_i32(*args, **kwargs) -> torch.Tensor:
-        return torch.empty(*args, dtype=torch.int32, device="cuda", **kwargs)
+        return torch.empty(*args, dtype=torch.int32, device=DEVICE_TYPE, **kwargs)
 
 
 def _fx_view_to_reshape(gm: fx.GraphModule) -> None:
     from torch._inductor.fx_passes.post_grad import view_to_reshape
 
     view_to_reshape(gm)
+
+
+def fold_consecutive_reshapes(gm: fx.GraphModule) -> None:
+    """Fold consecutive reshape ops into a single reshape.
+
+    ``make_fx`` faithfully records every view/reshape the Python code performs,
+    so patterns like ``x.reshape(a, b).reshape(c, d)`` produce two reshape
+    nodes.  Inductor's own optimisation would fold these, but
+    ``pm.register_replacement``'s ``trace_fn`` runs before Inductor, so we
+    must fold them ourselves for the pattern to match the compiled graph.
+
+    When reshape(A, shape1) feeds only into reshape(result, shape2),
+    the first reshape is redundant -- replace with reshape(A, shape2).
+    """
+    aten_reshape = torch.ops.aten.reshape.default
+    for node in list(gm.graph.nodes):
+        if not is_func(node, aten_reshape):
+            continue
+        inp = node.args[0]
+        if not isinstance(inp, fx.Node) or not is_func(inp, aten_reshape):
+            continue
+        if len(inp.users) != 1:
+            continue
+        original_input = inp.args[0]
+        node.args = (original_input, node.args[1])
+        inp.replace_all_uses_with(original_input)
+        gm.graph.erase_node(inp)
 
 
 def _remove_noop_permutes(gm: fx.GraphModule) -> None:

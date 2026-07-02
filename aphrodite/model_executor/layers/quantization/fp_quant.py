@@ -35,25 +35,19 @@ class FPQuantConfig(QuantizationConfig):
         hadamard_group_size: int = 32,
         forward_dtype: str = "mxfp4",
         forward_method: str = "abs_max",
-        pseudoquantization: bool = False,
         modules_to_not_convert: list[str] | None = None,
     ) -> None:
         super().__init__()
         self.hadamard_group_size = hadamard_group_size
         self.forward_dtype = forward_dtype
         self.forward_method = forward_method
-        self.pseudoquantization = pseudoquantization
         self.modules_to_not_convert = modules_to_not_convert
-
-        if pseudoquantization:
-            raise ValueError("Pseudoquantization is not supported for Aphrodite")
 
     def __repr__(self) -> str:
         return (
             f"FPQuantConfig(hadamard_group_size={self.hadamard_group_size}, "
             f"forward_dtype={self.forward_dtype}, "
             f"forward_method={self.forward_method}, "
-            f"pseudoquantization={self.pseudoquantization}, "
             f"modules_to_not_convert={self.modules_to_not_convert})"
         )
 
@@ -78,17 +72,17 @@ class FPQuantConfig(QuantizationConfig):
         hadamard_group_size = cls.get_from_keys(config, ["hadamard_group_size"])
         forward_dtype = cls.get_from_keys(config, ["forward_dtype"])
         forward_method = cls.get_from_keys(config, ["forward_method"])
-        pseudoquantization = cls.get_from_keys(config, ["pseudoquantization"])
         modules_to_not_convert = cls.get_from_keys(config, ["modules_to_not_convert"])
         return cls(
             hadamard_group_size,
             forward_dtype,
             forward_method,
-            pseudoquantization,
             modules_to_not_convert,
         )
 
-    def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> LinearMethodBase | None:
+    def get_quant_method(
+        self, layer: torch.nn.Module, prefix: str
+    ) -> LinearMethodBase | None:
         if self.modules_to_not_convert is not None and any(
             prefix.endswith(module) for module in self.modules_to_not_convert
         ):
@@ -131,13 +125,17 @@ class FPQuantLinearMethod(LinearMethodBase):
                 "tensor parallel size. Or other skill issues."
             )
 
-        assert self.quant_config.forward_dtype in ["mxfp4", "nvfp4"], "Only mxfp4 and nvfp4 are supported for now"
+        assert self.quant_config.forward_dtype in ["mxfp4", "nvfp4"], (
+            "Only mxfp4 and nvfp4 are supported for now"
+        )
         if self.quant_config.forward_dtype == "mxfp4":
             group_size = 32
         elif self.quant_config.forward_dtype == "nvfp4":
             group_size = 16
         else:
-            raise ValueError(f"Unsupported forward_dtype: {self.quant_config.forward_dtype}")
+            raise ValueError(
+                f"Unsupported forward_dtype: {self.quant_config.forward_dtype}"
+            )
 
         qweight = Parameter(
             torch.empty(
@@ -183,14 +181,18 @@ class FPQuantLinearMethod(LinearMethodBase):
             torch.empty(1, dtype=torch.float32),
             requires_grad=False,
         )
-        set_weight_attrs(weight_global_scale, {"ignore_warning": True} | extra_weight_attrs)
+        set_weight_attrs(
+            weight_global_scale, {"ignore_warning": True} | extra_weight_attrs
+        )
         layer.register_parameter("weight_global_scale", weight_global_scale)
 
         act_global_scale = Parameter(
             torch.empty(1, dtype=torch.float32),
             requires_grad=False,
         )
-        set_weight_attrs(act_global_scale, {"ignore_warning": True} | extra_weight_attrs)
+        set_weight_attrs(
+            act_global_scale, {"ignore_warning": True} | extra_weight_attrs
+        )
         layer.register_parameter("act_global_scale", act_global_scale)
 
         forward_hadamard_matrix = Parameter(
@@ -201,19 +203,10 @@ class FPQuantLinearMethod(LinearMethodBase):
             ),
             requires_grad=False,
         )
-        set_weight_attrs(forward_hadamard_matrix, {"ignore_warning": True} | extra_weight_attrs)
-        layer.register_parameter("forward_hadamard_matrix", forward_hadamard_matrix)
-
-        backward_hadamard_matrix = Parameter(
-            torch.empty(
-                self.quant_config.hadamard_group_size,
-                self.quant_config.hadamard_group_size,
-                dtype=params_dtype,
-            ),
-            requires_grad=False,
+        set_weight_attrs(
+            forward_hadamard_matrix, {"ignore_warning": True} | extra_weight_attrs
         )
-        set_weight_attrs(backward_hadamard_matrix, {"ignore_warning": True} | extra_weight_attrs)
-        layer.register_parameter("backward_hadamard_matrix", backward_hadamard_matrix)
+        layer.register_parameter("forward_hadamard_matrix", forward_hadamard_matrix)
 
     def apply(
         self,
@@ -249,8 +242,12 @@ def fused_quantize_mx_fake(x_flat, hadamard_matrix, forward_method):
     padded_rows = ((rows + 128 - 1) // 128) * 128
     padded_cols = ((cols + 4 - 1) // 4) * 4
 
-    xh_e2m1 = torch.empty(x_flat.size(0), x_flat.size(1) // 2, dtype=torch.uint8, device=x_flat.device)
-    xh_e8m0 = torch.empty(padded_rows, padded_cols, dtype=torch.float8_e8m0fnu, device=x_flat.device)
+    xh_e2m1 = torch.empty(
+        x_flat.size(0), x_flat.size(1) // 2, dtype=torch.uint8, device=x_flat.device
+    )
+    xh_e8m0 = torch.empty(
+        padded_rows, padded_cols, dtype=torch.float8_e8m0fnu, device=x_flat.device
+    )
 
     return xh_e2m1, xh_e8m0
 
@@ -304,8 +301,12 @@ def fused_quantize_nv_fake(x_flat, hadamard_matrix, global_scale):
     padded_rows = ((rows + 128 - 1) // 128) * 128
     padded_cols = ((cols + 4 - 1) // 4) * 4
 
-    xh_e2m1 = torch.empty(x_flat.size(0), x_flat.size(1) // 2, dtype=torch.uint8, device=x_flat.device)
-    xh_e8m0 = torch.empty(padded_rows, padded_cols, dtype=torch.float8_e4m3fn, device=x_flat.device)
+    xh_e2m1 = torch.empty(
+        x_flat.size(0), x_flat.size(1) // 2, dtype=torch.uint8, device=x_flat.device
+    )
+    xh_e8m0 = torch.empty(
+        padded_rows, padded_cols, dtype=torch.float8_e4m3fn, device=x_flat.device
+    )
 
     return xh_e2m1, xh_e8m0
 
@@ -329,8 +330,12 @@ def matmul_nvf4_bf16(
     return cutlass_scaled_fp4_mm(
         x,
         w,
-        to_blocked(xs, backend="triton").view(torch.float8_e4m3fn).view(-1, x.shape[1] // 8),  # *2//16
-        to_blocked(ws, backend="triton").view(torch.float8_e4m3fn).view(-1, x.shape[1] // 8),
+        to_blocked(xs, backend="triton")
+        .view(torch.float8_e4m3fn)
+        .view(-1, x.shape[1] // 8),  # *2//16
+        to_blocked(ws, backend="triton")
+        .view(torch.float8_e4m3fn)
+        .view(-1, x.shape[1] // 8),
         alpha,
         torch.bfloat16,
     )
@@ -363,7 +368,9 @@ def quantized_forward(
     x_flat = x.contiguous().flatten(end_dim=-2)
 
     if forward_dtype == "mxfp4":
-        x_flat_q, x_flat_scales = torch.ops.aphrodite.fused_quantize_mx(x_flat, forward_hadamard_matrix, forward_method)
+        x_flat_q, x_flat_scales = torch.ops.aphrodite.fused_quantize_mx(
+            x_flat, forward_hadamard_matrix, forward_method
+        )
         y = torch.ops.aphrodite.matmul_mxf4_bf16(
             x_flat_q,
             qweight,

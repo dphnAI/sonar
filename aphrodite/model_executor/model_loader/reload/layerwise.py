@@ -45,8 +45,9 @@ __all__ = [
 #
 # Use a weak ref dictionary so that modules can be freed when the model is freed.
 # Values are sanitized from references to the layer key in order to avoid circular refs
-LAYERWISE_INFO: WeakKeyDictionary[torch.nn.Module, LayerReloadingInfo] = WeakKeyDictionary()
-
+LAYERWISE_INFO: WeakKeyDictionary[torch.nn.Module, LayerReloadingInfo] = (
+    WeakKeyDictionary()
+)
 
 # Global set used to track loading for logging purposes only
 LOADING_LAYERS: WeakSet[torch.nn.Module] = WeakSet()
@@ -122,15 +123,19 @@ def initialize_online_processing(layer: torch.nn.Module):
     Called by either `initialize_layerwise_reload` or an online quantization scheme,
     prevents double wrapping in the case of online quantization + reloading
 
-    :param layer: layer whose parameter weight loaders will be wrapped
+    Args:
+        layer: layer whose parameter weight loaders will be wrapped
     """
     info = get_layerwise_info(layer)
 
     # Track loading progress to determine when to process/copy
     info.load_numel = 0
     info.load_numel_total = get_layer_size(layer)
+    _wrap_parameters_weight_loader(layer)
 
-    # Wrap each parameter's weight loader
+
+def _wrap_parameters_weight_loader(layer: torch.nn.Module) -> None:
+    """Wrap each parameter's weight loader."""
     # Note that nested wrapping will occur for shared tensors
     for name, tensor in get_layer_tensors(layer).items():
         if name in SKIP_TENSORS:
@@ -166,6 +171,12 @@ def make_online_process_loader(layer: torch.nn.Module, param_name: str) -> Calla
             logger.debug("%s: Excessive loading", layer.__class__.__name__)
             return
 
+        # Re-run on each load: layers may register parameters later (e.g., `bias`).
+        # Wrap late parameters and refresh `load_numel_total` so processing waits
+        # until all parameters are loaded.
+        info.load_numel_total = get_layer_size(layer)
+        _wrap_parameters_weight_loader(layer)
+
         # Bind and normalize arguments
         bound_args = loader_signature.bind(*args, **kwargs)
         bound_args.apply_defaults()
@@ -191,7 +202,9 @@ def make_online_process_loader(layer: torch.nn.Module, param_name: str) -> Calla
             LOADING_LAYERS.add(layer)
             if len(LOADING_LAYERS) >= 2:
                 names = sorted([layer.__class__.__name__ for layer in LOADING_LAYERS])
-                mem_used = sum(get_info_size(LAYERWISE_INFO[layer]) for layer in LOADING_LAYERS)
+                mem_used = sum(
+                    get_info_size(LAYERWISE_INFO[layer]) for layer in LOADING_LAYERS
+                )
                 logger.warning_once(
                     "Allocating %.1f MB of device memory to buffers to load %s layers. "
                     "This extra memory usage can be avoided by ordering weights "
@@ -219,8 +232,9 @@ def finalize_layerwise_processing(model: torch.nn.Module, model_config: ModelCon
     This function should be applied after `initialize_layerwise_reload` is applied
     unwrap the layerwise weight loaders.
 
-    :param model: model to finalize processing for
-    :param model_config: config needed for applying processing to attention layers
+    Args:
+        model: model to finalize processing for
+        model_config: config needed for applying processing to attention layers
     """
     if hasattr(model, "_original_do_torchao_reload"):
         model._do_torchao_reload = model._original_do_torchao_reload
@@ -272,14 +286,17 @@ def finalize_layerwise_reload(*args, **kwargs):
     finalize_layerwise_processing(*args, **kwargs)
 
 
-def _finalize_attention_layer(layer: torch.nn.Module, info: LayerReloadingInfo, model_config: ModelConfig) -> None:
+def _finalize_attention_layer(
+    layer: torch.nn.Module, info: LayerReloadingInfo, model_config: ModelConfig
+) -> None:
     if info.load_numel > 0 and info.kernel_tensors is not None:
         # Reload with new scale weights from checkpoint
         _place_kernel_tensors(layer, info)
         _reload_attention_scales(layer, info)
     elif info.load_numel > 0 or info.kernel_tensors is None:
         raise ValueError(
-            "Layerwise loading of attention layers is not supported. Attention must always process after linears."
+            "Layerwise loading of attention layers is not supported. "
+            "Attention must always process after linears."
         )
     else:
         _place_kernel_tensors(layer, info)
@@ -374,6 +391,8 @@ def _copy_and_restore_kernel_tensors(layer: torch.nn.Module, info: LayerReloadin
     for name, param in parameters.items():
         param.data.copy_(getattr(layer, name))
     for name, buffer in buffers.items():
+        if name not in layer._buffers:
+            continue
         buffer.data.copy_(getattr(layer, name))
 
     _place_kernel_tensors(layer, info)

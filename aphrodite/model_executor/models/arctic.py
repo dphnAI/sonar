@@ -9,7 +9,7 @@ import torch
 from torch import nn
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
+from aphrodite.config import CacheConfig, AphroditeConfig
 from aphrodite.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
@@ -67,7 +67,9 @@ class ArcticMLP(nn.Module):
         self.hidden_size = config.hidden_size
         self.expert_id = expert_id
 
-        self.ffn_dim = config.intermediate_size if not is_residual_mlp else self.hidden_size
+        self.ffn_dim = (
+            config.intermediate_size if not is_residual_mlp else self.hidden_size
+        )
 
         self.w13 = MergedColumnParallelLinear(
             self.hidden_size,
@@ -85,7 +87,10 @@ class ArcticMLP(nn.Module):
             prefix=f"{prefix}.w2",
         )
         if config.hidden_act != "silu":
-            raise ValueError(f"Unsupported activation: {config.hidden_act}. Only silu is supported for now.")
+            raise ValueError(
+                f"Unsupported activation: {config.hidden_act}. "
+                "Only silu is supported for now."
+            )
         self.act_fn = SiluAndMul()
 
     def forward(self, hidden_states):
@@ -187,7 +192,9 @@ class ArcticMoE(nn.Module):
         if weight_name.endswith("w1.weight"):
             param_data[expert_id, 0:shard_size, :] = loaded_weight[shard, :]
         if weight_name.endswith("w3.weight"):
-            param_data[expert_id, shard_size : 2 * shard_size, :] = loaded_weight[shard, :]
+            param_data[expert_id, shard_size : 2 * shard_size, :] = loaded_weight[
+                shard, :
+            ]
         if weight_name.endswith("w2.weight"):
             param_data[expert_id, :, :] = loaded_weight[:, shard]
 
@@ -206,7 +213,6 @@ class ArcticMoE(nn.Module):
             self.w2s,
             topk_weights,
             topk_ids,
-            inplace=True,
         )
         if self.reduce_results and self.tp_size > 1:
             final_hidden_states = tensor_model_parallel_all_reduce(final_hidden_states)
@@ -324,10 +330,14 @@ class ArcticDecoderLayer(nn.Module):
         )
 
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
         if self.use_residual:
-            self.residual_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            self.residual_layernorm = RMSNorm(
+                config.hidden_size, eps=config.rms_norm_eps
+            )
             self.residual_mlp = ArcticMLP(
                 config,
                 is_residual_mlp=True,
@@ -381,7 +391,9 @@ class ArcticModel(nn.Module):
         )
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
-            lambda prefix: ArcticDecoderLayer(config, cache_config, quant_config, prefix=prefix),
+            lambda prefix: ArcticDecoderLayer(
+                config, cache_config, quant_config, prefix=prefix
+            ),
             prefix=f"{prefix}.layers",
         )
         self._attn_implementation = config._attn_implementation
@@ -446,9 +458,15 @@ class ArcticModel(nn.Module):
 
             if is_moe_layer:
                 for expert_id in range(self.config.num_local_experts):
-                    expert_params_mapping.append(("ws", f"experts.{expert_id}.w1.weight", expert_id))
-                    expert_params_mapping.append(("w2s", f"experts.{expert_id}.w2.weight", expert_id))
-                    expert_params_mapping.append(("ws", f"experts.{expert_id}.w3.weight", expert_id))
+                    expert_params_mapping.append(
+                        ("ws", f"experts.{expert_id}.w1.weight", expert_id)
+                    )
+                    expert_params_mapping.append(
+                        ("w2s", f"experts.{expert_id}.w2.weight", expert_id)
+                    )
+                    expert_params_mapping.append(
+                        ("ws", f"experts.{expert_id}.w3.weight", expert_id)
+                    )
             else:
                 mlp_params_mapping.append(
                     (
@@ -502,7 +520,9 @@ class ArcticModel(nn.Module):
                             continue
                         param = params_dict[name]
                         weight_loader = param.weight_loader
-                        weight_loader(param, loaded_weight, weight_name, expert_id=shard_id)
+                        weight_loader(
+                            param, loaded_weight, weight_name, expert_id=shard_id
+                        )
                         break
                     else:
                         if name.endswith(".bias") and name not in params_dict:
@@ -510,7 +530,9 @@ class ArcticModel(nn.Module):
                         if is_pp_missing_parameter(name, self):
                             continue
                         param = params_dict[name]
-                        weight_loader = getattr(param, "weight_loader", default_weight_loader)
+                        weight_loader = getattr(
+                            param, "weight_loader", default_weight_loader
+                        )
                         weight_loader(param, loaded_weight)
             loaded_params.add(name)
         return loaded_params
@@ -524,7 +546,9 @@ class ArcticForCausalLM(nn.Module, SupportsPP, SupportsQuant):
         config = aphrodite_config.model_config.hf_config
         quant_config = aphrodite_config.quant_config
         self.config = config
-        self.model = ArcticModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = ArcticModel(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
+        )
         self.vocab_size = config.vocab_size
         self.lm_head = ParallelLMHead(
             self.vocab_size,
@@ -538,7 +562,9 @@ class ArcticForCausalLM(nn.Module, SupportsPP, SupportsQuant):
         self.num_experts_per_tok = config.num_experts_per_tok
 
         self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -550,7 +576,9 @@ class ArcticForCausalLM(nn.Module, SupportsPP, SupportsQuant):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
+        hidden_states = self.model(
+            input_ids, positions, intermediate_tensors, inputs_embeds
+        )
         return hidden_states
 
     def compute_logits(

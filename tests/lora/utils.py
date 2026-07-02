@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import json
 import os
 from dataclasses import dataclass
@@ -8,10 +9,13 @@ import torch
 from safetensors.torch import save_file
 
 from aphrodite.lora.lora_weights import LoRALayerWeights, PackedLoRALayerWeights
+from aphrodite.platforms import current_platform
+
+DEVICE_TYPE = current_platform.device_type
 
 
 class DummyLoRAManager:
-    def __init__(self, device: torch.device = "cuda:0"):
+    def __init__(self, device: torch.device = f"{DEVICE_TYPE}:0"):
         super().__init__()
         self._loras: dict[str, LoRALayerWeights] = {}
         self._device = device
@@ -27,22 +31,18 @@ class DummyLoRAManager:
         module_name: str,
         weight: torch.Tensor,
         rank: int = 8,
-        generate_embeddings_tensor: int = 0,
     ):
         lora = LoRALayerWeights(
             module_name,
             rank=rank,
             lora_alpha=1,
-            lora_a=torch.rand([rank, weight.shape[1]], dtype=weight.dtype, device=self._device),
-            lora_b=torch.rand([weight.shape[0], rank], dtype=weight.dtype, device=self._device),
+            lora_a=torch.rand(
+                [rank, weight.shape[1]], dtype=weight.dtype, device=self._device
+            ),
+            lora_b=torch.rand(
+                [weight.shape[0], rank], dtype=weight.dtype, device=self._device
+            ),
         )
-        if generate_embeddings_tensor:
-            lora.embeddings_tensor = torch.rand(
-                5,
-                generate_embeddings_tensor,
-                dtype=weight.dtype,
-                device=self._device,
-            )
         self.set_module_lora(module_name, lora)
 
         return lora
@@ -60,8 +60,8 @@ class DummyLoRAManager:
             module_name,
             rank=rank,
             lora_alpha=1,
-            lora_a=torch.rand([rank, input_dim], device="cuda"),
-            lora_b=torch.rand([output_dim, input_dim], device="cuda"),
+            lora_a=torch.rand([rank, input_dim], device=DEVICE_TYPE),
+            lora_b=torch.rand([output_dim, input_dim], device=DEVICE_TYPE),
             embeddings_tensor=embeddings_tensor,
         )
         self.set_module_lora(module_name, lora)
@@ -152,9 +152,13 @@ def generate_data(
             dtype=dtype,
         ).to(device)
         # shrink op need atomic_add, so output is initinized by 0
-        ref_out_tensor = torch.zeros((total_tokens, max_rank), dtype=dtype, device=inputs_tensor.device)
+        ref_out_tensor = torch.zeros(
+            (total_tokens, max_rank), dtype=dtype, device=inputs_tensor.device
+        )
         # NOTE  shrink kernel using torch.float32 as output type
-        our_out_tensor = torch.zeros((total_tokens, max_rank), dtype=torch.float32).to(device)
+        our_out_tensor = torch.zeros((total_tokens, max_rank), dtype=torch.float32).to(
+            device
+        )
     else:
         inputs_tensor = torch.rand(
             (total_tokens, max_rank),
@@ -172,12 +176,16 @@ def generate_data(
         ).to(device)
         # Ensure the same input.
         our_out_tensor = ref_out_tensor.clone()
-    lora_indices_tensor = torch.randint(0, lora_nums - 1 if lora_nums > 1 else 1, (batches,)).to(device)
+    lora_indices_tensor = torch.randint(
+        0, lora_nums - 1 if lora_nums > 1 else 1, (batches,)
+    ).to(device)
     indices = torch.zeros((total_tokens), dtype=torch.long).to(device)
     current_offset = 0
     for b_id in range(batches):
         lora_index = lora_indices_tensor[b_id]
-        indices[current_offset : current_offset + seq_len_tensor[b_id]].copy_(lora_index)
+        indices[current_offset : current_offset + seq_len_tensor[b_id]].copy_(
+            lora_index
+        )
         current_offset += seq_len_tensor[b_id].item()
 
     return PunicaTensors(
@@ -222,15 +230,21 @@ def generate_data_for_expand_nslices(
         )
     # expand op needs to complete y+=a@lora_b, so output is
     # initinized randomly
-    ref_out_tensor = torch.rand((total_tokens, hidden_size * nslices), dtype=dtype).to(device)
+    ref_out_tensor = torch.rand((total_tokens, hidden_size * nslices), dtype=dtype).to(
+        device
+    )
     # Ensure the same input.
     our_out_tensor = ref_out_tensor.clone()
-    lora_indices_tensor = torch.randint(0, lora_nums - 1 if lora_nums > 1 else 1, (batches,))
+    lora_indices_tensor = torch.randint(
+        0, lora_nums - 1 if lora_nums > 1 else 1, (batches,)
+    )
     indices = torch.zeros((total_tokens), dtype=torch.long).to(device)
     current_offset = 0
     for b_id in range(batches):
         lora_index = lora_indices_tensor[b_id]
-        indices[current_offset : current_offset + seq_len_tensor[b_id]] = lora_index.item()
+        indices[current_offset : current_offset + seq_len_tensor[b_id]] = (
+            lora_index.item()
+        )
         current_offset += seq_len_tensor[b_id].item()
 
     lora_indices_tensor = lora_indices_tensor.to(device)
@@ -296,16 +310,22 @@ def generate_data_for_nslices(
             )
         # expand op needs to complete y+=a@lora_b, so output is
         # initinized randomly
-        our_out_tensor = torch.rand((total_tokens, hidden_size * nslices), dtype=dtype).to(device)
+        our_out_tensor = torch.rand(
+            (total_tokens, hidden_size * nslices), dtype=dtype
+        ).to(device)
 
     # Ensure the same input.
     ref_out_tensor = our_out_tensor.clone()
-    lora_indices_tensor = torch.randint(0, lora_nums - 1 if lora_nums > 1 else 1, (batches,))
+    lora_indices_tensor = torch.randint(
+        0, lora_nums - 1 if lora_nums > 1 else 1, (batches,)
+    )
     indices = torch.zeros((total_tokens), dtype=torch.long).to(device)
     current_offset = 0
     for b_id in range(batches):
         lora_index = lora_indices_tensor[b_id]
-        indices[current_offset : current_offset + seq_len_tensor[b_id]] = lora_index.item()
+        indices[current_offset : current_offset + seq_len_tensor[b_id]] = (
+            lora_index.item()
+        )
         current_offset += seq_len_tensor[b_id].item()
 
     lora_indices_tensor = lora_indices_tensor.to(device)

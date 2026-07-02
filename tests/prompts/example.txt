@@ -1,4 +1,4 @@
-Aphrodite is a high-throughput and memory-efficient inference and serving engine for LLMs.
+vLLM is a high-throughput and memory-efficient inference and serving engine for LLMs.
 Briefly describe the major milestones in the development of artificial intelligence from 1950 to 2020.
 Compare and contrast artificial intelligence with human intelligence in terms of processing information.
 Describe the basic components of a neural network and how it can be trained.

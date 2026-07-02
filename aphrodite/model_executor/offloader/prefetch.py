@@ -104,7 +104,8 @@ class StaticBufferPool:
             self._buffers[key] = slot_tensors
 
         logger.debug(
-            "[StaticBufferPool] Allocated %d unique (name, shape, stride, dtype), %d slots each, total %.4f GB",
+            "[StaticBufferPool] Allocated %d unique (name, shape, stride, dtype), "
+            "%d slots each, total %.4f GB",
             len(unique_params),
             slot_capacity,
             self.total_bytes / 1e9,
@@ -164,7 +165,9 @@ class PrefetchOffloader(BaseOffloader):
         modules_generator: Generator[nn.Module, None, None],
     ) -> list[nn.Module]:
         """Wrap modules with prefetch offloading logic."""
-        assert len(self.module_offloaders) == 0, "wrap_modules should only be called once"
+        assert len(self.module_offloaders) == 0, (
+            "wrap_modules should only be called once"
+        )
 
         all_modules = []
         offload_modules = []
@@ -385,7 +388,7 @@ class _ModuleOffloader:
 
         # Event to signal when H2D copy to static buffer is complete.
         # Used for per-layer synchronization (both eager and capture modes).
-        self._copy_done_event = torch.cuda.Event()
+        self._copy_done_event = torch.Event()
 
         # Track whether _copy_done_event is valid for eager-mode wait_event.
         # False when: (1) never recorded, or (2) last recorded during a
@@ -398,7 +401,8 @@ class _ModuleOffloader:
         self._prefetch_in_capture = False
 
         assert self.device != torch.device("cpu"), (
-            "Module parameters should not already be on CPU (offloader handles CPU placement)"
+            "Module parameters should not already be on CPU "
+            "(offloader handles CPU placement)"
         )
 
         # Buffer pool and slot (assigned in assign_buffer_slot)
@@ -407,11 +411,13 @@ class _ModuleOffloader:
 
         param_dict = dict(self.module.named_parameters())
         assert all(name in param_dict for name in whitelist_param_names), (
-            f"Whitelist params {whitelist_param_names} not found in module params {list(param_dict.keys())}"
+            f"Whitelist params {whitelist_param_names} not found in module params "
+            f"{list(param_dict.keys())}"
         )
 
         self._param_offloaders = {
-            name: _BaseParamOffloader.create(mode, module=module, param_name=name) for name in whitelist_param_names
+            name: _BaseParamOffloader.create(mode, module=module, param_name=name)
+            for name in whitelist_param_names
         }
 
     def post_init(self):
@@ -437,11 +443,14 @@ class _ModuleOffloader:
         # Remove offloaders whose parameter was deleted during
         # process_weights_after_loading (e.g. k_scale / v_scale).
         deleted = [
-            name for name, offloader in self._param_offloaders.items() if getattr(offloader, "_param_deleted", False)
+            name
+            for name, offloader in self._param_offloaders.items()
+            if getattr(offloader, "_param_deleted", False)
         ]
         if deleted:
             logger.debug(
-                "Pruning %d transient offloaded param(s) that were deleted by process_weights_after_loading: %s",
+                "Pruning %d transient offloaded param(s) that were deleted "
+                "by process_weights_after_loading: %s",
                 len(deleted),
                 deleted,
             )
@@ -509,7 +518,7 @@ class _ModuleOffloader:
 
         # Fork: record event on compute stream, copy_stream waits on it
         # This joins copy_stream to any active CUDA graph capture
-        fork_event = torch.cuda.Event()
+        fork_event = torch.Event()
         torch.cuda.current_stream().record_event(fork_event)
         self.copy_stream.wait_event(fork_event)
 
@@ -633,7 +642,9 @@ class _CpuParamOffloader(_BaseParamOffloader):
         )
         self._cpu_storage.copy_(param.data)
 
-        self.offloaded_bytes = self._cpu_storage.numel() * self._cpu_storage.element_size()
+        self.offloaded_bytes = (
+            self._cpu_storage.numel() * self._cpu_storage.element_size()
+        )
 
         # Point param.data to CPU storage - this allows weight loading to work
         # and frees GPU memory when the original GPU tensor is garbage collected
@@ -684,7 +695,9 @@ class _CpuParamOffloader(_BaseParamOffloader):
           so that prefetch copies the processed weights, not stale data
         - Then point param.data to the GPU buffer for torch.compile
         """
-        assert self._cpu_storage is not None, "_offload_to_cpu_internal() must be called before assign_static_buffer()"
+        assert self._cpu_storage is not None, (
+            "_offload_to_cpu_internal() must be called before assign_static_buffer()"
+        )
 
         # Get current parameter (may have been replaced by
         # process_weights_after_loading)

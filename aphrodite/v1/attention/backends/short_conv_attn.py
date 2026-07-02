@@ -28,5 +28,7 @@ class ShortConvAttentionMetadata(BaseMambaAttentionMetadata):
     pass
 
 
-class ShortConvAttentionMetadataBuilder(BaseMambaAttentionMetadataBuilder[ShortConvAttentionMetadata]):
+class ShortConvAttentionMetadataBuilder(
+    BaseMambaAttentionMetadataBuilder[ShortConvAttentionMetadata]
+):
     metadata_cls = ShortConvAttentionMetadata

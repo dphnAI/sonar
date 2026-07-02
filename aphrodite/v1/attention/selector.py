@@ -12,7 +12,6 @@ from aphrodite.logger import init_logger
 from aphrodite.utils.import_utils import resolve_obj_by_qualname
 from aphrodite.v1.attention.backend import AttentionBackend, AttentionType
 from aphrodite.v1.attention.backends.registry import (
-    MAMBA_TYPE_TO_BACKEND_MAP,
     MambaAttentionBackendEnum,
 )
 
@@ -32,6 +31,7 @@ class AttentionSelectorConfig(NamedTuple):
     attn_type: str = AttentionType.DECODER
     use_non_causal: bool = False
     use_batch_invariant: bool = False
+    use_kv_connector: bool = False
 
     def __repr__(self):
         return (
@@ -46,7 +46,8 @@ class AttentionSelectorConfig(NamedTuple):
             f"use_per_head_quant_scales={self.use_per_head_quant_scales}, "
             f"attn_type={self.attn_type}, "
             f"use_non_causal={self.use_non_causal}, "
-            f"use_batch_invariant={self.use_batch_invariant})"
+            f"use_batch_invariant={self.use_batch_invariant}, "
+            f"use_kv_connector={self.use_kv_connector})"
         )
 
 
@@ -67,7 +68,8 @@ def get_attn_backend(
     if kv_cache_dtype is not None:
         valid_cache_dtypes = get_args(CacheDType)
         assert kv_cache_dtype in valid_cache_dtypes, (
-            f"Invalid kv_cache_dtype: {kv_cache_dtype}. Valid values are: {valid_cache_dtypes}"
+            f"Invalid kv_cache_dtype: {kv_cache_dtype}. "
+            f"Valid values are: {valid_cache_dtypes}"
         )
 
     from aphrodite.config import get_current_aphrodite_config
@@ -79,6 +81,11 @@ def get_attn_backend(
         block_size = cache_config.block_size
     else:
         block_size = None
+
+    kv_transfer_config = aphrodite_config.kv_transfer_config
+    use_kv_connector = (
+        kv_transfer_config is not None and kv_transfer_config.is_kv_transfer_instance
+    )
 
     attn_selector_config = AttentionSelectorConfig(
         head_size=head_size,
@@ -93,6 +100,7 @@ def get_attn_backend(
         attn_type=attn_type or AttentionType.DECODER,
         use_non_causal=aphrodite_config.attention_config.use_non_causal,
         use_batch_invariant=envs.APHRODITE_BATCH_INVARIANT,
+        use_kv_connector=use_kv_connector,
     )
 
     return _cached_get_attn_backend(
@@ -116,7 +124,9 @@ def _cached_get_attn_backend(
         num_heads=num_heads,
     )
     if not attention_cls:
-        raise ValueError(f"Invalid attention backend for {current_platform.device_name}")
+        raise ValueError(
+            f"Invalid attention backend for {current_platform.device_name}"
+        )
     backend = resolve_obj_by_qualname(attention_cls)
 
     # Adjust kv cache layout if the selected backend requires a specific one
@@ -135,7 +145,7 @@ def _cached_get_attn_backend(
 
 
 def get_mamba_attn_backend(
-    mamba_type: str,
+    mamba_type: MambaAttentionBackendEnum,
 ) -> type[AttentionBackend]:
     """Select which mamba attention backend to use and lazily import it."""
     return _cached_get_mamba_attn_backend(mamba_type)
@@ -143,21 +153,14 @@ def get_mamba_attn_backend(
 
 @cache
 def _cached_get_mamba_attn_backend(
-    mamba_type: str,
+    mamba_type: MambaAttentionBackendEnum,
 ) -> type[AttentionBackend]:
-    assert mamba_type and isinstance(mamba_type, str)
+    assert mamba_type and isinstance(mamba_type, MambaAttentionBackendEnum)
 
-    selected_backend = None
-    try:
-        backend_name = MAMBA_TYPE_TO_BACKEND_MAP[mamba_type]
-        selected_backend = MambaAttentionBackendEnum[backend_name]
-    except KeyError as e:
-        raise ValueError(
-            f"Invalid mamba attention backend type: '{mamba_type}'. Valid "
-            f"types are: {list(MAMBA_TYPE_TO_BACKEND_MAP.keys())}"
-        ) from e
-
-    mamba_attn_backend = selected_backend.get_class()
+    mamba_attn_backend = mamba_type.get_class()
     if envs.APHRODITE_BATCH_INVARIANT and not mamba_attn_backend.supports_batch_invariance():
-        raise RuntimeError(f"APHRODITE batch_invariant mode is not supported for {mamba_attn_backend.get_name()}.")
+        raise RuntimeError(
+            "APHRODITE batch_invariant mode is not supported for "
+            f"{mamba_attn_backend.get_name()}."
+        )
     return mamba_attn_backend

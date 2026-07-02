@@ -21,6 +21,22 @@ logger = init_logger(__name__)
 float8_info = torch.finfo(current_platform.fp8_dtype())
 
 
+def has_native_kv_cache_layout(
+    key_cache: torch.Tensor,
+    value_cache: torch.Tensor,
+) -> bool:
+    """Return whether KV cache blocks can use the native ROCm pairing.
+
+    The native reshape_and_cache writer assumes packed blocks. If cache update
+    needs reshape_and_cache_flash for a stride-padded hybrid layout, decode
+    should use the matching Triton path too.
+    """
+    return (
+        key_cache.stride(0) == key_cache.shape[1:].numel()
+        and value_cache.stride(0) == value_cache.shape[1:].numel()
+    )
+
+
 @triton.jit
 def cdiv_fn(x, y):
     return (x + y - 1) // y
@@ -83,9 +99,14 @@ def kernel_paged_attention_2d(
     else:
         cur_batch_in_all_start_index = seq_idx
 
-    query_head_idx = kv_head_idx * num_queries_per_kv + tl.arange(0, num_queries_per_kv_padded)
+    query_head_idx = kv_head_idx * num_queries_per_kv + tl.arange(
+        0, num_queries_per_kv_padded
+    )
 
-    query_offset = cur_batch_in_all_start_index * query_stride_0 + query_head_idx[:, None] * query_stride_1
+    query_offset = (
+        cur_batch_in_all_start_index * query_stride_0
+        + query_head_idx[:, None] * query_stride_1
+    )
 
     head_mask = query_head_idx < (kv_head_idx + 1) * num_queries_per_kv
     head_mask = head_mask & (query_head_idx < num_query_heads)
@@ -119,7 +140,9 @@ def kernel_paged_attention_2d(
 
     # alibi slope for this head
     if USE_ALIBI_SLOPES:
-        alibi_slope = tl.load(alibi_slopes_ptr + query_head_idx, mask=head_mask, other=0.0)
+        alibi_slope = tl.load(
+            alibi_slopes_ptr + query_head_idx, mask=head_mask, other=0.0
+        )
 
     num_blocks = cdiv_fn(seq_len, BLOCK_SIZE)
 
@@ -228,7 +251,10 @@ def kernel_paged_attention_2d(
         acc = acc * tl.load(out_scale_inv)
         acc = tl.clamp(acc, FP8_MIN, FP8_MAX)
 
-    output_offset = cur_batch_in_all_start_index * output_stride_0 + query_head_idx * output_stride_1
+    output_offset = (
+        cur_batch_in_all_start_index * output_stride_0
+        + query_head_idx * output_stride_1
+    )
 
     tl.store(
         output_ptr + output_offset[:, None] + tl.arange(0, HEAD_SIZE_PADDED)[None, :],
@@ -314,7 +340,8 @@ def chunked_prefill_paged_decode(
             target_dtype = torch.float8_e5m2
         else:
             raise ValueError(
-                f"Unsupported FP8 kv_cache_dtype {kv_cache_dtype}: should be one of 'fp8', 'fp8_e4m3', 'fp8_e5m2'."
+                f"Unsupported FP8 kv_cache_dtype {kv_cache_dtype}: "
+                f"should be one of 'fp8', 'fp8_e4m3', 'fp8_e5m2'."
             )
 
         key_cache = key_cache.view(target_dtype)
@@ -335,19 +362,19 @@ def chunked_prefill_paged_decode(
         alibi_slopes,
         sinks,
     )
-    # Triton is only forced when encountering a non-standard block
-    # like Qwen3 with a size of 544.
-    # 1. Check if block_size is a power of 2 (16, 32, 64...)
-    # 2. If it's a power of 2, we trust the Aphrodite's native use_custom decision.
-    # 3. If it's not a power of 2 (such as Qwen3's 544),
-    # then our Triton path is forced.
+    has_native_layout = has_native_kv_cache_layout(key_cache, value_cache)
+    # Force Triton for non-standard blocks like Qwen3's 544 and for
+    # stride-padded hybrid layouts. The latter use reshape_and_cache_flash
+    # during cache update, so keep decode on the matching stride-aware path.
     is_pow2 = block_size > 0 and (block_size & (block_size - 1) == 0)
-    if not is_pow2:
+    if not is_pow2 or not has_native_layout:
         use_custom = False
 
     if use_custom:
         _PARTITION_SIZE_ROCM = 256
-        max_num_partitions = (max_seq_len + _PARTITION_SIZE_ROCM - 1) // _PARTITION_SIZE_ROCM
+        max_num_partitions = (
+            max_seq_len + _PARTITION_SIZE_ROCM - 1
+        ) // _PARTITION_SIZE_ROCM
         assert _PARTITION_SIZE_ROCM % block_size == 0
         total_num_seq = block_table.shape[0]
         tmp_output = torch.empty(
@@ -384,11 +411,19 @@ def chunked_prefill_paged_decode(
             fp8_out_scale=output_scale,
         )
     else:
-        logger.warning_once("Cannot use ROCm custom paged attention kernel, falling back to Triton implementation.")
+        logger.warning_once(
+            "Cannot use ROCm custom paged attention kernel,"
+            " falling back to Triton implementation."
+        )
         real_block_size = value_cache.shape[3]
         # The standard model directly uses the original block_size.
         # Non-standard 544 uses 32 to accommodate integer division logic.
-        TRITON_BLOCK_SIZE = block_size if is_pow2 else 32
+        # Cap at 128 to avoid exceeding GPU shared memory limits
+        # (e.g. hybrid Mamba models inflate block_size to 2048).
+        # The kernel handles TRITON_BLOCK_SIZE != PHYSICAL_BLOCK_SIZE
+        # via the l_block_idx/internal_offsets addressing logic.
+        MAX_TRITON_BLOCK_SIZE = 128
+        TRITON_BLOCK_SIZE = min(block_size, MAX_TRITON_BLOCK_SIZE) if is_pow2 else 32
         if is_block_table_ptr:
             # Using the physical base address of tensors
             kv_element_size = key_cache.element_size()
@@ -398,7 +433,9 @@ def chunked_prefill_paged_decode(
 
             # Normalization: Directly calculate the block offset
             # of the pointer relative to the base address
-            processed_block_table = ((block_table - base_addr) // block_byte_stride).to(torch.int32)
+            processed_block_table = ((block_table - base_addr) // block_byte_stride).to(
+                torch.int32
+            )
         else:
             processed_block_table = block_table.to(torch.int32)
 

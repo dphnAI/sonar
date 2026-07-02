@@ -48,7 +48,9 @@ def _is_supported_param(param_key: str, supported: set[str]) -> bool:
     return normalized in supported
 
 
-def _filter_params(params: ParameterSweep, *, supported: set[str], strict: bool) -> ParameterSweep:
+def _filter_params(
+    params: ParameterSweep, *, supported: set[str], strict: bool
+) -> ParameterSweep:
     filtered = []
     for item in params:
         kept: dict[str, object] = {}
@@ -156,7 +158,9 @@ def run_benchmark(
 
         with output_path.open("r", encoding="utf-8") as f:
             run_data = json.load(f)
-            return _update_run_data(run_data, serve_overrides, startup_overrides, run_number)
+            return _update_run_data(
+                run_data, serve_overrides, startup_overrides, run_number
+            )
 
     if dry_run:
         print("[END BENCHMARK]")
@@ -172,7 +176,9 @@ def run_benchmark(
     with output_path.open("r", encoding="utf-8") as f:
         run_data = json.load(f)
 
-    run_data = _update_run_data(run_data, serve_overrides, startup_overrides, run_number)
+    run_data = _update_run_data(
+        run_data, serve_overrides, startup_overrides, run_number
+    )
 
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(run_data, f, indent=4)
@@ -208,7 +214,9 @@ def run_comb(
     if dry_run:
         return None
 
-    with _get_comb_run_path(base_path, run_number=None).open("w", encoding="utf-8") as f:
+    with _get_comb_run_path(base_path, run_number=None).open(
+        "w", encoding="utf-8"
+    ) as f:
         json.dump(comb_data, f, indent=4)
 
     return comb_data
@@ -261,7 +269,9 @@ class SweepStartupArgs:
     resume: bool
 
     parser_name: ClassVar[str] = "startup"
-    parser_help: ClassVar[str] = "Benchmark Aphrodite startup time over parameter combinations."
+    parser_help: ClassVar[str] = (
+        "Benchmark Aphrodite startup time over parameter combinations."
+    )
 
     @classmethod
     def from_cli_args(cls, args: argparse.Namespace):
@@ -279,8 +289,12 @@ class SweepStartupArgs:
 
         supported = _get_supported_startup_keys()
         strict_params = args.strict_params
-        serve_params = _filter_params(serve_params, supported=supported, strict=strict_params)
-        startup_params = _filter_params(startup_params, supported=supported, strict=strict_params)
+        serve_params = _filter_params(
+            serve_params, supported=supported, strict=strict_params
+        )
+        startup_params = _filter_params(
+            startup_params, supported=supported, strict=strict_params
+        )
 
         if args.experiment_name:
             experiment_name = args.experiment_name
@@ -303,7 +317,7 @@ class SweepStartupArgs:
         )
 
     @classmethod
-    def add_cli_args(cls, parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    def add_cli_args(cls, parser: FlexibleArgumentParser) -> FlexibleArgumentParser:
         parser.add_argument(
             "--startup-cmd",
             type=str,
@@ -323,12 +337,14 @@ class SweepStartupArgs:
             "--startup-params",
             type=str,
             default=None,
-            help="Path to JSON file containing parameter combinations for the `aphrodite bench startup` command.",
+            help="Path to JSON file containing parameter combinations "
+            "for the `aphrodite bench startup` command.",
         )
         parser.add_argument(
             "--strict-params",
             action="store_true",
-            help="If set, unknown parameters in sweep files raise an error instead of being ignored.",
+            help="If set, unknown parameters in sweep files raise an error "
+            "instead of being ignored.",
         )
 
         parser.add_argument(
@@ -360,7 +376,8 @@ class SweepStartupArgs:
         parser.add_argument(
             "--dry-run",
             action="store_true",
-            help="If set, prints the commands to run, then exits without executing them.",
+            help="If set, prints the commands to run, "
+            "then exits without executing them.",
         )
         parser.add_argument(
             "--resume",
@@ -396,7 +413,8 @@ class SweepStartupArgs:
             print(f"Experiment has been saved at: {experiment_dir}")
         except BaseException as exc:
             raise RuntimeError(
-                "The script was terminated early. Use `--resume` to continue the script from its last checkpoint."
+                "The script was terminated early. Use `--resume` "
+                "to continue the script from its last checkpoint."
             ) from exc
 
 
@@ -420,6 +438,6 @@ def main(args: argparse.Namespace):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=SweepStartupArgs.parser_help)
+    parser = FlexibleArgumentParser(description=SweepStartupArgs.parser_help)
     SweepStartupArgs.add_cli_args(parser)
     main(parser.parse_args())

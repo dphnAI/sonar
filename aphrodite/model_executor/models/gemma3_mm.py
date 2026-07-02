@@ -39,6 +39,7 @@ from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import (
     MultiModalEmbeddings,
+    SupportsEncoderCudaGraph,
     SupportsLoRA,
     SupportsMultiModal,
     SupportsPP,
@@ -101,7 +102,9 @@ class Gemma3ProcessingInfo(BaseProcessingInfo):
             **self.ctx.get_merged_mm_kwargs(mm_kwargs),
         )["images_kwargs"]
 
-        do_pan_and_scan = images_kwargs.get("do_pan_and_scan", image_processor.do_pan_and_scan)
+        do_pan_and_scan = images_kwargs.get(
+            "do_pan_and_scan", image_processor.do_pan_and_scan
+        )
         pan_and_scan_min_crop_size = images_kwargs.get(
             "pan_and_scan_min_crop_size", image_processor.pan_and_scan_min_crop_size
         )
@@ -217,7 +220,9 @@ class Gemma3ProcessingInfo(BaseProcessingInfo):
             **self.ctx.get_merged_mm_kwargs({}),
         )["images_kwargs"]
 
-        max_num_crops = images_kwargs.get("pan_and_scan_max_num_crops", image_processor.pan_and_scan_max_num_crops)
+        max_num_crops = images_kwargs.get(
+            "pan_and_scan_max_num_crops", image_processor.pan_and_scan_max_num_crops
+        )
 
         vision_config = self.get_hf_config().vision_config
         native_size = vision_config.image_size
@@ -274,7 +279,9 @@ class Gemma3MultiModalProcessor(BaseMultiModalProcessor[Gemma3ProcessingInfo]):
         if (images := mm_data.get("images")) is not None:
             mm_items = self.info.parse_mm_data({"image": images}, validate=False)
             parsed_images = mm_items.get_items("image", ImageProcessorItems)
-            image_sizes = [parsed_images.get_image_size(i) for i in range(len(parsed_images))]
+            image_sizes = [
+                parsed_images.get_image_size(i) for i in range(len(parsed_images))
+            ]
             hf_processor = self.info.get_hf_processor(**mm_kwargs)
 
             num_crops = [
@@ -299,7 +306,7 @@ class Gemma3MultiModalProcessor(BaseMultiModalProcessor[Gemma3ProcessingInfo]):
 
         return dict(
             pixel_values=MultiModalFieldConfig.flat_from_sizes("image", num_patches),
-            num_patches=MultiModalFieldConfig.batched("image"),
+            num_patches=MultiModalFieldConfig.batched("image", keep_on_cpu=True),
         )
 
     def _get_prompt_updates(
@@ -416,15 +423,23 @@ class Gemma3MultiModalProjector(nn.Module):
         super().__init__()
 
         self.mm_input_projection_weight = nn.Parameter(
-            torch.zeros(config.vision_config.hidden_size, config.text_config.hidden_size)
+            torch.zeros(
+                config.vision_config.hidden_size, config.text_config.hidden_size
+            )
         )
 
-        self.mm_soft_emb_norm = GemmaRMSNorm(config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps)
+        self.mm_soft_emb_norm = GemmaRMSNorm(
+            config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps
+        )
 
-        self.patches_per_image = int(config.vision_config.image_size // config.vision_config.patch_size)
+        self.patches_per_image = int(
+            config.vision_config.image_size // config.vision_config.patch_size
+        )
         self.tokens_per_side = int(config.mm_tokens_per_image**0.5)
         self.kernel_size = self.patches_per_image // self.tokens_per_side
-        self.avg_pool = nn.AvgPool2d(kernel_size=self.kernel_size, stride=self.kernel_size)
+        self.avg_pool = nn.AvgPool2d(
+            kernel_size=self.kernel_size, stride=self.kernel_size
+        )
 
     def forward(self, vision_outputs: torch.Tensor):
         batch_size, _, seq_length = vision_outputs.shape
@@ -441,7 +456,9 @@ class Gemma3MultiModalProjector(nn.Module):
 
         normed_vision_outputs = self.mm_soft_emb_norm(pooled_vision_outputs)
 
-        projected_vision_outputs = torch.matmul(normed_vision_outputs, self.mm_input_projection_weight)
+        projected_vision_outputs = torch.matmul(
+            normed_vision_outputs, self.mm_input_projection_weight
+        )
         return projected_vision_outputs.type_as(vision_outputs)
 
 
@@ -450,7 +467,9 @@ class Gemma3MultiModalProjector(nn.Module):
     info=Gemma3ProcessingInfo,
     dummy_inputs=Gemma3DummyInputsBuilder,
 )
-class Gemma3ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
+class Gemma3ForConditionalGeneration(
+    nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA, SupportsEncoderCudaGraph
+):
     packed_modules_mapping = {
         "qkv_proj": [
             "q_proj",
@@ -486,8 +505,12 @@ class Gemma3ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, 
         quant_config = aphrodite_config.quant_config
         multimodal_config = aphrodite_config.model_config.multimodal_config
         self.config = config
+        self.model_config = aphrodite_config.model_config
         self.quant_config = quant_config
         self.multimodal_config = multimodal_config
+        self.vit_positions_per_patch = (
+            self.config.vision_config.image_size // self.config.vision_config.patch_size
+        ) ** 2
 
         self.configure_mm_token_handling(
             vocab_size=config.text_config.vocab_size,
@@ -513,13 +536,17 @@ class Gemma3ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, 
             logit_scale = getattr(config, "logit_scale", 1.0)
             self.language_model.logits_processor.scale *= logit_scale
 
-        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.language_model.make_empty_intermediate_tensors
+        )
 
     @property
     def dtype(self):
         return next(self.parameters()).dtype
 
-    def _parse_and_validate_image_input(self, **kwargs: object) -> Gemma3ImageInputs | None:
+    def _parse_and_validate_image_input(
+        self, **kwargs: object
+    ) -> Gemma3ImageInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         num_patches = kwargs.pop("num_patches", None)
         image_embeds = kwargs.pop("image_embeds", None)
@@ -660,3 +687,136 @@ class Gemma3ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, 
         """
         # The Gemma3 connector maintains a 1:1 token mapping
         return num_vision_tokens
+
+    def get_encoder_cudagraph_config(self):
+        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+            EncoderCudaGraphConfig,
+        )
+
+        return EncoderCudaGraphConfig(
+            modalities=["image"],
+            buffer_keys=["pixel_values"],
+            out_hidden_size=self.config.text_config.hidden_size,
+        )
+
+    def get_encoder_cudagraph_budget_range(
+        self,
+        aphrodite_config: AphroditeConfig,
+    ) -> tuple[int, int]:
+        min_budget = self.config.mm_tokens_per_image
+        max_budget = min(
+            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            self.model_config.max_model_len,
+        )
+        return (min_budget, max_budget)
+
+    def get_encoder_cudagraph_item_specs(
+        self,
+        mm_kwargs: dict[str, Any],
+    ):
+        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
+
+        num_patches = mm_kwargs["num_patches"]
+        mm_tokens_per_image = self.config.mm_tokens_per_image
+
+        return [
+            EncoderItemSpec(
+                input_size=int(np) * self.vit_positions_per_patch,
+                output_tokens=int(np) * mm_tokens_per_image,
+            )
+            for np in num_patches
+        ]
+
+    def select_encoder_cudagraph_items(
+        self,
+        mm_kwargs: dict[str, Any],
+        indices: list[int],
+    ) -> dict[str, Any]:
+        pixel_values = mm_kwargs["pixel_values"]
+        num_patches = mm_kwargs["num_patches"]
+
+        if len(indices) == 0:
+            return {
+                "pixel_values": pixel_values[:0],
+                "num_patches": num_patches[:0],
+            }
+        cum_patches = [0]
+        for p in num_patches:
+            cum_patches.append(cum_patches[-1] + int(p))
+
+        selected_pv = torch.cat(
+            [pixel_values[cum_patches[i] : cum_patches[i + 1]] for i in indices]
+        )
+        selected_np = num_patches[indices]
+
+        return {
+            "pixel_values": selected_pv,
+            "num_patches": selected_np,
+        }
+
+    def prepare_encoder_cudagraph_capture_inputs(
+        self,
+        token_budget: int,
+        max_batch_size: int,
+        max_frames_per_batch: int,
+        device: torch.device,
+        dtype: torch.dtype,
+        path: str = "default",
+    ):
+        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+            EncoderCudaGraphCaptureInputs,
+        )
+
+        mm_tokens_per_image = self.config.mm_tokens_per_image
+        num_images = min(
+            token_budget // mm_tokens_per_image,
+            max_batch_size,
+        )
+
+        image_size = self.config.vision_config.image_size
+        dummy_pixel_values = torch.randn(
+            num_images,
+            3,
+            image_size,
+            image_size,
+            device=device,
+            dtype=dtype,
+        )
+        values = {"pixel_values": dummy_pixel_values}
+
+        return EncoderCudaGraphCaptureInputs(
+            values,
+        )
+
+    def prepare_encoder_cudagraph_replay_buffers(
+        self,
+        mm_kwargs: dict[str, Any],
+        max_batch_size: int,
+        max_frames_per_batch: int,
+        path: str = "default",
+    ):
+        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+            EncoderCudaGraphReplayBuffers,
+        )
+
+        return EncoderCudaGraphReplayBuffers(
+            values={"pixel_values": mm_kwargs["pixel_values"]},
+        )
+
+    def encoder_cudagraph_forward(
+        self,
+        values: dict[str, torch.Tensor],
+        path: str = "default",
+    ) -> torch.Tensor:
+        pixel_values = values["pixel_values"]
+        image_features = self.vision_tower(pixel_values)
+        image_features = self.multi_modal_projector(image_features)
+        return image_features.flatten(end_dim=1)
+
+    def encoder_eager_forward(
+        self,
+        mm_kwargs: dict[str, Any],
+    ) -> torch.Tensor:
+        image_input = self._parse_and_validate_image_input(**mm_kwargs)
+        results = self._process_image_input(image_input)
+        return torch.cat(results, dim=0)

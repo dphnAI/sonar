@@ -62,6 +62,7 @@ if TYPE_CHECKING:
         PromMetricT,
     )
     from aphrodite.forward_context import ForwardContext
+    from aphrodite.v1.core.block_pool import BlockPool
     from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
     from aphrodite.v1.kv_cache_interface import KVCacheConfig
     from aphrodite.v1.request import Request
@@ -158,7 +159,9 @@ class KVConnectorWorkerMetadata(ABC):
     """
 
     @abstractmethod
-    def aggregate(self, other: "KVConnectorWorkerMetadata") -> "KVConnectorWorkerMetadata":
+    def aggregate(
+        self, other: "KVConnectorWorkerMetadata"
+    ) -> "KVConnectorWorkerMetadata":
         """
         Aggregate metadata with another `KVConnectorWorkerMetadata` object.
         """
@@ -182,7 +185,7 @@ class KVConnectorBase_V1(ABC):
         self,
         aphrodite_config: "AphroditeConfig",
         role: KVConnectorRole,
-        kv_cache_config: "KVCacheConfig | None" = None,
+        kv_cache_config: "KVCacheConfig",
     ):
         logger.warning(
             "Initializing KVConnectorBase_V1. This API is experimental and "
@@ -195,13 +198,6 @@ class KVConnectorBase_V1(ABC):
         else:
             raise ValueError("kv_transfer_config must be set for KVConnectorBase_V1")
         self._kv_cache_config = kv_cache_config
-        if self._kv_cache_config is None:
-            logger.warning(
-                "KVConnectorBase_V1 initialized without kv_cache_config. "
-                "This is deprecated - please update your connector to accept "
-                "kv_cache_config as the third constructor argument and pass it "
-                "to super().__init__()."
-            )
         self._role = role
 
     @property
@@ -262,7 +258,9 @@ class KVConnectorBase_V1(ABC):
         """
         return
 
-    def register_cross_layers_kv_cache(self, kv_cache: torch.Tensor, attn_backend: type["AttentionBackend"]):
+    def register_cross_layers_kv_cache(
+        self, kv_cache: torch.Tensor, attn_backend: type["AttentionBackend"]
+    ):
         """
         Initialize with a single KV cache tensor used by all layers.
         The first dimension should be num_layers.
@@ -356,7 +354,9 @@ class KVConnectorBase_V1(ABC):
         """
         pass
 
-    def get_finished(self, finished_req_ids: set[str]) -> tuple[set[str] | None, set[str] | None]:
+    def get_finished(
+        self, finished_req_ids: set[str]
+    ) -> tuple[set[str] | None, set[str] | None]:
         """
         Notifies worker-side connector ids of requests that have
         finished generating tokens on the worker.
@@ -440,6 +440,16 @@ class KVConnectorBase_V1(ABC):
     # Scheduler-side methods
     # ==============================
 
+    def bind_gpu_block_pool(self, gpu_block_pool: "BlockPool") -> None:
+        """
+        Bind the GPU block pool to the connector for per-GPU block status tracking.
+        For example, inc/dec ref counts, or iterate over the prefix cache blocks.
+
+        Args:
+            gpu_block_pool: the GPU block pool.
+        """
+        return
+
     @abstractmethod
     def get_num_new_matched_tokens(
         self,
@@ -476,7 +486,9 @@ class KVConnectorBase_V1(ABC):
         pass
 
     @abstractmethod
-    def update_state_after_alloc(self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int):
+    def update_state_after_alloc(
+        self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int
+    ):
         """
         Update KVConnector state after block allocation.
 
@@ -495,7 +507,9 @@ class KVConnectorBase_V1(ABC):
         pass
 
     @abstractmethod
-    def build_connector_meta(self, scheduler_output: SchedulerOutput) -> KVConnectorMetadata:
+    def build_connector_meta(
+        self, scheduler_output: SchedulerOutput
+    ) -> KVConnectorMetadata:
         """
         Build the connector metadata for this step.
 
@@ -506,6 +520,14 @@ class KVConnectorBase_V1(ABC):
             scheduler_output (SchedulerOutput): the scheduler output object.
         """
         pass
+
+    def on_new_request(self, request: "Request") -> None:
+        """Called by the scheduler when a new request is added.
+
+        Connectors can override this to inspect the request and perform
+        bookkeeping. The default implementation is a no-op.
+        """
+        return
 
     def update_connector_output(self, connector_output: KVConnectorOutput):
         """
@@ -547,6 +569,18 @@ class KVConnectorBase_V1(ABC):
         """
         return ()
 
+    def has_pending_push_work(self) -> bool:
+        """Return True if the connector has push-mode work that requires
+        the engine main loop to keep stepping (e.g. a P-side request whose
+        KV blocks are waiting to be WRITTEN to a D node).
+
+        Connectors that don't implement push-based KV transfer should
+        leave this as False.
+        """
+        # TODO: replace with a more general connector hook for keeping the
+        # scheduler alive (e.g. extend has_unfinished_requests).
+        return False
+
     @classmethod
     def get_required_kvcache_layout(cls, aphrodite_config: "AphroditeConfig") -> str | None:
         """
@@ -560,7 +594,10 @@ class KVConnectorBase_V1(ABC):
         """
 
         if cls is KVConnectorBase_V1:
-            raise TypeError("get_required_kvcache_layout should not be called on the abstract base class")
+            raise TypeError(
+                "get_required_kvcache_layout should not be called "
+                "on the abstract base class"
+            )
         return None
 
     @classmethod
@@ -598,7 +635,9 @@ class KVConnectorBase_V1(ABC):
         return None
 
     @classmethod
-    def build_kv_connector_stats(cls, data: dict[str, Any] | None = None) -> "KVConnectorStats | None":
+    def build_kv_connector_stats(
+        cls, data: dict[str, Any] | None = None
+    ) -> "KVConnectorStats | None":
         """
         KVConnectorStats resolution method. This method allows dynamically
         registered connectors to return their own KVConnectorStats object,
@@ -606,7 +645,9 @@ class KVConnectorBase_V1(ABC):
         """
         return None
 
-    def set_xfer_handshake_metadata(self, metadata: dict[int, KVConnectorHandshakeMetadata]) -> None:
+    def set_xfer_handshake_metadata(
+        self, metadata: dict[int, KVConnectorHandshakeMetadata]
+    ) -> None:
         """
         Set the KV connector handshake metadata for this connector.
 
@@ -614,6 +655,23 @@ class KVConnectorBase_V1(ABC):
             metadata (KVConnectorHandshakeMetadata): the handshake metadata to set.
         """
         return None
+
+    def set_xfer_handshake_metadata_pp_aware(
+        self, metadata: dict[tuple[int, int], KVConnectorHandshakeMetadata]
+    ) -> None:
+        """
+        Set handshake metadata keyed by (pp_rank, tp_rank).
+        - Default implementation assumes pp_rank is always 0
+        - PP-aware connectors override this to consume all PP producer shards.
+        """
+        if any(pp_rank != 0 for pp_rank, _ in metadata):
+            raise ValueError(
+                f"{type(self).__name__} received pp_rank > 0 handshake metadata "
+                "but does not support PP-disaggregated KV transfer."
+            )
+        self.set_xfer_handshake_metadata(
+            {tp_rank: meta for (_, tp_rank), meta in metadata.items()}
+        )
 
     @classmethod
     def build_prom_metrics(

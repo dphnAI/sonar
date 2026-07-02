@@ -446,7 +446,7 @@ void MatMulPrimitiveHandler::execute(ExecArgs& args) {
   c_storage->set_data_handle((void*)args.c_ptr);
   c_mem_desc->dims[0] = args.a_m_size;
 
-#ifndef APHRODITE_USE_ACL
+#ifndef VLLM_USE_ACL
   // We do not support in ACL backend of oneDNN, we handle bias by:
   // 1. copying it into the result tensor
   // 2. attaching a fused-sum post-op to the matmul primitive
@@ -460,7 +460,7 @@ void MatMulPrimitiveHandler::execute(ExecArgs& args) {
 // With ACL backend of oneDNN, the required memory format might change when the
 // source tensor dims change. This does not really happen in practice, so isn't
 // a performance hit, but we need to support it because the API allows for it.
-#ifdef APHRODITE_USE_ACL
+#ifdef VLLM_USE_ACL
   auto new_expected_wei_desc =
       dnnl::matmul::primitive_desc(
           const_cast<dnnl_primitive_desc_t>(matmul.get_primitive_desc()))
@@ -507,7 +507,7 @@ dnnl::matmul::primitive_desc MatMulPrimitiveHandler::create_primitive_desc(
   } else {
     a_md = dnnl::memory::desc({key.a_m_size, b_k_size_}, b_type_,
                               {key.a_m_stride, 1});
-#ifdef APHRODITE_USE_ACL
+#ifdef VLLM_USE_ACL
     // ACL's backend of oneDNN always expects the weight format to be "any"
     b_md = dnnl::memory::desc({b_k_size_, b_n_size_}, b_type_,
                               dnnl::memory::format_tag::any);
@@ -525,7 +525,7 @@ dnnl::matmul::primitive_desc MatMulPrimitiveHandler::create_primitive_desc(
     dnnl::memory::desc bias_md({1, b_n_size_}, key.bias_type, {b_n_size_, 1});
 // Since ACL's matmuls don't support passing a bias_md, we apply the bias
 // through a fused-sum post-op
-#ifdef APHRODITE_USE_ACL
+#ifdef VLLM_USE_ACL
     dnnl::post_ops post_ops;
     post_ops.append_sum();
     attr.set_post_ops(post_ops);
@@ -551,7 +551,7 @@ void MatMulPrimitiveHandler::init_runtime_memory_cache(const Args& args) {
   set_runtime_memory_ptr(1, memory_cache_[DNNL_ARG_DST].get());
 
 // ACL matmuls don't support bias_md, so we don't need these
-#ifndef APHRODITE_USE_ACL
+#ifndef VLLM_USE_ACL
   memory_cache_[DNNL_ARG_BIAS] =
       dnnl::memory({{b_n_size_}, dnnl::memory::data_type::f32, {1}},
                    default_engine(), nullptr);
@@ -564,7 +564,7 @@ void MatMulPrimitiveHandler::init_runtime_memory_cache(const Args& args) {
 }
 
 bool is_onednn_acl_supported() {
-#ifdef APHRODITE_USE_ACL
+#ifdef VLLM_USE_ACL
   return true;
 #else
   return false;

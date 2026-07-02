@@ -12,11 +12,11 @@ from aphrodite.engine.protocol import EngineClient
 from aphrodite.entrypoints.openai.engine.protocol import (
     ErrorResponse,
 )
-from aphrodite.entrypoints.openai.utils import validate_json_request
 from aphrodite.entrypoints.serve.elastic_ep.middleware import (
     get_scaling_elastic_ep,
     set_scaling_elastic_ep,
 )
+from aphrodite.entrypoints.serve.utils.api_utils import validate_json_request
 from aphrodite.logger import init_logger
 
 logger = init_logger(__name__)
@@ -49,7 +49,9 @@ async def scale_elastic_ep(raw_request: Request):
     drain_timeout = body.get("drain_timeout", 120)  # Default 2 minutes
 
     if new_data_parallel_size is None:
-        raise HTTPException(status_code=400, detail="new_data_parallel_size is required")
+        raise HTTPException(
+            status_code=400, detail="new_data_parallel_size is required"
+        )
 
     if not isinstance(new_data_parallel_size, int) or new_data_parallel_size <= 0:
         raise HTTPException(
@@ -58,7 +60,9 @@ async def scale_elastic_ep(raw_request: Request):
         )
 
     if not isinstance(drain_timeout, int) or drain_timeout <= 0:
-        raise HTTPException(status_code=400, detail="drain_timeout must be a positive integer")
+        raise HTTPException(
+            status_code=400, detail="drain_timeout must be a positive integer"
+        )
 
     # Set scaling flag to prevent new requests
     set_scaling_elastic_ep(True)
@@ -73,7 +77,8 @@ async def scale_elastic_ep(raw_request: Request):
     except TimeoutError as e:
         raise HTTPException(
             status_code=408,
-            detail=f"Scale failed due to request drain timeout after {drain_timeout} seconds",
+            detail="Scale failed due to request drain timeout "
+            f"after {drain_timeout} seconds",
         ) from e
     except Exception as e:
         logger.error("Scale failed: %s", e)

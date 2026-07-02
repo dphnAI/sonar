@@ -5,19 +5,23 @@ Script to test add_lora, remove_lora, pin_lora, list_loras functions.
 """
 
 import pytest
-from aphrodite.endpoints.openai.api_server import build_async_engine_client_from_engine_args
-from aphrodite.engine.args_tools import AsyncEngineArgs, EngineArgs
 
+from aphrodite.engine.arg_utils import AsyncEngineArgs, EngineArgs
+from aphrodite.entrypoints.openai.api_server import (
+    build_async_engine_client_from_engine_args,
+)
 from aphrodite.lora.request import LoRARequest
 from aphrodite.v1.engine.llm_engine import LLMEngine
 
-MODEL_PATH = "meta-llama/Llama-2-7b-hf"
-LORA_MODULE_PATH = "yard1/llama-2-7b-sql-lora-test"
+MODEL_PATH = "Qwen/Qwen3-0.6B"
+LORA_MODULE_PATH = "charent/self_cognition_Alice"
 LORA_RANK = 8
 
 
 def make_lora_request(lora_id: int):
-    return LoRARequest(lora_name=f"{lora_id}", lora_int_id=lora_id, lora_path=LORA_MODULE_PATH)
+    return LoRARequest(
+        lora_name=f"{lora_id}", lora_int_id=lora_id, lora_path=LORA_MODULE_PATH
+    )
 
 
 def test_lora_functions_sync():

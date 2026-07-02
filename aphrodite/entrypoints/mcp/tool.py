@@ -40,7 +40,10 @@ def validate_gpt_oss_install():
         raise ImportError(f"Invalid version string for 'gpt_oss': {e}") from None
 
     if pkg_version < Version(MIN_GPT_OSS_VERSION):
-        raise ImportError(f"gpt_oss >= {MIN_GPT_OSS_VERSION} is required, but {pkg_version} is installed.") from None
+        raise ImportError(
+            f"gpt_oss >= {MIN_GPT_OSS_VERSION} is required, "
+            f"but {pkg_version} is installed."
+        ) from None
 
 
 class Tool(ABC):
@@ -68,7 +71,9 @@ class HarmonyBrowserTool(Tool):
             from gpt_oss.tools.simple_browser.backend import ExaBackend
         except ImportError as e:
             self.enabled = False
-            logger.warning_once("gpt_oss is not installed properly (%s), browsing is disabled", e)
+            logger.warning_once(
+                "gpt_oss is not installed properly (%s), browsing is disabled", e
+            )
             return
 
         browser_backend = ExaBackend(source="web", api_key=exa_api_key)
@@ -128,7 +133,8 @@ class HarmonyPythonTool(Tool):
         except Exception as e:
             self.enabled = False
             logger.warning_once(
-                "Code interpreter tool failed to initialize (%s), code interpreter is disabled",
+                "Code interpreter tool failed to initialize (%s), code "
+                "interpreter is disabled",
                 e,
             )
             return
@@ -153,7 +159,7 @@ class HarmonyPythonTool(Tool):
 
         assert isinstance(context, ParsableContext)
 
-        last_msg = context.parser.response_messages[-1]
+        last_msg = context.response_messages[-1]
         args = json.loads(last_msg.arguments)
 
         last_msg_harmony = Message(

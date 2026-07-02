@@ -6,9 +6,6 @@ from copy import deepcopy
 
 from tblib import pickling_support
 
-# Import fixture
-from tests.v1.entrypoints.conftest import sample_json_schema
-
 # ruff: noqa
 
 # Install support for pickling exceptions so that we can nicely propagate
@@ -27,7 +24,7 @@ import threading
 from collections.abc import Generator
 from contextlib import nullcontext
 from enum import Enum
-from typing import Any, Callable, TypedDict, TypeVar, cast
+from typing import Any, Callable, TypedDict, TypeVar, cast, TYPE_CHECKING, Optional
 
 import numpy as np
 import pytest
@@ -36,27 +33,101 @@ import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub import snapshot_download
 from PIL import Image
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, BatchEncoding, BatchFeature
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BatchEncoding,
+    BatchFeature,
+)
 from transformers.models.auto.auto_factory import _BaseAutoModelClass
 
+from tests.models.utils import (
+    TokensTextLogprobs,
+    TokensTextLogprobsPromptLogprobs,
+    softmax,
+)
 from aphrodite import LLM, SamplingParams, envs
 from aphrodite.assets.audio import AudioAsset
 from aphrodite.assets.image import ImageAsset
 from aphrodite.assets.video import VideoAsset
-from aphrodite.common.connections import global_http_connection
-from aphrodite.common.sampling_params import BeamSearchParams
+from aphrodite.config.cache import CacheConfig
 from aphrodite.config.model import ConvertOption, RunnerOption, _get_and_verify_dtype
-from aphrodite.distributed import cleanup_dist_env_and_memory, init_distributed_environment, initialize_model_parallel
+from aphrodite.connections import global_http_connection
+from aphrodite.distributed import (
+    cleanup_dist_env_and_memory,
+    init_distributed_environment,
+    initialize_model_parallel,
+)
 from aphrodite.logger import init_logger
 from aphrodite.logprobs import Logprob
+from aphrodite.multimodal.media import MediaWithBytes
 from aphrodite.multimodal.utils import fetch_image
 from aphrodite.outputs import RequestOutput
+from aphrodite.platforms import current_platform
+from aphrodite.sampling_params import BeamSearchParams
 from aphrodite.transformers_utils.utils import maybe_model_redirect
 from aphrodite.utils.collection_utils import is_list_of
 from aphrodite.utils.torch_utils import set_default_torch_num_threads
-from tests.models.utils import TokensTextLogprobs, TokensTextLogprobsPromptLogprobs
+
+from torch._inductor.utils import fresh_cache
+
+
+if TYPE_CHECKING:
+    from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
+    from transformers.generation.utils import GenerateOutput
+
 
 logger = init_logger(__name__)
+
+
+@pytest.fixture
+def sample_json_schema():
+    return {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "age": {"type": "integer"},
+            "skills": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                },
+            },
+            "grade": {
+                "type": "string",
+                "pattern": "^[A-D]$",
+            },
+            "email": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
+            },
+            "work_history": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "company": {"type": "string"},
+                        "duration": {
+                            "type": "number",
+                            "minimum": 0.0,
+                            "maximum": 100.0,
+                        },
+                        "position": {"type": "string"},
+                    },
+                    "required": ["company", "duration", "position"],
+                    "additionalProperties": False,
+                },
+                "minItems": 0,
+                "maxItems": 3,
+            },
+        },
+        "required": ["name", "age", "skills", "grade", "email", "work_history"],
+        "additionalProperties": False,
+        "minProperties": 1,
+        "maxProperties": 10,
+    }
+
 
 _TEST_DIR = os.path.dirname(__file__)
 _TEST_PROMPTS = [os.path.join(_TEST_DIR, "prompts", "example.txt")]
@@ -144,26 +215,6 @@ AUDIO_ASSETS = AudioTestAssets()
 """Singleton instance of {class}`AudioTestAssets`."""
 
 
-@pytest.fixture(scope="function", autouse=True)
-def cleanup_APHRODITE_USE_V1(monkeypatch):
-    """
-    The V1 oracle sets "APHRODITE_USE_V1" during loading. This means
-    that each invocation of a test change the env variable.
-
-    If we touch "APHRODITE_USE_V1" with monkeypatch, then any changes
-    made during the test run by Aphrodite will be cleaned up.
-
-    This fixture is used by every test.
-    """
-
-    # If APHRODITE_USE_V1 is not set, set then delete. This will
-    # cause monkeypatch to clean up APHRODITE_USE_V1 upon exit
-    # if APHRODITE modifies the value of envs.APHRODITE_USE_V1.
-    if "APHRODITE_USE_V1" not in os.environ:
-        monkeypatch.setenv("APHRODITE_USE_V1", "")
-        monkeypatch.delenv("APHRODITE_USE_V1")
-
-
 @pytest.fixture(autouse=True)
 def init_test_http_connection():
     # pytest_asyncio may use a different event loop per test
@@ -173,17 +224,42 @@ def init_test_http_connection():
 
 @pytest.fixture
 def dist_init():
-    temp_file = tempfile.mkstemp()[1]
-    init_distributed_environment(
-        world_size=1,
-        rank=0,
-        distributed_init_method=f"file://{temp_file}",
-        local_rank=0,
-        backend="nccl",
-    )
-    initialize_model_parallel(1, 1)
-    yield
-    cleanup_dist_env_and_memory()
+    from tests.utils import ensure_current_vllm_config
+
+    # Close the fd returned by mkstemp; FileStore opens the path itself.
+    # Leaving it open leaks one FD per test and eventually exhausts the
+    # ulimit, causing FileStore's destructor to throw c10::DistStoreError
+    # ("Too many open files") during gc and abort the process.
+    fd, temp_file = tempfile.mkstemp()
+    os.close(fd)
+
+    try:
+        with ensure_current_vllm_config():
+            init_distributed_environment(
+                world_size=1,
+                rank=0,
+                distributed_init_method=f"file://{temp_file}",
+                local_rank=0,
+                backend="nccl",
+            )
+            initialize_model_parallel(1, 1)
+            yield
+        cleanup_dist_env_and_memory()
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(temp_file)
+
+
+@pytest.fixture
+def default_vllm_config():
+    """Set a default AphroditeConfig for tests that directly test CustomOps or pathways
+    that use get_current_vllm_config() outside of a full engine context.
+    """
+    from aphrodite.config import AphroditeConfig, set_current_vllm_config
+
+    config = AphroditeConfig()
+    with set_current_vllm_config(config):
+        yield config
 
 
 @pytest.fixture()
@@ -203,6 +279,27 @@ def cleanup_fixture(should_do_global_cleanup_after_test: bool):
         cleanup_dist_env_and_memory()
 
 
+@pytest.fixture
+def workspace_init():
+    """Initialize the workspace manager for tests that need it.
+
+    This fixture initializes the workspace manager with a CUDA device
+    if available, and resets it after the test completes. Tests that
+    create a full Aphrodite engine should NOT use this fixture as the engine
+    will initialize the workspace manager itself.
+    """
+    from aphrodite.v1.worker.workspace import (
+        init_workspace_manager,
+        reset_workspace_manager,
+    )
+
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")
+        init_workspace_manager(device)
+    yield
+    reset_workspace_manager()
+
+
 @pytest.fixture(autouse=True)
 def dynamo_reset():
     yield
@@ -211,10 +308,7 @@ def dynamo_reset():
 
 @pytest.fixture
 def example_prompts() -> list[str]:
-    prompts = []
-    for filename in _TEST_PROMPTS:
-        prompts += _read_prompts(filename)
-    return prompts
+    return [prompt for filename in _TEST_PROMPTS for prompt in _read_prompts(filename)]
 
 
 @pytest.fixture
@@ -233,10 +327,7 @@ class DecoderPromptType(Enum):
 
 @pytest.fixture
 def example_long_prompts() -> list[str]:
-    prompts = []
-    for filename in _LONG_PROMPTS:
-        prompts += _read_prompts(filename)
-    return prompts
+    return [prompt for filename in _LONG_PROMPTS for prompt in _read_prompts(filename)]
 
 
 @pytest.fixture(scope="session")
@@ -284,12 +375,15 @@ class HfRunner:
         model_name: str,
         dtype: str = "auto",
         *,
+        revision: str | None = None,
         model_kwargs: dict[str, Any] | None = None,
         trust_remote_code: bool = True,
         is_sentence_transformer: bool = False,
         is_cross_encoder: bool = False,
         skip_tokenizer_init: bool = False,
         auto_cls: type[_BaseAutoModelClass] = AutoModelForCausalLM,
+        tokenizer_name: str | None = None,
+        processor: Any | None = None,
         # Set this to avoid hanging issue
         default_torch_num_threads: int | None = None,
     ) -> None:
@@ -303,12 +397,15 @@ class HfRunner:
             self._init(
                 model_name=model_name,
                 dtype=dtype,
+                revision=revision,
                 model_kwargs=model_kwargs,
                 trust_remote_code=trust_remote_code,
                 is_sentence_transformer=is_sentence_transformer,
                 is_cross_encoder=is_cross_encoder,
                 skip_tokenizer_init=skip_tokenizer_init,
                 auto_cls=auto_cls,
+                tokenizer_name=tokenizer_name,
+                processor=processor,
             )
 
     def _init(
@@ -316,12 +413,15 @@ class HfRunner:
         model_name: str,
         dtype: str = "auto",
         *,
+        revision: str | None = None,
         model_kwargs: dict[str, Any] | None = None,
         trust_remote_code: bool = True,
         is_sentence_transformer: bool = False,
         is_cross_encoder: bool = False,
         skip_tokenizer_init: bool = False,
         auto_cls: type[_BaseAutoModelClass] = AutoModelForCausalLM,
+        tokenizer_name: str | None = None,
+        processor: Any | None = None,
     ) -> None:
         model_name = maybe_model_redirect(model_name)
         self.model_name = model_name
@@ -330,12 +430,22 @@ class HfRunner:
             model_name,
             trust_remote_code=trust_remote_code,
         )
+        # HF runner should use the HF config so that it's consistent with the HF model
+        if self.config.__module__.startswith("aphrodite.transformers_utils.configs"):
+            from transformers.models.auto.configuration_auto import CONFIG_MAPPING
+
+            del CONFIG_MAPPING._extra_content[self.config.model_type]
+            self.config = AutoConfig.from_pretrained(
+                model_name,
+                trust_remote_code=trust_remote_code,
+            )
         self.device = self.get_default_device()
         self.dtype = dtype = _get_and_verify_dtype(
             self.model_name,
             self.config,
             dtype=dtype,
             is_pooling_model=is_sentence_transformer or is_cross_encoder,
+            config_format="hf",
         )
 
         model_kwargs = model_kwargs if model_kwargs is not None else {}
@@ -347,6 +457,7 @@ class HfRunner:
 
             self.model = SentenceTransformer(
                 model_name,
+                revision=revision,
                 device=self.device,
                 model_kwargs=model_kwargs,
                 trust_remote_code=trust_remote_code,
@@ -357,15 +468,20 @@ class HfRunner:
 
             self.model = CrossEncoder(
                 model_name,
+                revision=revision,
                 device=self.device,
                 automodel_args=model_kwargs,
                 trust_remote_code=trust_remote_code,
             )
         else:
-            model = auto_cls.from_pretrained(
-                model_name,
-                trust_remote_code=trust_remote_code,
-                **model_kwargs,
+            model = cast(
+                nn.Module,
+                auto_cls.from_pretrained(
+                    model_name,
+                    revision=revision,
+                    trust_remote_code=trust_remote_code,
+                    **model_kwargs,
+                ),
             )
 
             # in case some unquantized custom models are not in same dtype
@@ -383,22 +499,29 @@ class HfRunner:
             self.model = model
 
         if not skip_tokenizer_init:
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                model_name,
-                dtype=dtype,
-                trust_remote_code=trust_remote_code,
+            self.tokenizer: "PreTrainedTokenizer | PreTrainedTokenizerFast" = (
+                AutoTokenizer.from_pretrained(
+                    tokenizer_name or model_name,
+                    trust_remote_code=trust_remote_code,
+                )
             )
 
-        # don't put this import at the top level
-        # it will call torch.cuda.device_count()
-        from transformers import AutoProcessor  # noqa: F401
+        if processor is not None:
+            self.processor = processor
+        else:
+            # don't put this import at the top level
+            # it will call torch.accelerator.device_count()
+            from transformers import AutoProcessor
 
-        self.processor = AutoProcessor.from_pretrained(
-            model_name,
-            dtype=dtype,
-            trust_remote_code=trust_remote_code,
-        )
+            self.processor = AutoProcessor.from_pretrained(
+                model_name,
+                trust_remote_code=trust_remote_code,
+            )
         if skip_tokenizer_init:
+            if self.processor is None:
+                raise ValueError(
+                    "skip_tokenizer_init=True requires processor initialization."
+                )
             self.tokenizer = self.processor.tokenizer
 
     def get_inputs(
@@ -407,6 +530,7 @@ class HfRunner:
         images: PromptImageInput | None = None,
         videos: PromptVideoInput | None = None,
         audios: PromptAudioInput | None = None,
+        tokenization_kwargs: dict[str, Any] | None = None,
     ) -> list[BatchFeature | BatchEncoding | dict[str, torch.Tensor]]:
         if images is not None:
             assert len(prompts) == len(images)
@@ -420,10 +544,24 @@ class HfRunner:
         all_inputs: list[BatchFeature | BatchEncoding | dict[str, torch.Tensor]] = []
         for i, prompt in enumerate(prompts):
             if isinstance(prompt, str):
-                processor_kwargs: dict[str, Any] = {
-                    "text": prompt,
-                    "return_tensors": "pt",
-                }
+                if self.processor is None:
+                    raise RuntimeError(
+                        "HfRunner.processor is not initialized. "
+                        "Pass processor=... to HfRunner or set "
+                        "hf_model.processor before generation."
+                    )
+                # Create a copy to avoid modifying the original dict
+                processor_kwargs = (
+                    tokenization_kwargs.copy()
+                    if tokenization_kwargs is not None
+                    else {}
+                )
+                processor_kwargs.update(
+                    {
+                        "text": prompt,
+                        "return_tensors": "pt",
+                    }
+                )
                 if images is not None and (image := images[i]) is not None:
                     processor_kwargs["images"] = image
                 if videos is not None and (video := videos[i]) is not None:
@@ -445,10 +583,14 @@ class HfRunner:
             else:
                 # check that prompt is (batched) list of integers (token ids)
                 if not is_list_of(prompt, typ=int, check="all"):
-                    raise ValueError("Prompt must be a list of ints corresponding to the prompt token ids.")
+                    raise ValueError(
+                        "Prompt must be a list of ints corresponding to the prompt token ids."
+                    )
                 # check that no multimodal input is provided
                 if images or videos or audios:
-                    raise ValueError("When providing prompt token ids multimodal inputs are not supported.")
+                    raise ValueError(
+                        "When providing prompt token ids multimodal inputs are not supported."
+                    )
                 input_dict = {
                     "input_ids": torch.tensor(prompt, dtype=torch.long).unsqueeze(0),
                 }
@@ -465,20 +607,23 @@ class HfRunner:
             embeddings.append(embedding)
         return embeddings
 
-    def classify(self, prompts: list[str]) -> list[str]:
+    def classify(self, prompts: list[str]) -> list[list[float]]:
         # output is final logits
         all_inputs = self.get_inputs(prompts)
-        outputs = []
+        outputs: list[list[float]] = []
         problem_type = getattr(self.config, "problem_type", "")
 
         for inputs in all_inputs:
             output = self.model(**self.wrap_device(inputs))
+
+            assert isinstance(output.logits, torch.Tensor)
+
             if problem_type == "regression":
                 logits = output.logits[0].tolist()
             elif problem_type == "multi_label_classification":
                 logits = output.logits.sigmoid()[0].tolist()
             else:
-                logits = output.logits.softmax(dim=-1)[0].tolist()
+                logits = softmax(output.logits)[0].tolist()
             outputs.append(logits)
 
         return outputs
@@ -491,22 +636,27 @@ class HfRunner:
         audios: PromptAudioInput | None = None,
         **kwargs: Any,
     ) -> list[tuple[list[list[int]], list[str]]]:
-        all_inputs = self.get_inputs(prompts, images=images, videos=videos, audios=audios)
+        all_inputs = self.get_inputs(
+            prompts, images=images, videos=videos, audios=audios
+        )
 
         outputs: list[tuple[list[list[int]], list[str]]] = []
         for inputs in all_inputs:
-            output_ids = self.model.generate(
+            output_ids: torch.Tensor = self.model.generate(
                 **self.wrap_device(inputs),
                 use_cache=True,
                 **kwargs,
             )
+            if self.processor is None:
+                raise RuntimeError(
+                    "HfRunner.processor is not initialized; cannot decode output."
+                )
             output_str = self.processor.batch_decode(
                 output_ids,
                 skip_special_tokens=True,
                 clean_up_tokenization_spaces=False,
             )
-            output_ids = output_ids.cpu().tolist()
-            outputs.append((output_ids, output_str))
+            outputs.append((output_ids.cpu().tolist(), output_str))
         return outputs
 
     def generate_greedy(
@@ -553,7 +703,9 @@ class HfRunner:
         for i in range(len(outputs)):
             output_ids, output_str = outputs[i]
             for j in range(len(output_ids)):
-                output_ids[j] = [x for x in output_ids[j] if x != self.tokenizer.pad_token_id]
+                output_ids[j] = [
+                    x for x in output_ids[j] if x != self.tokenizer.pad_token_id
+                ]
             outputs[i] = (output_ids, output_str)
         return outputs
 
@@ -566,11 +718,13 @@ class HfRunner:
         audios: PromptAudioInput | None = None,
         **kwargs: Any,
     ) -> list[list[torch.Tensor]]:
-        all_inputs = self.get_inputs(prompts, images=images, videos=videos, audios=audios)
+        all_inputs = self.get_inputs(
+            prompts, images=images, videos=videos, audios=audios
+        )
 
         all_logprobs: list[list[torch.Tensor]] = []
         for inputs in all_inputs:
-            output = self.model.generate(
+            output: "GenerateOutput" = self.model.generate(
                 **self.wrap_device(inputs),
                 use_cache=True,
                 do_sample=False,
@@ -641,18 +795,26 @@ class HfRunner:
         images: PromptImageInput | None = None,
         audios: PromptAudioInput | None = None,
         videos: PromptVideoInput | None = None,
+        use_cache: bool = True,
+        tokenization_kwargs: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> list[TokensTextLogprobs]:
-        all_inputs = self.get_inputs(prompts, images=images, videos=videos, audios=audios)
+        all_inputs = self.get_inputs(
+            prompts,
+            images=images,
+            videos=videos,
+            audios=audios,
+            tokenization_kwargs=tokenization_kwargs,
+        )
 
         all_logprobs: list[list[dict[int, float]]] = []
         all_output_ids: list[list[int]] = []
         all_output_strs: list[str] = []
 
         for inputs in all_inputs:
-            output = self.model.generate(
+            output: "GenerateOutput" = self.model.generate(
                 **self.wrap_device(inputs),
-                use_cache=True,
+                use_cache=use_cache,
                 do_sample=False,
                 max_new_tokens=max_tokens,
                 output_hidden_states=True,
@@ -660,10 +822,16 @@ class HfRunner:
                 **kwargs,
             )
 
+            # Encoder-decoder models return decoder_hidden_states instead of
+            # hidden_states
+            hidden_states = (
+                getattr(output, "hidden_states", None) or output.decoder_hidden_states
+            )
+
             (
                 seq_logprobs_lst,
                 output_len,
-            ) = self._hidden_states_to_logprobs(output.hidden_states, num_logprobs)
+            ) = self._hidden_states_to_logprobs(hidden_states, num_logprobs)
 
             all_logprobs.append(seq_logprobs_lst)
             seq_ids = output.sequences[0]
@@ -673,7 +841,10 @@ class HfRunner:
             all_output_strs.append(self.tokenizer.decode(output_ids))
 
         outputs = zip(all_output_ids, all_output_strs, all_logprobs)
-        return [(output_ids, output_str, output_logprobs) for output_ids, output_str, output_logprobs in outputs]
+        return [
+            (output_ids, output_str, output_logprobs)
+            for output_ids, output_str, output_logprobs in outputs
+        ]
 
     def encode(self, prompts: list[str], *args, **kwargs) -> list[list[torch.Tensor]]:
         return self.model.encode(prompts, *args, **kwargs)
@@ -682,11 +853,38 @@ class HfRunner:
         return self.model.predict(prompts, *args, convert_to_tensor=True, **kwargs)
 
     def __enter__(self):
+        if current_platform.is_rocm():
+            # Record starting memory usage stats on ROCm so that we can wait for
+            # memory to roughly settle back below these levels on shutdown. This is
+            # helpful in cases where the HfRunner is initialized after significant GPU
+            # memory is already occupied, e.g. in
+            # tests/basic_correctness/test_basic_correctness.py::test_models_distributed
+            from tests.utils import (
+                get_physical_device_indices,
+                record_gpu_memory_usage_stats,
+            )
+
+            if (device_count := current_platform.device_count()) > 0:
+                devices = get_physical_device_indices(devices=list(range(device_count)))
+                mem_usage_stats = record_gpu_memory_usage_stats(devices=devices)
+                self.threshold_ratios = {
+                    device: 0.05 + mem_used / mem_tot
+                    for device, (mem_used, mem_tot) in mem_usage_stats.items()
+                }
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        from tests.utils import wait_for_rocm_memory_to_settle
+
         del self.model
         cleanup_dist_env_and_memory()
+        # ROCm frees VRAM lazily; wait so a runner started right after this HF
+        # model exits does not OOM on its startup memory guard.
+        wait_for_rocm_memory_to_settle(
+            threshold_ratio=getattr(self, "threshold_ratios", None)
+        )
+        if hasattr(self, "threshold_ratios"):
+            del self.threshold_ratios
 
 
 @pytest.fixture(scope="session")
@@ -717,14 +915,13 @@ class AphroditeRunner:
         tokenizer_name: str | None = None,
         tokenizer_mode: str = "auto",
         trust_remote_code: bool = True,
-        seed: int | None = 0,
+        seed: int = 0,
         max_model_len: int | None = 1024,
         dtype: str = "auto",
         disable_log_stats: bool = True,
         tensor_parallel_size: int = 1,
         block_size: int = 16 if not torch.xpu.is_available() else 64,
         enable_chunked_prefill: bool | None = False,
-        swap_space: int = 4,
         enforce_eager: bool | None = False,
         # Set this to avoid hanging issue
         default_torch_num_threads: int | None = None,
@@ -743,6 +940,28 @@ class AphroditeRunner:
             # being captured which can trigger edge cases that we don't handle yet.
             kwargs["compilation_config"] = {"cudagraph_capture_sizes": [4]}
 
+            # Make sure we have atleast one cudagraph large enough for a single decode.
+            if (speculative_config := kwargs.get("speculative_config")) and (
+                num_speculative_tokens := speculative_config["num_speculative_tokens"]
+            ):
+                kwargs["compilation_config"]["cudagraph_capture_sizes"].append(
+                    num_speculative_tokens + 1
+                )
+
+        from aphrodite.platforms import current_platform
+
+        if current_platform.is_rocm():
+            gpu_memory_utilization = kwargs.get(
+                "gpu_memory_utilization",
+                CacheConfig.gpu_memory_utilization,
+            )
+            # V1 startup requires free_memory >= total * gpu_memory_utilization.
+            # ROCm CI can hand a test a device that is still lazily releasing
+            # VRAM from a previous process, so wait before constructing LLM.
+            from tests.utils import wait_for_rocm_memory_to_settle
+
+            wait_for_rocm_memory_to_settle(threshold_ratio=1.0 - gpu_memory_utilization)
+
         with init_ctx:
             self.llm = LLM(
                 model=model_name,
@@ -753,7 +972,6 @@ class AphroditeRunner:
                 trust_remote_code=trust_remote_code,
                 dtype=dtype,
                 seed=seed,
-                swap_space=swap_space,
                 enforce_eager=enforce_eager,
                 disable_log_stats=disable_log_stats,
                 tensor_parallel_size=tensor_parallel_size,
@@ -765,36 +983,49 @@ class AphroditeRunner:
 
     def get_inputs(
         self,
-        prompts: list[str] | list[torch.Tensor] | list[list[int]],
+        prompts: list[str]
+        | list[torch.Tensor]
+        | list[list[int]]
+        | list[dict[str, Any]],
         images: PromptImageInput | None = None,
         videos: PromptVideoInput | None = None,
         audios: PromptAudioInput | None = None,
     ) -> list[dict[str, Any]]:
-        if any(x is not None and len(x) != len(prompts) for x in [images, videos, audios]):
-            raise ValueError("All non-None multimodal inputs must have the same length as prompts")
+        if any(
+            x is not None and len(x) != len(prompts) for x in [images, videos, audios]
+        ):
+            raise ValueError(
+                "All non-None multimodal inputs must have the same length as prompts"
+            )
 
         inputs = list[dict[str, Any]]()
         for i, prompt in enumerate(prompts):
-            prompt_dict = dict[str, Any]()
-            if isinstance(prompt, str):
-                prompt_dict["prompt"] = prompt
-            elif isinstance(prompt, list):
-                prompt_dict["prompt_token_ids"] = prompt
+            # If we're passing an encoder/decoder prompt, we assume it
+            # already contains the multimodal data in the prompt
+            if isinstance(prompt, dict):
+                assert images is None and audios is None and videos is None
+                inputs.append(prompt.copy())
             else:
-                prompt_dict["prompt_embeds"] = prompt
+                prompt_dict = dict[str, Any]()
+                if isinstance(prompt, str):
+                    prompt_dict["prompt"] = prompt
+                elif isinstance(prompt, list):
+                    prompt_dict["prompt_token_ids"] = prompt
+                else:
+                    prompt_dict["prompt_embeds"] = prompt
 
-            multi_modal_data = dict[str, Any]()
-            if images is not None and (image := images[i]) is not None:
-                multi_modal_data["image"] = image
-            if videos is not None and (video := videos[i]) is not None:
-                multi_modal_data["video"] = video
-            if audios is not None and (audio := audios[i]) is not None:
-                multi_modal_data["audio"] = audio
+                multi_modal_data = dict[str, Any]()
+                if images is not None and (image := images[i]) is not None:
+                    multi_modal_data["image"] = image
+                if videos is not None and (video := videos[i]) is not None:
+                    multi_modal_data["video"] = video
+                if audios is not None and (audio := audios[i]) is not None:
+                    multi_modal_data["audio"] = audio
 
-            if multi_modal_data:
-                prompt_dict["multi_modal_data"] = multi_modal_data
+                if multi_modal_data:
+                    prompt_dict["multi_modal_data"] = multi_modal_data
 
-            inputs.append(prompt_dict)
+                inputs.append(prompt_dict)
 
         return inputs
 
@@ -810,7 +1041,9 @@ class AphroditeRunner:
     ) -> list[tuple[list[list[int]], list[str]]] | tuple[list, list]:
         inputs = self.get_inputs(prompts, images=images, videos=videos, audios=audios)
 
-        req_outputs = self.llm.generate(inputs, sampling_params=sampling_params, **kwargs)
+        req_outputs = self.llm.generate(
+            inputs, sampling_params=sampling_params, **kwargs
+        )
 
         outputs: list[tuple[list[list[int]], list[str]]] = []
         logprobs = []
@@ -820,6 +1053,8 @@ class AphroditeRunner:
             req_sample_output_ids: list[list[int]] = []
             req_sample_output_strs: list[str] = []
             req_logprobs = []
+            if req_output.prompt_logprobs:
+                req_logprobs.extend(req_output.prompt_logprobs)
             for sample in req_output.outputs:
                 output_str = sample.text
                 output_ids = list(sample.token_ids)
@@ -834,6 +1069,7 @@ class AphroditeRunner:
     @staticmethod
     def _final_steps_generate_w_logprobs(
         req_outputs: list[RequestOutput],
+        include_prompt_token_ids: bool = False,
     ) -> list[TokensTextLogprobsPromptLogprobs]:
         outputs: list[TokensTextLogprobsPromptLogprobs] = []
         for req_output in req_outputs:
@@ -842,7 +1078,26 @@ class AphroditeRunner:
                 output_str = sample.text
                 output_ids = list(sample.token_ids)
                 output_logprobs = sample.logprobs
-            outputs.append((output_ids, output_str, output_logprobs, req_output.prompt_logprobs))
+            if include_prompt_token_ids:
+                outputs.append(
+                    (  # type: ignore[arg-type]
+                        output_ids,
+                        output_str,
+                        output_logprobs,
+                        req_output.prompt_token_ids,
+                        req_output.prompt_logprobs,
+                    )
+                )
+            else:
+                outputs.append(
+                    (
+                        output_ids,
+                        output_str,
+                        output_logprobs,
+                        req_output.prompt_logprobs,
+                    )
+                )
+
         return outputs
 
     def generate_w_logprobs(
@@ -852,13 +1107,18 @@ class AphroditeRunner:
         images: PromptImageInput | None = None,
         audios: PromptAudioInput | None = None,
         videos: PromptVideoInput | None = None,
+        include_prompt_token_ids: bool = False,
         **kwargs: Any,
     ) -> list[TokensTextLogprobs] | list[TokensTextLogprobsPromptLogprobs]:
         inputs = self.get_inputs(prompts, images=images, videos=videos, audios=audios)
 
-        req_outputs = self.llm.generate(inputs, sampling_params=sampling_params, **kwargs)
+        req_outputs = self.llm.generate(
+            inputs, sampling_params=sampling_params, **kwargs
+        )
 
-        toks_str_logsprobs_prompt_logprobs = self._final_steps_generate_w_logprobs(req_outputs)
+        toks_str_logsprobs_prompt_logprobs = self._final_steps_generate_w_logprobs(
+            req_outputs, include_prompt_token_ids
+        )
         # Omit prompt logprobs if not required by sampling params
         return (
             [x[0:-1] for x in toks_str_logsprobs_prompt_logprobs]
@@ -917,22 +1177,33 @@ class AphroditeRunner:
             **kwargs,
         )
 
-    def generate_prompt_perplexity(self, prompts: list[str]) -> list[float]:
+    def generate_prompt_perplexity(
+        self, prompts: list[str], mask: Optional[list[str]] = None
+    ) -> list[float]:
         """
         Return the perplexity score associated with generating the prompts
 
         :param prompts: list of prompts to score
         :return: perplexity score of each prompt
         """
-        outputs = self.generate_greedy_logprobs(prompts, max_tokens=1, num_logprobs=None, num_prompt_logprobs=0)
+        outputs = self.generate_greedy_logprobs(
+            prompts, max_tokens=1, num_logprobs=None, num_prompt_logprobs=0
+        )
+
+        mask_prefix_lens = (
+            [len(self.llm.get_tokenizer()(prefix)["input_ids"]) for prefix in mask]
+            if mask is not None
+            else [0 for _ in range(len(prompts))]
+        )
 
         perplexities = []
-        for output in outputs:
+        for output, mask_prefix_len in zip(outputs, mask_prefix_lens):
             output = cast(TokensTextLogprobsPromptLogprobs, output)
             token_datas = cast(list[dict[int, Logprob] | None], output[3])
             assert token_datas[0] is None
+
             token_log_probs = []
-            for token_data in token_datas[1:]:
+            for token_data in token_datas[mask_prefix_len + 1 :]:
                 assert token_data is not None
                 assert len(token_data) == 1
                 token_log_prob = list(token_data.values())[0].logprob
@@ -993,10 +1264,6 @@ class AphroditeRunner:
         req_outputs = self.llm.encode(prompts, pooling_task="token_classify")
         return [req_output.outputs.data for req_output in req_outputs]
 
-    def reward(self, prompts: list[str]) -> list[list[float]]:
-        req_outputs = self.llm.reward(prompts)
-        return [req_output.outputs.data for req_output in req_outputs]
-
     def score(
         self,
         text_1: list[str] | str,
@@ -1013,16 +1280,50 @@ class AphroditeRunner:
     def get_llm(self) -> LLM:
         return self.llm
 
+    def collective_rpc(self, *args, **kwargs):
+        return self.llm.collective_rpc(*args, **kwargs)
+
     def __enter__(self):
         return self
 
+    def _wait_for_rocm_memory_release(self, gpu_memory_utilization: float) -> None:
+        from tests.utils import wait_for_rocm_memory_to_settle
+
+        # V1 startup requires free_memory >= total * gpu_memory_utilization.
+        # Wait for the complementary used-memory ratio so the next runner does
+        # not fail the startup guard immediately after this runner exits. The
+        # wait is bounded so cleanup failures fail this test instead of hanging.
+        wait_for_rocm_memory_to_settle(threshold_ratio=1.0 - gpu_memory_utilization)
+
     def __exit__(self, exc_type, exc_value, traceback):
+        # Explicitly shutdown the engine core to release GPU resources
+        # This is needed because when executing consecutive tests, the GC
+        # might not be fast enough in shutting down the llm engine. This can lead to OOMs
+        # because when the next test starts some GPU memory is still in use.
+        gpu_memory_utilization = (
+            self.llm.llm_engine.vllm_config.cache_config.gpu_memory_utilization
+        )
+        from aphrodite.platforms import current_platform
+
+        try:
+            # Give the engine core time to run its own graceful shutdown
+            # (model_executor teardown + empty_cache + process-group destroy)
+            # before the process manager SIGKILLs it at the default 5s. On ROCm
+            # a hard kill leaves the whole allocation for the driver's slow async
+            # VRAM reclamation, which starves the next test's startup.
+            shutdown_timeout = 60.0 if current_platform.is_rocm() else None
+            self.llm.llm_engine.engine_core.shutdown(timeout=shutdown_timeout)
+        except Exception:
+            # Ignore shutdown errors as cleanup will still proceed
+            pass
         del self.llm
+        torch._dynamo.reset()
         cleanup_dist_env_and_memory()
+        self._wait_for_rocm_memory_release(gpu_memory_utilization)
 
 
 @pytest.fixture(scope="session")
-def aphrodite_runner():
+def vllm_runner():
     return AphroditeRunner
 
 
@@ -1037,7 +1338,7 @@ def temporary_enable_log_propagate():
 
 
 @pytest.fixture()
-def caplog_aphrodite(temporary_enable_log_propagate, caplog):
+def caplog_vllm(temporary_enable_log_propagate, caplog):
     # To capture aphrodite log, we should enable propagate=True temporarily
     # because caplog depends on logs propagated to the root logger.
     yield caplog
@@ -1047,7 +1348,7 @@ def caplog_aphrodite(temporary_enable_log_propagate, caplog):
 def caplog_mp_fork():
     """
     This fixture enables capturing logs from a forked MP subprocess.
-    It should be used in conjunction with caplog_aphrodite.
+    It should be used in conjunction with caplog_vllm.
 
     By default, subprocess logs do not go through the parent process.
     We instead create a queue listener in the parent process which
@@ -1092,7 +1393,7 @@ class LogHolder:
 def caplog_mp_spawn(tmp_path, monkeypatch):
     """
     This fixture enables capturing logs from a forked MP subprocess.
-    It does not require caplog_aphrodite (but it only contains logs from the child).
+    It does not require caplog_vllm (but it only contains logs from the child).
 
     By default, subprocess logs do not go through the parent process.
     We instead add a FileHandler to the config so the spawned child process
@@ -1108,7 +1409,7 @@ def caplog_mp_spawn(tmp_path, monkeypatch):
     def ctx(level: int | str):
         from aphrodite.logger import DEFAULT_LOGGING_CONFIG
 
-        config_path = tmp_path / "aphrodite_logging_config.json"
+        config_path = tmp_path / "vllm_logging_config.json"
         log_path = tmp_path / "aphrodite.log"
         log_holder = LogHolder()
 
@@ -1118,13 +1419,14 @@ def caplog_mp_spawn(tmp_path, monkeypatch):
             assert path.exists()
             config = json.loads(path.read_text())
 
-        config["loggers"]["aphrodite"]["handlers"] += ["aphrodite_file"]
-        config["handlers"]["aphrodite_file"] = {
+        config["loggers"]["aphrodite"]["handlers"] += ["vllm_file"]
+        config["handlers"]["vllm_file"] = {
             "class": "logging.FileHandler",
             "formatter": "aphrodite",
             "level": level,
             "filename": log_path.as_posix(),
         }
+        config["loggers"]["aphrodite"]["level"] = level
 
         config_path.write_text(json.dumps(config))
 
@@ -1225,7 +1527,9 @@ def dummy_gemma2_embedding_path():
 # Add the flag `--optional` to allow run tests
 # that are marked with @pytest.mark.optional
 def pytest_addoption(parser):
-    parser.addoption("--optional", action="store_true", default=False, help="run optional test")
+    parser.addoption(
+        "--optional", action="store_true", default=False, help="run optional test"
+    )
 
 
 def pytest_collection_modifyitems(config, items):
@@ -1283,7 +1587,13 @@ class AssetHandler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
-        self.wfile.write(data)
+        try:
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError) as e:
+            logger.debug(
+                "Client disconnected while serving test asset %s: %r", filename, e
+            )
+            self.close_connection = True
 
 
 def _find_free_port() -> int:
@@ -1306,7 +1616,9 @@ class LocalAssetServer:
 
     def __enter__(self):
         self.port = _find_free_port()
-        self.server = http.server.ThreadingHTTPServer((self.address, self.port), AssetHandler)
+        self.server = http.server.ThreadingHTTPServer(
+            (self.address, self.port), AssetHandler
+        )
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         return self
@@ -1335,7 +1647,11 @@ class LocalAssetServer:
         return f"{self.base_url}/{name}"
 
     def get_image_asset(self, name: str) -> Image.Image:
-        return fetch_image(self.url_for(name))
+        image = fetch_image(self.url_for(name))
+        # Unwrap MediaWithBytes if present
+        if isinstance(image, MediaWithBytes):
+            image = image.media
+        return image
 
 
 @pytest.fixture(scope="session")
@@ -1361,3 +1677,134 @@ def image_urls(request, local_asset_server) -> list[str]:
     """Indirect fixture: takes a list of names, returns list of full URLs."""
     names: list[str] = request.param
     return [local_asset_server.url_for(name) for name in names]
+
+
+@pytest.fixture
+def disable_deepgemm_ue8m0(monkeypatch):
+    from aphrodite.utils.deep_gemm import is_deep_gemm_e8m0_used
+
+    with monkeypatch.context() as monkeypatch_ctx:
+        monkeypatch_ctx.setenv("APHRODITE_USE_DEEP_GEMM_E8M0", "0")
+        is_deep_gemm_e8m0_used.cache_clear()
+        yield
+        # Clear cache so the next time it is used it is processed with the
+        # default APHRODITE_USE_DEEP_GEMM_E8M0  setting.
+        is_deep_gemm_e8m0_used.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def clean_gpu_memory_between_tests():
+    if os.getenv("APHRODITE_TEST_CLEAN_GPU_MEMORY", "0") != "1":
+        yield
+        return
+
+    # Wait for GPU memory to be cleared before starting the test
+    import gc
+
+    from tests.utils import wait_for_gpu_memory_to_clear
+
+    num_gpus = torch.accelerator.device_count()
+    if num_gpus > 0:
+        try:
+            wait_for_gpu_memory_to_clear(
+                devices=list(range(num_gpus)),
+                threshold_ratio=0.1,
+            )
+        except ValueError as e:
+            logger.info("Failed to clean GPU memory: %s", e)
+
+    yield
+
+    # Clean up GPU memory after the test
+    if torch.cuda.is_available():
+        torch.accelerator.empty_cache()
+        gc.collect()
+
+
+@pytest.fixture
+def use_fresh_inductor_cache():
+    """
+    Use a fresh inductor cache for the test.
+    This is useful to ensure that the test is not affected by the
+    previous test calls.
+    """
+    with fresh_cache():
+        yield
+
+
+@pytest.fixture
+def fresh_vllm_cache(monkeypatch, use_fresh_inductor_cache):
+    """Temporary APHRODITE_CACHE_ROOT combined with a fresh inductor cache."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        monkeypatch.setenv("APHRODITE_CACHE_ROOT", tmp_dir)
+        yield tmp_dir
+
+
+@pytest.fixture(scope="function")
+def enable_pickle(monkeypatch):
+    """`LLM.apply_model` requires pickling a function."""
+    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+
+
+@pytest.fixture(scope="function")
+def disable_log_dedup(monkeypatch):
+    """
+    Disable log deduplication such that warning_once and info_once always print.
+    """
+
+    # Patch logger._print_warning_once to remove the lru_cache decorator
+    from aphrodite import logger
+
+    original_print_warning_once = logger._print_warning_once
+    original_print_info_once = logger._print_info_once
+    original_print_debug_once = logger._print_debug_once
+
+    logger._print_warning_once = original_print_warning_once.__wrapped__
+    logger._print_info_once = original_print_info_once.__wrapped__
+    logger._print_debug_once = original_print_debug_once.__wrapped__
+
+    yield
+    logger._print_warning_once = original_print_warning_once
+    logger._print_info_once = original_print_info_once
+    logger._print_debug_once = original_print_debug_once
+
+
+@pytest.fixture(scope="function")
+def fake_vllm_ir(monkeypatch):
+    """
+    Pytest fixture to allow isolated IR op registration in tests.
+
+    Replaces IrOp.registry with an empty dict and swaps ``vllm_ir_torch_lib`` for a
+    fresh ``Library`` with a unique namespace per test (see ``Library.ns``).
+
+    Torch keeps registrations for the process lifetime; reusing the fragment
+    name ``vllm_ir`` and defining the same op string again can segfault. A
+    random library name keeps each fixture run on a disjoint namespace.
+
+    The test Library is kept alive until after monkeypatch teardown so PyTorch's
+    C++ state is not freed while references may still exist.
+
+    Usage:
+        def test_my_ir_op(fake_vllm_ir):
+            @aphrodite.ir.register_op
+            def my_test_op(x: torch.Tensor) -> torch.Tensor:
+                return x * 2
+
+            result = my_test_op(torch.tensor([1, 2, 3]))
+            # Registry and library cleaned up automatically after the test
+    """
+    import secrets
+
+    from torch.library import Library
+    from aphrodite.ir.op import IrOp
+
+    monkeypatch.setattr(IrOp, "registry", {})
+
+    # Keep a local reference so the Library is not GC'd before monkeypatch
+    # teardown restores the original reference.
+    test_lib = Library(f"vllm_ir_{secrets.token_hex(8)}", "FRAGMENT")
+    monkeypatch.setattr("aphrodite.ir.op.vllm_ir_torch_lib", test_lib)
+
+    yield
+
+    del test_lib

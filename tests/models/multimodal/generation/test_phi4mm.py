@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import os
 from collections.abc import Sequence
 
-import librosa
 import pytest
 import regex as re
 from huggingface_hub import snapshot_download
@@ -13,9 +13,15 @@ from aphrodite.assets.image import ImageAsset
 from aphrodite.logprobs import SampleLogprobs
 from aphrodite.lora.request import LoRARequest
 from aphrodite.multimodal.image import convert_image_mode, rescale_image_size
-from aphrodite.platforms import current_platform
+from aphrodite.multimodal.media.audio import load_audio
 
-from ....conftest import IMAGE_ASSETS, AphroditeRunner, HfRunner, PromptAudioInput, PromptImageInput
+from ....conftest import (
+    IMAGE_ASSETS,
+    HfRunner,
+    PromptAudioInput,
+    PromptImageInput,
+    AphroditeRunner,
+)
 from ....utils import large_gpu_test
 from ...utils import check_logprobs_close
 
@@ -25,19 +31,25 @@ HF_IMAGE_PROMPTS = IMAGE_ASSETS.prompts(
         "cherry_blossom": "<|user|>\n<|image_1|>\nPlease infer the season with reason in details.<|end|>\n<|assistant|>\n",  # noqa: E501
     }
 )
-HF_MULTIIMAGE_IMAGE_PROMPT = "<|user|>\n<|image_1|>\n<|image_2|>\nDescribe these images.<|end|>\n<|assistant|>\n"  # noqa: E501
+HF_MULTIIMAGE_IMAGE_PROMPT = (
+    "<|user|>\n<|image_1|>\n<|image_2|>\nDescribe these images.<|end|>\n<|assistant|>\n"  # noqa: E501
+)
 
 model_path = snapshot_download("microsoft/Phi-4-multimodal-instruct")
 # Since the vision-lora and speech-lora co-exist with the base model,
 # we have to manually specify the path of the lora weights.
 vision_lora_path = os.path.join(model_path, "vision-lora")
-speech_question = os.path.join(model_path, "examples", "what_is_shown_in_this_image.wav")
+speech_question = os.path.join(
+    model_path, "examples", "what_is_shown_in_this_image.wav"
+)
 models = [model_path]
 
 
-def aphrodite_to_hf_output(aphrodite_output: tuple[list[int], str, SampleLogprobs | None], model: str):
+def vllm_to_hf_output(
+    vllm_output: tuple[list[int], str, SampleLogprobs | None], model: str
+):
     """Sanitize aphrodite output to be comparable with hf output."""
-    _, output_str, out_logprobs = aphrodite_output
+    _, output_str, out_logprobs = vllm_output
 
     output_str_without_image = re.sub(r"(<\|image_\d+\|>)+", "", output_str)
     assert output_str_without_image[0] == " "
@@ -55,16 +67,10 @@ def aphrodite_to_hf_output(aphrodite_output: tuple[list[int], str, SampleLogprob
 
 target_dtype = "half"
 
-# ROCm Triton FA can run into shared memory issues with these models,
-# use other backends in the meantime
-# FIXME (mattwong, gshtrasb, hongxiayan)
-if current_platform.is_rocm():
-    os.environ["APHRODITE_USE_TRITON_FLASH_ATTN"] = "0"
-
 
 def run_test(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    vllm_runner: type[AphroditeRunner],
     inputs: Sequence[tuple[list[str], PromptImageInput, PromptAudioInput | None]],
     model: str,
     *,
@@ -90,7 +96,7 @@ def run_test(
     # if we run HF first, the cuda initialization will be done and it
     # will hurt multiprocessing backend with fork method (the default method).
     # max_model_len should be greater than image_feature_size
-    with aphrodite_runner(
+    with vllm_runner(
         model,
         runner="generate",
         max_model_len=max_model_len,
@@ -103,10 +109,10 @@ def run_test(
         max_lora_rank=320,
         gpu_memory_utilization=0.8,  # set to 0.8 to avoid OOM in CI
         enforce_eager=True,
-    ) as aphrodite_model:
+    ) as vllm_model:
         lora_request = LoRARequest("vision", 1, vision_lora_path)
-        aphrodite_outputs_per_case = [
-            aphrodite_model.generate_greedy_logprobs(
+        vllm_outputs_per_case = [
+            vllm_model.generate_greedy_logprobs(
                 prompts,
                 max_tokens,
                 num_logprobs=num_logprobs,
@@ -126,11 +132,15 @@ def run_test(
         hf_processor = hf_model.processor
         eos_token_id = hf_processor.tokenizer.eos_token_id
 
-        def patch_hf_processor(*args, text="", images=None, audio=None, sampling_rate=None, **kwargs):
+        def patch_hf_processor(
+            *args, text="", images=None, audio=None, sampling_rate=None, **kwargs
+        ):
             audios = None
             if audio is not None and sampling_rate is not None:
                 audios = [(audio, sampling_rate)]
-            return hf_processor(*args, text=text, images=images, audios=audios, **kwargs)
+            return hf_processor(
+                *args, text=text, images=images, audios=audios, **kwargs
+            )
 
         hf_model.processor = patch_hf_processor
 
@@ -147,10 +157,10 @@ def run_test(
             for prompts, images, audios in inputs
         ]
 
-    for hf_outputs, aphrodite_outputs in zip(hf_outputs_per_case, aphrodite_outputs_per_case):
+    for hf_outputs, vllm_outputs in zip(hf_outputs_per_case, vllm_outputs_per_case):
         check_logprobs_close(
             outputs_0_lst=hf_outputs,
-            outputs_1_lst=aphrodite_outputs,
+            outputs_1_lst=vllm_outputs,
             name_0="hf",
             name_1="aphrodite",
         )
@@ -160,8 +170,6 @@ def run_test(
 @pytest.mark.parametrize(
     "size_factors",
     [
-        # No image
-        [],
         # Single-scale
         [1.0],
         # Single-scale, batched
@@ -176,7 +184,7 @@ def run_test(
 @pytest.mark.parametrize("num_logprobs", [10])
 def test_models(
     hf_runner,
-    aphrodite_runner,
+    vllm_runner,
     image_assets,
     model,
     size_factors,
@@ -198,7 +206,7 @@ def test_models(
 
     run_test(
         hf_runner,
-        aphrodite_runner,
+        vllm_runner,
         inputs_per_image,
         model,
         dtype=dtype,
@@ -231,7 +239,7 @@ def test_models(
 @pytest.mark.parametrize("num_logprobs", [10])
 def test_multi_images_models(
     hf_runner,
-    aphrodite_runner,
+    vllm_runner,
     image_assets,
     model,
     size_factors,
@@ -245,14 +253,17 @@ def test_multi_images_models(
     inputs_per_case = [
         (
             [HF_MULTIIMAGE_IMAGE_PROMPT for _ in size_factors],
-            [[rescale_image_size(image, factor) for image in images] for factor in size_factors],
+            [
+                [rescale_image_size(image, factor) for image in images]
+                for factor in size_factors
+            ],
             None,
         ),
     ]
 
     run_test(
         hf_runner,
-        aphrodite_runner,
+        vllm_runner,
         inputs_per_case,
         model,
         dtype=dtype,
@@ -271,7 +282,7 @@ def test_multi_images_models(
 @pytest.mark.parametrize("num_logprobs", [10])
 def test_vision_speech_models(
     hf_runner,
-    aphrodite_runner,
+    vllm_runner,
     model,
     dtype: str,
     max_model_len: int,
@@ -279,7 +290,7 @@ def test_vision_speech_models(
     num_logprobs: int,
 ) -> None:
     # use the example speech question so that the model outputs are reasonable
-    audio = librosa.load(speech_question, sr=None)
+    audio = load_audio(speech_question, sr=None)
     image = convert_image_mode(ImageAsset("cherry_blossom").pil_image, "RGB")
 
     inputs_vision_speech = [
@@ -292,7 +303,7 @@ def test_vision_speech_models(
 
     run_test(
         hf_runner,
-        aphrodite_runner,
+        vllm_runner,
         inputs_vision_speech,
         model,
         dtype=dtype,

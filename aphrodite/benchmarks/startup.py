@@ -26,6 +26,7 @@ from aphrodite.benchmarks.lib.utils import (
     write_to_json,
 )
 from aphrodite.engine.arg_utils import EngineArgs
+from aphrodite.utils.argparse_utils import FlexibleArgumentParser
 
 PERCENTAGES = [10, 25, 50, 75, 90, 99]
 
@@ -151,9 +152,14 @@ def run_startup_in_subprocess(engine_args, result_queue):
         encoder_compilation_time = 0.0
         if hasattr(llm.llm_engine, "aphrodite_config"):
             aphrodite_config = llm.llm_engine.aphrodite_config
-            if hasattr(aphrodite_config, "compilation_config") and aphrodite_config.compilation_config is not None:
+            if (
+                hasattr(aphrodite_config, "compilation_config")
+                and aphrodite_config.compilation_config is not None
+            ):
                 compilation_time = aphrodite_config.compilation_config.compilation_time
-                encoder_compilation_time = aphrodite_config.compilation_config.encoder_compilation_time
+                encoder_compilation_time = (
+                    aphrodite_config.compilation_config.encoder_compilation_time
+                )
 
         result_queue.put(
             {
@@ -168,7 +174,9 @@ def run_startup_in_subprocess(engine_args, result_queue):
         result_queue.put(str(e))
 
 
-def save_to_pytorch_benchmark_format(args: argparse.Namespace, metrics: list[MetricStats]) -> None:
+def save_to_pytorch_benchmark_format(
+    args: argparse.Namespace, metrics: list[MetricStats]
+) -> None:
     base_name = os.path.splitext(args.output_json)[0]
     for m in metrics:
         records = convert_to_pytorch_benchmark_format(
@@ -183,7 +191,7 @@ def save_to_pytorch_benchmark_format(args: argparse.Namespace, metrics: list[Met
             write_to_json(f"{base_name}.{m.key}.pytorch.json", records)
 
 
-def add_cli_args(parser: argparse.ArgumentParser):
+def add_cli_args(parser: FlexibleArgumentParser):
     parser.add_argument(
         "--num-iters-cold",
         type=int,
@@ -227,7 +235,7 @@ def main(args: argparse.Namespace):
         """
 
         # Create a queue for inter-process communication
-        result_queue = multiprocessing.Queue()
+        result_queue: multiprocessing.Queue[Any] = multiprocessing.Queue()
         process = multiprocessing.Process(
             target=run_startup_in_subprocess,
             args=(
@@ -272,7 +280,9 @@ def main(args: argparse.Namespace):
         warm_iterations.append(create_llm_and_measure_startup())
 
     # Determine if encoder compilation occurred in any iteration
-    has_encoder = any(m["encoder_compilation_time"] > 0 for m in cold_iterations + warm_iterations)
+    has_encoder = any(
+        m["encoder_compilation_time"] > 0 for m in cold_iterations + warm_iterations
+    )
 
     cold_metrics = _collect_phase_metrics("cold", cold_iterations, has_encoder)
     warm_metrics = _collect_phase_metrics("warm", warm_iterations, has_encoder)

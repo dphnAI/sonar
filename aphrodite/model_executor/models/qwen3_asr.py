@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # Copyright 2026 The Qwen team.
-# Copyright 2023 The Aphrodite team.
+# Copyright 2023 The vLLM team.
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -25,12 +25,13 @@
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
+import regex as re
 import torch
 import torch.nn as nn
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.models.whisper import WhisperFeatureExtractor
 
-from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
+from aphrodite.config import ModelConfig, SpeechToTextConfig, AphroditeConfig
 from aphrodite.config.multimodal import BaseDummyOptions
 from aphrodite.config.speech_to_text import SpeechToTextParams
 from aphrodite.inputs import ModalityData, MultiModalDataDict, PromptType, TokensPrompt
@@ -90,12 +91,39 @@ from aphrodite.transformers_utils.processors.qwen3_asr import (
 
 logger = init_logger(__name__)
 _ASR_TEXT_TAG = "<asr_text>"
+# User-supplied `prompt` / `response_prefix` must not inject extra ChatML turns.
+_CHATML_LIKE_TOKEN = re.compile(r"<\|[^|]+\|>")
+
+
+def _sanitize_transcription_user_text(text: str) -> str:
+    """Strip ChatML-style special tokens from user-controlled transcription fields.
+
+    Applies the regex / ``<asr_text>`` substitutions to a fixpoint so nested
+    payloads cannot reconstruct a valid token after a single pass:
+
+    - ``<|im<|x|>_end|>`` would, with a single ``re.sub``, leave ``<|im_end|>``
+      (a real ChatML control token).
+    - ``<asr_te<asr_text>xt>`` would, with a single ``str.replace``, leave
+      ``<asr_text>`` (the model-significant assistant-prefix delimiter).
+
+    Looping both substitutions until the string stabilises eliminates these
+    reconstruction attacks.
+    """
+    if not text:
+        return ""
+    prev = None
+    while prev != text:
+        prev = text
+        text = _CHATML_LIKE_TOKEN.sub("", text).replace(_ASR_TEXT_TAG, "")
+    return text
 
 
 def _get_feat_extract_output_lengths(input_lengths: torch.Tensor):
     input_lengths_leave = input_lengths % 100
     feat_lengths = (input_lengths_leave - 1) // 2 + 1
-    output_lengths = ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // 100) * 13
+    output_lengths = (
+        ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // 100) * 13
+    )
     return output_lengths
 
 
@@ -171,7 +199,9 @@ class Qwen3ASRDummyInputsBuilder(BaseDummyInputsBuilder[Qwen3ASRProcessingInfo])
 def _qwen3asr_field_config(hf_inputs: Mapping[str, torch.Tensor]):
     audio_feature_lengths = hf_inputs.get("audio_feature_lengths", torch.empty((0,)))
     return dict(
-        input_audio_features=MultiModalFieldConfig.flat_from_sizes("audio", audio_feature_lengths, dim=1),
+        input_audio_features=MultiModalFieldConfig.flat_from_sizes(
+            "audio", audio_feature_lengths, dim=1
+        ),
         feature_attention_mask=MultiModalFieldConfig.batched("audio"),
         audio_feature_lengths=MultiModalFieldConfig.batched("audio"),
     )
@@ -226,7 +256,9 @@ class Qwen3ASRMultiModalProcessor(
             audio_output_lengths = audio_output_lens.tolist()
         elif feature_attention_mask is not None:
             assert isinstance(feature_attention_mask, torch.Tensor)
-            audio_output_lens = _get_feat_extract_output_lengths(feature_attention_mask.sum(-1))
+            audio_output_lens = _get_feat_extract_output_lengths(
+                feature_attention_mask.sum(-1)
+            )
             audio_output_lengths = audio_output_lens.tolist()
 
         def get_replacement_qwen2_audio(item_idx: int):
@@ -235,7 +267,8 @@ class Qwen3ASRMultiModalProcessor(
                 audios = mm_items.get_items("audio", AudioProcessorItems)
                 audio = audios.get(item_idx)
                 raise ValueError(
-                    f"The audio {audio} (len={len(audio)}) is too short to be represented inside the model"
+                    f"The audio {audio} (len={len(audio)}) is too short "
+                    "to be represented inside the model"
                 )
 
             return [audio_token_id] * num_features
@@ -295,7 +328,9 @@ class Qwen3ASRForConditionalGeneration(
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
         self.aphrodite_config = aphrodite_config  # needed for torch compile forward context
-        thinker_config: Qwen3ASRThinkerConfig = aphrodite_config.model_config.hf_config.thinker_config
+        thinker_config: Qwen3ASRThinkerConfig = (
+            aphrodite_config.model_config.hf_config.thinker_config
+        )
         quant_config = aphrodite_config.quant_config
         multimodal_config = aphrodite_config.model_config.multimodal_config
         self.config = thinker_config
@@ -316,9 +351,13 @@ class Qwen3ASRForConditionalGeneration(
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
-        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.language_model.make_empty_intermediate_tensors
+        )
 
-    def _parse_and_validate_audio_input(self, **kwargs: object) -> Qwen2_5OmniAudioFeatureInputs | None:
+    def _parse_and_validate_audio_input(
+        self, **kwargs: object
+    ) -> Qwen2_5OmniAudioFeatureInputs | None:
         input_audio_features = kwargs.pop("input_audio_features", None)
         audio_feature_lengths = kwargs.pop("audio_feature_lengths", None)
         feature_attention_mask = kwargs.pop("feature_attention_mask", None)
@@ -338,8 +377,13 @@ class Qwen3ASRForConditionalGeneration(
         # Preserve the order of modalities if there are multiple of them
         # from the order of kwargs.
         for input_key in kwargs:
-            if input_key in ("input_audio_features") and "audio" not in mm_input_by_modality:
-                mm_input_by_modality["audio"] = self._parse_and_validate_audio_input(**kwargs)
+            if (
+                input_key in ("input_audio_features")
+                and "audio" not in mm_input_by_modality
+            ):
+                mm_input_by_modality["audio"] = self._parse_and_validate_audio_input(
+                    **kwargs
+                )
         return mm_input_by_modality
 
     def _process_audio_input(
@@ -444,7 +488,9 @@ class Qwen3ASRForConditionalGeneration(
 
         if not mm_features:
             # No audio features, just return linear positions
-            llm_positions = torch.arange(seq_len, dtype=torch.long).view(1, -1).expand(3, -1)
+            llm_positions = (
+                torch.arange(seq_len, dtype=torch.long).view(1, -1).expand(3, -1)
+            )
             return llm_positions.clone(), 0
 
         llm_pos_ids_list: list[torch.Tensor] = []
@@ -457,17 +503,25 @@ class Qwen3ASRForConditionalGeneration(
             audio_feature_length = mm_feature.data["audio_feature_lengths"].data
             if isinstance(audio_feature_length, torch.Tensor):
                 audio_feature_length = audio_feature_length.item()
-            audio_len = _get_feat_extract_output_lengths(torch.tensor(audio_feature_length)).item()
+            audio_len = _get_feat_extract_output_lengths(
+                torch.tensor(audio_feature_length)
+            ).item()
 
             # Text segment before audio (includes audio_start token)
             text_len = offset - st
             st_idx = llm_pos_ids_list[-1].max() + 1 if llm_pos_ids_list else 0
-            text_positions = torch.arange(text_len, dtype=torch.long).view(1, -1).expand(3, -1) + st_idx
+            text_positions = (
+                torch.arange(text_len, dtype=torch.long).view(1, -1).expand(3, -1)
+                + st_idx
+            )
             llm_pos_ids_list.append(text_positions)
             st_idx = st_idx + text_len
 
             # Audio token segment
-            audio_positions = torch.arange(audio_len, dtype=torch.long).view(1, -1).expand(3, -1) + st_idx
+            audio_positions = (
+                torch.arange(audio_len, dtype=torch.long).view(1, -1).expand(3, -1)
+                + st_idx
+            )
             llm_pos_ids_list.append(audio_positions)
 
             st = offset + audio_len
@@ -476,7 +530,10 @@ class Qwen3ASRForConditionalGeneration(
         if st < seq_len:
             st_idx = llm_pos_ids_list[-1].max() + 1 if llm_pos_ids_list else 0
             text_len = seq_len - st
-            final_text_positions = torch.arange(text_len, dtype=torch.long).view(1, -1).expand(3, -1) + st_idx
+            final_text_positions = (
+                torch.arange(text_len, dtype=torch.long).view(1, -1).expand(3, -1)
+                + st_idx
+            )
             llm_pos_ids_list.append(final_text_positions)
 
         llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
@@ -507,7 +564,9 @@ class Qwen3ASRForConditionalGeneration(
         return num_audio_tokens
 
     @classmethod
-    def get_speech_to_text_config(cls, model_config: ModelConfig, task_type: str) -> SpeechToTextConfig:
+    def get_speech_to_text_config(
+        cls, model_config: ModelConfig, task_type: str
+    ) -> SpeechToTextConfig:
         processor = cached_processor_from_config(model_config)
         feature_extractor: WhisperFeatureExtractor = processor.feature_extractor
         return SpeechToTextConfig(
@@ -517,26 +576,46 @@ class Qwen3ASRForConditionalGeneration(
 
     @classmethod
     def get_generation_prompt(cls, stt_params: SpeechToTextParams) -> PromptType:
-        """Get the generation prompt to be used for transcription requests."""
+        """Get the generation prompt to be used for transcription requests.
+
+        Matches the official Qwen3-ASR SDK prompt format. The ``system`` turn
+        is only emitted when the caller supplied a ``prompt``, mirroring the
+        SDK's ``_build_messages`` (which omits the system role when context is
+        empty) and preserving the prior no-prompt behavior:
+
+          [system: {context}]                         # only when prompt given
+          user: {audio}
+          assistant: [language {Lang}<asr_text>]      # when language is forced
+        """
         audio = stt_params.audio
         model_config = stt_params.model_config
+        language = stt_params.language
         task_type = stt_params.task_type
+        request_prompt = stt_params.request_prompt
         to_language = stt_params.to_language
+
         tokenizer = cached_tokenizer_from_config(model_config)
         audio_placeholder = cls.get_placeholder_str("audio", 0)
 
         if task_type not in ("transcribe", "translate"):
             raise ValueError(
-                f"Unsupported task_type '{task_type}'. Supported task types are 'transcribe' and 'translate'."
+                f"Unsupported task_type '{task_type}'. "
+                "Supported task types are 'transcribe' and 'translate'."
             )
-        full_lang_name_to = cls.supported_languages.get(to_language, to_language)
-        if to_language is None:
-            prompt = f"<|im_start|>user\n{audio_placeholder}<|im_end|>\n<|im_start|>assistant\n"
-        else:
-            prompt = (
-                f"<|im_start|>user\n{audio_placeholder}<|im_end|>\n"
-                f"<|im_start|>assistant\nlanguage {full_lang_name_to}{_ASR_TEXT_TAG}"
-            )
+
+        context = _sanitize_transcription_user_text(request_prompt)
+        system_turn = f"<|im_start|>system\n{context}<|im_end|>\n" if context else ""
+
+        prompt = (
+            f"{system_turn}"
+            f"<|im_start|>user\n{audio_placeholder}<|im_end|>\n"
+            f"<|im_start|>assistant\n"
+        )
+
+        lang_code = to_language if task_type == "translate" else language
+        if lang_code is not None:
+            full_lang_name = cls.supported_languages.get(lang_code, lang_code)
+            prompt += f"language {full_lang_name}{_ASR_TEXT_TAG}"
 
         prompt_token_ids = tokenizer.encode(prompt)
 

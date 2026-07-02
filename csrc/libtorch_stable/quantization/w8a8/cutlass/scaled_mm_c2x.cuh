@@ -22,8 +22,8 @@
 #include "cutlass/epilogue/threadblock/fusion/visitors.hpp"
 #include "cutlass/gemm/kernel/default_gemm_universal_with_visitor.h"
 
-#include "core/math.hpp"
-#include "cutlass_extensions/common.hpp"
+#include "libtorch_stable/core/math.hpp"
+#include "libtorch_stable/cutlass_extensions/common.hpp"
 // clang-format on
 
 using namespace cute;
@@ -36,7 +36,7 @@ using namespace cute;
    EVTCompute::Arguments struct.
 */
 
-namespace aphrodite {
+namespace vllm {
 template <typename Arch, template <typename> typename ArchGuard,
           typename ElementAB_, typename ElementD_,
           template <typename, typename> typename Epilogue_, typename TileShape,
@@ -190,4 +190,4 @@ inline void fallback_cutlass_gemm_caller(torch::stable::Tensor& out,
   }
 }
 
-}  // namespace aphrodite
+}  // namespace vllm

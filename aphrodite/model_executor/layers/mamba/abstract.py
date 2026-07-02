@@ -8,6 +8,7 @@ import torch
 from aphrodite.config import AphroditeConfig
 from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
 from aphrodite.v1.attention.backend import AttentionBackend
+from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
 from aphrodite.v1.attention.selector import get_mamba_attn_backend
 from aphrodite.v1.kv_cache_interface import KVCacheSpec, MambaSpec
 
@@ -33,7 +34,7 @@ class MambaBase(AttentionLayerBase):
 
     @property
     @abstractmethod
-    def mamba_type(self) -> str:
+    def mamba_type(self) -> MambaAttentionBackendEnum:
         pass
 
     @abstractmethod
@@ -52,7 +53,9 @@ class MambaBase(AttentionLayerBase):
             mamba_type=self.mamba_type,
             mamba_cache_mode=aphrodite_config.cache_config.mamba_cache_mode,
             num_speculative_blocks=(
-                aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
+                aphrodite_config.speculative_config.num_speculative_tokens
+                if aphrodite_config.speculative_config
+                else 0
             ),
         )
 

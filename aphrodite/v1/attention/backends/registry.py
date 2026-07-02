@@ -25,7 +25,10 @@ class _AttentionBackendEnumMeta(EnumMeta):
         except KeyError:
             members = cast("dict[str, Enum]", cls.__members__).keys()
             valid_backends = ", ".join(members)
-            raise ValueError(f"Unknown attention backend: '{name}'. Valid options are: {valid_backends}") from None
+            raise ValueError(
+                f"Unknown attention backend: '{name}'. "
+                f"Valid options are: {valid_backends}"
+            ) from None
 
 
 class AttentionBackendEnum(Enum, metaclass=_AttentionBackendEnumMeta):
@@ -39,27 +42,77 @@ class AttentionBackendEnum(Enum, metaclass=_AttentionBackendEnumMeta):
     """
 
     FLASH_ATTN = "aphrodite.v1.attention.backends.flash_attn.FlashAttentionBackend"
-    FLASH_ATTN_DIFFKV = "aphrodite.v1.attention.backends.flash_attn_diffkv.FlashAttentionDiffKVBackend"
+    FLASH_ATTN_DIFFKV = (
+        "aphrodite.v1.attention.backends.flash_attn_diffkv.FlashAttentionDiffKVBackend"
+    )
     TRITON_ATTN = "aphrodite.v1.attention.backends.triton_attn.TritonAttentionBackend"
+    TRITON_ATTN_DIFFKV = (
+        "aphrodite.v1.attention.backends.triton_attn_diffkv.TritonAttentionDiffKVBackend"
+    )
     ROCM_ATTN = "aphrodite.v1.attention.backends.rocm_attn.RocmAttentionBackend"
     ROCM_AITER_MLA = "aphrodite.v1.attention.backends.mla.rocm_aiter_mla.AiterMLABackend"
-    ROCM_AITER_TRITON_MLA = "aphrodite.v1.attention.backends.mla.aiter_triton_mla.AiterTritonMLABackend"
-    ROCM_AITER_FA = "aphrodite.v1.attention.backends.rocm_aiter_fa.AiterFlashAttentionBackend"
-    ROCM_AITER_MLA_SPARSE = "aphrodite.v1.attention.backends.mla.rocm_aiter_mla_sparse.ROCMAiterMLASparseBackend"
+    ROCM_AITER_TRITON_MLA = (
+        "aphrodite.v1.attention.backends.mla.aiter_triton_mla.AiterTritonMLABackend"
+    )
+    ROCM_AITER_FA = (
+        "aphrodite.v1.attention.backends.rocm_aiter_fa.AiterFlashAttentionBackend"
+    )
+    ROCM_AITER_MLA_SPARSE = (
+        "aphrodite.v1.attention.backends.mla.rocm_aiter_mla_sparse.ROCMAiterMLASparseBackend"
+    )
     XPU_MLA_SPARSE = "aphrodite.v1.attention.backends.mla.xpu_mla_sparse.XPUMLASparseBackend"
     TORCH_SDPA = ""  # this tag is only used for ViT
     FLASHINFER = "aphrodite.v1.attention.backends.flashinfer.FlashInferBackend"
-    FLASHINFER_MLA = "aphrodite.v1.attention.backends.mla.flashinfer_mla.FlashInferMLABackend"
-    FLASHINFER_MLA_SPARSE = "aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse.FlashInferMLASparseBackend"
+    FLASHINFER_MLA = (
+        "aphrodite.v1.attention.backends.mla.flashinfer_mla.FlashInferMLABackend"
+    )
+    TOKENSPEED_MLA = (
+        "aphrodite.v1.attention.backends.mla.tokenspeed_mla.TokenspeedMLABackend"
+    )
+    FLASHINFER_MLA_SPARSE = (
+        "aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse."
+        "FlashInferMLASparseTRTLLMBackend"
+    )
+    FLASHINFER_MLA_SPARSE_SM120 = (
+        "aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse."
+        "FlashInferMLASparseSM120Backend"
+    )
     TRITON_MLA = "aphrodite.v1.attention.backends.mla.triton_mla.TritonMLABackend"
     CUTLASS_MLA = "aphrodite.v1.attention.backends.mla.cutlass_mla.CutlassMLABackend"
     FLASHMLA = "aphrodite.v1.attention.backends.mla.flashmla.FlashMLABackend"
-    FLASHMLA_SPARSE = "aphrodite.v1.attention.backends.mla.flashmla_sparse.FlashMLASparseBackend"
+    FLASHMLA_SPARSE = (
+        "aphrodite.v1.attention.backends.mla.flashmla_sparse.FlashMLASparseBackend"
+    )
+    # DeepSeek V4 sparse MLA backends (model-driven; selected via the V4 layer).
+    FLASHMLA_SPARSE_DSV4 = (
+        "aphrodite.models.deepseek_v4.sparse_mla.DeepseekV4FlashMLABackend"
+    )
+    FLASHINFER_MLA_SPARSE_DSV4 = (
+        "aphrodite.models.deepseek_v4.nvidia.flashinfer_sparse."
+        "DeepseekV4FlashInferMLASparseBackend"
+    )
+    ROCM_FLASHMLA_SPARSE_DSV4 = (
+        "aphrodite.models.deepseek_v4.amd.rocm.DeepseekV4ROCMAiterMLASparseBackend"
+    )
     FLASH_ATTN_MLA = "aphrodite.v1.attention.backends.mla.flashattn_mla.FlashAttnMLABackend"
+    FLASH_ATTN_MLA_SPARSE = (
+        "aphrodite.v1.attention.backends.mla.flashattn_mla_sparse.FlashAttnMLASparseBackend"
+    )
+    MINIMAX_M3_SPARSE = (
+        "aphrodite.models.minimax_m3.common.sparse_attention.MiniMaxM3SparseBackend"
+    )
     NO_ATTENTION = "aphrodite.v1.attention.backends.no_attention.NoAttentionBackend"
     FLEX_ATTENTION = "aphrodite.v1.attention.backends.flex_attention.FlexAttentionBackend"
-    TREE_ATTN = "aphrodite.v1.attention.backends.tree_attn.TreeAttentionBackend"
-    ROCM_AITER_UNIFIED_ATTN = "aphrodite.v1.attention.backends.rocm_aiter_unified_attn.RocmAiterUnifiedAttentionBackend"
+    # HPC Attention Backend:
+    # powered by operators from https://github.com/Tencent/hpc-ops.
+    # Only supported on NVIDIA Hopper GPUs (e.g. H20, H200),
+    # currently limited to the Hy3 model,
+    # and requires a block size of 64.
+    HPC_ATTN = "aphrodite.v1.attention.backends.hpc_attn.HpcAttentionBackend"
+    ROCM_AITER_UNIFIED_ATTN = (
+        "aphrodite.v1.attention.backends.rocm_aiter_unified_attn."
+        "RocmAiterUnifiedAttentionBackend"
+    )
     CPU_ATTN = "aphrodite.v1.attention.backends.cpu_attn.CPUAttentionBackend"
     TURBOQUANT = "aphrodite.v1.attention.backends.turboquant_attn.TurboQuantAttentionBackend"
     # Placeholder for third-party/custom backends - must be registered before use
@@ -171,16 +224,6 @@ class MambaAttentionBackendEnum(Enum, metaclass=_AttentionBackendEnumMeta):
     def clear_override(self) -> None:
         """Clear any override for this backend, reverting to the default."""
         _MAMBA_ATTN_OVERRIDES.pop(self, None)
-
-
-MAMBA_TYPE_TO_BACKEND_MAP = {
-    "mamba1": MambaAttentionBackendEnum.MAMBA1.name,
-    "mamba2": MambaAttentionBackendEnum.MAMBA2.name,
-    "short_conv": MambaAttentionBackendEnum.SHORT_CONV.name,
-    "linear_attention": MambaAttentionBackendEnum.LINEAR.name,
-    "gdn_attention": MambaAttentionBackendEnum.GDN_ATTN.name,
-    "custom": MambaAttentionBackendEnum.CUSTOM.name,
-}
 
 
 _ATTN_OVERRIDES: dict[AttentionBackendEnum, str] = {}

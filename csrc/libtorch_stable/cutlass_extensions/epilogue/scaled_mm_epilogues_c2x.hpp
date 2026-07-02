@@ -2,7 +2,7 @@
 
 #include <torch/csrc/stable/tensor.h>
 
-#include "cutlass_extensions/epilogue/broadcast_load_epilogue_c2x.hpp"
+#include "broadcast_load_epilogue_c2x.hpp"
 
 /*
    This file defines custom epilogues for fusing channel scales, token scales,
@@ -14,7 +14,7 @@
    EVTCompute::Arguments struct.
 */
 
-namespace aphrodite::c2x {
+namespace vllm::c2x {
 
 using namespace cute;
 
@@ -322,4 +322,4 @@ struct ScaledEpilogueBiasAzpToken
   }
 };
 
-};  // namespace aphrodite::c2x
+};  // namespace vllm::c2x

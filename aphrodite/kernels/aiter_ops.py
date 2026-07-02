@@ -26,7 +26,9 @@ Many AITER ops want to remain invisible to torch.compile even after lowering.
 They are thus wrapped into torch custom ops inside the IR op implementations.
 """
 
-direct_register_aiter_op = functools.partial(direct_register_custom_op, target_lib=aiter_lib)
+direct_register_aiter_op = functools.partial(
+    direct_register_custom_op, target_lib=aiter_lib
+)
 """Syntactic sugar for registering AITER custom ops."""
 
 AITER_SUPPORTED = is_aiter_found()
@@ -41,8 +43,12 @@ rms_no_var_16bit_only = (
 and requires weight dtype to match x dtype."""
 
 
-@ir.ops.rms_norm.register_impl("aiter", supports_args=rms_no_var_16bit_only, supported=AITER_SUPPORTED)
-def rms_norm(x: Tensor, weight: Tensor | None, epsilon: float, variance_size: int | None = None) -> Tensor:
+@ir.ops.rms_norm.register_impl(
+    "aiter", supports_args=rms_no_var_16bit_only, supported=AITER_SUPPORTED
+)
+def rms_norm(
+    x: Tensor, weight: Tensor | None, epsilon: float, variance_size: int | None = None
+) -> Tensor:
     assert variance_size is None
     assert x.dtype in (torch.float16, torch.bfloat16)
     if weight is None:
@@ -66,4 +72,75 @@ def _rms_norm_fake(x: Tensor, weight: Tensor, variance_epsilon: float) -> Tensor
     return torch.empty_like(x)
 
 
-direct_register_aiter_op(op_name="rms_norm", op_func=_rms_norm_impl, fake_impl=_rms_norm_fake)
+direct_register_aiter_op(
+    op_name="rms_norm", op_func=_rms_norm_impl, fake_impl=_rms_norm_fake
+)
+
+rms_add_no_var_16bit_only = (
+    lambda x, x_residual, weight, epsilon, variance_size=None: variance_size is None
+    and x.dtype in (torch.float16, torch.bfloat16)
+    and (weight is None or weight.dtype == x.dtype)
+)
+"""
+AITER fused_add_rms_norm only supports 16-bit activations and no var_size override.
+Requires weight dtype to match x dtype.
+"""
+
+
+@ir.ops.fused_add_rms_norm.register_impl(
+    "aiter", supports_args=rms_add_no_var_16bit_only, supported=AITER_SUPPORTED
+)
+def fused_add_rms_norm(
+    x: Tensor,
+    x_residual: Tensor,
+    weight: Tensor | None,
+    epsilon: float,
+    variance_size: int | None = None,
+) -> tuple[Tensor, Tensor]:
+    assert variance_size is None
+    assert x.dtype in (torch.float16, torch.bfloat16)
+    if weight is None:
+        weight = torch.ones(x.shape[-1], device=x.device, dtype=x.dtype)
+    return torch.ops.aphrodite_aiter.fused_add_rms_norm(x, x_residual, weight, epsilon)
+
+
+def _rocm_aiter_rmsnorm2d_fwd_with_add_impl(
+    x: torch.Tensor,
+    residual: torch.Tensor,
+    weight: torch.Tensor,
+    variance_epsilon: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    from aiter import rmsnorm2d_fwd_with_add
+
+    # TODO can out = x and residual_out = residual to save memory?
+    #  Need to check if the kernel supports in-place residual output
+    #  (if yes set mutates_args and inplace)
+    residual_out = torch.empty_like(residual)
+    out = torch.empty_like(x)
+    rmsnorm2d_fwd_with_add(
+        out,  # output
+        x,  # input
+        residual,  # residual input
+        residual_out,  # residual output
+        weight,
+        variance_epsilon,
+    )
+    return out, residual_out
+
+
+def _rocm_aiter_rmsnorm2d_fwd_with_add_fake(
+    x: torch.Tensor,
+    residual: torch.Tensor,
+    weight: torch.Tensor,
+    variance_epsilon: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    residual_out = torch.empty_like(residual)
+    out = torch.empty_like(x)
+    return out, residual_out
+
+
+direct_register_aiter_op(
+    op_name="fused_add_rms_norm",
+    op_func=_rocm_aiter_rmsnorm2d_fwd_with_add_impl,
+    fake_impl=_rocm_aiter_rmsnorm2d_fwd_with_add_fake,
+)

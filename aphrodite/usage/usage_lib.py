@@ -196,7 +196,9 @@ class UsageMessage:
 
         if current_platform.is_cuda_alike():
             self.gpu_count = current_platform.device_count()
-            self.gpu_type, self.gpu_memory_per_device = cuda_get_device_properties(0, ("name", "total_memory"))
+            self.gpu_type, self.gpu_memory_per_device = cuda_get_device_properties(
+                0, ("name", "total_memory")
+            )
         if current_platform.is_cuda():
             self.cuda_runtime = torch.version.cuda
         if current_platform.is_xpu():
@@ -229,7 +231,9 @@ class UsageMessage:
         self.model_architecture = model_architecture
 
         # Environment variables
-        self.env_var_json = json.dumps({env_var: getattr(envs, env_var) for env_var in _USAGE_ENV_VARS_TO_COLLECT})
+        self.env_var_json = json.dumps(
+            {env_var: getattr(envs, env_var) for env_var in _USAGE_ENV_VARS_TO_COLLECT}
+        )
 
         # Metadata
         self.log_time = _get_current_timestamp_ns()

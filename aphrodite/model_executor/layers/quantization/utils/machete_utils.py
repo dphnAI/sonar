@@ -38,15 +38,19 @@ def query_machete_supported_group_sizes(act_type: torch.dtype) -> list[int]:
         return [-1, 128]
 
 
-def check_machete_supports_shape(in_features: int, out_features: int) -> tuple[bool, str | None]:
+def check_machete_supports_shape(
+    in_features: int, out_features: int
+) -> tuple[bool, str | None]:
     if in_features % MACHETE_PREPACKED_BLOCK_SHAPE[0] != 0:
         return (
             False,
-            f"Input features size must be divisible by {MACHETE_PREPACKED_BLOCK_SHAPE[0]}",
+            "Input features size must be divisible by "
+            f"{MACHETE_PREPACKED_BLOCK_SHAPE[0]}",
         )
     if out_features % MACHETE_PREPACKED_BLOCK_SHAPE[1] != 0:
         return (
             False,
-            f"Output features size must be divisible by {MACHETE_PREPACKED_BLOCK_SHAPE[1]}",
+            "Output features size must be divisible by "
+            f"{MACHETE_PREPACKED_BLOCK_SHAPE[1]}",
         )
     return True, None

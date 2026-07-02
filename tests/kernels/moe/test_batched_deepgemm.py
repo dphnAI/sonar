@@ -1,15 +1,25 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 import torch
-from aphrodite.modeling.layers.fused_moe.batched_deep_gemm_moe import BatchedDeepGemmExperts
-from aphrodite.modeling.layers.fused_moe.config import fp8_w8a8_moe_quant_config
-from aphrodite.modeling.layers.fused_moe.fused_batched_moe import BatchedPrepareAndFinalize, BatchedTritonExperts
-from aphrodite.modeling.layers.fused_moe.modular_kernel import FusedMoEModularKernel
 
+from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
+from aphrodite.model_executor.layers.fused_moe.config import fp8_w8a8_moe_quant_config
+from aphrodite.model_executor.layers.fused_moe.experts.batched_deep_gemm_moe import (
+    BatchedDeepGemmExperts,
+)
+from aphrodite.model_executor.layers.fused_moe.experts.fused_batched_moe import (
+    BatchedTritonExperts,
+)
+from aphrodite.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
+from aphrodite.model_executor.layers.fused_moe.prepare_finalize.batched import (
+    BatchedPrepareAndFinalize,
+)
 from aphrodite.utils.deep_gemm import calc_diff, is_deep_gemm_supported
 
 from .test_deepgemm import make_block_quant_fp8_weights
+from .utils import make_dummy_moe_config
 
 BLOCK_SIZE = [128, 128]
 
@@ -20,7 +30,9 @@ BLOCK_SIZE = [128, 128]
 @pytest.mark.parametrize("K", [128, 256])  # hidden dim
 @pytest.mark.parametrize("N", [512, 1024])  # intermediate dim per expert
 @pytest.mark.parametrize("topk", [2, 4])
-def test_batched_deepgemm_vs_triton(E: int, T: int, K: int, N: int, topk: int, monkeypatch):
+def test_batched_deepgemm_vs_triton(
+    E: int, T: int, K: int, N: int, topk: int, monkeypatch, workspace_init
+):
     """Compare BatchedDeepGemmExperts to BatchedTritonExperts."""
 
     monkeypatch.setenv("APHRODITE_USE_DEEP_GEMM", "1")
@@ -63,17 +75,23 @@ def test_batched_deepgemm_vs_triton(E: int, T: int, K: int, N: int, topk: int, m
         max_num_tokens=max_num_tokens,
         num_dispatchers=1,
         quant_config=quant_config,
+        moe_config=make_dummy_moe_config(),
     )
-    mk_triton = FusedMoEModularKernel(prep_finalize, triton_experts)
+    mk_triton = FusedMoEKernel(
+        prep_finalize,
+        triton_experts,
+    )
 
-    out_triton = mk_triton(
+    out_triton = mk_triton.apply(
         hidden_states=a,
         w1=w1,
         w2=w2,
         topk_weights=topk_weights,
         topk_ids=topk_ids,
-        inplace=False,
+        activation=MoEActivation.SILU,
         global_num_experts=E,
+        expert_map=None,
+        apply_router_weight_on_input=False,
     )
 
     # deepgemm
@@ -81,17 +99,23 @@ def test_batched_deepgemm_vs_triton(E: int, T: int, K: int, N: int, topk: int, m
         max_num_tokens=max_num_tokens,
         num_dispatchers=1,
         quant_config=quant_config,
+        moe_config=make_dummy_moe_config(),
     )
-    mk_deepgemm = FusedMoEModularKernel(prep_finalize, deepgemm_experts)
+    mk_deepgemm = FusedMoEKernel(
+        prep_finalize,
+        deepgemm_experts,
+    )
 
-    out_deepgemm = mk_deepgemm(
+    out_deepgemm = mk_deepgemm.apply(
         hidden_states=a,
         w1=w1,
         w2=w2,
         topk_weights=topk_weights,
         topk_ids=topk_ids,
-        inplace=False,
+        activation=MoEActivation.SILU,
         global_num_experts=E,
+        expert_map=None,
+        apply_router_weight_on_input=False,
     )
 
     diff = calc_diff(out_deepgemm, out_triton)

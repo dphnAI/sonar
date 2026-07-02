@@ -11,10 +11,10 @@ import pytest
 import pytest_asyncio
 import requests
 
-from aphrodite.platforms import current_platform
 from tests.utils import RemoteOpenAIServer
+from aphrodite.platforms import current_platform
 
-MODEL_NAME = "ibm-research/PowerMoE-3b"
+MODEL_NAME = os.getenv("MODEL_NAME", "ibm-research/PowerMoE-3b")
 
 # Number of data parallel ranks for external LB testing
 DP_SIZE = int(os.getenv("DP_SIZE", "2"))
@@ -83,7 +83,10 @@ class ExternalLBServerManager:
                         },
                     )
                     server.__enter__()
-                    print(f"Server rank {r} started successfully with {self.api_server_count} API servers")
+                    print(
+                        f"Server rank {r} started successfully with "
+                        f"{self.api_server_count} API servers"
+                    )
                     self.servers.append((server, sargs))
                 except Exception as e:
                     print(f"Failed to start server rank {r}: {e}")
@@ -108,11 +111,12 @@ class ExternalLBServerManager:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Stop all server instances."""
-        while self.servers:
-            try:
-                self.servers.pop()[0].__exit__(exc_type, exc_val, exc_tb)
-            except Exception as e:
-                print(f"Error stopping server: {e}")
+        servers = [s for s, _ in self.servers]
+        self.servers.clear()
+        try:
+            RemoteOpenAIServer.shutdown_many(servers)
+        except Exception as e:
+            print(f"Error stopping servers: {e}")
 
 
 @pytest.fixture(scope="module")
@@ -132,7 +136,9 @@ def default_server_args():
 @pytest.fixture(scope="module", params=[1, 4])
 def server_manager(request, default_server_args):
     api_server_count = request.param
-    server_manager = ExternalLBServerManager(MODEL_NAME, DP_SIZE, api_server_count, default_server_args)
+    server_manager = ExternalLBServerManager(
+        MODEL_NAME, DP_SIZE, api_server_count, default_server_args
+    )
 
     with server_manager:
         yield server_manager
@@ -147,15 +153,18 @@ def servers(server_manager):
 async def clients(servers: list[tuple[RemoteOpenAIServer, list[str]]]):
     # Create a client for each server
     async with AsyncExitStack() as stack:
-        yield [await stack.enter_async_context(server.get_async_client()) for server, _ in servers]
+        yield [
+            await stack.enter_async_context(server.get_async_client())
+            for server, _ in servers
+        ]
 
 
 def _get_parallel_config(server: RemoteOpenAIServer):
     response = requests.get(server.url_for("server_info?config_format=json"))
     response.raise_for_status()
 
-    aphrodite_config = response.json()["aphrodite_config"]
-    return aphrodite_config["parallel_config"]
+    vllm_config = response.json()["vllm_config"]
+    return vllm_config["parallel_config"]
 
 
 def test_external_lb_server_info(server_manager):
@@ -173,8 +182,12 @@ def test_external_lb_server_info(server_manager):
         api_process_counts = [c["_api_process_count"] for c in parallel_configs]
         api_process_ranks = [c["_api_process_rank"] for c in parallel_configs]
 
-        assert all(c == api_server_count for c in api_process_counts), api_process_counts
-        assert all(0 <= r < api_server_count for r in api_process_ranks), api_process_ranks
+        assert all(c == api_server_count for c in api_process_counts), (
+            api_process_counts
+        )
+        assert all(0 <= r < api_server_count for r in api_process_ranks), (
+            api_process_ranks
+        )
 
 
 @pytest.mark.asyncio
@@ -244,9 +257,14 @@ async def test_external_lb_single_completion(
 
     _, server_args = servers[0]
     api_server_count = (
-        server_args.count("--api-server-count") and server_args[server_args.index("--api-server-count") + 1] or 1
+        server_args.count("--api-server-count")
+        and server_args[server_args.index("--api-server-count") + 1]
+        or 1
     )
-    print(f"Successfully completed external LB test with {len(clients)} servers (API server count: {api_server_count})")
+    print(
+        f"Successfully completed external LB test with {len(clients)} servers "
+        f"(API server count: {api_server_count})"
+    )
 
 
 @pytest.mark.asyncio
@@ -287,9 +305,13 @@ async def test_external_lb_completion_streaming(
         # finish reason should only return in the last block for OpenAI API
         assert finish_reason_count == 1, "Finish reason should appear exactly once."
         assert last_chunk is not None, "Stream should have yielded at least one chunk."
-        assert last_chunk.choices[0].finish_reason == "length", "Finish reason should be 'length'."
+        assert last_chunk.choices[0].finish_reason == "length", (
+            "Finish reason should be 'length'."
+        )
         # Check that the combined text matches the non-streamed version.
-        assert "".join(chunks) == single_output, "Streamed output should match non-streamed output."
+        assert "".join(chunks) == single_output, (
+            "Streamed output should match non-streamed output."
+        )
         return True  # Indicate success for this request
 
     # Test single request to each server
@@ -326,7 +348,9 @@ async def test_external_lb_completion_streaming(
 
     _, server_args = servers[0]
     api_server_count = (
-        server_args.count("--api-server-count") and server_args[server_args.index("--api-server-count") + 1] or 1
+        server_args.count("--api-server-count")
+        and server_args[server_args.index("--api-server-count") + 1]
+        or 1
     )
     print(
         f"Successfully completed external LB streaming test with "

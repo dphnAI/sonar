@@ -4,23 +4,21 @@
 
 import itertools
 import random
-import unittest
-import unittest.mock
 from collections.abc import Sequence
 from numbers import Number
 from typing import Any, NamedTuple
+from unittest.mock import patch
 
-import pytest
 import torch
-from aphrodite.attention import AttentionBackend, AttentionMetadata, AttentionType
-from aphrodite.attention.backends.registry import _Backend
-from aphrodite.modeling.layers.activation import SiluAndMul
-from aphrodite.modeling.layers.fused_moe.utils import moe_kernel_quantize_input
 from torch._prims_common import TensorLikeType
 
-from aphrodite.utils import STR_BACKEND_ENV_VAR, STR_FLASH_ATTN_VAL, STR_XFORMERS_ATTN_VAL
-from aphrodite.utils.torch_utils import make_tensor_with_pad
 from tests.kernels.quant_utils import native_w8a8_block_matmul
+from aphrodite.model_executor.custom_op import op_registry
+from aphrodite.model_executor.layers.activation import SiluAndMul
+from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
+from aphrodite.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
+from aphrodite.utils.torch_utils import make_tensor_with_pad
+from aphrodite.v1.attention.backend import AttentionType
 
 # For now, disable "test_aot_dispatch_dynamic" since there are some
 # bugs related to this test in PyTorch 2.4.
@@ -161,7 +159,9 @@ def maybe_make_int_tensor(
     * If _list is not None: 1D int torch.Tensor on `device`
     * None otherwise
     """
-    return None if _list is None else torch.tensor(_list, dtype=torch.int, device=device)
+    return (
+        None if _list is None else torch.tensor(_list, dtype=torch.int, device=device)
+    )
 
 
 def maybe_make_long_tensor(
@@ -176,7 +176,9 @@ def maybe_make_long_tensor(
     * If _list is not None: 1D long torch.Tensor on `device`
     * None otherwise
     """
-    return None if _list is None else torch.tensor(_list, dtype=torch.long, device=device)
+    return (
+        None if _list is None else torch.tensor(_list, dtype=torch.long, device=device)
+    )
 
 
 def maybe_max(_list: list | None) -> Number | None:
@@ -211,20 +213,6 @@ def make_causal_mask(
     # Replace True with float('-inf') and False with 0
     mask = mask.masked_fill(mask == 1, float("-inf")).masked_fill(mask == 0, 0.0)
     return mask
-
-
-def override_backend_env_variable(mpatch: pytest.MonkeyPatch, backend_name: str) -> None:
-    """
-    Override the environment variable indicating the Aphrodite backend temporarily,
-    using pytest monkeypatch to ensure that the env vars get
-    reset once the test context exits.
-
-    Arguments:
-
-    * mpatch: pytest monkeypatch instance
-    * backend_name: attention backend name to force
-    """
-    mpatch.setenv(STR_BACKEND_ENV_VAR, backend_name)
 
 
 def ref_masked_attention(
@@ -362,9 +350,15 @@ def make_qkv(
     key = torch.rand((batch_size, max_kv_seq_len, num_heads, head_size)).to(device)
     value = torch.rand((batch_size, max_kv_seq_len, num_heads, head_size)).to(device)
 
-    prefill_query = torch.zeros((batch_size, max_q_seq_len, num_heads, head_size)).to(device)
-    prefill_key = torch.zeros((batch_size, max_kv_seq_len, num_heads, head_size)).to(device)
-    prefill_value = torch.zeros((batch_size, max_kv_seq_len, num_heads, head_size)).to(device)
+    prefill_query = torch.zeros((batch_size, max_q_seq_len, num_heads, head_size)).to(
+        device
+    )
+    prefill_key = torch.zeros((batch_size, max_kv_seq_len, num_heads, head_size)).to(
+        device
+    )
+    prefill_value = torch.zeros((batch_size, max_kv_seq_len, num_heads, head_size)).to(
+        device
+    )
 
     decode_query = torch.zeros((batch_size, 1, num_heads, head_size)).to(device)
     decode_key = torch.zeros((batch_size, 1, num_heads, head_size)).to(device)
@@ -375,9 +369,15 @@ def make_qkv(
         key[bdx, kv_seq_len:, :, :] = 0
         value[bdx, kv_seq_len:, :, :] = 0
 
-        prefill_query[bdx, 0 : (q_seq_len - 1), :, :] = query[bdx, 0 : (q_seq_len - 1), :, :]
-        prefill_key[bdx, 0 : (kv_seq_len - 1), :, :] = key[bdx, 0 : (kv_seq_len - 1), :, :]
-        prefill_value[bdx, 0 : (kv_seq_len - 1), :, :] = value[bdx, 0 : (kv_seq_len - 1), :, :]
+        prefill_query[bdx, 0 : (q_seq_len - 1), :, :] = query[
+            bdx, 0 : (q_seq_len - 1), :, :
+        ]
+        prefill_key[bdx, 0 : (kv_seq_len - 1), :, :] = key[
+            bdx, 0 : (kv_seq_len - 1), :, :
+        ]
+        prefill_value[bdx, 0 : (kv_seq_len - 1), :, :] = value[
+            bdx, 0 : (kv_seq_len - 1), :, :
+        ]
 
         decode_query[bdx, :, :, :] = query[bdx, (q_seq_len - 1) : q_seq_len, :, :]
         decode_key[bdx, :, :, :] = key[bdx, (kv_seq_len - 1) : kv_seq_len, :, :]
@@ -442,7 +442,9 @@ def pack_tensor(
     packed_tensor = torch.zeros((num_tok, num_heads, head_size), device=device)
 
     for bdx, (seq_len, start_loc) in enumerate(zip(seq_lens, start_loc_list)):
-        packed_tensor[start_loc : (start_loc + seq_len), :, :] = unpacked_tensor[bdx, :seq_len, :, :]
+        packed_tensor[start_loc : (start_loc + seq_len), :, :] = unpacked_tensor[
+            bdx, :seq_len, :, :
+        ]
 
     return packed_tensor, start_loc_list
 
@@ -473,7 +475,9 @@ def pack_qkv(qkv: QKVInputs, device: torch.device | str) -> PackedQKVInputs:
         packed_query = None
         q_start_loc_list = None
     else:
-        packed_query, q_start_loc_list = pack_tensor(qkv.query, qkv.q_seq_lens, device=device)
+        packed_query, q_start_loc_list = pack_tensor(
+            qkv.query, qkv.q_seq_lens, device=device
+        )
     packed_key, kv_start_loc_list = pack_tensor(qkv.key, qkv.kv_seq_lens, device=device)
     packed_value, _ = pack_tensor(qkv.value, qkv.kv_seq_lens, device=device)
     return PackedQKVInputs(
@@ -485,85 +489,6 @@ def pack_qkv(qkv: QKVInputs, device: torch.device | str) -> PackedQKVInputs:
         (None if q_start_loc_list is None else qkv.q_seq_lens),
         qkv.kv_seq_lens,
     )
-
-
-def make_backend(backend_name: str) -> AttentionBackend:
-    """
-    Construct the backend instance determined by the backend_name string
-    argument.
-
-    Note: at time of writing the Attention wrapper automatically selects
-    its own backend for Attention.forward(); so the backend instance which
-    you generate with this function is not meant to be used for *running*
-    inference, but rather for generating compatible metadata structures
-    using backend.make_metadata()
-
-
-    Returns:
-
-    * Backend instance
-    """
-    if backend_name == STR_XFORMERS_ATTN_VAL:
-        from aphrodite.v1.attention.backends.xformers import XFormersAttentionBackend
-
-        return XFormersAttentionBackend()
-    if backend_name == STR_FLASH_ATTN_VAL:
-        from aphrodite.v1.attention.backends.flash_attn import FlashAttentionBackend
-
-        return FlashAttentionBackend()
-    if backend_name == "TRITON_ATTN":
-        from aphrodite.v1.attention.backends.triton_attn import TritonAttentionBackend
-
-        return TritonAttentionBackend()
-    if backend_name == "FLEX_ATTENTION":
-        from aphrodite.v1.attention.backends.flex_attention import FlexAttentionBackend
-
-        return FlexAttentionBackend()
-    if backend_name == "TORCH_SDPA":
-        from aphrodite.v1.attention.backends.cpu_attn import TorchSDPABackend
-
-        return TorchSDPABackend()
-    if backend_name == "FLASHINFER":
-        from aphrodite.v1.attention.backends.flashinfer import FlashInferBackend
-
-        return FlashInferBackend()
-
-    raise AssertionError(f"Unrecognized backend_name {backend_name} for unit test")
-
-
-def make_alibi_bias(
-    alibi_slopes: torch.Tensor,
-    num_kv_heads: int,
-    dtype: torch.dtype,
-    seq_lens: list[int],
-) -> list[Any]:
-    """Create ALiBi biases compatible with xFormers attention tests."""
-    from xformers.ops.fmha.attn_bias import LowerTriangularMaskWithTensorBias
-
-    if alibi_slopes is None:
-        return [None for _ in seq_lens]
-
-    attn_biases: list[Any] = []
-    num_heads = alibi_slopes.shape[0]
-    assert num_heads >= num_kv_heads, "ALiBi slopes expect at least as many heads as KV heads"
-
-    for seq_len in seq_lens:
-        bias = torch.arange(seq_len, dtype=dtype, device=alibi_slopes.device)
-        bias = bias[None, :] - bias[:, None]
-
-        padded_len = (seq_len + 7) // 8 * 8
-        bias_tensor = torch.empty(
-            1,
-            num_heads,
-            seq_len,
-            padded_len,
-            device=alibi_slopes.device,
-            dtype=dtype,
-        )[:, :, :, :seq_len].copy_(bias)
-        bias_tensor.mul_(alibi_slopes[:, None, None])
-        attn_biases.append(LowerTriangularMaskWithTensorBias(bias_tensor))
-
-    return attn_biases
 
 
 def _make_metadata_tensors(
@@ -618,7 +543,9 @@ def _make_metadata_tensors(
             dtype=torch.int32,
             device=seq_lens_tensor.device,
         )
-        torch.cumsum(seq_lens_tensor, dim=0, dtype=seq_start_loc.dtype, out=seq_start_loc[1:])
+        torch.cumsum(
+            seq_lens_tensor, dim=0, dtype=seq_start_loc.dtype, out=seq_start_loc[1:]
+        )
 
     encoder_seq_start_loc = torch.zeros(
         encoder_seq_lens_tensor.shape[0] + 1,
@@ -667,17 +594,12 @@ def make_kv_cache(
 
     Returns:
 
-    * kv_cache: 2 x num_blocks x (block_size * num_heads * head_size)
-    *     for backend 'XFORMERS'
     * kv_cache: 2 x num_blocks x block_size x num_heads x head_size
     *     for backend 'FLASH_ATTN'
     """
-    if backend == "XFORMERS":
-        kv_cache = torch.rand((2, num_blocks, block_size * num_heads * head_size)).to(device)
-    elif backend == "FLASH_ATTN":
-        kv_cache = torch.rand((2, num_blocks, block_size, num_heads, head_size)).to(device)
-    else:
-        raise ValueError(f"Unknown backend value: '{backend}'. Expected 'XFORMERS' or 'FLASH_ATTN'.")
+    if backend != "FLASH_ATTN":
+        raise ValueError(f"Unknown backend value: '{backend}'. Expected 'FLASH_ATTN'.")
+    kv_cache = torch.rand((2, num_blocks, block_size, num_heads, head_size)).to(device)
     if default_val is not None:
         kv_cache[:, :, :] = default_val
     return kv_cache
@@ -688,7 +610,7 @@ def _num_tokens_to_min_blocks(num_tokens: int, block_size: int) -> int:
     Compute the minimum number of blocks required to hold num_tokens tokens,
     given block_size
     """
-    return (num_tokens + block_size) // block_size
+    return (num_tokens + block_size - 1) // block_size
 
 
 def make_empty_slot_mapping_tensor(device: torch.device | str):
@@ -749,7 +671,9 @@ def split_slot_mapping(
 
     base_idx = 0
     for seq_len in seq_lens:
-        prefill_slot_mapping.extend(slot_mapping_list[base_idx : (base_idx + seq_len - 1)])
+        prefill_slot_mapping.extend(
+            slot_mapping_list[base_idx : (base_idx + seq_len - 1)]
+        )
         decode_slot_mapping.append(slot_mapping_list[base_idx + seq_len - 1])
         base_idx += seq_len
 
@@ -771,7 +695,7 @@ def make_block_tables_slot_mapping(
     For a sequence with num_tokens tokens the minimum number
     of required KV cache blocks is
 
-    num_blocks = (num_tokens + block_size) // block_size
+    num_blocks = (num_tokens + block_size - 1) // block_size
 
     Then the minimum KV cache size in blocks is
 
@@ -805,7 +729,9 @@ def make_block_tables_slot_mapping(
     """
 
     # Provision minimum number of KV cache blocks
-    num_blocks_list = [_num_tokens_to_min_blocks(num_tokens, block_size) for num_tokens in seq_lens]
+    num_blocks_list = [
+        _num_tokens_to_min_blocks(num_tokens, block_size) for num_tokens in seq_lens
+    ]
     max_block_table_len = max(num_blocks_list)
     block_table_pad_tokens = 10
 
@@ -819,7 +745,9 @@ def make_block_tables_slot_mapping(
         num_blocks = num_blocks_list[sdx]
         block_table = list(range(block_base_idx, block_base_idx - num_blocks, -1))
         for idx in range(num_tokens):
-            mapping_value = (idx % block_size) + block_table[idx // block_size] * block_size
+            mapping_value = (idx % block_size) + block_table[
+                idx // block_size
+            ] * block_size
             slot_mapping_list.append(mapping_value)
 
         block_base_idx -= num_blocks
@@ -836,181 +764,6 @@ def make_block_tables_slot_mapping(
     return (block_tables_tensor, slot_mapping_list, max_block_idx)
 
 
-def make_test_metadata(
-    attn_backend: _Backend,
-    is_prompt: bool,
-    seq_lens: list[int] | None,
-    decoder_test_params: PhaseTestParameters | None,
-    device: torch.device | str,
-    encoder_test_params: PhaseTestParameters | None = None,
-    cross_test_params: PhaseTestParameters | None = None,
-) -> AttentionMetadata:
-    """
-    Construct fake attention metadata for a given test phase
-    (prefill-phase or decode-phase).
-
-    encoder_test_params and cross_test_params arguments allow encoder
-    attention and enc/dec cross-attention (respectively) to use distinct
-    metadata values from decoder self-attention (decoder_test_params.)
-
-    if encoder_test_params and cross_test_params are None, the attention
-    metadata will support decoder-only scenario.
-
-    Assumptions:
-
-    * No chunked prefill -> a batch is 100% prefill or 100% decode, never both
-
-    Arguments:
-
-    * attn_backend_name: Backend for sourcing attention kernels
-    * is_prompt: prefill if True, o/w decode
-    * seq_lens: list of token counts for each sequence
-    * decoder_test_params: decoder self-attention test params;
-                           this function requires
-                           kv_mmap (memory mapping) field
-    * device: CPU or CUDA device
-    * encoder_test_params: encoder attention test params;
-                           this function requires encoder query
-                           sequence lengths field. If None,
-                           encoder query sequence lengths are
-                           treated as None
-    * cross_test_params: enc/dec cross-attention test params;
-                         this function requires kv_mmap field.
-                         If None, KV cache memory map data
-                         structures are treated as None
-
-    Return:
-
-    * AttentionMetadata structure
-    """
-
-    # Decoder self-attention memory mapping
-    # decoder_test_params is None signals encoder-only
-    # scenario, so kv_mmap is None
-    kv_mmap = None if decoder_test_params is None else decoder_test_params.kv_mmap
-
-    # This function constructs metadata assuming no chunked prefill,
-    # i.e. 100% prefill tokens or 100% decode tokens
-    #
-    # - If is_prompt, num_prefills_or_decodes is the number of prefills
-    #   and num_prefill_or_decode_tokens is the number of prefill tokens
-    # - If not is_prompt, num_prefills_or_decodes is the number of decodes
-    #   and num_prefill_or_decode_tokens is the number of decode tokens
-    #
-    # seq_lens is None signals encoder-only
-    # scenario, in which case num_prefills_or_decodes and
-    # num_prefill_or_decode_tokens are unused
-    num_prefills_or_decodes = None if seq_lens is None else len(seq_lens)
-
-    num_prefill_or_decode_tokens = None if seq_lens is None else (sum(seq_lens) if is_prompt else len(seq_lens))
-
-    # Seems for non-prefix-caching scenarios context_lens
-    # is never needed
-    context_lens = None
-
-    if encoder_test_params is None:
-        encoder_seq_lens = None
-        num_encoder_tokens = None
-    else:
-        # Encoder/decoder or encoder-only models only:
-        # * Extract encoder input sequence lengths
-        assert encoder_test_params.packed_qkvo.packed_qkv is not None
-        encoder_seq_lens = encoder_test_params.packed_qkvo.packed_qkv.q_seq_lens
-        num_encoder_tokens = None if encoder_seq_lens is None else (sum(encoder_seq_lens))
-
-    # For encoder/decoder or encoder-only models only, extract *cross-attention*
-    # slot_mapping and block table (kv_mmap)
-    cross_kv_mmap = None if cross_test_params is None else cross_test_params.kv_mmap
-
-    attn_backend_obj = make_backend(attn_backend.name)
-
-    if is_prompt:
-        # Prefill-phase scenario
-
-        num_prefills = num_prefills_or_decodes
-        num_prefill_tokens = num_prefill_or_decode_tokens
-        num_decode_tokens = 0
-
-        (
-            seq_lens_tensor,
-            context_lens_tensor,
-            _,
-            _,
-            seq_start_loc,
-            encoder_seq_lens_tensor,
-            encoder_seq_start_loc,
-            max_encoder_seq_len,
-        ) = _make_metadata_tensors(seq_lens, context_lens, encoder_seq_lens, device=device)
-        return attn_backend_obj.make_metadata(
-            num_prefills=num_prefills,
-            slot_mapping=(None if kv_mmap is None else kv_mmap.slot_mapping),
-            enable_kv_scales_calculation=True,
-            num_prefill_tokens=num_prefill_tokens,
-            num_decode_tokens=num_decode_tokens,
-            seq_lens=seq_lens,
-            seq_lens_tensor=seq_lens_tensor,
-            seq_start_loc=seq_start_loc,
-            max_prefill_seq_len=None if seq_lens is None else max(seq_lens),
-            max_decode_seq_len=0,
-            context_lens_tensor=context_lens_tensor,
-            block_tables=(None if kv_mmap is None else kv_mmap.block_tables),
-            use_cuda_graph=False,
-            num_encoder_tokens=num_encoder_tokens,
-            encoder_seq_lens=encoder_seq_lens,
-            encoder_seq_lens_tensor=encoder_seq_lens_tensor,
-            encoder_seq_start_loc=encoder_seq_start_loc,
-            max_encoder_seq_len=max_encoder_seq_len,
-            cross_slot_mapping=(None if cross_kv_mmap is None else cross_kv_mmap.slot_mapping),
-            cross_block_tables=(None if cross_kv_mmap is None else cross_kv_mmap.block_tables),
-        )
-
-    else:  # not is_prompt
-        # Decode-phase scenario
-
-        assert kv_mmap is not None
-        assert num_prefill_or_decode_tokens is not None
-        assert seq_lens is not None
-
-        num_prefills = 0
-        num_prefill_tokens = 0
-        num_decode_tokens = num_prefill_or_decode_tokens
-
-        (
-            seq_lens_tensor,
-            context_lens_tensor,
-            _,
-            _,
-            seq_start_loc,
-            encoder_seq_lens_tensor,
-            encoder_seq_start_loc,
-            max_encoder_seq_len,
-        ) = _make_metadata_tensors(seq_lens, context_lens, encoder_seq_lens, device=device)
-
-        return attn_backend_obj.make_metadata(
-            num_prefills=num_prefills,
-            slot_mapping=kv_mmap.slot_mapping,
-            enable_kv_scales_calculation=True,
-            num_prefill_tokens=num_prefill_tokens,
-            num_decode_tokens=num_decode_tokens,
-            seq_lens=seq_lens,
-            seq_lens_tensor=seq_lens_tensor,
-            seq_start_loc=seq_start_loc,
-            max_prefill_seq_len=0,
-            max_decode_seq_len=max(seq_lens),
-            max_decode_query_len=1,
-            context_lens_tensor=context_lens_tensor,
-            block_tables=kv_mmap.block_tables,
-            use_cuda_graph=False,
-            num_encoder_tokens=num_encoder_tokens,
-            encoder_seq_lens=encoder_seq_lens,
-            encoder_seq_lens_tensor=encoder_seq_lens_tensor,
-            encoder_seq_start_loc=encoder_seq_start_loc,
-            max_encoder_seq_len=max_encoder_seq_len,
-            cross_slot_mapping=(None if cross_kv_mmap is None else cross_kv_mmap.slot_mapping),
-            cross_block_tables=(None if cross_kv_mmap is None else cross_kv_mmap.block_tables),
-        )
-
-
 def assert_actual_matches_ideal(
     test_params: PhaseTestParameters, output_under_test: torch.Tensor, backend: str
 ) -> None:
@@ -1024,16 +777,14 @@ def assert_actual_matches_ideal(
     * output_under_test: actually observed output value
     """
     ideal_output = test_params.packed_qkvo.ideal_output
-    if backend == "XFORMERS":
-        torch.testing.assert_close(ideal_output, output_under_test.view_as(ideal_output))
-
-    elif backend == "FLASH_ATTN":
-        # For FlashAttention override the accuracy thresholds to non default
-        # values since we notice a higher difference between the ideal and
-        # actual output.
-        torch.testing.assert_close(ideal_output, output_under_test.view_as(ideal_output), atol=0.01, rtol=0.016)
-    else:
-        raise ValueError(f"Unknown backend value: '{backend}'. Expected 'XFORMERS' or 'FLASH_ATTN'.")
+    if backend != "FLASH_ATTN":
+        raise ValueError(f"Unknown backend value: '{backend}'. Expected 'FLASH_ATTN'.")
+    # For FlashAttention override the accuracy thresholds to non default
+    # values since we notice a higher difference between the ideal and
+    # actual output.
+    torch.testing.assert_close(
+        ideal_output, output_under_test.view_as(ideal_output), atol=0.01, rtol=0.016
+    )
 
 
 # Copied/modified from torch._refs.__init__.py
@@ -1049,7 +800,42 @@ def fp8_allclose(
     """
     torch._refs._check_close_args(name="torch.allclose", a=a, b=b, rtol=rtol, atol=atol)
 
-    return bool(torch.all(torch.isclose(a.double(), b.double(), rtol=rtol, atol=atol, equal_nan=equal_nan)).item())
+    return bool(
+        torch.all(
+            torch.isclose(
+                a.double(), b.double(), rtol=rtol, atol=atol, equal_nan=equal_nan
+            )
+        ).item()
+    )
+
+
+def bf16_ulp_distance(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+    """Representable-step distance between two bf16 tensors.
+
+    Reinterprets the bf16 bit patterns under the IEEE-754 total ordering so
+    that adjacent representable values differ by exactly 1.
+    """
+
+    def key(t: torch.Tensor) -> torch.Tensor:
+        u = t.contiguous().view(torch.int16).to(torch.int64) & 0xFFFF
+        return torch.where(u >= 0x8000, 0xFFFF - u, u + 0x8000)
+
+    return (key(a) - key(b)).abs()
+
+
+def fp8_ulp_distance(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+    """Representable-step distance between two 8-bit fp8 tensors.
+
+    Reinterprets the fp8 bytes under a sign-magnitude total ordering so that
+    adjacent representable values differ by exactly 1. Inputs must already share
+    the same fp8 encoding (e.g. both FP8_STORE_DTYPE).
+    """
+
+    def key(t: torch.Tensor) -> torch.Tensor:
+        u = t.contiguous().view(torch.uint8).to(torch.int64)
+        return torch.where(u >= 0x80, 0xFF - u, u + 0x80)
+
+    return (key(a) - key(b)).abs()
 
 
 # Marlin MoE test utils
@@ -1061,7 +847,9 @@ def stack_and_dev(tensors: list[torch.Tensor]):
 
 
 def compute_max_diff(output, output_ref):
-    return torch.mean(torch.abs(output - output_ref)) / torch.mean(torch.abs(output_ref))
+    return torch.mean(torch.abs(output - output_ref)) / torch.mean(
+        torch.abs(output_ref)
+    )
 
 
 def torch_experts(
@@ -1082,12 +870,20 @@ def torch_experts(
     per_act_token_quant=False,
     block_shape: list[int] | None = None,
     apply_router_weights_on_input: bool = False,
+    activation: MoEActivation = MoEActivation.SILU,
 ) -> torch.Tensor:
     assert (
         global_num_experts == -1
         or (global_num_experts == w1.shape[0] and expert_map is None)
         or (expert_map is not None and global_num_experts == expert_map.shape[0])
     )
+
+    if quant_dtype in [torch.float16, torch.bfloat16]:
+        quant_dtype = None
+    quant_input_only = quant_dtype is not None and w1_scale is None and w2_scale is None
+    if quant_input_only:
+        assert a1_scale is None and a2_scale is None
+        assert per_act_token_quant
 
     M, K = a.shape
     topk = topk_ids.shape[1]
@@ -1102,7 +898,12 @@ def torch_experts(
 
     if a1_scale:
         assert not per_act_token_quant and block_shape is None
-    a, a_scale = moe_kernel_quantize_input(a, a1_scale, quant_dtype, per_act_token_quant, block_shape)
+    a, a_scale = moe_kernel_quantize_input(
+        a, a1_scale, quant_dtype, per_act_token_quant, block_shape
+    )
+
+    if quant_input_only:
+        a = (a.float() * a_scale.view(-1, 1)).to(w1.dtype)
 
     num_experts = w1.shape[0]
 
@@ -1112,6 +913,8 @@ def torch_experts(
 
     f32 = torch.float32
 
+    act = op_registry[activation.custom_op_name]
+
     for i in range(num_experts):
         mask = topk_ids == i
         if mask.sum():
@@ -1119,24 +922,46 @@ def torch_experts(
                 tmp1 = a[mask] @ w1[i].transpose(0, 1)
                 if b_bias1 is not None:
                     tmp1 = tmp1 + b_bias1[i].view(1, -1).to(tmp1.dtype)
-                tmp2 = SiluAndMul()(tmp1)
+                tmp2 = act()(tmp1)
                 out[mask] = tmp2 @ w2[i].transpose(0, 1)
                 if b_bias2 is not None:
                     out[mask] = out[mask] + b_bias2[i].view(1, -1).to(tmp1.dtype)
+            elif quant_input_only:
+                tmp1 = a[mask] @ w1[i].transpose(0, 1)
+                tmp2 = SiluAndMul()(tmp1)
+                tmp2, tmp2_scale = moe_kernel_quantize_input(
+                    tmp2, None, quant_dtype, per_act_token_quant
+                )
+                tmp2 = (tmp2.float() * tmp2_scale.view(-1, 1)).to(w2.dtype)
+                out[mask] = tmp2 @ w2[i].transpose(0, 1)
             elif block_shape is not None:
                 # block quantized
-                assert a_scale is not None and w1_scale is not None and w2_scale is not None
-                tmp1 = native_w8a8_block_matmul(a[mask], w1[i], a_scale[mask], w1_scale[i], block_shape, out.dtype)
+                assert (
+                    a_scale is not None
+                    and w1_scale is not None
+                    and w2_scale is not None
+                )
+                tmp1 = native_w8a8_block_matmul(
+                    a[mask], w1[i], a_scale[mask], w1_scale[i], block_shape, out.dtype
+                )
                 if b_bias1 is not None:
                     tmp1 = tmp1 + b_bias1[i].view(1, -1).to(tmp1.dtype)
                 tmp2 = SiluAndMul()(tmp1)
-                tmp2, b_scale = moe_kernel_quantize_input(tmp2, a2_scale, quant_dtype, per_act_token_quant, block_shape)
+                tmp2, b_scale = moe_kernel_quantize_input(
+                    tmp2, a2_scale, quant_dtype, per_act_token_quant, block_shape
+                )
 
-                out[mask] = native_w8a8_block_matmul(tmp2, w2[i], b_scale, w2_scale[i], block_shape, out.dtype)
+                out[mask] = native_w8a8_block_matmul(
+                    tmp2, w2[i], b_scale, w2_scale[i], block_shape, out.dtype
+                )
                 if b_bias2 is not None:
                     out[mask] = out[mask] + b_bias2[i].view(1, -1).to(tmp1.dtype)
             else:
-                assert a_scale is not None and w1_scale is not None and w2_scale is not None
+                assert (
+                    a_scale is not None
+                    and w1_scale is not None
+                    and w2_scale is not None
+                )
                 scales = a_scale if a_scale.numel() == 1 else a_scale[mask]
 
                 tmp1 = a[mask].to(f32) * scales
@@ -1145,9 +970,11 @@ def torch_experts(
                 if b_bias1 is not None:
                     tmp1 = tmp1 + b_bias1[i].view(1, -1).to(out.dtype)
 
-                tmp2 = SiluAndMul()(tmp1).to(out.dtype)
+                tmp2 = act()(tmp1).to(out.dtype)
 
-                tmp2, b_scale = moe_kernel_quantize_input(tmp2, a2_scale, quant_dtype, per_act_token_quant, block_shape)
+                tmp2, b_scale = moe_kernel_quantize_input(
+                    tmp2, a2_scale, quant_dtype, per_act_token_quant, block_shape
+                )
                 assert b_scale is not None
 
                 tmp2 = tmp2.to(f32) * b_scale
@@ -1159,7 +986,11 @@ def torch_experts(
     if apply_router_weights_on_input:
         return out
     else:
-        return (out.view(M, -1, w2.shape[1]).to(f32) * topk_weight.view(M, -1, 1)).sum(dim=1).to(out.dtype)
+        return (
+            (out.view(M, -1, w2.shape[1]).to(f32) * topk_weight.view(M, -1, 1))
+            .sum(dim=1)
+            .to(out.dtype)
+        )
 
 
 def torch_moe(
@@ -1172,6 +1003,7 @@ def torch_moe(
     b_bias2: torch.Tensor | None = None,
     global_num_experts: int = -1,
     expert_map: torch.Tensor | None = None,
+    activation: MoEActivation = MoEActivation.SILU,
 ) -> torch.Tensor:
     score = torch.softmax(score, dim=-1, dtype=torch.float32)
     topk_weight, topk_ids = torch.topk(score, topk)
@@ -1185,6 +1017,7 @@ def torch_moe(
         b_bias1,
         b_bias2,
         expert_map,
+        activation=activation,
     )
 
 
@@ -1205,7 +1038,9 @@ def torch_moe_single(a, w, score, topk):
 # A special version of op check that has a restricted default set of test_utils
 # and a patched version of allclose that supports fp8 types.
 def opcheck(
-    op: torch._ops.OpOverload | torch._ops.OpOverloadPacket | torch._library.custom_ops.CustomOpDef,
+    op: torch._ops.OpOverload
+    | torch._ops.OpOverloadPacket
+    | torch._library.custom_ops.CustomOpDef,
     args: tuple[Any, ...],
     kwargs: dict[str, Any] | None = None,
     *,
@@ -1213,9 +1048,11 @@ def opcheck(
     raise_exception: bool = True,
     cond: bool = True,
 ) -> dict[str, str]:
-    with unittest.mock.patch("torch.allclose", new=fp8_allclose):
+    with patch("torch.allclose", new=fp8_allclose):
         return (
-            torch.library.opcheck(op, args, kwargs, test_utils=test_utils, raise_exception=raise_exception)
+            torch.library.opcheck(
+                op, args, kwargs, test_utils=test_utils, raise_exception=raise_exception
+            )
             if cond
             else {}
         )
@@ -1224,7 +1061,9 @@ def opcheck(
 # For testing quantized linear kernels
 def to_fp8(tensor: torch.Tensor):
     finfo = torch.finfo(torch.float8_e4m3fn)
-    return torch.round(tensor.clamp(min=finfo.min, max=finfo.max)).to(dtype=torch.float8_e4m3fn)
+    return torch.round(tensor.clamp(min=finfo.min, max=finfo.max)).to(
+        dtype=torch.float8_e4m3fn
+    )
 
 
 def to_int8(tensor: torch.Tensor):
@@ -1257,13 +1096,19 @@ def baseline_scaled_mm(
         for i, s in enumerate(shape):
             if t.shape[i] != s and t.shape[i] != 1:
                 assert s % t.shape[i] == 0
-                t = t.unsqueeze(i + 1).expand(*t.shape[: i + 1], s // t.shape[i], *t.shape[i + 1 :]).flatten(i, i + 1)
+                t = (
+                    t.unsqueeze(i + 1)
+                    .expand(*t.shape[: i + 1], s // t.shape[i], *t.shape[i + 1 :])
+                    .flatten(i, i + 1)
+                )
         return t
 
     scale_a = group_broadcast(scale_a, a.shape)
     scale_b = group_broadcast(scale_b, b.shape)
 
-    output = torch.mm((scale_a * a.to(dtype=torch.float32)), (scale_b * b.to(dtype=torch.float32))).to(out_dtype)
+    output = torch.mm(
+        (scale_a * a.to(dtype=torch.float32)), (scale_b * b.to(dtype=torch.float32))
+    ).to(out_dtype)
 
     if bias is not None:
         output = output + bias

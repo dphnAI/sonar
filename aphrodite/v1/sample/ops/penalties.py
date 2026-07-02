@@ -4,8 +4,7 @@
 import torch
 
 from aphrodite.model_executor.layers.utils import apply_penalties
-from aphrodite.utils.platform_utils import is_pin_memory_available
-from aphrodite.utils.torch_utils import make_tensor_with_pad
+from aphrodite.utils.torch_utils import PIN_MEMORY, make_tensor_with_pad
 
 
 def apply_all_penalties(
@@ -39,7 +38,9 @@ def apply_all_penalties(
     )
 
 
-def _convert_to_tensors(output_token_ids: list[list[int]], vocab_size: int, device: torch.device) -> torch.Tensor:
+def _convert_to_tensors(
+    output_token_ids: list[list[int]], vocab_size: int, device: torch.device
+) -> torch.Tensor:
     """
     Convert the different list data structures to tensors.
     """
@@ -50,6 +51,6 @@ def _convert_to_tensors(output_token_ids: list[list[int]], vocab_size: int, devi
         pad=vocab_size,
         device="cpu",
         dtype=torch.int64,
-        pin_memory=is_pin_memory_available(),
+        pin_memory=PIN_MEMORY,
     )
     return output_tokens_tensor.to(device, non_blocking=True)

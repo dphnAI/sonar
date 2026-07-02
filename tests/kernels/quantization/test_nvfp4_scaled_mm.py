@@ -6,6 +6,7 @@ from nvfp4_utils import FLOAT4_E2M1_MAX, FLOAT8_E4M3_MAX, dequantize_nvfp4_to_dt
 
 from aphrodite import _custom_ops as ops
 from aphrodite.platforms import current_platform
+from aphrodite.utils.torch_utils import set_random_seed
 
 if not current_platform.has_device_capability(100):
     pytest.skip(
@@ -59,15 +60,19 @@ def test_nvfp4_gemm(
     seed: int,
     device: str,
 ) -> None:
-    current_platform.seed_everything(seed)
+    set_random_seed(seed)
     m, n, packed_k = shape
     k = packed_k * 2
     block_size = 16
     a_dtype = torch.randn((m, k), dtype=dtype, device=device)
     b_dtype = torch.randn((n, k), dtype=dtype, device=device)
 
-    a_global_scale = ((FLOAT8_E4M3_MAX * FLOAT4_E2M1_MAX) / torch.amax(a_dtype.flatten(), dim=-1)).to(torch.float32)
-    b_global_scale = ((FLOAT8_E4M3_MAX * FLOAT4_E2M1_MAX) / torch.amax(b_dtype.flatten(), dim=-1)).to(torch.float32)
+    a_global_scale = (
+        (FLOAT8_E4M3_MAX * FLOAT4_E2M1_MAX) / torch.amax(a_dtype.flatten(), dim=-1)
+    ).to(torch.float32)
+    b_global_scale = (
+        (FLOAT8_E4M3_MAX * FLOAT4_E2M1_MAX) / torch.amax(b_dtype.flatten(), dim=-1)
+    ).to(torch.float32)
     alpha = 1.0 / (a_global_scale * b_global_scale)
     # ops.scaled_fp4_quant returns swizzled scales, while weights
     # from checkpoints are in linear scales.
@@ -88,6 +93,8 @@ def test_nvfp4_gemm(
         block_size,
         device,
     )
-    out = ops.cutlass_scaled_fp4_mm(a_fp4, b_fp4, a_scale_interleaved, b_scale_interleaved, alpha, dtype)
+    out = ops.cutlass_scaled_fp4_mm(
+        a_fp4, b_fp4, a_scale_interleaved, b_scale_interleaved, alpha, dtype
+    )
 
     torch.testing.assert_close(out, expected_out.to(dtype=dtype), atol=1e-1, rtol=1e-1)

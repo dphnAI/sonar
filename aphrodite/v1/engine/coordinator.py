@@ -11,7 +11,7 @@ import zmq
 
 from aphrodite.config import ParallelConfig
 from aphrodite.logger import init_logger
-from aphrodite.utils.network_utils import get_tcp_uri, make_zmq_socket
+from aphrodite.utils.network_utils import make_zmq_socket
 from aphrodite.utils.system_utils import get_mp_context, set_process_title
 from aphrodite.v1.engine import EngineCoreOutputs, EngineCoreRequestType
 from aphrodite.v1.serial_utils import MsgpackDecoder
@@ -58,17 +58,27 @@ class DPCoordinator:
 
     def _wait_for_zmq_addrs(self, zmq_addr_pipe) -> tuple[str, str, str]:
         try:
-            ready = multiprocessing.connection.wait([zmq_addr_pipe, self.proc.sentinel], timeout=30)
+            timeout = 120
+            ready = multiprocessing.connection.wait(
+                [zmq_addr_pipe, self.proc.sentinel], timeout=timeout
+            )
             if not ready:
-                raise RuntimeError("DP Coordinator process failed to report ZMQ addresses during startup.")
+                raise RuntimeError(
+                    "DP Coordinator process failed to report ZMQ addresses "
+                    f"within timeout={timeout} seconds during startup."
+                )
             try:
                 return zmq_addr_pipe.recv()
             except EOFError:
-                raise RuntimeError("DP Coordinator process failed during startup.") from None
+                raise RuntimeError(
+                    "DP Coordinator process failed during startup."
+                ) from None
         finally:
             zmq_addr_pipe.close()
 
-    def __init__(self, parallel_config: ParallelConfig, enable_wave_coordination: bool = True):
+    def __init__(
+        self, parallel_config: ParallelConfig, enable_wave_coordination: bool = True
+    ):
         dp_size = parallel_config.data_parallel_size
         assert dp_size > 1, "Coordinator only used for data parallel"
 
@@ -82,12 +92,9 @@ class DPCoordinator:
         if parallel_config.enable_elastic_ep:
             local_only_eng = False
 
-        def bind_address(local_only: bool) -> str:
-            return get_engine_client_zmq_addr(local_only=True, host=host) if local_only else get_tcp_uri(host, 0)
-
-        front_publish_address = bind_address(local_only)
-        back_publish_address = bind_address(local_only_eng)
-        back_output_address = bind_address(local_only_eng)
+        front_publish_address = get_engine_client_zmq_addr(local_only, host=host)
+        back_publish_address = get_engine_client_zmq_addr(local_only_eng, host=host)
+        back_output_address = get_engine_client_zmq_addr(local_only_eng, host=host)
 
         context = get_mp_context()
         parent_zmq_addr_pipe, child_zmq_addr_pipe = context.Pipe(duplex=False)
@@ -231,7 +238,10 @@ class DPCoordinatorProc:
             # Wait until all engines subscribe.
             for _ in self.engines:
                 if publish_back.recv() != b"\x01":
-                    logger.error("DP Coordinator received unexpected message while waiting for engines to subscribe")
+                    logger.error(
+                        "DP Coordinator received unexpected message while "
+                        "waiting for engines to subscribe"
+                    )
                     return
             # Send ready message to engines.
             publish_back.send(b"READY")
@@ -283,7 +293,9 @@ class DPCoordinatorProc:
                         # by each engine during initialization
                         publish_back.send(b"READY")
                     elif buffer != b"\x00":
-                        logger.error("DP Coordinator received unexpected message from engines")
+                        logger.error(
+                            "DP Coordinator received unexpected message from engines"
+                        )
 
                 if publish_front in events:
                     buffer = publish_front.recv()
@@ -292,7 +304,11 @@ class DPCoordinatorProc:
                         continue
 
                     decoded = msgspec.msgpack.decode(buffer)
-                    if isinstance(decoded, (list, tuple)) and len(decoded) == 2 and decoded[0] == "SCALE_ELASTIC_EP":
+                    if (
+                        isinstance(decoded, (list, tuple))
+                        and len(decoded) == 2
+                        and decoded[0] == "SCALE_ELASTIC_EP"
+                    ):
                         # Handle scale up notification
                         new_engine_count = decoded[1]
                         current_count = len(self.engines)
@@ -339,7 +355,9 @@ class DPCoordinatorProc:
 
                             engines_running = True
                             wave_state_changed = True
-                            self._send_start_wave(publish_back, current_wave, engine_to_exclude)
+                            self._send_start_wave(
+                                publish_back, current_wave, engine_to_exclude
+                            )
 
                 if output_back in events:
                     # We received a message from one of the engines.
@@ -367,9 +385,13 @@ class DPCoordinatorProc:
                                 last_step_counts = self._get_engine_counts(do_copy=True)
                             last_stats_step = stats_step
                             last_stats_wave = stats_wave
-                        elif stats_wave != last_stats_wave or (stats_step != last_stats_step):
+                        elif stats_wave != last_stats_wave or (
+                            stats_step != last_stats_step
+                        ):
                             logger.warning(
-                                "Received stats for out-of-order step (%d, %d) from engine %d (expected > (%d, %d))",
+                                "Received stats for out-of-order "
+                                "step (%d, %d) from engine %d (expected "
+                                "> (%d, %d))",
                                 stats_wave,
                                 stats_step,
                                 eng_index,
@@ -398,13 +420,15 @@ class DPCoordinatorProc:
                                 engines_running = False
                                 wave_state_changed = True
                         elif (wave := outputs.start_wave) is not None and (
-                            wave > current_wave or (wave == current_wave and not engines_running)
+                            wave > current_wave
+                            or (wave == current_wave and not engines_running)
                         ):
                             # 3. The engine received request for a non-current wave
                             # so we must ensure that other engines progress to the
                             # next wave (race condition handling).
                             logger.debug(
-                                "Starting wave %d after notification of stale wave request from engine.",
+                                "Starting wave %d after notification of "
+                                "stale wave request from engine.",
                                 wave,
                             )
                             current_wave = wave
@@ -417,7 +441,9 @@ class DPCoordinatorProc:
                     publish_front.send(msgspec.msgpack.encode(message))
 
     @staticmethod
-    def _send_start_wave(socket: zmq.Socket, wave: int, exclude_engine_index: int | None):
+    def _send_start_wave(
+        socket: zmq.Socket, wave: int, exclude_engine_index: int | None
+    ):
         """Broadcast the START_DP_WAVE message to all the engines.
         It includes the current wave number and index of engine which
         has already received a request with this wave number and so doesn't

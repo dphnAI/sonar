@@ -16,7 +16,10 @@ class UBatchSlice:
     token_slice: slice
 
     def is_empty(self) -> bool:
-        return self.request_slice.start == self.request_slice.stop or self.token_slice.start == self.token_slice.stop
+        return (
+            self.request_slice.start == self.request_slice.stop
+            or self.token_slice.start == self.token_slice.stop
+        )
 
     @property
     def num_tokens(self) -> int:
@@ -26,11 +29,15 @@ class UBatchSlice:
 UBatchSlices: TypeAlias = list[UBatchSlice]
 
 
-def is_last_ubatch_empty(orig_num_tokens: int, padded_num_tokens: int, num_ubatches: int) -> bool:
+def is_last_ubatch_empty(
+    orig_num_tokens: int, padded_num_tokens: int, num_ubatches: int
+) -> bool:
     return (padded_num_tokens // num_ubatches) * (num_ubatches - 1) >= orig_num_tokens
 
 
-def check_ubatch_thresholds(config: ParallelConfig, num_tokens: int, uniform_decode: bool) -> bool:
+def check_ubatch_thresholds(
+    config: ParallelConfig, num_tokens: int, uniform_decode: bool
+) -> bool:
     if not config.use_ubatching:
         return False
     if uniform_decode:
@@ -41,12 +48,16 @@ def check_ubatch_thresholds(config: ParallelConfig, num_tokens: int, uniform_dec
 
 # This pads the last ubatch slice out to the total number of tokens
 # (num_tokens + padding) since we do `create_ubatch_slices` before applying DP padding.
-def _pad_out_ubatch_slices(ubatch_slices: UBatchSlices, num_total_tokens: int, num_reqs_padded: int) -> UBatchSlices:
+def _pad_out_ubatch_slices(
+    ubatch_slices: UBatchSlices, num_total_tokens: int, num_reqs_padded: int
+) -> UBatchSlices:
     last_slice = ubatch_slices[-1]
     padded_last_request_slice = slice(last_slice.request_slice.start, num_reqs_padded)
     padded_last_token_slice = slice(last_slice.token_slice.start, num_total_tokens)
 
-    return ubatch_slices[:-1] + [UBatchSlice(padded_last_request_slice, padded_last_token_slice)]
+    return ubatch_slices[:-1] + [
+        UBatchSlice(padded_last_request_slice, padded_last_token_slice)
+    ]
 
 
 def maybe_create_ubatch_slices(
@@ -94,7 +105,9 @@ def maybe_create_ubatch_slices(
 
         start_token = end_token
 
-    ubatch_slices_padded = _pad_out_ubatch_slices(ubatch_slices, num_tokens_padded, num_reqs_padded)
+    ubatch_slices_padded = _pad_out_ubatch_slices(
+        ubatch_slices, num_tokens_padded, num_reqs_padded
+    )
 
     assert sum(s.num_tokens for s in ubatch_slices_padded) == num_tokens_padded
 
@@ -112,7 +125,10 @@ def slice_query_start_locs(
     Note: This function creates a new tensor to hold the new query_start_locs.
     This will break cudagraph compatibility.
     """
-    return query_start_loc[request_slice.start : request_slice.stop + 1] - query_start_loc[request_slice.start]
+    return (
+        query_start_loc[request_slice.start : request_slice.stop + 1]
+        - query_start_loc[request_slice.start]
+    )
 
 
 def _make_metadata_with_slice(
@@ -134,7 +150,9 @@ def _make_metadata_with_slice(
     last_req = request_slice.stop - 1
     last_tok = token_slice.stop - 1
 
-    assert start_locs[first_req] <= first_tok < start_locs[first_req + 1], "Token slice start outside of first request"
+    assert start_locs[first_req] <= first_tok < start_locs[first_req + 1], (
+        "Token slice start outside of first request"
+    )
     # NOTE: last token can be outside of the last request if we have CG padding.
 
     # If the request is split across ubatches, we have to adjust the metadata.
@@ -146,9 +164,13 @@ def _make_metadata_with_slice(
     splits_last_request = last_tok < start_locs[last_req + 1] - 1
 
     query_start_loc_cpu = slice_query_start_locs(start_locs, request_slice)
-    query_start_loc = slice_query_start_locs(attn_metadata.query_start_loc, request_slice)
+    query_start_loc = slice_query_start_locs(
+        attn_metadata.query_start_loc, request_slice
+    )
 
-    assert len(query_start_loc) >= 2, f"query_start_loc must have at least 2 elements, got {len(query_start_loc)}"
+    assert len(query_start_loc) >= 2, (
+        f"query_start_loc must have at least 2 elements, got {len(query_start_loc)}"
+    )
 
     if splits_first_request:
         tokens_skipped = first_tok - start_locs[first_req]
@@ -156,7 +178,11 @@ def _make_metadata_with_slice(
         query_start_loc_cpu[1:] -= tokens_skipped
     seq_lens = attn_metadata.seq_lens[request_slice]
     # Read raw fields to avoid triggering the deprecated D2H-syncing properties.
-    seq_lens_cpu = attn_metadata._seq_lens_cpu[request_slice] if attn_metadata._seq_lens_cpu is not None else None
+    seq_lens_cpu = (
+        attn_metadata._seq_lens_cpu[request_slice]
+        if attn_metadata._seq_lens_cpu is not None
+        else None
+    )
     seq_lens_cpu_upper_bound = (
         attn_metadata.seq_lens_cpu_upper_bound[request_slice]
         if attn_metadata.seq_lens_cpu_upper_bound is not None
@@ -188,11 +214,15 @@ def _make_metadata_with_slice(
             seq_lens_cpu_upper_bound[-1] -= tokens_skipped
 
     assert seq_lens_cpu_upper_bound is not None
-    max_seq_len = int(seq_lens_cpu_upper_bound.max())
+    # Preserve the max_seq_len override set during CUDA-graph capture so
+    # the attention backend selects the correct kernel for SWA layers.
+    max_seq_len = max(int(seq_lens_cpu_upper_bound.max()), attn_metadata.max_seq_len)
 
     num_requests = request_slice.stop - request_slice.start
     num_actual_tokens = token_slice.stop - token_slice.start
-    max_query_len = int(torch.max(torch.abs(query_start_loc_cpu[1:] - query_start_loc_cpu[:-1])).item())
+    max_query_len = int(
+        torch.max(torch.abs(query_start_loc_cpu[1:] - query_start_loc_cpu[:-1])).item()
+    )
 
     # This is to account for the case where we are in a dummy
     # run and query_start_loc_cpu is full of 0s

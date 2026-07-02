@@ -43,11 +43,13 @@ def _run_ar(
     dp_size = parallel_config.data_parallel_size
     dp_rank = parallel_config.data_parallel_rank
     device, group = _get_device_and_group(parallel_config)
-    tensor = torch.zeros(4, dp_size, device=device, dtype=torch.int32)
-    tensor[0][dp_rank] = orig_num_tokens_per_ubatch
-    tensor[1][dp_rank] = padded_num_tokens_per_ubatch
-    tensor[2][dp_rank] = 1 if should_ubatch else 0
-    tensor[3][dp_rank] = cudagraph_mode
+    # Populate this rank's contribution on CPU to reduce GPU syncs.
+    tensor_cpu = torch.zeros(4, dp_size, dtype=torch.int32)
+    tensor_cpu[0][dp_rank] = orig_num_tokens_per_ubatch
+    tensor_cpu[1][dp_rank] = padded_num_tokens_per_ubatch
+    tensor_cpu[2][dp_rank] = 1 if should_ubatch else 0
+    tensor_cpu[3][dp_rank] = cudagraph_mode
+    tensor = tensor_cpu.to(device, non_blocking=True)
     dist.all_reduce(tensor, group=group)
     return tensor
 
@@ -65,7 +67,9 @@ def _post_process_ubatch(tensor: torch.Tensor, num_ubatches: int) -> bool:
     orig_min_num_tokens = int(orig_num_tokens_tensor.min().item())
     padded_max_num_tokens = int(padded_num_tokens_tensor.max().item())
     if is_last_ubatch_empty(orig_min_num_tokens, padded_max_num_tokens, num_ubatches):
-        logger.debug("Aborting ubatching %s %s", orig_min_num_tokens, padded_max_num_tokens)
+        logger.debug(
+            "Aborting ubatching %s %s", orig_min_num_tokens, padded_max_num_tokens
+        )
         should_ubatch = False
     return should_ubatch
 
@@ -208,12 +212,14 @@ def coordinate_batch_across_dp(
     if num_tokens_padded is None:
         num_tokens_padded = num_tokens_unpadded
 
-    (should_ubatch, num_tokens_after_padding, synced_cudagraph_mode) = _synchronize_dp_ranks(
-        num_tokens_unpadded,
-        num_tokens_padded,
-        should_attempt_ubatching,
-        cudagraph_mode,
-        parallel_config,
+    (should_ubatch, num_tokens_after_padding, synced_cudagraph_mode) = (
+        _synchronize_dp_ranks(
+            num_tokens_unpadded,
+            num_tokens_padded,
+            should_attempt_ubatching,
+            cudagraph_mode,
+            parallel_config,
+        )
     )
 
     return (should_ubatch, num_tokens_after_padding, synced_cudagraph_mode)

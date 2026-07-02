@@ -10,9 +10,9 @@ from torch.nn import Module
 
 if TYPE_CHECKING:
     import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-    from aphrodite.model_executor.layers.fused_moe import FusedMoE
-    from aphrodite.model_executor.layers.fused_moe.config import (
+    from aphrodite.model_executor.layers.fused_moe import (
         FusedMoEQuantConfig,
+        RoutedExperts,
     )
     from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import Fp8MoeBackend
 
@@ -116,8 +116,14 @@ class Mxfp8OnlineMoEMethod(OnlineMoEMethodBase):
         params_dtype: torch.dtype,
         **extra_weight_attrs,
     ):
-        if hidden_size % MXFP8_BLOCK_SIZE != 0 or intermediate_size_per_partition % MXFP8_BLOCK_SIZE != 0:
-            raise ValueError(f"Online MXFP8 MoE requires hidden/intermediate sizes divisible by {MXFP8_BLOCK_SIZE}.")
+        if (
+            hidden_size % MXFP8_BLOCK_SIZE != 0
+            or intermediate_size_per_partition % MXFP8_BLOCK_SIZE != 0
+        ):
+            raise ValueError(
+                "Online MXFP8 MoE requires hidden/intermediate sizes divisible "
+                f"by {MXFP8_BLOCK_SIZE}."
+            )
 
         super().create_weights(
             layer=layer,
@@ -130,24 +136,32 @@ class Mxfp8OnlineMoEMethod(OnlineMoEMethodBase):
 
         layer.weight_block_size = [1, MXFP8_BLOCK_SIZE]
 
-    def _quantize_mxfp8_moe_weight(self, weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def _quantize_mxfp8_moe_weight(
+        self, weight: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Batch quantization: bf16/fp16 weights -> MXFP8 (fp8 + uint8 scales)."""
         E = weight.size(0)
         first_q, first_s = mxfp8_e4m3_quantize(weight[0], is_sf_swizzled_layout=False)
         # Pre-allocate the output tensors rather than stacking.
         # This is important for consistent memory layout.
-        w_quant = torch.empty((E, *first_q.shape), dtype=first_q.dtype, device=weight.device)
-        w_scales = torch.empty((E, *first_s.shape), dtype=first_s.dtype, device=weight.device)
+        w_quant = torch.empty(
+            (E, *first_q.shape), dtype=first_q.dtype, device=weight.device
+        )
+        w_scales = torch.empty(
+            (E, *first_s.shape), dtype=first_s.dtype, device=weight.device
+        )
         w_quant[0] = first_q
         w_scales[0] = first_s
         for i in range(1, E):
-            w_quant[i], w_scales[i] = mxfp8_e4m3_quantize(weight[i], is_sf_swizzled_layout=False)
+            w_quant[i], w_scales[i] = mxfp8_e4m3_quantize(
+                weight[i], is_sf_swizzled_layout=False
+            )
 
         return w_quant, w_scales
 
     def _setup_kernel(
         self,
-        layer: "FusedMoE",
+        layer: "RoutedExperts",
         w13: torch.Tensor,
         w2: torch.Tensor,
         w13_scale: torch.Tensor,
@@ -185,11 +199,12 @@ class Mxfp8OnlineMoEMethod(OnlineMoEMethodBase):
                 moe_config=self.moe,
                 fp8_backend=self.fp8_backend,
                 experts_cls=self.experts_cls,
-                routing_tables=layer._maybe_init_expert_routing_tables(),
-                shared_experts=layer.shared_experts,
+                routing_tables=layer._expert_routing_tables(),
             )
 
-    def get_fused_moe_quant_config(self, layer: torch.nn.Module) -> "FusedMoEQuantConfig":
+    def get_fused_moe_quant_config(
+        self, layer: torch.nn.Module
+    ) -> "FusedMoEQuantConfig":
         from aphrodite.model_executor.layers.fused_moe.oracle.fp8 import (
             make_fp8_moe_quant_config,
         )
@@ -199,17 +214,17 @@ class Mxfp8OnlineMoEMethod(OnlineMoEMethodBase):
         a1_scale = layer.w13_input_scale
         a2_scale = layer.w2_input_scale
 
-        quant_config = make_fp8_moe_quant_config(
+        return make_fp8_moe_quant_config(
             fp8_backend=self.fp8_backend,
             w1_scale=w1_scale,
             w2_scale=w2_scale,
             a1_scale=a1_scale,
             a2_scale=a2_scale,
+            w1_bias=getattr(layer, "w13_bias", None),
+            w2_bias=getattr(layer, "w2_bias", None),
             block_shape=self.weight_block_size,
+            swiglu_limit=getattr(layer, "swiglu_limit", None),
         )
-
-        self._maybe_inject_biases(quant_config, layer)
-        return quant_config
 
     def process_weights_after_loading(self, layer: Module) -> None:
         if getattr(layer, "_already_called_process_weights_after_loading", False):

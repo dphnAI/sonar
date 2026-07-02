@@ -5,15 +5,15 @@ import contextlib
 import os
 from typing import TYPE_CHECKING
 
+import torch
+
 # import custom ops, trigger op registration
 import aphrodite_xpu_kernels._C  # noqa
 import aphrodite_xpu_kernels._moe_C  # noqa
 import aphrodite_xpu_kernels._xpu_C  # noqa
-import torch
 
 import aphrodite.envs as envs
 from aphrodite.logger import init_logger
-from aphrodite.utils.torch_utils import supports_xpu_graph
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 
 from .interface import DeviceCapability, Platform, PlatformEnum
@@ -26,6 +26,78 @@ else:
     AphroditeConfig = None
 
 logger = init_logger(__name__)
+
+
+def get_mem_info_wrapper(
+    device: int | str | torch.device | None = None,
+) -> tuple[int, int]:
+    """
+    Get memory info for a device, compatible with torch.accelerator.get_memory_info API.
+
+    Args:
+        device: Device specification. Can be:
+            - None: Use current XPU device
+            - int: Device index
+            - str: Device string (e.g., "xpu:0", "xpu")
+            - torch.device: Device object
+
+    Returns:
+        Tuple[int, int]: (free_memory, total_memory) in bytes
+    """
+    # Handle None - use current device
+    if device is None:
+        device = torch.xpu.current_device()
+
+    # Handle torch.device objects
+    elif isinstance(device, torch.device):
+        if device.type != "xpu":
+            raise RuntimeError(f"Expected 'xpu' device, got '{device.type}'")
+        # If device index is not specified, use current device
+        device = (
+            device.index if device.index is not None else torch.xpu.current_device()
+        )
+
+    # Handle string device specifications (e.g., "xpu:0", "xpu")
+    elif isinstance(device, str):
+        if not device.startswith("xpu"):
+            raise RuntimeError(f"Expected 'xpu' device string, got '{device}'")
+        # Parse device string
+        parts = device.split(":")
+        if len(parts) == 1:
+            # "xpu" -> use current device
+            device = torch.xpu.current_device()
+        elif len(parts) == 2:
+            # "xpu:0" -> use index 0
+            try:
+                device = int(parts[1])
+            except ValueError as err:
+                raise RuntimeError(
+                    f"Invalid device index: '{device}', expected integer after ':'"
+                ) from err
+        else:
+            raise RuntimeError(f"Invalid device string format: '{device}'")
+
+    # At this point, device should be an int
+    if isinstance(device, int):
+        # bounds check
+        device_count = torch.xpu.device_count()
+        if not (0 <= device < device_count):
+            raise ValueError(
+                f"Invalid device index {device}, must be in range [0, {device_count})"
+            )
+
+    elif not isinstance(device, int):
+        raise TypeError(
+            f"device must be int, str, torch.device, or None, got {type(device)}"
+        )
+
+    # Call the underlying C++ implementation
+    free, total = torch.ops._C_cache_ops.getMemoryInfo(device)
+
+    return free, total
+
+
+torch.accelerator.get_memory_info = get_mem_info_wrapper
 
 
 class XPUPlatform(Platform):
@@ -55,8 +127,9 @@ class XPUPlatform(Platform):
         from aphrodite.v1.attention.backends.utils import set_kv_cache_layout
 
         set_kv_cache_layout("NHD")
-        logger.info(
-            "Setting APHRODITE_KV_CACHE_LAYOUT to 'NHD' for XPU; only NHD layout is supported by XPU attention kernels."
+        logger.info_once(
+            "Setting APHRODITE_KV_CACHE_LAYOUT to 'NHD' for XPU; "
+            "only NHD layout is supported by XPU attention kernels."
         )
 
         # TurboQuant KV cache: route directly to TQ backend
@@ -77,7 +150,8 @@ class XPUPlatform(Platform):
             return AttentionBackendEnum.TRITON_ATTN.get_path()
         elif dtype == torch.float32:
             logger.warning_once(
-                "Flash Attention on XPU does not support float32 dtype. Falling back to Triton Attention backend."
+                "Flash Attention on XPU does not support float32 dtype. "
+                "Falling back to Triton Attention backend."
             )
             return AttentionBackendEnum.TRITON_ATTN.get_path()
         elif selected_backend == AttentionBackendEnum.FLASH_ATTN:
@@ -85,10 +159,11 @@ class XPUPlatform(Platform):
             return AttentionBackendEnum.FLASH_ATTN.get_path()
         elif selected_backend:
             raise ValueError(
-                f"Invalid attention backend for {cls.device_name}, with use_mla: {attn_selector_config.use_mla}"
+                f"Invalid attention backend for {cls.device_name}, "
+                f"with use_mla: {attn_selector_config.use_mla}"
             )
 
-        logger.info("Using Flash Attention backend.")
+        logger.info_once("Using Flash Attention backend.")
         return AttentionBackendEnum.FLASH_ATTN.get_path()
 
     @classmethod
@@ -106,6 +181,13 @@ class XPUPlatform(Platform):
         dtype: torch.dtype,
         backend: "AttentionBackendEnum | None" = None,
     ) -> "AttentionBackendEnum":
+        if dtype == torch.float32:
+            logger.warning_once(
+                "Flash Attention on XPU does not support float32 dtype. "
+                "Falling back to Triton Attention backend for vit attention."
+            )
+            return AttentionBackendEnum.TRITON_ATTN
+
         if backend is not None:
             assert backend in cls.get_supported_vit_attn_backends(), (
                 f"Backend {backend} is not supported for vit attention. "
@@ -115,7 +197,9 @@ class XPUPlatform(Platform):
             logger.info_once(f"Using backend {backend} for vit attention")
             return backend
 
-        logger.info_once(f"Using backend {AttentionBackendEnum.FLASH_ATTN} for vit attention")
+        logger.info_once(
+            f"Using backend {AttentionBackendEnum.FLASH_ATTN} for vit attention"
+        )
         return AttentionBackendEnum.FLASH_ATTN
 
     @classmethod
@@ -165,8 +249,6 @@ class XPUPlatform(Platform):
 
     @classmethod
     def check_and_update_config(cls, aphrodite_config: AphroditeConfig) -> None:
-        parallel_config = aphrodite_config.parallel_config
-
         # lazy import to avoid circular import
         from aphrodite.config import CUDAGraphMode
 
@@ -177,48 +259,42 @@ class XPUPlatform(Platform):
         attention_config = aphrodite_config.attention_config
         if attention_config.backend is None:
             attention_config.backend = AttentionBackendEnum.FLASH_ATTN
+
+        # lazy import to avoid circular import
+        from aphrodite.utils.torch_utils import supports_xpu_graph
+
         if not supports_xpu_graph():
             compilation_config.cudagraph_mode = CUDAGraphMode.NONE
-            logger.warning("XPU Graph is not supported in the current PyTorch version, disabling cudagraph_mode.")
+            logger.warning_once(
+                "XPU Graph is not supported in the current PyTorch version, "
+                "disabling cudagraph_mode."
+            )
         elif not envs.APHRODITE_XPU_ENABLE_XPU_GRAPH:
             compilation_config.cudagraph_mode = CUDAGraphMode.NONE
-            logger.warning(
+            logger.warning_once(
                 "XPU Graph is disabled by environment variable, "
                 "please set APHRODITE_XPU_ENABLE_XPU_GRAPH=1 to enable it."
             )
-        elif parallel_config.world_size_across_dp > 1:
-            compilation_config.cudagraph_mode = CUDAGraphMode.NONE
-            logger.warning("XPU Graph doesn't support capture communication ops, disabling cudagraph_mode.")
-        else:
-            if (
-                attention_config.backend == AttentionBackendEnum.FLASH_ATTN
-                and compilation_config.cudagraph_mode not in {CUDAGraphMode.NONE, CUDAGraphMode.PIECEWISE}
-            ):
-                compilation_config.cudagraph_mode = CUDAGraphMode.PIECEWISE
-                logger.warning(
-                    "FMHA sycl-tla kernels cannot be captured with XPU graphs, "
-                    "falling back to PIECEWISE graph mode on XPU platform."
-                )
 
         # Disable fusion passes not yet supported on XPU.
+        from aphrodite.config.compilation import CompilationMode
+
         pass_config = compilation_config.pass_config
         fusion_passes_to_disable = {
-            "enable_sp": "Sequence parallelism",
             "fuse_gemm_comms": "Async TP",
             "fuse_allreduce_rms": "AllReduce + RMSNorm fusion",
-            "fuse_norm_quant": "RMSNorm + quant fusion",
-            "fuse_act_quant": "Activation + quant fusion",
             "fuse_attn_quant": "Attention + quant fusion",
             "fuse_act_padding": "Activation + padding fusion",
             "fuse_rope_kvcache": "RoPE + KV cache fusion",
         }
-        for flag, feature_name in fusion_passes_to_disable.items():
-            if getattr(pass_config, flag):
-                logger.warning(
-                    "Feature %r is not yet supported on XPU and will be disabled.",
-                    feature_name,
-                )
-                setattr(pass_config, flag, False)
+        if compilation_config.mode != CompilationMode.NONE:
+            for flag, feature_name in fusion_passes_to_disable.items():
+                if getattr(pass_config, flag):
+                    logger.warning_once(
+                        "Feature %r is not yet supported on XPU and will be disabled.",
+                        feature_name,
+                    )
+                    setattr(pass_config, flag, False)
 
         # check and update parallel config
         parallel_config = aphrodite_config.parallel_config
@@ -238,6 +314,16 @@ class XPUPlatform(Platform):
         # spawn is the only supported multiprocessing method on XPU
         if "APHRODITE_WORKER_MULTIPROC_METHOD" not in os.environ:
             os.environ["APHRODITE_WORKER_MULTIPROC_METHOD"] = "spawn"
+
+        # XPU requires graceful shutdown to allow oneCCL/Level Zero resources
+        # to be properly released. Without this, subsequent server startups on
+        # the same devices may hang during CCL initialization.
+        if aphrodite_config.shutdown_timeout == 0:
+            aphrodite_config.shutdown_timeout = 5
+            logger.info(
+                "XPU platform: set server shutdown_timeout=%d.",
+                aphrodite_config.shutdown_timeout,
+            )
 
     @classmethod
     def update_block_size_for_backend(cls, aphrodite_config: "AphroditeConfig") -> None:
@@ -264,7 +350,9 @@ class XPUPlatform(Platform):
 
         if kernel_block_size is None:
             return
-        new_block_size = cdiv(cache_config.block_size, kernel_block_size) * kernel_block_size
+        new_block_size = (
+            cdiv(cache_config.block_size, kernel_block_size) * kernel_block_size
+        )
         if new_block_size == cache_config.block_size:
             return
 
@@ -272,8 +360,12 @@ class XPUPlatform(Platform):
             cache_config.mamba_block_size = new_block_size
         original_mamba_page_size_padded = cache_config.mamba_page_size_padded
         if cache_config.mamba_page_size_padded is not None:
-            attn_page_size_1_token = cache_config.mamba_page_size_padded // cache_config.block_size
-            cache_config.mamba_page_size_padded = new_block_size * attn_page_size_1_token
+            attn_page_size_1_token = (
+                cache_config.mamba_page_size_padded // cache_config.block_size
+            )
+            cache_config.mamba_page_size_padded = (
+                new_block_size * attn_page_size_1_token
+            )
         cache_config.block_size = new_block_size
         logger.info(
             "[XPU]Setting attention block size to %d tokens to ensure multiple of %d, "
@@ -297,7 +389,9 @@ class XPUPlatform(Platform):
         return True
 
     @classmethod
-    def get_current_memory_usage(cls, device: torch.types.Device | None = None) -> float:
+    def get_current_memory_usage(
+        cls, device: torch.types.Device | None = None
+    ) -> float:
         torch.xpu.empty_cache()
         torch.xpu.reset_peak_memory_stats(device)
         return torch.xpu.max_memory_allocated(device)
@@ -313,10 +407,12 @@ class XPUPlatform(Platform):
 
     @classmethod
     def get_device_communicator_cls(cls) -> str:
-        from aphrodite.utils.torch_utils import supports_xccl
-
-        if not supports_xccl():
-            logger.warning("xccl is not enabled in this torch build, communication is not available.")
+        if not torch.distributed.is_xccl_available():
+            # Supports xccl with PyTorch versions >= 2.8.0.dev for XPU platform
+            logger.warning(
+                "xccl is not enabled in this torch build, communication"
+                " is not available."
+            )
         return "aphrodite.distributed.device_communicators.xpu_communicator.XpuCommunicator"  # noqa
 
     @classmethod
@@ -324,7 +420,9 @@ class XPUPlatform(Platform):
         return True
 
     @classmethod
-    def get_default_ir_op_priority(cls, aphrodite_config: "AphroditeConfig") -> "IrOpPriorityConfig":
+    def get_default_ir_op_priority(
+        cls, aphrodite_config: "AphroditeConfig"
+    ) -> "IrOpPriorityConfig":
         from aphrodite.config.compilation import CompilationMode
         from aphrodite.config.kernel import IrOpPriorityConfig
 
@@ -365,8 +463,8 @@ class XPUPlatform(Platform):
         dst_block_indices: torch.Tensor,
     ) -> None:
         """Copy blocks from src_cache to dst_cache on XPU."""
-        _src_cache = src_cache[:, src_block_indices]
-        dst_cache[:, dst_block_indices] = _src_cache.to(dst_cache.device)
+        _src_cache = src_cache[src_block_indices]
+        dst_cache[dst_block_indices] = _src_cache.to(dst_cache.device)
 
     @classmethod
     def swap_out_blocks_to_host(
@@ -377,9 +475,13 @@ class XPUPlatform(Platform):
         dst_block_indices: torch.Tensor,
     ) -> None:
         """Copy blocks from XPU to host (CPU)."""
-        _src_cache = src_cache[:, src_block_indices]
-        dst_cache[:, dst_block_indices] = _src_cache.cpu()
+        _src_cache = src_cache[src_block_indices]
+        dst_cache[dst_block_indices] = _src_cache.cpu()
 
     @classmethod
     def num_compute_units(cls, device_id: int = 0) -> int:
         return torch.xpu.get_device_properties(device_id).max_compute_units
+
+    @classmethod
+    def use_custom_op_collectives(cls) -> bool:
+        return True

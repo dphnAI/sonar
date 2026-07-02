@@ -25,7 +25,8 @@ def swizzle_blockscale(scale: torch.Tensor) -> torch.Tensor:
         The swizzled tensor with the same logical shape as *scale*.
     """
     assert scale.dtype == torch.float8_e4m3fn, (
-        "swizzle_blockscale expects the input tensor to be in torch.float8_e4m3fn format."
+        "swizzle_blockscale expects the input tensor to be in "
+        "torch.float8_e4m3fn format."
     )
 
     scale_ndim = scale.ndim
@@ -38,7 +39,9 @@ def swizzle_blockscale(scale: torch.Tensor) -> torch.Tensor:
     M_padded = round_up(M, 128)
     K_padded = round_up(K, 4)
 
-    padded = torch.zeros((B, M_padded, K_padded), dtype=scale.dtype, device=scale.device)
+    padded = torch.zeros(
+        (B, M_padded, K_padded), dtype=scale.dtype, device=scale.device
+    )
     padded[:B, :M, :K] = scale
 
     # Reshape / permute to the layout required by the kernel.

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 
 from aphrodite import LLM, SamplingParams
@@ -19,14 +20,6 @@ def test_n_gt_1(llm):
     params = SamplingParams(n=3)
     outputs = llm.generate(PROMPT, params)
     assert len(outputs[0].outputs) == 3
-
-
-def test_best_of(llm):
-    """Raise a ValueError since best_of is deprecated."""
-
-    params = SamplingParams(n=2, best_of=3)
-    with pytest.raises(ValueError):
-        _ = llm.generate(PROMPT, params)
 
 
 def test_penalties(llm):
@@ -58,7 +51,9 @@ def test_stop(llm):
     # Output should not contain the stop word.
     assert len(new_split_text) == STOP_IDX
 
-    params = SamplingParams(temperature=0, stop=split_text[STOP_IDX], include_stop_str_in_output=True)
+    params = SamplingParams(
+        temperature=0, stop=split_text[STOP_IDX], include_stop_str_in_output=True
+    )
     output = llm.generate(PROMPT, params)
     new_split_text = output[0].outputs[0].text.split()
 
@@ -92,7 +87,9 @@ def test_detokenize_false(llm):
     assert len(output[0].outputs[0].token_ids) > 0
     assert len(output[0].outputs[0].text) == 0
 
-    output = llm.generate(PROMPT, SamplingParams(detokenize=False, logprobs=3, prompt_logprobs=3))
+    output = llm.generate(
+        PROMPT, SamplingParams(detokenize=False, logprobs=3, prompt_logprobs=3)
+    )
     assert len(output[0].outputs[0].token_ids) > 0
     assert len(output[0].outputs[0].text) == 0
 
@@ -109,6 +106,25 @@ def test_detokenize_false(llm):
 def test_bad_words(llm):
     """Check that we respect bad words."""
 
+    tokenizer = llm.get_tokenizer()
+
+    def contains_bad_word(text: str, tokens: list[int], bad_word: str) -> bool:
+        """Check if word appears in BOTH text and token sequence."""
+        if bad_word not in text:
+            return False
+
+        for add_prefix_space in [False, True]:
+            prefix = " " if add_prefix_space else ""
+            bad_words_token = tokenizer.encode(
+                prefix + bad_word.lstrip(), add_special_tokens=False
+            )
+            if not bad_words_token:
+                continue
+            for i in range(len(tokens) - len(bad_words_token) + 1):
+                if tokens[i : i + len(bad_words_token)] == bad_words_token:
+                    return True
+        return False
+
     output = llm.generate(PROMPT, SamplingParams(temperature=0))
     split_text = output[0].outputs[0].text.split()
 
@@ -116,28 +132,16 @@ def test_bad_words(llm):
     params = SamplingParams(temperature=0, bad_words=[bad_words_1])
     output = llm.generate(PROMPT, params)
     new_text = output[0].outputs[0].text
-    assert bad_words_1 not in new_text
+    new_tokens = output[0].outputs[0].token_ids
+    assert not contains_bad_word(new_text, new_tokens, bad_words_1)
 
     bad_words_2 = new_text.split()[-1]
     params = SamplingParams(temperature=0, bad_words=[bad_words_1, bad_words_2])
     output = llm.generate(PROMPT, params)
     new_text = output[0].outputs[0].text
-    assert bad_words_1 not in new_text
-    assert bad_words_2 not in new_text
-
-
-def test_logits_processor(llm):
-    """Check that we reject logits processor."""
-
-    # This sample logits processor gives infinite score to the i-th token,
-    # where i is the length of the input sequence.
-    # We therefore expect the output token sequence to be [0, 1, 2, ...]
-    def pick_ith(token_ids, logits):
-        logits[len(token_ids)] = float("inf")
-        return logits
-
-    with pytest.raises(ValueError):
-        _ = llm.generate(PROMPT, SamplingParams(logits_processors=[pick_ith]))
+    new_tokens = output[0].outputs[0].token_ids
+    assert not contains_bad_word(new_text, new_tokens, bad_words_1)
+    assert not contains_bad_word(new_text, new_tokens, bad_words_2)
 
 
 def test_allowed_token_ids(llm):
@@ -147,6 +151,14 @@ def test_allowed_token_ids(llm):
     allowed_token_ids = [TOKEN_ID]
     output = llm.generate(PROMPT, SamplingParams(allowed_token_ids=allowed_token_ids))
     assert output[0].outputs[0].token_ids[-1] == TOKEN_ID
+
+    # Each single-token allowlist must force that token (kernel used to drop some).
+    for token_id in (1, 5, 100, 500, 2518, 9834, 31999):
+        output = llm.generate(
+            PROMPT,
+            SamplingParams(temperature=0, max_tokens=1, allowed_token_ids=[token_id]),
+        )
+        assert output[0].outputs[0].token_ids[-1] == token_id
 
     # Reject empty allowed_token_ids.
     with pytest.raises(ValueError):

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-import base64
+
 import datetime
 import os
 import tempfile
@@ -10,18 +10,19 @@ from typing import Any
 
 import albumentations
 import numpy as np
+import pybase64 as base64
 import rasterio
 import regex as re
 import torch
-from aphrodite.endpoints.openai.protocol import IOProcessorRequest, IOProcessorResponse
-from aphrodite.inputs.data import PromptType
 from einops import rearrange
 from terratorch.datamodules import Sen1Floods11NonGeoDataModule
 
 from aphrodite.config import AphroditeConfig
+from aphrodite.inputs import PromptType
 from aphrodite.logger import init_logger
 from aphrodite.outputs import PoolingRequestOutput
-from aphrodite.plugins.io_processors.interface import IOProcessor, IOProcessorInput, IOProcessorOutput
+from aphrodite.plugins.io_processors.interface import IOProcessor
+from aphrodite.renderers import BaseRenderer
 
 from .types import DataModuleConfig, ImagePrompt, ImageRequestOutput
 
@@ -44,8 +45,8 @@ datamodule_config: DataModuleConfig = {
     "no_label_replace": -1,
     "num_workers": 8,
     "test_transform": [
-        albumentations.Resize(always_apply=False, height=448, interpolation=1, p=1, width=448),
-        albumentations.pytorch.ToTensorV2(transpose_mask=False, always_apply=True, p=1.0),
+        albumentations.Resize(height=448, interpolation=1, p=1, width=448),
+        albumentations.pytorch.ToTensorV2(transpose_mask=False, p=1.0),
     ],
 }
 
@@ -199,7 +200,11 @@ def load_image(
                 if len(julian_day) == 3:
                     julian_day = int(julian_day)
                 else:
-                    julian_day = datetime.datetime.strptime(julian_day, "%m%d").timetuple().tm_yday
+                    julian_day = (
+                        datetime.datetime.strptime(julian_day, "%m%d")
+                        .timetuple()
+                        .tm_yday
+                    )
                 temporal_coords.append([year, julian_day])
         except Exception:
             logger.exception("Could not extract timestamp for %s", file)
@@ -211,11 +216,11 @@ def load_image(
     return imgs, temporal_coords, location_coords, metas
 
 
-class PrithviMultimodalDataProcessor(IOProcessor):
+class PrithviMultimodalDataProcessor(IOProcessor[ImagePrompt, ImageRequestOutput]):
     indices = [0, 1, 2, 3, 4, 5]
 
-    def __init__(self, aphrodite_config: AphroditeConfig):
-        super().__init__(aphrodite_config)
+    def __init__(self, vllm_config: AphroditeConfig, renderer: BaseRenderer):
+        super().__init__(vllm_config, renderer)
 
         self.datamodule = Sen1Floods11NonGeoDataModule(
             data_root=datamodule_config["data_root"],
@@ -235,32 +240,15 @@ class PrithviMultimodalDataProcessor(IOProcessor):
         self.requests_cache: dict[str, dict[str, Any]] = {}
         self.indices = DEFAULT_INPUT_INDICES
 
-    def parse_request(self, request: Any) -> IOProcessorInput:
-        if type(request) is dict:
-            image_prompt = ImagePrompt(**request)
-            return image_prompt
-        if isinstance(request, IOProcessorRequest):
-            if not hasattr(request, "data"):
-                raise ValueError("missing 'data' field in OpenAIBaseModel Request")
+    def parse_data(self, data: object) -> ImagePrompt:
+        if isinstance(data, dict):
+            return ImagePrompt(**data)
 
-            request_data = request.data
-
-            if type(request_data) is dict:
-                return ImagePrompt(**request_data)
-            else:
-                raise ValueError("Unable to parse the request data")
-
-        raise ValueError("Unable to parse request")
-
-    def output_to_response(self, plugin_output: IOProcessorOutput) -> IOProcessorResponse:
-        return IOProcessorResponse(
-            request_id=plugin_output.request_id,
-            data=plugin_output,
-        )
+        raise ValueError("Prompt data should be an `ImagePrompt`")
 
     def pre_process(
         self,
-        prompt: IOProcessorInput,
+        prompt: ImagePrompt,
         request_id: str | None = None,
         **kwargs,
     ) -> PromptType | Sequence[PromptType]:
@@ -292,7 +280,9 @@ class PrithviMultimodalDataProcessor(IOProcessor):
         )
 
         batch = torch.tensor(input_data)
-        windows = batch.unfold(3, self.img_size, self.img_size).unfold(4, self.img_size, self.img_size)
+        windows = batch.unfold(3, self.img_size, self.img_size).unfold(
+            4, self.img_size, self.img_size
+        )
         self.h1, self.w1 = windows.shape[3:5]
         windows = rearrange(
             windows,
@@ -302,7 +292,11 @@ class PrithviMultimodalDataProcessor(IOProcessor):
         )
 
         # Split into batches if number of windows > batch_size
-        num_batches = windows.shape[0] // self.batch_size if windows.shape[0] > self.batch_size else 1
+        num_batches = (
+            windows.shape[0] // self.batch_size
+            if windows.shape[0] > self.batch_size
+            else 1
+        )
         windows = torch.tensor_split(windows, num_batches, dim=0)
 
         if temporal_coords:
@@ -317,14 +311,18 @@ class PrithviMultimodalDataProcessor(IOProcessor):
         prompts = []
         for window in windows:
             # Apply standardization
-            window = self.datamodule.test_transform(image=window.squeeze().numpy().transpose(1, 2, 0))
+            window = self.datamodule.test_transform(
+                image=window.squeeze().numpy().transpose(1, 2, 0)
+            )
             window = self.datamodule.aug(window)["image"]
             prompts.append(
                 {
                     "prompt_token_ids": [1],
                     "multi_modal_data": {
-                        "pixel_values": window.to(torch.float16)[0],
-                        "location_coords": location_coords.to(torch.float16),
+                        "image": {
+                            "pixel_values": window.to(torch.float16)[0],
+                            "location_coords": location_coords.to(torch.float16),
+                        }
                     },
                 }
             )
@@ -336,7 +334,7 @@ class PrithviMultimodalDataProcessor(IOProcessor):
         model_output: Sequence[PoolingRequestOutput],
         request_id: str | None = None,
         **kwargs,
-    ) -> IOProcessorOutput:
+    ) -> ImageRequestOutput:
         pred_imgs_list = []
 
         if request_id and (request_id in self.requests_cache):
@@ -376,6 +374,12 @@ class PrithviMultimodalDataProcessor(IOProcessor):
         if not self.meta_data:
             raise ValueError("No metadata available for the current task")
         self.meta_data.update(count=1, dtype="uint8", compress="lzw", nodata=0)
-        out_data = save_geotiff(_convert_np_uint8(pred_imgs), self.meta_data, out_format)
+        out_data = save_geotiff(
+            _convert_np_uint8(pred_imgs), self.meta_data, out_format
+        )
 
-        return ImageRequestOutput(type=out_format, format="tiff", data=out_data, request_id=request_id)
+        return ImageRequestOutput(
+            type=out_format,
+            format="tiff",
+            data=out_data,
+        )

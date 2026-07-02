@@ -8,7 +8,7 @@ import torch.nn as nn
 from transformers import Lfm2Config
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
+from aphrodite.config import CacheConfig, ModelConfig, AphroditeConfig
 from aphrodite.distributed import get_pp_group, get_tensor_model_parallel_world_size
 from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.model_executor.layers.attention import Attention
@@ -32,7 +32,6 @@ from aphrodite.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 from aphrodite.sequence import IntermediateTensors
 
 from .interfaces import HasInnerState, IsHybrid, SupportsLoRA, SupportsPP, SupportsQuant
@@ -41,7 +40,6 @@ from .utils import (
     PPMissingLayer,
     WeightsMapper,
     extract_layer_index,
-    is_pp_missing_parameter,
     make_empty_intermediate_tensors_factory,
     make_layers,
     maybe_prefix,
@@ -65,7 +63,9 @@ class Lfm2MLP(nn.Module):
             # custom dim factor multiplier
             if ffn_dim_multiplier is not None:
                 intermediate_size = int(ffn_dim_multiplier * intermediate_size)
-            intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) // multiple_of)
+            intermediate_size = multiple_of * (
+                (intermediate_size + multiple_of - 1) // multiple_of
+            )
 
         self.w13 = MergedColumnParallelLinear(
             input_size=dim,
@@ -295,6 +295,20 @@ class Lfm2ShortConvDecoderLayer(nn.Module):
 
 @support_torch_compile
 class Lfm2Model(nn.Module):
+    # HF uses .conv. but Aphrodite uses .short_conv. to avoid LoRA regex collision
+    # with the inner .conv.conv child (ShortConv has a child self.conv, so
+    # naming the container .conv too makes _match_target_modules match both).
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_substr={".conv.": ".short_conv."},
+        orig_to_new_stacked={
+            ".q_proj": (".qkv_proj", "q"),
+            ".k_proj": (".qkv_proj", "k"),
+            ".v_proj": (".qkv_proj", "v"),
+            ".w1": (".w13", 0),
+            ".w3": (".w13", 1),
+        },
+    )
+
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
 
@@ -314,7 +328,9 @@ class Lfm2Model(nn.Module):
         def get_layer(prefix: str):
             layer_idx = extract_layer_index(prefix)
             is_attn = self.config.layer_types[layer_idx] == "full_attention"
-            layer_class = Lfm2AttentionDecoderLayer if is_attn else Lfm2ShortConvDecoderLayer
+            layer_class = (
+                Lfm2AttentionDecoderLayer if is_attn else Lfm2ShortConvDecoderLayer
+            )
             return layer_class(
                 config,
                 layer_idx,
@@ -364,48 +380,20 @@ class Lfm2Model(nn.Module):
                 residual=residual,
             )
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
+            return IntermediateTensors(
+                {"hidden_states": hidden_states, "residual": residual}
+            )
         hidden_states, _ = self.embedding_norm(hidden_states, residual)
         return hidden_states
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            (".qkv_proj", ".q_proj", "q"),
-            (".qkv_proj", ".k_proj", "k"),
-            (".qkv_proj", ".v_proj", "v"),
-            (".w13", ".w1", 0),
-            (".w13", ".w3", 1),
-        ]
-        params_dict = dict(self.named_parameters())
-        loaded_params: set[str] = set()
-        for name, loaded_weight in weights:
-            if ".conv." in name:
-                name = name.replace(".conv.", ".short_conv.", 1)
-
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                # Use segment-boundary matching (trailing dot) to prevent
-                # e.g. ".w1" from matching inside ".w13" in pre-fused keys.
-                if weight_name + "." not in name:
-                    continue
-                name = name.replace(weight_name + ".", param_name + ".")
-
-                if is_pp_missing_parameter(name, self):
-                    continue
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                if is_pp_missing_parameter(name, self):
-                    continue
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
+        loader = AutoWeightsLoader(self)
+        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
 
 
-class Lfm2ForCausalLM(nn.Module, HasInnerState, SupportsLoRA, SupportsPP, IsHybrid, SupportsQuant):
+class Lfm2ForCausalLM(
+    nn.Module, HasInnerState, SupportsLoRA, SupportsPP, IsHybrid, SupportsQuant
+):
     packed_modules_mapping = {
         "qkv_proj": [
             "q_proj",
@@ -419,12 +407,8 @@ class Lfm2ForCausalLM(nn.Module, HasInnerState, SupportsLoRA, SupportsPP, IsHybr
         "in_proj": ["in_proj"],
     }
 
-    # HF uses .conv. but Aphrodite uses .short_conv. to avoid LoRA regex collision
-    # with the inner .conv.conv child (ShortConv has a child self.conv, so
-    # naming the container .conv too makes _match_target_modules match both)
-    hf_to_aphrodite_mapper = WeightsMapper(
-        orig_to_new_substr={".conv.": ".short_conv."},
-    )
+    # Reuse the backbone mapper so LoRA/quantization see the same name mapping.
+    hf_to_aphrodite_mapper = Lfm2Model.hf_to_aphrodite_mapper
 
     # LoRA specific attributes
     embedding_modules = {
@@ -475,12 +459,15 @@ class Lfm2ForCausalLM(nn.Module, HasInnerState, SupportsLoRA, SupportsPP, IsHybr
         cache_config = aphrodite_config.cache_config
         if cache_config.mamba_cache_mode == "all":
             raise NotImplementedError(
-                "Lfm2 currently does not support 'all' prefix caching, please use '--mamba-cache-mode=align' instead"
+                "Lfm2 currently does not support 'all' prefix caching, "
+                "please use '--mamba-cache-mode=align' instead"
             )
 
         super().__init__()
         self.config = config
-        self.model = Lfm2Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Lfm2Model(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
+        )
 
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
@@ -495,7 +482,9 @@ class Lfm2ForCausalLM(nn.Module, HasInnerState, SupportsLoRA, SupportsPP, IsHybr
 
         self.logits_processor = LogitsProcessor(config.vocab_size)
 
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -508,7 +497,9 @@ class Lfm2ForCausalLM(nn.Module, HasInnerState, SupportsLoRA, SupportsPP, IsHybr
         inputs_embeds: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
+        hidden_states = self.model(
+            input_ids, positions, intermediate_tensors, inputs_embeds
+        )
         return hidden_states
 
     def compute_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:

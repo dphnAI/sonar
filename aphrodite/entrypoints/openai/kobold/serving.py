@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator
 from fastapi import Request
 
 from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.logger import RequestLogger
+from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
 from aphrodite.entrypoints.openai.engine.serving import OpenAIServing
 from aphrodite.entrypoints.openai.kobold.protocol import KAIGenerationInputSchema
 from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels

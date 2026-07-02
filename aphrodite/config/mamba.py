@@ -17,7 +17,9 @@ class _MambaBackendEnumMeta(EnumMeta):
             return super().__getitem__(name)
         except KeyError:
             valid = ", ".join(cls.__members__.keys())
-            raise ValueError(f"Unknown Mamba SSU backend: '{name}'. Valid options are: {valid}") from None
+            raise ValueError(
+                f"Unknown Mamba SSU backend: '{name}'. Valid options are: {valid}"
+            ) from None
 
 
 class MambaBackendEnum(Enum, metaclass=_MambaBackendEnumMeta):
@@ -61,7 +63,10 @@ class MambaConfig:
                     "on NVIDIA CUDA platforms. Please do not specify  "
                     "`--enable-mamba-cache-stochastic-rounding`."
                 )
-            if self.backend == MambaBackendEnum.TRITON and not current_platform.is_device_capability_family(100):
+            if (
+                self.backend == MambaBackendEnum.TRITON
+                and not current_platform.is_device_capability_family(100)
+            ):
                 raise ValueError(
                     "Stochastic rounding for Mamba cache with triton backend requires "
                     "compute capability 10.0 (data center Blackwell). The `cvt.rs` "

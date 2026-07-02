@@ -19,6 +19,8 @@ from aphrodite.platforms import current_platform
 
 logger = init_logger(__name__)
 
+# The empirical value for small batch
+PDL_ADVANCE_LAUNCH_TOKENS = 16
 
 fi_ar_available = False
 try:
@@ -59,6 +61,7 @@ def _create_workspace(
             hidden_dim=hidden_dim,
             dtype=dtype,
             comm_backend=comm_backend,
+            group=group,
         )
     except Exception as e:
         if "multicast" in str(e).lower():
@@ -89,25 +92,32 @@ def _create_workspace(
     return workspace
 
 
-def _resolve_fi_ar_backend() -> str:
+def _resolve_fi_ar_backend() -> tuple[str, bool]:
+    """Resolve the flashinfer allreduce backend for the current setup.
+
+    Returns:
+        A ``(backend, allow_trtllm_fallback)`` tuple. ``allow_trtllm_fallback``
+        is True only when ``auto`` selects mnnvl for a single node, so that
+        workspace creation can fall back to trtllm on single-node topologies
+        without NVSwitch multicast support (where mnnvl is unavailable).
+    """
     backend = envs.APHRODITE_FLASHINFER_ALLREDUCE_BACKEND
     if backend != "auto":
         logger.info_once(f"Using flashinfer allreduce backend: {backend}")
-        return backend
+        return backend, False
 
-    if get_node_count() > 1:  # noqa: SIM108
-        # Use mnnvl backend for multi-node setup since
-        # trtllm backend does not support multi-node allreduce
-        backend = "mnnvl"
-    else:
-        # Currently defaulting to trtllm backend for single-node
-        # setup since mnnvl has issues with cudagraph:
-        # https://github.com/vllm-project/vllm/issues/35772
-        # Should switch back to auto when the issue is resolved.
-        backend = "trtllm"
+    # Default to mnnvl for both single- and multi-node setups. The mnnvl
+    # cudagraph hang that previously forced single-node to trtllm
+    # (https://github.com/vllm-project/aphrodite/issues/35772) was fixed upstream in
+    # FlashInfer (>= 0.6.12, Aphrodite pins 0.6.13), so mnnvl is safe here. trtllm
+    # does not support multi-node allreduce, so mnnvl is required there anyway.
+    # mnnvl needs NVSwitch multicast; on single-node topologies without it,
+    # fall back to trtllm so fused allreduce stays enabled.
+    backend = "mnnvl"
+    allow_trtllm_fallback = get_node_count() == 1
 
     logger.info_once(f"Auto-selected flashinfer allreduce backend: {backend}")
-    return backend
+    return backend, allow_trtllm_fallback
 
 
 def get_fi_ar_workspace(
@@ -129,7 +139,7 @@ def get_fi_ar_workspace(
     if _fi_ar_workspace is not None:
         return _fi_ar_workspace
 
-    backend = _resolve_fi_ar_backend()
+    backend, allow_trtllm_fallback = _resolve_fi_ar_backend()
 
     if get_node_count() > 1 and backend == "trtllm":
         raise ValueError(
@@ -137,16 +147,33 @@ def get_fi_ar_workspace(
             "'trtllm' backend. Please use 'mnnvl' backend instead."
         )
 
-    # Reuse the quant workspace if it was already created with the same backend
-    if _fi_ar_quant_workspace is not None and _fi_ar_quant_workspace.backend == backend:
-        _fi_ar_workspace = _fi_ar_quant_workspace
-        return _fi_ar_workspace
+    def _get_or_create(be: str):
+        # Reuse the quant workspace if it was already created with the same backend
+        if _fi_ar_quant_workspace is not None and _fi_ar_quant_workspace.backend == be:
+            return _fi_ar_quant_workspace
+        return _create_workspace(
+            be, world_size, rank, max_token_num, hidden_dim, dtype, group
+        )
 
-    _fi_ar_workspace = _create_workspace(backend, world_size, rank, max_token_num, hidden_dim, dtype, group)
+    _fi_ar_workspace = _get_or_create(backend)
+    if _fi_ar_workspace is None and allow_trtllm_fallback and backend != "trtllm":
+        logger.warning_once(
+            "FlashInfer mnnvl allreduce workspace unavailable (likely no NVSwitch "
+            "multicast support); falling back to trtllm backend for single node."
+        )
+        backend = "trtllm"
+        _fi_ar_workspace = _get_or_create(backend)
+
     if _fi_ar_workspace is not None:
-        logger.info_once(f"Initialized FlashInfer Allreduce norm fusion workspace with backend={backend}")
+        logger.info_once(
+            "Initialized FlashInfer Allreduce norm fusion workspace "
+            f"with backend={backend}"
+        )
     else:
-        logger.warning_once(f"Failed to initialize FlashInfer Allreduce norm fusion workspace with backend={backend}")
+        logger.warning_once(
+            "Failed to initialize FlashInfer Allreduce norm fusion workspace "
+            f"with backend={backend}"
+        )
 
     return _fi_ar_workspace
 
@@ -182,12 +209,18 @@ def get_fi_ar_quant_workspace(
         _fi_ar_quant_workspace = _fi_ar_workspace
         return _fi_ar_quant_workspace
 
-    _fi_ar_quant_workspace = _create_workspace("trtllm", world_size, rank, max_token_num, hidden_dim, dtype, group)
+    _fi_ar_quant_workspace = _create_workspace(
+        "trtllm", world_size, rank, max_token_num, hidden_dim, dtype, group
+    )
     if _fi_ar_quant_workspace is not None:
-        logger.info_once("Initialized FlashInfer Allreduce norm quantization fusion workspace with backend=trtllm")
+        logger.info_once(
+            "Initialized FlashInfer Allreduce norm quantization "
+            "fusion workspace with backend=trtllm"
+        )
     else:
         logger.warning_once(
-            "Failed to initialize FlashInfer Allreduce norm quantization fusion workspace with backend=trtllm"
+            "Failed to initialize FlashInfer Allreduce norm quantization "
+            "fusion workspace with backend=trtllm"
         )
 
     return _fi_ar_quant_workspace
@@ -221,11 +254,15 @@ class FlashInferAllReduce:
         self.disabled = True
 
         if not fi_ar_available:
-            logger.info("FlashInfer All Reduce is disabled because flashinfer is not available")
+            logger.info(
+                "FlashInfer All Reduce is disabled because flashinfer is not available"
+            )
             return
 
         if not current_platform.is_cuda():
-            logger.info("FlashInfer All Reduce is disabled because it requires CUDA platform")
+            logger.info(
+                "FlashInfer All Reduce is disabled because it requires CUDA platform"
+            )
             return
 
         self.group = group
@@ -238,10 +275,13 @@ class FlashInferAllReduce:
         # Use the same threshold as the allreduce-rms fusion pass
         # TODO: tune the threshold
         MiB = 1024 * 1024
-        max_workspace_size = PassConfig.default_fi_allreduce_fusion_max_size_mb().get(self.world_size, None)
+        max_workspace_size = PassConfig.default_fi_allreduce_fusion_max_size_mb().get(
+            self.world_size, None
+        )
         if not max_workspace_size:
             logger.warning(
-                "FlashInfer All Reduce is disabled because it is not supported for world_size=%d.",
+                "FlashInfer All Reduce is disabled because it "
+                "is not supported for world_size=%d.",
                 self.world_size,
             )
             return
@@ -291,7 +331,7 @@ class FlashInferAllReduce:
         return self._ensure_workspace(hidden_dim, input_tensor.dtype)
 
     def all_reduce(self, input_tensor: torch.Tensor) -> torch.Tensor:
-        _, hidden_dim = input_tensor.shape
+        num_tokens, hidden_dim = input_tensor.shape
         workspace = get_fi_ar_workspace(
             world_size=self.world_size,
             rank=self.rank,
@@ -304,6 +344,8 @@ class FlashInferAllReduce:
             input=input_tensor,
             workspace=workspace,
             pattern=flashinfer_comm.AllReduceFusionPattern.kAllReduce,
+            launch_with_pdl=True,
+            trigger_completion_at_end=num_tokens > PDL_ADVANCE_LAUNCH_TOKENS,
         )
 
     def destroy(self):

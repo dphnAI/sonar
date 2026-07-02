@@ -10,7 +10,7 @@ import torch
 from torch import nn
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
+from aphrodite.config import CacheConfig, ModelConfig, AphroditeConfig
 from aphrodite.distributed import (
     get_pp_group,
     get_tensor_model_parallel_world_size,
@@ -41,6 +41,7 @@ from aphrodite.transformers_utils.configs.step3_vl import Step3TextConfig
 
 from .interfaces import SupportsPP
 from .utils import (
+    AutoWeightsLoader,
     PPMissingLayer,
     is_pp_missing_parameter,
     make_empty_intermediate_tensors_factory,
@@ -63,7 +64,8 @@ class FusedMoEBlock(nn.Module):
 
         if self.tp_size > config.moe_num_experts:
             raise ValueError(
-                f"Tensor parallel size {self.tp_size} is greater than the number of experts {config.moe_num_experts}."
+                f"Tensor parallel size {self.tp_size} is greater than "
+                f"the number of experts {config.moe_num_experts}."
             )
 
         self.experts = FusedMoE(
@@ -90,7 +92,9 @@ class FusedMoEBlock(nn.Module):
 
         router_logits, _ = self.gate(hidden_states)
 
-        final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=router_logits)
+        final_hidden_states = self.experts(
+            hidden_states=hidden_states, router_logits=router_logits
+        )
 
         return final_hidden_states.view(orig_shape)
 
@@ -120,7 +124,9 @@ class Step3TextMLP(nn.Module):
             prefix=f"{prefix}.down_proj",
         )
         if hidden_act != "silu":
-            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu is supported for now.")
+            raise ValueError(
+                f"Unsupported activation: {hidden_act}. Only silu is supported for now."
+            )
         self.act_fn = SiluAndMul()
         self.hidden_size = hidden_size
 
@@ -155,7 +161,9 @@ class Step3TextAttention(nn.Module):
         self.num_heads = self.total_num_heads // tp_size
 
         if num_kv_heads != 1:
-            raise ValueError(f"Step3TextAttention num_kv_heads must be 1, but got {num_kv_heads}.")
+            raise ValueError(
+                f"Step3TextAttention num_kv_heads must be 1, but got {num_kv_heads}."
+            )
         self.num_kv_heads = num_kv_heads
 
         self.head_dim = head_dim
@@ -200,7 +208,9 @@ class Step3TextAttention(nn.Module):
             prefix=f"{prefix}.attn",
         )
 
-    def forward(self, positions: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, positions: torch.Tensor, hidden_states: torch.Tensor
+    ) -> torch.Tensor:
         qkv, _ = self.qkv_proj(hidden_states)
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
         q = self.inter_norm(q)
@@ -245,7 +255,9 @@ class Step3TextDecoderLayer(nn.Module):
             moe_layers_idx = [i for i in range(1, config.num_hidden_layers)]
 
         if layer_idx in moe_layers_idx:
-            self.moe = FusedMoEBlock(config=config, quant_config=quant_config, prefix=f"{prefix}.moe")
+            self.moe = FusedMoEBlock(
+                config=config, quant_config=quant_config, prefix=f"{prefix}.moe"
+            )
             self.share_expert = Step3TextMLP(
                 hidden_size=self.hidden_size,
                 intermediate_size=config.share_expert_dim,
@@ -264,7 +276,9 @@ class Step3TextDecoderLayer(nn.Module):
             )
             self.use_moe = False
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
     def forward(
         self,
@@ -305,7 +319,9 @@ class Step3TextModel(nn.Module):
         self.vocab_size = config.vocab_size
         self.config = config
 
-        if get_pp_group().is_first_rank or (config.tie_word_embeddings and get_pp_group().is_last_rank):
+        if get_pp_group().is_first_rank or (
+            config.tie_word_embeddings and get_pp_group().is_last_rank
+        ):
             self.embed_tokens = VocabParallelEmbedding(
                 self.vocab_size,
                 config.hidden_size,
@@ -329,7 +345,7 @@ class Step3TextModel(nn.Module):
             self.norm = PPMissingLayer()
 
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
-            ["hidden_states"], config.hidden_size
+            ["hidden_states", "residual"], config.hidden_size
         )
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
@@ -367,51 +383,6 @@ class Step3TextModel(nn.Module):
         hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
 
-
-class Step3TextForCausalLM(nn.Module, SupportsPP):
-    def __init__(
-        self,
-        *,
-        aphrodite_config: AphroditeConfig,
-        prefix: str = "",
-    ):
-        super().__init__()
-        config = aphrodite_config.model_config.hf_config
-
-        self.config = config
-        self.aphrodite_config = aphrodite_config
-
-        self.model = Step3TextModel(aphrodite_config=aphrodite_config, prefix=prefix)
-
-        if get_pp_group().is_last_rank:
-            self.lm_head = ParallelLMHead(
-                config.vocab_size,
-                config.hidden_size,
-                prefix=maybe_prefix(prefix, "lm_head"),
-            )
-            self.logits_processor = LogitsProcessor(config.vocab_size)
-        else:
-            self.lm_head = PPMissingLayer()
-
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
-
-    def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
-        return self.model.embed_input_ids(input_ids)
-
-    def forward(
-        self,
-        input_ids: torch.Tensor | None,
-        positions: torch.Tensor,
-        intermediate_tensors: IntermediateTensors | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-    ):
-        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
-        return hidden_states
-
-    def compute_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        logits = self.logits_processor(self.lm_head, hidden_states)
-        return logits
-
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         qkv_params_mapping = [
             # (param_name, shard_name, relative_start_idx, relative_end_idx)
@@ -419,18 +390,22 @@ class Step3TextForCausalLM(nn.Module, SupportsPP):
                 ".qkv_proj",
                 ".q_proj",
                 0,
-                self.config.share_q_dim / (self.config.share_q_dim + self.config.head_dim * 2),
+                self.config.share_q_dim
+                / (self.config.share_q_dim + self.config.head_dim * 2),
             ),
             (
                 ".qkv_proj",
                 ".k_proj",
-                self.config.share_q_dim / (self.config.share_q_dim + self.config.head_dim * 2),
-                (self.config.share_q_dim + self.config.head_dim) / (self.config.share_q_dim + self.config.head_dim * 2),
+                self.config.share_q_dim
+                / (self.config.share_q_dim + self.config.head_dim * 2),
+                (self.config.share_q_dim + self.config.head_dim)
+                / (self.config.share_q_dim + self.config.head_dim * 2),
             ),
             (
                 ".qkv_proj",
                 ".v_proj",
-                (self.config.share_q_dim + self.config.head_dim) / (self.config.share_q_dim + self.config.head_dim * 2),
+                (self.config.share_q_dim + self.config.head_dim)
+                / (self.config.share_q_dim + self.config.head_dim * 2),
                 (self.config.share_q_dim + self.config.head_dim * 2)
                 / (self.config.share_q_dim + self.config.head_dim * 2),
             ),
@@ -442,12 +417,26 @@ class Step3TextForCausalLM(nn.Module, SupportsPP):
         ]
         params_dict = dict(self.named_parameters())
         loaded_params: set[str] = set()
-        base_layer = "base_layer." if any(".base_layer." in name for name in params_dict) else ""
+        base_layer = (
+            "base_layer." if any(".base_layer." in name for name in params_dict) else ""
+        )
 
         expert_params_mapping = [
-            (f".moe.experts.{base_layer}w13_weight", ".moe.gate_proj.weight", "w1"),
-            (f".moe.experts.{base_layer}w13_weight", ".moe.up_proj.weight", "w3"),
-            (f".moe.experts.{base_layer}w2_weight", ".moe.down_proj.weight", "w2"),
+            (
+                f".moe.experts.routed_experts.{base_layer}w13_weight",
+                ".moe.gate_proj.weight",
+                "w1",
+            ),
+            (
+                f".moe.experts.routed_experts.{base_layer}w13_weight",
+                ".moe.up_proj.weight",
+                "w3",
+            ),
+            (
+                f".moe.experts.routed_experts.{base_layer}w2_weight",
+                ".moe.down_proj.weight",
+                "w2",
+            ),
         ]
 
         disable_moe_stacked_params = [data[1] for data in expert_params_mapping]
@@ -456,7 +445,10 @@ class Step3TextForCausalLM(nn.Module, SupportsPP):
             for param_name, weight_name, shard_id in stacked_params_mapping:
                 if weight_name not in name:
                     continue
-                if any(disable_moe_stacked_param in name for disable_moe_stacked_param in disable_moe_stacked_params):
+                if any(
+                    disable_moe_stacked_param in name
+                    for disable_moe_stacked_param in disable_moe_stacked_params
+                ):
                     continue
                 name = name.replace(weight_name, param_name)
                 if is_pp_missing_parameter(name, self):
@@ -476,7 +468,9 @@ class Step3TextForCausalLM(nn.Module, SupportsPP):
                     if is_pp_missing_parameter(name, self):
                         continue
                     # Skip loading extra bias for GPTQ models.
-                    if (name.endswith(".bias") or name.endswith("_bias")) and name not in params_dict:
+                    if (
+                        name.endswith(".bias") or name.endswith("_bias")
+                    ) and name not in params_dict:
                         continue
                     param = params_dict[name]
                     weight_loader = param.weight_loader
@@ -507,7 +501,9 @@ class Step3TextForCausalLM(nn.Module, SupportsPP):
                         dim = param.shape[param.output_dim]
                         begin_idx = int(start_idx * dim)
                         end_idx = int(end_idx * dim)
-                        param_slice = param.narrow(param.output_dim, begin_idx, end_idx - begin_idx)
+                        param_slice = param.narrow(
+                            param.output_dim, begin_idx, end_idx - begin_idx
+                        )
                         param_slice.copy_(loaded_weight)
                         loaded_params.add(name)
                         break
@@ -515,7 +511,62 @@ class Step3TextForCausalLM(nn.Module, SupportsPP):
                         if is_pp_missing_parameter(name, self):
                             continue
                         param = params_dict[name]
-                        weight_loader = getattr(param, "weight_loader", default_weight_loader)
+                        weight_loader = getattr(
+                            param, "weight_loader", default_weight_loader
+                        )
                         weight_loader(param, loaded_weight)
                         loaded_params.add(name)
         return loaded_params
+
+
+class Step3TextForCausalLM(nn.Module, SupportsPP):
+    def __init__(
+        self,
+        *,
+        aphrodite_config: AphroditeConfig,
+        prefix: str = "",
+    ):
+        super().__init__()
+        config = aphrodite_config.model_config.hf_config
+
+        self.config = config
+        self.aphrodite_config = aphrodite_config
+
+        self.model = Step3TextModel(aphrodite_config=aphrodite_config, prefix=prefix)
+
+        if get_pp_group().is_last_rank:
+            self.lm_head = ParallelLMHead(
+                config.vocab_size,
+                config.hidden_size,
+                prefix=maybe_prefix(prefix, "lm_head"),
+            )
+            self.logits_processor = LogitsProcessor(config.vocab_size)
+        else:
+            self.lm_head = PPMissingLayer()
+
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
+
+    def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
+        return self.model.embed_input_ids(input_ids)
+
+    def forward(
+        self,
+        input_ids: torch.Tensor | None,
+        positions: torch.Tensor,
+        intermediate_tensors: IntermediateTensors | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+    ):
+        hidden_states = self.model(
+            input_ids, positions, intermediate_tensors, inputs_embeds
+        )
+        return hidden_states
+
+    def compute_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        logits = self.logits_processor(self.lm_head, hidden_states)
+        return logits
+
+    def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
+        loader = AutoWeightsLoader(self)
+        return loader.load_weights(weights)

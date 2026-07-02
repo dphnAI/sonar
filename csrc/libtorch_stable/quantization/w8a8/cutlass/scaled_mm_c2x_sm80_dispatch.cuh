@@ -9,7 +9,7 @@
  * shape.
  */
 
-namespace aphrodite {
+namespace vllm {
 
 template <typename InType, typename OutType,
           template <typename, typename> typename Epilogue>
@@ -138,4 +138,4 @@ inline void cutlass_gemm_sm80_dispatch(torch::stable::Tensor& out,
   }
 }
 
-}  // namespace aphrodite
+}  // namespace vllm

@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 import torch
-from aphrodite.modeling.models.glm4_1v import Glm4vImageEmbeddingInputs
-from aphrodite.modeling.models.granite_speech import GraniteSpeechAudioInputs
-from aphrodite.modeling.models.hyperclovax_vision import HCXVisionVideoPixelInputs
-from aphrodite.modeling.models.phi3v import Phi3VImagePixelInputs
+
+from aphrodite.model_executor.models.glm4_1v import Glm4vImageEmbeddingInputs
+from aphrodite.model_executor.models.granite_speech import GraniteSpeechAudioInputs
+from aphrodite.model_executor.models.hyperclovax_vision import HCXVisionVideoPixelInputs
+from aphrodite.model_executor.models.phi3v import Phi3VImagePixelInputs
 
 
 def test_tensor_schema_valid_tensor():

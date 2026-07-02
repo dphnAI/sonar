@@ -3,6 +3,8 @@
 
 
 # ===================== import region =====================
+import threading
+
 import torch
 import torch.distributed as dist
 from torch.distributed import ProcessGroup, ReduceOp
@@ -132,7 +134,9 @@ class PyNcclCommunicator:
         self.device = device
         # nccl communicator and stream will use this device
         with torch.accelerator.device_index(device.index):
-            self.comm: ncclComm_t = self.nccl.ncclCommInitRank(self.world_size, self.unique_id, self.rank)
+            self.comm: ncclComm_t = self.nccl.ncclCommInitRank(
+                self.world_size, self.unique_id, self.rank
+            )
 
             stream = current_stream()
             # A small all_reduce for warmup.
@@ -143,8 +147,19 @@ class PyNcclCommunicator:
 
     def destroy(self):
         if self.available and not self.disabled:
-            with torch.accelerator.device_index(self.device.index):
-                self.nccl.ncclCommDestroy(self.comm)
+            # ncclCommAbort can block until all CUDA graphs that
+            # captured NCCL ops on this comm are destroyed — and
+            # those graphs are released later in this same main-
+            # thread teardown, so a direct call here self-deadlocks.
+            # Run it in a daemon thread with a timeout: the main
+            # thread proceeds, the graphs drop, and the abort returns.
+            def _abort():
+                with torch.accelerator.device_index(self.device.index):
+                    self.nccl.ncclCommAbort(self.comm)
+
+            abort_thread = threading.Thread(target=_abort, daemon=True)
+            abort_thread.start()
+            abort_thread.join(timeout=5.0)
             self.available = False
             self.disabled = True
 
@@ -161,7 +176,8 @@ class PyNcclCommunicator:
         # will only work on tensors on the same device
         # otherwise it will cause "illegal memory access"
         assert in_tensor.device == self.device, (
-            f"this nccl communicator is created to work on {self.device}, but the input tensor is on {in_tensor.device}"
+            f"this nccl communicator is created to work on {self.device}, "
+            f"but the input tensor is on {in_tensor.device}"
         )
 
         if out_tensor is None:
@@ -180,7 +196,9 @@ class PyNcclCommunicator:
         )
         return out_tensor
 
-    def all_gather(self, output_tensor: torch.Tensor, input_tensor: torch.Tensor, stream=None):
+    def all_gather(
+        self, output_tensor: torch.Tensor, input_tensor: torch.Tensor, stream=None
+    ):
         if self.disabled:
             return
         # nccl communicator created on a specific device
@@ -305,7 +323,8 @@ class PyNcclCommunicator:
         if self.disabled:
             return
         assert tensor.device == self.device, (
-            f"this nccl communicator is created to work on {self.device}, but the input tensor is on {tensor.device}"
+            f"this nccl communicator is created to work on {self.device}, "
+            f"but the input tensor is on {tensor.device}"
         )
         if stream is None:
             stream = current_stream()
@@ -331,7 +350,8 @@ class PyNcclCommunicator:
         if self.disabled:
             return
         assert tensor.device == self.device, (
-            f"this nccl communicator is created to work on {self.device}, but the input tensor is on {tensor.device}"
+            f"this nccl communicator is created to work on {self.device}, "
+            f"but the input tensor is on {tensor.device}"
         )
         if stream is None:
             stream = current_stream()
@@ -357,7 +377,8 @@ class PyNcclCommunicator:
         if self.disabled:
             return
         assert tensor.device == self.device, (
-            f"this nccl communicator is created to work on {self.device}, but the input tensor is on {tensor.device}"
+            f"this nccl communicator is created to work on {self.device}, "
+            f"but the input tensor is on {tensor.device}"
         )
         if stream is None:
             stream = current_stream()

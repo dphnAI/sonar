@@ -11,21 +11,23 @@
 
 import importlib.util
 
-# this import statement is needed to ensure the ops are registered
-import aphrodite.modeling.layers.fused_moe.rocm_aiter_fused_moe  # noqa: F401
 import pytest
 import torch
 
 from aphrodite.platforms import current_platform
 
+if not current_platform.is_rocm():
+    pytest.skip("This test can only run on ROCm.", allow_module_level=True)
+
+# this import statement is needed to ensure the ops are registered
+import aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe  # noqa: F401
+
 # need to import once to ensure the ops are registered
 # Check if aiter package is installed
 aiter_available = importlib.util.find_spec("aiter") is not None
 
-pytestmark = pytest.mark.skipif(
-    not (current_platform.is_rocm() and aiter_available),
-    reason="AITER ops are only available on ROCm with aiter package installed",
-)
+if not aiter_available:
+    pytest.skip("These tests require AITER to run.", allow_module_level=True)
 
 
 def test_rocm_aiter_biased_grouped_topk_custom_op_registration():
@@ -58,14 +60,18 @@ def test_rocm_aiter_biased_grouped_topk_torch_compile_compatibility():
     scale_factor = 1.0
 
     gating_output = torch.randn((token, expert), dtype=torch.bfloat16, device="cuda")
-    e_score_correction_bias = torch.randn((expert,), dtype=torch.bfloat16, device="cuda")
+    e_score_correction_bias = torch.randn(
+        (expert,), dtype=torch.bfloat16, device="cuda"
+    )
 
     device = gating_output.device
     topk_ids = torch.empty((token, topk), dtype=torch.int32, device=device)
     topk_weights = torch.empty((token, topk), dtype=torch.float32, device=device)
 
     # Define a function that uses the op
-    def biased_grouped_topk_fn(gating_output, e_score_correction_bias, topk_weights, topk_ids):
+    def biased_grouped_topk_fn(
+        gating_output, e_score_correction_bias, topk_weights, topk_ids
+    ):
         return torch.ops.aphrodite.rocm_aiter_biased_grouped_topk(
             gating_output,
             e_score_correction_bias,
@@ -99,15 +105,23 @@ def test_rocm_aiter_biased_grouped_topk_torch_compile_compatibility():
         dynamic=False,
     )
 
-    topk_weights_original = torch.empty((token, topk), dtype=torch.float32, device=device)
+    topk_weights_original = torch.empty(
+        (token, topk), dtype=torch.float32, device=device
+    )
     topk_ids_original = torch.empty((token, topk), dtype=torch.int32, device=device)
 
-    topk_weights_compiled = torch.empty((token, topk), dtype=torch.float32, device=device)
+    topk_weights_compiled = torch.empty(
+        (token, topk), dtype=torch.float32, device=device
+    )
     topk_ids_compiled = torch.empty((token, topk), dtype=torch.int32, device=device)
 
     # Run both compiled (V1 graph mode) and uncompiled versions (V1 eager mode)
-    biased_grouped_topk_fn(gating_output, e_score_correction_bias, topk_weights_original, topk_ids_original)
-    compiled_fn(gating_output, e_score_correction_bias, topk_weights_compiled, topk_ids_compiled)
+    biased_grouped_topk_fn(
+        gating_output, e_score_correction_bias, topk_weights_original, topk_ids_original
+    )
+    compiled_fn(
+        gating_output, e_score_correction_bias, topk_weights_compiled, topk_ids_compiled
+    )
 
     # Sort the results for comparison since the order might not be deterministic
     topk_ids_original, indices_original = torch.sort(topk_ids_original)
@@ -117,7 +131,9 @@ def test_rocm_aiter_biased_grouped_topk_torch_compile_compatibility():
     topk_weights_compiled = torch.gather(topk_weights_compiled, 1, indices_compiled)
 
     # Verify results match
-    assert torch.allclose(topk_weights_original, topk_weights_compiled, rtol=1e-2, atol=1e-2)
+    assert torch.allclose(
+        topk_weights_original, topk_weights_compiled, rtol=1e-2, atol=1e-2
+    )
     assert torch.allclose(topk_ids_original, topk_ids_compiled)
 
 
@@ -175,14 +191,20 @@ def test_rocm_aiter_grouped_topk_torch_compile_compatibility():
         dynamic=False,
     )
 
-    topk_weights_original = torch.empty((token, topk), dtype=torch.float32, device=device)
+    topk_weights_original = torch.empty(
+        (token, topk), dtype=torch.float32, device=device
+    )
     topk_ids_original = torch.empty((token, topk), dtype=torch.int32, device=device)
 
-    topk_weights_compiled = torch.empty((token, topk), dtype=torch.float32, device=device)
+    topk_weights_compiled = torch.empty(
+        (token, topk), dtype=torch.float32, device=device
+    )
     topk_ids_compiled = torch.empty((token, topk), dtype=torch.int32, device=device)
 
     # Run both compiled (V1 graph mode) and uncompiled versions (V1 eager mode)
-    grouped_topk_fn(gating_output, topk_weights_original, topk_ids_original, scoring_func)
+    grouped_topk_fn(
+        gating_output, topk_weights_original, topk_ids_original, scoring_func
+    )
     compiled_fn(gating_output, topk_weights_compiled, topk_ids_compiled, scoring_func)
 
     # Sort the results for comparison since the order might not be deterministic
@@ -193,5 +215,7 @@ def test_rocm_aiter_grouped_topk_torch_compile_compatibility():
     topk_weights_compiled = torch.gather(topk_weights_compiled, 1, indices_compiled)
 
     # Verify results match
-    assert torch.allclose(topk_weights_original, topk_weights_compiled, rtol=1e-2, atol=1e-2)
+    assert torch.allclose(
+        topk_weights_original, topk_weights_compiled, rtol=1e-2, atol=1e-2
+    )
     assert torch.allclose(topk_ids_original, topk_ids_compiled)

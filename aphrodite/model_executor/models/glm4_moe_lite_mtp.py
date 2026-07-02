@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 # Copyright 2025 The ZhipuAI Team.
-# Copyright 2023 The Aphrodite team.
+# Copyright 2023 The vLLM team.
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -33,7 +33,7 @@ from transformers import PretrainedConfig
 from aphrodite._aiter_ops import rocm_aiter_ops
 from aphrodite.config import AphroditeConfig
 from aphrodite.model_executor.layers.fused_moe import (
-    FusedMoE,
+    MoERunner,
     fused_moe_make_expert_params_mapping,
 )
 from aphrodite.model_executor.layers.layernorm import RMSNorm
@@ -106,7 +106,9 @@ class Glm4MoeLiteMultiTokenPredictorLayer(nn.Module):
         else:
             topk_indices_buffer = None
 
-        self.shared_head = SharedHead(config=config, prefix=prefix, quant_config=quant_config)
+        self.shared_head = SharedHead(
+            config=config, prefix=prefix, quant_config=quant_config
+        )
         self.mtp_block = Glm4MoeLiteDecoderLayer(
             aphrodite_config=aphrodite_config,
             prefix=prefix,
@@ -128,9 +130,13 @@ class Glm4MoeLiteMultiTokenPredictorLayer(nn.Module):
         inputs_embeds = self.enorm(inputs_embeds)
         previous_hidden_states = self.hnorm(previous_hidden_states)
 
-        hidden_states = self.eh_proj(torch.cat([inputs_embeds, previous_hidden_states], dim=-1))
+        hidden_states = self.eh_proj(
+            torch.cat([inputs_embeds, previous_hidden_states], dim=-1)
+        )
 
-        hidden_states, residual = self.mtp_block(positions=positions, hidden_states=hidden_states, residual=None)
+        hidden_states, residual = self.mtp_block(
+            positions=positions, hidden_states=hidden_states, residual=None
+        )
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -189,7 +195,9 @@ class Glm4MoeLiteMultiTokenPredictor(nn.Module):
     ) -> torch.Tensor:
         current_step_idx = spec_step_idx % self.num_mtp_layers
         mtp_layer = self.layers[str(self.mtp_start_layer_idx + current_step_idx)]
-        logits = self.logits_processor(mtp_layer.shared_head.head, mtp_layer.shared_head(hidden_states))
+        logits = self.logits_processor(
+            mtp_layer.shared_head.head, mtp_layer.shared_head(hidden_states)
+        )
         return logits
 
 
@@ -201,13 +209,11 @@ class Glm4MoeLiteMTP(nn.Module, SupportsPP, Glm4MixtureOfExperts):
             aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
         )
 
-        self.expert_weights = []
-
         # Set MoE hyperparameters
         self.num_moe_layers = self.config.num_nextn_predict_layers
         self.num_expert_groups = self.config.n_group
 
-        self.moe_layers: list[FusedMoE] = []
+        self.moe_layers: list[MoERunner] = []
         self.moe_mlp_layers: list[Glm4MoeLite] = []
         example_moe = None
         for layer in self.model.layers.values():
@@ -232,7 +238,9 @@ class Glm4MoeLiteMTP(nn.Module, SupportsPP, Glm4MixtureOfExperts):
         inputs_embeds: torch.Tensor | None = None,
         spec_step_idx: int = 0,
     ) -> torch.Tensor:
-        hidden_states = self.model(input_ids, positions, hidden_states, inputs_embeds, spec_step_idx)
+        hidden_states = self.model(
+            input_ids, positions, hidden_states, inputs_embeds, spec_step_idx
+        )
         return hidden_states
 
     def compute_logits(
@@ -243,7 +251,9 @@ class Glm4MoeLiteMTP(nn.Module, SupportsPP, Glm4MixtureOfExperts):
         return self.model.compute_logits(hidden_states, spec_step_idx)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        rocm_aiter_moe_shared_expert_enabled = rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
+        rocm_aiter_moe_shared_expert_enabled = (
+            rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
+        )
         stacked_params_mapping = [
             ("gate_up_proj", "gate_proj", 0),
             ("gate_up_proj", "up_proj", 1),
@@ -257,7 +267,11 @@ class Glm4MoeLiteMTP(nn.Module, SupportsPP, Glm4MixtureOfExperts):
             ckpt_down_proj_name="down_proj",
             ckpt_up_proj_name="up_proj",
             num_experts=self.config.n_routed_experts
-            + (self.config.n_shared_experts if rocm_aiter_moe_shared_expert_enabled else 0),
+            + (
+                self.config.n_shared_experts
+                if rocm_aiter_moe_shared_expert_enabled
+                else 0
+            ),
         )
 
         params_dict = dict(self.named_parameters())
@@ -268,7 +282,9 @@ class Glm4MoeLiteMTP(nn.Module, SupportsPP, Glm4MixtureOfExperts):
             spec_layer = get_spec_layer_idx_from_weight_name(self.config, name)
             if spec_layer is None:
                 continue
-            is_fusion_moe_shared_experts_layer = rocm_aiter_moe_shared_expert_enabled and ("mlp.shared_experts" in name)
+            is_fusion_moe_shared_experts_layer = (
+                rocm_aiter_moe_shared_expert_enabled and ("mlp.shared_experts" in name)
+            )
             name = self._rewrite_spec_layer_name(spec_layer, name)
             for param_name, weight_name, shard_id in stacked_params_mapping:
                 # Skip non-stacked layers and experts (experts handled below).
@@ -288,7 +304,9 @@ class Glm4MoeLiteMTP(nn.Module, SupportsPP, Glm4MixtureOfExperts):
 
                 # QKV fusion is optional, fall back to normal
                 # weight loading if it's not enabled
-                if (param_name == "fused_qkv_a_proj") and name_mapped not in params_dict:
+                if (
+                    param_name == "fused_qkv_a_proj"
+                ) and name_mapped not in params_dict:
                     continue
                 else:
                     name = name_mapped
@@ -319,7 +337,8 @@ class Glm4MoeLiteMTP(nn.Module, SupportsPP, Glm4MixtureOfExperts):
                     split_dim = 1 if "down_proj.weight" in name else 0
                     total = loaded_weight.shape[split_dim]
                     assert total % num_chunks == 0, (
-                        f"Shared expert weight dim {total} not divisible by num_chunks {num_chunks}"
+                        f"Shared expert weight dim {total} "
+                        f"not divisible by num_chunks {num_chunks}"
                     )
                     chunk_size = total // num_chunks
 
@@ -329,9 +348,13 @@ class Glm4MoeLiteMTP(nn.Module, SupportsPP, Glm4MixtureOfExperts):
 
                     if is_fusion_moe_shared_experts_layer:
                         if split_dim == 0:
-                            weight_to_load = loaded_weight[j * chunk_size : (j + 1) * chunk_size, :]
+                            weight_to_load = loaded_weight[
+                                j * chunk_size : (j + 1) * chunk_size, :
+                            ]
                         else:
-                            weight_to_load = loaded_weight[:, j * chunk_size : (j + 1) * chunk_size]
+                            weight_to_load = loaded_weight[
+                                :, j * chunk_size : (j + 1) * chunk_size
+                            ]
                         # Synthesize an expert-style name so expert mapping
                         # can route it
                         chunk_name = name.replace(
@@ -360,7 +383,9 @@ class Glm4MoeLiteMTP(nn.Module, SupportsPP, Glm4MixtureOfExperts):
                         # We should ask the weight loader to return success or
                         # not here since otherwise we may skip experts with
                         # other available replicas.
-                        weight_loader = typing.cast(Callable[..., bool], param.weight_loader)
+                        weight_loader = typing.cast(
+                            Callable[..., bool], param.weight_loader
+                        )
                         success = weight_loader(
                             param,
                             weight_to_load,
@@ -392,11 +417,16 @@ class Glm4MoeLiteMTP(nn.Module, SupportsPP, Glm4MixtureOfExperts):
 
                         # According to DeepSeek-V3 Technical Report, MTP modules
                         # shares embedding layer. We only load the first weights.
-                        if spec_layer != self.model.mtp_start_layer_idx and ".layers" not in name:
+                        if (
+                            spec_layer != self.model.mtp_start_layer_idx
+                            and ".layers" not in name
+                        ):
                             continue
 
                         param = params_dict[name]
-                        weight_loader = getattr(param, "weight_loader", default_weight_loader)
+                        weight_loader = getattr(
+                            param, "weight_loader", default_weight_loader
+                        )
                         weight_loader(param, loaded_weight)
             if not is_fusion_moe_shared_experts_layer:
                 loaded_params.add(name)
@@ -426,7 +456,9 @@ class Glm4MoeLiteMTP(nn.Module, SupportsPP, Glm4MixtureOfExperts):
                 break
         if not spec_layer_weight:
             # treat rest weights as weights for transformer layer block
-            name = name.replace(f"model.layers.{spec_layer}.", f"model.layers.{spec_layer}.mtp_block.")
+            name = name.replace(
+                f"model.layers.{spec_layer}.", f"model.layers.{spec_layer}.mtp_block."
+            )
         elif shared_weight:
             # treat shared weights as top level weights
             name = name.replace(f"model.layers.{spec_layer}.", "model.")

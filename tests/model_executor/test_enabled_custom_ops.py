@@ -1,14 +1,29 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 import torch
-from aphrodite.modeling.custom_op import CustomOp
-from aphrodite.modeling.layers.activation import GeluAndMul, ReLUSquaredActivation, SiluAndMul
-from aphrodite.modeling.layers.fused_moe.fused_moe import aphrodite_topk_softmax, dispatch_topk_func
-from aphrodite.modeling.layers.fused_moe.rocm_aiter_fused_moe import is_rocm_aiter_moe_enabled
-from aphrodite.modeling.layers.layernorm import RMSNorm, dispatch_rocm_rmsnorm_func, fused_add_rms_norm, rms_norm
 
-from aphrodite.config import AphroditeConfig, CompilationConfig, set_current_aphrodite_config
+from aphrodite._aiter_ops import rocm_aiter_ops
+from aphrodite.config import (
+    CompilationConfig,
+    AphroditeConfig,
+    get_cached_compilation_config,
+    set_current_vllm_config,
+)
+from aphrodite.model_executor.custom_op import CustomOp, op_registry
+from aphrodite.model_executor.layers.activation import (
+    GeluAndMul,
+    ReLUSquaredActivation,
+    SiluAndMul,
+)
+from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import (
+    dispatch_topk_sigmoid_func,
+    dispatch_topk_softmax_func,
+    vllm_topk_sigmoid,
+    vllm_topk_softmax,
+)
+from aphrodite.model_executor.layers.layernorm import RMSNorm
 from aphrodite.platforms import current_platform
 
 RMS_NORM_SUPPORTED_DTYPES = [torch.float16, torch.bfloat16]
@@ -68,26 +83,29 @@ def test_enabled_ops(
     default_on: bool,
 ):
     custom_ops = env.split(",") if env else []
-    aphrodite_config = AphroditeConfig(
-        compilation_config=CompilationConfig(backend=backend, mode=compilation_mode, custom_ops=custom_ops)
+    vllm_config = AphroditeConfig(
+        compilation_config=CompilationConfig(
+            backend=backend, mode=compilation_mode, custom_ops=custom_ops
+        )
     )
-    with set_current_aphrodite_config(aphrodite_config):
+    get_cached_compilation_config.cache_clear()
+    with set_current_vllm_config(vllm_config):
         assert CustomOp.default_on() == default_on
 
         ops_enabled = [bool(x) for x in ops_enabled]
 
         assert RMSNorm(1024).enabled() == ops_enabled[0]
-        assert CustomOp.op_registry["rms_norm"].enabled() == ops_enabled[0]
+        assert op_registry["rms_norm"].enabled() == ops_enabled[0]
 
         assert SiluAndMul().enabled() == ops_enabled[1]
-        assert CustomOp.op_registry["silu_and_mul"].enabled() == ops_enabled[1]
+        assert op_registry["silu_and_mul"].enabled() == ops_enabled[1]
 
         assert GeluAndMul().enabled() == ops_enabled[2]
-        assert CustomOp.op_registry["gelu_and_mul"].enabled() == ops_enabled[2]
+        assert op_registry["gelu_and_mul"].enabled() == ops_enabled[2]
 
         # If registered, subclasses should follow their own name
         assert Relu3().enabled() == ops_enabled[3]
-        assert CustomOp.op_registry["relu3"].enabled() == ops_enabled[3]
+        assert op_registry["relu3"].enabled() == ops_enabled[3]
 
         # Unregistered subclass
         class SiluAndMul2(SiluAndMul):
@@ -97,55 +115,37 @@ def test_enabled_ops(
         assert SiluAndMul2().enabled() == SiluAndMul().enabled()
 
 
-@pytest.mark.parametrize("env", ["all,none", "all,+rms_norm,all", "+rms_norm,-rms_norm"])
+@pytest.mark.parametrize(
+    "env", ["all,none", "all,+rms_norm,all", "+rms_norm,-rms_norm"]
+)
 def test_enabled_ops_invalid(env: str):
     with pytest.raises(Exception):  # noqa
-        aphrodite_config = AphroditeConfig(compilation_config=CompilationConfig(custom_ops=env.split(",")))
-        with set_current_aphrodite_config(aphrodite_config):
+        vllm_config = AphroditeConfig(
+            compilation_config=CompilationConfig(custom_ops=env.split(","))
+        )
+        with set_current_vllm_config(vllm_config):
             RMSNorm(1024).enabled()
 
 
-@pytest.mark.parametrize("use_rocm_aiter", ["0", "1"])
-def test_topk_dispatch(use_rocm_aiter: str, monkeypatch):
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", use_rocm_aiter)
-    topk_func = dispatch_topk_func()
-    is_rocm_aiter_moe_enabled.cache_clear()
-    if current_platform.is_rocm() and int(use_rocm_aiter):
-        from aphrodite.modeling.layers.fused_moe.rocm_aiter_fused_moe import rocm_aiter_topk_softmax
+@pytest.mark.parametrize(
+    "use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False]
+)
+def test_topk_softmax_dispatch(use_rocm_aiter: bool):
+    topk_func = dispatch_topk_softmax_func(use_rocm_aiter)
 
-        assert topk_func == rocm_aiter_topk_softmax
+    if current_platform.is_rocm() and use_rocm_aiter:
+        assert topk_func == rocm_aiter_ops.topk_softmax
     else:
-        assert topk_func == aphrodite_topk_softmax
+        assert topk_func == vllm_topk_softmax
 
 
-@pytest.mark.parametrize("add_residual", [True, False])
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.bfloat16])
-@pytest.mark.parametrize("use_rocm_aiter", ["0", "1"])
-@pytest.mark.parametrize("use_rocm_aiter_norm", ["0", "1"])
-@pytest.mark.skipif(not current_platform.is_rocm(), reason="AITER is a feature exclusive for ROCm")
-def test_rms_norm_dispatch(
-    add_residual: bool,
-    dtype: torch.dtype,
-    use_rocm_aiter: str,
-    use_rocm_aiter_norm: str,
-    monkeypatch,
-):
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", use_rocm_aiter)
-    monkeypatch.setenv("APHRODITE_ROCM_USE_AITER_RMSNORM", use_rocm_aiter_norm)
-    rms_norm_func = dispatch_rocm_rmsnorm_func(add_residual, dtype)
+@pytest.mark.parametrize(
+    "use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False]
+)
+def test_topk_sigmoid_dispatch(use_rocm_aiter: bool):
+    topk_func = dispatch_topk_sigmoid_func(use_rocm_aiter)
 
-    should_use_rocm_aiter = (
-        current_platform.is_rocm()
-        and int(use_rocm_aiter)
-        and int(use_rocm_aiter_norm)
-        and dtype in RMS_NORM_SUPPORTED_DTYPES
-    )
-
-    if add_residual and should_use_rocm_aiter:
-        assert rms_norm_func == torch.ops.aphrodite.rocm_aiter_rmsnorm2d_fwd_with_add
-    elif should_use_rocm_aiter:
-        assert rms_norm_func == torch.ops.aphrodite.rocm_aiter_rms_norm
-    elif add_residual:
-        assert rms_norm_func == fused_add_rms_norm
+    if current_platform.is_rocm() and use_rocm_aiter:
+        assert topk_func == rocm_aiter_ops.topk_sigmoid
     else:
-        assert rms_norm_func == rms_norm
+        assert topk_func == vllm_topk_sigmoid

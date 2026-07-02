@@ -49,7 +49,7 @@ class SchedulerInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def schedule(self) -> "SchedulerOutput":
+    def schedule(self, throttle_prefills: bool = False) -> "SchedulerOutput":
         """Schedule the requests to process in this scheduling step.
 
         The scheduling decision is made at the iteration level. Each scheduling
@@ -68,6 +68,12 @@ class SchedulerInterface(ABC):
         or the batch as a whole. The model runner will use this information in
         preparing inputs to the model.
 
+        Args:
+            throttle_prefills: DP prefill balancing. When True (set by the DP
+                engine core on non-cadence-aligned steps), new prefill compute is
+                deferred to a later step so prefills stay aligned across DP ranks;
+                automatically overridden when the rank is saturated.
+
         Returns:
             A SchedulerOutput object containing information about the scheduled
             requests.
@@ -75,7 +81,9 @@ class SchedulerInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_grammar_bitmask(self, scheduler_output: "SchedulerOutput") -> "GrammarOutput | None":
+    def get_grammar_bitmask(
+        self, scheduler_output: "SchedulerOutput"
+    ) -> "GrammarOutput | None":
         raise NotImplementedError
 
     @abstractmethod
@@ -196,7 +204,9 @@ class SchedulerInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def reset_prefix_cache(self, reset_running_requests: bool = False, reset_connector: bool = False) -> bool:
+    def reset_prefix_cache(
+        self, reset_running_requests: bool = False, reset_connector: bool = False
+    ) -> bool:
         """Reset the prefix cache for KV cache.
 
         This is particularly required when the model weights are live-updated.

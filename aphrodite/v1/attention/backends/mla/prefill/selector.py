@@ -13,6 +13,7 @@ import torch
 
 from aphrodite.logger import init_logger
 from aphrodite.platforms.interface import DeviceCapability
+from aphrodite.v1.attention.backends.mla.prefill.base import MLADimensions
 from aphrodite.v1.attention.backends.mla.prefill.registry import MLAPrefillBackendEnum
 
 if TYPE_CHECKING:
@@ -31,24 +32,17 @@ class MLAPrefillSelectorConfig(NamedTuple):
     """
 
     dtype: torch.dtype
-    is_r1_compatible: bool
+    mla_dimensions: MLADimensions = MLADimensions(
+        qk_nope_head_dim=0,
+        qk_rope_head_dim=0,
+        v_head_dim=0,
+    )
 
-
-def is_deepseek_r1_mla_compatible(aphrodite_config: "AphroditeConfig") -> bool:
-    """Check if model has DeepSeek R1 compatible MLA dimensions.
-
-    DeepSeek R1 MLA dimensions are:
-    - qk_nope_head_dim = 128
-    - qk_rope_head_dim = 64
-    - v_head_dim = 128
-    """
-    if aphrodite_config.model_config is None:
-        return False
-    hf_text_config = aphrodite_config.model_config.hf_text_config
-    qk_nope_head_dim = getattr(hf_text_config, "qk_nope_head_dim", 1)
-    qk_rope_head_dim = getattr(hf_text_config, "qk_rope_head_dim", 1)
-    v_head_dim = getattr(hf_text_config, "v_head_dim", 1)
-    return qk_nope_head_dim == 128 and qk_rope_head_dim == 64 and v_head_dim == 128
+    def __repr__(self):
+        return (
+            f"MLAPrefillSelectorConfig(dtype={self.dtype}, "
+            f"mla_dimensions={self.mla_dimensions})"
+        )
 
 
 def _get_mla_prefill_backend_priorities(
@@ -62,11 +56,20 @@ def _get_mla_prefill_backend_priorities(
     Returns:
         List of backends in priority order (highest priority first).
     """
+    from aphrodite.platforms import current_platform
+
+    if current_platform.is_rocm():
+        return [
+            MLAPrefillBackendEnum.ROCM_AITER_FA,
+            MLAPrefillBackendEnum.FLASH_ATTN,
+        ]
+
     if device_capability.major == 10:  # Blackwell
         return [
             MLAPrefillBackendEnum.FLASH_ATTN,
             MLAPrefillBackendEnum.TRTLLM_RAGGED,
             MLAPrefillBackendEnum.FLASHINFER,
+            MLAPrefillBackendEnum.TOKENSPEED_MLA,
         ]
     else:  # Hopper (SM90) and older
         return [
@@ -93,22 +96,35 @@ def get_mla_prefill_backend(
 
     device_capability = current_platform.get_device_capability()
     if device_capability is None:
-        logger.info_once("Device capability not available, using FlashAttention MLA prefill backend.")
+        logger.info_once(
+            "Device capability not available, using FlashAttention MLA prefill backend."
+        )
         return MLAPrefillBackendEnum.FLASH_ATTN.get_class()
 
     attention_config = aphrodite_config.attention_config
 
-    selector_config = MLAPrefillSelectorConfig(
-        dtype=aphrodite_config.model_config.dtype,
-        is_r1_compatible=is_deepseek_r1_mla_compatible(aphrodite_config),
-    )
+    model_config = aphrodite_config.model_config
+    if model_config is None:
+        selector_config = MLAPrefillSelectorConfig(dtype=torch.get_default_dtype())
+    else:
+        hf_text_config = model_config.hf_text_config
+        selector_config = MLAPrefillSelectorConfig(
+            dtype=model_config.dtype,
+            mla_dimensions=MLADimensions(
+                qk_nope_head_dim=getattr(hf_text_config, "qk_nope_head_dim", 0),
+                qk_rope_head_dim=getattr(hf_text_config, "qk_rope_head_dim", 0),
+                v_head_dim=getattr(hf_text_config, "v_head_dim", 0),
+            ),
+        )
 
     if attention_config.mla_prefill_backend is not None:
         selected_backend = attention_config.mla_prefill_backend
         backend_cls: type[MLAPrefillBackend] | None = None
         try:
             backend_cls = selected_backend.get_class()
-            invalid_reasons = backend_cls.validate_configuration(device_capability, selector_config)
+            invalid_reasons = backend_cls.validate_configuration(
+                device_capability, selector_config
+            )
         except ImportError:
             invalid_reasons = ["ImportError"]
         if invalid_reasons:
@@ -148,7 +164,9 @@ def _auto_select_mla_prefill_backend(
         backend_cls: type[MLAPrefillBackend] | None = None
         try:
             backend_cls = backend_enum.get_class()
-            invalid_reasons = backend_cls.validate_configuration(device_capability, selector_config)
+            invalid_reasons = backend_cls.validate_configuration(
+                device_capability, selector_config
+            )
         except ImportError:
             invalid_reasons = ["ImportError"]
         if not invalid_reasons:
@@ -158,7 +176,12 @@ def _auto_select_mla_prefill_backend(
         all_invalid_reasons[backend_enum.name] = invalid_reasons
 
     reasons_str = (
-        "{" + ", ".join(f"{name}: [{', '.join(reasons)}]" for name, reasons in all_invalid_reasons.items()) + "}"
+        "{"
+        + ", ".join(
+            f"{name}: [{', '.join(reasons)}]"
+            for name, reasons in all_invalid_reasons.items()
+        )
+        + "}"
     )
     config_str = repr(selector_config)
     logger.debug_once(
@@ -167,4 +190,6 @@ def _auto_select_mla_prefill_backend(
         reasons_str,
     )
 
-    raise ValueError(f"No valid MLA prefill backend found with {config_str}. Reasons: {reasons_str}.")
+    raise ValueError(
+        f"No valid MLA prefill backend found with {config_str}. Reasons: {reasons_str}."
+    )

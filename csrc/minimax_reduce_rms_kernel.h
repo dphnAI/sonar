@@ -19,9 +19,9 @@
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
 
-#include <torch/types.h>
+#include <torch/headeronly/core/ScalarType.h>
 
-namespace aphrodite {
+namespace vllm {
 namespace tensorrt_llm {
 
 template <typename DType>
@@ -51,7 +51,7 @@ static constexpr int kElemsPerAccess = ElemsPerAccess<DType>::value;
 struct MiniMaxReduceRMSParams {
   int nranks{};
   int rank{};
-  at::ScalarType dtype{at::ScalarType::Undefined};
+  torch::headeronly::ScalarType dtype{torch::headeronly::ScalarType::Undefined};
   int size_q{};
   int hidden_dim{};
   int size_k{};
@@ -76,4 +76,4 @@ struct MiniMaxReduceRMSParams {
 void minimax_reduce_rms_op(MiniMaxReduceRMSParams const& params);
 
 }  // namespace tensorrt_llm
-}  // namespace aphrodite
+}  // namespace vllm

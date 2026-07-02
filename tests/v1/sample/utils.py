@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 from collections.abc import Iterator
 from enum import Enum
 from typing import NamedTuple
@@ -121,7 +122,9 @@ def assert_incr_detok_str_matches_non_incr_detok_str(
       msg: error message if `assert` fails
     """
     rgx = r"[^a-zA-Z0-9]+"
-    assert re.sub(rgx, "", incremental_detokenization_str) == re.sub(rgx, "", non_incremental_detokenization_str), msg
+    assert re.sub(rgx, "", incremental_detokenization_str) == re.sub(
+        rgx, "", non_incremental_detokenization_str
+    ), msg
 
 
 def compute_correct_cumulative_logprob(completion_output: CompletionOutput) -> float:
@@ -144,8 +147,12 @@ def create_fake_logits(batch_size: int, vocab_size: int) -> torch.Tensor:
     return fake_logits
 
 
-def create_penalty_tensor(batch_size: int, penalty_value: float, device: torch.device) -> torch.Tensor:
-    return torch.full((batch_size,), fill_value=penalty_value, dtype=torch.float, device=device)
+def create_penalty_tensor(
+    batch_size: int, penalty_value: float, device: torch.device
+) -> torch.Tensor:
+    return torch.full(
+        (batch_size,), fill_value=penalty_value, dtype=torch.float, device=device
+    )
 
 
 def create_prompt_tokens_tensor(
@@ -180,7 +187,9 @@ class LogitsprocsTestFakes(NamedTuple):
         Returns:
           Iterator over logits processors
         """
-        return (lp for lp in self.sampling_metadata.logitsprocs.all if isinstance(lp, cls))
+        return (
+            lp for lp in self.sampling_metadata.logitsprocs.all if isinstance(lp, cls)
+        )
 
     def get_logitsprocs(self) -> Iterator[LogitsProcessor]:
         """Iterator over all logits processors."""
@@ -189,22 +198,43 @@ class LogitsprocsTestFakes(NamedTuple):
 
 def fake_update_logitsprocs_state(
     test_fakes: LogitsprocsTestFakes,
-    batch_update: BatchUpdate,
+    batch_update: BatchUpdate | None,
 ) -> None:
     """Imitate logits processors persistent batch state update
     in engine core"""
     for logitproc in test_fakes.get_logitsprocs():
         logitproc.update_state(batch_update)
+    holder = test_fakes.sampling_metadata.thinking_budget_state_holder
+    if holder is not None:
+        holder.sync_batch(batch_update)
 
 
 def fake_apply_logitsprocs(
     test_fakes: LogitsprocsTestFakes,
     slice_indices: list[int],
+    slot_output_token_ids: list[list[int]] | None = None,
 ) -> torch.Tensor:
-    """Imitate application of logits processors in engine core"""
+    """Imitate application of logits processors in engine core.
+
+    When ``thinking_budget_state_holder`` has tracked requests, this mirrors
+    :meth:`Sampler.apply_logits_processors` by refreshing per-slot
+    ``output_token_ids`` (if ``slot_output_token_ids`` is provided), then
+    ``update_state`` + ``apply_to_logits`` on the holder after built-in logits
+    processors.
+    """
     logits = test_fakes.logits[torch.tensor(slice_indices, dtype=torch.long)].clone()
     for processor in test_fakes.get_logitsprocs():
         logits = processor.apply(logits)
+
+    md = test_fakes.sampling_metadata
+    holder = md.thinking_budget_state_holder
+    if holder is not None and holder.has_tracked_requests():
+        if slot_output_token_ids is not None:
+            for i, toks in enumerate(slot_output_token_ids):
+                if i < len(md.output_token_ids):
+                    md.output_token_ids[i] = list(toks)
+        holder.update_state(md.output_token_ids, md.spec_token_ids, None)
+        logits = holder.apply_to_logits(logits, False, md.spec_token_ids)
     return logits
 
 
@@ -219,7 +249,9 @@ def create_allowed_token_ids(
         if i % 2 == 1:
             continue
         if mask is None:
-            mask = torch.zeros((batch_size, vocab_size), dtype=torch.bool, device=device)
+            mask = torch.zeros(
+                (batch_size, vocab_size), dtype=torch.bool, device=device
+            )
         start = min(i, vocab_size - 1)
         end = min(i + num_allowed_token_ids, vocab_size - 1)
         mask[i, start:end] = True

@@ -1,15 +1,25 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import copy
 import time
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor
+from unittest.mock import PropertyMock, patch
 
 import pytest
-from aphrodite.engine.args_tools import EngineArgs
 from transformers import AutoTokenizer
 
 from aphrodite import SamplingParams
+from aphrodite.config import (
+    CacheConfig,
+    ECTransferConfig,
+    KVTransferConfig,
+    ModelConfig,
+    SchedulerConfig,
+    AphroditeConfig,
+)
+from aphrodite.engine.arg_utils import EngineArgs
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import set_default_torch_num_threads
 from aphrodite.v1.engine import EngineCoreRequest
@@ -31,15 +41,20 @@ TOKENIZER = AutoTokenizer.from_pretrained(MODEL_NAME)
 PROMPT = "I am Gyoubu Masataka Oniwa"
 PROMPT_TOKENS = TOKENIZER(PROMPT).input_ids
 
+_REQUEST_COUNTER = 0
+
 
 def make_request() -> EngineCoreRequest:
+    global _REQUEST_COUNTER
+    _REQUEST_COUNTER += 1
+    request_id = f"request-{_REQUEST_COUNTER}"
     return EngineCoreRequest(
-        request_id=str(uuid.uuid4()),
+        request_id=request_id,
+        external_req_id=f"{request_id}-{uuid.uuid4()}",
         prompt_token_ids=PROMPT_TOKENS,
         mm_features=None,
         sampling_params=SamplingParams(),
         pooling_params=None,
-        eos_token_id=None,
         arrival_time=time.time(),
         lora_request=None,
         cache_salt=None,
@@ -51,11 +66,13 @@ def make_request() -> EngineCoreRequest:
 def test_engine_core():
     """Setup the EngineCore."""
     engine_args = EngineArgs(model=MODEL_NAME)
-    aphrodite_config = engine_args.create_engine_config()
-    executor_class = Executor.get_class(aphrodite_config)
+    vllm_config = engine_args.create_engine_config()
+    executor_class = Executor.get_class(vllm_config)
 
     with set_default_torch_num_threads(1):
-        engine_core = EngineCore(aphrodite_config=aphrodite_config, executor_class=executor_class, log_stats=True)
+        engine_core = EngineCore(
+            vllm_config=vllm_config, executor_class=executor_class, log_stats=True
+        )
     """Test basic request lifecycle."""
 
     # First request.
@@ -63,7 +80,7 @@ def test_engine_core():
     assert len(engine_core.scheduler.waiting) == 1
     assert len(engine_core.scheduler.running) == 0
 
-    _ = engine_core.step()
+    _ = engine_core.step_fn()
     assert len(engine_core.scheduler.waiting) == 0
     assert len(engine_core.scheduler.running) == 1
 
@@ -72,7 +89,7 @@ def test_engine_core():
     assert len(engine_core.scheduler.waiting) == 1
     assert len(engine_core.scheduler.running) == 1
 
-    _ = engine_core.step()
+    _ = engine_core.step_fn()
     assert len(engine_core.scheduler.waiting) == 0
     assert len(engine_core.scheduler.running) == 2
 
@@ -82,12 +99,12 @@ def test_engine_core():
     assert len(engine_core.scheduler.waiting) == 2
     assert len(engine_core.scheduler.running) == 2
 
-    _ = engine_core.step()
+    _ = engine_core.step_fn()
     assert len(engine_core.scheduler.waiting) == 0
     assert len(engine_core.scheduler.running) == 4
 
     # Loop through until they are all done.
-    while (outs := engine_core.step()[0].get(0)) and outs.outputs:
+    while (outs := engine_core.step_fn()[0].get(0)) and outs.outputs:
         pass
 
     assert len(engine_core.scheduler.waiting) == 0
@@ -104,7 +121,7 @@ def test_engine_core():
     assert engine_core.scheduler.has_unfinished_requests()
     assert not engine_core.scheduler.has_finished_requests()
 
-    _ = engine_core.step()
+    _ = engine_core.step_fn()
     assert len(engine_core.scheduler.waiting) == 0
     assert len(engine_core.scheduler.running) == 1
     assert engine_core.scheduler.has_unfinished_requests()
@@ -116,7 +133,7 @@ def test_engine_core():
     assert not engine_core.scheduler.has_unfinished_requests()
     assert engine_core.scheduler.has_finished_requests()
 
-    _ = engine_core.step()
+    _ = engine_core.step_fn()
     assert not engine_core.scheduler.has_unfinished_requests()
     assert not engine_core.scheduler.has_finished_requests()
 
@@ -130,7 +147,7 @@ def test_engine_core():
     assert len(engine_core.scheduler.waiting) == 2
     assert len(engine_core.scheduler.running) == 0
 
-    _ = engine_core.step()
+    _ = engine_core.step_fn()
     assert len(engine_core.scheduler.waiting) == 0
     assert len(engine_core.scheduler.running) == 2
 
@@ -138,7 +155,7 @@ def test_engine_core():
     assert len(engine_core.scheduler.waiting) == 1
     assert len(engine_core.scheduler.running) == 2
 
-    _ = engine_core.step()
+    _ = engine_core.step_fn()
     assert len(engine_core.scheduler.waiting) == 0
     assert len(engine_core.scheduler.running) == 3
 
@@ -147,7 +164,7 @@ def test_engine_core():
     assert len(engine_core.scheduler.waiting) == 0
     assert len(engine_core.scheduler.running) == 2
 
-    _ = engine_core.step()
+    _ = engine_core.step_fn()
     assert len(engine_core.scheduler.waiting) == 0
     assert len(engine_core.scheduler.running) == 2
 
@@ -162,12 +179,12 @@ def test_engine_core():
     req0.request_id = req1.request_id = "test"
     engine_core.add_request(*engine_core.preprocess_add_request(req0))
 
-    while (outs := engine_core.step()[0].get(0)) and outs.outputs:
-        pass
+    while engine_core.scheduler.has_requests():
+        engine_core.step_fn()
 
     engine_core.add_request(*engine_core.preprocess_add_request(req1))
-    while (outs := engine_core.step()[0].get(0)) and outs.outputs:
-        pass
+    while engine_core.scheduler.has_requests():
+        engine_core.step_fn()
 
     assert len(engine_core.scheduler.waiting) == 0
     assert len(engine_core.scheduler.running) == 0
@@ -182,11 +199,13 @@ def test_engine_core_advanced_sampling():
     """
     """Setup the EngineCore."""
     engine_args = EngineArgs(model=MODEL_NAME)
-    aphrodite_config = engine_args.create_engine_config()
-    executor_class = Executor.get_class(aphrodite_config)
+    vllm_config = engine_args.create_engine_config()
+    executor_class = Executor.get_class(vllm_config)
 
     with set_default_torch_num_threads(1):
-        engine_core = EngineCore(aphrodite_config=aphrodite_config, executor_class=executor_class, log_stats=True)
+        engine_core = EngineCore(
+            vllm_config=vllm_config, executor_class=executor_class, log_stats=True
+        )
     """Test basic request lifecycle."""
     # First request.
     request: EngineCoreRequest = make_request()
@@ -203,8 +222,8 @@ def test_engine_core_advanced_sampling():
         assert len(engine_core.scheduler.waiting) == 1
         assert len(engine_core.scheduler.running) == 0
         # Loop through until they are all done.
-        while (outs := engine_core.step()[0].get(0)) and outs.outputs:
-            pass
+        while engine_core.scheduler.has_requests():
+            engine_core.step_fn()
         assert len(engine_core.scheduler.waiting) == 0
         assert len(engine_core.scheduler.running) == 0
 
@@ -258,7 +277,9 @@ def test_engine_core_concurrent_batches():
             # Use the thread pool instead of creating a new thread
             return self.thread_pool.submit(_execute)
 
-        def sample_tokens(self, grammar_output, non_block=False) -> Future[ModelRunnerOutput]:
+        def sample_tokens(
+            self, grammar_output, non_block=False
+        ) -> Future[ModelRunnerOutput]:
             """Make sample_tokens non-blocking."""
 
             # DummyExecutor used only for testing async case.
@@ -273,10 +294,6 @@ def test_engine_core_concurrent_batches():
             # Use the thread pool instead of creating a new thread
             return self.thread_pool.submit(_execute)
 
-        @property
-        def max_concurrent_batches(self) -> int:
-            return 2
-
         def shutdown(self):
             if hasattr(self, "thread_pool"):
                 self.thread_pool.shutdown(wait=False)
@@ -290,10 +307,24 @@ def test_engine_core_concurrent_batches():
         max_num_batched_tokens=10,
         # Reduce startup time.
         enforce_eager=True,
+        # Test concurrent batch behaviour independently of async scheduling.
+        async_scheduling=False,
     )
-    aphrodite_config = engine_args.create_engine_config()
-    with set_default_torch_num_threads(1):
-        engine_core = EngineCore(aphrodite_config=aphrodite_config, log_stats=False, executor_class=DummyExecutor)
+    vllm_config = engine_args.create_engine_config()
+    # Force two concurrent batches to exercise the batch queue independently
+    # of async scheduling (which is disabled above).
+    with (
+        set_default_torch_num_threads(1),
+        patch.object(
+            AphroditeConfig,
+            "max_concurrent_batches",
+            new_callable=PropertyMock,
+            return_value=2,
+        ),
+    ):
+        engine_core = EngineCore(
+            vllm_config=vllm_config, log_stats=False, executor_class=DummyExecutor
+        )
     assert engine_core.batch_queue is not None
 
     # Add two requests in a row. Each request have 12 prompt tokens.
@@ -359,7 +390,10 @@ def test_engine_core_concurrent_batches():
         assert output is not None
         assert len(output[0].outputs) == 1
         if req_id in engine_core.scheduler.requests:
-            assert engine_core.scheduler.requests[req_id].num_tokens == expected_num_tokens[req_id]
+            assert (
+                engine_core.scheduler.requests[req_id].num_tokens
+                == expected_num_tokens[req_id]
+            )
         expected_num_tokens[req_id] += 1
         req_id = (req_id + 1) % 2
 
@@ -377,17 +411,23 @@ def test_engine_core_tp():
         # Reduce startup time.
         enforce_eager=True,
     )
-    aphrodite_config = engine_args.create_engine_config()
-    executor_class = Executor.get_class(aphrodite_config)
+    vllm_config = engine_args.create_engine_config()
+    executor_class = Executor.get_class(vllm_config)
 
     with set_default_torch_num_threads(1):
-        engine_core = EngineCore(aphrodite_config=aphrodite_config, executor_class=executor_class, log_stats=True)
+        engine_core = EngineCore(
+            vllm_config=vllm_config, executor_class=executor_class, log_stats=True
+        )
 
     def get_worker_cache_config_field(worker, key: str):
         return getattr(worker.cache_config, key)
 
-    num_gpu_blocks = engine_core.collective_rpc(get_worker_cache_config_field, args=("num_gpu_blocks",))
-    num_cpu_blocks = engine_core.collective_rpc(get_worker_cache_config_field, args=("num_cpu_blocks",))
+    num_gpu_blocks = engine_core.collective_rpc(
+        get_worker_cache_config_field, args=("num_gpu_blocks",)
+    )
+    num_cpu_blocks = engine_core.collective_rpc(
+        get_worker_cache_config_field, args=("num_cpu_blocks",)
+    )
     assert all(x is not None for x in num_gpu_blocks)
     assert all(x is not None for x in num_cpu_blocks)
 
@@ -396,11 +436,13 @@ def test_engine_core_tp():
 def test_engine_core_invalid_request_id_type():
     """Test that engine raises TypeError for non-string request_id."""
     engine_args = EngineArgs(model=MODEL_NAME)
-    aphrodite_config = engine_args.create_engine_config()
-    executor_class = Executor.get_class(aphrodite_config)
+    vllm_config = engine_args.create_engine_config()
+    executor_class = Executor.get_class(vllm_config)
 
     with set_default_torch_num_threads(1):
-        engine_core = EngineCore(aphrodite_config=aphrodite_config, executor_class=executor_class, log_stats=True)
+        engine_core = EngineCore(
+            vllm_config=vllm_config, executor_class=executor_class, log_stats=True
+        )
 
     # Test with UUID object (common mistake)
     uuid_request = make_request()
@@ -431,39 +473,138 @@ def test_engine_core_invalid_request_id_type():
 
 
 @create_new_process_for_each_test()
-def test_engine_core_kv_cache_properties():
-    """Test that max_concurrency and kv_cache_size_tokens properties are accessible on EngineCore."""
-    engine_args = EngineArgs(model=MODEL_NAME)
-    aphrodite_config = engine_args.create_engine_config()
-    executor_class = Executor.get_class(aphrodite_config)
+@pytest.mark.parametrize(
+    ("ec_role", "gpu_memory_utilization", "enable_prefix_caching"),
+    [
+        ("ec_producer", 0.01, False),
+        # NOTE: ec_producer never allows prefix caching
+        ("ec_consumer", 0.7, True),
+        ("ec_consumer", 0.7, False),
+    ],
+)
+@pytest.mark.parametrize("use_kv_connector", [False, True])
+def test_encoder_instance_zero_kv_cache(
+    ec_role: str,
+    gpu_memory_utilization: float,
+    enable_prefix_caching: bool,
+    use_kv_connector: bool,
+):
+    """EPD (Encoder-Prefill-Decode) Encoder-cache-specific tests
+
+    This test verifies encoder-only instance initializes with 0 KV cache blocks.
+    Under EPD disagg mode, Encoder instances (EC producer role) only execute
+    vision encoder, so they don't need KV cache for text generation.
+    """
+    # Form aphrodite config
+    model_config = ModelConfig(
+        model="llava-hf/llava-1.5-7b-hf",  # Multimodal model
+        enforce_eager=True,
+        trust_remote_code=True,
+        dtype="float16",
+        seed=42,
+    )
+    scheduler_config = SchedulerConfig(
+        max_num_seqs=10,
+        max_num_batched_tokens=512,
+        max_model_len=512,
+        disable_hybrid_kv_cache_manager=True,
+        is_encoder_decoder=model_config.is_encoder_decoder,
+    )
+    cache_config = CacheConfig(
+        block_size=16,
+        gpu_memory_utilization=gpu_memory_utilization,
+        cache_dtype="auto",
+        enable_prefix_caching=enable_prefix_caching,
+    )
+    kv_transfer_config = (
+        KVTransferConfig(
+            kv_connector="ExampleConnector",
+            kv_role="kv_both",
+            kv_connector_extra_config={"shared_storage_path": "local_storage"},
+        )
+        if use_kv_connector
+        else None
+    )
+    ec_transfer_config = ECTransferConfig(
+        ec_connector="ECExampleConnector",
+        ec_role=ec_role,
+        ec_connector_extra_config={"shared_storage_path": "/tmp/ec_test_encoder"},
+    )
+
+    vllm_config = AphroditeConfig(
+        model_config=model_config,
+        cache_config=cache_config,
+        scheduler_config=scheduler_config,
+        kv_transfer_config=kv_transfer_config,
+        ec_transfer_config=ec_transfer_config,
+    )
+
+    executor_class = Executor.get_class(vllm_config)
+    print(f"executor_class: {executor_class}")
 
     with set_default_torch_num_threads(1):
-        engine_core = EngineCore(aphrodite_config=aphrodite_config, executor_class=executor_class, log_stats=False)
+        engine_core = EngineCore(
+            vllm_config=vllm_config, executor_class=executor_class, log_stats=True
+        )
 
-    # Test max_concurrency property
-    max_conc = engine_core.max_concurrency
-    assert isinstance(max_conc, float)
-    assert max_conc > 0
+    # Check encoder cache manager exists
+    assert engine_core.scheduler.encoder_cache_manager is not None, (
+        "encoder_cache_manager should exist"
+    )
 
-    # Test kv_cache_size_tokens property
-    kv_cache_tokens = engine_core.kv_cache_size_tokens
-    assert isinstance(kv_cache_tokens, int)
-    assert kv_cache_tokens >= 0  # Can be 0 for models without KV cache
+    if ec_role == "ec_producer":
+        # Check 1: num_blocks should be 0
+        # NOTE: num_blocks=1 as BlockPool always needs a null_block.
+        kv_cache_config = engine_core.scheduler.kv_cache_manager.kv_cache_config
+        print(f"kv_cache_config: {kv_cache_config}")
+        assert kv_cache_config.num_blocks == 1, (
+            f"ec_producer should only have 1 KV blocks, "
+            f"got {kv_cache_config.num_blocks}"
+        )
 
-    # Test kv_cache_size_tokens_str property
-    kv_cache_tokens_str = engine_core.kv_cache_size_tokens_str
-    assert isinstance(kv_cache_tokens_str, str)
-    assert len(kv_cache_tokens_str) > 0
-    # Verify the string represents the same number
-    tokens_from_str = int(kv_cache_tokens_str.replace(",", "")) if kv_cache_tokens_str.replace(",", "") else 0
-    assert tokens_from_str == kv_cache_tokens
+        # Check 2: kv_cache_groups should be empty
+        assert len(kv_cache_config.kv_cache_groups) == 0, (
+            f"ec_producer should have 0 KV cache groups, "
+            f"got {len(kv_cache_config.kv_cache_groups)}"
+        )
 
-    # Test get_max_concurrency method (for RPC access)
-    max_conc_method = engine_core.get_max_concurrency()
-    assert isinstance(max_conc_method, float)
-    assert max_conc_method == max_conc
+        # Check 3: kv_cache_tensors should be empty
+        assert len(kv_cache_config.kv_cache_tensors) == 0, (
+            f"Encoder instance should have 0 KV cache tensors, "
+            f"got {len(kv_cache_config.kv_cache_tensors)}"
+        )
 
-    # Test get_kv_cache_size_tokens method (for RPC access)
-    kv_cache_tokens_method = engine_core.get_kv_cache_size_tokens()
-    assert isinstance(kv_cache_tokens_method, int)
-    assert kv_cache_tokens_method == kv_cache_tokens
+        # Check 4: Verify EC connector is initialized and is producer
+        assert engine_core.scheduler.ec_connector is not None, (
+            "Encoder instance should have EC connector"
+        )
+        assert engine_core.scheduler.ec_connector.is_producer, (
+            "Encoder instance EC connector should be producer"
+        )
+
+        # Check 5: Verify chunked prefill is disabled
+        assert not vllm_config.scheduler_config.enable_chunked_prefill, (
+            "Encoder instance should disable chunked prefill (no KV cache)"
+        )
+
+    elif ec_role == "ec_consumer":
+        # Check 1: num_blocks should be > 1
+        kv_cache_config = engine_core.scheduler.kv_cache_manager.kv_cache_config
+        print(f"kv_cache_config: {kv_cache_config}")
+        assert kv_cache_config.num_blocks > 1, (
+            f"ec_consumer should have >1 KV blocks, got {kv_cache_config.num_blocks}"
+        )
+
+        # Check 2: kv_cache_groups should NOT be empty
+        assert len(kv_cache_config.kv_cache_groups) > 0, (
+            f"ec_consumer should have KV cache groups, "
+            f"got {len(kv_cache_config.kv_cache_groups)}"
+        )
+
+        # Check 3: Verify EC connector is consumer
+        assert engine_core.scheduler.ec_connector is not None, (
+            "Consumer instance should have EC connector"
+        )
+        assert not engine_core.scheduler.ec_connector.is_producer, (
+            "Consumer instance EC connector should be consumer"
+        )

@@ -3,6 +3,7 @@
 """Abstract base class for MLA prefill backends."""
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 import torch
@@ -12,10 +13,25 @@ if TYPE_CHECKING:
     from aphrodite.model_executor.layers.attention.mla_attention import (
         MLACommonPrefillMetadata,
     )
+    from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
     from aphrodite.platforms.interface import DeviceCapability
     from aphrodite.v1.attention.backends.mla.prefill.selector import (
         MLAPrefillSelectorConfig,
     )
+
+
+@dataclass(frozen=True, kw_only=True)
+class MLADimensions:
+    qk_nope_head_dim: int
+    qk_rope_head_dim: int
+    v_head_dim: int
+
+    def __str__(self) -> str:
+        return (
+            f"(qk_nope_head_dim={self.qk_nope_head_dim}, "
+            f"qk_rope_head_dim={self.qk_rope_head_dim}, "
+            f"v_head_dim={self.v_head_dim})"
+        )
 
 
 class MLAPrefillBackend(ABC):
@@ -25,7 +41,7 @@ class MLAPrefillBackend(ABC):
         torch.float16,
         torch.bfloat16,
     ]
-    requires_r1_mla_dimensions: ClassVar[bool] = False
+    supported_mla_dimensions: ClassVar[list[MLADimensions]] = []
 
     @staticmethod
     @abstractmethod
@@ -44,6 +60,12 @@ class MLAPrefillBackend(ABC):
     def is_available(cls) -> bool:
         return True
 
+    def supports_quant_output(self, quant_key: "QuantKey") -> bool:
+        """Whether `run_prefill_new_tokens` can write quantized output
+        directly (fused) for the given quant key, skipping the post-quant
+        pass. Overridden by backends that support it."""
+        return False
+
     @classmethod
     def validate_configuration(
         cls,
@@ -54,7 +76,8 @@ class MLAPrefillBackend(ABC):
 
         if not cls.supports_compute_capability(device_capability):
             invalid_reasons.append(
-                f"compute capability {device_capability.major}.{device_capability.minor} not supported"
+                f"compute capability {device_capability.major}."
+                f"{device_capability.minor} not supported"
             )
 
         if not cls.supports_dtype(selector_config.dtype):
@@ -63,10 +86,14 @@ class MLAPrefillBackend(ABC):
         if not cls.is_available():
             invalid_reasons.append("required dependencies not available")
 
-        if cls.requires_r1_mla_dimensions and not selector_config.is_r1_compatible:
+        if (
+            cls.supported_mla_dimensions
+            and selector_config.mla_dimensions not in cls.supported_mla_dimensions
+        ):
+            supported = ", ".join(str(dims) for dims in cls.supported_mla_dimensions)
             invalid_reasons.append(
-                "model does not have DeepSeek R1 MLA dimensions "
-                "(qk_nope_head_dim=128, qk_rope_head_dim=64, v_head_dim=128)"
+                "Model does not have supported MLA dimensions "
+                f"(got {selector_config.mla_dimensions}; supported: {supported})"
             )
 
         return invalid_reasons
@@ -80,8 +107,6 @@ class MLAPrefillBackend(ABC):
         qk_rope_head_dim: int,
         v_head_dim: int,
         aphrodite_config: "AphroditeConfig",
-        device: torch.device,
-        layer_names: list[str] | None = None,
     ) -> None:
         self.num_heads = num_heads
         self.scale = scale
@@ -90,8 +115,17 @@ class MLAPrefillBackend(ABC):
         self.qk_rope_head_dim = qk_rope_head_dim
         self.v_head_dim = v_head_dim
         self.aphrodite_config = aphrodite_config
-        self.device = device
-        self.layer_names = layer_names
+
+    def clone(self) -> "MLAPrefillBackend":
+        return self.__class__(
+            num_heads=self.num_heads,
+            scale=self.scale,
+            kv_lora_rank=self.kv_lora_rank,
+            qk_nope_head_dim=self.qk_nope_head_dim,
+            qk_rope_head_dim=self.qk_rope_head_dim,
+            v_head_dim=self.v_head_dim,
+            aphrodite_config=self.aphrodite_config,
+        )
 
     def prepare_metadata(  # noqa: B027
         self,
@@ -110,6 +144,8 @@ class MLAPrefillBackend(ABC):
         k: torch.Tensor,
         v: torch.Tensor,
         return_softmax_lse: bool,
+        out: torch.Tensor | None = None,
+        output_scale: torch.Tensor | None = None,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         raise NotImplementedError
 

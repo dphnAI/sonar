@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
+
 import pytest
 import torch
 
 from aphrodite.multimodal.image import rescale_image_size
 
-from ...conftest import IMAGE_ASSETS, AphroditeRunner, ImageTestAssets
+from ...conftest import IMAGE_ASSETS, ImageTestAssets, AphroditeRunner
 from ..utils import check_logprobs_close
 
 HF_IMAGE_PROMPTS = IMAGE_ASSETS.prompts(
@@ -17,7 +19,7 @@ HF_IMAGE_PROMPTS = IMAGE_ASSETS.prompts(
 
 
 def run_awq_test(
-    aphrodite_runner: type[AphroditeRunner],
+    vllm_runner: type[AphroditeRunner],
     image_assets: ImageTestAssets,
     source_model: str,
     quant_model: str,
@@ -45,7 +47,7 @@ def run_awq_test(
     # will hurt multiprocessing backend with fork method (the default method).
 
     # max_model_len should be greater than image_feature_size
-    with aphrodite_runner(
+    with vllm_runner(
         source_model,
         max_model_len=4096,
         dtype=dtype,
@@ -53,13 +55,15 @@ def run_awq_test(
         distributed_executor_backend=distributed_executor_backend,
         enforce_eager=True,
         default_torch_num_threads=1,
-    ) as aphrodite_model:
+    ) as vllm_model:
         source_outputs_per_image = [
-            aphrodite_model.generate_greedy_logprobs(prompts, max_tokens, num_logprobs=num_logprobs, images=images)
+            vllm_model.generate_greedy_logprobs(
+                prompts, max_tokens, num_logprobs=num_logprobs, images=images
+            )
             for prompts, images in inputs_per_image
         ]
 
-    with aphrodite_runner(
+    with vllm_runner(
         quant_model,
         quantization="awq",
         max_model_len=4096,
@@ -68,13 +72,17 @@ def run_awq_test(
         distributed_executor_backend=distributed_executor_backend,
         enforce_eager=True,
         default_torch_num_threads=1,
-    ) as aphrodite_model:
+    ) as vllm_model:
         quant_outputs_per_image = [
-            aphrodite_model.generate_greedy_logprobs(prompts, max_tokens, num_logprobs=num_logprobs, images=images)
+            vllm_model.generate_greedy_logprobs(
+                prompts, max_tokens, num_logprobs=num_logprobs, images=images
+            )
             for prompts, images in inputs_per_image
         ]
 
-    for source_outputs, quant_outputs in zip(source_outputs_per_image, quant_outputs_per_image):
+    for source_outputs, quant_outputs in zip(
+        source_outputs_per_image, quant_outputs_per_image
+    ):
         # TODO: Check whether using original CLIPVisionModel can improve
         # consistency against HF
         check_logprobs_close(
@@ -86,14 +94,43 @@ def run_awq_test(
 
 
 @pytest.mark.parametrize(
+    ("model", "quantization", "dtype"),
+    [
+        ("mattbucci/gemma-4-26B-AWQ", "awq", "float16"),
+        ("cyankiwi/gemma-4-26B-A4B-it-AWQ-4bit", "compressed-tensors", "bfloat16"),
+    ],
+    ids=[
+        "gemma4-moe-standard-awq-dot-suffix",
+        "gemma4-moe-compressed-tensors-underscore-suffix",
+    ],
+)
+@torch.inference_mode()
+def test_awq_load(
+    vllm_runner: type[AphroditeRunner],
+    example_prompts: list[str],
+    model: str,
+    quantization: str,
+    dtype: str,
+) -> None:
+    """Regression test: AWQ weight loading must not KeyError."""
+    with vllm_runner(
+        model,
+        quantization=quantization,
+        dtype=dtype,
+        max_model_len=128,
+        enforce_eager=True,
+    ) as vllm_model:
+        outputs = vllm_model.generate_greedy(example_prompts[:2], max_tokens=32)
+    assert len(outputs) == 2
+
+
+@pytest.mark.parametrize(
     ("source_model", "quant_model"),
     [("OpenGVLab/InternVL2-2B", "OpenGVLab/InternVL2-2B-AWQ")],
 )
 @pytest.mark.parametrize(
     "size_factors",
     [
-        # No image
-        [],
         # Single-scale
         [1.0],
         # Single-scale, batched
@@ -107,7 +144,7 @@ def run_awq_test(
 @pytest.mark.parametrize("num_logprobs", [5])
 @torch.inference_mode()
 def test_awq_models(
-    aphrodite_runner,
+    vllm_runner,
     image_assets,
     source_model,
     quant_model,
@@ -117,7 +154,7 @@ def test_awq_models(
     num_logprobs,
 ) -> None:
     run_awq_test(
-        aphrodite_runner,
+        vllm_runner,
         image_assets,
         source_model,
         quant_model,

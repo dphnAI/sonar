@@ -20,36 +20,55 @@ calculus, each contributing unique perspectives that would shape this new
 field."""
 
 
-def test_smaller_truncation_size(aphrodite_runner, model_name=MODEL_NAME, input_str=input_str):
+def test_smaller_truncation_size(
+    vllm_runner, model_name=MODEL_NAME, input_str=input_str
+):
     truncate_prompt_tokens = 10
 
-    with aphrodite_runner(model_name, runner="pooling", max_model_len=max_model_len) as aphrodite_model:
-        aphrodite_output = aphrodite_model.llm.embed(input_str, truncate_prompt_tokens=truncate_prompt_tokens)
+    with vllm_runner(
+        model_name, runner="pooling", max_model_len=max_model_len
+    ) as vllm_model:
+        vllm_output = vllm_model.llm.embed(
+            input_str,
+            tokenization_kwargs=dict(truncate_prompt_tokens=truncate_prompt_tokens),
+        )
 
-    prompt_tokens = aphrodite_output[0].prompt_token_ids
+    prompt_tokens = vllm_output[0].prompt_token_ids
 
     assert len(prompt_tokens) == truncate_prompt_tokens
 
 
-def test_max_truncation_size(aphrodite_runner, model_name=MODEL_NAME, input_str=input_str):
+def test_max_truncation_size(vllm_runner, model_name=MODEL_NAME, input_str=input_str):
     truncate_prompt_tokens = -1
 
-    with aphrodite_runner(model_name, runner="pooling", max_model_len=max_model_len) as aphrodite_model:
-        aphrodite_output = aphrodite_model.llm.embed(input_str, truncate_prompt_tokens=truncate_prompt_tokens)
+    with vllm_runner(
+        model_name, runner="pooling", max_model_len=max_model_len
+    ) as vllm_model:
+        vllm_output = vllm_model.llm.embed(
+            input_str,
+            tokenization_kwargs=dict(truncate_prompt_tokens=truncate_prompt_tokens),
+        )
 
-    prompt_tokens = aphrodite_output[0].prompt_token_ids
+    prompt_tokens = vllm_output[0].prompt_token_ids
 
     assert len(prompt_tokens) == max_model_len
 
 
-def test_bigger_truncation_size(aphrodite_runner, model_name=MODEL_NAME, input_str=input_str):
+def test_bigger_truncation_size(
+    vllm_runner, model_name=MODEL_NAME, input_str=input_str
+):
     truncate_prompt_tokens = max_model_len + 1
 
     with (
         pytest.raises(ValueError),
-        aphrodite_runner(model_name, runner="pooling", max_model_len=max_model_len) as aphrodite_model,
+        vllm_runner(
+            model_name, runner="pooling", max_model_len=max_model_len
+        ) as vllm_model,
     ):
-        llm_output = aphrodite_model.llm.embed(input_str, truncate_prompt_tokens=truncate_prompt_tokens)
+        llm_output = vllm_model.llm.embed(
+            input_str,
+            tokenization_kwargs=dict(truncate_prompt_tokens=truncate_prompt_tokens),
+        )
 
         assert (
             llm_output

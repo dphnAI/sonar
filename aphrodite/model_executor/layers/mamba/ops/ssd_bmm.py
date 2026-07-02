@@ -69,7 +69,6 @@ def _bmm_chunk_fwd_kernel(
     out_ptr,
     cu_chunk_seqlens_ptr,
     # Matrix dimensions
-    seqlen,
     chunk_size: tl.constexpr,
     K: tl.constexpr,
     ngroups: tl.constexpr,
@@ -119,12 +118,14 @@ def _bmm_chunk_fwd_kernel(
     for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
         a = tl.load(
             a_ptrs,
-            mask=(offs_m[:, None] < chunk_size_limit) & (offs_k[None, :] < K - k * BLOCK_SIZE_K),
+            mask=(offs_m[:, None] < chunk_size_limit)
+            & (offs_k[None, :] < K - k * BLOCK_SIZE_K),
             other=0.0,
         ).to(dot_dtype)
         b = tl.load(
             b_ptrs,
-            mask=(offs_k[:, None] < K - k * BLOCK_SIZE_K) & (offs_n[None, :] < chunk_size_limit),
+            mask=(offs_k[:, None] < K - k * BLOCK_SIZE_K)
+            & (offs_n[None, :] < chunk_size_limit),
             other=0.0,
         ).to(dot_dtype)
         acc += tl.dot(a, b)
@@ -166,14 +167,21 @@ def _bmm_chunk_fwd(a, b, chunk_size, cu_chunk_seqlens, causal=False, output_dtyp
     nchunks = len(cu_chunk_seqlens) - 1
     # Allocates output.
     out_dtype = a.dtype if output_dtype is None else output_dtype
-    out = torch.empty((nchunks, ngroups, chunk_size, chunk_size), device=a.device, dtype=out_dtype)
+    out = torch.empty(
+        (nchunks, ngroups, chunk_size, chunk_size), device=a.device, dtype=out_dtype
+    )
     dot_dtype = (
         tl.bfloat16
         if a.dtype == torch.bfloat16 or b.dtype == torch.bfloat16
-        else (tl.float16 if a.dtype == torch.float16 or b.dtype == torch.float16 else tl.float32)
+        else (
+            tl.float16
+            if a.dtype == torch.float16 or b.dtype == torch.float16
+            else tl.float32
+        )
     )
     grid = lambda META: (
-        triton.cdiv(chunk_size, META["BLOCK_SIZE_M"]) * triton.cdiv(chunk_size, META["BLOCK_SIZE_N"]),
+        triton.cdiv(chunk_size, META["BLOCK_SIZE_M"])
+        * triton.cdiv(chunk_size, META["BLOCK_SIZE_N"]),
         nchunks * ngroups,
     )
     with torch.accelerator.device_index(a.device.index):
@@ -182,7 +190,6 @@ def _bmm_chunk_fwd(a, b, chunk_size, cu_chunk_seqlens, causal=False, output_dtyp
             b_ptr=b,
             out_ptr=out,
             cu_chunk_seqlens_ptr=cu_chunk_seqlens,
-            seqlen=seqlen,
             chunk_size=chunk_size,
             K=k,
             ngroups=ngroups,

@@ -118,10 +118,8 @@ class LRUCache(cachetools.LRUCache[_K, _V]):
         return info
 
     def touch(self, key: _K) -> None:
-        try:
+        if key in self:
             self._LRUCache__order.move_to_end(key)  # type: ignore
-        except KeyError:
-            self._LRUCache__order[key] = None  # type: ignore
 
     @overload
     def get(self, key: _K, /) -> _V | None: ...
@@ -197,7 +195,9 @@ class LRUCache(cachetools.LRUCache[_K, _V]):
                 ALL_PINNED_SENTINEL,
             )
             if lru_key is ALL_PINNED_SENTINEL:
-                raise RuntimeError("All items are pinned, cannot remove oldest from the cache.")
+                raise RuntimeError(
+                    "All items are pinned, cannot remove oldest from the cache."
+                )
         else:
             lru_key = next(iter(self.order))
         value = self.pop(cast(_K, lru_key))

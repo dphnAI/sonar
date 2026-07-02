@@ -21,13 +21,16 @@ def main():
     import aphrodite.entrypoints.cli.run
     import aphrodite.entrypoints.cli.run_batch
     import aphrodite.entrypoints.cli.serve
-    from aphrodite.entrypoints.utils import APHRODITE_SUBCMD_PARSER_EPILOG, cli_env_setup
+    from aphrodite.entrypoints.serve.utils.api_utils import (
+        APHRODITE_SUBCMD_PARSER_EPILOG,
+        cli_env_setup,
+    )
     from aphrodite.utils.argparse_utils import FlexibleArgumentParser
 
     CMD_MODULES = [
         aphrodite.entrypoints.cli.openai,
-        aphrodite.entrypoints.cli.run,
         aphrodite.entrypoints.cli.serve,
+        aphrodite.entrypoints.cli.run,
         aphrodite.entrypoints.cli.launch,
         aphrodite.entrypoints.cli.benchmark.main,
         aphrodite.entrypoints.cli.collect_env,
@@ -48,7 +51,9 @@ def main():
             from aphrodite.platforms.cpu import CpuPlatform
 
             platforms.current_platform = CpuPlatform()
-            logger.info("Unspecified platform detected, switching to CPU Platform instead.")
+            logger.info(
+                "Unspecified platform detected, switching to CPU Platform instead."
+            )
 
     parser = FlexibleArgumentParser(
         description="Aphrodite CLI",

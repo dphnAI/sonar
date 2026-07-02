@@ -3,7 +3,9 @@
 #define CPU_TYPES_VXE_HPP
 
 #include <vecintrin.h>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <torch/all.h>
 namespace vec_op {
@@ -21,14 +23,13 @@ struct fp8_e5m2_tag {};
 
 // NOTE: FP16 (Half) is supported on s390x via custom bit-manipulation
 // conversion. PyTorch itself lacks native s390x FP16 support.
-#define APHRODITE_DISPATCH_CASE_FLOATING_TYPES(...)       \
+#define VLLM_DISPATCH_CASE_FLOATING_TYPES(...)            \
   AT_DISPATCH_CASE(at::ScalarType::Float, __VA_ARGS__)    \
   AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__) \
   AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__)
 
-#define APHRODITE_DISPATCH_FLOATING_TYPES(TYPE, NAME, ...) \
-  AT_DISPATCH_SWITCH(TYPE, NAME,                           \
-                     APHRODITE_DISPATCH_CASE_FLOATING_TYPES(__VA_ARGS__))
+#define VLLM_DISPATCH_FLOATING_TYPES(TYPE, NAME, ...) \
+  AT_DISPATCH_SWITCH(TYPE, NAME, VLLM_DISPATCH_CASE_FLOATING_TYPES(__VA_ARGS__))
 
 #ifndef CPU_OP_GUARD
   #define CPU_KERNEL_GUARD_IN(NAME)
@@ -689,6 +690,10 @@ struct FP32Vec16 : public Vec<FP32Vec16> {
 
   explicit FP32Vec16(const BF16Vec8& v) : FP32Vec16(FP32Vec8(v)) {}
 
+  // FP8 stub: dead code on s390x (fp8 KV cache is x86-only), needed for
+  // load_b_pair_vec template to compile on all platforms.
+  explicit FP32Vec16(const BF16Vec32&, int) : reg{} {}
+
   FP32Vec16 operator*(const FP32Vec16& b) const {
     return FP32Vec16(f32x4x4_t({vec_mul(reg.val[0], b.reg.val[0]),
                                 vec_mul(reg.val[1], b.reg.val[1]),
@@ -814,8 +819,7 @@ inline void storeFP32<::c10::Half>(float v, ::c10::Half* ptr) {
   // intrinsics for FP32 to FP16 conversion does not use IEEE rounding and can
   // produce incorrect results for some inputs. Process each of the 4 vectors
   // separately.
-  uint32_t in;
-  std::memcpy(&in, &v, sizeof(in));
+  uint32_t in = std::bit_cast<uint32_t>(v);
 
   uint32_t s = (in & 0x80000000) >> 16;  // Sign
   uint32_t e = (in & 0x7F800000) >> 23;  // Exponent

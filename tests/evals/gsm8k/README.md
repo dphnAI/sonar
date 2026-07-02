@@ -1,22 +1,21 @@
 # GSM8K Accuracy Evaluation
 
-This directory contains a replacement for the lm-eval-harness GSM8K evaluation, using an isolated GSM8K script and Aphrodite server for better performance and control.
+This directory contains a replacement for the lm-eval-harness GSM8K evaluation, using an isolated GSM8K script and vLLM server for better performance and control.
 
 ## Usage
 
 ### Run tests with pytest (like buildkite)
 
 ```bash
-pytest -s -v tests/gsm8k/test_gsm8k_correctness.py \
-    --config-list-file=configs/models-small.txt \
-    --tp-size=1
+pytest -s -v tests/evals/gsm8k/test_gsm8k_correctness.py \
+    --config-list-file=configs/models-small.txt
 ```
 
 ### Run standalone evaluation script
 
 ```bash
-# Start Aphrodite server first
-aphrodite run Qwen/Qwen2.5-1.5B-Instruct --port 8000
+# Start vLLM server first
+vllm serve Qwen/Qwen2.5-1.5B-Instruct --port 8000
 
 # Run evaluation
 python tests/evals/gsm8k/gsm8k_eval.py --port 8000
@@ -31,5 +30,11 @@ model_name: "Qwen/Qwen2.5-1.5B-Instruct"
 accuracy_threshold: 0.54  # Minimum expected accuracy
 num_questions: 1319       # Number of questions (default: full test set)
 num_fewshot: 5            # Few-shot examples from train set
-max_model_len: 4096       # Model context length
+server_args: "--max-model-len 4096 --tensor-parallel-size 2 --moe-backend flashinfer_cutlass"  # Server arguments
+env:                      # Environment variables (optional)
+  VLLM_LOGGING_LEVEL: "DEBUG"
 ```
+
+The `server_args` field accepts any arguments that can be passed to `vllm serve`.
+
+The `env` field accepts a dictionary of environment variables to set for the server process.

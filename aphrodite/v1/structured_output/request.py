@@ -59,10 +59,14 @@ class StructuredOutputRequest:
     @property
     def grammar(self) -> StructuredOutputGrammar | None:
         completed = self._check_grammar_completion()
-        return cast(StructuredOutputGrammar | None, self._grammar) if completed else None
+        return (
+            cast(StructuredOutputGrammar | None, self._grammar) if completed else None
+        )
 
     @grammar.setter
-    def grammar(self, grammar: StructuredOutputGrammar | Future[StructuredOutputGrammar]) -> None:
+    def grammar(
+        self, grammar: StructuredOutputGrammar | Future[StructuredOutputGrammar]
+    ) -> None:
         self._grammar = grammar
 
     @functools.cached_property

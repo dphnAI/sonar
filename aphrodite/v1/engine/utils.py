@@ -12,21 +12,26 @@ from multiprocessing import Process, connection
 from multiprocessing.process import BaseProcess
 from multiprocessing.queues import Queue
 from typing import TYPE_CHECKING, cast
-from unittest.mock import patch
 
 import msgspec
 import zmq
 
 from aphrodite import envs
-from aphrodite.config import AphroditeConfig, CacheConfig, ParallelConfig
+from aphrodite.config import CacheConfig, ParallelConfig, AphroditeConfig
 from aphrodite.logger import init_logger
 from aphrodite.platforms import current_platform
 from aphrodite.ray.ray_env import get_env_vars_to_copy
 from aphrodite.utils import numa_utils
-from aphrodite.utils.network_utils import get_open_zmq_ipc_path, zmq_socket_ctx
+from aphrodite.utils.network_utils import (
+    get_open_port,
+    get_open_zmq_ipc_path,
+    get_tcp_uri,
+    zmq_socket_ctx,
+)
 from aphrodite.utils.system_utils import get_mp_context
 from aphrodite.v1.engine.coordinator import DPCoordinator
 from aphrodite.v1.executor import Executor
+from aphrodite.v1.executor.ray_utils import WORKER_SPECIFIC_ENV_VARS
 from aphrodite.v1.utils import get_engine_client_zmq_addr, shutdown
 
 if TYPE_CHECKING:
@@ -95,6 +100,23 @@ def _get_bundle_node_ip(bundle: dict[str, float]) -> str:
     raise ValueError(f"Missing node affinity in placement bundle: {bundle}")
 
 
+def _node_ip_from_resources(node_resources: dict) -> str | None:
+    """Return the node IP encoded in a Ray per-node resource dict, or None.
+
+    Ray advertises each node's IP as a ``node:<ip>`` resource key. The head node
+    also carries ``node:__internal_head__``, and placement groups add
+    ``..._group_...`` keys; both are ignored.
+    """
+    for key in node_resources:
+        if (
+            key.startswith("node:")
+            and key != "node:__internal_head__"
+            and "_group_" not in key
+        ):
+            return key.split(":", 1)[1]
+    return None
+
+
 class CoreEngineProcManager:
     """
     Utility class to handle creation, readiness, and shutdown
@@ -143,7 +165,8 @@ class CoreEngineProcManager:
                 context.Process(
                     target=EngineCoreProc.run_engine_core,
                     name=f"EngineCore_DP{global_index}" if is_dp else "EngineCore",
-                    kwargs=common_kwargs | {"dp_rank": global_index, "local_dp_rank": local_index},
+                    kwargs=common_kwargs
+                    | {"dp_rank": global_index, "local_dp_rank": local_index},
                 )
             )
 
@@ -151,30 +174,38 @@ class CoreEngineProcManager:
         self.manager_stopped = threading.Event()
         self.failed_proc_name: str | None = None
 
+        # All ranks share this config object: capture the user-provided
+        # --device-ids list before the per-rank shard overwrites it. Mutating
+        # the config before each proc.start() works because the spawn method
+        # pickles process args at start() time, sequentially per rank.
+        user_assigned_gpu_ids = aphrodite_config.parallel_config.assigned_physical_gpu_ids
         try:
             for proc, local_dp_rank in zip(self.processes, local_dp_ranks):
-                # Adjust device control in DP for non-CUDA platforms
-                # as well as external and ray launchers
-                # For CUDA platforms, we use torch.accelerator.set_device_index()()
-                device_control_context: contextlib.AbstractContextManager[None] = contextlib.nullcontext()
-                if is_dp and (not current_platform.is_cuda_alike() or aphrodite_config.parallel_config.use_ray):
-                    device_control_context = set_device_control_env_var(aphrodite_config, local_dp_rank)
+                # Populate the logical-to-physical GPU mapping in DP for
+                # platforms that cannot rely on
+                # torch.accelerator.set_device_index(), and for Ray.
+                needs_device_env_isolation = not (
+                    current_platform.is_cuda_alike() or current_platform.is_xpu()
+                )
+                if is_dp and (
+                    needs_device_env_isolation or aphrodite_config.parallel_config.use_ray
+                ):
+                    set_assigned_physical_gpu_ids_for_dp_rank(
+                        aphrodite_config, local_dp_rank, user_assigned_gpu_ids
+                    )
 
-                with (
-                    device_control_context,
-                    numa_utils.configure_subprocess(
-                        # EngineCore itself does not have a TP/PP-local rank.
-                        # When DP is enabled, set_device_control_env_var()
-                        # narrows visible devices to this DP shard first, so
-                        # local_rank=0 means "the first local GPU in this
-                        # shard". The actual TP/PP worker processes spawned by
-                        # the executor are bound separately with their own
-                        # local_rank values.
-                        aphrodite_config,
-                        local_rank=0,
-                        dp_local_rank=local_dp_rank,
-                        process_kind="EngineCore",
-                    ),
+                with numa_utils.configure_subprocess(
+                    # EngineCore itself does not have a TP/PP-local rank.
+                    # When DP is enabled, set_assigned_physical_gpu_ids_for_dp_rank()
+                    # populates the logical-to-physical mapping for this DP
+                    # shard, so local_rank=0 means "the first local GPU in
+                    # this shard". The actual TP/PP worker processes spawned
+                    # by the executor are bound separately with their own
+                    # local_rank values.
+                    aphrodite_config,
+                    local_rank=0,
+                    dp_local_rank=local_dp_rank,
+                    process_kind="EngineCore",
                 ):
                     proc.start()
         finally:
@@ -215,7 +246,11 @@ class CoreEngineProcManager:
 
     def finished_procs(self) -> dict[str, int]:
         """Returns dict of proc name -> exit code for any finished procs."""
-        return {proc.name: proc.exitcode for proc in self.processes if proc.exitcode is not None}
+        return {
+            proc.name: proc.exitcode
+            for proc in self.processes
+            if proc.exitcode is not None
+        }
 
 
 class SignalCallback:
@@ -245,53 +280,91 @@ class SignalCallback:
         self._event.set()
 
 
-@contextlib.contextmanager
-def set_device_control_env_var(aphrodite_config: AphroditeConfig, local_dp_rank: int) -> Iterator[None]:
+def set_assigned_physical_gpu_ids_for_dp_rank(
+    aphrodite_config: AphroditeConfig,
+    local_dp_rank: int,
+    user_assigned_gpu_ids: list[int] | None = None,
+) -> None:
     """
-    Temporarily set CUDA_VISIBLE_DEVICES or equivalent
-    for engine subprocess.
+    Populate assigned_physical_gpu_ids on the config for the given DP rank.
+
+    user_assigned_gpu_ids is the full (un-sharded) --device-ids list, if the
+    user provided one; this DP rank's shard is sliced from it. It is passed
+    explicitly rather than read from the config because callers may reuse
+    one config object across DP ranks, overwriting the field each time.
     """
     world_size = aphrodite_config.parallel_config.world_size
     local_world_size = aphrodite_config.parallel_config.local_world_size
     evar = current_platform.device_control_env_var
 
-    value = get_device_indices(evar, local_dp_rank, world_size, local_world_size)
-    with patch.dict(os.environ, values=((evar, value),)):
-        yield
+    physical_gpu_ids = get_physical_gpu_ids_for_local_dp_rank(
+        evar,
+        local_dp_rank,
+        world_size,
+        local_world_size,
+        user_assigned_gpu_ids=user_assigned_gpu_ids,
+    )
+    aphrodite_config.parallel_config.assigned_physical_gpu_ids = physical_gpu_ids
 
 
-def get_device_indices(
+def get_physical_gpu_ids_for_local_dp_rank(
     device_control_env_var: str,
     local_dp_rank: int,
     world_size: int,
     local_world_size: int | None = None,
-):
+    user_assigned_gpu_ids: list[int] | None = None,
+) -> list[int]:
     """
-    Returns a comma-separated string of device indices for the specified
+    Returns list of physical GPU IDs for the specified
     data parallel rank.
 
     For example, if world_size=2 and local_dp_rank=1, and there are 4 devices,
-    this will select devices 2 and 3 for local_dp_rank=1.
+    this will return [2, 3] for local_dp_rank=1.
+
+    If user_assigned_gpu_ids is provided (e.g. from --device-ids), this DP
+    rank's shard is sliced from it instead of being derived from the
+    device-control env var.
     """
     if local_world_size is None:
         local_world_size = world_size
+    if user_assigned_gpu_ids is not None:
+        start = local_dp_rank * world_size
+        stop = start + local_world_size
+        if stop > len(user_assigned_gpu_ids):
+            raise ValueError(
+                f"--device-ids provides {len(user_assigned_gpu_ids)} devices, "
+                f"but DP rank {local_dp_rank} needs devices [{start}, {stop})"
+            )
+        return user_assigned_gpu_ids[start:stop]
     try:
-        value = ",".join(
-            str(current_platform.device_id_to_physical_device_id(i))
+        return [
+            current_platform.device_id_to_physical_device_id(i)
             for i in range(
                 local_dp_rank * world_size,
                 local_dp_rank * world_size + local_world_size,
             )
-        )
+        ]
     except IndexError as e:
         raise Exception(
-            f"Error setting {device_control_env_var}: "
+            f"Error computing device indices for "
+            f"{device_control_env_var}: "
             f"local range: [{local_dp_rank * world_size}, "
             f"{(local_dp_rank + 1) * world_size}) "
             "base value: "
             f'"{os.getenv(device_control_env_var)}"'
         ) from e
-    return value
+
+
+def _apply_dp_identity_suffix(dp_aphrodite_config, dp_rank: int) -> None:
+    # Ray actor names (RayExecutorV2) and KV-connector engine_ids must
+    # be unique across sibling DP engines or registration collides.
+    # Use the global DP rank, not a node-local rank, since sibling DP
+    # engines can span multiple nodes.
+    dp_aphrodite_config.instance_id = f"{dp_aphrodite_config.instance_id}_dp{dp_rank}"
+    if dp_aphrodite_config.kv_transfer_config is not None:
+        dp_aphrodite_config.kv_transfer_config.engine_id = (
+            f"{dp_aphrodite_config.kv_transfer_config.engine_id}_dp{dp_rank}"
+        )
 
 
 class CoreEngineActorManager:
@@ -321,13 +394,22 @@ class CoreEngineActorManager:
         from aphrodite.v1.engine.core import DPMoEEngineCoreActor, EngineCoreActor
 
         dp_size = aphrodite_config.parallel_config.data_parallel_size
-        actor_class = DPMoEEngineCoreActor if dp_size > 1 and aphrodite_config.model_config.is_moe else EngineCoreActor
+        actor_class = (
+            DPMoEEngineCoreActor
+            if dp_size > 1 and aphrodite_config.model_config.is_moe
+            else EngineCoreActor
+        )
 
         self.local_engine_actors: list[ray.ActorHandle] = []
         self.remote_engine_actors: list[ray.ActorHandle] = []
 
-        env_vars_list = get_env_vars_to_copy(destination=actor_class.__name__)
-        self.env_vars_dict = {name: os.environ[name] for name in env_vars_list if name in os.environ}
+        env_vars_list = get_env_vars_to_copy(
+            destination=actor_class.__name__,
+            exclude_vars=WORKER_SPECIFIC_ENV_VARS,
+        )
+        self.env_vars_dict = {
+            name: os.environ[name] for name in env_vars_list if name in os.environ
+        }
         runtime_env = RuntimeEnv(env_vars=self.env_vars_dict)
 
         self.addresses = addresses
@@ -359,7 +441,9 @@ class CoreEngineActorManager:
             self._coord_store = store
 
         if placement_groups is not None:
-            assert local_dp_ranks is not None, "local_dp_ranks must be provided if placement_groups is provided"
+            assert local_dp_ranks is not None, (
+                "local_dp_ranks must be provided if placement_groups is provided"
+            )
             assert len(placement_groups) == len(local_dp_ranks), (
                 "placement_groups and local_dp_ranks must have the same length"
             )
@@ -367,23 +451,24 @@ class CoreEngineActorManager:
             # TODO(rui): validate passed-in placement groups
             self.created_placement_groups = []
         else:
-            placement_groups, local_dp_ranks = CoreEngineActorManager.create_dp_placement_groups(aphrodite_config)
+            placement_groups, local_dp_ranks = (
+                CoreEngineActorManager.create_dp_placement_groups(aphrodite_config)
+            )
             self.created_placement_groups = placement_groups
-        assert len(placement_groups) == dp_size, "Number of placement groups must match data parallel size"
+        assert len(placement_groups) == dp_size, (
+            "Number of placement groups must match data parallel size"
+        )
 
         self.placement_group_is_local = []
         refs = []
-        for index, local_index, pg in zip(range(dp_size), local_dp_ranks, placement_groups):
+        for index, local_index, pg in zip(
+            range(dp_size), local_dp_ranks, placement_groups
+        ):
             dp_aphrodite_config = copy.deepcopy(aphrodite_config)
+            if dp_size > 1:
+                _apply_dp_identity_suffix(dp_aphrodite_config, index)
             dp_aphrodite_config.parallel_config.placement_group = pg
             local_client = index < local_engine_count
-
-            if dp_size > 1 and dp_aphrodite_config.kv_transfer_config is not None:
-                # modify the engine_id and append the local_dp_rank to it to ensure
-                # that the kv_transfer_config is unique for each DP rank.
-                dp_aphrodite_config.kv_transfer_config.engine_id = (
-                    f"{dp_aphrodite_config.kv_transfer_config.engine_id}_dp{local_index}"
-                )
 
             # Ray XPU known issue: dpctl initializes the GPU runtime early, so
             # setting device env vars in Ray actor's initialization method
@@ -391,9 +476,11 @@ class CoreEngineActorManager:
             # https://github.com/ray-project/ray/blob/master/python/ray/_private/accelerators/intel_gpu.py#L56 # noqa: E501
             if current_platform.is_xpu():
                 device_evar = current_platform.device_control_env_var
-                device_indices = get_device_indices(device_evar, local_index, world_size)
+                physical_gpu_ids = get_physical_gpu_ids_for_local_dp_rank(
+                    device_evar, local_index, world_size
+                )
                 actor_env_vars = self.env_vars_dict.copy()
-                actor_env_vars[device_evar] = device_indices
+                actor_env_vars[device_evar] = ",".join(str(d) for d in physical_gpu_ids)
                 runtime_env = RuntimeEnv(env_vars=actor_env_vars)
 
             actor = (
@@ -452,12 +539,44 @@ class CoreEngineActorManager:
         local_dp_ranks: list[int] = []
 
         dp_master_ip_key = f"node:{dp_master_ip}"
-        nodes = sorted(available_resources.values(), key=lambda x: dp_master_ip_key not in x)
+        nodes = sorted(
+            available_resources.values(), key=lambda x: dp_master_ip_key not in x
+        )
         assert len(nodes) > 0, "No nodes with resources found in Ray cluster."
-        assert dp_master_ip_key in nodes[0], f"The DP master node (ip: {dp_master_ip}) is missing or dead"
+        assert dp_master_ip_key in nodes[0], (
+            f"The DP master node (ip: {dp_master_ip}) is missing or dead"
+        )
+
+        # optionally restrict DP placement to a caller-provided node set.
+        requested_node_ips = {
+            ip.strip()
+            for ip in envs.APHRODITE_RAY_DP_PLACEMENT_NODE_IPS.split(",")
+            if ip.strip()
+        }
+        if requested_node_ips:
+            allowed_node_ips = set(requested_node_ips)
+            # The master node must host the local ranks, so it has to be allowed.
+            if dp_master_ip not in allowed_node_ips:
+                allowed_node_ips.add(dp_master_ip)
+            filtered_nodes = [
+                node_resources
+                for node_resources in nodes
+                if _node_ip_from_resources(node_resources) in allowed_node_ips
+            ]
+            logger.info(
+                "APHRODITE_RAY_DP_PLACEMENT_NODE_IPS set; restricting DP placement "
+                "from %d to %d node(s): %s",
+                len(nodes),
+                len(filtered_nodes),
+                sorted(allowed_node_ips),
+            )
+            nodes = filtered_nodes
+
         device_str = current_platform.ray_device_key
         n_node_devices: list[int] = [
-            int(node_resources[device_str]) for node_resources in nodes if device_str in node_resources
+            int(node_resources[device_str])
+            for node_resources in nodes
+            if device_str in node_resources
         ]
         assert n_node_devices, f"No {device_str} found in Ray cluster."
         max_device_per_node = max(n_node_devices)
@@ -473,7 +592,8 @@ class CoreEngineActorManager:
 
         all2all_backend = aphrodite_config.parallel_config.all2all_backend
         if pack_strategy == "fill" and (
-            all2all_backend == "deepep_high_throughput" or all2all_backend == "deepep_low_latency"
+            all2all_backend == "deepep_high_throughput"
+            or all2all_backend == "deepep_low_latency"
         ):
             raise ValueError(
                 "DeepEP kernels require EP ranks [0,7] (same for [8,15], ...) "
@@ -495,7 +615,9 @@ class CoreEngineActorManager:
 
             # if we need multiple nodes per dp group, we require for now that
             # available nodes are homogeneous
-            assert set(n_node_devices) == {max_device_per_node}, f"Nodes are not homogeneous, {nodes}"
+            assert set(n_node_devices) == {max_device_per_node}, (
+                f"Nodes are not homogeneous, {nodes}"
+            )
             assert world_size % max_device_per_node == 0, (
                 f"For multi-node data parallel groups, world_size ({world_size}) must "
                 f"be a multiple of number of devices per node ({max_device_per_node})."
@@ -516,12 +638,10 @@ class CoreEngineActorManager:
         # for "span" pack strategy
         collected_bundles = []
         for node_resources in nodes:
-            node_ip_keys = [
-                key for key in node_resources if key != "node:__internal_head__" and key.startswith("node:")
-            ]
-            assert len(node_ip_keys) == 1, f"Zero or multiple node IP keys found in node resources: {node_ip_keys}"
-            node_ip_key = node_ip_keys[0]
-            node_ip = node_ip_key.split(":")[1]
+            node_ip = _node_ip_from_resources(node_resources)
+            assert node_ip is not None, (
+                f"No node IP key found in node resources: {node_resources}"
+            )
 
             n_device_on_node = int(node_resources.get(device_str, 0))
             if pack_strategy == "span" and n_device_on_node != 0:
@@ -543,7 +663,8 @@ class CoreEngineActorManager:
             elif pack_strategy == "strict":
                 if dp_size_available < dp_size_local:
                     logger.info(
-                        "Skipping node %s as %s DP ranks could not fit, possible to fit %s DP ranks",
+                        "Skipping node %s as %s DP ranks could not fit, "
+                        "possible to fit %s DP ranks",
                         node_ip,
                         dp_size_local,
                         dp_size_available,
@@ -569,7 +690,9 @@ class CoreEngineActorManager:
                         continue
 
                     control_node_ip = _get_bundle_node_ip(collected_bundles[0])
-                    bundles = collected_bundles + [_make_control_bundle(control_node_ip)]
+                    bundles = collected_bundles + [
+                        _make_control_bundle(control_node_ip)
+                    ]
                     collected_bundles = []
                 else:
                     # STRICT_PACK already keeps every bundle in the placement
@@ -577,7 +700,9 @@ class CoreEngineActorManager:
                     # control bundle is redundant for correctness here. Keep it
                     # anyway for consistency with the span path and to preserve
                     # intent if this scheduling strategy changes later.
-                    bundles = device_bundle * world_size + [_make_control_bundle(node_ip)]
+                    bundles = device_bundle * world_size + [
+                        _make_control_bundle(node_ip)
+                    ]
 
                 pg = ray.util.placement_group(
                     name=f"dp_rank_{len(placement_groups)}",
@@ -588,6 +713,9 @@ class CoreEngineActorManager:
                 local_dp_ranks.append(i)
                 if len(placement_groups) == dp_size:
                     break
+
+            if len(placement_groups) == dp_size:
+                break
 
         if len(placement_groups) < dp_size:
             raise ValueError(
@@ -601,7 +729,8 @@ class CoreEngineActorManager:
             f"Created {len(placement_groups)} DP placement groups, expected {dp_size}"
         )
         assert len(local_dp_ranks) == dp_size, (
-            f"local_dp_ranks length {len(local_dp_ranks)} does not match expected {dp_size}"
+            f"local_dp_ranks length {len(local_dp_ranks)} does not match "
+            f"expected {dp_size}"
         )
         return placement_groups, local_dp_ranks
 
@@ -631,7 +760,9 @@ class CoreEngineActorManager:
         nodes = list_nodes()
         nodes = sorted(nodes, key=lambda node: node.node_ip != dp_master_ip)
         assert nodes[0].node_ip == dp_master_ip, "The first node must be the head node"
-        assert len(nodes) == 1 or nodes[1].node_ip != dp_master_ip, "There can only be one head node"
+        assert len(nodes) == 1 or nodes[1].node_ip != dp_master_ip, (
+            "There can only be one head node"
+        )
 
         available_resources = available_resources_per_node()
         total_resources = total_resources_per_node()
@@ -671,7 +802,9 @@ class CoreEngineActorManager:
 
                 # Create bundles with node constraint for master node
                 if node_ip == dp_master_ip:
-                    bundles = [{device_str: 1.0, "node:" + dp_master_ip: 0.001}] * world_size + [{"CPU": 1.0}]
+                    bundles = [
+                        {device_str: 1.0, "node:" + dp_master_ip: 0.001}
+                    ] * world_size + [{"CPU": 1.0}]
                 else:
                     bundles = [{device_str: 1.0}] * world_size + [{"CPU": 1.0}]
 
@@ -690,7 +823,9 @@ class CoreEngineActorManager:
 
         return placement_groups, local_dp_ranks
 
-    def scale_up_elastic_ep(self, cur_aphrodite_config: AphroditeConfig, new_data_parallel_size: int) -> None:
+    def scale_up_elastic_ep(
+        self, cur_aphrodite_config: AphroditeConfig, new_data_parallel_size: int
+    ) -> None:
         import copy
 
         import ray
@@ -699,9 +834,15 @@ class CoreEngineActorManager:
 
         from aphrodite.v1.engine.core import DPMoEEngineCoreActor, EngineCoreActor
 
-        actor_class = DPMoEEngineCoreActor if cur_aphrodite_config.model_config.is_moe else EngineCoreActor
+        actor_class = (
+            DPMoEEngineCoreActor
+            if cur_aphrodite_config.model_config.is_moe
+            else EngineCoreActor
+        )
 
-        cur_data_parallel_size = len(self.local_engine_actors) + len(self.remote_engine_actors)
+        cur_data_parallel_size = len(self.local_engine_actors) + len(
+            self.remote_engine_actors
+        )
 
         assert new_data_parallel_size > cur_data_parallel_size, (
             f"New data parallel size {new_data_parallel_size} must be greater "
@@ -709,27 +850,36 @@ class CoreEngineActorManager:
             "for scale up"
         )
 
-        placement_groups, local_dp_ranks = self.add_dp_placement_groups(cur_aphrodite_config, new_data_parallel_size)
+        placement_groups, local_dp_ranks = self.add_dp_placement_groups(
+            cur_aphrodite_config, new_data_parallel_size
+        )
 
         world_size = cur_aphrodite_config.parallel_config.world_size
         dp_master_ip = cur_aphrodite_config.parallel_config.data_parallel_master_ip
         new_local_engines = 0
 
-        runtime_env = RuntimeEnv(env_vars=self.env_vars_dict | {"APHRODITE_ELASTIC_EP_SCALE_UP_LAUNCH": "1"})
+        runtime_env = RuntimeEnv(
+            env_vars=self.env_vars_dict | {"APHRODITE_ELASTIC_EP_SCALE_UP_LAUNCH": "1"}
+        )
         for i, (pg, local_rank) in enumerate(zip(placement_groups, local_dp_ranks)):
             rank = cur_data_parallel_size + i
             dp_aphrodite_config = copy.deepcopy(cur_aphrodite_config)
+            if new_data_parallel_size > 1:
+                _apply_dp_identity_suffix(dp_aphrodite_config, rank)
             dp_aphrodite_config.parallel_config.data_parallel_size = new_data_parallel_size
             dp_aphrodite_config.parallel_config.placement_group = pg
 
             # Check if this placement group is on the head node
-            local_client = any(bundle.get("node:" + dp_master_ip, 0) > 0 for bundle in pg.bundle_specs)
+            local_client = any(
+                bundle.get("node:" + dp_master_ip, 0) > 0 for bundle in pg.bundle_specs
+            )
 
             if local_client:
                 new_local_engines += 1
                 # Update data_parallel_size_local
                 dp_aphrodite_config.parallel_config.data_parallel_size_local = (
-                    cur_aphrodite_config.parallel_config.data_parallel_size_local + new_local_engines
+                    cur_aphrodite_config.parallel_config.data_parallel_size_local
+                    + new_local_engines
                 )
 
             actor = (
@@ -762,13 +912,21 @@ class CoreEngineActorManager:
         ray.get(
             [
                 actor.wait_for_init.remote()
-                for actor in (self.local_engine_actors[-new_local_engines:] if new_local_engines > 0 else [])
-                + self.remote_engine_actors[-(len(placement_groups) - new_local_engines) :]
+                for actor in (
+                    self.local_engine_actors[-new_local_engines:]
+                    if new_local_engines > 0
+                    else []
+                )
+                + self.remote_engine_actors[
+                    -(len(placement_groups) - new_local_engines) :
+                ]
             ]
         )
 
         actors = (
-            self.local_engine_actors[-new_local_engines:] if new_local_engines > 0 else []
+            self.local_engine_actors[-new_local_engines:]
+            if new_local_engines > 0
+            else []
         ) + self.remote_engine_actors[-(len(placement_groups) - new_local_engines) :]
 
         for actor in actors:
@@ -780,9 +938,13 @@ class CoreEngineActorManager:
         # Update old_aphrodite_config with new data_parallel_size_local if any new
         # local engines were added
         if new_local_engines > 0:
-            cur_aphrodite_config.parallel_config.data_parallel_size_local += new_local_engines
+            cur_aphrodite_config.parallel_config.data_parallel_size_local += (
+                new_local_engines
+            )
 
-    def scale_down_elastic_ep(self, cur_data_parallel_size: int, new_data_parallel_size: int) -> None:
+    def scale_down_elastic_ep(
+        self, cur_data_parallel_size: int, new_data_parallel_size: int
+    ) -> None:
         import ray
 
         assert cur_data_parallel_size > new_data_parallel_size, (
@@ -824,7 +986,10 @@ class CoreEngineActorManager:
         while not self.manager_stopped.is_set():
             actor_run_refs = list(self.get_run_refs())
             if not actor_run_refs:
-                logger.info("There are no actors to monitor currently. The monitoring function is about to terminate.")
+                logger.info(
+                    "There are no actors to monitor currently. "
+                    "The monitoring function is about to terminate."
+                )
                 break
             actor_done_refs, _ = ray.wait(actor_run_refs, timeout=5)
             unexpected_failure = False
@@ -858,8 +1023,19 @@ class CoreEngineActorManager:
 def get_engine_zmq_addresses(
     aphrodite_config: AphroditeConfig,
     num_api_servers: int = 1,
+    *,
+    defer_api_server_ports: bool = True,
 ) -> EngineZmqAddresses:
-    """Allocate ZMQ addresses for engine-client communication."""
+    """Allocate ZMQ addresses for engine-client communication.
+
+    By default each TCP address is a ``tcp://host:0`` placeholder; the
+    consumer (API-server child or single-process ``MPClient``) binds, then
+    recovers the kernel-assigned port via ``getsockopt(zmq.LAST_ENDPOINT)``
+    and writes it back into ``addresses`` before the engine handshake.
+
+    Set ``defer_api_server_ports=False`` only when the consumer cannot
+    report a bound port back (e.g. the Rust front-end). IPC paths are
+    unaffected."""
     parallel_config = aphrodite_config.parallel_config
     local_engine_count = parallel_config.data_parallel_size_local
     local_start_index = parallel_config.data_parallel_rank_local
@@ -869,19 +1045,26 @@ def get_engine_zmq_addresses(
 
     # In offline mode there is an LLM instance per DP rank and
     # one core engine per LLM, see
-    # examples/offline_inference/data_parallel.py.
+    # examples/features/data_parallel/data_parallel_offline.py.
     offline_mode = local_start_index is not None
 
     # client_local_only = True for cases where this front-end
     # sends requests only to colocated engines.
-    client_local_only = offline_mode or local_engines_only or (local_engine_count == dp_size)
+    client_local_only = (
+        offline_mode or local_engines_only or (local_engine_count == dp_size)
+    )
     # NOTE(yongji): handling scaling from intra-node to inter-node
     if parallel_config.enable_elastic_ep:
         client_local_only = False
 
+    def _addr() -> str:
+        if client_local_only:
+            return get_open_zmq_ipc_path()
+        return get_tcp_uri(host, 0 if defer_api_server_ports else get_open_port())
+
     return EngineZmqAddresses(
-        inputs=[get_engine_client_zmq_addr(client_local_only, host) for _ in range(num_api_servers)],
-        outputs=[get_engine_client_zmq_addr(client_local_only, host) for _ in range(num_api_servers)],
+        inputs=[_addr() for _ in range(num_api_servers)],
+        outputs=[_addr() for _ in range(num_api_servers)],
     )
 
 
@@ -924,7 +1107,9 @@ def launch_core_engines(
     # The coordinator is needed for:
     # 1. Internal/hybrid LB: collecting and publishing queue stats for load balancing
     # 2. MoE models: wave coordination in addition to stats
-    run_coordinator = aphrodite_config.needs_dp_coordinator and not offline_mode and dp_rank == 0
+    run_coordinator = (
+        aphrodite_config.needs_dp_coordinator and not offline_mode and dp_rank == 0
+    )
 
     if run_coordinator:
         coordinator = DPCoordinator(
@@ -932,8 +1117,12 @@ def launch_core_engines(
             enable_wave_coordination=aphrodite_config.model_config.is_moe,
         )
 
-        addresses.coordinator_input, addresses.coordinator_output = coordinator.get_engine_socket_addresses()
-        addresses.frontend_stats_publish_address = coordinator.get_stats_publish_address()
+        addresses.coordinator_input, addresses.coordinator_output = (
+            coordinator.get_engine_socket_addresses()
+        )
+        addresses.frontend_stats_publish_address = (
+            coordinator.get_stats_publish_address()
+        )
 
         logger.info("Started DP Coordinator process (PID: %d)", coordinator.proc.pid)
     else:
@@ -960,13 +1149,19 @@ def launch_core_engines(
         # in both external dplb and internal dplb mode.
         # Note this also covers the case where we have zero local engines
         # and rank 0 is headless.
-        engines_to_handshake = [CoreEngine(index=i, local=(i < local_engine_count)) for i in range(dp_size)]
+        engines_to_handshake = [
+            CoreEngine(index=i, local=(i < local_engine_count)) for i in range(dp_size)
+        ]
     else:
         # Rank > 0 handshakes with just the local cores it is managing.
         assert local_engines_only, (
-            "Attempting to launch core_engines from dp_rank > 0, but found internal DPLB, which is incompatible."
+            "Attempting to launch core_engines from dp_rank > 0, but "
+            "found internal DPLB, which is incompatible."
         )
-        engines_to_handshake = [CoreEngine(index=i, local=True) for i in range(dp_rank, dp_rank + local_engine_count)]
+        engines_to_handshake = [
+            CoreEngine(index=i, local=True)
+            for i in range(dp_rank, dp_rank + local_engine_count)
+        ]
 
     # Whether the started engines will handshake only with co-located
     # front-end processes. In external_dp_lb mode, ranks > 0 handshake with
@@ -978,7 +1173,11 @@ def launch_core_engines(
     if parallel_config.enable_elastic_ep:
         handshake_local_only = False
 
-    handshake_address = get_engine_client_zmq_addr(handshake_local_only, host, parallel_config.data_parallel_rpc_port)
+    # Preserve "port=0 means auto-pick" for the handshake address, which
+    # is consumed by engines spawned in this process and so cannot defer
+    # port resolution to bind time.
+    rpc_port = parallel_config.data_parallel_rpc_port or get_open_port()
+    handshake_address = get_engine_client_zmq_addr(handshake_local_only, host, rpc_port)
 
     if local_engines_only and dp_rank > 0:
         assert not handshake_local_only
@@ -988,7 +1187,9 @@ def launch_core_engines(
         local_handshake_address = handshake_address
         client_handshake_address = None
 
-    with zmq_socket_ctx(local_handshake_address, zmq.ROUTER, bind=True) as handshake_socket:
+    with zmq_socket_ctx(
+        local_handshake_address, zmq.ROUTER, bind=True
+    ) as handshake_socket:
         # Start local engines.
         if local_engine_count:
             local_engine_manager = CoreEngineProcManager(
@@ -1040,7 +1241,8 @@ def wait_for_engine_startup(
     poller.register(handshake_socket, zmq.POLLIN)
 
     remote_should_be_headless = (
-        not parallel_config.data_parallel_hybrid_lb and not parallel_config.data_parallel_external_lb
+        not parallel_config.data_parallel_hybrid_lb
+        and not parallel_config.data_parallel_external_lb
     )
 
     if proc_manager is not None:
@@ -1068,7 +1270,9 @@ def wait_for_engine_startup(
             if coord_process is not None and coord_process.exitcode is not None:
                 finished[coord_process.name] = coord_process.exitcode
             raise RuntimeError(
-                f"Engine core initialization failed. See root cause above. Failed core proc(s): {finished}"
+                "Engine core initialization failed. "
+                "See root cause above. "
+                f"Failed core proc(s): {finished}"
             )
 
         # Receive HELLO and READY messages from the input socket.
@@ -1076,7 +1280,9 @@ def wait_for_engine_startup(
         eng_index = int.from_bytes(eng_identity, "little")
         engine = next((e for e in core_engines if e.identity == eng_identity), None)
         if engine is None:
-            raise RuntimeError(f"Message from engine with unexpected data parallel rank: {eng_index}")
+            raise RuntimeError(
+                f"Message from engine with unexpected data parallel rank: {eng_index}"
+            )
         msg = msgspec.msgpack.decode(ready_msg_bytes)
         status, local, headless = msg["status"], msg["local"], msg["headless"]
         if local != engine.local:
@@ -1091,11 +1297,15 @@ def wait_for_engine_startup(
         if not local and headless != remote_should_be_headless:
             if headless:
                 raise RuntimeError(
-                    f"Remote engine {eng_index} must not use --headless in external or hybrid dp lb mode"
+                    f"Remote engine {eng_index} must not use "
+                    f"--headless in external or hybrid dp lb "
+                    f"mode"
                 )
             else:
                 raise RuntimeError(
-                    f"Remote engine {eng_index} must use --headless unless in external or hybrid dp lb mode"
+                    f"Remote engine {eng_index} must use "
+                    f"--headless unless in external or hybrid "
+                    f"dp lb mode"
                 )
 
         if status == "HELLO" and engine.state == CoreEngineState.NEW:

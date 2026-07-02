@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 
-from aphrodite.transformers_utils.tokenizer import get_tokenizer
+from aphrodite.tokenizers import get_tokenizer
 
 from ...utils import RemoteOpenAIServer
 
@@ -58,11 +59,16 @@ async def test_basic_completion_with_emoji(server, return_token_ids: bool | None
 
         # Check against the expected prompt token IDs
         tokenizer = get_tokenizer(tokenizer_name=MODEL_NAME)
-        encoded_tokens = tokenizer.encode("Complete this sentence with emojis: I love coding 🚀")
+        encoded_tokens = tokenizer.encode(
+            "Complete this sentence with emojis: I love coding 🚀"
+        )
         # Check that encoded_tokens is a subsequence of prompt_token_ids
         assert any(
-            completion.choices[0].prompt_token_ids[i : i + len(encoded_tokens)] == encoded_tokens
-            for i in range(len(completion.choices[0].prompt_token_ids) - len(encoded_tokens) + 1)
+            completion.choices[0].prompt_token_ids[i : i + len(encoded_tokens)]
+            == encoded_tokens
+            for i in range(
+                len(completion.choices[0].prompt_token_ids) - len(encoded_tokens) + 1
+            )
         )
 
         # Verify token_ids field is present in the choice
@@ -145,8 +151,12 @@ async def test_chat_completion_with_tool_use(server):
         # Verify the prompt texts and response texts
         tokenizer = get_tokenizer(tokenizer_name=MODEL_NAME)
         prompt_text = tokenizer.decode(response.prompt_token_ids)
-        assert prompt_text.startswith("<|im_start|>system\nYou are a helpful assistant.")
-        assert prompt_text.endswith("What's the weather like in Paris?<|im_end|>\n<|im_start|>assistant\n")
+        assert prompt_text.startswith(
+            "<|im_start|>system\nYou are a helpful assistant."
+        )
+        assert prompt_text.endswith(
+            "What's the weather like in Paris?<|im_end|>\n<|im_start|>assistant\n"
+        )
 
         response_text = tokenizer.decode(response.choices[0].token_ids)
         assert response_text.startswith('<tool_call>\n{"name": "get_weather"')
@@ -220,7 +230,10 @@ async def test_comparison_with_prompt_logprobs_and_logprobs(server):
         # The prompt_token_ids should match the prompt portion
         assert len(completion.choices[0].token_ids) < len(logprobs_token_ids)
         response_token_ids_length = len(completion.choices[0].token_ids)
-        assert logprobs_token_ids[-response_token_ids_length:] == completion.choices[0].token_ids
+        assert (
+            logprobs_token_ids[-response_token_ids_length:]
+            == completion.choices[0].token_ids
+        )
 
         # Verify tokenizer consistency
         tokenizer = get_tokenizer(tokenizer_name=MODEL_NAME)
@@ -299,8 +312,12 @@ async def test_chat_completion_with_emoji_and_token_ids(server):
         tokenizer = get_tokenizer(tokenizer_name=MODEL_NAME)
 
         decoded_prompt = tokenizer.decode(response.prompt_token_ids)
-        assert decoded_prompt.startswith("<|im_start|>system\nYou like to use emojis in your responses.")
-        assert decoded_prompt.endswith("I love cats 🐱<|im_end|>\n<|im_start|>assistant\n")
+        assert decoded_prompt.startswith(
+            "<|im_start|>system\nYou like to use emojis in your responses."
+        )
+        assert decoded_prompt.endswith(
+            "I love cats 🐱<|im_end|>\n<|im_start|>assistant\n"
+        )
 
         decoded_response = tokenizer.decode(response.choices[0].token_ids)
         # The content should match the response text
@@ -331,7 +348,9 @@ async def test_chat_completion_with_emoji_and_token_ids(server):
                 first_chunk = False
             else:
                 chunk_dump = chunk.model_dump()
-                assert "prompt_token_ids" not in chunk_dump, "Subsequent chunks should not have prompt_token_ids"
+                assert "prompt_token_ids" not in chunk_dump, (
+                    "Subsequent chunks should not have prompt_token_ids"
+                )
 
             if chunk.choices:
                 if chunk.choices[0].delta.content:

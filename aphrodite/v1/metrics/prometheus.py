@@ -24,7 +24,9 @@ def setup_multiprocess_prometheus():
         # cleaned up upon exit.
         _prometheus_multiproc_dir = tempfile.TemporaryDirectory()
         os.environ["PROMETHEUS_MULTIPROC_DIR"] = _prometheus_multiproc_dir.name
-        logger.debug("Created PROMETHEUS_MULTIPROC_DIR at %s", _prometheus_multiproc_dir.name)
+        logger.debug(
+            "Created PROMETHEUS_MULTIPROC_DIR at %s", _prometheus_multiproc_dir.name
+        )
     else:
         logger.warning(
             "Found PROMETHEUS_MULTIPROC_DIR was set by user. "
@@ -62,7 +64,7 @@ def unregister_aphrodite_metrics():
     registry = REGISTRY
     # Unregister any existing Aphrodite collectors
     for collector in list(registry._collector_to_names):
-        if hasattr(collector, "_name") and "aphrodite" in collector._name:
+        if hasattr(collector, "_name") and collector._name.startswith("aphrodite:"):
             registry.unregister(collector)
 
 

@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
-from aphrodite.engine.args_tools import AsyncEngineArgs
 from dummy_stat_logger.dummy_stat_logger import DummyStatLogger
 
 from aphrodite.config import AphroditeConfig
+from aphrodite.engine.arg_utils import AsyncEngineArgs
 from aphrodite.v1.engine.async_llm import AsyncLLM
 from aphrodite.v1.metrics.loggers import load_stat_logger_plugin_factories
 
@@ -15,11 +16,13 @@ def test_stat_logger_plugin_is_discovered(monkeypatch: pytest.MonkeyPatch):
 
         factories = load_stat_logger_plugin_factories()
         assert len(factories) == 1, f"Expected 1 factory, got {len(factories)}"
-        assert factories[0] is DummyStatLogger, f"Expected DummyStatLogger class, got {factories[0]}"
+        assert factories[0] is DummyStatLogger, (
+            f"Expected DummyStatLogger class, got {factories[0]}"
+        )
 
         # instantiate and confirm the right type
-        aphrodite_config = AphroditeConfig()
-        instance = factories[0](aphrodite_config)
+        vllm_config = AphroditeConfig()
+        instance = factories[0](vllm_config)
         assert isinstance(instance, DummyStatLogger)
 
 

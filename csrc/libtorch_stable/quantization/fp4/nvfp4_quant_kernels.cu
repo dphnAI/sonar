@@ -23,26 +23,26 @@
 
 #include "libtorch_stable/torch_utils.h"
 #include "libtorch_stable/dispatch_utils.h"
-#include "cuda_vec_utils.cuh"
+#include "../../cuda_vec_utils.cuh"
 
 #include "cuda_utils.h"
-#include "launch_bounds_utils.h"
+#include "libtorch_stable/launch_bounds_utils.h"
 
 // Define before including nvfp4_utils.cuh so the header
 // can use this macro during compilation.
 #define NVFP4_ENABLE_ELTS16 1
 #include "nvfp4_utils.cuh"
 
-namespace aphrodite {
+namespace vllm {
 
 // Use UE4M3 by default.
 template <class Type, bool UE8M0_SF = false>
-__global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
-    cvt_fp16_to_fp4(int32_t numRows, int32_t numCols, int32_t num_padded_cols,
-                    Type const* __restrict__ in,
+__global__ void __launch_bounds__(512, VLLM_BLOCKS_PER_SM(512))
+    cvt_fp16_to_fp4(int32_t numRows, int32_t numCols, int32_t outputCols,
+                    int32_t num_padded_cols, Type const* __restrict__ in,
                     float const* __restrict__ SFScale,
                     uint32_t* __restrict__ out, uint32_t* __restrict__ SFout) {
-  using PackedVec = aphrodite::PackedVec<Type, CVT_FP4_PACK16>;
+  using PackedVec = vllm::PackedVec<Type, CVT_FP4_PACK16>;
 
   static constexpr int CVT_FP4_NUM_THREADS_PER_SF =
       (CVT_FP4_SF_VEC_SIZE / CVT_FP4_ELTS_PER_THREAD);
@@ -50,7 +50,7 @@ __global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
                 "Vec size is not matched.");
 
   // Precompute SF layout parameter (constant for entire kernel).
-  int32_t const numKTiles = (numCols + 63) / 64;
+  int32_t const numKTiles = (outputCols + 63) / 64;
 
   int sf_m = round_up<int>(numRows, 128);
   int32_t const colIdx = blockDim.x * blockIdx.y + threadIdx.x;
@@ -68,16 +68,17 @@ __global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
       PackedVec in_vec;
       int64_t inOffset = rowIdx * (numCols / CVT_FP4_ELTS_PER_THREAD) + colIdx;
 
-      // If we are outside valid rows OR outside valid columns -> Use Zeros
-      bool valid = (rowIdx < numRows) && (elem_idx < numCols);
+      // If we are outside valid columns, feed zeros
+      bool valid_input = (rowIdx < numRows) && (elem_idx < numCols);
+      bool valid_output = (rowIdx < numRows) && (elem_idx < outputCols);
       if constexpr (CVT_FP4_PACK16) {
         ld256_cg_or_zero(reinterpret_cast<u32x8_t&>(in_vec),
                          &reinterpret_cast<const uint32_t*>(in)[inOffset * 8],
-                         valid);
+                         valid_input);
       } else {
         ld128_cg_or_zero(reinterpret_cast<uint4&>(in_vec),
                          &reinterpret_cast<const uint32_t*>(in)[inOffset * 4],
-                         valid);
+                         valid_input);
       }
 
       auto sf_out =
@@ -89,16 +90,16 @@ __global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
           cvt_warp_fp16_to_fp4<Type, CVT_FP4_NUM_THREADS_PER_SF, UE8M0_SF>(
               in_vec, global_scale, sf_out);
 
-      // We do NOT write output for padding because the 'out' tensor is not
-      // padded.
-      if (valid) {
+      if (valid_output) {
         if constexpr (CVT_FP4_PACK16) {
-          int64_t outOffset = rowIdx * (numCols / 8) + colIdx * 2;
+          int64_t outOffset = rowIdx * (outputCols / 8) + colIdx * 2;
           uint64_t packed64 =
               (uint64_t(out_val.hi) << 32) | uint64_t(out_val.lo);
           reinterpret_cast<uint64_t*>(out)[outOffset >> 1] = packed64;
         } else {
-          out[inOffset] = out_val;
+          int64_t outOffset =
+              rowIdx * (outputCols / CVT_FP4_ELTS_PER_THREAD) + colIdx;
+          out[outOffset] = out_val;
         }
       }
     }
@@ -107,9 +108,10 @@ __global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
 
 // Use UE4M3 by default.
 template <class Type, bool UE8M0_SF = false>
-__global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
+__global__ void __launch_bounds__(512, VLLM_BLOCKS_PER_SM(512))
     cvt_fp16_to_fp4_sf_major(int32_t numRows, int32_t numCols,
-                             int32_t sf_n_unpadded, int32_t num_packed_cols,
+                             int32_t outputCols, int32_t sf_n_unpadded,
+                             int32_t num_packed_cols,
                              Type const* __restrict__ in,
                              float const* __restrict__ SFScale,
                              uint32_t* __restrict__ out,
@@ -136,7 +138,7 @@ __global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
       PackedVec in_vec;
       int64_t inOffset = rowIdx * (numCols / CVT_FP4_ELTS_PER_THREAD) + colIdx;
 
-      // If we are outside valid rows OR outside valid columns -> Use Zeros
+      // If we are outside valid columns, feed zeros
       bool valid = (rowIdx < numRows) && (elem_idx < numCols);
       if constexpr (CVT_FP4_PACK16) {
         ld256_cg_or_zero(reinterpret_cast<u32x8_t&>(in_vec),
@@ -155,23 +157,23 @@ __global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
           cvt_warp_fp16_to_fp4<Type, CVT_FP4_NUM_THREADS_PER_SF, UE8M0_SF>(
               in_vec, global_scale, sf_out);
 
-      // We do NOT write output for padding because the 'out' tensor is not
-      // padded.
-      if (valid) {
+      if (rowIdx < numRows) {
         if constexpr (CVT_FP4_PACK16) {
-          int64_t outOffset = rowIdx * (numCols / 8) + colIdx * 2;
+          int64_t outOffset = rowIdx * (outputCols / 8) + colIdx * 2;
           uint64_t packed64 =
               (uint64_t(out_val.hi) << 32) | uint64_t(out_val.lo);
           reinterpret_cast<uint64_t*>(out)[outOffset >> 1] = packed64;
         } else {
-          out[inOffset] = out_val;
+          int64_t outOffset =
+              rowIdx * (outputCols / CVT_FP4_ELTS_PER_THREAD) + colIdx;
+          out[outOffset] = out_val;
         }
       }
     }
   }
 }
 
-}  // namespace aphrodite
+}  // namespace vllm
 
 void scaled_fp4_quant_sm1xxa(torch::stable::Tensor const& output,
                              torch::stable::Tensor const& input,
@@ -180,8 +182,11 @@ void scaled_fp4_quant_sm1xxa(torch::stable::Tensor const& output,
                              bool is_sf_swizzled_layout) {
   int32_t m = input.size(0);
   int32_t n = input.size(1);
+  int32_t output_n = output.size(1) * 2;
 
   STD_TORCH_CHECK(n % 16 == 0, "The N dimension must be multiple of 16.");
+  STD_TORCH_CHECK(output_n % 16 == 0,
+                  "The output tensor width must be a multiple of 16.");
   STD_TORCH_CHECK(
       input.scalar_type() == torch::headeronly::ScalarType::Half ||
           input.scalar_type() == torch::headeronly::ScalarType::BFloat16,
@@ -197,50 +202,48 @@ void scaled_fp4_quant_sm1xxa(torch::stable::Tensor const& output,
       input.get_device_index());
   auto stream = get_current_cuda_stream(input.get_device_index());
 
-  int sf_n_unpadded = int(n / CVT_FP4_SF_VEC_SIZE);
+  int output_sf_n_unpadded = int(output_n / CVT_FP4_SF_VEC_SIZE);
 
   // Grid, Block size. Each thread converts 8 values.
   dim3 block(std::min(int(n / ELTS_PER_THREAD), 512));
   int const numBlocksPerSM =
-      aphrodite_runtime_blocks_per_sm(static_cast<int>(block.x));
+      vllm_runtime_blocks_per_sm(static_cast<int>(block.x));
 
   if (is_sf_swizzled_layout) {
-    int sf_n_int = int(aphrodite::round_up(sf_n_unpadded, 4) / 4);
+    int sf_n_int = int(vllm::round_up(output_sf_n_unpadded, 4) / 4);
     int32_t num_padded_cols =
         sf_n_int * 4 * CVT_FP4_SF_VEC_SIZE / CVT_FP4_ELTS_PER_THREAD;
 
-    int grid_y =
-        aphrodite::div_round_up(num_padded_cols, static_cast<int>(block.x));
+    int grid_y = vllm::div_round_up(num_padded_cols, static_cast<int>(block.x));
     int grid_x =
-        std::min(aphrodite::computeEffectiveRows(m),
+        std::min(vllm::computeEffectiveRows(m),
                  std::max(1, (multiProcessorCount * numBlocksPerSM) / grid_y));
     dim3 grid(grid_x, grid_y);
 
-    APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+    VLLM_STABLE_DISPATCH_HALF_TYPES(
         input.scalar_type(), "nvfp4_quant_kernel", [&] {
-          using cuda_type = aphrodite::CUDATypeConverter<scalar_t>::Type;
+          using cuda_type = vllm::CUDATypeConverter<scalar_t>::Type;
           auto input_ptr = static_cast<cuda_type const*>(input.data_ptr());
-          aphrodite::cvt_fp16_to_fp4<cuda_type, false>
-              <<<grid, block, 0, stream>>>(
-                  m, n, num_padded_cols, input_ptr, input_sf_ptr,
-                  reinterpret_cast<uint32_t*>(output_ptr),
-                  reinterpret_cast<uint32_t*>(sf_out));
+          vllm::cvt_fp16_to_fp4<cuda_type, false><<<grid, block, 0, stream>>>(
+              m, n, output_n, num_padded_cols, input_ptr, input_sf_ptr,
+              reinterpret_cast<uint32_t*>(output_ptr),
+              reinterpret_cast<uint32_t*>(sf_out));
         });
   } else {
-    int num_packed_cols = n / CVT_FP4_ELTS_PER_THREAD;
-    int grid_y =
-        aphrodite::div_round_up(num_packed_cols, static_cast<int>(block.x));
+    int num_packed_cols = output_n / CVT_FP4_ELTS_PER_THREAD;
+    int grid_y = vllm::div_round_up(num_packed_cols, static_cast<int>(block.x));
     int grid_x = std::min(
         m, std::max(1, (multiProcessorCount * numBlocksPerSM) / grid_y));
     dim3 grid(grid_x, grid_y);
 
-    APHRODITE_STABLE_DISPATCH_HALF_TYPES(
+    VLLM_STABLE_DISPATCH_HALF_TYPES(
         input.scalar_type(), "nvfp4_quant_kernel", [&] {
-          using cuda_type = aphrodite::CUDATypeConverter<scalar_t>::Type;
+          using cuda_type = vllm::CUDATypeConverter<scalar_t>::Type;
           auto input_ptr = static_cast<cuda_type const*>(input.data_ptr());
-          aphrodite::cvt_fp16_to_fp4_sf_major<cuda_type, false>
+          vllm::cvt_fp16_to_fp4_sf_major<cuda_type, false>
               <<<grid, block, 0, stream>>>(
-                  m, n, sf_n_unpadded, num_packed_cols, input_ptr, input_sf_ptr,
+                  m, n, output_n, output_sf_n_unpadded, num_packed_cols,
+                  input_ptr, input_sf_ptr,
                   reinterpret_cast<uint32_t*>(output_ptr),
                   reinterpret_cast<uint32_t*>(sf_out));
         });

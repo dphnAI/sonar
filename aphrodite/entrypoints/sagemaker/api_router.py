@@ -18,7 +18,7 @@ from aphrodite.config import ModelConfig
 from aphrodite.entrypoints.openai.engine.protocol import ErrorResponse
 from aphrodite.entrypoints.openai.engine.serving import OpenAIServing
 from aphrodite.entrypoints.openai.generate.factories import get_generate_invocation_types
-from aphrodite.entrypoints.openai.utils import validate_json_request
+from aphrodite.entrypoints.serve.utils.api_utils import validate_json_request
 from aphrodite.entrypoints.pooling.base.serving import PoolingServingBase
 from aphrodite.entrypoints.pooling.factories import get_pooling_invocation_types
 from aphrodite.entrypoints.serve.instrumentator.basic import base

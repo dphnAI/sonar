@@ -1,17 +1,23 @@
+# Adapted from: https://github.com/deepseek-ai/FlashMLA/blob/main/tests/test_flash_mla.py
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-# Adapted from: https://github.com/deepseek-ai/FlashMLA/blob/main/tests/test_flash_mla.py
 import math
 import random
 
 import pytest
 import torch
-from aphrodite.attention.ops.flashmla import flash_mla_with_kvcache, get_mla_metadata, is_flashmla_dense_supported
 
 from aphrodite.triton_utils import triton
+from aphrodite.v1.attention.ops.flashmla import (
+    flash_mla_with_kvcache,
+    get_mla_metadata,
+    is_flashmla_dense_supported,
+)
 
 
-def cal_diff(x: torch.Tensor, y: torch.Tensor, name: str, use_fp8: bool = False) -> None:
+def cal_diff(
+    x: torch.Tensor, y: torch.Tensor, name: str, use_fp8: bool = False
+) -> None:
     x, y = x.double(), y.double()
     cos_diff = 1 - 2 * (x * y).sum().item() / max((x * x + y * y).sum().item(), 1e-12)
     if use_fp8:
@@ -21,11 +27,15 @@ def cal_diff(x: torch.Tensor, y: torch.Tensor, name: str, use_fp8: bool = False)
 
 
 FLASH_MLA_UNSUPPORTED_REASON = (
-    is_flashmla_dense_supported()[1] if not is_flashmla_dense_supported()[0] else "FlashMLA is supported"
+    is_flashmla_dense_supported()[1]
+    if not is_flashmla_dense_supported()[0]
+    else "FlashMLA is supported"
 )
 
 
-@pytest.mark.skipif(not is_flashmla_dense_supported()[0], reason=FLASH_MLA_UNSUPPORTED_REASON)
+@pytest.mark.skipif(
+    not is_flashmla_dense_supported()[0], reason=FLASH_MLA_UNSUPPORTED_REASON
+)
 @pytest.mark.parametrize("b", [128])
 @pytest.mark.parametrize("s_q", [1, 2])
 @pytest.mark.parametrize("mean_sk", [4096, 8192, 16384])
@@ -36,18 +46,25 @@ FLASH_MLA_UNSUPPORTED_REASON = (
 @pytest.mark.parametrize("block_size", [64])
 @pytest.mark.parametrize("causal", [True])
 @pytest.mark.parametrize("varlen", [False, True])
-@pytest.mark.parametrize("torch_dtype", [torch.bfloat16, torch.float16, torch.float8_e4m3fn])
+@pytest.mark.parametrize(
+    "torch_dtype", [torch.bfloat16, torch.float16, torch.float8_e4m3fn]
+)
 @torch.inference_mode()
-def test_flash_mla(b, s_q, mean_sk, h_q, h_kv, d, dv, block_size, causal, varlen, torch_dtype):
+def test_flash_mla(
+    b, s_q, mean_sk, h_q, h_kv, d, dv, block_size, causal, varlen, torch_dtype
+):
     device = torch.device("cuda:0")
     init_dtype = torch.bfloat16 if torch_dtype == torch.float8_e4m3fn else torch_dtype
     torch.set_default_dtype(init_dtype)
     torch.set_default_device(device)
-    torch.cuda.set_device(device)
+    torch.accelerator.set_device_index(device)
     torch.manual_seed(0)
     random.seed(0)
 
-    print(f"{b=}, {s_q=}, {mean_sk=}, {h_q=}, {h_kv=}, {d=}, {dv=}, {causal=}, {varlen=}, {torch_dtype=}")
+    print(
+        f"{b=}, {s_q=}, {mean_sk=}, {h_q=}, {h_kv=}, "
+        f"{d=}, {dv=}, {causal=}, {varlen=}, {torch_dtype=}"
+    )
 
     use_fp8 = torch_dtype == torch.float8_e4m3fn
     cache_seqlens = torch.full((b,), mean_sk, dtype=torch.int32)
@@ -59,15 +76,19 @@ def test_flash_mla(b, s_q, mean_sk, h_q, h_kv, d, dv, block_size, causal, varlen
     max_seqlen_pad = triton.cdiv(max_seqlen, 256) * 256
 
     q = torch.randn(b, s_q, h_q, d)
-    block_table = torch.arange(b * max_seqlen_pad // block_size, dtype=torch.int32).view(
-        b, max_seqlen_pad // block_size
-    )
+    block_table = torch.arange(
+        b * max_seqlen_pad // block_size, dtype=torch.int32
+    ).view(b, max_seqlen_pad // block_size)
     blocked_k = torch.randn(block_table.numel(), block_size, h_kv, d)
     for i in range(b):
-        blocked_k.view(b, max_seqlen_pad, h_kv, d)[i, cache_seqlens[i].item() :] = float("nan")
+        blocked_k.view(b, max_seqlen_pad, h_kv, d)[i, cache_seqlens[i].item() :] = (
+            float("nan")
+        )
     blocked_v = blocked_k[..., :dv]
 
-    tile_scheduler_metadata, num_splits = get_mla_metadata(cache_seqlens, s_q * h_q // h_kv, h_kv)
+    tile_scheduler_metadata, num_splits = get_mla_metadata(
+        cache_seqlens, s_q * h_q // h_kv, h_kv
+    )
 
     init_dtype = q.dtype
     if use_fp8:
@@ -117,8 +138,16 @@ def test_flash_mla(b, s_q, mean_sk, h_q, h_kv, d, dv, block_size, causal, varlen
 
     def ref_mla():
         q_ = (q.to(torch.float) * descale_q).to(init_dtype) if use_fp8 else q
-        blocked_k_ = (blocked_k.to(torch.float) * descale_k).to(init_dtype) if use_fp8 else blocked_k
-        blocked_v_ = (blocked_v.to(torch.float) * descale_k).to(init_dtype) if use_fp8 else blocked_v
+        blocked_k_ = (
+            (blocked_k.to(torch.float) * descale_k).to(init_dtype)
+            if use_fp8
+            else blocked_k
+        )
+        blocked_v_ = (
+            (blocked_v.to(torch.float) * descale_k).to(init_dtype)
+            if use_fp8
+            else blocked_v
+        )
         out = torch.empty(b, s_q, h_q, dv, dtype=torch.float32)
         lse = torch.empty(b, h_q, s_q, dtype=torch.float32)
         for i in range(b):
@@ -141,7 +170,9 @@ def test_flash_mla(b, s_q, mean_sk, h_q, h_kv, d, dv, block_size, causal, varlen
 
     t = triton.testing.do_bench(flash_mla)
     FLOPS = s_q * total_seqlens * h_q * (d + dv) * 2
-    bytes = (total_seqlens * h_kv * d + b * s_q * h_q * d) * (torch.finfo(torch_dtype).bits // 8) + (
-        b * s_q * h_q * dv
-    ) * (torch.finfo(init_dtype).bits // 8)
-    print(f"{t:.3f} ms, {FLOPS / 10**9 / t:.0f} TFLOPS,", f"{bytes / 10**6 / t:.0f} GB/s")
+    bytes = (total_seqlens * h_kv * d + b * s_q * h_q * d) * (
+        torch.finfo(torch_dtype).bits // 8
+    ) + (b * s_q * h_q * dv) * (torch.finfo(init_dtype).bits // 8)
+    print(
+        f"{t:.3f} ms, {FLOPS / 10**9 / t:.0f} TFLOPS,", f"{bytes / 10**6 / t:.0f} GB/s"
+    )

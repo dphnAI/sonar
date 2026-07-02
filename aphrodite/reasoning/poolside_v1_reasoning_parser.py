@@ -41,8 +41,12 @@ class PoolsideV1ReasoningParser(DeepSeekV3ReasoningParser):
         super().__init__(tokenizer, *args, **kwargs)
 
         if self._start_of_assistant_message not in self.vocab:
-            raise ValueError(f"Tokenizer must contain {self._start_of_assistant_message!r} token")
-        self._start_of_assistant_message_token_id = self.vocab[self._start_of_assistant_message]
+            raise ValueError(
+                f"Tokenizer must contain {self._start_of_assistant_message!r} token"
+            )
+        self._start_of_assistant_message_token_id = self.vocab[
+            self._start_of_assistant_message
+        ]
 
     def is_reasoning_end(self, input_ids: Sequence[int]) -> bool:
         # IdentityReasoningParser always returns True: no reasoning to parse.

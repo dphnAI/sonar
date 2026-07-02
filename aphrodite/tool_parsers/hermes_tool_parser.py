@@ -25,33 +25,21 @@ from aphrodite.tool_parsers.abstract_tool_parser import (
     Tool,
     ToolParser,
 )
+from aphrodite.tool_parsers.utils import is_complete_json, partial_tag_overlap
 from aphrodite.utils.mistral import is_mistral_tokenizer
 
 logger = init_logger(__name__)
 
 
-def _partial_tag_overlap(text: str, tag: str) -> int:
-    """Length of the longest prefix of `tag` that matches a suffix of `text`.
-
-    E.g. text ending in "<tool_" returns 6 when tag is "<tool_call>".
-    Returns 0 if there is no overlap.
-    """
-    max_check = min(len(tag) - 1, len(text))
-    for k in range(max_check, 0, -1):
-        if text.endswith(tag[:k]):
-            return k
-    return 0
-
-
-def _is_valid_json(text: str) -> bool:
-    try:
-        json.loads(text)
-        return True
-    except (json.JSONDecodeError, ValueError):
-        return False
-
-
 class Hermes2ProToolParser(ToolParser):
+    structural_tag_model = "hermes"
+    tool_call_start_token: str = "<tool_call>"
+    tool_call_end_token: str = "</tool_call>"
+    tool_call_regex = re.compile(
+        r"<tool_call>(.*?)</tool_call>|<tool_call>(.*)", re.DOTALL
+    )
+    scratch_pad_regex = re.compile(r"<scratch_pad>(.*?)</scratch_pad>", re.DOTALL)
+
     def __init__(self, tokenizer: TokenizerLike, tools: list[Tool] | None = None):
         super().__init__(tokenizer, tools)
 
@@ -59,14 +47,11 @@ class Hermes2ProToolParser(ToolParser):
             logger.error("Detected Mistral tokenizer when using a Hermes model")
             self.model_tokenizer = tokenizer.tokenizer
 
-        self.tool_call_start_token: str = "<tool_call>"
-        self.tool_call_end_token: str = "</tool_call>"
-
-        self.tool_call_regex = re.compile(r"<tool_call>(.*?)</tool_call>|<tool_call>(.*)", re.DOTALL)
-        self.scratch_pad_regex = re.compile(r"<scratch_pad>(.*?)</scratch_pad>", re.DOTALL)
-
         if not self.model_tokenizer:
-            raise ValueError("The model tokenizer must be passed to the ToolParser constructor during construction.")
+            raise ValueError(
+                "The model tokenizer must be passed to the ToolParser "
+                "constructor during construction."
+            )
 
         # Streaming state: what has been sent to the client.
         self._sent_content_idx: int = 0
@@ -89,7 +74,9 @@ class Hermes2ProToolParser(ToolParser):
     ) -> ExtractedToolCallInformation:
         # sanity check; avoid unnecessary processing
         if self.tool_call_start_token not in model_output:
-            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
+            return ExtractedToolCallInformation(
+                tools_called=False, tool_calls=[], content=model_output
+            )
 
         else:
             try:
@@ -101,14 +88,19 @@ class Hermes2ProToolParser(ToolParser):
 
                 # load the JSON, and then use it to build the Function and
                 # Tool Call
-                raw_function_calls = [json.loads(match[0] if match[0] else match[1]) for match in function_call_tuples]
+                raw_function_calls = [
+                    json.loads(match[0] if match[0] else match[1])
+                    for match in function_call_tuples
+                ]
                 tool_calls = [
                     ToolCall(
                         type="function",
                         function=FunctionCall(
                             name=function_call["name"],
                             # function call args are JSON but as a string
-                            arguments=json.dumps(function_call["arguments"], ensure_ascii=False),
+                            arguments=json.dumps(
+                                function_call["arguments"], ensure_ascii=False
+                            ),
                         ),
                     )
                     for function_call in raw_function_calls
@@ -123,7 +115,9 @@ class Hermes2ProToolParser(ToolParser):
 
             except Exception:
                 logger.exception("Error in extracting tool call from response.")
-                return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
+                return ExtractedToolCallInformation(
+                    tools_called=False, tool_calls=[], content=model_output
+                )
 
     def _extract_content(self, current_text: str) -> str | None:
         """Return unsent non-tool-call text, or None.
@@ -131,7 +125,9 @@ class Hermes2ProToolParser(ToolParser):
         Holds back any suffix that could be a partial <tool_call> tag.
         """
         if self.tool_call_start_token not in current_text:
-            overlap_length = _partial_tag_overlap(current_text, self.tool_call_start_token)
+            overlap_length = partial_tag_overlap(
+                current_text, self.tool_call_start_token
+            )
             sendable_idx = len(current_text) - overlap_length
         else:
             sendable_idx = current_text.index(self.tool_call_start_token)
@@ -158,13 +154,13 @@ class Hermes2ProToolParser(ToolParser):
             else:
                 raw = text[json_start:]
                 # Strip partial </tool_call> suffix if present.
-                overlap = _partial_tag_overlap(raw, self.tool_call_end_token)
+                overlap = partial_tag_overlap(raw, self.tool_call_end_token)
                 if overlap:
                     raw = raw[:-overlap]
                 tc_json = raw.strip()
                 # Valid JSON without closing tag = complete body,
                 # tag tokens just haven't arrived yet.
-                is_complete = _is_valid_json(tc_json) if tc_json else False
+                is_complete = is_complete_json(tc_json) if tc_json else False
                 results.append((tc_json, is_complete))
                 break
         return results
@@ -193,7 +189,9 @@ class Hermes2ProToolParser(ToolParser):
                 raw = raw[:-1].rstrip()
         return raw
 
-    def _compute_args_diff(self, index: int, tc_json: str, is_complete: bool) -> str | None:
+    def _compute_args_diff(
+        self, index: int, tc_json: str, is_complete: bool
+    ) -> str | None:
         """Return new argument text not yet sent for tool `index`, or None."""
         args = self._extract_tool_args(tc_json, is_complete)
         if args is None or len(args) <= len(self.streamed_args_for_tool[index]):
@@ -245,7 +243,9 @@ class Hermes2ProToolParser(ToolParser):
                             index=i,
                             type="function",
                             id=make_tool_call_id(),
-                            function=DeltaFunctionCall(name=name).model_dump(exclude_none=True),
+                            function=DeltaFunctionCall(name=name).model_dump(
+                                exclude_none=True
+                            ),
                         )
                     )
 
@@ -255,7 +255,9 @@ class Hermes2ProToolParser(ToolParser):
                     tool_call_deltas.append(
                         DeltaToolCall(
                             index=i,
-                            function=DeltaFunctionCall(arguments=args_diff).model_dump(exclude_none=True),
+                            function=DeltaFunctionCall(arguments=args_diff).model_dump(
+                                exclude_none=True
+                            ),
                         )
                     )
 

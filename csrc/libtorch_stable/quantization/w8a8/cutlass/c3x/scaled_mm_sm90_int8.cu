@@ -2,7 +2,7 @@
 #include "scaled_mm_sm90_int8_dispatch.cuh"
 #include "cutlass_extensions/epilogue/scaled_mm_epilogues_c3x.hpp"
 
-namespace aphrodite {
+namespace vllm {
 
 void cutlass_scaled_mm_sm90_int8(
     torch::stable::Tensor& out, torch::stable::Tensor const& a,
@@ -22,4 +22,4 @@ void cutlass_scaled_mm_sm90_int8(
   }
 }
 
-}  // namespace aphrodite
+}  // namespace vllm

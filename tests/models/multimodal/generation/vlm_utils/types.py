@@ -14,7 +14,7 @@ from transformers.models.auto.auto_factory import _BaseAutoModelClass
 
 from aphrodite.config.model import RunnerOption
 from aphrodite.logprobs import SampleLogprobs
-from aphrodite.transformers_utils.tokenizer import AnyTokenizer
+from aphrodite.tokenizers import TokenizerLike
 
 from .....conftest import (
     AUDIO_ASSETS,
@@ -46,14 +46,12 @@ SINGLE_AUDIO_BASE_PROMPT = AUDIO_ASSETS.prompts(
     }
 )
 
-MULTI_IMAGE_BASE_PROMPT = (
-    f"Image-1: {TEST_IMG_PLACEHOLDER}Image-2: {TEST_IMG_PLACEHOLDER}Describe the two images in detail.\n"  # noqa: E501
-)
+MULTI_IMAGE_BASE_PROMPT = f"Image-1: {TEST_IMG_PLACEHOLDER}Image-2: {TEST_IMG_PLACEHOLDER}Describe the two images in detail.\n"  # noqa: E501
 VIDEO_BASE_PROMPT = f"{TEST_VIDEO_PLACEHOLDER}Why is this video funny?"
 
 
-IMAGE_SIZE_FACTORS = [(), (1.0,), (1.0, 1.0, 1.0), (0.25, 0.5, 1.0)]
-EMBEDDING_SIZE_FACTORS = [(), (1.0,), (1.0, 1.0, 1.0)]
+IMAGE_SIZE_FACTORS = [(1.0,), (1.0, 1.0, 1.0), (0.25, 0.5, 1.0)]
+EMBEDDING_SIZE_FACTORS = [(1.0,), (1.0, 1.0, 1.0)]
 RunnerOutput = tuple[list[int], str, SampleLogprobs | None]
 
 
@@ -113,7 +111,9 @@ class VLMTestInfo(NamedTuple):
 
     # Function for converting ImageAssets to image embeddings;
     # We need to define this explicitly for embedding tests
-    convert_assets_to_embeddings: Callable[[ImageTestAssets], list[torch.Tensor]] | None = None
+    convert_assets_to_embeddings: (
+        Callable[[ImageTestAssets], list[torch.Tensor]] | None
+    ) = None
 
     # Exposed options for Aphrodite runner; we change these in a several tests,
     # but the defaults are derived from AphroditeRunner & the engine defaults
@@ -123,16 +123,17 @@ class VLMTestInfo(NamedTuple):
     max_num_seqs: int = 256
     runner: RunnerOption = "auto"
     tensor_parallel_size: int = 1
-    aphrodite_runner_kwargs: dict[str, Any] | None = None
+    vllm_runner_kwargs: dict[str, Any] | None = None
 
     # Optional callable which gets a list of token IDs from the model tokenizer
-    get_stop_token_ids: Callable[[AnyTokenizer], list[int]] | None = None
+    get_stop_token_ids: Callable[[TokenizerLike], list[int]] | None = None
     # Optional list of strings to stop generation, useful when stop tokens are
     # not special tokens in the tokenizer
     stop_str: list[str] | None = None
 
     # Exposed options for HF runner
     hf_model_kwargs: dict[str, Any] | None = None
+    hf_processor: Callable[[str], Any] | None = None
     # Indicates we should explicitly pass the EOS from the tokenizer
     use_tokenizer_eos: bool = False
     auto_cls: type[_BaseAutoModelClass] = AutoModelForCausalLM
@@ -140,7 +141,7 @@ class VLMTestInfo(NamedTuple):
 
     # Post processors that if defined, will run oun the outputs of the
     # Aphrodite and HF runner, respectively (useful for sanitization, etc).
-    aphrodite_output_post_proc: Callable[[RunnerOutput, str], Any] | None = None
+    vllm_output_post_proc: Callable[[RunnerOutput, str], Any] | None = None
     hf_output_post_proc: Callable[[RunnerOutput, str], Any] | None = None
 
     # Consumes the output of the callables above and checks if they're equal
@@ -168,7 +169,9 @@ class VLMTestInfo(NamedTuple):
     # Hack for updating a prompt to take into a local path; currently only used
     # for Qwen-VL, which requires encoding the image path / url into the prompt
     # for HF runner
-    prompt_path_encoder: Callable[[PosixPath, str, list[ImageAsset] | ImageTestAssets], str] | None = None  # noqa: E501
+    prompt_path_encoder: (
+        Callable[[PosixPath, str, list[ImageAsset] | ImageTestAssets], str] | None
+    ) = None  # noqa: E501
 
     # Allows configuring a test to run with custom inputs
     custom_test_opts: list[CustomTestOptions] | None = None
@@ -186,14 +189,15 @@ class VLMTestInfo(NamedTuple):
             "max_num_seqs": self.max_num_seqs,
             "runner": self.runner,
             "tensor_parallel_size": self.tensor_parallel_size,
-            "aphrodite_runner_kwargs": self.aphrodite_runner_kwargs,
+            "vllm_runner_kwargs": self.vllm_runner_kwargs,
             "hf_output_post_proc": self.hf_output_post_proc,
-            "aphrodite_output_post_proc": self.aphrodite_output_post_proc,
+            "vllm_output_post_proc": self.vllm_output_post_proc,
             "auto_cls": self.auto_cls,
             "use_tokenizer_eos": self.use_tokenizer_eos,
             "comparator": self.comparator,
             "get_stop_token_ids": self.get_stop_token_ids,
             "hf_model_kwargs": self.hf_model_kwargs,
+            "hf_processor": self.hf_processor,
             "stop_str": self.stop_str,
             "patch_hf_runner": self.patch_hf_runner,
         }

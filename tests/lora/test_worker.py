@@ -1,35 +1,56 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import os
 import random
 import tempfile
 from unittest.mock import patch
 
-from aphrodite.lora.models import LoRAMapping
-
-from aphrodite.config import AphroditeConfig, CacheConfig, DeviceConfig, ModelConfig, ParallelConfig, SchedulerConfig
+from aphrodite.config import (
+    CacheConfig,
+    DeviceConfig,
+    ModelConfig,
+    ParallelConfig,
+    SchedulerConfig,
+    AphroditeConfig,
+    set_current_vllm_config,
+)
 from aphrodite.config.load import LoadConfig
 from aphrodite.config.lora import LoRAConfig
+from aphrodite.lora.model_manager import LoRAMapping
 from aphrodite.lora.request import LoRARequest
-from aphrodite.v1.worker.gpu_worker import Worker
+from aphrodite.platforms import current_platform
 
+if current_platform.is_xpu():
+    from aphrodite.v1.worker.xpu_worker import XPUWorker as Worker
+else:
+    from aphrodite.v1.worker.gpu_worker import Worker
+
+MODEL_PATH = "Qwen/Qwen3-0.6B"
 NUM_LORAS = 16
+
+DEVICE_TYPE = current_platform.device_type
 
 
 @patch.dict(os.environ, {"RANK": "0"})
-def test_worker_apply_lora(sql_lora_files):
+def test_worker_apply_lora(qwen3_lora_files):
     def set_active_loras(worker: Worker, lora_requests: list[LoRARequest]):
         lora_mapping = LoRAMapping([], [])
 
-        worker.model_runner.lora_manager.set_active_adapters(lora_requests, lora_mapping)
+        worker.model_runner.lora_manager.set_active_adapters(
+            lora_requests, lora_mapping
+        )
 
-    aphrodite_config = AphroditeConfig(
-        model_config=ModelConfig(
-            "meta-llama/Llama-2-7b-hf",
-            seed=0,
-            dtype="float16",
-            enforce_eager=True,
-        ),
+    model_config = ModelConfig(
+        MODEL_PATH,
+        seed=0,
+        dtype="float16",
+        max_model_len=127,
+        enforce_eager=True,
+    )
+
+    vllm_config = AphroditeConfig(
+        model_config=model_config,
         load_config=LoadConfig(
             download_dir=None,
             load_format="dummy",
@@ -39,37 +60,54 @@ def test_worker_apply_lora(sql_lora_files):
             tensor_parallel_size=1,
             data_parallel_size=1,
         ),
-        scheduler_config=SchedulerConfig("generate", 32, 32, 32),
-        device_config=DeviceConfig("cuda"),
+        scheduler_config=SchedulerConfig(
+            max_model_len=model_config.max_model_len,
+            is_encoder_decoder=model_config.is_encoder_decoder,
+            runner_type="generate",
+            max_num_batched_tokens=32,
+            max_num_seqs=32,
+            max_num_partial_prefills=32,
+        ),
+        device_config=DeviceConfig(DEVICE_TYPE),
         cache_config=CacheConfig(
             block_size=16,
-            swap_space=0,
             cache_dtype="auto",
         ),
-        lora_config=LoRAConfig(max_lora_rank=8, max_cpu_loras=NUM_LORAS, max_loras=NUM_LORAS),
+        lora_config=LoRAConfig(
+            max_lora_rank=8, max_cpu_loras=NUM_LORAS, max_loras=NUM_LORAS
+        ),
     )
     worker = Worker(
-        aphrodite_config=aphrodite_config,
+        vllm_config=vllm_config,
         local_rank=0,
         rank=0,
         distributed_init_method=f"file://{tempfile.mkstemp()[1]}",
     )
 
-    worker.init_device()
-    worker.load_model()
+    with set_current_vllm_config(vllm_config):
+        worker.init_device()
+        worker.load_model()
 
     set_active_loras(worker, [])
     assert worker.list_loras() == set()
 
-    lora_requests = [LoRARequest(str(i + 1), i + 1, sql_lora_files) for i in range(NUM_LORAS)]
+    lora_requests = [
+        LoRARequest(str(i + 1), i + 1, qwen3_lora_files) for i in range(NUM_LORAS)
+    ]
 
     set_active_loras(worker, lora_requests)
-    assert worker.list_loras() == {lora_request.lora_int_id for lora_request in lora_requests}
+    assert worker.list_loras() == {
+        lora_request.lora_int_id for lora_request in lora_requests
+    }
 
     for i in range(NUM_LORAS):
         random.seed(i)
-        iter_lora_requests = random.choices(lora_requests, k=random.randint(1, NUM_LORAS))
+        iter_lora_requests = random.choices(
+            lora_requests, k=random.randint(1, NUM_LORAS)
+        )
         random.shuffle(iter_lora_requests)
         iter_lora_requests = iter_lora_requests[: -random.randint(0, NUM_LORAS)]
         set_active_loras(worker, lora_requests)
-        assert worker.list_loras().issuperset({lora_request.lora_int_id for lora_request in iter_lora_requests})
+        assert worker.list_loras().issuperset(
+            {lora_request.lora_int_id for lora_request in iter_lora_requests}
+        )

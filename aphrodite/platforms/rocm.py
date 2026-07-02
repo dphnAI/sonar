@@ -32,8 +32,10 @@ logger = init_logger(__name__)
 try:
     from amdsmi import (
         AmdSmiException,
+        AmdSmiMemoryType,
         amdsmi_get_gpu_asic_info,
         amdsmi_get_gpu_device_uuid,
+        amdsmi_get_gpu_memory_total,
         amdsmi_get_processor_handles,
         amdsmi_init,
         amdsmi_shut_down,
@@ -49,6 +51,11 @@ except ImportError as e:
     log_extension_import_failure("aphrodite._C", e, target_logger=logger)
 
 # import custom ops, trigger op registration
+try:
+    import aphrodite._C_stable_libtorch  # noqa: F401
+except ImportError as e:
+    logger.warning("Failed to import from aphrodite._C_stable_libtorch with %r", e)
+
 try:
     import aphrodite._rocm_C  # noqa: F401
 except ImportError as e:
@@ -102,7 +109,11 @@ def _rocm_device_count_stateless(cuda_visible_devices: str | None = None) -> int
         return 0
     # ROCm uses amdsmi instead of nvml for stateless device count
     # This requires a sufficiently modern version of Torch 2.4.0
-    raw_count = torch.cuda._device_count_amdsmi() if (hasattr(torch.cuda, "_device_count_amdsmi")) else -1
+    raw_count = (
+        torch.cuda._device_count_amdsmi()
+        if (hasattr(torch.cuda, "_device_count_amdsmi"))
+        else -1
+    )
     r = torch._C._cuda_getDeviceCount() if raw_count < 0 else raw_count
     return r
 
@@ -112,6 +123,14 @@ def _sync_hip_cuda_env_vars():
     Treats empty string as unset. Raises on genuine conflicts."""
     hip_val = os.environ.get("HIP_VISIBLE_DEVICES") or None
     cuda_val = os.environ.get("CUDA_VISIBLE_DEVICES") or None
+
+    if cuda_val is not None:
+        logger.warning_once(
+            "Using CUDA_VISIBLE_DEVICES on ROCm is deprecated and support "
+            "will be removed in Aphrodite v0.26.0. Please use HIP_VISIBLE_DEVICES "
+            "instead.",
+            scope="process",
+        )
 
     if hip_val is not None and cuda_val is not None:
         if hip_val != cuda_val:
@@ -129,6 +148,7 @@ def _sync_hip_cuda_env_vars():
 
 # Sync at import time - catches misconfigurations from process start.
 _sync_hip_cuda_env_vars()
+
 
 # AMDSMI utils
 # Note that NVML is not affected by `{CUDA/HIP}_VISIBLE_DEVICES`,
@@ -162,6 +182,14 @@ def _query_gcn_arch_from_amdsmi() -> str:
     raise RuntimeError("amdsmi did not return valid GCN arch")
 
 
+@with_amdsmi_context
+def _query_total_memory_from_amdsmi(physical_device_id: int) -> int:
+    """Query total VRAM (bytes) from amdsmi. Raises if not available."""
+    handles = amdsmi_get_processor_handles()
+    handle = handles[physical_device_id]
+    return amdsmi_get_gpu_memory_total(handle, AmdSmiMemoryType.VRAM)
+
+
 def _get_gcn_arch() -> str:
     """
     Get GCN arch via amdsmi (no CUDA init), fallback to torch.cuda.
@@ -186,6 +214,9 @@ def _get_gcn_arch() -> str:
 _GCN_ARCH = _get_gcn_arch()
 
 _ON_GFX1X = any(arch in _GCN_ARCH for arch in ["gfx11", "gfx12"])
+_ON_GFX11 = "gfx11" in _GCN_ARCH
+_ON_GFX1100 = "gfx1100" in _GCN_ARCH
+_ON_GFX1151 = "gfx1151" in _GCN_ARCH
 _ON_GFX12X = any(arch in _GCN_ARCH for arch in ["gfx12"])
 _ON_MI3XX = any(arch in _GCN_ARCH for arch in ["gfx942", "gfx950"])
 _ON_GFX9 = any(arch in _GCN_ARCH for arch in ["gfx90a", "gfx942", "gfx950"])
@@ -269,6 +300,18 @@ def on_gfx1x() -> bool:
     return _ON_GFX1X
 
 
+def on_gfx11() -> bool:
+    return _ON_GFX11
+
+
+def on_gfx1100() -> bool:
+    return _ON_GFX1100
+
+
+def on_gfx1151() -> bool:
+    return _ON_GFX1151
+
+
 def on_gfx12x() -> bool:
     return _ON_GFX12X
 
@@ -291,6 +334,17 @@ def on_gfx942() -> bool:
 
 def on_gfx950() -> bool:
     return _ON_GFX950
+
+
+# Enable HIP online tuning early, before hipBLASLt initializes.
+# Turn on hipBLASLt online tuning if use AITER hipBLASLt GEMM.
+if (
+    envs.APHRODITE_ROCM_USE_AITER
+    and envs.APHRODITE_ROCM_USE_AITER_LINEAR
+    and envs.APHRODITE_ROCM_USE_AITER_LINEAR_HIPBMM
+    and on_mi3xx()
+):
+    os.environ["HIP_ONLINE_TUNING"] = "1"
 
 
 @cache
@@ -346,7 +400,8 @@ def flash_attn_triton_available() -> bool:
             return False
         if os.environ.get("FLASH_ATTENTION_TRITON_AMD_ENABLE") != "TRUE":
             logger.info_once(
-                "Set FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE to enable Flash Attention Triton backend on RDNA."
+                "Set FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE to enable "
+                "Flash Attention Triton backend on RDNA."
             )
             return False
         return True
@@ -357,6 +412,7 @@ def flash_attn_triton_available() -> bool:
 def _get_backend_priorities(
     use_mla: bool,
     use_sparse: bool,
+    use_kv_connector: bool = False,
 ) -> list[AttentionBackendEnum]:
     from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
 
@@ -375,9 +431,11 @@ def _get_backend_priorities(
                 AttentionBackendEnum.TRITON_MLA,
             ]
 
-    backends = [
-        AttentionBackendEnum.ROCM_ATTN,
-    ]
+    backends = []
+    # ROCM_ATTN uses (2, num_blocks, ...) KV cache layout which is
+    # incompatible with KV connectors that require blocks-first layout.
+    if not use_kv_connector:
+        backends.append(AttentionBackendEnum.ROCM_ATTN)
     if rocm_aiter_ops.is_mha_enabled():
         backends.append(AttentionBackendEnum.ROCM_AITER_FA)
     if is_aiter_found_and_supported():
@@ -405,13 +463,14 @@ class RocmPlatform(Platform):
 
     supported_quantization: list[str] = [
         "awq",
+        "auto_awq",
         "awq_marlin",  # will be overwritten with awq
         "gptq",
-        "gptq_marlin",  # will be overwritten with gptq
+        "auto_gptq",
         "fp8",
+        "deepseek_v4_fp8",
         "compressed-tensors",
         "fbgemm_fp8",
-        "gguf",
         "quark",
         "mxfp4",
         "mxfp8",
@@ -423,6 +482,7 @@ class RocmPlatform(Platform):
         "modelopt_mixed",
         "fp8_per_tensor",
         "fp8_per_block",
+        "fp8_per_channel",
         "online",
         "gpt_oss_mxfp4",
     ]
@@ -454,6 +514,7 @@ class RocmPlatform(Platform):
         backend_priorities = _get_backend_priorities(
             attn_selector_config.use_mla,
             attn_selector_config.use_sparse,
+            attn_selector_config.use_kv_connector,
         )
         for priority, backend in enumerate(backend_priorities):
             try:
@@ -512,16 +573,21 @@ class RocmPlatform(Platform):
         )
         reasons_str = (
             "{"
-            + ", ".join(f"{backend.name}: [{', '.join(reasons)}]" for backend, reasons in invalid_reasons.items())
+            + ", ".join(
+                f"{backend.name}: [{', '.join(reasons)}]"
+                for backend, reasons in invalid_reasons.items()
+            )
             + "}"
         )
         config_str = attn_selector_config.__repr__()
         logger.debug_once(
-            f"Some attention backends are not valid for {cls.device_name} with {config_str}. Reasons: {reasons_str}."
+            f"Some attention backends are not valid for {cls.device_name} with "
+            f"{config_str}. Reasons: {reasons_str}."
         )
         if len(valid_backends_priorities) == 0:
             raise ValueError(
-                f"No valid attention backend found for {cls.device_name} with {config_str}. Reasons: {reasons_str}."
+                f"No valid attention backend found for {cls.device_name} "
+                f"with {config_str}. Reasons: {reasons_str}."
             )
 
         # We have found some valid backends. Select the one with the
@@ -532,11 +598,14 @@ class RocmPlatform(Platform):
         )
         selected_index = sorted_indices[0]
         selected_backend = valid_backends_priorities[selected_index][0]
-        valid_str = "[" + ", ".join(f"'{b[0].name}'" for b in valid_backends_priorities) + "]"
+        valid_str = (
+            "[" + ", ".join(f"'{b[0].name}'" for b in valid_backends_priorities) + "]"
+        )
         if invalid_reasons:
             rejected_str = ", ".join(b.name for b in invalid_reasons)
             logger.info(
-                "Found incompatible backend(s) [%s] with %s. Overriding with %s out of potential backends: %s.",
+                "Found incompatible backend(s) [%s] with %s. "
+                "Overriding with %s out of potential backends: %s.",
                 rejected_str,
                 attn_selector_config.attn_type,
                 selected_backend.name,
@@ -583,13 +652,23 @@ class RocmPlatform(Platform):
             logger.info_once("Using AITER Flash Attention backend for ViT model.")
             return AttentionBackendEnum.ROCM_AITER_FA
 
-        if on_gfx9() and find_spec("flash_attn") is not None and (dtype == torch.float16 or dtype == torch.bfloat16):
+        if (
+            on_gfx9()
+            and find_spec("flash_attn") is not None
+            and (dtype == torch.float16 or dtype == torch.bfloat16)
+        ):
             logger.info_once("Using Flash Attention backend for ViT model.")
             return AttentionBackendEnum.FLASH_ATTN
 
         # RDNA3/RDNA4 (gfx11xx/gfx12xx): Use Flash Attention Triton backend
-        if on_gfx1x() and flash_attn_triton_available() and (dtype == torch.float16 or dtype == torch.bfloat16):
-            logger.info_once("Using Flash Attention (Triton backend) for ViT model on RDNA.")
+        if (
+            on_gfx1x()
+            and flash_attn_triton_available()
+            and (dtype == torch.float16 or dtype == torch.bfloat16)
+        ):
+            logger.info_once(
+                "Using Flash Attention (Triton backend) for ViT model on RDNA."
+            )
             return AttentionBackendEnum.FLASH_ATTN
 
         logger.info_once("Using Torch SDPA backend for ViT model.")
@@ -669,23 +748,31 @@ class RocmPlatform(Platform):
 
     @classmethod
     def get_device_total_memory(cls, device_id: int = 0) -> int:
-        device_props = torch.cuda.get_device_properties(device_id)
-        return device_props.total_memory
+        # Query total VRAM via amdsmi so we don't initialize a HIP context in
+        # the calling process. torch.cuda.get_device_properties() creates a
+        # HIP context, which makes Aphrodite fall back from `fork` to `spawn` for
+        # worker processes. Keeping this query context-free preserves `fork`
+        # where it is otherwise valid (e.g. out-of-tree models registered in
+        # the parent process).
+        try:
+            physical_device_id = cls.device_id_to_physical_device_id(device_id)
+            return _query_total_memory_from_amdsmi(physical_device_id)
+        except Exception as e:
+            logger.debug("Failed to get total memory via amdsmi: %s", e)
+            logger.warning_once(
+                "Failed to get total memory via amdsmi, falling back to "
+                "torch.cuda. This will initialize CUDA."
+            )
+        return torch.cuda.get_device_properties(device_id).total_memory
 
     @classmethod
     def apply_config_platform_defaults(cls, aphrodite_config: "AphroditeConfig") -> None:
         from aphrodite._aiter_ops import rocm_aiter_ops
-        from aphrodite.config.compilation import CUDAGraphMode
 
         compilation_config = aphrodite_config.compilation_config
-        is_eager_execution = compilation_config.cudagraph_mode == CUDAGraphMode.NONE
         use_aiter_fused_moe = rocm_aiter_ops.is_fused_moe_enabled()
-        use_aiter_rms_norm = rocm_aiter_ops.is_rmsnorm_enabled()
         use_aiter_fp8_linear = rocm_aiter_ops.is_linear_fp8_enabled()
         use_aiter_fused_se = rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
-        #  Aiter rms norm perform best when CUDA Graph capture is enabled.
-        if use_aiter_rms_norm and not is_eager_execution and "-rms_norm" not in compilation_config.custom_ops:
-            compilation_config.custom_ops.append("+rms_norm")
 
         if use_aiter_fp8_linear and "-quant_fp8" not in compilation_config.custom_ops:
             compilation_config.custom_ops.append("+quant_fp8")
@@ -740,7 +827,9 @@ class RocmPlatform(Platform):
     @classmethod
     def verify_model_arch(cls, model_arch: str) -> None:
         if model_arch in _ROCM_UNSUPPORTED_MODELS:
-            raise ValueError(f"Model architecture '{model_arch}' is not supported by ROCm for now.")
+            raise ValueError(
+                f"Model architecture '{model_arch}' is not supported by ROCm for now."
+            )
 
         if model_arch in _ROCM_PARTIALLY_SUPPORTED_MODELS:
             msg = _ROCM_PARTIALLY_SUPPORTED_MODELS[model_arch]
@@ -765,14 +854,18 @@ class RocmPlatform(Platform):
         return "aphrodite.lora.punica_wrapper.punica_gpu.PunicaWrapperGPU"
 
     @classmethod
-    def get_current_memory_usage(cls, device: torch.types.Device | None = None) -> float:
+    def get_current_memory_usage(
+        cls, device: torch.types.Device | None = None
+    ) -> float:
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats(device)
         return torch.cuda.max_memory_allocated(device)
 
     @classmethod
     def get_device_communicator_cls(cls) -> str:
-        return "aphrodite.distributed.device_communicators.cuda_communicator.CudaCommunicator"  # noqa
+        return (
+            "aphrodite.distributed.device_communicators.cuda_communicator.CudaCommunicator"  # noqa
+        )
 
     @classmethod
     def supports_mx(cls) -> bool:
@@ -831,7 +924,9 @@ class RocmPlatform(Platform):
         backend_options = ProcessGroupNCCL.Options()
         backend_options._timeout = timeout
 
-        backend_class = ProcessGroupNCCL(prefix_store, group_rank, group_size, backend_options)
+        backend_class = ProcessGroupNCCL(
+            prefix_store, group_rank, group_size, backend_options
+        )
         backend_type = ProcessGroup.BackendType.NCCL
         device = torch.device("cuda")
         pg._set_default_backend(backend_type)
@@ -874,8 +969,8 @@ class RocmPlatform(Platform):
         dst_block_indices: torch.Tensor,
     ) -> None:
         """Copy blocks from src_cache to dst_cache on GPU."""
-        _src_cache = src_cache[:, src_block_indices]
-        dst_cache[:, dst_block_indices] = _src_cache.to(dst_cache.device)
+        _src_cache = src_cache[src_block_indices]
+        dst_cache[dst_block_indices] = _src_cache.to(dst_cache.device)
 
     @classmethod
     def swap_out_blocks_to_host(
@@ -886,8 +981,8 @@ class RocmPlatform(Platform):
         dst_block_indices: torch.Tensor,
     ) -> None:
         """Copy blocks from GPU to host (CPU)."""
-        _src_cache = src_cache[:, src_block_indices]
-        dst_cache[:, dst_block_indices] = _src_cache.cpu()
+        _src_cache = src_cache[src_block_indices]
+        dst_cache[dst_block_indices] = _src_cache.cpu()
 
     @classmethod
     def support_hybrid_kv_cache(cls) -> bool:
@@ -906,8 +1001,10 @@ class RocmPlatform(Platform):
         return True
 
     @classmethod
-    def get_default_ir_op_priority(cls, aphrodite_config: "AphroditeConfig") -> "IrOpPriorityConfig":
-        from aphrodite.config.compilation import CompilationMode
+    def get_default_ir_op_priority(
+        cls, aphrodite_config: "AphroditeConfig"
+    ) -> "IrOpPriorityConfig":
+        from aphrodite.config.compilation import CompilationMode, CUDAGraphMode
         from aphrodite.config.kernel import IrOpPriorityConfig
 
         # Native used by default when compiling,
@@ -917,12 +1014,10 @@ class RocmPlatform(Platform):
         using_inductor = cc.backend == "inductor" and cc.mode != CompilationMode.NONE
         default = ["native"] if using_inductor else ["aphrodite_c", "native"]
 
-        # This (mostly) preserves previous CustomOp behavior
-        # Necessary on ROCm because it's common that users
-        # enable rms_norm to use the aiter kernel.
+        #  Aiter rms norm perform best when CUDA Graph capture is enabled.
         # TODO(luka/TJ) remove env vars completely
         if (
-            cc.is_custom_op_enabled("rms_norm")
+            cc.cudagraph_mode != CUDAGraphMode.NONE
             and envs.APHRODITE_ROCM_USE_AITER
             and envs.APHRODITE_ROCM_USE_AITER_RMSNORM
         ):
@@ -930,7 +1025,9 @@ class RocmPlatform(Platform):
         else:
             rms_norm = default
 
-        return IrOpPriorityConfig.with_default(default, rms_norm=rms_norm)
+        return IrOpPriorityConfig.with_default(
+            default, rms_norm=rms_norm, fused_add_rms_norm=rms_norm
+        )
 
     @classmethod
     @with_amdsmi_context
@@ -942,10 +1039,13 @@ class RocmPlatform(Platform):
             for device_id in range(cls.device_count()):
                 physical_device_id = cls.device_id_to_physical_device_id(device_id)
                 try:
-                    numa_node = amdsmi_topo_get_numa_node_number(handles[physical_device_id])
+                    numa_node = amdsmi_topo_get_numa_node_number(
+                        handles[physical_device_id]
+                    )
                 except AmdSmiException as e:
                     logger.warning(
-                        "Could not detect NUMA node for GPU %d, disabling automatic NUMA binding: %s",
+                        "Could not detect NUMA node for GPU %d, "
+                        "disabling automatic NUMA binding: %s",
                         device_id,
                         e,
                     )

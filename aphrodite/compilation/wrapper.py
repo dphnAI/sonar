@@ -53,7 +53,9 @@ class TorchCompileWithNoGuardsWrapper:
     since we drop all guards.
     """
 
-    def _call_with_optional_nvtx_range(self, callable_fn: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> Any:
+    def _call_with_optional_nvtx_range(
+        self, callable_fn: Callable[P, R], *args: P.args, **kwargs: P.kwargs
+    ) -> Any:
         if self.layerwise_nvtx_tracing_enabled:
             args_list = list(args)
             kwargs_dict = dict(kwargs)
@@ -79,7 +81,9 @@ class TorchCompileWithNoGuardsWrapper:
         aphrodite_config = get_current_aphrodite_config()
         self.aphrodite_config = aphrodite_config
         mode = aphrodite_config.compilation_config.mode
-        self.layerwise_nvtx_tracing_enabled = aphrodite_config.observability_config.enable_layerwise_nvtx_tracing
+        self.layerwise_nvtx_tracing_enabled = (
+            aphrodite_config.observability_config.enable_layerwise_nvtx_tracing
+        )
         if mode is None:
             raise RuntimeError("Compilation mode cannot be NO_COMPILATION")
 
@@ -92,7 +96,9 @@ class TorchCompileWithNoGuardsWrapper:
             options = aphrodite_config.compilation_config.inductor_compile_config
 
         self.first_compile = True
-        self.evaluate_guards = aphrodite_config.compilation_config.dynamic_shapes_config.evaluate_guards
+        self.evaluate_guards = (
+            aphrodite_config.compilation_config.dynamic_shapes_config.evaluate_guards
+        )
 
         ds_type = aphrodite_config.compilation_config.dynamic_shapes_config.type
 
@@ -100,12 +106,16 @@ class TorchCompileWithNoGuardsWrapper:
             # Drop all the guards.
             if self.evaluate_guards:
                 assert not envs.APHRODITE_USE_BYTECODE_HOOK, (
-                    "compilation_config.dynamic_shapes_config.evaluate_guards requires APHRODITE_USE_BYTECODE_HOOK=0. "
+                    "compilation_config.dynamic_shapes_config.evaluate_guards "
+                    "requires APHRODITE_USE_BYTECODE_HOOK=0. "
+                )
+                assert ds_type != DynamicShapesType.UNBACKED, (
+                    "UNBACKED dynamic shapes do not add guards"
                 )
 
-                assert ds_type != DynamicShapesType.UNBACKED, "UNBACKED dynamic shapes do not add guards"
-
-                options["guard_filter_fn"] = lambda x: [entry.guard_type == "SHAPE_ENV" for entry in x]
+                options["guard_filter_fn"] = lambda x: [
+                    entry.guard_type == "SHAPE_ENV" for entry in x
+                ]
             else:
                 if hasattr(torch.compiler, "skip_all_guards_unsafe"):
                     # Torch 2.10+ provides skip_all_guards_unsafe
@@ -144,7 +154,9 @@ class TorchCompileWithNoGuardsWrapper:
             )
 
         if envs.APHRODITE_USE_BYTECODE_HOOK and mode != CompilationMode.STOCK_TORCH_COMPILE:
-            torch._dynamo.convert_frame.register_bytecode_hook(self.bytecode_hook)
+            self._bytecode_hook_handle = (
+                torch._dynamo.convert_frame.register_bytecode_hook(self.bytecode_hook)
+            )
             self._compiled_bytecode: CodeType | None = None
 
     def aot_compile(self, *args: Any, **kwargs: Any) -> Any:
@@ -158,17 +170,24 @@ class TorchCompileWithNoGuardsWrapper:
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         if envs.APHRODITE_USE_BYTECODE_HOOK:
-            if self.aphrodite_config.compilation_config.mode == CompilationMode.STOCK_TORCH_COMPILE:
+            if (
+                self.aphrodite_config.compilation_config.mode
+                == CompilationMode.STOCK_TORCH_COMPILE
+            ):
                 return self._compiled_callable(*args, **kwargs)
 
             if not self._compiled_bytecode:
                 # Make sure a compilation is triggered by clearing dynamo
                 # cache.
                 torch._dynamo.eval_frame.remove_from_cache(self.original_code_object())
-                return self._call_with_optional_nvtx_range(self._compiled_callable, *args, **kwargs)
+                return self._call_with_optional_nvtx_range(
+                    self._compiled_callable, *args, **kwargs
+                )
             else:
                 with self._dispatch_to_compiled_code():
-                    return self._call_with_optional_nvtx_range(self.forward, *args, **kwargs)
+                    return self._call_with_optional_nvtx_range(
+                        self.forward, *args, **kwargs
+                    )
         else:
             ctx = (
                 nullcontext()
@@ -177,7 +196,9 @@ class TorchCompileWithNoGuardsWrapper:
             )
             self.first_compile = False
             with _compilation_context(), ctx:
-                return self._call_with_optional_nvtx_range(self._compiled_callable, *args, **kwargs)
+                return self._call_with_optional_nvtx_range(
+                    self._compiled_callable, *args, **kwargs
+                )
 
     @abstractmethod
     def forward(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -242,6 +263,12 @@ class TorchCompileWithNoGuardsWrapper:
             )
             raise RuntimeError(msg)
 
+    def cleanup(self) -> None:
+        """Remove the bytecode hook registered by this instance."""
+        handle = getattr(self, "_bytecode_hook_handle", None)
+        if handle is not None:
+            handle.remove()
+
     @contextmanager
     def _dispatch_to_compiled_code(self) -> Generator[None, None, None]:
         # noqa: E501
@@ -267,7 +294,9 @@ def reset_compile_wrapper(model: torch.nn.Module) -> None:
     """
     Clean up compiled model and captured CUDA graphs for elastic EP.
     """
-    if not isinstance(model, TorchCompileWithNoGuardsWrapper) and hasattr(model, "model"):
+    if not isinstance(model, TorchCompileWithNoGuardsWrapper) and hasattr(
+        model, "model"
+    ):
         model = model.model
     if not isinstance(model, TorchCompileWithNoGuardsWrapper):
         return

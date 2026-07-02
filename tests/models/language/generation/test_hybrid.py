@@ -1,13 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 from collections.abc import Callable
+from contextlib import contextmanager, nullcontext
 
 import pytest
-from aphrodite.engine.args_tools import EngineArgs
 
-from aphrodite.common.sampling_params import SamplingParams
 from tests.models.registry import HF_EXAMPLE_MODELS
 from tests.utils import multi_gpu_test
+from aphrodite import LLM
+from aphrodite.engine.arg_utils import EngineArgs
+from aphrodite.platforms import current_platform
+from aphrodite.sampling_params import SamplingParams
+from aphrodite.v1.cudagraph_dispatcher import CudagraphDispatcher
 
 from ...utils import check_logprobs_close, check_outputs_equal
 
@@ -17,6 +22,8 @@ pytestmark = pytest.mark.hybrid_model
 # NOTE: The first model in each list is taken as the primary model,
 # meaning that it will be used in all tests in this file
 # The rest of the models will only be tested by test_models
+
+APC_MULTIPLY_BY = 300
 
 SSM_MODELS = [
     "state-spaces/mamba-130m-hf",
@@ -30,7 +37,6 @@ HYBRID_MODELS = [
     "ai21labs/Jamba-tiny-dev",
     "pfnet/plamo-2-1b",
     "Zyphra/Zamba2-1.2B-instruct",
-    "hmellor/tiny-random-BambaForCausalLM",
     "ibm-granite/granite-4.0-tiny-preview",
     "tiiuae/Falcon-H1-0.5B-Base",
     "LiquidAI/LFM2-1.2B",
@@ -51,13 +57,23 @@ FP32_STATE_MODELS = [
 # Avoid OOM
 MAX_NUM_SEQS = 4
 
+ATTN_BACKEND = "TRITON_ATTN" if current_platform.is_rocm() else "auto"
+
+
+def _set_conv_state_layout(monkeypatch, layout: str) -> None:
+    """Set conv state layout env var and clear cache to pick up new value."""
+    from aphrodite.model_executor.layers.mamba import mamba_utils
+
+    monkeypatch.setenv("APHRODITE_SSM_CONV_STATE_LAYOUT", layout)
+    mamba_utils.get_conv_state_layout.cache_clear()
+
 
 @pytest.mark.parametrize("model", SSM_MODELS + HYBRID_MODELS)
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_models(
     hf_runner,
-    aphrodite_runner,
+    vllm_runner,
     example_prompts,
     monkeypatch,
     model: str,
@@ -72,14 +88,20 @@ def test_models(
         pass
 
     with hf_runner(model) as hf_model:
-        hf_outputs = hf_model.generate_greedy_logprobs_limit(example_prompts, max_tokens, num_logprobs)
+        hf_outputs = hf_model.generate_greedy_logprobs_limit(
+            example_prompts, max_tokens, num_logprobs
+        )
 
-    with aphrodite_runner(model, max_num_seqs=MAX_NUM_SEQS) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+    with vllm_runner(
+        model, max_num_seqs=MAX_NUM_SEQS, attention_backend=ATTN_BACKEND
+    ) as vllm_model:
+        vllm_outputs = vllm_model.generate_greedy_logprobs(
+            example_prompts, max_tokens, num_logprobs
+        )
 
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=aphrodite_outputs,
+        outputs_1_lst=vllm_outputs,
         name_0="hf",
         name_1="aphrodite",
     )
@@ -88,12 +110,15 @@ def test_models(
 @pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("num_logprobs", [5])
+@pytest.mark.parametrize("conv_state_layout", ["SD", "DS"])
 def test_batching(
-    aphrodite_runner,
+    vllm_runner,
     example_prompts,
+    monkeypatch,
     model: str,
     max_tokens: int,
     num_logprobs: int,
+    conv_state_layout: str,
 ) -> None:
     try:
         model_info = HF_EXAMPLE_MODELS.find_hf_info(model)
@@ -102,29 +127,38 @@ def test_batching(
     except ValueError:
         pass
 
+    _set_conv_state_layout(monkeypatch, conv_state_layout)
+
     for_loop_outputs = []
-    with aphrodite_runner(model, max_num_seqs=MAX_NUM_SEQS) as aphrodite_model:
+    with vllm_runner(model, max_num_seqs=MAX_NUM_SEQS) as vllm_model:
         for prompt in example_prompts:
-            (single_output,) = aphrodite_model.generate_greedy_logprobs([prompt], max_tokens, num_logprobs)
+            (single_output,) = vllm_model.generate_greedy_logprobs(
+                [prompt], max_tokens, num_logprobs
+            )
             for_loop_outputs.append(single_output)
 
-        batched_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+        batched_outputs = vllm_model.generate_greedy_logprobs(
+            example_prompts, max_tokens, num_logprobs
+        )
 
     check_logprobs_close(
         outputs_0_lst=for_loop_outputs,
         outputs_1_lst=batched_outputs,
-        name_0="for_loop_aphrodite",
-        name_1="batched_aphrodite",
+        name_0="for_loop_vllm",
+        name_1="batched_vllm",
     )
 
 
 @pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0]])
 @pytest.mark.parametrize("max_tokens", [10])
+@pytest.mark.parametrize("conv_state_layout", ["SD", "DS"])
 def test_chunked_prefill_with_parallel_sampling(
-    aphrodite_runner,
+    vllm_runner,
     example_prompts,
+    monkeypatch,
     model: str,
     max_tokens: int,
+    conv_state_layout: str,
 ) -> None:
     """
     Tests chunked prefill in conjunction with n > 1.
@@ -136,37 +170,52 @@ def test_chunked_prefill_with_parallel_sampling(
     decoding steps inside a chunked prefill forward pass
     (where we have both prefill and decode together)
     """
+    _set_conv_state_layout(monkeypatch, conv_state_layout)
+
     sampling_params = SamplingParams(n=3, temperature=1, seed=0, max_tokens=max_tokens)
-    with aphrodite_runner(
+    with vllm_runner(
         model,
         enable_chunked_prefill=True,
         # forces prefill chunks with decoding
         max_num_batched_tokens=MAX_NUM_SEQS * 3,
         max_num_seqs=MAX_NUM_SEQS,
-    ) as aphrodite_model:
-        aphrodite_model.generate(example_prompts, sampling_params)
+        attention_backend=ATTN_BACKEND,
+    ) as vllm_model:
+        vllm_model.generate(example_prompts, sampling_params)
 
 
 @pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0]])
 @pytest.mark.parametrize("max_tokens", [20])
+@pytest.mark.parametrize("conv_state_layout", ["SD", "DS"])
 def test_mamba_cache_cg_padding(
-    aphrodite_runner,
+    vllm_runner,
     example_prompts,
+    monkeypatch,
     model: str,
     max_tokens: int,
+    conv_state_layout: str,
 ) -> None:
     """
     This test is for verifying that mamba cache is padded to CG captured
     batch size. If it's not, a torch RuntimeError will be raised because
     tensor dimensions aren't compatible.
     """
-    aphrodite_config = EngineArgs(model=model, trust_remote_code=True).create_engine_config()
-    while len(example_prompts) == aphrodite_config.pad_for_cudagraph(len(example_prompts)):
+    _set_conv_state_layout(monkeypatch, conv_state_layout)
+
+    vllm_config = EngineArgs(model=model, trust_remote_code=True).create_engine_config()
+    cudagraph_dispatcher = CudagraphDispatcher(vllm_config)
+    cudagraph_dispatcher.initialize_cudagraph_keys(
+        vllm_config.compilation_config.cudagraph_mode
+    )
+    while (
+        len(example_prompts)
+        == cudagraph_dispatcher.dispatch(len(example_prompts))[1].num_tokens
+    ):
         example_prompts.append(example_prompts[0])
 
     try:
-        with aphrodite_runner(model) as aphrodite_model:
-            aphrodite_model.generate_greedy(example_prompts, max_tokens)
+        with vllm_runner(model) as vllm_model:
+            vllm_model.generate_greedy(example_prompts, max_tokens)
     except RuntimeError:
         pytest.fail(
             "Couldn't run batch size which is not equal to a Cuda Graph "
@@ -177,7 +226,7 @@ def test_mamba_cache_cg_padding(
 
 @pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0]])
 def test_fail_upon_inc_requests_and_finished_requests_lt_available_blocks(
-    aphrodite_runner,
+    vllm_runner,
     example_prompts,
     model: str,
 ) -> None:
@@ -191,17 +240,18 @@ def test_fail_upon_inc_requests_and_finished_requests_lt_available_blocks(
     a single step.
     """
     try:
-        with aphrodite_runner(model, max_num_seqs=MAX_NUM_SEQS) as aphrodite_model:
-            aphrodite_model.generate_greedy([example_prompts[0]] * 100, 10)
+        with vllm_runner(model, max_num_seqs=MAX_NUM_SEQS) as vllm_model:
+            vllm_model.generate_greedy([example_prompts[0]] * 100, 10)
     except ValueError:
         pytest.fail(
-            "Hybrid inner state wasn't cleaned up properly betweensteps finished requests registered unnecessarily "
+            "Hybrid inner state wasn't cleaned up properly between"
+            "steps finished requests registered unnecessarily "
         )
 
 
 @pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0]])
 def test_state_cleanup(
-    aphrodite_runner,
+    vllm_runner,
     example_prompts,
     model: str,
 ) -> None:
@@ -212,11 +262,14 @@ def test_state_cleanup(
     If it's not cleaned, an error would be expected.
     """
     try:
-        with aphrodite_runner(model, max_num_seqs=MAX_NUM_SEQS) as aphrodite_model:
+        with vllm_runner(model, max_num_seqs=MAX_NUM_SEQS) as vllm_model:
             for _ in range(10):
-                aphrodite_model.generate_greedy([example_prompts[0]] * 100, 1)
+                vllm_model.generate_greedy([example_prompts[0]] * 100, 1)
     except ValueError:
-        pytest.fail("Hybrid inner state wasn't cleaned up between states, could be related to finished_requests_ids")
+        pytest.fail(
+            "Hybrid inner state wasn't cleaned up between states, "
+            "could be related to finished_requests_ids"
+        )
 
 
 @multi_gpu_test(num_gpus=2)
@@ -224,23 +277,31 @@ def test_state_cleanup(
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_distributed_correctness(
-    aphrodite_runner,
+    vllm_runner,
     example_prompts,
     model: str,
     max_tokens: int,
     num_logprobs: int,
 ) -> None:
-    with aphrodite_runner(model, tensor_parallel_size=1, max_num_seqs=MAX_NUM_SEQS) as aphrodite_model:
-        aphrodite_outputs_tp_1 = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+    with vllm_runner(
+        model, tensor_parallel_size=1, max_num_seqs=MAX_NUM_SEQS
+    ) as vllm_model:
+        vllm_outputs_tp_1 = vllm_model.generate_greedy_logprobs(
+            example_prompts, max_tokens, num_logprobs
+        )
 
-    with aphrodite_runner(model, tensor_parallel_size=2, max_num_seqs=MAX_NUM_SEQS) as aphrodite_model:
-        aphrodite_outputs_tp_2 = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+    with vllm_runner(
+        model, tensor_parallel_size=2, max_num_seqs=MAX_NUM_SEQS
+    ) as vllm_model:
+        vllm_outputs_tp_2 = vllm_model.generate_greedy_logprobs(
+            example_prompts, max_tokens, num_logprobs
+        )
 
     check_logprobs_close(
-        outputs_0_lst=aphrodite_outputs_tp_1,
-        outputs_1_lst=aphrodite_outputs_tp_2,
-        name_0="aphrodite_tp_1",
-        name_1="aphrodite_tp_2",
+        outputs_0_lst=vllm_outputs_tp_1,
+        outputs_1_lst=vllm_outputs_tp_2,
+        name_0="vllm_tp_1",
+        name_1="vllm_tp_2",
     )
 
 
@@ -249,7 +310,7 @@ def test_distributed_correctness(
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_full_cuda_graph(
     hf_runner,
-    aphrodite_runner,
+    vllm_runner,
     example_prompts,
     monkeypatch,
     model: str,
@@ -264,14 +325,20 @@ def test_full_cuda_graph(
         pass
 
     with hf_runner(model) as hf_model:
-        hf_outputs = hf_model.generate_greedy_logprobs_limit(example_prompts, max_tokens, num_logprobs)
+        hf_outputs = hf_model.generate_greedy_logprobs_limit(
+            example_prompts, max_tokens, num_logprobs
+        )
 
-    with aphrodite_runner(model, max_num_seqs=MAX_NUM_SEQS) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+    with vllm_runner(
+        model, max_num_seqs=MAX_NUM_SEQS, attention_backend=ATTN_BACKEND
+    ) as vllm_model:
+        vllm_outputs = vllm_model.generate_greedy_logprobs(
+            example_prompts, max_tokens, num_logprobs
+        )
 
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=aphrodite_outputs,
+        outputs_1_lst=vllm_outputs,
         name_0="hf",
         name_1="aphrodite",
     )
@@ -280,10 +347,12 @@ def test_full_cuda_graph(
 @pytest.mark.parametrize("model", FP32_STATE_MODELS)
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("num_logprobs", [5])
-@pytest.mark.parametrize("cache_dtype_param", ["mamba_ssm_cache_dtype", "mamba_cache_dtype"])
+@pytest.mark.parametrize(
+    "cache_dtype_param", ["mamba_ssm_cache_dtype", "mamba_cache_dtype"]
+)
 def test_fp32_cache_state(
     hf_runner,
-    aphrodite_runner,
+    vllm_runner,
     example_prompts,
     monkeypatch,
     model: str,
@@ -299,53 +368,77 @@ def test_fp32_cache_state(
         pass
 
     with hf_runner(model) as hf_model:
-        hf_outputs = hf_model.generate_greedy_logprobs_limit(example_prompts, max_tokens, num_logprobs)
+        hf_outputs = hf_model.generate_greedy_logprobs_limit(
+            example_prompts, max_tokens, num_logprobs
+        )
 
-    with aphrodite_runner(model, max_num_seqs=MAX_NUM_SEQS, **{cache_dtype_param: "float32"}) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+    with vllm_runner(
+        model, max_num_seqs=MAX_NUM_SEQS, **{cache_dtype_param: "float32"}
+    ) as vllm_model:
+        vllm_outputs = vllm_model.generate_greedy_logprobs(
+            example_prompts, max_tokens, num_logprobs
+        )
 
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=aphrodite_outputs,
+        outputs_1_lst=vllm_outputs,
         name_0="hf",
         name_1="aphrodite",
     )
 
 
 # Helper functions for the APC tests
-def _get_aphrodite_runner_params(model, max_model_len, tensor_parallel_size=1):
+def _get_vllm_runner_params(
+    model: str,
+    max_model_len: int,
+    tensor_parallel_size: int = 1,
+):
     return {
         "model_name": model,
+        "enable_chunked_prefill": True,
         "enable_prefix_caching": False,
         "max_model_len": max_model_len,
         "tensor_parallel_size": tensor_parallel_size,
         "gpu_memory_utilization": 0.4,
+        "attention_backend": ATTN_BACKEND,
     }
 
 
+@contextmanager
+def _owned_vllm_runner(vllm_runner, kwargs):
+    with vllm_runner(**kwargs) as runner:
+        yield runner
+
+
 def _get_Aphrodite_output(
-    aphrodite_runner,
+    vllm_runner,
     kwargs,
     prompts,
     max_tokens,
     num_logprobs,
     num_repetitions=1,
-    aphrodite_model=None,
+    vllm_model=None,
 ):
-    outs = []
-    if aphrodite_model is None:
-        aphrodite_model = aphrodite_runner(**kwargs)
-    for _ in range(num_repetitions):
-        if num_logprobs < 0:
-            aphrodite_output = aphrodite_model.generate_greedy(prompts, max_tokens)
-        else:
-            aphrodite_output = aphrodite_model.generate_greedy_logprobs(prompts, max_tokens, num_logprobs)
-        outs.append(aphrodite_output)
+    runner_context = (
+        _owned_vllm_runner(vllm_runner, kwargs)
+        if vllm_model is None
+        else nullcontext(vllm_model)
+    )
+    with runner_context as runner:
+        outs = []
+        for _ in range(num_repetitions):
+            if num_logprobs < 0:
+                vllm_output = runner.generate_greedy(prompts, max_tokens)
+            else:
+                vllm_output = runner.generate_greedy_logprobs(
+                    prompts, max_tokens, num_logprobs
+                )
+            outs.append(vllm_output)
 
-    return outs, aphrodite_model
+    return outs, vllm_model
 
 
-@pytest.mark.parametrize("model", [HYBRID_MODELS[3]])
+@pytest.mark.parametrize("model", [HYBRID_MODELS[0]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("n_repetitions", [2])
 # If num_logprobs is set to -1, then the stringent version
@@ -355,7 +448,7 @@ def _get_Aphrodite_output(
 @pytest.mark.parametrize("tensor_parallel_size", [1])
 def test_apc_single_prompt(
     hf_runner,
-    aphrodite_runner,
+    vllm_runner,
     example_prompts,
     monkeypatch,
     model: str,
@@ -375,43 +468,41 @@ def test_apc_single_prompt(
         check_logprobs_close if num_logprobs > 0 else check_outputs_equal  # type: ignore
     )
 
-    MULTIPLE = 300
-
     # Sample prompts.
-    generated_prompts = [MULTIPLE * example_prompts[0]]
+    generated_prompts = [APC_MULTIPLY_BY * example_prompts[0]]
 
     max_model_len = max(len(prompt) + max_tokens for prompt in generated_prompts)
-    aphrodite_runner_kwargs = _get_aphrodite_runner_params(
+    vllm_runner_kwargs = _get_vllm_runner_params(
         model, max_model_len, tensor_parallel_size=tensor_parallel_size
     )
-    aphrodite_runner_kwargs["mamba_ssm_cache_dtype"] = "float32"
-    aphrodite_outputs_no_cache, _ = _get_Aphrodite_output(
-        aphrodite_runner, aphrodite_runner_kwargs, generated_prompts, max_tokens, num_logprobs
+    vllm_runner_kwargs["mamba_ssm_cache_dtype"] = "float32"
+    vllm_outputs_no_cache, _ = _get_Aphrodite_output(
+        vllm_runner, vllm_runner_kwargs, generated_prompts, max_tokens, num_logprobs
     )
 
-    aphrodite_runner_kwargs["enable_prefix_caching"] = True
-    aphrodite_outputs_cache_rep, _ = _get_Aphrodite_output(
-        aphrodite_runner,
-        aphrodite_runner_kwargs,
+    vllm_runner_kwargs["enable_prefix_caching"] = True
+    vllm_outputs_cache_rep, _ = _get_Aphrodite_output(
+        vllm_runner,
+        vllm_runner_kwargs,
         generated_prompts,
         max_tokens,
         num_logprobs,
         n_repetitions,
     )
 
-    for r_idx, aphrodite_outputs_cache_itn in enumerate(aphrodite_outputs_cache_rep):
+    for r_idx, vllm_outputs_cache_itn in enumerate(vllm_outputs_cache_rep):
         # In the first repetition, the caches are filled
         # In the second repetition, these caches are reused
 
         compare_operator(
-            outputs_0_lst=aphrodite_outputs_no_cache[0],
-            outputs_1_lst=aphrodite_outputs_cache_itn,
-            name_0="aphrodite_no_cache",
-            name_1=f"aphrodite_cache_it_{r_idx + 1}",
+            outputs_0_lst=vllm_outputs_no_cache[0],
+            outputs_1_lst=vllm_outputs_cache_itn,
+            name_0="vllm_no_cache",
+            name_1=f"vllm_cache_it_{r_idx + 1}",
         )
 
 
-@pytest.mark.parametrize("model", [HYBRID_MODELS[3]])
+@pytest.mark.parametrize("model", [HYBRID_MODELS[0]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("n_repetitions", [2])
 # If num_logprobs is set to -1, then the stringent version
@@ -421,7 +512,7 @@ def test_apc_single_prompt(
 @pytest.mark.parametrize("tensor_parallel_size", [1])
 def test_apc_single_prompt_block_align_alignment(
     hf_runner,
-    aphrodite_runner,
+    vllm_runner,
     example_prompts,
     monkeypatch,
     model: str,
@@ -441,25 +532,24 @@ def test_apc_single_prompt_block_align_alignment(
         check_logprobs_close if num_logprobs > 0 else check_outputs_equal  # type: ignore
     )
 
-    MULTIPLE = 300
-
     # Sample prompts. This custom prompt is used, as it causes the most issues
-    generated_prompts = ["The president of the United States is " * MULTIPLE]
+    generated_prompts = ["The president of the United States is " * APC_MULTIPLY_BY]
 
     max_model_len = max(len(prompt) + max_tokens for prompt in generated_prompts)
-    aphrodite_runner_kwargs = _get_aphrodite_runner_params(
+    vllm_runner_kwargs = _get_vllm_runner_params(
         model, max_model_len, tensor_parallel_size=tensor_parallel_size
     )
-    aphrodite_runner_kwargs["mamba_ssm_cache_dtype"] = "float32"
+    vllm_runner_kwargs["mamba_ssm_cache_dtype"] = "float32"
 
-    aphrodite_outputs_no_cache, _ = _get_Aphrodite_output(
-        aphrodite_runner, aphrodite_runner_kwargs, generated_prompts, max_tokens, num_logprobs
+    vllm_outputs_no_cache, _ = _get_Aphrodite_output(
+        vllm_runner, vllm_runner_kwargs, generated_prompts, max_tokens, num_logprobs
     )
 
-    aphrodite_runner_kwargs["enable_prefix_caching"] = True
-    with aphrodite_runner(**aphrodite_runner_kwargs) as aphrodite_model:
+    vllm_runner_kwargs["enable_prefix_caching"] = True
+    with vllm_runner(**vllm_runner_kwargs) as vllm_model:
         # Retrieve the default mamba state block size
-        mamba_block_size = aphrodite_model.llm.llm_engine.cache_config.mamba_block_size
+        vllm_config = vllm_model.llm.llm_engine.vllm_config
+        mamba_block_size = vllm_config.cache_config.mamba_block_size
 
     # In case the hybrid model does not have the
     # "mamba_block_size" assume a fixed constant
@@ -468,10 +558,12 @@ def test_apc_single_prompt_block_align_alignment(
 
     mamba_block_size_multiplier = 10
     for offsets in [-3, 3, mamba_block_size // 4 + 3, mamba_block_size // 2 - 3]:
-        aphrodite_runner_kwargs["max_num_batched_tokens"] = mamba_block_size_multiplier * mamba_block_size - offsets
-        aphrodite_outputs_cache_rep, _ = _get_Aphrodite_output(
-            aphrodite_runner,
-            aphrodite_runner_kwargs,
+        vllm_runner_kwargs["max_num_batched_tokens"] = (
+            mamba_block_size_multiplier * mamba_block_size - offsets
+        )
+        vllm_outputs_cache_rep, _ = _get_Aphrodite_output(
+            vllm_runner,
+            vllm_runner_kwargs,
             generated_prompts,
             max_tokens,
             num_logprobs,
@@ -479,19 +571,19 @@ def test_apc_single_prompt_block_align_alignment(
         )
 
         # Check alignment of the output logits when using APC
-        for r_idx, aphrodite_outputs_cache_itn in enumerate(aphrodite_outputs_cache_rep):
+        for r_idx, vllm_outputs_cache_itn in enumerate(vllm_outputs_cache_rep):
             # In the first repetition, the caches are filled
             # In the second repetition, these caches are reused
 
             compare_operator(
-                outputs_0_lst=aphrodite_outputs_no_cache[0],
-                outputs_1_lst=aphrodite_outputs_cache_itn,
-                name_0="aphrodite_no_cache",
-                name_1=f"aphrodite_cache_it_{r_idx + 1}",
+                outputs_0_lst=vllm_outputs_no_cache[0],
+                outputs_1_lst=vllm_outputs_cache_itn,
+                name_0="vllm_no_cache",
+                name_1=f"vllm_cache_it_{r_idx + 1}",
             )
 
 
-@pytest.mark.parametrize("model", [HYBRID_MODELS[3]])
+@pytest.mark.parametrize("model", [HYBRID_MODELS[0]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("n_repetitions", [2])
 # If num_logprobs is set to -1, then the stringent version
@@ -501,7 +593,7 @@ def test_apc_single_prompt_block_align_alignment(
 @pytest.mark.parametrize("tensor_parallel_size", [1])
 def test_apc_multiple_prompts_all_cached_outputs(
     hf_runner,
-    aphrodite_runner,
+    vllm_runner,
     example_prompts,
     monkeypatch,
     model: str,
@@ -521,44 +613,46 @@ def test_apc_multiple_prompts_all_cached_outputs(
         check_logprobs_close if num_logprobs > 0 else check_outputs_equal  # type: ignore
     )
 
-    MULTIPLE = 300
-
     # Sample prompts.
-    generated_prompts = [MULTIPLE * prompt for prompt in example_prompts]
+    generated_prompts = [APC_MULTIPLY_BY * prompt for prompt in example_prompts]
 
     max_model_len = max(len(prompt) + max_tokens for prompt in generated_prompts)
-    aphrodite_runner_kwargs = _get_aphrodite_runner_params(
+    vllm_runner_kwargs = _get_vllm_runner_params(
         model, max_model_len, tensor_parallel_size=tensor_parallel_size
     )
-    aphrodite_runner_kwargs["mamba_ssm_cache_dtype"] = "float32"
+    vllm_runner_kwargs["mamba_ssm_cache_dtype"] = "float32"
+    # Reduce the effects of batch variance on ROCm since batch invariance is not
+    # yet supported. See: https://github.com/vllm-project/aphrodite/issues/27433
+    if current_platform.is_rocm():
+        vllm_runner_kwargs["max_num_seqs"] = 4
 
-    aphrodite_outputs_no_cache, _ = _get_Aphrodite_output(
-        aphrodite_runner, aphrodite_runner_kwargs, generated_prompts, max_tokens, num_logprobs
+    vllm_outputs_no_cache, _ = _get_Aphrodite_output(
+        vllm_runner, vllm_runner_kwargs, generated_prompts, max_tokens, num_logprobs
     )
 
-    aphrodite_runner_kwargs["enable_prefix_caching"] = True
-    aphrodite_outputs_cache_rep, _ = _get_Aphrodite_output(
-        aphrodite_runner,
-        aphrodite_runner_kwargs,
+    vllm_runner_kwargs["enable_prefix_caching"] = True
+    vllm_outputs_cache_rep, _ = _get_Aphrodite_output(
+        vllm_runner,
+        vllm_runner_kwargs,
         generated_prompts,
         max_tokens,
         num_logprobs,
         n_repetitions,
     )
 
-    for r_idx, aphrodite_outputs_cache_itn in enumerate(aphrodite_outputs_cache_rep):
+    for r_idx, vllm_outputs_cache_itn in enumerate(vllm_outputs_cache_rep):
         # In the first repetition, the caches are filled
         # In the second repetition, these caches are reused
 
         compare_operator(
-            outputs_0_lst=aphrodite_outputs_no_cache[0],
-            outputs_1_lst=aphrodite_outputs_cache_itn,
-            name_0="aphrodite_no_cache",
-            name_1=f"aphrodite_cache_it_{r_idx + 1}",
+            outputs_0_lst=vllm_outputs_no_cache[0],
+            outputs_1_lst=vllm_outputs_cache_itn,
+            name_0="vllm_no_cache",
+            name_1=f"vllm_cache_it_{r_idx + 1}",
         )
 
 
-@pytest.mark.parametrize("model", [HYBRID_MODELS[3]])
+@pytest.mark.parametrize("model", [HYBRID_MODELS[0]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("n_repetitions", [2])
 # If num_logprobs is set to -1, then the stringent version
@@ -568,7 +662,7 @@ def test_apc_multiple_prompts_all_cached_outputs(
 @pytest.mark.parametrize("tensor_parallel_size", [1])
 def test_apc_multiple_prompts_block_align_alignment(
     hf_runner,
-    aphrodite_runner,
+    vllm_runner,
     example_prompts,
     monkeypatch,
     model: str,
@@ -588,25 +682,28 @@ def test_apc_multiple_prompts_block_align_alignment(
         check_logprobs_close if num_logprobs > 0 else check_outputs_equal  # type: ignore
     )
 
-    MULTIPLE = 300
-
     # Sample prompts. This custom prompt is used, as it causes the most issues
     prompt_text = "The president of the United States is "
     prompt_offsets = [0, 3, 7, 13, 17, 22, 25, 31]
-    generated_prompts = [prompt_text[offset:] * MULTIPLE for offset in prompt_offsets]
+    generated_prompts = [
+        prompt_text[offset:] * APC_MULTIPLY_BY for offset in prompt_offsets
+    ]
 
     max_model_len = max(len(prompt) + max_tokens for prompt in generated_prompts)
-    aphrodite_runner_kwargs = _get_aphrodite_runner_params(model, max_model_len, tensor_parallel_size)
-    aphrodite_runner_kwargs["mamba_ssm_cache_dtype"] = "float32"
+    vllm_runner_kwargs = _get_vllm_runner_params(
+        model, max_model_len, tensor_parallel_size
+    )
+    vllm_runner_kwargs["mamba_ssm_cache_dtype"] = "float32"
 
-    aphrodite_outputs_no_cache, _ = _get_Aphrodite_output(
-        aphrodite_runner, aphrodite_runner_kwargs, generated_prompts, max_tokens, num_logprobs
+    vllm_outputs_no_cache, _ = _get_Aphrodite_output(
+        vllm_runner, vllm_runner_kwargs, generated_prompts, max_tokens, num_logprobs
     )
 
-    aphrodite_runner_kwargs["enable_prefix_caching"] = True
-    with aphrodite_runner(**aphrodite_runner_kwargs) as aphrodite_model:
+    vllm_runner_kwargs["enable_prefix_caching"] = True
+    with vllm_runner(**vllm_runner_kwargs) as vllm_model:
         # Retrieve the default mamba state block size
-        mamba_block_size = aphrodite_model.llm.llm_engine.cache_config.mamba_block_size
+        vllm_config = vllm_model.llm.llm_engine.vllm_config
+        mamba_block_size = vllm_config.cache_config.mamba_block_size
 
     # In case the hybrid model does not have the
     # "mamba_block_size" assume a fixed constant
@@ -615,10 +712,12 @@ def test_apc_multiple_prompts_block_align_alignment(
 
     mamba_block_size_multiplier = 10
     for offsets in [-3, 3, mamba_block_size // 4 + 3, mamba_block_size // 2 - 3]:
-        aphrodite_runner_kwargs["max_num_batched_tokens"] = mamba_block_size_multiplier * mamba_block_size - offsets
-        aphrodite_outputs_cache_rep, _ = _get_Aphrodite_output(
-            aphrodite_runner,
-            aphrodite_runner_kwargs,
+        vllm_runner_kwargs["max_num_batched_tokens"] = (
+            mamba_block_size_multiplier * mamba_block_size - offsets
+        )
+        vllm_outputs_cache_rep, _ = _get_Aphrodite_output(
+            vllm_runner,
+            vllm_runner_kwargs,
             generated_prompts,
             max_tokens,
             num_logprobs,
@@ -626,19 +725,19 @@ def test_apc_multiple_prompts_block_align_alignment(
         )
 
         # Check alignment of the output logits when using APC
-        for r_idx, aphrodite_outputs_cache_itn in enumerate(aphrodite_outputs_cache_rep):
+        for r_idx, vllm_outputs_cache_itn in enumerate(vllm_outputs_cache_rep):
             # In the first repetition, the caches are filled
             # In the second repetition, these caches are reused
 
             compare_operator(
-                outputs_0_lst=aphrodite_outputs_no_cache[0],
-                outputs_1_lst=aphrodite_outputs_cache_itn,
-                name_0="aphrodite_no_cache",
-                name_1=f"aphrodite_cache_it_{r_idx + 1}",
+                outputs_0_lst=vllm_outputs_no_cache[0],
+                outputs_1_lst=vllm_outputs_cache_itn,
+                name_0="vllm_no_cache",
+                name_1=f"vllm_cache_it_{r_idx + 1}",
             )
 
 
-@pytest.mark.parametrize("model", [HYBRID_MODELS[3]])
+@pytest.mark.parametrize("model", [HYBRID_MODELS[0]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("n_repetitions", [2])
 # If num_logprobs is set to -1, then the stringent version
@@ -648,7 +747,7 @@ def test_apc_multiple_prompts_block_align_alignment(
 @pytest.mark.parametrize("tensor_parallel_size", [1])
 def test_apc_multiple_prompts_partial_cached_outputs(
     hf_runner,
-    aphrodite_runner,
+    vllm_runner,
     example_prompts,
     monkeypatch,
     model: str,
@@ -668,51 +767,137 @@ def test_apc_multiple_prompts_partial_cached_outputs(
         check_logprobs_close if num_logprobs > 0 else check_outputs_equal  # type: ignore
     )
 
-    MULTIPLE = 300
-
     # Sample prompts.
-    generated_prompts = [MULTIPLE * prompt for prompt in example_prompts]
+    generated_prompts = [APC_MULTIPLY_BY * prompt for prompt in example_prompts]
 
     max_model_len = max(len(prompt) + max_tokens for prompt in generated_prompts)
-    aphrodite_runner_kwargs = _get_aphrodite_runner_params(
+    vllm_runner_kwargs = _get_vllm_runner_params(
         model, max_model_len, tensor_parallel_size=tensor_parallel_size
     )
-    aphrodite_runner_kwargs["mamba_ssm_cache_dtype"] = "float32"
+    vllm_runner_kwargs["mamba_ssm_cache_dtype"] = "float32"
 
-    aphrodite_outputs_no_cache, _ = _get_Aphrodite_output(
-        aphrodite_runner, aphrodite_runner_kwargs, generated_prompts, max_tokens, num_logprobs
+    vllm_outputs_no_cache, _ = _get_Aphrodite_output(
+        vllm_runner, vllm_runner_kwargs, generated_prompts, max_tokens, num_logprobs
     )
 
     # Cache only part of all the prompts
-    aphrodite_runner_kwargs["enable_prefix_caching"] = True
-    aphrodite_outputs_partial_cache, aphrodite_model = _get_Aphrodite_output(
-        aphrodite_runner, aphrodite_runner_kwargs, generated_prompts[:3], max_tokens, num_logprobs
-    )
-
-    compare_operator(
-        outputs_0_lst=aphrodite_outputs_no_cache[0][:3],
-        outputs_1_lst=aphrodite_outputs_partial_cache[0],
-        name_0="aphrodite_no_cache",
-        name_1="aphrodite_partial_cache",
-    )
-
-    aphrodite_outputs_cache_rep, _ = _get_Aphrodite_output(
-        aphrodite_runner,
-        aphrodite_runner_kwargs,
-        generated_prompts,
-        max_tokens,
-        num_logprobs,
-        n_repetitions,
-        aphrodite_model=aphrodite_model,
-    )
-
-    for r_idx, aphrodite_outputs_cache_itn in enumerate(aphrodite_outputs_cache_rep):
-        # In the first repetition, the caches are filled
-        # In the second repetition, these caches are reused
+    vllm_runner_kwargs["enable_prefix_caching"] = True
+    with _owned_vllm_runner(vllm_runner, vllm_runner_kwargs) as vllm_model:
+        vllm_outputs_partial_cache, _ = _get_Aphrodite_output(
+            vllm_runner,
+            vllm_runner_kwargs,
+            generated_prompts[:3],
+            max_tokens,
+            num_logprobs,
+            vllm_model=vllm_model,
+        )
 
         compare_operator(
-            outputs_0_lst=aphrodite_outputs_no_cache[0],
-            outputs_1_lst=aphrodite_outputs_cache_itn,
-            name_0="aphrodite_no_cache",
-            name_1=f"aphrodite_cache_it_{r_idx + 1}",
+            outputs_0_lst=vllm_outputs_no_cache[0][:3],
+            outputs_1_lst=vllm_outputs_partial_cache[0],
+            name_0="vllm_no_cache",
+            name_1="vllm_partial_cache",
         )
+
+        vllm_outputs_cache_rep, _ = _get_Aphrodite_output(
+            vllm_runner,
+            vllm_runner_kwargs,
+            generated_prompts,
+            max_tokens,
+            num_logprobs,
+            n_repetitions,
+            vllm_model=vllm_model,
+        )
+
+        for r_idx, vllm_outputs_cache_itn in enumerate(vllm_outputs_cache_rep):
+            # In the first repetition, the caches are filled
+            # In the second repetition, these caches are reused
+
+            compare_operator(
+                outputs_0_lst=vllm_outputs_no_cache[0],
+                outputs_1_lst=vllm_outputs_cache_itn,
+                name_0="vllm_no_cache",
+                name_1=f"vllm_cache_it_{r_idx + 1}",
+            )
+
+
+# Test that outputs match whether prefix caching is enabled or not for mamba.
+@pytest.mark.parametrize("model", ["tiiuae/falcon-mamba-7b"])
+def test_same_mamba_output_apc_on_vs_off(
+    vllm_runner,
+    model: str,
+) -> None:
+    num_logprobs = 5
+    prompts = [
+        "hello what is one plus one what is one plus one what is one plus one the answer is",  # noqa: E501
+        "hello what is one plus one what is one plus one what is one plus one the answer is",  # noqa: E501
+    ]
+    max_tokens = 20
+    max_model_len = max(len(p) for p in prompts) + max_tokens + 64
+
+    base_kwargs = _get_vllm_runner_params(model, max_model_len)
+    base_kwargs.update(
+        enforce_eager=True, block_size=16, seed=42, gpu_memory_utilization=0.8
+    )
+
+    # No prefix caching
+    kwargs_no_apc = {**base_kwargs, "enable_prefix_caching": False}
+    with vllm_runner(**kwargs_no_apc) as vllm_model:
+        outputs_no_apc, _ = _get_Aphrodite_output(
+            vllm_runner,
+            kwargs_no_apc,
+            prompts,
+            max_tokens,
+            num_logprobs=num_logprobs,
+            vllm_model=vllm_model,
+        )
+    # With prefix caching
+    kwargs_with_apc = {
+        **base_kwargs,
+        "enable_prefix_caching": True,
+        "mamba_block_size": 16,
+    }
+    with vllm_runner(**kwargs_with_apc) as vllm_model:
+        outputs_with_apc, _ = _get_Aphrodite_output(
+            vllm_runner,
+            kwargs_with_apc,
+            prompts,
+            max_tokens,
+            num_logprobs=num_logprobs,
+            vllm_model=vllm_model,
+        )
+
+    check_logprobs_close(
+        outputs_0_lst=outputs_no_apc[0],
+        outputs_1_lst=outputs_with_apc[0],
+        name_0="vllm_no_apc",
+        name_1="vllm_with_apc",
+    )
+
+
+# we have to use a real large model to get reasonable results
+# the model can't be a hybrid model as we need block_size 16
+@pytest.mark.parametrize("model", ["tiiuae/falcon-mamba-7b"])
+def test_apc_common_prefix_same_batch(
+    model: str,
+    monkeypatch,
+) -> None:
+    # Required to put the two requests in the same batch
+    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+    llm = LLM(
+        model=model,
+        enforce_eager=True,
+        block_size=16,
+        mamba_block_size=16,
+        enable_prefix_caching=True,
+        seed=42,
+        attention_backend=ATTN_BACKEND,
+    )
+    prompts = [
+        "hello what is one plus one what is one plus one what is one plus one the answer is",  # noqa: E501
+        "hello what is one plus one what is one plus one what is one plus one the answer is",  # noqa: E501
+    ]
+    sampling_params = SamplingParams(temperature=0.0, max_tokens=20)
+    outputs = llm.generate(prompts, sampling_params)
+    for output in outputs:
+        assert "two" in output.outputs[0].text

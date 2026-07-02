@@ -1,16 +1,16 @@
 #pragma once
 
 #include "cutlass/numeric_conversion.h"
-#include "cutlass_extensions/aphrodite_custom_types.cuh"
+#include "cutlass_extensions/vllm_custom_types.cuh"
 #include "cutlass_extensions/cute_utils.cuh"
-#include "cutlass_extensions/aphrodite_type_utils.cuh"
+#include "cutlass_extensions/vllm_type_utils.cuh"
 
 // this file extends:
 //   https://github.com/NVIDIA/cutlass/blob/cutlass-3.5.0/include/cutlass/numeric_conversion.h
-// with aphrodite specific type conversions, namely: aphrodite_uint4b8_t,
-// aphrodite_uint8b128_t as well as adds interleaved numeric array converters
-// for specific types. (interleaved numeric array converters can be more
-// efficient for subbyte types)
+// with vllm specific type conversions, namely: vllm_uint4b8_t, vllm_uint8b128_t
+// as well as adds interleaved numeric array converters for specific types.
+// (interleaved numeric array converters can be more efficient for subbyte
+// types)
 
 namespace cutlass {
 
@@ -208,11 +208,11 @@ CUTLASS_DEVICE cutlass::AlignedArray<uint32_t, 2> lut_4bit_to_8bit_convert(
   return r;
 };
 
-// for Array<int8_t, N> <= Array<aphrodite_uint4b8_t, N>
+// for Array<int8_t, N> <= Array<vllm_uint4b8_t, N>
 template <FloatRoundStyle Round, int N>
-struct NumericArrayConverter<int8_t, aphrodite_uint4b8_t, N, Round> {
+struct NumericArrayConverter<int8_t, vllm_uint4b8_t, N, Round> {
   using result_type = Array<int8_t, N>;
-  using source_type = Array<aphrodite_uint4b8_t, N>;
+  using source_type = Array<vllm_uint4b8_t, N>;
 
   static FloatRoundStyle const round_style = Round;
 
@@ -241,12 +241,11 @@ struct NumericArrayConverter<int8_t, aphrodite_uint4b8_t, N, Round> {
   result_type operator()(source_type const& s) const { return convert(s); }
 };
 
-// for Array<cutlass::float_e4m3_t, N> <= Array<aphrodite_uint4b8_t, N>
+// for Array<cutlass::float_e4m3_t, N> <= Array<vllm_uint4b8_t, N>
 template <FloatRoundStyle Round, int N>
-struct NumericArrayConverter<cutlass::float_e4m3_t, aphrodite_uint4b8_t, N,
-                             Round> {
+struct NumericArrayConverter<cutlass::float_e4m3_t, vllm_uint4b8_t, N, Round> {
   using result_type = Array<cutlass::float_e4m3_t, N>;
-  using source_type = Array<aphrodite_uint4b8_t, N>;
+  using source_type = Array<vllm_uint4b8_t, N>;
 
   static FloatRoundStyle const round_style = Round;
 
@@ -275,11 +274,11 @@ struct NumericArrayConverter<cutlass::float_e4m3_t, aphrodite_uint4b8_t, N,
   result_type operator()(source_type const& s) const { return convert(s); }
 };
 
-// for Array<cutlass::half_t, N> <= Array<aphrodite_uint4b8_t, N>
+// for Array<cutlass::half_t, N> <= Array<vllm_uint4b8_t, N>
 template <FloatRoundStyle Round, int N>
-struct NumericArrayConverter<cutlass::half_t, aphrodite_uint4b8_t, N, Round> {
+struct NumericArrayConverter<cutlass::half_t, vllm_uint4b8_t, N, Round> {
   using result_type = Array<cutlass::half_t, N>;
-  using source_type = Array<aphrodite_uint4b8_t, N>;
+  using source_type = Array<vllm_uint4b8_t, N>;
 
   struct RegConvert {
     template <typename PackedResultType>
@@ -368,17 +367,17 @@ struct NumericArrayConverter<cutlass::half_t, aphrodite_uint4b8_t, N, Round> {
   result_type operator()(source_type const& s) const { return convert(s); }
 };
 
-// for Array<cutlass::half_t, N> <= Array<aphrodite_uint4b8_t, N>
+// for Array<cutlass::half_t, N> <= Array<vllm_uint4b8_t, N>
 //   for IlvdLayout: (2, 4):(4, 1)
 template <FloatRoundStyle Round, int N>
 struct InterleavedNumericArrayConverter<Layout<Shape<_2, _4>, Stride<_4, _1>>,
-                                        cutlass::half_t, aphrodite_uint4b8_t, N,
+                                        cutlass::half_t, vllm_uint4b8_t, N,
                                         Round, void> {
   using IlvdLayout = Layout<Shape<_2, _4>, Stride<_4, _1>>;
   static_assert(N % size(IlvdLayout{}) == 0);
 
   using result_type = Array<cutlass::half_t, N>;
-  using source_type = Array<aphrodite_uint4b8_t, N>;
+  using source_type = Array<vllm_uint4b8_t, N>;
 
   static FloatRoundStyle const round_style = Round;
 
@@ -547,11 +546,11 @@ struct InterleavedNumericArrayConverter<Layout<Shape<_2, _4>, Stride<_4, _1>>,
   result_type operator()(source_type const& s) const { return convert(s); }
 };
 
-// for Array<cutlass::half_t, N> <= Array<aphrodite_uint8b128_t, N>
+// for Array<cutlass::half_t, N> <= Array<vllm_uint8b128_t, N>
 template <FloatRoundStyle Round, int N>
-struct NumericArrayConverter<cutlass::half_t, aphrodite_uint8b128_t, N, Round> {
+struct NumericArrayConverter<cutlass::half_t, vllm_uint8b128_t, N, Round> {
   using result_type = Array<cutlass::half_t, N>;
-  using source_type = Array<aphrodite_uint8b128_t, N>;
+  using source_type = Array<vllm_uint8b128_t, N>;
 
   struct RegConvert {
     template <typename PackedResultType>
@@ -598,11 +597,11 @@ struct NumericArrayConverter<cutlass::half_t, aphrodite_uint8b128_t, N, Round> {
   result_type operator()(source_type const& s) const { return convert(s); }
 };
 
-// for Array<cutlass::float, N> <= Array<aphrodite_uint8b128_t, N>
+// for Array<cutlass::float, N> <= Array<vllm_uint8b128_t, N>
 template <FloatRoundStyle Round, int N>
-struct NumericArrayConverter<float, aphrodite_uint8b128_t, N, Round> {
+struct NumericArrayConverter<float, vllm_uint8b128_t, N, Round> {
   using result_type = Array<float, N>;
-  using source_type = Array<aphrodite_uint8b128_t, N>;
+  using source_type = Array<vllm_uint8b128_t, N>;
   static FloatRoundStyle const round_style = Round;
 
  private:
@@ -642,12 +641,11 @@ struct NumericArrayConverter<float, aphrodite_uint8b128_t, N, Round> {
 
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 800)
 
-// for Array<cutlass::bfloat16_t, N> <= Array<aphrodite_uint4b8_t, N>
+// for Array<cutlass::bfloat16_t, N> <= Array<vllm_uint4b8_t, N>
 template <FloatRoundStyle Round, int N>
-struct NumericArrayConverter<cutlass::bfloat16_t, aphrodite_uint4b8_t, N,
-                             Round> {
+struct NumericArrayConverter<cutlass::bfloat16_t, vllm_uint4b8_t, N, Round> {
   using result_type = Array<cutlass::bfloat16_t, N>;
-  using source_type = Array<aphrodite_uint4b8_t, N>;
+  using source_type = Array<vllm_uint4b8_t, N>;
 
   static FloatRoundStyle const round_style = Round;
 
@@ -730,17 +728,17 @@ struct NumericArrayConverter<cutlass::bfloat16_t, aphrodite_uint4b8_t, N,
   result_type operator()(source_type const& s) const { return convert(s); }
 };
 
-// for Array<cutlass::bfloat16_t, N> <= Array<aphrodite_uint4b8_t, N>
+// for Array<cutlass::bfloat16_t, N> <= Array<vllm_uint4b8_t, N>
 //   for IlvdLayout: (2, 4):(4, 1)
 template <FloatRoundStyle Round, int N>
 struct InterleavedNumericArrayConverter<Layout<Shape<_2, _4>, Stride<_4, _1>>,
-                                        cutlass::bfloat16_t,
-                                        aphrodite_uint4b8_t, N, Round, void> {
+                                        cutlass::bfloat16_t, vllm_uint4b8_t, N,
+                                        Round, void> {
   using IlvdLayout = Layout<Shape<_2, _4>, Stride<_4, _1>>;
   static_assert(N % size(IlvdLayout{}) == 0);
 
   using result_type = Array<cutlass::bfloat16_t, N>;
-  using source_type = Array<aphrodite_uint4b8_t, N>;
+  using source_type = Array<vllm_uint4b8_t, N>;
 
  private:
   struct RegConvert {
@@ -868,26 +866,25 @@ struct InterleavedNumericArrayConverter<Layout<Shape<_2, _4>, Stride<_4, _1>>,
   result_type operator()(source_type const& s) const { return convert(s); }
 };
 
-// for Array<cutlass::bfloat16_t, N> <= Array<aphrodite_uint8b128_t, N>
+// for Array<cutlass::bfloat16_t, N> <= Array<vllm_uint8b128_t, N>
 template <FloatRoundStyle Round, int N>
-struct NumericArrayConverter<cutlass::bfloat16_t, aphrodite_uint8b128_t, N,
-                             Round> {
+struct NumericArrayConverter<cutlass::bfloat16_t, vllm_uint8b128_t, N, Round> {
   using result_type = Array<cutlass::bfloat16_t, N>;
-  using source_type = Array<aphrodite_uint8b128_t, N>;
+  using source_type = Array<vllm_uint8b128_t, N>;
   static FloatRoundStyle const round_style = Round;
 
  private:
   using result_packed_4_t = Array<cutlass::bfloat16_t, 4>;
   using result_packed_2_t = Array<cutlass::bfloat16_t, 2>;
-  using src_packed_4_t = Array<aphrodite_uint8b128_t, 4>;
-  using src_packed_2_t = Array<aphrodite_uint8b128_t, 2>;
+  using src_packed_4_t = Array<vllm_uint8b128_t, 4>;
+  using src_packed_2_t = Array<vllm_uint8b128_t, 2>;
 
   // Not Valid, not supported, only here to satisfy the interface and to avoid
   //  a compile error. ScalarConverter will not actually work until
-  //  NumericConverter<cutlass::bfloat16_t, aphrodite_uint8b128_t, Round> is
+  //  NumericConverter<cutlass::bfloat16_t, vllm_uint8b128_t, Round> is
   //  implemented
   using ScalarConverter =
-      NumericConverter<cutlass::bfloat16_t, aphrodite_uint8b128_t, Round>;
+      NumericConverter<cutlass::bfloat16_t, vllm_uint8b128_t, Round>;
 
   template <typename PackedResultType, typename PackedSrcType>
   CUTLASS_DEVICE static PackedResultType packed_convert(
@@ -900,8 +897,8 @@ struct NumericArrayConverter<cutlass::bfloat16_t, aphrodite_uint8b128_t, N,
         "Invalid PackedSrcType/PackedResultType must be 2 or 4 to use private "
         "convert dispatch.");
 
-    NumericArrayConverter<float, aphrodite_uint8b128_t,
-                          PackedResultType::kElements, Round>
+    NumericArrayConverter<float, vllm_uint8b128_t, PackedResultType::kElements,
+                          Round>
         convert_uint8_to_f32;
     Array<float, PackedResultType::kElements> tmp =
         convert_uint8_to_f32(source);

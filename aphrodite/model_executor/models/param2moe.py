@@ -25,7 +25,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite.config import AphroditeConfig, CacheConfig
+from aphrodite.config import CacheConfig, AphroditeConfig
 from aphrodite.distributed import (
     get_pp_group,
     get_tensor_model_parallel_world_size,
@@ -144,10 +144,12 @@ class Param2MoEAttention(nn.Module):
 
         tp_size = get_tensor_model_parallel_world_size()
         assert self.num_heads % tp_size == 0, (
-            f"num_attention_heads ({self.num_heads}) must be divisible by tensor-parallel world size ({tp_size})."
+            f"num_attention_heads ({self.num_heads}) must be divisible "
+            f"by tensor-parallel world size ({tp_size})."
         )
         assert self.num_kv_heads % tp_size == 0, (
-            f"num_key_value_heads ({self.num_kv_heads}) must be divisible by tensor-parallel world size ({tp_size})."
+            f"num_key_value_heads ({self.num_kv_heads}) must be divisible "
+            f"by tensor-parallel world size ({tp_size})."
         )
         self.num_local_heads = self.num_heads // tp_size
         self.num_local_kv_heads = self.num_kv_heads // tp_size
@@ -227,8 +229,12 @@ class Param2MoEAttention(nn.Module):
 
         if self.use_qk_norm:
             T = q.shape[0]
-            q = self.q_layernorm(q.view(T, self.num_local_heads, self.head_dim)).view(T, self.q_size_local)
-            k = self.k_layernorm(k.view(T, self.num_local_kv_heads, self.head_dim)).view(T, self.kv_size_local)
+            q = self.q_layernorm(q.view(T, self.num_local_heads, self.head_dim)).view(
+                T, self.q_size_local
+            )
+            k = self.k_layernorm(
+                k.view(T, self.num_local_kv_heads, self.head_dim)
+            ).view(T, self.kv_size_local)
 
         q, k = self.rotary_emb(positions, q, k)
         attn_output = self.attn(q, k, v)
@@ -300,11 +306,15 @@ class Param2MoEMoEBlock(nn.Module):
 
         self.num_experts: int = config.num_experts
         self.top_k: int = config.num_experts_per_tok
-        self.routed_scaling_factor: float = getattr(config, "routed_scaling_factor", 1.0)
+        self.routed_scaling_factor: float = getattr(
+            config, "routed_scaling_factor", 1.0
+        )
 
         self.n_group: int | None = getattr(config, "n_group", None)
         self.topk_group: int | None = getattr(config, "topk_group", None)
-        self.use_grouped_topk: bool = self.n_group is not None and self.topk_group is not None
+        self.use_grouped_topk: bool = (
+            self.n_group is not None and self.topk_group is not None
+        )
 
         self.norm_expert_prob: bool = getattr(config, "norm_topk_prob", True)
         self.score_function: str = getattr(config, "score_function", "sigmoid")
@@ -316,7 +326,9 @@ class Param2MoEMoEBlock(nn.Module):
         )
 
         if getattr(config, "moe_router_enable_expert_bias", True):
-            self.gate.e_score_correction_bias = nn.Parameter(torch.zeros(self.num_experts, dtype=torch.float32))
+            self.gate.e_score_correction_bias = nn.Parameter(
+                torch.zeros(self.num_experts, dtype=torch.float32)
+            )
         else:
             self.gate.e_score_correction_bias = None  # type: ignore[assignment]
 
@@ -477,7 +489,9 @@ class Param2MoEModel(nn.Module):
         self.tie_word_embeddings: bool = getattr(config, "tie_word_embeddings", False)
 
         # Embedding  (HF name: word_embeddings → Aphrodite name: embed_tokens)
-        if get_pp_group().is_first_rank or (self.tie_word_embeddings and get_pp_group().is_last_rank):
+        if get_pp_group().is_first_rank or (
+            self.tie_word_embeddings and get_pp_group().is_last_rank
+        ):
             self.embed_tokens = VocabParallelEmbedding(
                 self.vocab_size,
                 self.embed_dim,
@@ -530,7 +544,9 @@ class Param2MoEModel(nn.Module):
             hidden_states, residual = layer(hidden_states, positions, residual)
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
+            return IntermediateTensors(
+                {"hidden_states": hidden_states, "residual": residual}
+            )
 
         if residual is None:
             hidden_states = self.norm(hidden_states)
@@ -689,12 +705,11 @@ class Param2MoEModel(nn.Module):
 class Param2MoEMixtureOfExperts(MixtureOfExperts):
     """Implements the Aphrodite MixtureOfExperts protocol for Param2MoE."""
 
-    expert_weights: list[torch.Tensor]
-
     def extract_moe_parameters(self, example_moe: Param2MoEMoEBlock | None) -> None:
         if example_moe is None:
             raise RuntimeError(
-                "No Param2MoEMoEBlock found in model.layers. Check first_k_dense_replace and num_experts in config."
+                "No Param2MoEMoEBlock found in model.layers. "
+                "Check first_k_dense_replace and num_experts in config."
             )
         self.num_logical_experts = example_moe.num_experts
         self.num_routed_experts = example_moe.num_experts
@@ -728,26 +743,10 @@ class Param2MoEMixtureOfExperts(MixtureOfExperts):
             if hasattr(fused, "update_expert_map"):
                 fused.update_expert_map()
 
-    def set_eplb_state(
-        self,
-        expert_load_view: torch.Tensor,
-        logical_to_physical_map: torch.Tensor,
-        logical_replica_count: torch.Tensor,
-    ) -> None:
-        self.expert_weights.clear()
-        for layer_idx, layer in enumerate(self.moe_layers):
-            if hasattr(layer, "get_expert_weights"):
-                self.expert_weights.append(layer.get_expert_weights())
-            if hasattr(layer, "set_eplb_state"):
-                layer.set_eplb_state(
-                    moe_layer_idx=layer_idx,
-                    expert_load_view=expert_load_view,
-                    logical_to_physical_map=logical_to_physical_map,
-                    logical_replica_count=logical_replica_count,
-                )
 
-
-class Param2MoEForCausalLM(nn.Module, SupportsPP, SupportsLoRA, Param2MoEMixtureOfExperts):
+class Param2MoEForCausalLM(
+    nn.Module, SupportsPP, SupportsLoRA, Param2MoEMixtureOfExperts
+):
     """
     Aphrodite-native Param2MoE CausalLM.
 
@@ -809,9 +808,10 @@ class Param2MoEForCausalLM(nn.Module, SupportsPP, SupportsLoRA, Param2MoEMixture
             self.lm_head = PPMissingLayer()
             self.logits_processor = None  # type: ignore[assignment]
 
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
 
-        self.expert_weights: list[torch.Tensor] = []
         self.num_moe_layers: int = 0
         self.moe_layers: list = []
         self.moe_mlp_layers: list = []

@@ -19,11 +19,11 @@
 #include "cutlass/gemm/collective/collective_builder.hpp"
 #include "cutlass/util/packed_stride.hpp"
 
-#include "core/math.hpp"
-#include "cutlass_extensions/common.hpp"
+#include "libtorch_stable/core/math.hpp"
+#include "libtorch_stable/cutlass_extensions/common.hpp"
 // clang-format on
 
-namespace aphrodite::c3x {
+namespace vllm::c3x {
 
 static inline cute::Shape<int, int, int, int> get_problem_shape(
     torch::stable::Tensor const& a, torch::stable::Tensor const& b) {
@@ -106,4 +106,4 @@ void cutlass_gemm_caller(torch::stable::Tensor& out,
                                   epilogue_args);
 }
 
-}  // namespace aphrodite::c3x
+}  // namespace vllm::c3x

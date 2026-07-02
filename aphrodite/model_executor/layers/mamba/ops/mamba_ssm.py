@@ -4,15 +4,192 @@
 # Copyright (c) 2024, Tri Dao, Albert Gu.
 # Adapted from https://github.com/state-spaces/mamba/blob/v2.2.4/mamba_ssm/ops/triton/selective_state_update.py
 
+import functools
+import json
+import os
+from contextlib import contextmanager
+from typing import Any
+
 import torch
 from packaging import version
 
+import aphrodite.envs as envs
 from aphrodite import _custom_ops as ops
+from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.mamba.ops.triton_helpers import fast_exp
+from aphrodite.platforms import current_platform
 from aphrodite.triton_utils import HAS_TRITON, tl, triton
 from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
 
+if current_platform.is_xpu():
+    from aphrodite._xpu_ops import xpu_ops
+
+logger = init_logger(__name__)
+
 TRITON3 = HAS_TRITON and (version.parse(triton.__version__) >= version.parse("3.0.0"))
+
+
+# ---------------------------------------------------------------------------
+# JSON config loading
+# ---------------------------------------------------------------------------
+
+_CONFIGS_DIR = os.path.join(
+    os.path.dirname(os.path.realpath(__file__)), "configs", "selective_state_update"
+)
+
+
+def get_ssm_config_file_name(
+    headdim: int, dstate: int, cache_dtype: str, device_name: str
+) -> str:
+    """Return the JSON filename for the given kernel shape.
+
+    Layout: ``configs/selective_state_update/
+    headdim=<H>,dstate=<D>,device_name=<dev>,cache_dtype=<dt>.json``.
+    """
+    return (
+        f"headdim={headdim},dstate={dstate},"
+        f"device_name={device_name},cache_dtype={cache_dtype}.json"
+    )
+
+
+def get_ssm_device_name() -> str:
+    return current_platform.get_device_name().replace(" ", "_")
+
+
+def _canonical_cache_dtype(cache_dtype: str) -> str:
+    """Canonical key for config lookup. bf16 and fp16 share the same tuned
+    configs because the kernel only sees bit width when accessing state."""
+    return "float16" if cache_dtype == "bfloat16" else cache_dtype
+
+
+@functools.cache
+def get_ssm_configs(
+    headdim: int, dstate: int, cache_dtype: str
+) -> dict[int, Any] | None:
+    """
+    Return tuned (BLOCK_SIZE_M, num_warps) configs for *selective_state_update*
+    keyed by ``effective_batch = batch * nheads``, or ``None`` if no config
+    file is found for the (headdim, dstate, cache_dtype, device) combination.
+
+    They can be generated with:
+        benchmarks/kernels/benchmark_selective_state_update.py --save-configs
+    """
+    cache_dtype = _canonical_cache_dtype(cache_dtype)
+    device_name = get_ssm_device_name()
+    json_file_name = get_ssm_config_file_name(headdim, dstate, cache_dtype, device_name)
+
+    config_file_paths: list[str] = []
+
+    # User-supplied override
+    user_defined_config_folder = envs.APHRODITE_TUNED_CONFIG_FOLDER
+    if user_defined_config_folder is not None:
+        config_file_paths.append(
+            os.path.join(user_defined_config_folder, json_file_name)
+        )
+
+    # Bundled default
+    config_file_paths.append(os.path.join(_CONFIGS_DIR, json_file_name))
+
+    for path in config_file_paths:
+        if os.path.exists(path):
+            with open(path) as f:
+                logger.info_once(
+                    "Using SSM config from %s for selective_state_update.",
+                    path,
+                    scope="global",
+                )
+                raw = json.load(f)
+                if isinstance(raw, dict):
+                    # triton_version included in the config file only for reference
+                    raw.pop("triton_version", None)
+                    return {int(k): v for k, v in raw.items() if k.isdigit()}
+
+    logger.warning_once(
+        "Using default Mamba SSU config. Performance might be sub-optimal! "
+        "Config file not found at %s",
+        ", ".join(config_file_paths),
+    )
+    return None
+
+
+def _get_default_ssm_launch_config(
+    dstate: int,
+    is_blackwell: bool,
+) -> tuple[int, int]:
+    """Hard-coded fallback heuristic used when no tuned config is available."""
+    BLOCK_SIZE_M, num_warps = 4, 8
+    if dstate <= 16:
+        BLOCK_SIZE_M, num_warps = 32, 4
+    elif dstate <= 32:
+        BLOCK_SIZE_M, num_warps = 16, 4
+    elif dstate <= 64:
+        BLOCK_SIZE_M, num_warps = 8, 4
+    else:
+        if is_blackwell:
+            BLOCK_SIZE_M, num_warps = 32, 8
+        elif dstate <= 128:
+            BLOCK_SIZE_M, num_warps = 4, 4
+    return BLOCK_SIZE_M, num_warps
+
+
+@functools.cache
+def _try_get_optimal_ssm_config_cached(
+    headdim: int,
+    dstate: int,
+    batch: int,
+    nheads: int,
+    cache_dtype: str,
+    is_blackwell: bool,
+) -> tuple[int, int]:
+    """Cached resolution. See :func:`try_get_optimal_ssm_config`."""
+    effective_batch = batch * nheads
+    configs = get_ssm_configs(headdim, dstate, cache_dtype)
+    if configs:
+        # Pick the closest effective_batch in the tuned grid (MoE strategy).
+        closest = min(configs.keys(), key=lambda x: abs(x - effective_batch))
+        cfg = configs[closest]
+        return cfg["BLOCK_SIZE_M"], cfg["num_warps"]
+
+    return _get_default_ssm_launch_config(dstate, is_blackwell)
+
+
+# Override hook for benchmarks/tests, see `override_ssm_config`.
+_ssm_config_override: tuple[int, int] | None = None
+
+
+@contextmanager
+def override_ssm_config(config: tuple[int, int]):
+    """Pin ``try_get_optimal_ssm_config`` to ``config`` for the duration of
+    the context. Used by the tuning benchmark to time specific configs."""
+    global _ssm_config_override
+    prev = _ssm_config_override
+    _ssm_config_override = config
+    try:
+        yield
+    finally:
+        _ssm_config_override = prev
+
+
+def try_get_optimal_ssm_config(
+    headdim: int,
+    dstate: int,
+    batch: int,
+    nheads: int,
+    cache_dtype: str,
+    is_blackwell: bool,
+) -> tuple[int, int]:
+    """Return (BLOCK_SIZE_M, num_warps) for the given kernel shape.
+
+    Tuning is keyed on ``effective_batch = batch * nheads`` (the kernel grid
+    scales with the product), so configs transfer across (model, TP) combos
+    sharing ``(headdim, dstate, cache_dtype)``.
+    """
+    if _ssm_config_override is not None:
+        return _ssm_config_override
+    return _try_get_optimal_ssm_config_cached(
+        headdim, dstate, batch, nheads, cache_dtype, is_blackwell
+    )
+
 
 if TRITON3:
 
@@ -46,10 +223,19 @@ cvt.rs.f16x2.f32 $0, $2, $1, $3;
 @triton.heuristics({"HAS_DT_BIAS": lambda args: args["dt_bias_ptr"] is not None})
 @triton.heuristics({"HAS_D": lambda args: args["D_ptr"] is not None})
 @triton.heuristics({"HAS_Z": lambda args: args["z_ptr"] is not None})
-@triton.heuristics({"HAS_STATE_BATCH_INDICES": lambda args: args["state_batch_indices_ptr"] is not None})
-@triton.heuristics({"IS_SPEC_DECODING": lambda args: args["num_accepted_tokens_ptr"] is not None})
+@triton.heuristics(
+    {
+        "HAS_STATE_BATCH_INDICES": lambda args: args["state_batch_indices_ptr"]
+        is not None
+    }
+)
+@triton.heuristics(
+    {"IS_SPEC_DECODING": lambda args: args["num_accepted_tokens_ptr"] is not None}
+)
 @triton.heuristics({"IS_VARLEN": lambda args: args["cu_seqlens_ptr"] is not None})
-@triton.heuristics({"BLOCK_SIZE_DSTATE": lambda args: triton.next_power_of_2(args["dstate"])})
+@triton.heuristics(
+    {"BLOCK_SIZE_DSTATE": lambda args: triton.next_power_of_2(args["dstate"])}
+)
 @triton.jit(do_not_specialize=["N"])
 def _selective_scan_update_kernel(
     # Pointers to matrices
@@ -152,16 +338,23 @@ def _selective_scan_update_kernel(
 
         dst_state_batch_indices_ptr += pid_b * stride_dst_state_indices_batch
         if not IS_SPEC_DECODING:
-            dst_state_batch_idx = tl.load(dst_state_batch_indices_ptr + init_token_idx * stride_dst_state_indices_T).to(
-                tl.int64
+            dst_state_batch_idx = tl.load(
+                dst_state_batch_indices_ptr
+                + init_token_idx * stride_dst_state_indices_T
+            ).to(tl.int64)
+            dst_state_ptr = state_ptr + (
+                dst_state_batch_idx * stride_state_batch + pid_h * stride_state_head
             )
-            dst_state_ptr = state_ptr + (dst_state_batch_idx * stride_state_batch + pid_h * stride_state_head)
 
-        state_batch_indices_ptr += pid_b * stride_state_indices_batch + init_token_idx * stride_state_indices_T
+        state_batch_indices_ptr += (
+            pid_b * stride_state_indices_batch + init_token_idx * stride_state_indices_T
+        )
         state_batch_idx = tl.load(state_batch_indices_ptr).to(tl.int64)
         state_ptr += state_batch_idx * stride_state_batch + pid_h * stride_state_head
     else:
-        dst_state_ptr = state_ptr + pid_b * stride_state_batch + pid_h * stride_state_head
+        dst_state_ptr = (
+            state_ptr + pid_b * stride_state_batch + pid_h * stride_state_head
+        )
         state_ptr += pid_b * stride_state_batch + pid_h * stride_state_head
 
     x_ptr += bos * stride_x_batch + pid_h * stride_x_head
@@ -177,9 +370,13 @@ def _selective_scan_update_kernel(
 
     offs_m = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
     offs_n = tl.arange(0, BLOCK_SIZE_DSTATE)
-    state_ptrs = state_ptr + (offs_m[:, None] * stride_state_dim + offs_n[None, :] * stride_state_dstate)
+    state_ptrs = state_ptr + (
+        offs_m[:, None] * stride_state_dim + offs_n[None, :] * stride_state_dstate
+    )
     if not IS_SPEC_DECODING:
-        dst_state_ptrs = dst_state_ptr + (offs_m[:, None] * stride_state_dim + offs_n[None, :] * stride_state_dstate)
+        dst_state_ptrs = dst_state_ptr + (
+            offs_m[:, None] * stride_state_dim + offs_n[None, :] * stride_state_dstate
+        )
 
     mask = (offs_m[:, None] < dim) & (offs_n[None, :] < dstate)
     if HAS_STATE_BATCH_INDICES:
@@ -245,7 +442,9 @@ def _selective_scan_update_kernel(
                     + offs_m[:, None] * stride_state_dim
                     + offs_n[None, :] * stride_state_dstate
                 )
-                tl.store(token_dst_ptrs, state.to(token_dst_ptrs.dtype.element_ty), mask=mask)
+                tl.store(
+                    token_dst_ptrs, state.to(token_dst_ptrs.dtype.element_ty), mask=mask
+                )
 
         out = tl.sum(state * C[None, :], axis=1)
         if HAS_D:
@@ -268,10 +467,15 @@ def _selective_scan_update_kernel(
             rand_seed = tl.load(rand_seed_ptr)
             # Generate random offsets for each element in state
             if HAS_STATE_BATCH_INDICES:
-                rand_offsets = state_batch_idx * stride_state_batch + pid_h * stride_state_head
+                rand_offsets = (
+                    state_batch_idx * stride_state_batch + pid_h * stride_state_head
+                )
             else:
                 rand_offsets = pid_b * stride_state_batch + pid_h * stride_state_head
-            rand_offsets += offs_m[:, None] * stride_state_dim + offs_n[None, :] * stride_state_dstate
+            rand_offsets += (
+                offs_m[:, None] * stride_state_dim
+                + offs_n[None, :] * stride_state_dstate
+            )
             # Generate random 32-bits for each element in state
             if PHILOX_ROUNDS > 0:
                 rand = tl.randint(rand_seed, rand_offsets, PHILOX_ROUNDS)
@@ -369,7 +573,9 @@ def selective_state_update(
         N = len(cu_seqlens) - 1
         # Only used to verify the shape of
         # state_batch_indices and dst_state_batch_indices
-        max_seqlen = state_batch_indices.size(-1) if state_batch_indices is not None else 1
+        max_seqlen = (
+            state_batch_indices.size(-1) if state_batch_indices is not None else 1
+        )
     else:
         N = batch
         max_seqlen = 1
@@ -401,7 +607,9 @@ def selective_state_update(
     grid = lambda META: (triton.cdiv(dim, META["BLOCK_SIZE_M"]), N, nheads)
     z_strides = (z.stride(0), z.stride(1), z.stride(2)) if z is not None else (0, 0, 0)
     state_batch_indices_strides = (
-        (state_batch_indices.stride(0), state_batch_indices.stride(1)) if state_batch_indices is not None else (0, 0)
+        (state_batch_indices.stride(0), state_batch_indices.stride(1))
+        if state_batch_indices is not None
+        else (0, 0)
     )
     dst_state_batch_indices_strides = (
         (dst_state_batch_indices.stride(0), dst_state_batch_indices.stride(1))
@@ -409,27 +617,23 @@ def selective_state_update(
         else (0, 0)
     )
     # We don't want autotune since it will overwrite the state.
-    # We instead tune by hand based on dstate.
+    # Load from JSON config if available, otherwise fall back to heuristic.
+    cache_dtype = str(state.dtype).removeprefix("torch.")
+    BLOCK_SIZE_M, num_warps = try_get_optimal_ssm_config(
+        dim, dstate, N, nheads, cache_dtype, is_blackwell
+    )
 
-    # Default
-    BLOCK_SIZE_M, num_warps = 4, 8
-
-    if dstate <= 16:
-        BLOCK_SIZE_M, num_warps = 32, 4
-    elif dstate <= 32:
-        BLOCK_SIZE_M, num_warps = 16, 4
-    elif dstate <= 64:
-        BLOCK_SIZE_M, num_warps = 8, 4
-    else:
-        # dstate > 64
-        if is_blackwell:
-            # Optimized for B200 with dstate>64
-            BLOCK_SIZE_M, num_warps = 32, 8
-        elif dstate <= 128:
-            BLOCK_SIZE_M, num_warps = 4, 4
-
-    tie_hdim = A.stride(-1) == 0 and A.stride(-2) == 0 and dt.stride(-1) == 0 and dt_bias.stride(-1) == 0
-    rand_seed = torch.randint(0, 2**32, (1,), device=state.device) if enable_stochastic_rounding else None
+    tie_hdim = (
+        A.stride(-1) == 0
+        and A.stride(-2) == 0
+        and dt.stride(-1) == 0
+        and dt_bias.stride(-1) == 0
+    )
+    rand_seed = (
+        torch.randint(0, 2**32, (1,), device=state.device)
+        if enable_stochastic_rounding
+        else None
+    )
 
     with torch.accelerator.device_index(x.device.index):
         _selective_scan_update_kernel[grid](
@@ -589,28 +793,52 @@ def selective_scan_fn(
     if C.dim() == 2 and query_start_loc is not None:
         C = C.unsqueeze(0)
 
-    ops.selective_scan_fwd(
-        u,
-        delta,
-        A,
-        B,
-        C,
-        D,
-        z,
-        delta_bias,
-        delta_softplus,
-        query_start_loc,
-        cache_indices,
-        has_initial_state,
-        ssm_states,
-        null_block_id,
-        block_size,
-        block_idx_first_scheduled_token,
-        block_idx_last_scheduled_token,
-        initial_state_idx,
-        cu_chunk_seqlen,
-        last_chunk_indices,
-    )
+    if current_platform.is_xpu():
+        xpu_ops.selective_scan_fwd(
+            u,
+            delta,
+            A,
+            B,
+            C,
+            D,
+            z,
+            delta_bias,
+            delta_softplus,
+            query_start_loc,
+            cache_indices,
+            has_initial_state,
+            ssm_states,
+            null_block_id,
+            block_size,
+            block_idx_first_scheduled_token,
+            block_idx_last_scheduled_token,
+            initial_state_idx,
+            cu_chunk_seqlen,
+            last_chunk_indices,
+        )
+    else:
+        ops.selective_scan_fwd(
+            u,
+            delta,
+            A,
+            B,
+            C,
+            D,
+            z,
+            delta_bias,
+            delta_softplus,
+            query_start_loc,
+            cache_indices,
+            has_initial_state,
+            ssm_states,
+            null_block_id,
+            block_size,
+            block_idx_first_scheduled_token,
+            block_idx_last_scheduled_token,
+            initial_state_idx,
+            cu_chunk_seqlen,
+            last_chunk_indices,
+        )
 
     if z is None:
         return delta  # output written inplace to delta

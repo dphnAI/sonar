@@ -2,8 +2,6 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 
-from typing import cast
-
 import torch
 from torch import nn
 
@@ -16,6 +14,7 @@ from aphrodite.distributed import (
     tensor_model_parallel_all_reduce,
 )
 from aphrodite.forward_context import ForwardContext, get_forward_context
+from aphrodite.logger import init_logger
 from aphrodite.model_executor.custom_op import CustomOp, PluggableLayer
 from aphrodite.model_executor.layers.linear import (
     ColumnParallelLinear,
@@ -36,9 +35,7 @@ from aphrodite.model_executor.layers.mamba.ops.layernorm_gated import rms_norm_g
 from aphrodite.model_executor.layers.mamba.ops.ssd_combined import (
     mamba_chunk_scan_combined_varlen,
 )
-from aphrodite.model_executor.layers.mamba.ops.ssu_dispatch import (
-    selective_state_update,
-)
+from aphrodite.model_executor.layers.mamba.ops.ssu_dispatch import selective_state_update
 from aphrodite.model_executor.layers.quantization import QuantizationConfig
 from aphrodite.model_executor.model_loader.weight_utils import (
     LoaderFunction,
@@ -54,7 +51,11 @@ from aphrodite.utils.torch_utils import (
     _resolve_layer_name,
     direct_register_custom_op,
 )
+from aphrodite.v1.attention.backend import AttentionMetadata
 from aphrodite.v1.attention.backends.mamba2_attn import Mamba2AttentionMetadata
+from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
+
+logger = init_logger(__name__)
 
 # Added by the IBM Team, 2024
 
@@ -89,7 +90,9 @@ class Mixer2RMSNormGated(CustomOp):
         else:
             # Avoid checkpoint mismatch by skipping unused parameter
             self.register_parameter("weight", None)
-        assert self.full_hidden_size % self.tp_size == 0, "Tensor parallel world size must divide hidden size."
+        assert self.full_hidden_size % self.tp_size == 0, (
+            "Tensor parallel world size must divide hidden size."
+        )
 
     def forward_native(
         self,
@@ -279,10 +282,13 @@ class MambaMixer2(MambaBase, PluggableLayer):
         self.tp_size = get_tensor_model_parallel_world_size()
         tp_rank = get_tensor_model_parallel_rank()
 
-        assert num_heads % self.tp_size == 0, "Tensor parallel world size must divide num heads."
+        assert num_heads % self.tp_size == 0, (
+            "Tensor parallel world size must divide num heads."
+        )
 
         assert (n_groups % self.tp_size) == 0 or n_groups == 1, (
-            "If tensor parallel world size does not divide num_groups, then num_groups must equal 1."
+            "If tensor parallel world size does not divide num_groups, "
+            "then num_groups must equal 1."
         )
 
         self.ssm_state_size = ssm_state_size
@@ -298,7 +304,9 @@ class MambaMixer2(MambaBase, PluggableLayer):
             # - for TP we shard conv_dim by sharding on n_groups,
             # - but if n_groups cannot divide tp_size, we need to
             #   extend some extra groups
-            groups = MambaStateShapeCalculator.extra_groups_for_head_shards(n_groups, self.tp_size)
+            groups = MambaStateShapeCalculator.extra_groups_for_head_shards(
+                n_groups, self.tp_size
+            )
             self.n_groups = n_groups + groups
 
         self.groups_ssm_state_size = self.n_groups * self.ssm_state_size
@@ -431,7 +439,9 @@ class MambaMixer2(MambaBase, PluggableLayer):
         # `ColumnParallelLinear` and `MergedColumnParallelLinear`,
         # and `set_weight_attrs` doesn't allow to override it
         self.conv1d.weight.data = self.conv1d.weight.data.unsqueeze(1)
-        conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
+        conv_weights = self.conv1d.weight.view(
+            self.conv1d.weight.size(0), self.conv1d.weight.size(2)
+        )
         self.register_buffer("conv_weights", conv_weights, persistent=False)
 
         # - these are TPed by heads to reduce the size of the
@@ -447,7 +457,9 @@ class MambaMixer2(MambaBase, PluggableLayer):
         self.use_rms_norm = use_rms_norm
 
         set_weight_attrs(self.D, {"weight_loader": sharded_weight_loader(0)})
-        a_weight_loader = composed_weight_loader(sharded_weight_loader(0), lambda x: -torch.exp(x.float()))
+        a_weight_loader = composed_weight_loader(
+            sharded_weight_loader(0), lambda x: -torch.exp(x.float())
+        )
         set_weight_attrs(self.A, {"weight_loader": a_weight_loader})
         set_weight_attrs(self.dt_bias, {"weight_loader": sharded_weight_loader(0)})
 
@@ -460,7 +472,11 @@ class MambaMixer2(MambaBase, PluggableLayer):
             prefix=f"{prefix}.out_proj",
         )
 
-        self.norm = Mixer2RMSNormGated(intermediate_size, n_groups, self.use_rms_norm, eps=rms_norm_eps)
+        self.norm = Mixer2RMSNormGated(
+            intermediate_size, n_groups, self.use_rms_norm, eps=rms_norm_eps
+        )
+
+        self._ssd_kernels_warmed_up = False
 
         # - get hidden_states, B and C after depthwise convolution.
         self.split_hidden_states_B_C_fn = lambda hidden_states_B_C: torch.split(
@@ -486,6 +502,12 @@ class MambaMixer2(MambaBase, PluggableLayer):
         self.prefix = prefix
 
         self.num_spec = aphrodite_config.num_speculative_tokens
+        if self.num_spec > 0:
+            self.register_buffer(
+                "_decode_state_offsets",
+                torch.arange(1 + self.num_spec, dtype=torch.int32).unsqueeze(0),
+                persistent=False,
+            )
 
         # Pre-compute sizes for forward pass
         self.tped_intermediate_size = self.intermediate_size // self.tp_size
@@ -546,6 +568,104 @@ class MambaMixer2(MambaBase, PluggableLayer):
 
         return output
 
+    def _warmup_ssd_kernels(self, projected_states: torch.Tensor) -> None:
+        """Run a minimal SSD forward pass to trigger Triton autotuning
+        while GPU memory is still plentiful (before SSM cache allocation).
+        """
+        if self._ssd_kernels_warmed_up:
+            return
+        self._ssd_kernels_warmed_up = True
+        logger.info_once("Warming up Mamba2 SSD Triton kernels...")
+
+        device = projected_states.device
+        dtype = projected_states.dtype
+
+        nheads = self.num_heads // self.tp_size
+        ngroups = self.n_groups // self.tp_size
+        headdim = self.head_dim
+        dstate = self.ssm_state_size
+
+        if self.model_config is None:
+            return
+        chunk_size = self.model_config.get_mamba_chunk_size()
+
+        # Triton's autotuner includes tensor dtypes in its cache key,
+        # so state_dtype must match what real inference uses.
+        _, ssm_state_dtype = self.get_state_dtype()
+
+        # SSD kernel autotune keys depend on dtype and head dimensions,
+        # not on sequence length or batch size, so a single shape suffices.
+        seqlen = chunk_size
+        batch = 1
+        nchunks = seqlen // chunk_size  # = 1
+
+        x = torch.randn(seqlen, nheads, headdim, device=device, dtype=dtype)
+        dt = torch.randn(seqlen, nheads, device=device, dtype=dtype)
+        B = torch.randn(seqlen, ngroups, dstate, device=device, dtype=dtype)
+        C = torch.randn(seqlen, ngroups, dstate, device=device, dtype=dtype)
+        cu_seqlens = torch.tensor([0, seqlen], device=device, dtype=torch.int32)
+        cu_chunk_seqlens = torch.tensor(
+            [i * chunk_size for i in range(nchunks + 1)],
+            device=device,
+            dtype=torch.int32,
+        )
+        last_chunk_indices = torch.tensor(
+            [nchunks - 1], device=device, dtype=torch.int32
+        )
+        seq_idx = torch.zeros(nchunks, device=device, dtype=torch.int32)
+        out = torch.empty(seqlen, nheads, headdim, device=device, dtype=dtype)
+
+        # Two kernels (_state_passing_fwd, _chunk_scan_fwd) use
+        # HAS_INITSTATES as a constexpr, producing separate compiled
+        # binaries. Warm up both code paths so neither triggers
+        # JIT compilation during inference.
+        for use_initial_states in (False, True):
+            initial_states = (
+                torch.randn(
+                    batch,
+                    nheads,
+                    headdim,
+                    dstate,
+                    device=device,
+                    dtype=ssm_state_dtype,
+                )
+                if use_initial_states
+                else None
+            )
+            try:
+                mamba_chunk_scan_combined_varlen(
+                    x=x,
+                    dt=dt,
+                    A=self.A,
+                    B=B,
+                    C=C,
+                    chunk_size=chunk_size,
+                    cu_seqlens=cu_seqlens,
+                    cu_chunk_seqlens=cu_chunk_seqlens,
+                    last_chunk_indices=last_chunk_indices,
+                    seq_idx=seq_idx,
+                    out=out,
+                    D=self.D,
+                    z=None,
+                    dt_bias=self.dt_bias,
+                    initial_states=initial_states,
+                    dt_softplus=True,
+                    dt_limit=(0.0, float("inf")),
+                    state_dtype=ssm_state_dtype,
+                )
+            except Exception:
+                logger.warning(
+                    "Mamba2 SSD kernel warmup failed for layer %s "
+                    "(initial_states=%s). First inference may experience "
+                    "latency spike or OOM due to autotuner.",
+                    self.prefix,
+                    use_initial_states,
+                    exc_info=True,
+                )
+
+        logger.debug("Mamba2 SSD kernel warmup completed for layer %s", self.prefix)
+        torch.accelerator.empty_cache()
+
     def conv_ssm_forward(
         self,
         projected_states: torch.Tensor,
@@ -568,15 +688,19 @@ class MambaMixer2(MambaBase, PluggableLayer):
         mamba_block_size = self.cache_config.mamba_block_size
         is_mamba_cache_all = self.cache_config.mamba_cache_mode == "all"
 
-        attn_metadata: Mamba2AttentionMetadata | None = None
+        attn_metadata: AttentionMetadata | None = None
         if attn_metadata_raw is not None:
             assert isinstance(attn_metadata_raw, dict)
-            attn_metadata = cast(Mamba2AttentionMetadata, attn_metadata_raw[self.prefix])
+            attn_metadata = attn_metadata_raw[self.prefix]
             assert isinstance(attn_metadata, Mamba2AttentionMetadata)
             # conv_state must be (..., dim, width-1) for the conv kernels.
             # DS layout stores it that way directly; SD layout needs a
             # transpose (which keeps dim contiguous via stride tricks).
-            conv_state = self.kv_cache[0] if is_conv_state_dim_first() else self.kv_cache[0].transpose(-1, -2)
+            conv_state = (
+                self.kv_cache[0]
+                if is_conv_state_dim_first()
+                else self.kv_cache[0].transpose(-1, -2)
+            )
             ssm_state = self.kv_cache[1]
             has_initial_states_p = attn_metadata.has_initial_states_p
             prep_initial_states = attn_metadata.prep_initial_states
@@ -593,8 +717,12 @@ class MambaMixer2(MambaBase, PluggableLayer):
             num_decode_tokens = attn_metadata.num_decode_tokens
 
         if attn_metadata is None:
-            # profile run
-            hidden_states_B_C = (hidden_states_B_C.transpose(0, 1).clone().transpose(0, 1)).contiguous()
+            # V1 profile run -- warm up SSD kernels so that autotuning
+            # completes before SSM cache allocation.
+            self._warmup_ssd_kernels(projected_states)
+            hidden_states_B_C = (
+                hidden_states_B_C.transpose(0, 1).clone().transpose(0, 1)
+            ).contiguous()
             hidden_states, _B, _C = self.split_hidden_states_B_C_fn(hidden_states_B_C)
             return hidden_states
 
@@ -619,18 +747,32 @@ class MambaMixer2(MambaBase, PluggableLayer):
         if is_mamba_cache_all:
             # If prefix caching is enabled, retrieve the relevant variables
             # for prefill and decode
-            block_idx_last_computed_token_d, block_idx_last_computed_token_p = torch.split(
-                attn_metadata.block_idx_last_computed_token,
-                [num_decodes, num_prefills],
-                dim=0,
+            block_idx_last_computed_token_d, block_idx_last_computed_token_p = (
+                torch.split(
+                    attn_metadata.block_idx_last_computed_token,
+                    [num_decodes, num_prefills],
+                    dim=0,
+                )
             )
-            block_idx_last_scheduled_token_d, block_idx_last_scheduled_token_p = torch.split(
-                attn_metadata.block_idx_last_scheduled_token,
-                [num_decodes, num_prefills],
-                dim=0,
+            block_idx_last_scheduled_token_d, block_idx_last_scheduled_token_p = (
+                torch.split(
+                    attn_metadata.block_idx_last_scheduled_token,
+                    [num_decodes, num_prefills],
+                    dim=0,
+                )
             )
+            if attn_metadata.block_idx_last_scheduled_token_prev_step is not None:
+                block_idx_last_scheduled_token_prev_step_d, _ = torch.split(
+                    attn_metadata.block_idx_last_scheduled_token_prev_step,
+                    [num_decodes, num_prefills],
+                    dim=0,
+                )
+            else:
+                block_idx_last_scheduled_token_prev_step_d = None
             # Prefill-only variables:
-            block_idx_first_scheduled_token_p = attn_metadata.block_idx_first_scheduled_token_p
+            block_idx_first_scheduled_token_p = (
+                attn_metadata.block_idx_first_scheduled_token_p
+            )
             num_computed_tokens_p = attn_metadata.num_computed_tokens_p
         else:
             block_idx_last_computed_token_p = None
@@ -638,6 +780,7 @@ class MambaMixer2(MambaBase, PluggableLayer):
             block_idx_first_scheduled_token_p = None
             block_idx_last_scheduled_token_d = None
             block_idx_last_computed_token_d = None
+            block_idx_last_scheduled_token_prev_step_d = None
             num_computed_tokens_p = None
 
         preallocated_ssm_out_d, preallocated_ssm_out_p = torch.split(
@@ -661,7 +804,9 @@ class MambaMixer2(MambaBase, PluggableLayer):
             #   are provided (which are pointers into
             #   "state_indices_tensor_p"), it will write additional cache
             #   states aligned at "block_size_to_align".
-            x = hidden_states_B_C_p.transpose(0, 1)  # this is the form that causal-conv see
+            x = hidden_states_B_C_p.transpose(
+                0, 1
+            )  # this is the form that causal-conv see
             hidden_states_B_C_p = causal_conv1d_fn(
                 x,
                 self.conv_weights,
@@ -679,7 +824,9 @@ class MambaMixer2(MambaBase, PluggableLayer):
                 query_start_loc=query_start_loc_p,
             ).transpose(0, 1)[:num_prefill_tokens]
 
-            hidden_states_p, B_p, C_p = self.split_hidden_states_B_C_fn(hidden_states_B_C_p)
+            hidden_states_p, B_p, C_p = self.split_hidden_states_B_C_fn(
+                hidden_states_B_C_p
+            )
 
             # 3. State Space Model sequence transformation
             initial_states = None
@@ -699,7 +846,9 @@ class MambaMixer2(MambaBase, PluggableLayer):
             # NOTE: final output is an in-place update of out tensor
             assert preallocated_ssm_out_p is not None
             varlen_states = mamba_chunk_scan_combined_varlen(
-                hidden_states_p.view(num_prefill_tokens, self.num_heads // self.tp_size, self.head_dim),
+                hidden_states_p.view(
+                    num_prefill_tokens, self.num_heads // self.tp_size, self.head_dim
+                ),
                 dt_p,
                 self.A,
                 B_p.view(num_prefill_tokens, self.n_groups // self.tp_size, -1),
@@ -736,13 +885,19 @@ class MambaMixer2(MambaBase, PluggableLayer):
                 # Save state for sequences with more than just final state
                 for seq_idx in range(num_prefills):
                     # Block index for the first scheduled token
-                    block_idx_first_scheduled_token = block_idx_first_scheduled_token_p[seq_idx]
+                    block_idx_first_scheduled_token = block_idx_first_scheduled_token_p[
+                        seq_idx
+                    ]
 
                     # Block index for the last scheduled token
-                    block_idx_last_scheduled_token = block_idx_last_scheduled_token_p[seq_idx]
+                    block_idx_last_scheduled_token = block_idx_last_scheduled_token_p[
+                        seq_idx
+                    ]
 
                     # Number of blocks that need to be written
-                    n_blocks_to_fill = block_idx_last_scheduled_token - block_idx_first_scheduled_token
+                    n_blocks_to_fill = (
+                        block_idx_last_scheduled_token - block_idx_first_scheduled_token
+                    )
 
                     # Skip sequences that don't have any blocks to fill
                     if n_blocks_to_fill == 0:
@@ -765,16 +920,21 @@ class MambaMixer2(MambaBase, PluggableLayer):
 
                     # Calculate the number of computed tokens that were not
                     # already cached
-                    num_unaligned_computed_tokens = num_computed_tokens_p[seq_idx] % mamba_block_size
+                    num_unaligned_computed_tokens = (
+                        num_computed_tokens_p[seq_idx] % mamba_block_size
+                    )
 
                     if num_unaligned_computed_tokens > 0:
                         # If the number of computed tokens is not block aligned,
                         # then we need to shift the index accordingly
-                        first_aligned_chunk -= num_unaligned_computed_tokens // chunk_size
+                        first_aligned_chunk -= (
+                            num_unaligned_computed_tokens // chunk_size
+                        )
 
                     # Get states to write
                     from_where = varlen_states[
-                        first_aligned_chunk : first_aligned_chunk + n_blocks_to_fill * chunk_stride : chunk_stride
+                        first_aligned_chunk : first_aligned_chunk
+                        + n_blocks_to_fill * chunk_stride : chunk_stride
                     ]
 
                     # Write the states
@@ -783,7 +943,9 @@ class MambaMixer2(MambaBase, PluggableLayer):
                 # For all seqs, store the last state (note: might be partial):
                 assert state_indices_tensor_p is not None
                 ssm_state[
-                    state_indices_tensor_p.gather(1, block_idx_last_scheduled_token_p.unsqueeze(1)).squeeze(1)
+                    state_indices_tensor_p.gather(
+                        1, block_idx_last_scheduled_token_p.unsqueeze(1)
+                    ).squeeze(1)
                 ] = varlen_states[last_chunk_indices_p]
 
             else:
@@ -797,18 +959,29 @@ class MambaMixer2(MambaBase, PluggableLayer):
         if has_decode:
             assert state_indices_tensor_d is not None
             if is_mamba_cache_all:
-                state_indices_tensor_d_input = state_indices_tensor_d.gather(
-                    1, block_idx_last_computed_token_d.unsqueeze(1)
-                ).squeeze(1)
-                state_indices_tensor_d_output = state_indices_tensor_d.gather(
-                    1, block_idx_last_scheduled_token_d.unsqueeze(1)
-                ).squeeze(1)
-                # for decode:
-                #   block_idx_first_scheduled_token_d ==
-                #       block_idx_last_scheduled_token_d
-                # at block boundaries:
-                #   block_idx_first_scheduled_token_d >
-                #       block_idx_last_computed_token_d
+                if self.num_spec > 0:
+                    assert block_idx_last_scheduled_token_prev_step_d is not None
+                    input_indices = (
+                        block_idx_last_scheduled_token_prev_step_d.unsqueeze(1)
+                        + self._decode_state_offsets
+                    )
+                    output_indices = (
+                        block_idx_last_scheduled_token_d.unsqueeze(1)
+                        + self._decode_state_offsets
+                    )
+                    state_indices_tensor_d_input = state_indices_tensor_d.gather(
+                        1, input_indices
+                    )
+                    state_indices_tensor_d_output = state_indices_tensor_d.gather(
+                        1, output_indices
+                    )
+                else:
+                    state_indices_tensor_d_input = state_indices_tensor_d.gather(
+                        1, block_idx_last_computed_token_d.unsqueeze(1)
+                    ).squeeze(1)
+                    state_indices_tensor_d_output = state_indices_tensor_d.gather(
+                        1, block_idx_last_scheduled_token_d.unsqueeze(1)
+                    ).squeeze(1)
             else:
                 # Without caching, read and write in-place to the same blocks:
                 state_indices_tensor_d_input = state_indices_tensor_d
@@ -829,19 +1002,25 @@ class MambaMixer2(MambaBase, PluggableLayer):
                 max_query_len=state_indices_tensor_d.size(-1),
             )
 
-            hidden_states_d, B_d, C_d = self.split_hidden_states_B_C_fn(hidden_states_B_C_d)
+            hidden_states_d, B_d, C_d = self.split_hidden_states_B_C_fn(
+                hidden_states_B_C_d
+            )
 
             # 3. State Space Model sequence transformation
             n_groups = self.n_groups // self.tp_size
             A_d = (
-                self.A[:, None, ...][:, :, None].expand(-1, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
+                self.A[:, None, ...][:, :, None]
+                .expand(-1, self.head_dim, self.ssm_state_size)
+                .to(dtype=torch.float32)
             )
             dt_d = dt_d[:, :, None].expand(-1, -1, self.head_dim)
             dt_bias = self.dt_bias[:, None, ...].expand(-1, self.head_dim)
             D_d = self.D[:, None, ...].expand(-1, self.head_dim)
             B_d = B_d.view(-1, n_groups, B_d.shape[1] // n_groups)
             C_d = C_d.view(-1, n_groups, C_d.shape[1] // n_groups)
-            hidden_states_d = hidden_states_d.view(-1, self.num_heads // self.tp_size, self.head_dim)
+            hidden_states_d = hidden_states_d.view(
+                -1, self.num_heads // self.tp_size, self.head_dim
+            )
 
             assert preallocated_ssm_out_d is not None
             # - the hidden is reshaped into (bs, num_heads, head_dim)
@@ -888,8 +1067,8 @@ class MambaMixer2(MambaBase, PluggableLayer):
         )
 
     @property
-    def mamba_type(self) -> str:
-        return "mamba2"
+    def mamba_type(self) -> MambaAttentionBackendEnum:
+        return MambaAttentionBackendEnum.MAMBA2
 
 
 def mamba_mixer2(

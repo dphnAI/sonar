@@ -14,6 +14,7 @@ import torch
 
 from aphrodite.config.mamba import MambaBackendEnum, MambaConfig
 from aphrodite.logger import init_logger
+from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
 from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
 from aphrodite.v1.kv_cache_interface import KVCacheConfig, MambaSpec
 
@@ -199,7 +200,9 @@ def initialize_mamba_ssu_backend(
     selective_state_update.
     """
     if not any(
-        isinstance(g.kv_cache_spec, MambaSpec) and g.kv_cache_spec.mamba_type in ("mamba1", "mamba2")
+        isinstance(g.kv_cache_spec, MambaSpec)
+        and g.kv_cache_spec.mamba_type
+        in (MambaAttentionBackendEnum.MAMBA1, MambaAttentionBackendEnum.MAMBA2)
         for g in kv_cache_config.kv_cache_groups
     ):
         return
@@ -208,7 +211,10 @@ def initialize_mamba_ssu_backend(
 
     backend = mamba_config.backend
     if backend not in _BACKEND_REGISTRY:
-        raise ValueError(f"Unknown Mamba SSU backend: {backend}. Valid options: {list(_BACKEND_REGISTRY.keys())}")
+        raise ValueError(
+            f"Unknown Mamba SSU backend: {backend}. "
+            f"Valid options: {list(_BACKEND_REGISTRY.keys())}"
+        )
 
     backend_cls = _BACKEND_REGISTRY[backend]
     if isinstance(_mamba_ssu_backend, backend_cls):
@@ -221,7 +227,10 @@ def initialize_mamba_ssu_backend(
 def get_mamba_ssu_backend() -> MambaSSUBackend:
     """Get the current Mamba SSU backend. Raises if not initialized."""
     if _mamba_ssu_backend is None:
-        raise RuntimeError("Mamba SSU backend has not been initialized. Call initialize_mamba_ssu_backend() first.")
+        raise RuntimeError(
+            "Mamba SSU backend has not been initialized. "
+            "Call initialize_mamba_ssu_backend() first."
+        )
     return _mamba_ssu_backend
 
 

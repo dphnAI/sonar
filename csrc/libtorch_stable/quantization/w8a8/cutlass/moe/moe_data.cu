@@ -127,7 +127,7 @@ inline void launch_compute_problem_sizes(const torch::stable::Tensor& topk_ids,
   auto* ps2_ptr = problem_sizes2.mutable_data_ptr<int32_t>();
   auto* atomic_ptr = atomic_buffer.mutable_data_ptr<int32_t>();
 
-  APHRODITE_STABLE_DISPATCH_BOOL(swap_ab, SwapAB, [&] {
+  VLLM_STABLE_DISPATCH_BOOL(swap_ab, SwapAB, [&] {
     compute_problem_sizes<SwapAB><<<num_experts, num_threads, 0, stream>>>(
         topk_ptr, ps1_ptr, ps2_ptr, atomic_ptr,
         static_cast<int>(topk_ids.numel()), static_cast<int>(n),
@@ -222,7 +222,7 @@ void get_cutlass_moe_mm_problem_sizes_from_expert_offsets_caller(
   auto* ps1_ptr = problem_sizes1.mutable_data_ptr<int32_t>();
   auto* ps2_ptr = problem_sizes2.mutable_data_ptr<int32_t>();
 
-  APHRODITE_STABLE_DISPATCH_BOOL(swap_ab, SwapAB, [&] {
+  VLLM_STABLE_DISPATCH_BOOL(swap_ab, SwapAB, [&] {
     compute_problem_sizes_from_expert_offsets<SwapAB>
         <<<blocks, threads, 0, stream>>>(offsets_ptr, ps1_ptr, ps2_ptr,
                                          num_experts, static_cast<int>(n),

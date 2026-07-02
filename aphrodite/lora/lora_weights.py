@@ -7,7 +7,7 @@ import torch
 import torch.types
 
 from aphrodite.lora.peft_helper import PEFTHelper
-from aphrodite.utils.platform_utils import is_pin_memory_available
+from aphrodite.utils.torch_utils import PIN_MEMORY
 
 
 class LoRALayerWeights:
@@ -79,9 +79,13 @@ class LoRALayerWeights:
         dtype: torch.dtype,
         device: torch.types.Device,
     ) -> "LoRALayerWeights":
-        pin_memory = str(device) == "cpu" and is_pin_memory_available()
-        lora_a = torch.zeros([rank, input_dim], dtype=dtype, device=device, pin_memory=pin_memory)
-        lora_b = torch.zeros([output_dim, rank], dtype=dtype, device=device, pin_memory=pin_memory)
+        pin_memory = str(device) == "cpu" and PIN_MEMORY
+        lora_a = torch.zeros(
+            [rank, input_dim], dtype=dtype, device=device, pin_memory=pin_memory
+        )
+        lora_b = torch.zeros(
+            [output_dim, rank], dtype=dtype, device=device, pin_memory=pin_memory
+        )
 
         return cls(
             module_name,
@@ -120,7 +124,9 @@ class PackedLoRALayerWeights(LoRALayerWeights):
             ]
 
     @classmethod
-    def pack(cls, loras: GenericSequence["LoRALayerWeights | None"]) -> "PackedLoRALayerWeights":
+    def pack(
+        cls, loras: GenericSequence["LoRALayerWeights | None"]
+    ) -> "PackedLoRALayerWeights":
         """Pack a list of LoRAs into a single LoRA.
 
         If LoRA is None, it signifies that the submodule does not have a LoRA.

@@ -1,3 +1,3 @@
 #pragma once
 
-#define APHRODITE_IMPLIES(p, q) (!(p) || (q))
+#define VLLM_IMPLIES(p, q) (!(p) || (q))

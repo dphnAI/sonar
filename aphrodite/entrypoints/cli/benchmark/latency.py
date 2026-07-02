@@ -4,6 +4,7 @@ import argparse
 
 from aphrodite.benchmarks.latency import add_cli_args, main
 from aphrodite.entrypoints.cli.benchmark.base import BenchmarkSubcommandBase
+from aphrodite.utils.argparse_utils import FlexibleArgumentParser
 
 
 class BenchmarkLatencySubcommand(BenchmarkSubcommandBase):
@@ -13,7 +14,7 @@ class BenchmarkLatencySubcommand(BenchmarkSubcommandBase):
     help = "Benchmark the latency of a single batch of requests."
 
     @classmethod
-    def add_cli_args(cls, parser: argparse.ArgumentParser) -> None:
+    def add_cli_args(cls, parser: FlexibleArgumentParser) -> None:
         add_cli_args(parser)
 
     @staticmethod

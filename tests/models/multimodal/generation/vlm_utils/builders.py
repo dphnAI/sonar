@@ -11,7 +11,11 @@ import torch
 
 from aphrodite.multimodal.audio import AudioResampler
 from aphrodite.multimodal.image import rescale_image_size
-from aphrodite.multimodal.video import rescale_video_size, resize_video, sample_frames_from_video
+from aphrodite.multimodal.video import (
+    rescale_video_size,
+    resize_video,
+    sample_frames_from_video,
+)
 
 from .....conftest import AudioTestAssets, ImageTestAssets, VideoTestAssets
 from .types import (
@@ -28,7 +32,9 @@ from .types import (
 )
 
 
-def replace_test_placeholder(prompt: str, mm_idx_to_prompt: Callable[[int], str], test_placeholder: str) -> str:
+def replace_test_placeholder(
+    prompt: str, mm_idx_to_prompt: Callable[[int], str], test_placeholder: str
+) -> str:
     """Given a prompt, replaces each test placeholder with the
     model-specific tag.
     """
@@ -63,13 +69,19 @@ def get_model_prompts(
         # Replace the multimodal placeholders in the base prompt with
         # the correct ones for the model that we are testing
         if img_idx_to_prompt:
-            base_prompt = replace_test_placeholder(base_prompt, img_idx_to_prompt, TEST_IMG_PLACEHOLDER)
+            base_prompt = replace_test_placeholder(
+                base_prompt, img_idx_to_prompt, TEST_IMG_PLACEHOLDER
+            )
 
         if video_idx_to_prompt:
-            base_prompt = replace_test_placeholder(base_prompt, video_idx_to_prompt, TEST_VIDEO_PLACEHOLDER)
+            base_prompt = replace_test_placeholder(
+                base_prompt, video_idx_to_prompt, TEST_VIDEO_PLACEHOLDER
+            )
 
         if audio_idx_to_prompt:
-            base_prompt = replace_test_placeholder(base_prompt, audio_idx_to_prompt, TEST_AUDIO_PLACEHOLDER)
+            base_prompt = replace_test_placeholder(
+                base_prompt, audio_idx_to_prompt, TEST_AUDIO_PLACEHOLDER
+            )
 
         # Apply the prompt formatter to wrap the base prompt with
         # the correct media placeholders to get the model test prompt
@@ -111,7 +123,9 @@ def build_single_image_inputs_from_test_info(
     return build_single_image_inputs(images, model_prompts, size_wrapper)
 
 
-def build_single_image_inputs(images, model_prompts, size_wrapper: ImageSizeWrapper) -> list[PromptWithMultiModalInput]:
+def build_single_image_inputs(
+    images, model_prompts, size_wrapper: ImageSizeWrapper
+) -> list[PromptWithMultiModalInput]:
     # For every image / prompt pair, get a pair containing two lists of
     # length size_factors, where the first contains duplicates of the model
     # prompt [str], and the second contains copies of the image after being
@@ -121,7 +135,10 @@ def build_single_image_inputs(images, model_prompts, size_wrapper: ImageSizeWrap
     return [
         PromptWithMultiModalInput(
             prompts=[prompt for _ in size_wrapper.data],
-            image_data=[apply_image_size_scaling(image, size, size_wrapper.type) for size in size_wrapper.data],
+            image_data=[
+                apply_image_size_scaling(image, size, size_wrapper.type)
+                for size in size_wrapper.data
+            ],
         )
         for image, prompt in zip(images, model_prompts)
     ]
@@ -148,7 +165,8 @@ def build_multi_image_inputs_from_test_info(
         if tmp_path is None:
             raise ValueError("Prompt path encoder requires setting local path")
         model_prompts = [
-            test_info.prompt_path_encoder(tmp_path, model_prompt, image_assets) for model_prompt in model_prompts
+            test_info.prompt_path_encoder(tmp_path, model_prompt, image_assets)
+            for model_prompt in model_prompts
         ]
 
     images = [asset.pil_image for asset in image_assets]
@@ -168,7 +186,10 @@ def build_multi_image_inputs(
         PromptWithMultiModalInput(
             prompts=[prompt for _ in size_wrapper.data],
             image_data=[
-                [apply_image_size_scaling(image, size, size_wrapper.type) for image in images]
+                [
+                    apply_image_size_scaling(image, size, size_wrapper.type)
+                    for image in images
+                ]
                 for size in size_wrapper.data
             ],
         )
@@ -185,7 +206,9 @@ def build_embedding_inputs_from_test_info(
     # but we still check them in case this is ever called directly
     if test_info.prompt_formatter is None:
         raise ValueError("Prompt formatter must be set to build image embedding inputs")
-    if size_wrapper.type != SizeType.SIZE_FACTOR or not all(factor == 1.0 for factor in size_wrapper.data):
+    if size_wrapper.type != SizeType.SIZE_FACTOR or not all(
+        factor == 1.0 for factor in size_wrapper.data
+    ):
         raise ValueError("Embedding tests require constant (1.0) size factors")
     if test_info.convert_assets_to_embeddings is None:
         raise ValueError("No conversion func for getting embeddings found")
@@ -206,8 +229,8 @@ def build_embedding_inputs_from_test_info(
     assert len(images) == len(model_prompts)
 
     inputs = build_single_image_inputs(images, model_prompts, size_wrapper)
-    aphrodite_embeddings = build_single_image_inputs(embeds, model_prompts, size_wrapper)
-    return inputs, aphrodite_embeddings
+    vllm_embeddings = build_single_image_inputs(embeds, model_prompts, size_wrapper)
+    return inputs, vllm_embeddings
 
 
 def build_video_inputs_from_test_info(
@@ -235,13 +258,19 @@ def build_video_inputs_from_test_info(
         for asset in video_assets
     ]
 
-    video_scaler = resize_video if size_wrapper.type == SizeType.FIXED_SIZE else rescale_video_size
+    video_scaler = (
+        resize_video if size_wrapper.type == SizeType.FIXED_SIZE else rescale_video_size
+    )
 
     return [
         PromptWithMultiModalInput(
             prompts=[prompt for _ in size_wrapper.data],
             video_data=[
-                (video_scaler(video, size) if not needs_video_metadata else (video_scaler(video, size), meta))
+                (
+                    video_scaler(video, size)
+                    if not needs_video_metadata
+                    else (video_scaler(video, size), meta)
+                )
                 for size in size_wrapper.data
             ],
         )
@@ -294,10 +323,7 @@ def build_audio_inputs_from_test_info(
         test_info.audio_idx_to_prompt,
         test_info.prompt_formatter,
     )
-    resampler = AudioResampler(
-        target_sr=16000,
-        method="librosa",
-    )
+    resampler = AudioResampler(target_sr=16000)
     audios = [asset.audio_and_sample_rate for asset in audio_assets]
     resampled_audios = [
         (

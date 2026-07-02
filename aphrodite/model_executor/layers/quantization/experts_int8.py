@@ -5,7 +5,9 @@ from typing import Any
 
 import torch
 
-from aphrodite.model_executor.layers.fused_moe import FusedMoE
+from aphrodite.model_executor.layers.fused_moe import (
+    RoutedExperts,
+)
 from aphrodite.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
 from aphrodite.model_executor.layers.quantization import QuantizationMethods
 from aphrodite.model_executor.layers.quantization.base_config import (
@@ -48,9 +50,11 @@ class ExpertsInt8Config(QuantizationConfig):
     def from_config(cls, config: dict[str, Any]) -> "ExpertsInt8Config":
         return cls()
 
-    def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> "QuantizeMethodBase | None":
+    def get_quant_method(
+        self, layer: torch.nn.Module, prefix: str
+    ) -> "QuantizeMethodBase | None":
         if isinstance(layer, LinearBase):
             return UnquantizedLinearMethod()
-        elif isinstance(layer, FusedMoE):
+        elif isinstance(layer, RoutedExperts):
             return Int8OnlineMoEMethod(layer=layer)
         return None

@@ -12,19 +12,23 @@ from transformers import AutoModelForSequenceClassification
 @pytest.mark.parametrize("dtype", ["half"])
 def test_classify_models(
     hf_runner,
-    aphrodite_runner,
+    vllm_runner,
     example_prompts,
     model: str,
     dtype: str,
 ) -> None:
-    with aphrodite_runner(model, max_model_len=512, dtype=dtype) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.classify(example_prompts)
+    with vllm_runner(model, max_model_len=512, dtype=dtype) as vllm_model:
+        vllm_outputs = vllm_model.classify(example_prompts)
 
-    with hf_runner(model, dtype=dtype, auto_cls=AutoModelForSequenceClassification) as hf_model:
+    with hf_runner(
+        model, dtype=dtype, auto_cls=AutoModelForSequenceClassification
+    ) as hf_model:
         hf_outputs = hf_model.classify(example_prompts)
 
-    for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
+    for hf_output, vllm_output in zip(hf_outputs, vllm_outputs):
         hf_output = torch.tensor(hf_output)
-        aphrodite_output = torch.tensor(aphrodite_output)
+        vllm_output = torch.tensor(vllm_output)
 
-        assert torch.allclose(hf_output, aphrodite_output, 1e-3 if dtype == "float" else 1e-2)
+        assert torch.allclose(
+            hf_output, vllm_output, 1e-3 if dtype == "float" else 1e-2
+        )

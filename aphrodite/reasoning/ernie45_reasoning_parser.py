@@ -7,14 +7,11 @@ from typing import TYPE_CHECKING
 from transformers import PreTrainedTokenizerBase
 
 from aphrodite.entrypoints.openai.engine.protocol import DeltaMessage
-from aphrodite.logger import init_logger
 from aphrodite.reasoning.basic_parsers import BaseThinkingReasoningParser
 
 if TYPE_CHECKING:
     from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
     from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-
-logger = init_logger(__name__)
 
 
 class Ernie45ReasoningParser(BaseThinkingReasoningParser):
@@ -44,7 +41,8 @@ class Ernie45ReasoningParser(BaseThinkingReasoningParser):
 
         if not self.model_tokenizer:
             raise ValueError(
-                "The model tokenizer must be passed to the ReasoningParser constructor during construction."
+                "The model tokenizer must be passed to the ReasoningParser "
+                "constructor during construction."
             )
 
         self.response_start_token_id = self.vocab.get(self.response_start_token)
@@ -116,14 +114,18 @@ class Ernie45ReasoningParser(BaseThinkingReasoningParser):
                     content = content[:response_end_idx]
             elif self.response_end_token_id in delta_token_ids:
                 response_end_idx = content.rfind(self.response_end_token)
-                content = content[:response_end_idx]
+                if response_end_idx != -1:
+                    content = content[:response_end_idx]
             # remove \n after </think>  or </response>
             if previous_token_ids[-1] in self.parser_token_ids and (
                 len(delta_token_ids) > 0 and delta_token_ids[0] == self.newline_token_id
             ):
                 content = content.lstrip("\n")
             # remove \n after </think>\n
-            if (len(previous_token_ids) > 1 and previous_token_ids[-2] == self.end_token_id) and (
+            if (
+                len(previous_token_ids) > 1
+                and previous_token_ids[-2] == self.end_token_id
+            ) and (
                 len(delta_token_ids) > 0 and delta_token_ids[0] == self.newline_token_id
             ):
                 content = content.lstrip("\n")

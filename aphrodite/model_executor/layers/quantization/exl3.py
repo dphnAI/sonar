@@ -15,7 +15,10 @@ from aphrodite.distributed import (
     get_tensor_model_parallel_world_size,
 )
 from aphrodite.logger import init_logger
-from aphrodite.model_executor.layers.fused_moe import FusedMoE, FusedMoEMethodBase
+from aphrodite.model_executor.layers.fused_moe import (
+    FusedMoEMethodBase,
+    RoutedExperts,
+)
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
 from aphrodite.model_executor.layers.linear import (
@@ -418,7 +421,7 @@ class Exl3Config(QuantizationConfig):
             if not self._linear_prefix_is_exl3(prefix):
                 return UnquantizedLinearMethod()
             return Exl3LinearMethod(self)
-        if isinstance(layer, FusedMoE):
+        if isinstance(layer, RoutedExperts):
             if not self._moe_prefix_is_exl3(prefix):
                 return None
             return Exl3MoEMethod(self, layer.moe_config)
@@ -1022,7 +1025,7 @@ class Exl3MoEMethod(FusedMoEMethodBase):
         self._setup_fused_moe_kernel(layer, device)
 
     @classmethod
-    def _shard_tensors_for_tensor_parallel(cls, layer: FusedMoE) -> None:
+    def _shard_tensors_for_tensor_parallel(cls, layer: RoutedExperts) -> None:
         if layer.exl3_tp_size == 1:
             return
 
@@ -1062,7 +1065,7 @@ class Exl3MoEMethod(FusedMoEMethodBase):
 
     def apply(
         self,
-        layer: FusedMoE,
+        layer: RoutedExperts,
         x: torch.Tensor,
         topk_weights: torch.Tensor,
         topk_ids: torch.Tensor,
@@ -1215,7 +1218,7 @@ class Exl3MoEMethod(FusedMoEMethodBase):
 
     def _apply_single_token(
         self,
-        layer: FusedMoE,
+        layer: RoutedExperts,
         x_2d: torch.Tensor,
         topk_ids: torch.Tensor,
         topk_weights: torch.Tensor,
@@ -1311,7 +1314,7 @@ class Exl3MoEMethod(FusedMoEMethodBase):
 
     def _apply_small_batch(
         self,
-        layer: FusedMoE,
+        layer: RoutedExperts,
         x_2d: torch.Tensor,
         topk_ids: torch.Tensor,
         topk_weights: torch.Tensor,
@@ -1412,14 +1415,14 @@ class Exl3MoEMethod(FusedMoEMethodBase):
 
     def apply_monolithic(
         self,
-        layer: FusedMoE,
+        layer: RoutedExperts,
         x: torch.Tensor,
         router_logits: torch.Tensor,
     ) -> torch.Tensor:
         raise NotImplementedError("EXL3 MoE uses external routing.")
 
     @staticmethod
-    def _setup_fused_moe_kernel(layer: FusedMoE, device: torch.device) -> None:
+    def _setup_fused_moe_kernel(layer: RoutedExperts, device: torch.device) -> None:
         def tensor(prefix: str, attr: str, expert_id: int, shard_id: str):
             return getattr(layer, f"{prefix}_{attr}").exl3_tensors[(expert_id, shard_id)]
 
@@ -1513,7 +1516,7 @@ class Exl3MoEMethod(FusedMoEMethodBase):
 
     @staticmethod
     def _apply_exl3(
-        layer: FusedMoE,
+        layer: RoutedExperts,
         prefix: str,
         x: torch.Tensor,
         expert_id: int,

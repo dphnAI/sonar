@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aphrodite import LLM
-from aphrodite.common.sampling_params import SamplingParams, StructuredOutputsParams
+from aphrodite.sampling_params import SamplingParams, StructuredOutputsParams
 from aphrodite.v1.metrics.reader import Counter, Gauge, Histogram, Metric, Vector
 
 if TYPE_CHECKING:
@@ -18,14 +18,14 @@ MODEL = "facebook/opt-125m"
 DTYPE = "half"
 
 
-def _aphrodite_model(
+def _vllm_model(
     apc: bool,
-    aphrodite_runner: type[AphroditeRunner],
+    vllm_runner: type[AphroditeRunner],
     *,
     skip_tokenizer_init: bool = False,
 ):
     """Set up AphroditeRunner instance."""
-    return aphrodite_runner(
+    return vllm_runner(
         MODEL,
         dtype=DTYPE,
         max_model_len=128,
@@ -43,17 +43,17 @@ def _aphrodite_model(
     # Prefix caching
     params=[False, True],
 )
-def aphrodite_model(aphrodite_runner, request):
+def vllm_model(vllm_runner, request):
     """AphroditeRunner test fixture parameterized by APC True/False."""
-    with _aphrodite_model(request.param, aphrodite_runner) as aphrodite_model:
-        yield aphrodite_model
+    with _vllm_model(request.param, vllm_runner) as vllm_model:
+        yield vllm_model
 
 
 @pytest.fixture(scope="function")
-def aphrodite_model_apc(aphrodite_runner):
+def vllm_model_apc(vllm_runner):
     """AphroditeRunner test fixture with APC."""
-    with _aphrodite_model(True, aphrodite_runner) as aphrodite_model:
-        yield aphrodite_model
+    with _vllm_model(True, vllm_runner) as vllm_model:
+        yield vllm_model
 
 
 @pytest.fixture(
@@ -63,14 +63,14 @@ def aphrodite_model_apc(aphrodite_runner):
     # Prefix caching
     params=[False, True],
 )
-def aphrodite_model_skip_tokenizer_init(aphrodite_runner, request):
+def vllm_model_skip_tokenizer_init(vllm_runner, request):
     """AphroditeRunner test fixture with APC."""
-    with _aphrodite_model(
+    with _vllm_model(
         request.param,
-        aphrodite_runner,
+        vllm_runner,
         skip_tokenizer_init=True,
-    ) as aphrodite_model:
-        yield aphrodite_model
+    ) as vllm_model:
+        yield vllm_model
 
 
 def _get_test_sampling_params(
@@ -79,10 +79,11 @@ def _get_test_sampling_params(
     structured_outputs: bool = False,
 ) -> tuple[list[SamplingParams], list[int]]:
     """Generate random sampling params for a batch."""
+    rng = random.Random(seed)
 
     def get_mostly_n_gt1() -> int:
         r"""Mostly n \in [2,20], ~1/3 n=1"""
-        x = random.randint(0, 28)
+        x = rng.randint(0, 28)
         if x < 10:
             return 1
         else:
@@ -96,14 +97,16 @@ def _get_test_sampling_params(
             top_p=0.95,
             n=n,
             seed=seed,
-            structured_outputs=StructuredOutputsParams(regex="[0-9]+") if structured_outputs else None,
+            structured_outputs=StructuredOutputsParams(regex="[0-9]+")
+            if structured_outputs
+            else None,
         )
         for n in n_list
     ], n_list
 
 
 def test_compatibility_with_skip_tokenizer_init(
-    aphrodite_model_skip_tokenizer_init: AphroditeRunner,
+    vllm_model_skip_tokenizer_init: AphroditeRunner,
     example_prompts: list[str],
 ):
     # Case 1: Structured output request should raise an error.
@@ -111,20 +114,20 @@ def test_compatibility_with_skip_tokenizer_init(
         example_prompts,
         structured_outputs=True,
     )
-    llm: LLM = aphrodite_model_skip_tokenizer_init.llm
+    llm: LLM = vllm_model_skip_tokenizer_init.llm
     with pytest.raises(ValueError):
         _ = llm.generate(example_prompts, sampling_params_list)
 
 
-def test_parallel_sampling(aphrodite_model, example_prompts) -> None:
+def test_parallel_sampling(vllm_model, example_prompts) -> None:
     """Test passes if parallel sampling `n>1` yields `n` unique completions.
 
     Args:
-      aphrodite_model: AphroditeRunner instance under test.
+      vllm_model: AphroditeRunner instance under test.
       example_prompt: test fixture providing prompts for testing.
     """
     sampling_params_list, n_list = _get_test_sampling_params(example_prompts)
-    llm: LLM = aphrodite_model.llm
+    llm: LLM = vllm_model.llm
     outputs = llm.generate(example_prompts, sampling_params_list)
 
     # Validate each request response
@@ -141,10 +144,13 @@ def test_parallel_sampling(aphrodite_model, example_prompts) -> None:
         # Assert unique completions
         if len(completion_counts) != n:
             repeats = {txt: num for (txt, num) in completion_counts.items() if num > 1}
-            raise AssertionError(f"{len(completion_counts)} unique completions; expected {n}. Repeats: {repeats}")
+            raise AssertionError(
+                f"{len(completion_counts)} unique completions; expected"
+                f" {n}. Repeats: {repeats}"
+            )
 
 
-def test_engine_metrics(aphrodite_runner, example_prompts):
+def test_engine_metrics(vllm_runner, example_prompts):
     max_tokens = 100
     # Use spec decoding to test num_accepted_tokens_per_pos
     speculative_config = {
@@ -154,12 +160,12 @@ def test_engine_metrics(aphrodite_runner, example_prompts):
         "num_speculative_tokens": 5,
     }
 
-    with aphrodite_runner(
+    with vllm_runner(
         MODEL,
         speculative_config=speculative_config,
         disable_log_stats=False,
-    ) as aphrodite_model:
-        llm: LLM = aphrodite_model.llm
+    ) as vllm_model:
+        llm: LLM = vllm_model.llm
         sampling_params = SamplingParams(temperature=0.0, max_tokens=max_tokens)
         outputs = llm.generate(example_prompts, sampling_params)
 
@@ -199,7 +205,9 @@ def test_engine_metrics(aphrodite_runner, example_prompts):
         assert request_generation_tokens[0].count == n_prompts
         assert request_generation_tokens[0].sum == total_tokens
 
-        num_accepted_tokens_per_pos = find_metric("aphrodite:spec_decode_num_accepted_tokens_per_pos")
+        num_accepted_tokens_per_pos = find_metric(
+            "aphrodite:spec_decode_num_accepted_tokens_per_pos"
+        )
         assert len(num_accepted_tokens_per_pos) == 1
         assert isinstance(num_accepted_tokens_per_pos[0], Vector)
         assert len(num_accepted_tokens_per_pos[0].values) == 5
@@ -217,43 +225,14 @@ def test_skip_tokenizer_initialization(model: str):
     )
     sampling_params = SamplingParams(prompt_logprobs=True, detokenize=True)
 
-    with pytest.raises(ValueError, match="cannot pass text prompts when"):
+    with pytest.raises(ValueError, match="`skip_tokenizer_init=True`"):
         llm.generate("abc", sampling_params)
 
-    outputs = llm.generate({"prompt_token_ids": [1, 2, 3]}, sampling_params=sampling_params)
+    outputs = llm.generate(
+        {"prompt_token_ids": [1, 2, 3]}, sampling_params=sampling_params
+    )
     assert len(outputs) > 0
     completions = outputs[0].outputs
     assert len(completions) > 0
     assert completions[0].text == ""
     assert completions[0].token_ids
-
-
-def test_kv_cache_properties(aphrodite_runner):
-    """Test that max_concurrency and kv_cache_size_tokens properties are accessible."""
-    with aphrodite_runner(
-        MODEL,
-        dtype=DTYPE,
-        max_model_len=128,
-        enforce_eager=True,
-        gpu_memory_utilization=0.5,
-    ) as aphrodite_model:
-        llm: LLM = aphrodite_model.llm
-        llm_engine = llm.llm_engine
-
-        # Test max_concurrency property
-        max_conc = llm_engine.max_concurrency
-        assert isinstance(max_conc, float)
-        assert max_conc > 0
-
-        # Test kv_cache_size_tokens property
-        kv_cache_tokens = llm_engine.kv_cache_size_tokens
-        assert isinstance(kv_cache_tokens, int)
-        assert kv_cache_tokens > 0
-
-        # Test kv_cache_size_tokens_str property
-        kv_cache_tokens_str = llm_engine.kv_cache_size_tokens_str
-        assert isinstance(kv_cache_tokens_str, str)
-        assert "," in kv_cache_tokens_str or len(kv_cache_tokens_str) > 0
-        # Verify the string represents the same number
-        tokens_from_str = int(kv_cache_tokens_str.replace(",", ""))
-        assert tokens_from_str == kv_cache_tokens

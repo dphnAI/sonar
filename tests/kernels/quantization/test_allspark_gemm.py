@@ -2,17 +2,18 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import pytest
 import torch
-from aphrodite.quantization.utils.allspark_utils import (
+
+from tests.kernels.utils import DEFAULT_OPCHECK_TEST_UTILS, opcheck
+from aphrodite import _custom_ops as ops
+from aphrodite.model_executor.layers.quantization.utils.allspark_utils import (
     ALLSPARK_AMPERE_K_ALIGN,
     ALLSPARK_AMPERE_M_CUBLAS_THRESHOLD,
     ALLSPARK_AMPERE_N_ALIGN,
 )
-from aphrodite.quantization.utils.quant_utils import quantize_weights
-
-from aphrodite import _custom_ops as ops
+from aphrodite.model_executor.layers.quantization.utils.quant_utils import quantize_weights
 from aphrodite.platforms import current_platform
 from aphrodite.scalar_type import scalar_types
-from tests.kernels.utils import DEFAULT_OPCHECK_TEST_UTILS, opcheck
+from aphrodite.utils.platform_utils import num_compute_units
 
 
 def is_gptq_allspark_supported(min_capability: int, max_capability: int) -> bool:
@@ -22,7 +23,9 @@ def is_gptq_allspark_supported(min_capability: int, max_capability: int) -> bool
     capability = current_platform.get_device_capability()
     assert capability is not None
 
-    return capability.to_int() >= min_capability and capability.to_int() <= max_capability
+    return (
+        capability.to_int() >= min_capability and capability.to_int() <= max_capability
+    )
 
 
 MNK_FACTORS = [
@@ -41,7 +44,9 @@ HAS_ZP_OPTS = [False, True]
 
 
 def compute_max_diff(output, output_ref):
-    return torch.mean(torch.abs(output - output_ref)) / torch.mean(torch.abs(output_ref))
+    return torch.mean(torch.abs(output - output_ref)) / torch.mean(
+        torch.abs(output_ref)
+    )
 
 
 def rand_data(shape, dtype=torch.float16):
@@ -66,13 +71,15 @@ def test_gptq_allspark_gemm_ampere(mnk_factors, group_size, has_zp, dtype):
     weight = rand_data((k, n), dtype=dtype)
 
     # Quantize (and apply act_order if provided)
-    w_ref, qw, s, zp = quantize_weights(weight, scalar_types.uint8b128, group_size, has_zp)
+    w_ref, qw, s, zp = quantize_weights(
+        weight, scalar_types.uint8b128, group_size, has_zp
+    )
 
     qw = qw.to(torch.uint8)
     if has_zp:
         zp = zp.to(dtype)
     properties = torch.cuda.get_device_properties(qw.device.index)
-    sm_count = properties.multi_processor_count
+    sm_count = num_compute_units(qw.device.index)
     sm_version = properties.major * 10 + properties.minor
 
     n_32align = (n + 32 - 1) // 32 * 32
@@ -115,7 +122,7 @@ def test_gptq_allspark_gemm_ampere(mnk_factors, group_size, has_zp, dtype):
     )
 
     output_ref = torch.matmul(input, w_ref)
-    torch.cuda.synchronize()
+    torch.accelerator.synchronize()
     max_diff = compute_max_diff(output, output_ref)
 
     assert max_diff < 0.04

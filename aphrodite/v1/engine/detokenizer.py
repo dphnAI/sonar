@@ -3,9 +3,9 @@
 from abc import ABC, abstractmethod
 
 import tokenizers
+import tokenizers.decoders
 from packaging import version
 from tokenizers import Tokenizer
-from tokenizers.decoders import DecodeStream
 from transformers import PreTrainedTokenizerFast
 
 from aphrodite.logger import init_logger
@@ -117,7 +117,7 @@ class BaseIncrementalDetokenizer(IncrementalDetokenizer, ABC):
         for new_token_id in new_token_ids:
             self.token_ids.append(new_token_id)
             self.output_text += self.decode_next(new_token_id)
-            # Support min_tokens, see https://github.com/vllm-project/vllm/pull/22014
+            # Support min_tokens, see https://github.com/vllm-project/aphrodite/pull/22014
             if self.min_tokens and self.num_output_tokens() <= self.min_tokens:
                 stop_check_offset = len(self.output_text)
 
@@ -177,13 +177,17 @@ class FastIncrementalDetokenizer(BaseIncrementalDetokenizer):
         self.tokenizer: Tokenizer = tokenizer._tokenizer
 
         # Use native prefill to prime the decode stream with prompt tokens.
-        self.stream = DecodeStream(
+        # Look up DecodeStream on the module so backend patches (e.g. the
+        # fastokens shim that replaces ``tokenizers.decoders.DecodeStream``)
+        # are honored regardless of import order.
+        self.stream = tokenizers.decoders.DecodeStream(
             ids=request.prompt_token_ids,
             skip_special_tokens=self.skip_special_tokens,
         )
 
         self.spaces_between_special_tokens = (
-            sampling_params.skip_special_tokens or sampling_params.spaces_between_special_tokens
+            sampling_params.skip_special_tokens
+            or sampling_params.spaces_between_special_tokens
         )
 
         if not self.spaces_between_special_tokens:
@@ -192,7 +196,8 @@ class FastIncrementalDetokenizer(BaseIncrementalDetokenizer):
             added_token_ids = getattr(self.tokenizer, "added_token_ids", None)
             if added_token_ids is None:
                 self.tokenizer.added_token_ids = added_token_ids = {
-                    tid: tok.content for tid, tok in self.tokenizer.get_added_tokens_decoder().items()
+                    tid: tok.content
+                    for tid, tok in self.tokenizer.get_added_tokens_decoder().items()
                 }
 
             if added_token_ids:
@@ -220,7 +225,7 @@ class FastIncrementalDetokenizer(BaseIncrementalDetokenizer):
             token = self.stream.step(self.tokenizer, next_token_id)
         except (OverflowError, TypeError):
             # Handle rare observed overflow, still to be diagnosed.
-            # See https://github.com/vllm-project/vllm/issues/21951.
+            # See https://github.com/vllm-project/aphrodite/issues/21951.
             logger.exception("Encountered invalid token id: %r", next_token_id)
             token = None
         except Exception as e:
@@ -229,12 +234,15 @@ class FastIncrementalDetokenizer(BaseIncrementalDetokenizer):
             # Recover from edge case where tokenizer can produce non-monotonic,
             # invalid UTF-8 output, which breaks the internal state of
             # tokenizers' DecodeStream.
-            # See https://github.com/vllm-project/vllm/issues/17448.
+            # See https://github.com/vllm-project/aphrodite/issues/17448.
             logger.warning(
-                "Encountered invalid prefix detokenization error for request %s, resetting decode stream.",
+                "Encountered invalid prefix detokenization error"
+                " for request %s, resetting decode stream.",
                 self.request_id,
             )
-            self.stream = DecodeStream(skip_special_tokens=self.skip_special_tokens)
+            self.stream = tokenizers.decoders.DecodeStream(
+                skip_special_tokens=self.skip_special_tokens
+            )
             token = self.stream.step(self.tokenizer, next_token_id)
         return token
 
@@ -247,14 +255,18 @@ class SlowIncrementalDetokenizer(BaseIncrementalDetokenizer):
         params = request.sampling_params
         assert params is not None
 
-        self.prompt_len = length_from_prompt_token_ids_or_embeds(request.prompt_token_ids, request.prompt_embeds)
+        self.prompt_len = length_from_prompt_token_ids_or_embeds(
+            request.prompt_token_ids, request.prompt_embeds
+        )
 
         # Metadata for incremental detokenization.
         if request.prompt_token_ids is not None:
-            self.tokens, self.prefix_offset, self.read_offset = convert_prompt_ids_to_tokens(
-                tokenizer=tokenizer,
-                prompt_ids=request.prompt_token_ids,
-                skip_special_tokens=params.skip_special_tokens,
+            self.tokens, self.prefix_offset, self.read_offset = (
+                convert_prompt_ids_to_tokens(
+                    tokenizer=tokenizer,
+                    prompt_ids=request.prompt_token_ids,
+                    skip_special_tokens=params.skip_special_tokens,
+                )
             )
         else:
             # Prompt embedding requests cannot be detokenized, in general.

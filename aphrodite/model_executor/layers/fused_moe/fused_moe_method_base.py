@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 from abc import abstractmethod
+from typing import TYPE_CHECKING
 
 import torch
 
@@ -20,6 +21,10 @@ from aphrodite.model_executor.layers.quantization.base_config import (
     QuantizeMethodBase,
 )
 
+if TYPE_CHECKING:
+    from aphrodite.model_executor.layers.fused_moe.routed_experts import RoutedExperts
+    from aphrodite.model_executor.layers.fused_moe.runner.shared_experts import SharedExperts
+
 logger = init_logger(__name__)
 
 
@@ -37,15 +42,17 @@ class FusedMoEMethodBase(QuantizeMethodBase):
         return self.moe_kernel is not None
 
     @property
-    def mk_owns_shared_expert(self) -> bool:
+    def mk_can_overlap_shared_experts(self) -> bool:
         # NOTE(rob): temporary attribute to indicate support for
         # completed migration to the new internal MK interface.
-        return self.moe_kernel is not None and self.moe_kernel.owns_shared_experts
+        return (
+            self.moe_kernel is not None and self.moe_kernel.can_overlap_shared_experts
+        )
 
     @abstractmethod
     def create_weights(
         self,
-        layer: torch.nn.Module,
+        layer: "RoutedExperts",
         num_experts: int,
         hidden_size: int,
         intermediate_size_per_partition: int,
@@ -102,14 +109,16 @@ class FusedMoEMethodBase(QuantizeMethodBase):
     ) -> FusedMoEPrepareAndFinalizeModular | None:
         from .all2all_utils import maybe_make_prepare_finalize
 
-        pf = maybe_make_prepare_finalize(self.moe, self.moe_quant_config, routing_tables)
+        pf = maybe_make_prepare_finalize(
+            self.moe, self.moe_quant_config, routing_tables
+        )
         assert pf is None or isinstance(pf, FusedMoEPrepareAndFinalizeModular)
         return pf
 
     def select_gemm_impl(
         self,
         prepare_finalize: FusedMoEPrepareAndFinalizeModular,
-        layer: torch.nn.Module,
+        layer: "RoutedExperts",
     ) -> FusedMoEExpertsModular:
         # based on the all2all implementation, select the appropriate
         # gemm implementation
@@ -119,7 +128,9 @@ class FusedMoEMethodBase(QuantizeMethodBase):
         )
 
     @abstractmethod
-    def get_fused_moe_quant_config(self, layer: torch.nn.Module) -> FusedMoEQuantConfig | None:
+    def get_fused_moe_quant_config(
+        self, layer: "RoutedExperts"
+    ) -> FusedMoEQuantConfig | None:
         raise NotImplementedError
 
     @property
@@ -131,6 +142,14 @@ class FusedMoEMethodBase(QuantizeMethodBase):
     @property
     def skip_forward_padding(self) -> bool:
         """Whether to skip the padding in the forward before applying the moe method."""
+        return False
+
+    @property
+    def has_unpadded_output(self) -> bool:
+        """
+        Indicates that the hidden_states output might be the unpadded
+        hidden_states shape rather than the full padded shape.
+        """
         return False
 
     @property
@@ -152,19 +171,44 @@ class FusedMoEMethodBase(QuantizeMethodBase):
 
     def apply(
         self,
-        layer: "FusedMoE",  # type: ignore[name-defined] # noqa: F821
+        layer: "RoutedExperts",
         x: torch.Tensor,
         topk_weights: torch.Tensor,
         topk_ids: torch.Tensor,
+        shared_experts: "SharedExperts | None",
         shared_experts_input: torch.Tensor | None,
     ) -> torch.Tensor:
+        """
+        Apply the MoE operation using modular kernels.
+
+        Args:
+            layer: RoutedExperts instance containing weight parameters
+            x: Input tensor
+            topk_weights: Expert weights from router
+            topk_ids: Selected expert IDs from router
+            shared_experts_input: Input for shared experts (if any)
+
+        Returns:
+            Output tensor from routed experts
+        """
         raise NotImplementedError
 
     def apply_monolithic(
         self,
-        layer: "FusedMoE",  # type: ignore[name-defined] # noqa: F821
+        layer: "RoutedExperts",
         x: torch.Tensor,
         router_logits: torch.Tensor,
         input_ids: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        """
+        Apply the MoE operation using monolithic kernels.
+
+        Args:
+            layer: RoutedExperts instance containing weight parameters
+            x: Input tensor
+            router_logits: Router logits (routing done internally)
+
+        Returns:
+            Output tensor from routed experts
+        """
         raise NotImplementedError

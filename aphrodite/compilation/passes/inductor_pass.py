@@ -30,6 +30,9 @@ class PassContext:
     def __init__(self, compile_range: Range):
         self.compile_range: Range = compile_range
 
+        # set of arg indices
+        self.donated_input_ids: set[int] = set()
+
 
 def get_pass_context() -> PassContext:
     """Get the current pass context."""
@@ -79,21 +82,27 @@ class InductorPass(CustomGraphPass):  # type: ignore[misc]
     def hash_source(*srcs: str | Any) -> str:
         """
         Utility method to hash the sources of functions or objects.
-        :param srcs: strings or objects to add to the hash.
-        Objects and functions have their source inspected.
-        Results are cached by resolved types to avoid repeated
-        inspect.getsource() calls.
-        :return:
+
+        Args:
+            srcs: strings or objects to add to the hash.
+                Objects and functions have their source inspected.
+                Results are cached by resolved types to avoid repeated
+                inspect.getsource() calls.
         """
         # Resolve instances to their class for a hashable cache key.
-        cache_key = tuple(src if isinstance(src, (str, type, types.FunctionType)) else src.__class__ for src in srcs)
+        cache_key = tuple(
+            src if isinstance(src, (str, type, types.FunctionType)) else src.__class__
+            for src in srcs
+        )
         return _hash_source_cached(*cache_key)
 
     @staticmethod
     def hash_dict(dict_: dict[Any, Any]) -> str:
         """
         Utility method to hash a dictionary, can alternatively be used for uuid.
-        :return: A sha256 hash of the json rep of the dictionary.
+
+        Returns:
+            A sha256 hash of the json rep of the dictionary.
         """
         encoded = json.dumps(dict_, sort_keys=True).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
@@ -108,7 +117,9 @@ class CallableInductorPass(InductorPass):
     implementation of the UUID.
     """
 
-    def __init__(self, callable: Callable[[fx.Graph], None], uuid: Any | None = None) -> None:
+    def __init__(
+        self, callable: Callable[[fx.Graph], None], uuid: Any | None = None
+    ) -> None:
         self.callable = callable
         self._uuid = self.hash_source(callable) if uuid is None else uuid
 

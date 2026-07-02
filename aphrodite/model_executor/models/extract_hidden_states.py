@@ -15,7 +15,7 @@ from typing import ClassVar
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
+from aphrodite.config import CacheConfig, AphroditeConfig, get_current_aphrodite_config
 from aphrodite.config.cache import CacheDType
 from aphrodite.forward_context import get_forward_context
 from aphrodite.model_executor.layers.attention.attention import set_default_quant_scales
@@ -34,8 +34,8 @@ from aphrodite.v1.attention.backend import (
 )
 from aphrodite.v1.kv_cache_interface import (
     AttentionSpec,
+    HiddenStateCacheSpec,
     KVCacheSpec,
-    MLAAttentionSpec,
 )
 
 ########## Custom Ops ########
@@ -54,7 +54,9 @@ def unified_kv_cache_update(
     kv_cache = attn_layer.kv_cache
 
     slot_mapping = forward_context.slot_mapping
-    assert isinstance(slot_mapping, dict), f"Expected slot_mapping to be a dict, got {type(slot_mapping)}. "
+    assert isinstance(slot_mapping, dict), (
+        f"Expected slot_mapping to be a dict, got {type(slot_mapping)}. "
+    )
     layer_slot_mapping = slot_mapping.get(layer_name)
     if layer_slot_mapping is not None:
         assert hasattr(attn_layer.impl, "do_kv_cache_update"), (
@@ -77,13 +79,15 @@ def dummy_attention(layer_name, _placeholder):
 
 
 def basic_cache(
-    to_cache: torch.Tensor,  # shape: [num_blocks, block_size, num_heads, head_size]
-    kv_cache: torch.Tensor,  # shape: [seq_len, num_heads, head_size]
+    to_cache: torch.Tensor,  # shape: [seq_len, num_heads, head_size]
+    kv_cache: torch.Tensor,  # shape: [num_blocks, block_size, num_heads, head_size]
     slot_mapping: torch.Tensor,  # shape: [seq_len]
 ):
-    num_blocks, block_size, num_heads, head_size = kv_cache.shape
-    token_kv_cache = kv_cache.view(num_blocks * block_size, num_heads, head_size)
-    token_kv_cache[slot_mapping] = to_cache
+    # Padding slots are -1; redirect them to the null block (block 0, never
+    # allocated to a request) so the scatter stays branch-free and sync-free.
+    block_size = kv_cache.shape[1]
+    slot_mapping = slot_mapping.clamp_min(0)
+    kv_cache[slot_mapping // block_size, slot_mapping % block_size] = to_cache
 
 
 ######### CacheOnlyAttentionBackend ########
@@ -149,7 +153,9 @@ class CacheOnlyAttentionMetadata:
         self.slot_mapping = slot_mapping
 
 
-class CacheOnlyAttentionMetadataBuilder(AttentionMetadataBuilder[CacheOnlyAttentionMetadata]):
+class CacheOnlyAttentionMetadataBuilder(
+    AttentionMetadataBuilder[CacheOnlyAttentionMetadata]
+):
     def __init__(
         self,
         kv_cache_spec: AttentionSpec,
@@ -167,10 +173,14 @@ class CacheOnlyAttentionMetadataBuilder(AttentionMetadataBuilder[CacheOnlyAttent
     ) -> CacheOnlyAttentionMetadata:
         use_cascade = common_prefix_len > 0
         if use_cascade:
-            raise NotImplementedError("Cascade attention not supported by CacheOnlyAttention")
+            raise NotImplementedError(
+                "Cascade attention not supported by CacheOnlyAttention"
+            )
         causal = common_attn_metadata.causal
         if not causal:
-            raise NotImplementedError("Non-causal attention not supported by CacheOnlyAttention")
+            raise NotImplementedError(
+                "Non-causal attention not supported by CacheOnlyAttention"
+            )
 
         return CacheOnlyAttentionMetadata(
             slot_mapping=common_attn_metadata.slot_mapping,
@@ -256,7 +266,9 @@ class CacheOnlyAttentionLayer(nn.Module, AttentionLayerBase):
             "CacheOnlyAttentionLayer doesn't currently support quantized kv cache but"
             f"kv cache dtype was set to {kv_cache_dtype}"
         )
-        self.kv_cache_torch_dtype = kv_cache_dtype_str_to_dtype(kv_cache_dtype, aphrodite_config.model_config)
+        self.kv_cache_torch_dtype = kv_cache_dtype_str_to_dtype(
+            kv_cache_dtype, aphrodite_config.model_config
+        )
 
         # Initialize KV cache quantization attributes
         set_default_quant_scales(self, register_buffer=True)
@@ -312,11 +324,9 @@ class CacheOnlyAttentionLayer(nn.Module, AttentionLayerBase):
         return self.attn_backend
 
     def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec:
-        # Note: we use MLAAttentionSpec here to because it will
-        # produce page sizes of (block_size * num_kv_heads * head_size * dtype_size)
-        # whereas FullAttentionSpec will add an additional factor of 2
-        return MLAAttentionSpec(
-            block_size=self.block_size,
+        # Re-read block_size: hybrid models may bump it after __init__.
+        return HiddenStateCacheSpec(
+            block_size=aphrodite_config.cache_config.block_size,
             num_kv_heads=self.num_heads,
             head_size=self.head_size,
             dtype=self.kv_cache_torch_dtype,
@@ -333,8 +343,12 @@ class ExtractHiddenStatesModel(nn.Module):
         self.aphrodite_config = aphrodite_config
         self.hf_config = aphrodite_config.speculative_config.draft_model_config.hf_config
         self.hidden_size = aphrodite_config.model_config.get_hidden_size()
-        self.target_num_hidden_layers = aphrodite_config.model_config.get_total_num_hidden_layers()
-        self.num_hidden_states = len(getattr(self.hf_config, "eagle_aux_hidden_state_layer_ids", []))
+        self.target_num_hidden_layers = (
+            aphrodite_config.model_config.get_total_num_hidden_layers()
+        )
+        self.num_hidden_states = len(
+            getattr(self.hf_config, "eagle_aux_hidden_state_layer_ids", [])
+        )
 
         cache_config = aphrodite_config.cache_config
 
@@ -353,7 +367,9 @@ class ExtractHiddenStatesModel(nn.Module):
                     num_heads=self.num_hidden_states,
                     head_size=self.hidden_size,
                     cache_config=cache_config,
-                    prefix=maybe_prefix(prefix, f"cache_only_layers.{self.target_num_hidden_layers}"),
+                    prefix=maybe_prefix(
+                        prefix, f"cache_only_layers.{self.target_num_hidden_layers}"
+                    ),
                 )
             }
         )

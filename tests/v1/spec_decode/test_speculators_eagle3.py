@@ -2,9 +2,10 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import pytest
 import torch
-from aphrodite.modeling.models.interfaces import supports_eagle3
 
 from aphrodite.config import SpeculativeConfig
+from aphrodite.model_executor.models.interfaces import supports_eagle3
+from aphrodite.platforms import current_platform
 
 
 @pytest.mark.parametrize(
@@ -21,10 +22,16 @@ from aphrodite.config import SpeculativeConfig
         pytest.param(
             "nm-testing/Speculator-Qwen3-8B-Eagle3-converted-071-quantized-w4a16",
             id="qwen3-eagle3-speculator-w4a16-verifier",
+            marks=pytest.mark.skipif(
+                current_platform.is_rocm(),
+                reason="The tests are skipped on rocm platform.",
+            ),
         ),
     ],
 )
-def test_eagle3_speculators_model(aphrodite_runner, example_prompts, model_path, monkeypatch):
+def test_eagle3_speculators_model(
+    vllm_runner, example_prompts, model_path, monkeypatch
+):
     """
     Test Eagle3 speculators models properly initialize speculative decoding.
 
@@ -38,23 +45,26 @@ def test_eagle3_speculators_model(aphrodite_runner, example_prompts, model_path,
     # Set environment variable for V1 engine serialization
     monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
 
-    with aphrodite_runner(model_path, dtype=torch.bfloat16) as aphrodite_model:
+    with vllm_runner(model_path, dtype=torch.bfloat16) as vllm_model:
         # Verify Eagle3 support is detected
-        eagle3_supported = aphrodite_model.apply_model(supports_eagle3)
+        eagle3_supported = vllm_model.apply_model(supports_eagle3)
         assert eagle3_supported, f"Eagle3 should be supported for {model_path}"
 
-        aphrodite_config = aphrodite_model.llm.llm_engine.aphrodite_config
+        vllm_config = vllm_model.llm.llm_engine.vllm_config
 
-        assert isinstance(aphrodite_config.speculative_config, SpeculativeConfig), (
+        assert isinstance(vllm_config.speculative_config, SpeculativeConfig), (
             "Speculative config should be initialized for speculators model"
         )
 
-        spec_config = aphrodite_config.speculative_config
+        spec_config = vllm_config.speculative_config
         assert spec_config.num_speculative_tokens > 0, (
-            f"Expected positive speculative tokens, got {spec_config.num_speculative_tokens}"
+            f"Expected positive speculative tokens, "
+            f"got {spec_config.num_speculative_tokens}"
         )
 
-        assert spec_config.model == model_path, f"Draft model should be {model_path}, got {spec_config.model}"
+        assert spec_config.model == model_path, (
+            f"Draft model should be {model_path}, got {spec_config.model}"
+        )
 
-        aphrodite_outputs = aphrodite_model.generate_greedy(example_prompts, max_tokens=20)
-        assert aphrodite_outputs, f"No outputs generated for speculators model {model_path}"
+        vllm_outputs = vllm_model.generate_greedy(example_prompts, max_tokens=20)
+        assert vllm_outputs, f"No outputs generated for speculators model {model_path}"

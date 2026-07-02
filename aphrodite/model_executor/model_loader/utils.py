@@ -13,13 +13,14 @@ from torch import nn
 from typing_extensions import assert_never
 
 import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, ModelConfig, set_current_aphrodite_config
+from aphrodite.config import ModelConfig, AphroditeConfig, set_current_aphrodite_config
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.attention import (
     Attention,
     MLAAttention,
     MMEncoderAttention,
 )
+from aphrodite.model_executor.layers.hpc import HpcModule
 from aphrodite.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
@@ -30,6 +31,7 @@ from aphrodite.model_executor.model_loader.reload import (
 )
 from aphrodite.model_executor.models.interfaces import SupportsQuant
 from aphrodite.tracing import instrument
+from aphrodite.utils.mem_utils import release_device_memory_under_pressure
 from aphrodite.utils.platform_utils import is_pin_memory_available
 from aphrodite.utils.torch_utils import get_accelerator_view_from_cpu_tensor
 
@@ -66,6 +68,8 @@ def initialize_model(
         "Aphrodite model class should accept `aphrodite_config` and `prefix` as "
         "input arguments. Possibly you have an old-style model class"
         " registered from out of tree and it is used for new Aphrodite version. "
+        "Check https://docs.aphrodite.ai/en/latest/design/arch_overview.html "
+        "for the design and update the model class accordingly."
     )
     warnings.warn(msg, DeprecationWarning, stacklevel=2)
 
@@ -94,7 +98,9 @@ def initialize_model(
     return model
 
 
-def process_weights_after_loading(model: nn.Module, model_config: ModelConfig, target_device: torch.device) -> None:
+def process_weights_after_loading(
+    model: nn.Module, model_config: ModelConfig, target_device: torch.device
+) -> None:
     for _, module in model.named_modules():
         quant_method = getattr(module, "quant_method", None)
         if isinstance(quant_method, QuantizeMethodBase):
@@ -105,17 +111,29 @@ def process_weights_after_loading(model: nn.Module, model_config: ModelConfig, t
             # parameters onto device for processing and back off after.
             with device_loading_context(module, target_device):
                 quant_method.process_weights_after_loading(module)
+            # Repacking transients above can leave large amounts of memory in
+            # the caching allocator, which starves the OS on UMA devices.
+            release_device_memory_under_pressure(target_device)
 
     # Initialize post-load attention weights for Attention, MLA, and MM encoder.
     # NOTE: Happens after other modules so we can easily decompress weights.
     for _, module in model.named_modules():
-        if isinstance(module, (Attention, MLAAttention, MMEncoderAttention)) and hasattr(
-            module, "process_weights_after_loading"
-        ):
+        if isinstance(
+            module, (Attention, MLAAttention, MMEncoderAttention)
+        ) and hasattr(module, "process_weights_after_loading"):
             # TODO(lucas): see if there is a way to unify the signatures
             # of process_weights_after_loading
             with device_loading_context(module, target_device):
                 module.process_weights_after_loading(model_config.dtype)
+
+    # Process HPC modules (HpcRopeNorm, etc.) that rely on
+    # process_weights_after_loading being called from the model's
+    # load_weights(). When using DummyModelLoader (e.g. profiling or
+    # sleep/wake_up reload), the model's load_weights() is not called, so we
+    # must handle HPC modules here generically.
+    for _, module in model.named_modules():
+        if isinstance(module, HpcModule):
+            module.process_weights_after_loading(model)
 
     # Needed for torchao model reloading via model.reload_weights
     # @kylesayrs @jerryzh168 this can be removed if callers move to `reload_weights`
@@ -146,7 +164,10 @@ def device_loading_context(module: torch.nn.Module, target_device: torch.device)
         yield module
 
     finally:
-        use_pin_memory = is_pin_memory_available() and not envs.APHRODITE_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY
+        use_pin_memory = (
+            is_pin_memory_available()
+            and not envs.APHRODITE_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY
+        )
         # Restore parameters to their original devices, ignoring new parameters
         for name, p in module.named_parameters():
             if name in original_device_states:
@@ -155,7 +176,9 @@ def device_loading_context(module: torch.nn.Module, target_device: torch.device)
 
             # parameter is UVA offloaded, but was replaced with a new device tensor
             # re-offload it to CPU using UVA
-            if name in uva_offloaded_parameters and not getattr(p, "_aphrodite_is_uva_offloaded", False):
+            if name in uva_offloaded_parameters and not getattr(
+                p, "_aphrodite_is_uva_offloaded", False
+            ):
                 cpu_data = p.data.to(device="cpu")
                 if use_pin_memory:
                     cpu_data = cpu_data.pin_memory()
@@ -258,7 +281,9 @@ class ParamMapping:
         return None
 
 
-def configure_quant_config(quant_config: QuantizationConfig, model_class: type[nn.Module]):
+def configure_quant_config(
+    quant_config: QuantizationConfig, model_class: type[nn.Module]
+):
     """
     Pass packed_modules_mapping by reference to quant_config so that
     quant_config can properly match fused modules
@@ -275,6 +300,6 @@ def configure_quant_config(quant_config: QuantizationConfig, model_class: type[n
 
         # pass mappings by reference to quant_config
         if hf_to_aphrodite_mapper is not None:
-            quant_config.apply_aphrodite_mapper(hf_to_aphrodite_mapper)
+            quant_config.apply_aphrodite_mapper(hf_to_aphrodite_mapper.get_unstacked_mapper())
         if packed_mapping is not None:
             quant_config.packed_modules_mapping = packed_mapping

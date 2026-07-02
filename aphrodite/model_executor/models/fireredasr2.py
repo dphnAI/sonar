@@ -11,7 +11,7 @@ from transformers import (
     Qwen2Config,
 )
 
-from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
+from aphrodite.config import ModelConfig, SpeechToTextConfig, AphroditeConfig
 from aphrodite.config.multimodal import BaseDummyOptions
 from aphrodite.config.speech_to_text import SpeechToTextParams
 from aphrodite.inputs import MultiModalDataDict, PromptType
@@ -125,7 +125,9 @@ class FireRedASR2Encoder(nn.Module):
         aphrodite_config: AphroditeConfig,
     ):
         super().__init__()
-        self.audio_encoder = ConformerEncoder(**aphrodite_config.model_config.hf_config.audio_encoder_conf)
+        self.audio_encoder = ConformerEncoder(
+            **aphrodite_config.model_config.hf_config.audio_encoder_conf
+        )
 
 
 class FireRedASR2Model(nn.Module):
@@ -142,7 +144,9 @@ class FireRedASR2Model(nn.Module):
             aphrodite_config.model_config.hf_config.encoder_downsample_rate,
         )
 
-        self.decoder = Qwen2ForCausalLM(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "decoder"))
+        self.decoder = Qwen2ForCausalLM(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "decoder")
+        )
 
     def forward(
         self,
@@ -162,7 +166,9 @@ class FireRedASR2Model(nn.Module):
         speech: torch.Tensor | list[torch.Tensor] | None,
         speech_lengths: torch.Tensor | list[torch.Tensor] | None,
     ) -> torch.Tensor | None:
-        encoder_outs, enc_lengths, enc_mask = self.encoder.audio_encoder(speech, speech_lengths)
+        encoder_outs, enc_lengths, enc_mask = self.encoder.audio_encoder(
+            speech, speech_lengths
+        )
         speech_features, speech_lens = self.encoder_projector(encoder_outs, enc_lengths)
         return speech_features
 
@@ -211,11 +217,17 @@ class FireRedASR2DummyInputsBuilder(BaseDummyInputsBuilder[FireRedASR2Processing
 
         audio_overrides = mm_options.get("audio")
 
-        ret = {"audio": self._get_dummy_audios(length=audio_len, num_audios=num_audios, overrides=audio_overrides)}
+        ret = {
+            "audio": self._get_dummy_audios(
+                length=audio_len, num_audios=num_audios, overrides=audio_overrides
+            )
+        }
         return ret
 
 
-class FireRedASR2MultiModalProcessor(BaseMultiModalProcessor[FireRedASR2ProcessingInfo]):
+class FireRedASR2MultiModalProcessor(
+    BaseMultiModalProcessor[FireRedASR2ProcessingInfo]
+):
     def _call_hf_processor(
         self,
         prompt: str,
@@ -300,7 +312,9 @@ class FireRedASR2MultiModalProcessor(BaseMultiModalProcessor[FireRedASR2Processi
     info=FireRedASR2ProcessingInfo,
     dummy_inputs=FireRedASR2DummyInputsBuilder,
 )
-class FireRedASR2ForConditionalGeneration(nn.Module, SupportsTranscription, SupportsMultiModal):
+class FireRedASR2ForConditionalGeneration(
+    nn.Module, SupportsTranscription, SupportsMultiModal
+):
     packed_modules_mapping = {
         "self_attn.qkv_proj": [
             "self_attn.q_proj",
@@ -349,7 +363,9 @@ class FireRedASR2ForConditionalGeneration(nn.Module, SupportsTranscription, Supp
         language = stt_params.language
 
         if language is None:
-            raise ValueError("Language must be specified when creating the fireredasr2 prompt")
+            raise ValueError(
+                "Language must be specified when creating the fireredasr2 prompt"
+            )
 
         prompt_str = "<|im_start|>user\n<|AUDIO|>请转写音频为文字<|im_end|>\n<|im_start|>assistant\n"  # noqa: E501
         prompt = {
@@ -361,7 +377,9 @@ class FireRedASR2ForConditionalGeneration(nn.Module, SupportsTranscription, Supp
         return cast(PromptType, prompt)
 
     @classmethod
-    def get_speech_to_text_config(cls, model_config: ModelConfig, task_type: str) -> SpeechToTextConfig:
+    def get_speech_to_text_config(
+        cls, model_config: ModelConfig, task_type: str
+    ) -> SpeechToTextConfig:
         processor = cached_processor_from_config(model_config)
 
         return SpeechToTextConfig(
@@ -419,7 +437,9 @@ class FireRedASR2ForConditionalGeneration(nn.Module, SupportsTranscription, Supp
 
         speech = audio_input["input_features"]
         speech_lengths = audio_input["speech_lengths"].to(torch.int32)
-        enc_output = self.model.get_encoder_outputs(speech=speech, speech_lengths=speech_lengths)
+        enc_output = self.model.get_encoder_outputs(
+            speech=speech, speech_lengths=speech_lengths
+        )
 
         return enc_output
 
@@ -439,7 +459,9 @@ class FireRedASR2ForConditionalGeneration(nn.Module, SupportsTranscription, Supp
         )
         return ret
 
-    def _parse_and_validate_audio_input(self, **kwargs: object) -> FireRedASR2AudioInputs:
+    def _parse_and_validate_audio_input(
+        self, **kwargs: object
+    ) -> FireRedASR2AudioInputs:
         input_features = kwargs.pop("input_features", None)
         speech_lengths = kwargs.pop("speech_lengths", None)
         fake_token_lengths = kwargs.pop("fake_token_lengths", None)
@@ -455,6 +477,8 @@ class FireRedASR2ForConditionalGeneration(nn.Module, SupportsTranscription, Supp
         return logits
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        loader = AutoWeightsLoader(self, skip_prefixes=["model.encoder.audio_encoder.positional_encoding.pe"])
+        loader = AutoWeightsLoader(
+            self, skip_prefixes=["model.encoder.audio_encoder.positional_encoding.pe"]
+        )
 
         return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)

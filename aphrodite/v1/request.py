@@ -76,6 +76,7 @@ class Request:
         resumable: bool = False,
         reasoning_ended: bool | None = None,
         reasoning_parser_kwargs: dict[str, Any] | None = None,
+        abort_immediately: bool = False,
     ) -> None:
         self.request_id = request_id
         self.client_index = client_index
@@ -83,10 +84,14 @@ class Request:
         self.sampling_params = sampling_params
         self.pooling_params = pooling_params
         self.lora_request = lora_request
-        self.structured_output_request = StructuredOutputRequest.from_sampling_params(sampling_params)
+        self.structured_output_request = StructuredOutputRequest.from_sampling_params(
+            sampling_params
+        )
         if self.structured_output_request is not None:
             self.structured_output_request.reasoning_ended = reasoning_ended
-            self.structured_output_request.reasoning_parser_kwargs = reasoning_parser_kwargs
+            self.structured_output_request.reasoning_parser_kwargs = (
+                reasoning_parser_kwargs
+            )
         self.arrival_time = arrival_time if arrival_time is not None else time.time()
 
         self.status = RequestStatus.WAITING
@@ -107,7 +112,9 @@ class Request:
                 self.status = RequestStatus.WAITING_FOR_STRUCTURED_OUTPUT_GRAMMAR
 
             if sampling_params.extra_args is not None:
-                self.kv_transfer_params = sampling_params.extra_args.get("kv_transfer_params")
+                self.kv_transfer_params = sampling_params.extra_args.get(
+                    "kv_transfer_params"
+                )
         else:
             raise ValueError("sampling_params and pooling_params can't both be unset")
 
@@ -120,16 +127,27 @@ class Request:
         # Cache per-block prompt-embed hashes to avoid rehashing the same
         # tensor slices when generating extra keys.
         self._prompt_embeds_per_block_hashes: dict[tuple[int, int], bytes] = {}
-        self.num_prompt_tokens = length_from_prompt_token_ids_or_embeds(prompt_token_ids, prompt_embeds)
+        self.num_prompt_tokens = length_from_prompt_token_ids_or_embeds(
+            prompt_token_ids, prompt_embeds
+        )
         self._output_token_ids: list[int] = []
         self._all_token_ids: list[int] = (
-            self.prompt_token_ids.copy() if self.prompt_token_ids is not None else [0] * self.num_prompt_tokens
+            self.prompt_token_ids.copy()
+            if self.prompt_token_ids is not None
+            else [0] * self.num_prompt_tokens
         )
 
         # Used in async scheduling.
         self.num_output_placeholders = 0
-        # Used in forced preemption (reset_prefix_cache) with async scheduling.
-        self.discard_latest_async_tokens = False
+        self.async_tokens_to_discard = 0
+
+        # V2+PP+async: Enforces `pp_size` cadence between same-request decode steps
+        # so the worker's broadcast slot ring stays consistent.
+        self.next_decode_eligible_step = 0
+
+        # Seq of the most recent step this request was scheduled in; fences
+        # deferred block freeing (see Scheduler._free_request_blocks).
+        self.last_sched_seq = 0
 
         self.spec_token_ids: list[int] = []
         self.num_computed_tokens = 0
@@ -172,6 +190,10 @@ class Request:
         # None entry in the queue means finished.
         self.streaming_queue: deque[StreamingUpdate | None] | None = None
 
+        # If True, request should be aborted immediately after being added to
+        # the scheduler so the connector's request_finished hook runs.
+        self.abort_immediately = abort_immediately
+
     @classmethod
     def from_engine_core_request(
         cls,
@@ -196,6 +218,7 @@ class Request:
             resumable=request.resumable,
             reasoning_ended=request.reasoning_ended,
             reasoning_parser_kwargs=request.reasoning_parser_kwargs,
+            abort_immediately=request.abort_immediately,
         )
 
     def append_output_token_ids(
@@ -241,9 +264,15 @@ class Request:
         return self.num_encoder_inputs > 0
 
     def get_skip_reading_prefix_cache(self) -> bool:
-        if self.sampling_params is not None and self.sampling_params.skip_reading_prefix_cache is not None:
+        if (
+            self.sampling_params is not None
+            and self.sampling_params.skip_reading_prefix_cache is not None
+        ):
             return self.sampling_params.skip_reading_prefix_cache
-        elif self.pooling_params is not None and self.pooling_params.skip_reading_prefix_cache is not None:
+        elif (
+            self.pooling_params is not None
+            and self.pooling_params.skip_reading_prefix_cache is not None
+        ):
             return self.pooling_params.skip_reading_prefix_cache
         return False
 

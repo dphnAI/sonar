@@ -1,9 +1,8 @@
 # Install OpenAI triton_kernels from https://github.com/triton-lang/triton/tree/main/python/triton_kernels
 
-set(DEFAULT_TRITON_KERNELS_TAG "v3.6.0")
+set(DEFAULT_TRITON_KERNELS_TAG "v3.5.1")
 
-# Set TRITON_KERNELS_SRC_DIR for use with local development with Aphrodite. We
-# expect TRITON_KERNELS_SRC_DIR to
+# Set TRITON_KERNELS_SRC_DIR for use with local development with Aphrodite. We expect TRITON_KERNELS_SRC_DIR to
 # be directly set to the triton_kernels python directory.
 if (DEFINED ENV{TRITON_KERNELS_SRC_DIR})
   message(STATUS "[triton_kernels] Fetch from $ENV{TRITON_KERNELS_SRC_DIR}")

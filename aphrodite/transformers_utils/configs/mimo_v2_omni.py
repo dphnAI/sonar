@@ -51,7 +51,11 @@ class Mimo_VLVisionConfig(PretrainedConfig):
         self.temporal_patch_size = temporal_patch_size
         self.tokens_per_second = tokens_per_second
         self.window_size = window_size
-        self.fullatt_block_indexes = fullatt_block_indexes if fullatt_block_indexes is not None else [7, 15, 23, 31]
+        self.fullatt_block_indexes = (
+            fullatt_block_indexes
+            if fullatt_block_indexes is not None
+            else [7, 15, 23, 31]
+        )
         self.out_hidden_size = out_hidden_size
         self.initializer_range = initializer_range
         self.kv_channels = kv_channels

@@ -2,14 +2,20 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import json
 from copy import deepcopy
-from unittest.mock import MagicMock
 
 import pytest
 import regex as re
-from aphrodite.endpoints.openai.protocol import ChatCompletionToolsParam
-from aphrodite.endpoints.openai.serving_chat import OpenAIServingChat
-from aphrodite.endpoints.openai.tool_parsers.utils import get_json_schema_from_tools
+from openai.types.responses import FunctionTool, WebSearchTool
 from pydantic import TypeAdapter
+
+from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    ChatCompletionToolsParam,
+)
+from aphrodite.tool_parsers.streaming import extract_required_tool_call_streaming
+from aphrodite.tool_parsers.utils import (
+    find_tool_properties,
+    get_json_schema_from_tools,
+)
 
 pytestmark = pytest.mark.cpu_test
 
@@ -24,7 +30,8 @@ EXAMPLE_TOOLS = [
                 "properties": {
                     "city": {
                         "type": "string",
-                        "description": "The city to find the weather for, e.g. 'San Francisco'",
+                        "description": "The city to find the weather for"
+                        ", e.g. 'San Francisco'",
                     },
                 },
                 "required": ["city"],
@@ -43,7 +50,8 @@ EXAMPLE_TOOLS = [
                 "properties": {
                     "city": {
                         "type": "string",
-                        "description": "The city to get the forecast for, e.g. 'New York'",
+                        "description": "The city to get the forecast for, e.g. "
+                        "'New York'",
                     },
                     "days": {
                         "type": "integer",
@@ -59,7 +67,9 @@ EXAMPLE_TOOLS = [
 ]
 
 
-def _compile_and_check(tools: list[ChatCompletionToolsParam], sample_output, should_match: bool):
+def _compile_and_check(
+    tools: list[ChatCompletionToolsParam], sample_output, should_match: bool
+):
     # self = MagicMock(tool_choice="required", tools=tools)
     # schema = ChatCompletionRequest._get_json_schema_from_tool(self)
     schema = get_json_schema_from_tools(tools=tools, tool_choice="required")
@@ -186,7 +196,9 @@ VALID_TOOLS = [t[0] for t in VALID_TOOL_OUTPUTS]
 )
 def test_structured_outputs_json(sample_output, should_match):
     _compile_and_check(
-        tools=TypeAdapter(list[ChatCompletionToolsParam]).validate_python(EXAMPLE_TOOLS),
+        tools=TypeAdapter(list[ChatCompletionToolsParam]).validate_python(
+            EXAMPLE_TOOLS
+        ),
         sample_output=sample_output,
         should_match=should_match,
     )
@@ -248,26 +260,27 @@ def update_parameters_empty_dict(
         ),
     ],
 )
-@pytest.mark.parametrize("update_parameters", [update_parameters_none, update_parameters_empty_dict])
-def test_structured_outputs_json_without_parameters(sample_output, should_match, update_parameters):
+@pytest.mark.parametrize(
+    "update_parameters", [update_parameters_none, update_parameters_empty_dict]
+)
+def test_structured_outputs_json_without_parameters(
+    sample_output, should_match, update_parameters
+):
     updated_tools = [deepcopy(EXAMPLE_TOOLS[0])]
     tools = TypeAdapter(list[ChatCompletionToolsParam]).validate_python(updated_tools)
     tools = list(map(update_parameters, tools))
-    assert all([tool.function.parameters is None or tool.function.parameters == {} for tool in tools])
-    _compile_and_check(tools=tools, sample_output=sample_output, should_match=should_match)
+    assert all(
+        [
+            tool.function.parameters is None or tool.function.parameters == {}
+            for tool in tools
+        ]
+    )
+    _compile_and_check(
+        tools=tools, sample_output=sample_output, should_match=should_match
+    )
 
 
-@pytest.mark.parametrize("output", VALID_TOOLS)
-@pytest.mark.parametrize("empty_params", [False, True])
-@pytest.mark.parametrize("delta_len", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-def test_streaming_output_valid(output, empty_params, delta_len):
-    self = MagicMock()
-
-    output = deepcopy(output)
-    if empty_params:
-        output = [{"name": o["name"], "parameters": {}} for o in output]
-    output_json = json.dumps(output)
-
+def _collect_required_tool_streaming_json(output_json: str, delta_len: int) -> str:
     previous_text = ""
     function_name_returned = False
     messages = []
@@ -275,12 +288,13 @@ def test_streaming_output_valid(output, empty_params, delta_len):
         delta_text = output_json[i : i + delta_len]
         current_text = previous_text + delta_text
 
-        delta_message, function_name_returned = OpenAIServingChat.extract_tool_call_required_streaming(
-            self,
+        delta_message, function_name_returned = extract_required_tool_call_streaming(
             previous_text=previous_text,
             current_text=current_text,
             delta_text=delta_text,
             function_name_returned=function_name_returned,
+            tool_call_idx=None,
+            tool_call_id_type="random",
         )
 
         if delta_message:
@@ -289,6 +303,7 @@ def test_streaming_output_valid(output, empty_params, delta_len):
         previous_text = current_text
 
     assert len(messages) > 0
+
     combined_messages = "["
     for message in messages:
         if message.tool_calls[0].function.name:
@@ -304,5 +319,78 @@ def test_streaming_output_valid(output, empty_params, delta_len):
         else:
             combined_messages += message.tool_calls[0].function.arguments
     combined_messages += "}]"
+    return combined_messages
+
+
+@pytest.mark.parametrize("output", VALID_TOOLS)
+@pytest.mark.parametrize("empty_params", [False, True])
+@pytest.mark.parametrize("delta_len", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+def test_streaming_output_valid(output, empty_params, delta_len):
+    output = deepcopy(output)
+    if empty_params:
+        output = [{"name": o["name"], "parameters": {}} for o in output]
+    output_json = json.dumps(output)
+
+    combined_messages = _collect_required_tool_streaming_json(output_json, delta_len)
     assert json.loads(combined_messages) == output
     assert json.dumps(json.loads(combined_messages)) == output_json
+
+
+@pytest.mark.parametrize(
+    "city",
+    [
+        "a { b",
+        "a } b",
+        "a }} b",
+        'a " } b',
+        r"a \ } b",
+    ],
+)
+@pytest.mark.parametrize("delta_len", [1, 2, 3, 8, 9999])
+def test_streaming_output_valid_with_braces_in_string(city, delta_len):
+    output = [{"name": "get_current_weather", "parameters": {"city": city}}]
+    output_json = json.dumps(output)
+    combined_messages = _collect_required_tool_streaming_json(output_json, delta_len)
+    assert json.loads(combined_messages) == output
+    assert json.dumps(json.loads(combined_messages)) == output_json
+
+
+def test_streaming_output_valid_with_trailing_extra_data():
+    output = [{"name": "get_current_weather", "parameters": {"city": "Vienna"}}]
+    output_json = json.dumps(output) + "\nDONE"
+    combined_messages = _collect_required_tool_streaming_json(output_json, delta_len=3)
+    assert json.loads(combined_messages) == output
+
+
+FUNCTION_TOOL = FunctionTool(
+    type="function",
+    name="get_weather",
+    parameters={
+        "type": "object",
+        "properties": {"city": {"type": "string"}},
+        "required": ["city"],
+    },
+)
+WEB_SEARCH_TOOL = WebSearchTool(type="web_search")
+
+
+class TestNonFunctionToolsSkipped:
+    """Non-function tools (web_search, etc.) must be silently skipped
+    by the tool-schema utilities instead of raising TypeError."""
+
+    def test_find_tool_properties_skips_web_search(self):
+        tools = [WEB_SEARCH_TOOL, FUNCTION_TOOL]
+        props = find_tool_properties(tools, "get_weather")
+        assert props == {"city": {"type": "string"}}
+
+    def test_find_tool_properties_only_non_function_tools(self):
+        props = find_tool_properties([WEB_SEARCH_TOOL], "get_weather")
+        assert props == {}
+
+    def test_get_json_schema_with_mixed_tools(self):
+        tools = [WEB_SEARCH_TOOL, FUNCTION_TOOL]
+        schema = get_json_schema_from_tools(tools=tools, tool_choice="required")
+        assert isinstance(schema, dict)
+        any_of = schema["items"]["anyOf"]
+        assert len(any_of) == 1
+        assert any_of[0]["properties"]["name"]["enum"] == ["get_weather"]

@@ -6,8 +6,9 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.v1.attention.backends.utils import make_local_attention_virtual_batches
 from tests.v1.attention.utils import BatchSpec, create_common_attn_metadata
+from aphrodite.platforms import current_platform
+from aphrodite.v1.attention.backends.utils import make_local_attention_virtual_batches
 
 
 @dataclass
@@ -21,6 +22,8 @@ class LocalAttentionTestData:
     expected_k_seqlens: list[int]
     expected_local_block_table: list[list[int]]
 
+
+DEVICE_TYPE = current_platform.device_type
 
 test_data_list = [
     # Same as example in docstring of make_local_attention_virtual_batches
@@ -151,7 +154,7 @@ test_data_list = [
 
 @pytest.mark.parametrize("test_data", test_data_list)
 def test_local_attention_virtual_batches(test_data: LocalAttentionTestData):
-    device = torch.device("cuda:0")
+    device = torch.device(f"{DEVICE_TYPE}:0")
     batch_spec = test_data.batch_spec
     attn_chunk_size = test_data.attn_chunk_size
     block_size = test_data.block_size
@@ -172,7 +175,9 @@ def test_local_attention_virtual_batches(test_data: LocalAttentionTestData):
     )
 
     # Call the function
-    result = make_local_attention_virtual_batches(attn_chunk_size, common_attn_metadata, block_size)
+    result, _ = make_local_attention_virtual_batches(
+        attn_chunk_size, common_attn_metadata, block_size
+    )
 
     # Convert to numpy for easier comparison
     actual_q_seqlens = np.diff(result.query_start_loc_cpu.numpy())
@@ -189,7 +194,9 @@ def test_local_attention_virtual_batches(test_data: LocalAttentionTestData):
     np.testing.assert_array_equal(actual_q_seqlens, expected_q_seqlens)
     np.testing.assert_array_equal(actual_k_seqlens, expected_k_seqlens)
 
-    expected_block_table_tensor = torch.tensor(expected_local_block_table, dtype=torch.int32, device=device)
+    expected_block_table_tensor = torch.tensor(
+        expected_local_block_table, dtype=torch.int32, device=device
+    )
 
     print(f"Expected block table:\n{expected_block_table_tensor}")
     print(f"Actual block table:\n{result.block_table_tensor}")

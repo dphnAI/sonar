@@ -1,15 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import unittest
 
 import pytest
 import torch
-from aphrodite.modeling.layers.mamba.mamba_mixer2 import Mixer2RMSNormGated
 
-from aphrodite.distributed.parallel_state import init_distributed_environment, initialize_model_parallel
-from aphrodite.platforms import current_platform
+from tests.utils import ensure_current_vllm_config, multi_gpu_test
+from aphrodite.distributed.parallel_state import (
+    init_distributed_environment,
+    initialize_model_parallel,
+)
+from aphrodite.model_executor.layers.mamba.mamba_mixer2 import Mixer2RMSNormGated
 from aphrodite.utils.system_utils import update_environment_variables
-from tests.utils import multi_gpu_test
+from aphrodite.utils.torch_utils import set_random_seed
 
 
 @multi_gpu_test(num_gpus=2)
@@ -64,10 +68,10 @@ def mixer2_gated_norm_tensor_parallel(
     dtype: torch.dtype,
     device: str,
 ):
-    current_platform.seed_everything(0)
+    set_random_seed(0)
 
     device = torch.device(f"cuda:{local_rank}")
-    torch.cuda.set_device(device)
+    torch.accelerator.set_device_index(device)
     torch.set_default_device(device)
     torch.set_default_dtype(dtype)
 
@@ -83,7 +87,8 @@ def mixer2_gated_norm_tensor_parallel(
 
     # initialize distributed
     init_distributed_environment()
-    initialize_model_parallel(tensor_model_parallel_size=world_size)
+    with ensure_current_vllm_config():
+        initialize_model_parallel(tensor_model_parallel_size=world_size)
 
     # create random weights an inputs
     weight = torch.rand((hidden_size,), dtype=dtype, device=device)
@@ -101,11 +106,13 @@ def mixer2_gated_norm_tensor_parallel(
     # - utilize mock patching to disable TP when
     with (
         unittest.mock.patch(
-            "aphrodite.modeling.layers.mamba.mamba_mixer2.get_tensor_model_parallel_world_size",
+            "aphrodite.model_executor.layers.mamba.mamba_mixer2."
+            "get_tensor_model_parallel_world_size",
             return_value=1,
         ),
         unittest.mock.patch(
-            "aphrodite.modeling.layers.mamba.mamba_mixer2.get_tensor_model_parallel_rank",
+            "aphrodite.model_executor.layers.mamba.mamba_mixer2."
+            "get_tensor_model_parallel_rank",
             return_value=0,
         ),
     ):

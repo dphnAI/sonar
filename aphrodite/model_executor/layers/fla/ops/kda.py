@@ -14,14 +14,14 @@ import torch.nn as nn
 
 from aphrodite.model_executor.custom_op import CustomOp
 from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.math_utils import cdiv, next_power_of_2
+from aphrodite.utils.math_utils import RCP_LN2, cdiv, next_power_of_2
 
 from .chunk_delta_h import chunk_gated_delta_rule_fwd_h
 from .cumsum import chunk_local_cumsum
 from .fused_recurrent import fused_recurrent_gated_delta_rule_fwd_kernel
 from .index import prepare_chunk_indices
 from .l2norm import l2norm_fwd
-from .op import exp, log
+from .op import exp2, log
 from .solve_tril import solve_tril
 from .utils import FLA_CHUNK_SIZE, is_amd
 
@@ -184,10 +184,14 @@ def layer_norm_gated_fwd_kernel(
     p_x = tl.make_block_ptr(x, (T, D), (D, 1), (i_t * BT, 0), (BT, BD), (1, 0))
     b_x = tl.load(p_x, boundary_check=(0, 1)).to(tl.float32)
     if HAS_RESIDUAL:
-        p_res = tl.make_block_ptr(residual, (T, D), (D, 1), (i_t * BT, 0), (BT, BD), (1, 0))
+        p_res = tl.make_block_ptr(
+            residual, (T, D), (D, 1), (i_t * BT, 0), (BT, BD), (1, 0)
+        )
         b_x += tl.load(p_res, boundary_check=(0, 1)).to(tl.float32)
     if STORE_RESIDUAL_OUT:
-        p_res_out = tl.make_block_ptr(residual_out, (T, D), (D, 1), (i_t * BT, 0), (BT, BD), (1, 0))
+        p_res_out = tl.make_block_ptr(
+            residual_out, (T, D), (D, 1), (i_t * BT, 0), (BT, BD), (1, 0)
+        )
         tl.store(p_res_out, b_x.to(p_res_out.dtype.element_ty), boundary_check=(0, 1))
     if not IS_RMS_NORM:
         b_mean = tl.sum(b_x, axis=1) / D
@@ -207,7 +211,11 @@ def layer_norm_gated_fwd_kernel(
         b_w = tl.load(w + o_d, mask=m_d).to(tl.float32)
     if HAS_BIAS:
         b_b = tl.load(b + o_d, mask=m_d).to(tl.float32)
-    b_x_hat = (b_x - b_mean[:, None]) * b_rstd[:, None] if not IS_RMS_NORM else b_x * b_rstd[:, None]
+    b_x_hat = (
+        (b_x - b_mean[:, None]) * b_rstd[:, None]
+        if not IS_RMS_NORM
+        else b_x * b_rstd[:, None]
+    )
     b_y = b_x_hat * b_w[None, :] if HAS_WEIGHT else b_x_hat
     if HAS_BIAS:
         b_y = b_y + b_b[None, :]
@@ -324,11 +332,17 @@ def layer_norm_gated_fwd(
         assert bias.shape == (D,)
     # allocate output
     y = x if out_dtype is None else torch.empty_like(x, dtype=out_dtype)
-    if residual is not None or (residual_dtype is not None and residual_dtype != x.dtype):
+    if residual is not None or (
+        residual_dtype is not None and residual_dtype != x.dtype
+    ):
         residual_out = torch.empty(T, D, device=x.device, dtype=residual_dtype)
     else:
         residual_out = None
-    mean = torch.empty((T,), dtype=torch.float, device=x.device) if not is_rms_norm else None
+    mean = (
+        torch.empty((T,), dtype=torch.float, device=x.device)
+        if not is_rms_norm
+        else None
+    )
     rstd = torch.empty((T,), dtype=torch.float, device=x.device)
     # Less than 64KB per feature: enqueue fused kernel
     MAX_FUSED_SIZE = 65536 // x.element_size()
@@ -398,7 +412,11 @@ def rms_norm_gated(
     if residual is not None:
         assert residual.shape == x_shape_og
         residual = residual.contiguous().reshape(-1, residual.shape[-1])
-    residual_dtype = residual.dtype if residual is not None else (torch.float if residual_in_fp32 else None)
+    residual_dtype = (
+        residual.dtype
+        if residual is not None
+        else (torch.float if residual_in_fp32 else None)
+    )
     y, _, _, residual_out = layer_norm_gated_fwd(
         x=x,
         g=g,
@@ -451,7 +469,7 @@ class FusedRMSNormGated(CustomOp):
         residual_in_fp32: bool = False,
     ) -> torch.Tensor:
         """Decomposed PyTorch ops for torch.compile/inductor fusion."""
-        # TODO(https://github.com/vllm-project/vllm/issues/36175): implement
+        # TODO(https://github.com/vllm-project/aphrodite/issues/36175): implement
         # native residual/prenorm path and unify with RMSNormGated.
         # For now, fall back to the triton kernel.
         if residual is not None or prenorm:
@@ -546,17 +564,29 @@ def chunk_kda_scaled_dot_kkt_fwd_kernel_intra_sub_inter(
     A += (bos * H + i_h) * BT
     Aqk += (bos * H + i_h) * BT
 
-    p_b = tl.make_block_ptr(beta + bos * H + i_h, (T,), (H,), (i_t * BT + i_i * BC,), (BC,), (0,))
+    p_b = tl.make_block_ptr(
+        beta + bos * H + i_h, (T,), (H,), (i_t * BT + i_i * BC,), (BC,), (0,)
+    )
     b_b = tl.load(p_b, boundary_check=(0,))
 
     b_A = tl.zeros([BC, BC], dtype=tl.float32)
     b_Aqk = tl.zeros([BC, BC], dtype=tl.float32)
     for i_k in range(tl.cdiv(K, BK)):
-        p_q = tl.make_block_ptr(q, (T, K), (H * K, 1), (i_t * BT + i_i * BC, i_k * BK), (BC, BK), (1, 0))
-        p_k = tl.make_block_ptr(k, (T, K), (H * K, 1), (i_t * BT + i_i * BC, i_k * BK), (BC, BK), (1, 0))
-        p_g = tl.make_block_ptr(g, (T, K), (H * K, 1), (i_t * BT + i_i * BC, i_k * BK), (BC, BK), (1, 0))
-        b_kt = tl.make_block_ptr(k, (K, T), (1, H * K), (i_k * BK, i_t * BT + i_j * BC), (BK, BC), (0, 1))
-        p_gk = tl.make_block_ptr(g, (K, T), (1, H * K), (i_k * BK, i_t * BT + i_j * BC), (BK, BC), (0, 1))
+        p_q = tl.make_block_ptr(
+            q, (T, K), (H * K, 1), (i_t * BT + i_i * BC, i_k * BK), (BC, BK), (1, 0)
+        )
+        p_k = tl.make_block_ptr(
+            k, (T, K), (H * K, 1), (i_t * BT + i_i * BC, i_k * BK), (BC, BK), (1, 0)
+        )
+        p_g = tl.make_block_ptr(
+            g, (T, K), (H * K, 1), (i_t * BT + i_i * BC, i_k * BK), (BC, BK), (1, 0)
+        )
+        b_kt = tl.make_block_ptr(
+            k, (K, T), (1, H * K), (i_k * BK, i_t * BT + i_j * BC), (BK, BC), (0, 1)
+        )
+        p_gk = tl.make_block_ptr(
+            g, (K, T), (1, H * K), (i_k * BK, i_t * BT + i_j * BC), (BK, BC), (0, 1)
+        )
 
         o_k = i_k * BK + tl.arange(0, BK)
         m_k = o_k < K
@@ -564,23 +594,27 @@ def chunk_kda_scaled_dot_kkt_fwd_kernel_intra_sub_inter(
         b_gn = tl.load(g + (i_t * BT + i_i * BC) * H * K + o_k, mask=m_k, other=0)
         # [BC, BK]
         b_g = tl.load(p_g, boundary_check=(0, 1))
-        b_k = tl.load(p_k, boundary_check=(0, 1)) * exp(b_g - b_gn[None, :])
+        b_k = tl.load(p_k, boundary_check=(0, 1)) * exp2(b_g - b_gn[None, :])
         # [BK, BC]
         b_gk = tl.load(p_gk, boundary_check=(0, 1))
         b_kt = tl.load(b_kt, boundary_check=(0, 1))
         # [BC, BC]
-        b_ktg = b_kt * exp(b_gn[:, None] - b_gk)
+        b_ktg = b_kt * exp2(b_gn[:, None] - b_gk)
         b_A += tl.dot(b_k, b_ktg)
 
         b_q = tl.load(p_q, boundary_check=(0, 1))
-        b_qg = b_q * exp(b_g - b_gn[None, :]) * scale
+        b_qg = b_q * exp2(b_g - b_gn[None, :]) * scale
         b_Aqk += tl.dot(b_qg, b_ktg)
 
     b_A *= b_b[:, None]
 
-    p_A = tl.make_block_ptr(A, (T, BT), (H * BT, 1), (i_t * BT + i_i * BC, i_j * BC), (BC, BC), (1, 0))
+    p_A = tl.make_block_ptr(
+        A, (T, BT), (H * BT, 1), (i_t * BT + i_i * BC, i_j * BC), (BC, BC), (1, 0)
+    )
     tl.store(p_A, b_A.to(A.dtype.element_ty), boundary_check=(0, 1))
-    p_Aqk = tl.make_block_ptr(Aqk, (T, BT), (H * BT, 1), (i_t * BT + i_i * BC, i_j * BC), (BC, BC), (1, 0))
+    p_Aqk = tl.make_block_ptr(
+        Aqk, (T, BT), (H * BT, 1), (i_t * BT + i_i * BC, i_j * BC), (BC, BC), (1, 0)
+    )
     tl.store(p_Aqk, b_Aqk.to(Aqk.dtype.element_ty), boundary_check=(0, 1))
 
 
@@ -669,7 +703,7 @@ def chunk_kda_scaled_dot_kkt_fwd_kernel_intra_sub_intra(
     for j in range(0, min(BC, T - i_t * BT - i_i * BC)):
         b_kt = tl.load(p_kt, mask=m_k, other=0).to(tl.float32)
         b_gk = tl.load(p_gk, mask=m_k, other=0).to(tl.float32)
-        b_ktg = b_kt[None, :] * exp(b_g - b_gk[None, :])
+        b_ktg = b_kt[None, :] * exp2(b_g - b_gk[None, :])
         b_A = tl.sum(b_k * b_ktg, 1)
         b_A = tl.where(o_i > j, b_A, 0.0)
         b_Aqk = tl.sum(b_q * b_ktg, 1)
@@ -687,6 +721,7 @@ def chunk_kda_scaled_dot_kkt_fwd(
     beta: torch.Tensor | None = None,
     scale: float | None = None,
     cu_seqlens: torch.Tensor | None = None,
+    chunk_indices: torch.Tensor | None = None,
     chunk_size: int = FLA_CHUNK_SIZE,
     output_dtype: torch.dtype = torch.float32,
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -714,7 +749,8 @@ def chunk_kda_scaled_dot_kkt_fwd(
     B, T, H, K = k.shape
     assert K <= 256
     BT = chunk_size
-    chunk_indices = prepare_chunk_indices(cu_seqlens, BT) if cu_seqlens is not None else None
+    if chunk_indices is None and cu_seqlens is not None:
+        chunk_indices = prepare_chunk_indices(cu_seqlens, BT)
     NT = cdiv(T, BT) if cu_seqlens is None else len(chunk_indices)
 
     BC = min(16, BT)
@@ -820,7 +856,9 @@ def recompute_w_u_fwd_kernel(
     p_b = tl.make_block_ptr(beta + bos * H + i_h, (T,), (H,), (i_t * BT,), (BT,), (0,))
     b_b = tl.load(p_b, boundary_check=(0,))
 
-    p_A = tl.make_block_ptr(A + (bos * H + i_h) * BT, (T, BT), (H * BT, 1), (i_t * BT, 0), (BT, BT), (1, 0))
+    p_A = tl.make_block_ptr(
+        A + (bos * H + i_h) * BT, (T, BT), (H * BT, 1), (i_t * BT, 0), (BT, BT), (1, 0)
+    )
     b_A = tl.load(p_A, boundary_check=(0, 1))
 
     for i_v in range(tl.cdiv(V, BV)):
@@ -874,7 +912,7 @@ def recompute_w_u_fwd_kernel(
             (1, 0),
         )
         b_gk = tl.load(p_gk, boundary_check=(0, 1))
-        b_kb *= exp(b_gk)
+        b_kb *= exp2(b_gk)
         if STORE_QG:
             p_q = tl.make_block_ptr(
                 q + (bos * H + i_h) * K,
@@ -893,15 +931,17 @@ def recompute_w_u_fwd_kernel(
                 (1, 0),
             )
             b_q = tl.load(p_q, boundary_check=(0, 1))
-            b_qg = b_q * exp(b_gk)
+            b_qg = b_q * exp2(b_gk)
             tl.store(p_qg, b_qg.to(p_qg.dtype.element_ty), boundary_check=(0, 1))
         if STORE_KG:
             last_idx = min(i_t * BT + BT, T) - 1
 
             o_k = i_k * BK + tl.arange(0, BK)
             m_k = o_k < K
-            b_gn = tl.load(gk + ((bos + last_idx) * H + i_h) * K + o_k, mask=m_k, other=0.0)
-            b_kg = b_k * exp(b_gn - b_gk)
+            b_gn = tl.load(
+                gk + ((bos + last_idx) * H + i_h) * K + o_k, mask=m_k, other=0.0
+            )
+            b_kg = b_k * exp2(b_gn - b_gk)
 
             p_kg = tl.make_block_ptr(
                 kg + (bos * H + i_h) * K,
@@ -925,13 +965,15 @@ def recompute_w_u_fwd(
     q: torch.Tensor | None = None,
     gk: torch.Tensor | None = None,
     cu_seqlens: torch.Tensor | None = None,
+    chunk_indices: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     B, T, H, K, V = *k.shape, v.shape[-1]
     BT = A.shape[-1]
     BK = 64
     BV = 64
 
-    chunk_indices = prepare_chunk_indices(cu_seqlens, BT) if cu_seqlens is not None else None
+    if chunk_indices is None and cu_seqlens is not None:
+        chunk_indices = prepare_chunk_indices(cu_seqlens, BT)
     NT = cdiv(T, BT) if cu_seqlens is None else len(chunk_indices)
 
     w = torch.empty_like(k)
@@ -1047,10 +1089,9 @@ def chunk_gla_fwd_kernel_o(
         # [BT, BK]
         b_g = tl.load(p_g, boundary_check=(0, 1))
         # [BT, BK]
-        b_qg = (b_q * exp(b_g)).to(b_q.dtype)
+        b_qg = (b_q * exp2(b_g)).to(b_q.dtype)
         # [BV, BK]
         b_h = tl.load(p_h, boundary_check=(0, 1))
-        # works but dkw, owing to divine benevolence
         # [BT, BV]
         if i_k >= 0:
             b_o += tl.dot(b_qg, tl.trans(b_h).to(b_qg.dtype))
@@ -1070,7 +1111,9 @@ def chunk_gla_fwd_kernel_o(
         (BT, BV),
         (1, 0),
     )
-    p_A = tl.make_block_ptr(A + (bos * H + i_h) * BT, (T, BT), (H * BT, 1), (i_t * BT, 0), (BT, BT), (1, 0))
+    p_A = tl.make_block_ptr(
+        A + (bos * H + i_h) * BT, (T, BT), (H * BT, 1), (i_t * BT, 0), (BT, BT), (1, 0)
+    )
     # [BT, BV]
     b_v = tl.load(p_v, boundary_check=(0, 1))
     # [BT, BT]
@@ -1089,12 +1132,14 @@ def chunk_gla_fwd_o_gk(
     o: torch.Tensor,
     scale: float,
     cu_seqlens: torch.Tensor | None = None,
-    chunk_size: int = 64,
+    chunk_indices: torch.Tensor | None = None,
+    chunk_size: int = FLA_CHUNK_SIZE,
 ):
     B, T, H, K, V = *q.shape, v.shape[-1]
     BT = chunk_size
 
-    chunk_indices = prepare_chunk_indices(cu_seqlens, chunk_size) if cu_seqlens is not None else None
+    if chunk_indices is None and cu_seqlens is not None:
+        chunk_indices = prepare_chunk_indices(cu_seqlens, chunk_size)
     NT = cdiv(T, BT) if cu_seqlens is None else len(chunk_indices)
 
     def grid(meta):
@@ -1119,6 +1164,214 @@ def chunk_gla_fwd_o_gk(
     return o
 
 
+@triton.heuristics(
+    {
+        "HAS_BIAS": lambda args: args["g_bias"] is not None,
+        "IS_VARLEN": lambda args: args["cu_seqlens"] is not None,
+    }
+)
+@triton.autotune(
+    configs=[
+        triton.Config({"BD": BD}, num_warps=num_warps)
+        for BD in [32, 64]
+        for num_warps in [2, 4, 8]
+    ],
+    key=["H", "D", "BT", "IS_VARLEN"],
+)
+@triton.jit(do_not_specialize=["T"])
+def kda_gate_cumsum_fwd_kernel(
+    g,
+    A,
+    y,
+    g_bias,
+    cu_seqlens,
+    chunk_indices,
+    cumsum_scale,
+    beta,
+    threshold,
+    T,
+    H: tl.constexpr,
+    D: tl.constexpr,
+    BT: tl.constexpr,
+    BD: tl.constexpr,
+    HAS_BIAS: tl.constexpr,
+    IS_VARLEN: tl.constexpr,
+):
+    i_d, i_t, i_bh = tl.program_id(0), tl.program_id(1), tl.program_id(2)
+    i_b, i_h = i_bh // H, i_bh % H
+    if IS_VARLEN:
+        i_n, i_t = (
+            tl.load(chunk_indices + i_t * 2).to(tl.int32),
+            tl.load(chunk_indices + i_t * 2 + 1).to(tl.int32),
+        )
+        bos, eos = (
+            tl.load(cu_seqlens + i_n).to(tl.int32),
+            tl.load(cu_seqlens + i_n + 1).to(tl.int32),
+        )
+        T = eos - bos
+    else:
+        bos = i_b * T
+
+    p_g = tl.make_block_ptr(
+        g + (bos * H + i_h) * D,
+        (T, D),
+        (H * D, 1),
+        (i_t * BT, i_d * BD),
+        (BT, BD),
+        (1, 0),
+    )
+    p_y = tl.make_block_ptr(
+        y + (bos * H + i_h) * D,
+        (T, D),
+        (H * D, 1),
+        (i_t * BT, i_d * BD),
+        (BT, BD),
+        (1, 0),
+    )
+
+    b_g = tl.load(p_g, boundary_check=(0, 1)).to(tl.float32)
+    if HAS_BIAS:
+        o_d = i_d * BD + tl.arange(0, BD)
+        b_bias = tl.load(g_bias + i_h * D + o_d, mask=o_d < D, other=0.0).to(tl.float32)
+        b_g = b_g + b_bias[None, :]
+
+    b_a = -tl.exp(tl.load(A + i_h).to(tl.float32))
+    b_g_scaled = b_g * beta
+    b_softplus = tl.where(
+        b_g_scaled > threshold,
+        b_g,
+        (1.0 / beta) * log(1.0 + tl.exp(b_g_scaled)),
+    )
+    b_gate = b_a * b_softplus
+
+    # Out-of-bounds rows (load returns 0, but softplus/bias can still make
+    # b_gate non-zero) participate in the dot product. They only contribute to
+    # out-of-bounds output rows, which are masked away by `boundary_check` on
+    # the store, so visible output matches unfused gate + chunk-local cumsum.
+    o_t = tl.arange(0, BT)
+    m_cumsum = tl.where(o_t[:, None] >= o_t[None, :], 1.0, 0.0)
+    b_y = tl.dot(m_cumsum, b_gate, allow_tf32=False) * cumsum_scale
+    tl.store(p_y, b_y.to(p_y.dtype.element_ty), boundary_check=(0, 1))
+
+
+def fused_kda_gate_chunk_cumsum(
+    raw_g: torch.Tensor,
+    A_log: torch.Tensor,
+    g_bias: torch.Tensor | None = None,
+    beta: float = 1.0,
+    threshold: float = 20.0,
+    cu_seqlens: torch.Tensor | None = None,
+    chunk_indices: torch.Tensor | None = None,
+    chunk_size: int = FLA_CHUNK_SIZE,
+    output_dtype: torch.dtype | None = torch.float,
+) -> torch.Tensor:
+    if cu_seqlens is not None:
+        assert raw_g.shape[0] == 1, (
+            "Only batch size 1 is supported when cu_seqlens are provided"
+        )
+    B, T, H, D = raw_g.shape
+    if chunk_indices is None and cu_seqlens is not None:
+        chunk_indices = prepare_chunk_indices(cu_seqlens, chunk_size)
+    NT = cdiv(T, chunk_size) if cu_seqlens is None else len(chunk_indices)
+
+    A_log = A_log.reshape(-1)
+    if g_bias is not None:
+        g_bias = g_bias.reshape(-1)
+    y = torch.empty_like(raw_g, dtype=output_dtype or raw_g.dtype)
+
+    def grid(meta):
+        return (cdiv(meta["D"], meta["BD"]), NT, B * H)
+
+    kda_gate_cumsum_fwd_kernel[grid](
+        g=raw_g,
+        A=A_log,
+        y=y,
+        g_bias=g_bias,
+        cu_seqlens=cu_seqlens,
+        chunk_indices=chunk_indices,
+        # RCP_LN2 folds in the natural-log -> log2 conversion so downstream
+        # exp2-based kernels reproduce exp(g). Keep this in sync with the
+        # `use_exp2=True` path in `_chunk_kda_fwd_with_cumulative_g`.
+        cumsum_scale=RCP_LN2,
+        beta=beta,
+        threshold=threshold,
+        T=T,
+        H=H,
+        D=D,
+        BT=chunk_size,
+    )
+    return y
+
+
+def _chunk_kda_fwd_with_cumulative_g(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    g: torch.Tensor,
+    beta: torch.Tensor,
+    scale: float,
+    initial_state: torch.Tensor,
+    output_final_state: bool,
+    cu_seqlens: torch.Tensor | None = None,
+    chunk_indices: torch.Tensor | None = None,
+    chunk_size: int = FLA_CHUNK_SIZE,
+):
+    # `g` must already be chunk-local cumulatively-summed AND scaled by
+    # RCP_LN2 (so the downstream exp2-based kernels reproduce exp(g)).
+    # Use `chunk_kda_fwd` or `chunk_kda_with_fused_gate_fwd` instead of
+    # calling this helper directly unless that invariant is upheld.
+    # the intra Aqk is kept in fp32
+    # the computation has very marginal effect on the entire throughput
+    A, Aqk = chunk_kda_scaled_dot_kkt_fwd(
+        q=q,
+        k=k,
+        gk=g,
+        beta=beta,
+        scale=scale,
+        cu_seqlens=cu_seqlens,
+        chunk_indices=chunk_indices,
+        chunk_size=chunk_size,
+        output_dtype=torch.float32,
+    )
+    A = solve_tril(A=A, cu_seqlens=cu_seqlens, output_dtype=k.dtype)
+    w, u, _, kg = recompute_w_u_fwd(
+        k=k,
+        v=v,
+        beta=beta,
+        A=A,
+        gk=g,
+        cu_seqlens=cu_seqlens,
+        chunk_indices=chunk_indices,
+    )
+    del A
+    h, v_new, final_state = chunk_gated_delta_rule_fwd_h(
+        k=kg,
+        w=w,
+        u=u,
+        gk=g,
+        initial_state=initial_state,
+        output_final_state=output_final_state,
+        cu_seqlens=cu_seqlens,
+        chunk_indices=chunk_indices,
+        use_exp2=True,
+    )
+    del w, u, kg
+    o = chunk_gla_fwd_o_gk(
+        q=q,
+        v=v_new,
+        g=g,
+        A=Aqk,
+        h=h,
+        o=v,
+        scale=scale,
+        cu_seqlens=cu_seqlens,
+        chunk_indices=chunk_indices,
+        chunk_size=chunk_size,
+    )
+    del Aqk, v_new, h
+    return o, final_state
+
+
 def chunk_kda_fwd(
     q: torch.Tensor,
     k: torch.Tensor,
@@ -1131,52 +1384,75 @@ def chunk_kda_fwd(
     cu_seqlens: torch.Tensor | None = None,
 ):
     chunk_size = FLA_CHUNK_SIZE
-    g = chunk_local_cumsum(g, chunk_size=chunk_size, cu_seqlens=cu_seqlens)
-    # the intra Aqk is kept in fp32
-    # the computation has very marginal effect on the entire throughput
-    A, Aqk = chunk_kda_scaled_dot_kkt_fwd(
+    chunk_indices = (
+        prepare_chunk_indices(cu_seqlens, chunk_size)
+        if cu_seqlens is not None
+        else None
+    )
+    g = chunk_local_cumsum(
+        g,
+        chunk_size=chunk_size,
+        cu_seqlens=cu_seqlens,
+        chunk_indices=chunk_indices,
+    )
+    # KDA evaluates cumulative gate decays with exp2. Convert from natural-log
+    # space so exp(x) is preserved as exp2(x / ln(2)).
+    g = g * RCP_LN2
+    return _chunk_kda_fwd_with_cumulative_g(
         q=q,
         k=k,
-        gk=g,
+        v=v,
+        g=g,
         beta=beta,
         scale=scale,
-        cu_seqlens=cu_seqlens,
-        chunk_size=chunk_size,
-        output_dtype=torch.float32,
-    )
-    A = solve_tril(A=A, cu_seqlens=cu_seqlens, output_dtype=k.dtype)
-    w, u, _, kg = recompute_w_u_fwd(
-        k=k,
-        v=v,
-        beta=beta,
-        A=A,
-        gk=g,
-        cu_seqlens=cu_seqlens,
-    )
-    del A
-    h, v_new, final_state = chunk_gated_delta_rule_fwd_h(
-        k=kg,
-        w=w,
-        u=u,
-        gk=g,
         initial_state=initial_state,
         output_final_state=output_final_state,
         cu_seqlens=cu_seqlens,
-    )
-    del w, u, kg
-    o = chunk_gla_fwd_o_gk(
-        q=q,
-        v=v_new,
-        g=g,
-        A=Aqk,
-        h=h,
-        o=v,
-        scale=scale,
-        cu_seqlens=cu_seqlens,
+        chunk_indices=chunk_indices,
         chunk_size=chunk_size,
     )
-    del Aqk, v_new, h
-    return o, final_state
+
+
+def chunk_kda_with_fused_gate_fwd(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    raw_g: torch.Tensor,
+    beta: torch.Tensor,
+    A_log: torch.Tensor,
+    g_bias: torch.Tensor | None,
+    scale: float,
+    initial_state: torch.Tensor,
+    output_final_state: bool,
+    cu_seqlens: torch.Tensor | None = None,
+):
+    chunk_size = FLA_CHUNK_SIZE
+    chunk_indices = (
+        prepare_chunk_indices(cu_seqlens, chunk_size)
+        if cu_seqlens is not None
+        else None
+    )
+    g = fused_kda_gate_chunk_cumsum(
+        raw_g,
+        A_log=A_log,
+        g_bias=g_bias,
+        cu_seqlens=cu_seqlens,
+        chunk_indices=chunk_indices,
+        chunk_size=chunk_size,
+    )
+    return _chunk_kda_fwd_with_cumulative_g(
+        q=q,
+        k=k,
+        v=v,
+        g=g,
+        beta=beta,
+        scale=scale,
+        initial_state=initial_state,
+        output_final_state=output_final_state,
+        cu_seqlens=cu_seqlens,
+        chunk_indices=chunk_indices,
+        chunk_size=chunk_size,
+    )
 
 
 def chunk_kda(
@@ -1207,6 +1483,45 @@ def chunk_kda(
         beta=beta.contiguous(),
         scale=scale,
         initial_state=initial_state.contiguous(),
+        output_final_state=output_final_state,
+        cu_seqlens=cu_seqlens,
+    )
+    return o, final_state
+
+
+def chunk_kda_with_fused_gate(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    raw_g: torch.Tensor,
+    beta: torch.Tensor,
+    A_log: torch.Tensor,
+    g_bias: torch.Tensor | None,
+    scale: float | None = None,
+    initial_state: torch.Tensor | None = None,
+    output_final_state: bool = False,
+    use_qk_l2norm_in_kernel: bool = False,
+    cu_seqlens: torch.Tensor | None = None,
+    **kwargs,
+):
+    """Run chunk KDA from raw gate projection using fused gate+cumsum."""
+    if scale is None:
+        scale = k.shape[-1] ** -0.5
+
+    if use_qk_l2norm_in_kernel:
+        q = l2norm_fwd(q.contiguous())
+        k = l2norm_fwd(k.contiguous())
+
+    o, final_state = chunk_kda_with_fused_gate_fwd(
+        q=q,
+        k=k,
+        v=v.contiguous(),
+        raw_g=raw_g.contiguous(),
+        beta=beta.contiguous(),
+        A_log=A_log,
+        g_bias=g_bias,
+        scale=scale,
+        initial_state=initial_state.contiguous() if initial_state is not None else None,
         output_final_state=output_final_state,
         cu_seqlens=cu_seqlens,
     )
@@ -1269,7 +1584,9 @@ def kda_gate_fwd_kernel(
     if HAS_BIAS:
         n_d = tl.arange(0, BD)
         bias_mask = n_d < D
-        b_bias = tl.load(g_bias + i_h * D + n_d, mask=bias_mask, other=0.0).to(tl.float32)
+        b_bias = tl.load(g_bias + i_h * D + n_d, mask=bias_mask, other=0.0).to(
+            tl.float32
+        )
         b_g = b_g + b_bias[None, :]
 
     # softplus(x, beta) = (1/beta) * log(1 + exp(beta * x))

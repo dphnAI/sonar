@@ -1,22 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 # Adapted from https://github.com/sgl-project/sglang/blob/main/test/srt/test_block_int8.py
 import itertools
 
 import pytest
 import torch
-from aphrodite.quantization.utils.int8_utils import w8a8_block_int8_matmul
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.platforms import current_platform
 from tests.kernels.quant_utils import native_w8a8_block_matmul
+from aphrodite.config import AphroditeConfig
+from aphrodite.model_executor.layers.quantization.utils.int8_utils import (
+    w8a8_block_int8_matmul,
+)
+from aphrodite.platforms import current_platform
 
 if current_platform.get_device_capability() < (7, 0):
     pytest.skip("INT8 Triton requires CUDA 7.0 or higher", allow_module_level=True)
 
-aphrodite_config = AphroditeConfig()
-aphrodite_config.scheduler_config.max_num_seqs = 128
-aphrodite_config.scheduler_config.max_model_len = 8192
+vllm_config = AphroditeConfig()
 
 DTYPES = [torch.half, torch.bfloat16]
 M = [1, 33, 64, 222]
@@ -60,7 +61,7 @@ def test_w8a8_block_int8_matmul(M, N, K, block_size, out_dtype, seed):
     ref_out = native_w8a8_block_matmul(A_fp8, B_fp8, As, Bs, block_size, out_dtype)
     out = w8a8_block_int8_matmul(A_fp8, B_fp8, As, Bs, block_size, out_dtype)
 
-    rel_diff = torch.mean(torch.abs(out.to(torch.float32) - ref_out.to(torch.float32))) / torch.mean(
-        torch.abs(ref_out.to(torch.float32))
-    )
+    rel_diff = torch.mean(
+        torch.abs(out.to(torch.float32) - ref_out.to(torch.float32))
+    ) / torch.mean(torch.abs(ref_out.to(torch.float32)))
     assert rel_diff < 0.001

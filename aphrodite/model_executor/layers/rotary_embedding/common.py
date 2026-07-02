@@ -2,12 +2,14 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 import math
-from importlib.util import find_spec
+from contextlib import suppress
+from importlib import import_module
 
 import torch
 
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.custom_op import CustomOp
+from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import direct_register_custom_op
 
 logger = init_logger(__name__)
@@ -35,7 +37,9 @@ def yarn_find_correction_dim(
     base: float = 10000,
     max_position_embeddings: int = 2048,
 ) -> float:
-    return (dim * math.log(max_position_embeddings / (num_rotations * 2 * math.pi))) / (2 * math.log(base))
+    return (dim * math.log(max_position_embeddings / (num_rotations * 2 * math.pi))) / (
+        2 * math.log(base)
+    )
 
 
 # Find dim range bounds based on rotations
@@ -55,7 +59,9 @@ def yarn_find_correction_range(
     return max(low, 0), min(high, dim - 1)  # Clamp values just in case
 
 
-def yarn_linear_ramp_mask(low: float, high: float, dim: int, dtype: torch.dtype) -> torch.Tensor:
+def yarn_linear_ramp_mask(
+    low: float, high: float, dim: int, dtype: torch.dtype
+) -> torch.Tensor:
     if low == high:
         high += 0.001  # Prevent singularity
 
@@ -130,10 +136,11 @@ class ApplyRotaryEmb(CustomOp):
         self.enable_fp32_compute = enable_fp32_compute
 
         self.apply_rotary_emb_flash_attn = None
-        if find_spec("flash_attn") is not None:
-            from flash_attn.ops.triton.rotary import apply_rotary
-
-            self.apply_rotary_emb_flash_attn = apply_rotary
+        if not current_platform.is_cpu():
+            with suppress(ModuleNotFoundError):
+                self.apply_rotary_emb_flash_attn = import_module(
+                    "flash_attn.ops.triton.rotary"
+                ).apply_rotary
 
     @staticmethod
     def forward_static(
@@ -214,7 +221,9 @@ class ApplyRotaryEmb(CustomOp):
         cos: torch.Tensor,
         sin: torch.Tensor,
     ) -> torch.Tensor:
-        output = self.forward_static(x, cos, sin, self.is_neox_style, self.enable_fp32_compute)
+        output = self.forward_static(
+            x, cos, sin, self.is_neox_style, self.enable_fp32_compute
+        )
         return output
 
     def forward_cuda(
@@ -228,7 +237,7 @@ class ApplyRotaryEmb(CustomOp):
         x, cos, sin, origin_shape, origin_dtype = self._pre_process(x, cos, sin)
 
         """
-        Arguments of apply_rotary_emb() in aphrodite_flash_attn:
+        Arguments of apply_rotary_emb() in vllm_flash_attn:
             x: [batch_size, seq_len, nheads, headdim]
             cos, sin: [seqlen_rotary, rotary_dim / 2]
             interleaved: default as False (Neox-style).
@@ -246,8 +255,31 @@ class ApplyRotaryEmb(CustomOp):
         cos: torch.Tensor,
         sin: torch.Tensor,
     ) -> torch.Tensor:
+        _HIP_MAX_GRID_DIM = 65535
+        """
+        HIP/ROCm has a per-dim grid limit of 65535 on gridY/gridZ. The
+        flash_attn triton rotary kernel uses
+        grid = (cdiv(nheads, BLOCK_H), cdiv(seq_len, BLOCK_M), batch)
+        with BLOCK_M=8 (rotary_dim<=128) or BLOCK_M=4 (otherwise) and
+        BLOCK_H=2. When the visual encoder packs many image patches into one
+        batch (e.g. Aphrodite profile_run with max_num_seqs images), gridY can
+        exceed 65535 and hipModuleLaunchKernel returns
+        `Triton Error [HIP]: Code: 1, invalid argument`. Fall back to the
+        native PyTorch implementation in that case.
+        """
         if self.apply_rotary_emb_flash_attn is not None:
             x, cos, sin, origin_shape, origin_dtype = self._pre_process(x, cos, sin)
+
+            seq_len = x.shape[-3]
+            batch = x.shape[0]
+            rotary_dim = cos.shape[-1] * 2
+            block_m = 8 if rotary_dim <= 128 else 4
+            grid_y = (seq_len + block_m - 1) // block_m
+            if grid_y > _HIP_MAX_GRID_DIM or batch > _HIP_MAX_GRID_DIM:
+                output = self.forward_static(
+                    x, cos, sin, self.is_neox_style, self.enable_fp32_compute
+                )
+                return self._post_process(output, origin_shape, origin_dtype)
 
             """
             Arguments of apply_rotary() in flash_attn:
@@ -257,7 +289,9 @@ class ApplyRotaryEmb(CustomOp):
                 ...
             """
             interleaved = not self.is_neox_style
-            output = self.apply_rotary_emb_flash_attn(x, cos, sin, interleaved=interleaved).type_as(x)
+            output = self.apply_rotary_emb_flash_attn(
+                x, cos, sin, interleaved=interleaved
+            ).type_as(x)
 
             output = self._post_process(output, origin_shape, origin_dtype)
         else:

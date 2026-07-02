@@ -15,7 +15,7 @@ from regex import escape as regex_escape
 
 from aphrodite.sampling_params import SamplingParams
 from aphrodite.utils.import_utils import LazyLoader
-from aphrodite.utils.platform_utils import is_pin_memory_available
+from aphrodite.utils.torch_utils import PIN_MEMORY
 from aphrodite.v1.structured_output.backend_types import (
     StructuredOutputBackend,
     StructuredOutputGrammar,
@@ -23,6 +23,7 @@ from aphrodite.v1.structured_output.backend_types import (
 )
 from aphrodite.v1.structured_output.utils import (
     OutlinesVocabulary,
+    compile_regex_with_timeout,
     get_outlines_cache,
     get_outlines_vocabulary,
 )
@@ -54,17 +55,24 @@ class OutlinesBackend(StructuredOutputBackend):
         self.vocabulary = get_outlines_vocabulary(self.tokenizer)
         self.cache = get_outlines_cache()
 
-    def _compile_index(self, regex_string: str, vocabulary: OutlinesVocabulary) -> oc.Index:
+    def _compile_index(
+        self, regex_string: str, vocabulary: OutlinesVocabulary
+    ) -> oc.Index:
         cache_key = f"{vocabulary._hash}_{regex_string}"
         if cache_key in self.cache:
             return self.cache[cache_key]
 
-        index = oc.Index(regex_string, vocabulary.inner)
+        index = compile_regex_with_timeout(
+            lambda pat: oc.Index(pat, vocabulary.inner),
+            regex_string,
+        )
         self.cache[cache_key] = index
 
         return index
 
-    def compile_grammar(self, request_type: StructuredOutputOptions, grammar_spec: str) -> StructuredOutputGrammar:
+    def compile_grammar(
+        self, request_type: StructuredOutputOptions, grammar_spec: str
+    ) -> StructuredOutputGrammar:
         if request_type == StructuredOutputOptions.JSON:
             regex = json_schema.build_regex_from_schema(grammar_spec)
         elif request_type == StructuredOutputOptions.REGEX:
@@ -74,7 +82,9 @@ class OutlinesBackend(StructuredOutputBackend):
             choices = [regex_escape(c) for c in choices]
             regex = "(" + "|".join(choices) + ")"
         else:
-            raise ValueError(f"Invalid request type for Outlines backend ({request_type!s})")
+            raise ValueError(
+                f"Invalid request type for Outlines backend ({request_type!s})"
+            )
         index = self._compile_index(regex, self.vocabulary)
         max_rollback_tokens = (
             self.aphrodite_config.speculative_config.num_speculative_tokens
@@ -91,7 +101,7 @@ class OutlinesBackend(StructuredOutputBackend):
             (max_num_seqs, (self.vocab_size + 31) // 32),
             -1,
             dtype=torch.int32,
-            pin_memory=is_pin_memory_available(),
+            pin_memory=PIN_MEMORY,
         )
 
     def destroy(self):
@@ -102,7 +112,9 @@ class OutlinesBackend(StructuredOutputBackend):
 class OutlinesGrammar(StructuredOutputGrammar):
     vocab_size: int
     guide: oc.Guide = field(hash=False)
-    num_processed_tokens: int = field(default_factory=lambda: 0, repr=False, hash=False, init=False)
+    num_processed_tokens: int = field(
+        default_factory=lambda: 0, repr=False, hash=False, init=False
+    )
 
     # outlines_core signals done on DFA accept; Aphrodite expects done after EOS.
     # We delay the finished flag by one step so EOS can still be emitted.
@@ -176,7 +188,9 @@ def validate_structured_output_request_outlines(params: SamplingParams):
             try:
                 schema = json.dumps(so_params.json)
             except Exception as e:
-                raise ValueError(f"Error serializing structured outputs jsonschema: {e}") from e
+                raise ValueError(
+                    f"Error serializing structured outputs jsonschema: {e}"
+                ) from e
         pattern = json_schema.build_regex_from_schema(schema)
         validate_regex_is_buildable(pattern)
     elif so_params.choice:
@@ -184,7 +198,10 @@ def validate_structured_output_request_outlines(params: SamplingParams):
         regex = "(" + "|".join(choices) + ")"
         validate_regex_is_buildable(regex)
     elif so_params.grammar:
-        raise ValueError("Outlines structured outputs backend does not support grammar specifications")
+        raise ValueError(
+            "Outlines structured outputs backend "
+            "does not support grammar specifications"
+        )
 
 
 def _prefix_needs_context(parsed) -> bool:

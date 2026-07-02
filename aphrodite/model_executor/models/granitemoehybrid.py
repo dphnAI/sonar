@@ -10,7 +10,7 @@ from torch import nn
 from transformers import GraniteMoeHybridConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
+from aphrodite.config import CacheConfig, ModelConfig, AphroditeConfig
 from aphrodite.distributed import get_tensor_model_parallel_world_size
 from aphrodite.distributed.parallel_state import get_pp_group
 from aphrodite.model_executor.layers.attention import Attention
@@ -99,11 +99,15 @@ class GraniteMoeHybridMambaDecoderLayer(nn.Module):
         self.shared_mlp = (
             None
             if getattr(config, "shared_intermediate_size", 0) == 0
-            else GraniteMoeSharedMLP(config, quant_config=quant_config, prefix=f"{prefix}.shared_mlp")
+            else GraniteMoeSharedMLP(
+                config, quant_config=quant_config, prefix=f"{prefix}.shared_mlp"
+            )
         )
 
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
     def forward(
         self,
@@ -171,11 +175,15 @@ class GraniteMoeHybridAttentionDecoderLayer(nn.Module):
         self.shared_mlp = (
             None
             if getattr(config, "shared_intermediate_size", 0) == 0
-            else GraniteMoeSharedMLP(config, quant_config=quant_config, prefix=f"{prefix}.shared_mlp")
+            else GraniteMoeSharedMLP(
+                config, quant_config=quant_config, prefix=f"{prefix}.shared_mlp"
+            )
         )
 
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
     def forward(
         self,
@@ -382,10 +390,14 @@ class GraniteMoeHybridModel(nn.Module):
         for i, layer in enumerate(self.layers):
             if isinstance(layer, GraniteMoeHybridAttentionDecoderLayer):
                 num_attn += 1
-            hidden_states, residual = layer(positions=positions, hidden_states=hidden_states, residual=residual)
+            hidden_states, residual = layer(
+                positions=positions, hidden_states=hidden_states, residual=residual
+            )
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
+            return IntermediateTensors(
+                {"hidden_states": hidden_states, "residual": residual}
+            )
 
         hidden_states = self.norm(hidden_states)
         return hidden_states
@@ -443,6 +455,8 @@ class GraniteMoeHybridModel(nn.Module):
                 loaded_params.add(n)
 
         def _load_expert(n, p, name, shard_id, expert_id):
+            if n not in params_dict:
+                return
             param = params_dict[n]
             weight_loader = getattr(param, "weight_loader", default_weight_loader)
             weight_loader(param, p, name, shard_id=shard_id, expert_id=expert_id)
@@ -483,18 +497,10 @@ class GraniteMoeHybridModel(nn.Module):
             if "A_log" in n:
                 n = n.replace("A_log", "A")
 
-            if self.quant_config is not None and (scale_name := self.quant_config.get_cache_scale(n)):
-                # Loading kv cache quantization scales
-                loaded_weight = p
-                loaded_weight = loaded_weight if loaded_weight.dim() == 0 else loaded_weight[0]
-                _load(scale_name, loaded_weight)
-                loaded_params.add(scale_name)
-                continue
-
             if _load_quant_expert(n, p):
                 continue
 
-            # Logic analogous to: https://github.com/vllm-project/vllm/blob/f49e5aff11c986ed4d45202b1716c5d74786efa9/aphrodite/model_executor/models/granitemoeshared.py#L215
+            # Logic analogous to: https://github.com/vllm-project/aphrodite/blob/f49e5aff11c986ed4d45202b1716c5d74786efa9/aphrodite/model_executor/models/granitemoeshared.py#L215
             # Mapping different experts' layout:
             #  from HF (input_linear, output_linear, router)
             #  to Aphrodite (experts_w13({e}.w1, {e}.w2), experts_w3({e}.w3), gate)
@@ -514,14 +520,14 @@ class GraniteMoeHybridModel(nn.Module):
                     )
                     w1_param, w3_param = p[e].chunk(2, dim=0)
                     _load_expert(
-                        n.replace(".input_linear.", ".experts.w13_"),
+                        n.replace(".input_linear.", ".experts.routed_experts.w13_"),
                         w1_param,
                         w1_name,
                         shard_id="w1",
                         expert_id=e,
                     )
                     _load_expert(
-                        n.replace(".input_linear.", ".experts.w13_"),
+                        n.replace(".input_linear.", ".experts.routed_experts.w13_"),
                         w3_param,
                         w3_name,
                         shard_id="w3",
@@ -537,7 +543,7 @@ class GraniteMoeHybridModel(nn.Module):
                     )
                     w2_param = p[e]
                     _load_expert(
-                        n.replace(".output_linear.", ".experts.w2_"),
+                        n.replace(".output_linear.", ".experts.routed_experts.w2_"),
                         w2_param,
                         w2_name,
                         shard_id="w2",
@@ -553,7 +559,9 @@ class GraniteMoeHybridModel(nn.Module):
                 loaded = False
                 for param_name, weight_name, shard_id in stacked_params_mapping:
                     if weight_name in n:
-                        _load_shard(n.replace(weight_name, param_name), p, shard_id=shard_id)
+                        _load_shard(
+                            n.replace(weight_name, param_name), p, shard_id=shard_id
+                        )
                         loaded = True
                 if not loaded:
                     _load(n, p)
@@ -640,7 +648,9 @@ class GraniteMoeHybridForCausalLM(
         self.quant_config = aphrodite_config.quant_config
         self.config = config
         self.scheduler_config = scheduler_config
-        self.model = GraniteMoeHybridModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = GraniteMoeHybridModel(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
+        )
 
         self.lm_head = ParallelLMHead(
             config.vocab_size,
@@ -656,7 +666,9 @@ class GraniteMoeHybridForCausalLM(
             scale=1 / self.config.logits_scaling,
         )
 
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -669,7 +681,9 @@ class GraniteMoeHybridForCausalLM(
         inputs_embeds: torch.Tensor | None = None,
         **kwargs,
     ):
-        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
+        hidden_states = self.model(
+            input_ids, positions, intermediate_tensors, inputs_embeds
+        )
 
         return hidden_states
 

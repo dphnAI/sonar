@@ -1,15 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 # Adapted from https://github.com/sgl-project/sglang/blob/main/test/srt/test_int8_kernel.py
 import itertools
 
 import pytest
 import torch
-from aphrodite.modeling.layers.activation import SiluAndMul
-from aphrodite.modeling.layers.fused_moe import fused_experts
-from aphrodite.modeling.layers.fused_moe.config import FusedMoEQuantConfig
-from aphrodite.quantization.utils.int8_utils import per_token_quant_int8
 
+from aphrodite.model_executor.layers.activation import SiluAndMul
+from aphrodite.model_executor.layers.fused_moe import fused_experts
+from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
+from aphrodite.model_executor.layers.quantization.utils.int8_utils import (
+    per_token_quant_int8,
+)
 from aphrodite.platforms import current_platform
 
 if current_platform.get_device_capability() < (7, 0):
@@ -61,16 +64,22 @@ def torch_w8a8_per_column_moe(a, w1, w2, w1_s, w2_s, topk, topk_weight, topk_ids
         mask = topk_ids == i
         if mask.sum():
             # First MLP layer: note that a_s is now per-token
-            inter_out = native_w8a8_per_token_matmul(a_q[mask], w1[i], a_s[mask], w1_s[i], output_dtype=a.dtype)
+            inter_out = native_w8a8_per_token_matmul(
+                a_q[mask], w1[i], a_s[mask], w1_s[i], output_dtype=a.dtype
+            )
             # Activation function
             act_out = SiluAndMul().forward_native(inter_out)
             # Quantize activation output with per-token
             act_out_q, act_out_s = per_token_quant_int8(act_out)
 
             # Second MLP layer
-            out[mask] = native_w8a8_per_token_matmul(act_out_q, w2[i], act_out_s, w2_s[i], output_dtype=a.dtype)
+            out[mask] = native_w8a8_per_token_matmul(
+                act_out_q, w2[i], act_out_s, w2_s[i], output_dtype=a.dtype
+            )
     # Apply routing weights and sum
-    return (out.view(B, -1, w2.shape[1]) * topk_weight.view(B, -1, 1).to(out.dtype)).sum(dim=1)
+    return (
+        out.view(B, -1, w2.shape[1]) * topk_weight.view(B, -1, 1).to(out.dtype)
+    ).sum(dim=1)
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -93,7 +102,7 @@ SEEDS = [0]
     itertools.product(M, N, K, E, TOP_KS, DTYPES, SEEDS),
 )
 @torch.inference_mode()
-def test_w8a8_fp8_fused_moe(M, N, K, E, topk, dtype, seed):
+def test_w8a8_fp8_fused_moe(default_vllm_config, M, N, K, E, topk, dtype, seed):
     torch.manual_seed(seed)
     # Initialize int8 quantization parameters
     factor_for_scale = 1e-2
@@ -118,7 +127,9 @@ def test_w8a8_fp8_fused_moe(M, N, K, E, topk, dtype, seed):
     score = torch.softmax(score, dim=-1, dtype=torch.float32)
     topk_weights, topk_ids = torch.topk(score, topk)
 
-    ref_out = torch_w8a8_per_column_moe(a, w1, w2, w1_s, w2_s, topk, topk_weights, topk_ids)
+    ref_out = torch_w8a8_per_column_moe(
+        a, w1, w2, w1_s, w2_s, topk, topk_weights, topk_ids
+    )
 
     quant_config = FusedMoEQuantConfig.make(
         torch.int8,
@@ -138,7 +149,7 @@ def test_w8a8_fp8_fused_moe(M, N, K, E, topk, dtype, seed):
     )
 
     # Check results
-    rel_diff = torch.mean(torch.abs(out.to(torch.float32) - ref_out.to(torch.float32))) / torch.mean(
-        torch.abs(ref_out.to(torch.float32))
-    )
+    rel_diff = torch.mean(
+        torch.abs(out.to(torch.float32) - ref_out.to(torch.float32))
+    ) / torch.mean(torch.abs(ref_out.to(torch.float32)))
     assert rel_diff < 0.05

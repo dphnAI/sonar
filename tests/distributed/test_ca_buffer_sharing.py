@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 # can only run on machines with p2p access across GPUs
 # can only run with torchrun:
 # torchrun --nproc_per_node=2 tests/distributed/test_ca_buffer_sharing.py
@@ -10,7 +11,9 @@ import torch
 import torch.distributed as dist
 
 from aphrodite.distributed.device_communicators.cuda_wrapper import CudaRTLibrary
-from aphrodite.distributed.device_communicators.custom_all_reduce import CustomAllreduce  # noqa
+from aphrodite.distributed.device_communicators.custom_all_reduce import (  # noqa
+    CustomAllreduce,
+)
 
 # create a cpu process group for communicating metadata (ipc handle)
 dist.init_process_group(backend="gloo")
@@ -29,7 +32,7 @@ pointers = CustomAllreduce.create_shared_buffer(buffer_size_in_bytes)
 print(f"Rank {rank} has pointers {pointers}")
 
 dist.barrier()
-torch.cuda.synchronize()
+torch.accelerator.synchronize()
 
 if rank == 0:
     # the first rank tries to write to all buffers
@@ -38,7 +41,7 @@ if rank == 0:
         lib.cudaMemset(pointer, byte_value, buffer_size_in_bytes)
 
 dist.barrier()
-torch.cuda.synchronize()
+torch.accelerator.synchronize()
 
 host_data = (ctypes.c_char * buffer_size_in_bytes)()
 
@@ -48,12 +51,14 @@ for p in pointers:
     lib.cudaMemcpy(host_data, pointer, buffer_size_in_bytes)
     for i in range(buffer_size_in_bytes):
         assert ord(host_data[i]) == byte_value, (
-            f"Rank {rank} failed to verify buffer {p}. Expected {byte_value}, got {ord(host_data[i])}"
+            f"Rank {rank} failed"
+            f" to verify buffer {p}. Expected {byte_value}, "
+            f"got {ord(host_data[i])}"
         )
 
 print(f"Rank {rank} verified all buffers")
 
 dist.barrier()
-torch.cuda.synchronize()
+torch.accelerator.synchronize()
 
 CustomAllreduce.free_shared_buffer(pointers)

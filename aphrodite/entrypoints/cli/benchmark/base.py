@@ -3,6 +3,7 @@
 import argparse
 
 from aphrodite.entrypoints.cli.types import CLISubcommand
+from aphrodite.utils.argparse_utils import FlexibleArgumentParser
 
 
 class BenchmarkSubcommandBase(CLISubcommand):
@@ -11,7 +12,7 @@ class BenchmarkSubcommandBase(CLISubcommand):
     help: str
 
     @classmethod
-    def add_cli_args(cls, parser: argparse.ArgumentParser) -> None:
+    def add_cli_args(cls, parser: FlexibleArgumentParser) -> None:
         """Add the CLI arguments to the parser."""
         raise NotImplementedError
 

@@ -43,10 +43,14 @@ class FlashInferCuteDSLExperts(mk.FusedMoEExpertsModular):
             moe_config=moe_config,
             quant_config=quant_config,
         )
-        assert quant_config.quant_dtype == "nvfp4", "Only nvfp4 quantization is currently supported."
+        assert quant_config.quant_dtype == "nvfp4", (
+            "Only nvfp4 quantization is currently supported."
+        )
         self.out_dtype = moe_config.in_dtype
         self.hidden_dim = moe_config.hidden_dim
-        self.intermediate_size_per_partition = moe_config.intermediate_size_per_partition
+        self.intermediate_size_per_partition = (
+            moe_config.intermediate_size_per_partition
+        )
         self.topk = moe_config.experts_per_token
         self.local_num_experts = moe_config.num_local_experts
         self.global_num_experts = moe_config.num_experts
@@ -64,7 +68,11 @@ class FlashInferCuteDSLExperts(mk.FusedMoEExpertsModular):
     @staticmethod
     def _supports_current_device() -> bool:
         p = current_platform
-        return p.is_cuda() and p.is_device_capability_family(100) and has_flashinfer_cutedsl_moe_nvfp4()
+        return (
+            p.is_cuda()
+            and p.is_device_capability_family(100)
+            and has_flashinfer_cutedsl_moe_nvfp4()
+        )
 
     @staticmethod
     def _supports_no_act_and_mul() -> bool:
@@ -89,9 +97,6 @@ class FlashInferCuteDSLExperts(mk.FusedMoEExpertsModular):
         moe_parallel_config: FusedMoEParallelConfig,
     ) -> bool:
         return True
-
-    def supports_expert_map(self) -> bool:
-        return False
 
     def finalize_weight_and_reduce_impl(self) -> mk.TopKWeightAndReduce:
         return TopKWeightAndReduceNoOP()
@@ -141,24 +146,21 @@ class FlashInferCuteDSLExperts(mk.FusedMoEExpertsModular):
         # The functional API expects x_sf with trailing dim: (M, K//16, 1).
         x_sf = a1q_scale.unsqueeze(-1)
 
-        from aphrodite.utils.flashinfer import _is_fi_autotuning, autotune
-
-        with autotune(_is_fi_autotuning):
-            flashinfer_cute_dsl_fused_moe_nvfp4(
-                x=hidden_states,
-                x_sf=x_sf,
-                token_selected_experts=topk_ids.to(torch.int32),
-                token_final_scales=topk_weights.float(),
-                w1_weight=w1,
-                w1_weight_sf=self.w1_scale,
-                w1_alpha=self.g1_alphas,
-                fc2_input_scale=self.a2_gscale,
-                w2_weight=w2,
-                w2_weight_sf=self.w2_scale,
-                w2_alpha=self.g2_alphas,
-                num_experts=self.global_num_experts,
-                top_k=self.topk,
-                num_local_experts=self.local_num_experts,
-                local_expert_offset=self.local_expert_offset,
-                moe_output=output,
-            )
+        flashinfer_cute_dsl_fused_moe_nvfp4(
+            x=hidden_states,
+            x_sf=x_sf,
+            token_selected_experts=topk_ids.to(torch.int32),
+            token_final_scales=topk_weights.float(),
+            w1_weight=w1,
+            w1_weight_sf=self.w1_scale,
+            w1_alpha=self.g1_alphas,
+            fc2_input_scale=self.a2_gscale,
+            w2_weight=w2,
+            w2_weight_sf=self.w2_scale,
+            w2_alpha=self.g2_alphas,
+            num_experts=self.global_num_experts,
+            top_k=self.topk,
+            num_local_experts=self.local_num_experts,
+            local_expert_offset=self.local_expert_offset,
+            moe_output=output,
+        )

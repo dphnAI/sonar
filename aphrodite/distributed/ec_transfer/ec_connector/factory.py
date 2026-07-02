@@ -12,7 +12,7 @@ from aphrodite.distributed.ec_transfer.ec_connector.base import (
 from aphrodite.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig, ECTransferConfig
+    from aphrodite.config import ECTransferConfig, AphroditeConfig
 
 logger = init_logger(__name__)
 
@@ -56,7 +56,9 @@ class ECConnectorFactory:
         return connector_cls(config, role)
 
     @classmethod
-    def get_connector_class(cls, ec_transfer_config: "ECTransferConfig") -> type[ECConnectorBase]:
+    def get_connector_class(
+        cls, ec_transfer_config: "ECTransferConfig"
+    ) -> type[ECConnectorBase]:
         """Get the connector class by name."""
         connector_name = ec_transfer_config.ec_connector
         if connector_name is None:

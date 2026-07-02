@@ -21,7 +21,7 @@
    EVTCompute::Arguments struct.
 */
 
-namespace aphrodite::c3x {
+namespace vllm::c3x {
 
 #ifdef TORCH_TARGET_VERSION
 using TensorType = torch::stable::Tensor;
@@ -461,14 +461,4 @@ struct ScaledEpilogueArray
   }
 };
 
-};  // namespace aphrodite::c3x
-
-namespace aphrodite::c3x {
-using aphrodite::c3x::ScaledEpilogue;
-using aphrodite::c3x::ScaledEpilogueArray;
-using aphrodite::c3x::ScaledEpilogueBase;
-using aphrodite::c3x::ScaledEpilogueBias;
-using aphrodite::c3x::ScaledEpilogueBiasAzp;
-using aphrodite::c3x::ScaledEpilogueBiasAzpToken;
-using aphrodite::c3x::ScaledEpilogueColumnBias;
-}  // namespace aphrodite::c3x
+};  // namespace vllm::c3x

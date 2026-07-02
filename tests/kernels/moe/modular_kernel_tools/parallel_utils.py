@@ -10,8 +10,13 @@ import torch
 from torch.multiprocessing import spawn  # pyright: ignore[reportPrivateImportUsage]
 from typing_extensions import ParamSpec
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.distributed import init_distributed_environment, initialize_model_parallel
+import aphrodite.envs as envs
+from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.distributed import (
+    cleanup_dist_env_and_memory,
+    init_distributed_environment,
+    initialize_model_parallel,
+)
 from aphrodite.utils.network_utils import get_open_port
 
 ## Parallel Processes Utils
@@ -29,25 +34,42 @@ class ProcessGroupInfo:
     device: torch.device
 
 
-def _set_aphrodite_config(aphrodite_config: AphroditeConfig, world_size: int, rank: int, local_rank: int):
+def _set_vllm_config(
+    vllm_config: AphroditeConfig, world_size: int, rank: int, local_rank: int
+):
     import tempfile
 
     temp_file = tempfile.mkstemp()[1]
 
-    with set_current_aphrodite_config(aphrodite_config):
+    # When DP is enabled, processes are organized as:
+    #  rank = dp_rank * tp_pp_world_size + tp_pp_rank
+    tp_pp_world_size = vllm_config.parallel_config.world_size
+    vllm_config.parallel_config.data_parallel_rank = rank // tp_pp_world_size
+    tp_pp_rank = rank % tp_pp_world_size
+    vllm_config.parallel_config.rank = tp_pp_rank
+
+    with set_current_vllm_config(vllm_config):
         init_distributed_environment(
-            world_size=world_size,
-            rank=rank,
+            world_size=tp_pp_world_size,
+            rank=tp_pp_rank,
             distributed_init_method=f"file://{temp_file}",
             local_rank=local_rank,
             backend="nccl",
         )
 
         initialize_model_parallel(
-            tensor_model_parallel_size=aphrodite_config.parallel_config.tensor_parallel_size,
-            pipeline_model_parallel_size=aphrodite_config.parallel_config.pipeline_parallel_size,
+            tensor_model_parallel_size=vllm_config.parallel_config.tensor_parallel_size,
+            pipeline_model_parallel_size=vllm_config.parallel_config.pipeline_parallel_size,
         )
-        cpu_group = torch.distributed.new_group(list(range(world_size)), backend="gloo")
+        if envs.APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP:
+            cpu_group = torch.distributed.split_group(
+                split_ranks=[list(range(world_size))],
+                group_desc="moe_test_cpu",
+            )
+        else:
+            cpu_group = torch.distributed.new_group(
+                list(range(world_size)), backend="gloo"
+            )
     return cpu_group
 
 
@@ -57,15 +79,16 @@ def _worker_parallel_launch(
     world_local_size: int,
     node_rank: int,
     init_method: str,
-    worker: Callable[Concatenate[ProcessGroupInfo, AphroditeConfig | None, Any, P], None],
-    aphrodite_config: AphroditeConfig | None,
+    worker: Callable[..., None],
+    vllm_config: AphroditeConfig | None,
     env_dict: dict | None,
-    *args: P.args,
-    **kwargs: P.kwargs,
+    worker_kwargs: dict[str, Any],
+    *args: Any,
 ) -> None:
     rank = node_rank * world_local_size + local_rank
-    torch.cuda.set_device(local_rank)
     device = torch.device("cuda", local_rank)
+    torch.accelerator.set_device_index(device)
+    torch.set_default_device(device)
     torch.distributed.init_process_group(
         backend="cpu:gloo,cuda:nccl",
         init_method=init_method,
@@ -80,10 +103,10 @@ def _worker_parallel_launch(
         os.environ.update(env_dict)
 
     cpu_group = None
-    if aphrodite_config is not None:
-        cpu_group = _set_aphrodite_config(aphrodite_config, world_size, rank, local_rank)
+    if vllm_config is not None:
+        cpu_group = _set_vllm_config(vllm_config, world_size, rank, local_rank)
 
-    try:
+    def _run_worker():
         worker(
             ProcessGroupInfo(
                 world_size=world_size,
@@ -93,28 +116,38 @@ def _worker_parallel_launch(
                 local_rank=local_rank,
                 device=device,
             ),
-            aphrodite_config,
+            vllm_config,
             cpu_group,
             *args,
-            **kwargs,
+            **worker_kwargs,
         )
+
+    try:
+        if vllm_config is not None:
+            with set_current_vllm_config(vllm_config):
+                _run_worker()
+        else:
+            _run_worker()
     except Exception as ex:
         print(ex)
         traceback.print_exc()
         raise
     finally:
-        torch.distributed.destroy_process_group()
+        torch.accelerator.synchronize()
+        if vllm_config is not None:
+            cleanup_dist_env_and_memory()
+        else:
+            torch.distributed.destroy_process_group()
 
 
 def parallel_launch_with_config(
     world_size: int,
     worker: Callable[Concatenate[ProcessGroupInfo, AphroditeConfig, Any, P], None],
-    aphrodite_config: AphroditeConfig,
-    env_dict: dict[Any, Any],
+    vllm_config: AphroditeConfig,
+    env_dict: dict[Any, Any] | None,
     *args: P.args,
     **kwargs: P.kwargs,
 ) -> None:
-    assert not kwargs
     spawn(
         _worker_parallel_launch,
         args=(
@@ -123,8 +156,9 @@ def parallel_launch_with_config(
             0,
             f"tcp://{os.getenv('LOCALHOST', 'localhost')}:{get_open_port()}",
             worker,
-            aphrodite_config,
+            vllm_config,
             env_dict,
+            kwargs,
         )
         + args,
         nprocs=world_size,

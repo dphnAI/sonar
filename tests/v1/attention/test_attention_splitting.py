@@ -1,18 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 import torch
 
-from aphrodite.v1.attention.backends.utils import (
-    UBatchSlice,
-    _make_metadata_with_slice,
-    slice_query_start_locs,
-    split_attn_metadata,
-    split_decodes_and_prefills,
-)
-from aphrodite.v1.worker.ubatch_utils import create_ubatch_slices
 from tests.v1.attention.test_attention_backends import BATCH_SPECS
 from tests.v1.attention.utils import BatchSpec, create_common_attn_metadata
+from aphrodite.v1.attention.backends.utils import (
+    split_decodes_and_prefills,
+)
+from aphrodite.v1.worker.ubatch_utils import (
+    UBatchSlice,
+    _make_metadata_with_slice,
+    maybe_create_ubatch_slices,
+    slice_query_start_locs,
+    split_attn_metadata,
+)
 
 
 @pytest.fixture
@@ -152,7 +155,12 @@ def test_split_attn_metadata_decode_batch(large_decode_metadata):
     assert torch.equal(results[1].seq_lens, torch.tensor([2048] * mid_point))
 
 
-def apply_split_decodes_and_prefills(query_lens: list[int], decode_threshold: int, require_uniform: bool):
+def apply_split_decodes_and_prefills(
+    query_lens: list[int],
+    decode_threshold: int,
+    require_uniform: bool,
+    padded_num_tokens: int | None = None,
+):
     """Helper function to apply split_decodes_and_prefills and return
     the results."""
     device = torch.device("cpu")
@@ -162,6 +170,10 @@ def apply_split_decodes_and_prefills(query_lens: list[int], decode_threshold: in
         block_size=16,
         device=device,
     )
+
+    if padded_num_tokens is not None:
+        common_metadata.num_actual_tokens = padded_num_tokens
+
     return split_decodes_and_prefills(
         common_metadata,
         decode_threshold=decode_threshold,
@@ -171,8 +183,8 @@ def apply_split_decodes_and_prefills(query_lens: list[int], decode_threshold: in
 
 def test_split_decodes_and_prefills_nonuniform_all_ones():
     query_lens = [1, 1, 1]
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
-        query_lens, 1, False
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
+        apply_split_decodes_and_prefills(query_lens, 1, False)
     )
     assert num_decodes == 3
     assert num_prefills == 0
@@ -182,8 +194,8 @@ def test_split_decodes_and_prefills_nonuniform_all_ones():
 
 def test_split_decodes_and_prefills_nonuniform_all_short_decodes():
     query_lens = [1, 2, 1, 3, 2, 1, 2]
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
-        query_lens, 3, False
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
+        apply_split_decodes_and_prefills(query_lens, 3, False)
     )
     assert num_decodes == 7
     assert num_prefills == 0
@@ -193,8 +205,8 @@ def test_split_decodes_and_prefills_nonuniform_all_short_decodes():
 
 def test_split_decodes_and_prefills_nonuniform_all_prefills():
     query_lens = [4, 5, 6, 7]
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
-        query_lens, 3, False
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
+        apply_split_decodes_and_prefills(query_lens, 3, False)
     )
     assert num_decodes == 0
     assert num_prefills == 4
@@ -204,8 +216,8 @@ def test_split_decodes_and_prefills_nonuniform_all_prefills():
 
 def test_split_decodes_and_prefills_nonuniform_mixed_batch():
     query_lens = [2, 1, 3, 4, 5, 6, 7, 8]
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
-        query_lens, 4, False
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
+        apply_split_decodes_and_prefills(query_lens, 4, False)
     )
     assert num_decodes == 4  # 2, 1, 3, 4 are all <= 4
     assert num_prefills == 4  # 5, 6, 7, 8 are all > 4
@@ -215,8 +227,8 @@ def test_split_decodes_and_prefills_nonuniform_mixed_batch():
 
 def test_split_decodes_and_prefills_uniform_all_ones():
     query_lens = [1, 1, 1]
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
-        query_lens, 1, True
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
+        apply_split_decodes_and_prefills(query_lens, 1, True)
     )
     assert num_decodes == 3
     assert num_prefills == 0
@@ -226,8 +238,8 @@ def test_split_decodes_and_prefills_uniform_all_ones():
 
 def test_split_decodes_and_prefills_uniform_all_short_decodes():
     query_lens = [2, 2, 1, 3, 2, 1, 2]
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
-        query_lens, 3, True
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
+        apply_split_decodes_and_prefills(query_lens, 3, True)
     )
     assert num_decodes == 2
     assert num_prefills == 5
@@ -237,8 +249,8 @@ def test_split_decodes_and_prefills_uniform_all_short_decodes():
 
 def test_split_decodes_and_prefills_uniform_all_prefills():
     query_lens = [4, 5, 6, 7]
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
-        query_lens, 3, True
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
+        apply_split_decodes_and_prefills(query_lens, 3, True)
     )
     assert num_decodes == 0
     assert num_prefills == 4
@@ -248,8 +260,8 @@ def test_split_decodes_and_prefills_uniform_all_prefills():
 
 def test_split_decodes_and_prefills_uniform_mixed_batch_all_uniform_decodes():
     query_lens = [2, 2, 2, 4, 5, 6, 7, 8]
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
-        query_lens, 4, True
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
+        apply_split_decodes_and_prefills(query_lens, 4, True)
     )
     assert num_decodes == 3  # 2, 2, 2 are all <= 4 and uniform
     assert num_prefills == 5  # 4, 5, 6, 7, 8 are all > 4
@@ -259,13 +271,29 @@ def test_split_decodes_and_prefills_uniform_mixed_batch_all_uniform_decodes():
 
 def test_split_decodes_and_prefills_uniform_mixed_batch_non_uniform_decodes():
     query_lens = [2, 1, 2, 4, 5, 6, 7, 8]
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
-        query_lens, 4, True
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
+        apply_split_decodes_and_prefills(query_lens, 4, True)
     )
     assert num_decodes == 1  # only the first 2 is taken as decode
     assert num_prefills == 7  # 1, 2, 4, 5, 6, 7, 8 are all > 4 or non-uniform
     assert num_decode_tokens == 2  # only the first 2
     assert num_prefill_tokens == (sum(query_lens) - 2)  # rest of the tokens
+
+
+def test_split_decodes_and_prefills_uniform_padded_batch_all_same():
+    """uniform batch where all query lengths are identical with 0 length padded reqs."""
+    # All query lengths are 2, with decode_threshold=3 (so 2 <= 3)
+    # This triggers the padded uniform path at line 891
+    query_lens = [2, 2, 2, 0]
+    padded_num_tokens = 8
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
+        apply_split_decodes_and_prefills(query_lens, 3, True, padded_num_tokens)
+    )
+    # With uniform batch, all requests are treated as decodes
+    assert num_decodes == 4
+    assert num_prefills == 0
+    assert num_decode_tokens == padded_num_tokens
+    assert num_prefill_tokens == 0
 
 
 @pytest.mark.parametrize(
@@ -277,7 +305,9 @@ def test_split_decodes_and_prefills_uniform_mixed_batch_non_uniform_decodes():
         ([32, 40], [8, 8], 4, 1, 2),
     ],
 )
-def test_prefill_split_across_ubatches(seq_lens, query_lens, split_point, expected_first_reqs, expected_second_reqs):
+def test_prefill_split_across_ubatches(
+    seq_lens, query_lens, split_point, expected_first_reqs, expected_second_reqs
+):
     """Test splitting a prefill across ubatches"""
     import numpy as np
 
@@ -289,8 +319,15 @@ def test_prefill_split_across_ubatches(seq_lens, query_lens, split_point, expect
     qsl_np = common.query_start_loc_cpu.numpy()
     num_tokens = common.num_actual_tokens
 
-    ubatch_slices = create_ubatch_slices(num_scheduled_tokens, split_point)
-    assert len(ubatch_slices) == 2
+    ubatch_slices, _ = maybe_create_ubatch_slices(
+        True,
+        num_scheduled_tokens,
+        num_tokens,
+        batch_spec.batch_size,
+        split_point=split_point,
+        num_ubatches=2,
+    )
+    assert ubatch_slices is not None and len(ubatch_slices) == 2
 
     first_meta = _make_metadata_with_slice(ubatch_slices[0], common)
     second_meta = _make_metadata_with_slice(ubatch_slices[1], common)
@@ -310,9 +347,13 @@ def test_prefill_split_across_ubatches(seq_lens, query_lens, split_point, expect
 
     # Check query length continuity: first-chunk + second-chunk == original qlen
     # First ubatch last request query length
-    qlen_first_last = int(first_meta.query_start_loc_cpu[-1] - first_meta.query_start_loc_cpu[-2])
+    qlen_first_last = int(
+        first_meta.query_start_loc_cpu[-1] - first_meta.query_start_loc_cpu[-2]
+    )
     # Second ubatch first request query length
-    qlen_second_first = int(second_meta.query_start_loc_cpu[1] - second_meta.query_start_loc_cpu[0])
+    qlen_second_first = int(
+        second_meta.query_start_loc_cpu[1] - second_meta.query_start_loc_cpu[0]
+    )
     assert qlen_first_last == tokens_in_first_chunk
     assert qlen_first_last + qlen_second_first == int(orig_q_lens[split_req_idx])
 
@@ -338,3 +379,68 @@ def test_prefill_split_across_ubatches(seq_lens, query_lens, split_point, expect
         # Map to original request index
         orig_idx = split_req_idx + j
         assert int(second_meta.seq_lens[j]) == seq_lens[orig_idx]
+
+
+def test_build_attention_metadata_zeros_stale_is_prefilling():
+    """_build_attention_metadata zeroes is_prefilling for padded rows."""
+    from unittest.mock import MagicMock, patch
+
+    from aphrodite.v1.attention.backend import CommonAttentionMetadata
+    from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+
+    num_reqs = 3
+    num_reqs_padded = 5
+
+    # Real rows [0-2] have known computed/prompt values; padded rows [3-4]
+    # carry stale data from a prior prefill (num_computed < num_prompt → True).
+    num_computed = torch.tensor([50, 100, 200, 10, 20], dtype=torch.int32)
+    num_prompt = torch.tensor([50, 200, 200, 100, 200], dtype=torch.int32)
+
+    runner = MagicMock()
+    runner.kv_cache_config.kv_cache_groups = [
+        MagicMock()
+    ]  # non-empty: skip early return
+    runner.attn_groups = [[]]  # empty inner list: inner loop never runs
+    runner.input_batch.num_computed_tokens_cpu_tensor = num_computed
+    runner.input_batch.num_prompt_tokens_cpu_tensor = num_prompt
+    runner.optimistic_seq_lens_cpu = torch.tensor([100, 200, 300, 0, 0])
+    runner.query_start_loc.gpu = torch.zeros(num_reqs_padded + 1, dtype=torch.int32)
+    runner.query_start_loc.cpu = torch.zeros(num_reqs_padded + 1, dtype=torch.int32)
+    runner.seq_lens = torch.zeros(num_reqs_padded, dtype=torch.int32)
+    runner.positions = torch.zeros(num_reqs_padded, dtype=torch.int64)
+    runner.routed_experts_initialized = False
+    runner.use_async_spec_decode = False
+    runner.dcp_world_size = 1
+    runner.speculative_config = None
+    runner.is_mm_prefix_lm = False
+    runner._get_encoder_seq_lens.return_value = (None, None)
+
+    # Intercept CommonAttentionMetadata construction to capture is_prefilling.
+    # With speculative_config=None the constructor is called exactly once (for
+    # cm_base), so captured reflects what the fix produced before storage.
+    captured_is_prefilling = None
+    original_init = CommonAttentionMetadata.__init__
+
+    def capturing_init(self, *args, **kwargs):
+        nonlocal captured_is_prefilling
+        if "is_prefilling" in kwargs:
+            captured_is_prefilling = kwargs["is_prefilling"]
+        original_init(self, *args, **kwargs)
+
+    with patch.object(CommonAttentionMetadata, "__init__", capturing_init):
+        GPUModelRunner._build_attention_metadata(
+            runner,
+            num_tokens=num_reqs,
+            num_reqs=num_reqs,
+            max_query_len=1,
+            num_tokens_padded=num_reqs_padded,
+            num_reqs_padded=num_reqs_padded,
+            slot_mappings={0: torch.zeros(num_reqs_padded, dtype=torch.int64)},
+        )
+
+    assert captured_is_prefilling is not None
+    assert not captured_is_prefilling[0]  # decode  (50 >= 50)
+    assert captured_is_prefilling[1]  # prefill (100 < 200)
+    assert not captured_is_prefilling[2]  # decode  (200 >= 200)
+    assert not captured_is_prefilling[3]  # stale data (10 < 100) zeroed
+    assert not captured_is_prefilling[4]  # stale data (20 < 200) zeroed

@@ -49,14 +49,16 @@ class SimpleCPUOffloadConnector(KVConnectorBase_V1, SupportsHMA):
         self,
         aphrodite_config: AphroditeConfig,
         role: KVConnectorRole,
-        kv_cache_config: "KVCacheConfig | None" = None,
+        kv_cache_config: "KVCacheConfig",
     ):
         super().__init__(aphrodite_config, role, kv_cache_config)
 
         enable_prefix_caching = aphrodite_config.cache_config.enable_prefix_caching
         extra_config = self._kv_transfer_config.kv_connector_extra_config or {}
 
-        cpu_capacity_bytes = int(extra_config.get("cpu_bytes_to_use", DEFAULT_CPU_CAPACITY_BYTES))
+        cpu_capacity_bytes = int(
+            extra_config.get("cpu_bytes_to_use", DEFAULT_CPU_CAPACITY_BYTES)
+        )
         # cpu_bytes_to_use is server-wide for compatibility;
         # cpu_bytes_to_use_per_rank overrides for per-rank capacity.
         world_size = aphrodite_config.parallel_config.world_size
@@ -78,11 +80,15 @@ class SimpleCPUOffloadConnector(KVConnectorBase_V1, SupportsHMA):
         self.worker_handler: SimpleCPUOffloadWorker | None = None
 
         if not enable_prefix_caching:
-            logger.warning("Detected prefix caching disabled, disabling CPU offload since it requires prefix caching.")
+            logger.warning(
+                "Detected prefix caching disabled, disabling CPU offload "
+                "since it requires prefix caching."
+            )
             return
 
         logger.info(
-            "SimpleCPUOffloadConnector: role=%s, per_rank=%.2f GB, world_size=%d, mode=%s",
+            "SimpleCPUOffloadConnector: role=%s, "
+            "per_rank=%.2f GB, world_size=%d, mode=%s",
             role.name,
             cpu_capacity_per_rank / (1024**3),
             world_size,
@@ -90,14 +96,24 @@ class SimpleCPUOffloadConnector(KVConnectorBase_V1, SupportsHMA):
         )
 
         if role == KVConnectorRole.SCHEDULER:
+            from aphrodite.v1.core.kv_cache_utils import resolve_kv_cache_block_sizes
+
+            assert kv_cache_config is not None
+            scheduler_block_size, hash_block_size = resolve_kv_cache_block_sizes(
+                kv_cache_config, aphrodite_config
+            )
             self.scheduler_manager = SimpleCPUOffloadScheduler(
                 aphrodite_config,
                 kv_cache_config,
                 cpu_capacity_per_rank,
+                scheduler_block_size=scheduler_block_size,
+                hash_block_size=hash_block_size,
                 lazy_offload=lazy_offload,
             )
         elif role == KVConnectorRole.WORKER:
-            self.worker_handler = SimpleCPUOffloadWorker(aphrodite_config, kv_cache_config, cpu_capacity_per_rank)
+            self.worker_handler = SimpleCPUOffloadWorker(
+                aphrodite_config, kv_cache_config, cpu_capacity_per_rank
+            )
 
     # --- Worker-side methods ---
 
@@ -157,7 +173,6 @@ class SimpleCPUOffloadConnector(KVConnectorBase_V1, SupportsHMA):
 
     # --- Scheduler-side methods ---
 
-    # NOTE: New API only for SimpleCPUOffloadConnector.
     def bind_gpu_block_pool(self, gpu_block_pool: "BlockPool") -> None:
         if self.scheduler_manager is not None:
             self.scheduler_manager.bind_gpu_block_pool(gpu_block_pool)
@@ -168,7 +183,9 @@ class SimpleCPUOffloadConnector(KVConnectorBase_V1, SupportsHMA):
         num_computed_tokens: int,
     ) -> tuple[int | None, bool]:
         if self.scheduler_manager is not None:
-            return self.scheduler_manager.get_num_new_matched_tokens(request, num_computed_tokens)
+            return self.scheduler_manager.get_num_new_matched_tokens(
+                request, num_computed_tokens
+            )
         return 0, False
 
     def update_state_after_alloc(
@@ -178,7 +195,9 @@ class SimpleCPUOffloadConnector(KVConnectorBase_V1, SupportsHMA):
         num_external_tokens: int,
     ) -> None:
         if self.scheduler_manager is not None:
-            self.scheduler_manager.update_state_after_alloc(request, blocks, num_external_tokens)
+            self.scheduler_manager.update_state_after_alloc(
+                request, blocks, num_external_tokens
+            )
 
     def build_connector_meta(
         self,
@@ -210,7 +229,9 @@ class SimpleCPUOffloadConnector(KVConnectorBase_V1, SupportsHMA):
         block_ids: tuple[list[int], ...],
     ) -> tuple[bool, dict[str, Any] | None]:
         if self.scheduler_manager is not None:
-            return self.scheduler_manager.request_finished_all_groups(request, block_ids)
+            return self.scheduler_manager.request_finished_all_groups(
+                request, block_ids
+            )
         return False, None
 
     # NOTE: New API only for SimpleCPUOffloadConnector.
@@ -224,10 +245,10 @@ class SimpleCPUOffloadConnector(KVConnectorBase_V1, SupportsHMA):
             return self.scheduler_manager.take_events()
         return []
 
+    # NOTE: Workers are not contacted. In-flight transfers drain naturally,
+    # and stale completions are ignored by the guarded
+    # SimpleCPUOffloadScheduler._process_store_event().
     def reset_cache(self) -> bool | None:
-        raise NotImplementedError(
-            "SimpleCPUOffloadConnector does not support reset_cache(). "
-            "reset_prefix_cache() requires synchronizing all pending "
-            "CPU offload transfers before clearing GPU prefix cache blocks, "
-            "which is not yet implemented."
-        )
+        if self.scheduler_manager is not None:
+            return self.scheduler_manager.reset()
+        return None

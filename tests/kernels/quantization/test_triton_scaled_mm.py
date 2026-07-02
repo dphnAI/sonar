@@ -11,10 +11,13 @@ import pytest
 import torch
 
 from aphrodite.platforms import current_platform
+from aphrodite.utils.torch_utils import set_random_seed
 
 device = "cuda"
 
-triton_scaled_mm_module = importlib.import_module("aphrodite.quantization.compressed_tensors.triton_scaled_mm")
+triton_scaled_mm_module = importlib.import_module(
+    "aphrodite.model_executor.layers.quantization.compressed_tensors.triton_scaled_mm"
+)
 triton_scaled_mm = triton_scaled_mm_module.triton_scaled_mm
 
 
@@ -53,11 +56,13 @@ def get_8bit_types():
 @pytest.mark.parametrize("max_tokens", [32])
 @pytest.mark.parametrize("num_logprobs", [10])
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="Should only run on ROCm")
-def test_rocm_compressed_tensors_w8a8(aphrodite_runner, example_prompts, model_path, max_tokens, num_logprobs):
+def test_rocm_compressed_tensors_w8a8(
+    vllm_runner, example_prompts, model_path, max_tokens, num_logprobs
+):
     dtype = "bfloat16"
 
-    with aphrodite_runner(model_path, dtype=dtype) as aphrodite_model:
-        aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+    with vllm_runner(model_path, dtype=dtype) as vllm_model:
+        vllm_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
 
 
 MNK_FACTORS = [
@@ -76,10 +81,12 @@ MNK_FACTORS = [
 @pytest.mark.parametrize("use_scalar_scale_a", [True, False])
 @pytest.mark.parametrize("use_scalar_scale_b", [True, False])
 @pytest.mark.parametrize("use_bias", [True, False])
-def test_scaled_mm(M, N, K, in_dtype, out_dtype, use_scalar_scale_a, use_scalar_scale_b, use_bias):
+def test_scaled_mm(
+    M, N, K, in_dtype, out_dtype, use_scalar_scale_a, use_scalar_scale_b, use_bias
+):
     is_floating_point_type = lambda t: torch.tensor([1, 1], dtype=t).is_floating_point()
 
-    current_platform.seed_everything(0)
+    set_random_seed(0)
 
     # NOTE: There are cases, where if the matrix is large enough, an output
     # like 65504.4 can be produced, and can easily turn into inf when

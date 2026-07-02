@@ -1,14 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Test the functionality of the Transformers backend."""
+"""Test the functionality of the Transformers modeling backend."""
 
 from typing import Any
 
 import pytest
 
-from aphrodite.platforms import current_platform
-
-from ..conftest import AphroditeRunner, HfRunner
+from ..conftest import HfRunner, AphroditeRunner
 from ..utils import multi_gpu_test, prep_prompts
 from .registry import HF_EXAMPLE_MODELS
 from .utils import check_embeddings_close, check_logprobs_close
@@ -59,10 +57,6 @@ def check_implementation(
     )
 
 
-@pytest.mark.skipif(
-    current_platform.is_rocm(),
-    reason="Llama-3.2-1B-Instruct, Ilama-3.2-1B produce memory access fault.",
-)
 @pytest.mark.parametrize(
     "model,model_impl",
     [
@@ -73,7 +67,7 @@ def check_implementation(
 )  # trust_remote_code=True by default
 def test_models(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    vllm_runner: type[AphroditeRunner],
     example_prompts: list[str],
     model: str,
     model_impl: str,
@@ -84,18 +78,23 @@ def test_models(
     installed = Version(transformers.__version__)
     required = Version("5.0.0")
     if model == "allenai/OLMoE-1B-7B-0924" and installed < required:
-        pytest.skip(f"MoE models with the Transformers backend require transformers>={required}, but got {installed}")
+        pytest.skip(
+            "MoE models with the Transformers modeling backend require "
+            f"transformers>={required}, but got {installed}"
+        )
 
-    check_implementation(hf_runner, aphrodite_runner, example_prompts, model, model_impl=model_impl)
+    check_implementation(
+        hf_runner, vllm_runner, example_prompts, model, model_impl=model_impl
+    )
 
 
-def test_hybrid_attention(aphrodite_runner: type[AphroditeRunner]) -> None:
+def test_hybrid_attention(vllm_runner: type[AphroditeRunner]) -> None:
     prompts, _, _ = prep_prompts(4, (800, 801))
     kwargs_ref = {"max_model_len": 8192, "enforce_eager": True}
     kwargs_test = {"model_impl": "transformers", **kwargs_ref}
     check_implementation(
-        aphrodite_runner,
-        aphrodite_runner,
+        vllm_runner,
+        vllm_runner,
         prompts,
         model="hmellor/tiny-random-Gemma2ForCausalLM",
         kwargs_ref=kwargs_ref,
@@ -106,13 +105,13 @@ def test_hybrid_attention(aphrodite_runner: type[AphroditeRunner]) -> None:
 @multi_gpu_test(num_gpus=2)
 def test_distributed(
     hf_runner: type[HfRunner],
-    aphrodite_runner: type[AphroditeRunner],
+    vllm_runner: type[AphroditeRunner],
     example_prompts,
 ):
     kwargs = {"model_impl": "transformers", "tensor_parallel_size": 2}
     check_implementation(
         hf_runner,
-        aphrodite_runner,
+        vllm_runner,
         example_prompts,
         "meta-llama/Llama-3.2-1B-Instruct",
         kwargs_test=kwargs,
@@ -130,47 +129,45 @@ def test_distributed(
                 "quantization": "bitsandbytes",
             },
         ),
+        ("unsloth/tinyllama-bnb-4bit", {}),
     ],
 )
 @pytest.mark.parametrize("max_tokens", [32])
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_quantization(
-    aphrodite_runner: type[AphroditeRunner],
+    vllm_runner: type[AphroditeRunner],
     example_prompts: list[str],
     model: str,
     quantization_kwargs: dict[str, str],
     max_tokens: int,
     num_logprobs: int,
 ) -> None:
-    if current_platform.is_rocm() and quantization_kwargs.get("quantization", "") == "bitsandbytes":
-        pytest.skip("bitsandbytes quantization is currently not supported in rocm.")
-
-    with aphrodite_runner(
+    with vllm_runner(
         model,
         model_impl="auto",
         enforce_eager=True,
         **quantization_kwargs,  # type: ignore[arg-type]
-    ) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
+    ) as vllm_model:
+        vllm_outputs = vllm_model.generate_greedy_logprobs(
             example_prompts, max_tokens=max_tokens, num_logprobs=num_logprobs
         )
 
-    with aphrodite_runner(
+    with vllm_runner(
         model,
         model_impl="transformers",
         enforce_eager=True,
         **quantization_kwargs,  # type: ignore[arg-type]
-    ) as aphrodite_model:
-        model_config = aphrodite_model.llm.llm_engine.model_config
+    ) as vllm_model:
+        model_config = vllm_model.llm.llm_engine.model_config
         assert model_config.using_transformers_backend()
 
-        transformers_outputs = aphrodite_model.generate_greedy_logprobs(
+        transformers_outputs = vllm_model.generate_greedy_logprobs(
             example_prompts, max_tokens=max_tokens, num_logprobs=num_logprobs
         )
 
     check_logprobs_close(
         outputs_0_lst=transformers_outputs,
-        outputs_1_lst=aphrodite_outputs,
+        outputs_1_lst=vllm_outputs,
         name_0="transformers",
         name_1="aphrodite",
     )
@@ -185,8 +182,8 @@ def test_quantization(
         "meta-llama/Llama-3.2-1B-Instruct",
     ],
 )
-def test_embed_loading(aphrodite_runner, model):
-    with aphrodite_runner(
+def test_embed_loading(vllm_runner, model):
+    with vllm_runner(
         model,
         max_model_len=1024,
         enforce_eager=True,
@@ -197,11 +194,13 @@ def test_embed_loading(aphrodite_runner, model):
         assert model_config.using_transformers_backend()
 
 
-@pytest.mark.parametrize("arch", ["TransformersEmbeddingModel", "TransformersForSequenceClassification"])
-def test_pooling(hf_runner, aphrodite_runner, example_prompts, arch):
+@pytest.mark.parametrize(
+    "arch", ["TransformersEmbeddingModel", "TransformersForSequenceClassification"]
+)
+def test_pooling(hf_runner, vllm_runner, example_prompts, arch):
     model = get_model(arch)
 
-    aphrodite_kwargs = dict(max_model_len=None, model_impl="transformers")
+    vllm_kwargs = dict(max_model_len=None, model_impl="transformers")
 
     hf_kwargs = dict()
     if arch == "TransformersEmbeddingModel":
@@ -215,27 +214,27 @@ def test_pooling(hf_runner, aphrodite_runner, example_prompts, arch):
     # "Write a short story about a robot that dreams for the first time.\n"
     # sentence_transformers will strip the input texts, see:
     # https://github.com/UKPLab/sentence-transformers/blob/v3.1.1/sentence_transformers/models/Transformer.py#L159
-    # This makes the input_ids different between hf_model and aphrodite_model.
+    # This makes the input_ids different between hf_model and vllm_model.
     # So we need to strip the input texts to avoid test failing.
     example_prompts = [str(s).strip() for s in example_prompts]
 
     with (
-        aphrodite_runner(model, **aphrodite_kwargs) as aphrodite_model,
+        vllm_runner(model, **vllm_kwargs) as vllm_model,
         hf_runner(model, **hf_kwargs) as hf_model,
     ):
-        model_config = aphrodite_model.llm.llm_engine.model_config
+        model_config = vllm_model.llm.llm_engine.model_config
         assert model_config.using_transformers_backend()
 
         if arch == "TransformersEmbeddingModel":
-            aphrodite_outputs = aphrodite_model.embed(example_prompts)
+            vllm_outputs = vllm_model.embed(example_prompts)
             hf_outputs = hf_model.encode(example_prompts)
         elif arch == "TransformersForSequenceClassification":
-            aphrodite_outputs = aphrodite_model.classify(example_prompts)
+            vllm_outputs = vllm_model.classify(example_prompts)
             hf_outputs = hf_model.classify(example_prompts)
 
     check_embeddings_close(
         embeddings_0_lst=hf_outputs,
-        embeddings_1_lst=aphrodite_outputs,
+        embeddings_1_lst=vllm_outputs,
         name_0="hf",
         name_1="aphrodite",
     )

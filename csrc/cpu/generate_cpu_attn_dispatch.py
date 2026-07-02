@@ -11,7 +11,7 @@ import os
 HEAD_DIMS_32 = [32, 64, 96, 128, 160, 192, 224, 256, 512]
 
 # Head dimensions divisible by 16 but not 32 (VEC16 only)
-HEAD_DIMS_16 = [80, 112]
+HEAD_DIMS_16 = [48, 80, 112]
 
 # ISA types
 ISA_TYPES = {
@@ -20,6 +20,8 @@ ISA_TYPES = {
     "VEC16": 2,
     "NEON": 3,
     "VXE": 4,
+    "RVV": 5,
+    "VSX": 6,
 }
 
 # KV cache index: 0 = auto (same as scalar_t), 1 = fp8_e4m3, 2 = fp8_e5m2
@@ -37,7 +39,7 @@ KV_CACHE_CPP_TYPES = {
 }
 
 # ISAs supported for head_dims divisible by 32
-ISA_FOR_32 = ["AMX", "NEON", "VEC", "VEC16", "VXE"]
+ISA_FOR_32 = ["AMX", "NEON", "VEC", "VEC16", "VXE", "RVV", "VSX"]
 
 # ISAs supported for head_dims divisible by 16 only
 ISA_FOR_16 = ["VEC16"]
@@ -55,7 +57,9 @@ def encode_params(head_dim: int, isa_type: str, kv_cache: str = "auto") -> int:
     return (head_dim << 16) | (kv_val << 8) | isa_val
 
 
-def _make_case(head_dim: int, isa: str, kv_cache: str = "auto", isa_override: str | None = None) -> str:
+def _make_case(
+    head_dim: int, isa: str, kv_cache: str = "auto", isa_override: str | None = None
+) -> str:
     """Generate a single switch case line."""
     encoded = encode_params(head_dim, isa, kv_cache)
     actual_isa = isa_override if isa_override else isa
@@ -146,6 +150,17 @@ def generate_header_file() -> str:
   #include "cpu_attn_vxe.hpp"
 #endif
 
+// cpu_attn_rvv.hpp supports VLEN=128 and VLEN=256 via RVVI() macros.
+// Other VLENs and scalar RISC-V builds skip it entirely.
+#if defined(__riscv) && defined(__riscv_v_min_vlen) && \
+    (__riscv_v_min_vlen == 128 || __riscv_v_min_vlen == 256)
+  #include "cpu_attn_rvv.hpp"
+#endif
+
+#ifdef __powerpc__
+  #include "cpu_attn_vsx.hpp"
+#endif
+
 """
 
     header += generate_helper_function()
@@ -161,7 +176,10 @@ def generate_header_file() -> str:
 
     def _macro_block(guard: str, isa_list: list[str], fp8: bool) -> str:
         """Return one CPU_ATTN_DISPATCH macro block for a given guard."""
-        enc = "    int64_t encoded_params = encode_cpu_attn_params(HEAD_DIM, ISA_TYPE, KV_CACHE_IDX); \\"
+        enc = (
+            "    int64_t encoded_params = encode_cpu_attn_params("
+            "HEAD_DIM, ISA_TYPE, KV_CACHE_IDX); \\"
+        )
         cases = generate_cases_for_isa_group(isa_list, include_fp8=fp8)
         tail = (
             "\n"
@@ -202,6 +220,25 @@ def generate_header_file() -> str:
         ["VXE", "VEC", "VEC16"],
         fp8=False,
     )
+    # RISC-V with RVV.  cpu_attn_rvv.hpp supports VLEN=128 and VLEN=256
+    # via RVVI() macros.  Builds with a supported VLEN get
+    # RVV+VEC+VEC16; other RISC-V builds fall back to VEC/VEC16 only.
+    header += _macro_block(
+        "#elif defined(__riscv) && defined(__riscv_v_min_vlen) "
+        "&& (__riscv_v_min_vlen == 128 || __riscv_v_min_vlen == 256)",
+        ["RVV", "VEC", "VEC16"],
+        fp8=False,
+    )
+    header += _macro_block(
+        "#elif defined(__riscv)",
+        ["VEC", "VEC16"],
+        fp8=False,
+    )
+    header += _macro_block(
+        "#elif defined(__powerpc__)",
+        ["VSX", "VEC", "VEC16"],
+        fp8=False,
+    )
     header += _macro_block(
         "#elif defined(__AVX512F__)",
         ["VEC", "VEC16"],
@@ -218,14 +255,18 @@ def generate_header_file() -> str:
         fp8=False,
     )
     header += (
-        "#endif  /* CPU_CAPABILITY_AMXBF16 / __aarch64__ / __s390x__ */\n\n#endif  // CPU_ATTN_DISPATCH_GENERATED_H\n"
+        "#endif  /* CPU_CAPABILITY_AMXBF16 / __aarch64__ / __s390x__ /"
+        " __riscv / __powerpc__ */\n\n"
+        "#endif  // CPU_ATTN_DISPATCH_GENERATED_H\n"
     )
 
     return header
 
 
 def main():
-    output_path = os.path.join(os.path.dirname(__file__), "cpu_attn_dispatch_generated.h")
+    output_path = os.path.join(
+        os.path.dirname(__file__), "cpu_attn_dispatch_generated.h"
+    )
 
     with open(output_path, "w") as f:
         f.write(generate_header_file())

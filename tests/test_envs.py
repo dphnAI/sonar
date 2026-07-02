@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import os
 from unittest.mock import patch
 
@@ -7,6 +8,7 @@ import pytest
 
 import aphrodite.envs as envs
 from aphrodite.envs import (
+    disable_envs_cache,
     enable_envs_cache,
     env_list_with_choices,
     env_set_with_choices,
@@ -26,6 +28,14 @@ def test_getattr_without_cache(monkeypatch: pytest.MonkeyPatch):
     assert not hasattr(envs.__getattr__, "cache_info")
 
 
+def test_nixl_side_channel_host_is_not_compile_factor(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("APHRODITE_NIXL_SIDE_CHANNEL_HOST", "10.0.0.15")
+
+    assert "APHRODITE_NIXL_SIDE_CHANNEL_HOST" not in envs.compile_factors()
+
+
 def test_getattr_with_cache(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("APHRODITE_HOST_IP", "1.1.1.1")
     monkeypatch.setenv("APHRODITE_PORT", "1234")
@@ -35,7 +45,7 @@ def test_getattr_with_cache(monkeypatch: pytest.MonkeyPatch):
     # Enable envs cache and ignore ongoing environment changes
     enable_envs_cache()
 
-    # __getattr__ is not decorated with functools.cache
+    # __getattr__ is decorated with functools.cache
     assert hasattr(envs.__getattr__, "cache_info")
     start_hits = envs.__getattr__.cache_info().hits
 
@@ -47,11 +57,50 @@ def test_getattr_with_cache(monkeypatch: pytest.MonkeyPatch):
     # All environment variables are cached
     for environment_variable in environment_variables:
         envs.__getattr__(environment_variable)
-    assert envs.__getattr__.cache_info().hits == start_hits + 2 + len(environment_variables)
+    assert envs.__getattr__.cache_info().hits == start_hits + 2 + len(
+        environment_variables
+    )
 
     # Reset envs.__getattr__ back to none-cached version to
     # avoid affecting other tests
     envs.__getattr__ = envs.__getattr__.__wrapped__
+
+
+def test_getattr_with_reset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APHRODITE_HOST_IP", "1.1.1.1")
+    # __getattr__ is not decorated with functools.cache
+    assert not hasattr(envs.__getattr__, "cache_info")
+
+    # Enable envs cache and ignore ongoing environment changes
+    enable_envs_cache()
+    assert envs.APHRODITE_HOST_IP == "1.1.1.1"
+    # With cache enabled, the environment variable value is cached and unchanged
+    monkeypatch.setenv("APHRODITE_HOST_IP", "2.2.2.2")
+    assert envs.APHRODITE_HOST_IP == "1.1.1.1"
+
+    disable_envs_cache()
+    assert envs.APHRODITE_HOST_IP == "2.2.2.2"
+    # After cache disabled, the environment variable value would be synced
+    # with os.environ
+    monkeypatch.setenv("APHRODITE_HOST_IP", "3.3.3.3")
+    assert envs.APHRODITE_HOST_IP == "3.3.3.3"
+
+
+def test_is_envs_cache_enabled() -> None:
+    assert not envs._is_envs_cache_enabled()
+    enable_envs_cache()
+    assert envs._is_envs_cache_enabled()
+
+    # Only wrap one-layer of cache, so we only need to
+    # call disable once to reset.
+    enable_envs_cache()
+    enable_envs_cache()
+    enable_envs_cache()
+    disable_envs_cache()
+    assert not envs._is_envs_cache_enabled()
+
+    disable_envs_cache()
+    assert not envs._is_envs_cache_enabled()
 
 
 class TestEnvWithChoices:
@@ -59,7 +108,9 @@ class TestEnvWithChoices:
 
     def test_default_value_returned_when_env_not_set(self):
         """Test default is returned when env var is not set."""
-        env_func = env_with_choices("NONEXISTENT_ENV", "default", ["option1", "option2"])
+        env_func = env_with_choices(
+            "NONEXISTENT_ENV", "default", ["option1", "option2"]
+        )
         assert env_func() == "default"
 
     def test_none_default_returned_when_env_not_set(self):
@@ -70,40 +121,58 @@ class TestEnvWithChoices:
     def test_valid_value_returned_case_sensitive(self):
         """Test that valid value is returned in case sensitive mode."""
         with patch.dict(os.environ, {"TEST_ENV": "option1"}):
-            env_func = env_with_choices("TEST_ENV", "default", ["option1", "option2"], case_sensitive=True)
+            env_func = env_with_choices(
+                "TEST_ENV", "default", ["option1", "option2"], case_sensitive=True
+            )
             assert env_func() == "option1"
 
     def test_valid_lowercase_value_returned_case_insensitive(self):
         """Test that lowercase value is accepted in case insensitive mode."""
         with patch.dict(os.environ, {"TEST_ENV": "option1"}):
-            env_func = env_with_choices("TEST_ENV", "default", ["OPTION1", "OPTION2"], case_sensitive=False)
+            env_func = env_with_choices(
+                "TEST_ENV", "default", ["OPTION1", "OPTION2"], case_sensitive=False
+            )
             assert env_func() == "option1"
 
     def test_valid_uppercase_value_returned_case_insensitive(self):
         """Test that uppercase value is accepted in case insensitive mode."""
         with patch.dict(os.environ, {"TEST_ENV": "OPTION1"}):
-            env_func = env_with_choices("TEST_ENV", "default", ["option1", "option2"], case_sensitive=False)
+            env_func = env_with_choices(
+                "TEST_ENV", "default", ["option1", "option2"], case_sensitive=False
+            )
             assert env_func() == "OPTION1"
 
     def test_invalid_value_raises_error_case_sensitive(self):
         """Test that invalid value raises ValueError in case sensitive mode."""
         with patch.dict(os.environ, {"TEST_ENV": "invalid"}):
-            env_func = env_with_choices("TEST_ENV", "default", ["option1", "option2"], case_sensitive=True)
-            with pytest.raises(ValueError, match="Invalid value 'invalid' for TEST_ENV"):
+            env_func = env_with_choices(
+                "TEST_ENV", "default", ["option1", "option2"], case_sensitive=True
+            )
+            with pytest.raises(
+                ValueError, match="Invalid value 'invalid' for TEST_ENV"
+            ):
                 env_func()
 
     def test_case_mismatch_raises_error_case_sensitive(self):
         """Test that case mismatch raises ValueError in case sensitive mode."""
         with patch.dict(os.environ, {"TEST_ENV": "OPTION1"}):
-            env_func = env_with_choices("TEST_ENV", "default", ["option1", "option2"], case_sensitive=True)
-            with pytest.raises(ValueError, match="Invalid value 'OPTION1' for TEST_ENV"):
+            env_func = env_with_choices(
+                "TEST_ENV", "default", ["option1", "option2"], case_sensitive=True
+            )
+            with pytest.raises(
+                ValueError, match="Invalid value 'OPTION1' for TEST_ENV"
+            ):
                 env_func()
 
     def test_invalid_value_raises_error_case_insensitive(self):
         """Test that invalid value raises ValueError when case insensitive."""
         with patch.dict(os.environ, {"TEST_ENV": "invalid"}):
-            env_func = env_with_choices("TEST_ENV", "default", ["option1", "option2"], case_sensitive=False)
-            with pytest.raises(ValueError, match="Invalid value 'invalid' for TEST_ENV"):
+            env_func = env_with_choices(
+                "TEST_ENV", "default", ["option1", "option2"], case_sensitive=False
+            )
+            with pytest.raises(
+                ValueError, match="Invalid value 'invalid' for TEST_ENV"
+            ):
                 env_func()
 
     def test_callable_choices_resolved_correctly(self):
@@ -124,7 +193,9 @@ class TestEnvWithChoices:
 
         with patch.dict(os.environ, {"TEST_ENV": "invalid"}):
             env_func = env_with_choices("TEST_ENV", "default", get_choices)
-            with pytest.raises(ValueError, match="Invalid value 'invalid' for TEST_ENV"):
+            with pytest.raises(
+                ValueError, match="Invalid value 'invalid' for TEST_ENV"
+            ):
                 env_func()
 
 
@@ -133,7 +204,9 @@ class TestEnvListWithChoices:
 
     def test_default_list_returned_when_env_not_set(self):
         """Test that default list is returned when env var is not set."""
-        env_func = env_list_with_choices("NONEXISTENT_ENV", ["default1", "default2"], ["option1", "option2"])
+        env_func = env_list_with_choices(
+            "NONEXISTENT_ENV", ["default1", "default2"], ["option1", "option2"]
+        )
         assert env_func() == ["default1", "default2"]
 
     def test_empty_default_list_returned_when_env_not_set(self):
@@ -168,26 +241,34 @@ class TestEnvListWithChoices:
     def test_empty_string_returns_default(self):
         """Test that empty string returns default."""
         with patch.dict(os.environ, {"TEST_ENV": ""}):
-            env_func = env_list_with_choices("TEST_ENV", ["default"], ["option1", "option2"])
+            env_func = env_list_with_choices(
+                "TEST_ENV", ["default"], ["option1", "option2"]
+            )
             assert env_func() == ["default"]
 
     def test_only_commas_returns_default(self):
         """Test that string with only commas returns default."""
         with patch.dict(os.environ, {"TEST_ENV": ",,,"}):
-            env_func = env_list_with_choices("TEST_ENV", ["default"], ["option1", "option2"])
+            env_func = env_list_with_choices(
+                "TEST_ENV", ["default"], ["option1", "option2"]
+            )
             assert env_func() == ["default"]
 
     def test_case_sensitive_validation(self):
         """Test case sensitive validation."""
         with patch.dict(os.environ, {"TEST_ENV": "option1,OPTION2"}):
-            env_func = env_list_with_choices("TEST_ENV", [], ["option1", "option2"], case_sensitive=True)
+            env_func = env_list_with_choices(
+                "TEST_ENV", [], ["option1", "option2"], case_sensitive=True
+            )
             with pytest.raises(ValueError, match="Invalid value 'OPTION2' in TEST_ENV"):
                 env_func()
 
     def test_case_insensitive_validation(self):
         """Test case insensitive validation."""
         with patch.dict(os.environ, {"TEST_ENV": "OPTION1,option2"}):
-            env_func = env_list_with_choices("TEST_ENV", [], ["option1", "option2"], case_sensitive=False)
+            env_func = env_list_with_choices(
+                "TEST_ENV", [], ["option1", "option2"], case_sensitive=False
+            )
             assert env_func() == ["OPTION1", "option2"]
 
     def test_invalid_value_in_list_raises_error(self):
@@ -230,7 +311,9 @@ class TestEnvSetWithChoices:
 
     def test_default_list_returned_when_env_not_set(self):
         """Test that default list is returned when env var is not set."""
-        env_func = env_set_with_choices("NONEXISTENT_ENV", ["default1", "default2"], ["option1", "option2"])
+        env_func = env_set_with_choices(
+            "NONEXISTENT_ENV", ["default1", "default2"], ["option1", "option2"]
+        )
         assert env_func() == {"default1", "default2"}
 
     def test_empty_default_list_returned_when_env_not_set(self):
@@ -265,26 +348,34 @@ class TestEnvSetWithChoices:
     def test_empty_string_returns_default(self):
         """Test that empty string returns default."""
         with patch.dict(os.environ, {"TEST_ENV": ""}):
-            env_func = env_set_with_choices("TEST_ENV", ["default"], ["option1", "option2"])
+            env_func = env_set_with_choices(
+                "TEST_ENV", ["default"], ["option1", "option2"]
+            )
             assert env_func() == {"default"}
 
     def test_only_commas_returns_default(self):
         """Test that string with only commas returns default."""
         with patch.dict(os.environ, {"TEST_ENV": ",,,"}):
-            env_func = env_set_with_choices("TEST_ENV", ["default"], ["option1", "option2"])
+            env_func = env_set_with_choices(
+                "TEST_ENV", ["default"], ["option1", "option2"]
+            )
             assert env_func() == {"default"}
 
     def test_case_sensitive_validation(self):
         """Test case sensitive validation."""
         with patch.dict(os.environ, {"TEST_ENV": "option1,OPTION2"}):
-            env_func = env_set_with_choices("TEST_ENV", [], ["option1", "option2"], case_sensitive=True)
+            env_func = env_set_with_choices(
+                "TEST_ENV", [], ["option1", "option2"], case_sensitive=True
+            )
             with pytest.raises(ValueError, match="Invalid value 'OPTION2' in TEST_ENV"):
                 env_func()
 
     def test_case_insensitive_validation(self):
         """Test case insensitive validation."""
         with patch.dict(os.environ, {"TEST_ENV": "OPTION1,option2"}):
-            env_func = env_set_with_choices("TEST_ENV", [], ["option1", "option2"], case_sensitive=False)
+            env_func = env_set_with_choices(
+                "TEST_ENV", [], ["option1", "option2"], case_sensitive=False
+            )
             assert env_func() == {"OPTION1", "option2"}
 
     def test_invalid_value_in_list_raises_error(self):
@@ -320,3 +411,106 @@ class TestEnvSetWithChoices:
         with patch.dict(os.environ, {"TEST_ENV": "option1,option1,option2"}):
             env_func = env_set_with_choices("TEST_ENV", [], ["option1", "option2"])
             assert env_func() == {"option1", "option2"}
+
+
+class TestVllmConfigureLogging:
+    """Test cases for APHRODITE_CONFIGURE_LOGGING environment variable."""
+
+    def test_configure_logging_defaults_to_true(self):
+        """Test that APHRODITE_CONFIGURE_LOGGING defaults to True when not set."""
+        # Ensure the env var is not set
+        with patch.dict(os.environ, {}, clear=False):
+            if "APHRODITE_CONFIGURE_LOGGING" in os.environ:
+                del os.environ["APHRODITE_CONFIGURE_LOGGING"]
+
+            # Clear cache if it exists
+            if hasattr(envs.__getattr__, "cache_clear"):
+                envs.__getattr__.cache_clear()
+
+            result = envs.APHRODITE_CONFIGURE_LOGGING
+            assert result is True
+            assert isinstance(result, bool)
+
+    def test_configure_logging_with_zero_string(self):
+        """Test that APHRODITE_CONFIGURE_LOGGING='0' evaluates to False."""
+        with patch.dict(os.environ, {"APHRODITE_CONFIGURE_LOGGING": "0"}):
+            # Clear cache if it exists
+            if hasattr(envs.__getattr__, "cache_clear"):
+                envs.__getattr__.cache_clear()
+
+            result = envs.APHRODITE_CONFIGURE_LOGGING
+            assert result is False
+            assert isinstance(result, bool)
+
+    def test_configure_logging_with_one_string(self):
+        """Test that APHRODITE_CONFIGURE_LOGGING='1' evaluates to True."""
+        with patch.dict(os.environ, {"APHRODITE_CONFIGURE_LOGGING": "1"}):
+            # Clear cache if it exists
+            if hasattr(envs.__getattr__, "cache_clear"):
+                envs.__getattr__.cache_clear()
+
+            result = envs.APHRODITE_CONFIGURE_LOGGING
+            assert result is True
+            assert isinstance(result, bool)
+
+    def test_configure_logging_with_invalid_value_raises_error(self):
+        """Test that invalid APHRODITE_CONFIGURE_LOGGING value raises ValueError."""
+        with patch.dict(os.environ, {"APHRODITE_CONFIGURE_LOGGING": "invalid"}):
+            # Clear cache if it exists
+            if hasattr(envs.__getattr__, "cache_clear"):
+                envs.__getattr__.cache_clear()
+
+            with pytest.raises(ValueError, match="invalid literal for int"):
+                _ = envs.APHRODITE_CONFIGURE_LOGGING
+
+
+class TestVllmMaxNSequences:
+    def test_default_value(self):
+        """Test that APHRODITE_MAX_N_SEQUENCES defaults to 64."""
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("APHRODITE_MAX_N_SEQUENCES", None)
+            if hasattr(envs.__getattr__, "cache_clear"):
+                envs.__getattr__.cache_clear()
+
+            assert envs.APHRODITE_MAX_N_SEQUENCES == 16384
+
+    def test_custom_value(self, monkeypatch: pytest.MonkeyPatch):
+        """Test that APHRODITE_MAX_N_SEQUENCES can be overridden."""
+        monkeypatch.setenv("APHRODITE_MAX_N_SEQUENCES", "128")
+        if hasattr(envs.__getattr__, "cache_clear"):
+            envs.__getattr__.cache_clear()
+
+        assert envs.APHRODITE_MAX_N_SEQUENCES == 128
+
+    def test_sampling_params_respects_limit(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Test that SamplingParams rejects n above the limit."""
+        from aphrodite.sampling_params import SamplingParams
+
+        monkeypatch.delenv("APHRODITE_MAX_N_SEQUENCES", raising=False)
+        if hasattr(envs.__getattr__, "cache_clear"):
+            envs.__getattr__.cache_clear()
+
+        max_n = envs.APHRODITE_MAX_N_SEQUENCES
+        SamplingParams(n=max_n)
+
+        with pytest.raises(ValueError, match="n must be at most"):
+            SamplingParams(n=max_n + 1)
+
+    def test_sampling_params_respects_custom_limit(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Test that SamplingParams uses the overridden env var limit."""
+        from aphrodite.sampling_params import SamplingParams
+
+        monkeypatch.setenv("APHRODITE_MAX_N_SEQUENCES", "128")
+        if hasattr(envs.__getattr__, "cache_clear"):
+            envs.__getattr__.cache_clear()
+
+        SamplingParams(n=128)
+
+        with pytest.raises(ValueError, match="n must be at most 128"):
+            SamplingParams(n=129)

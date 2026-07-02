@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from einops import rearrange
 from transformers.image_processing_utils import BatchFeature
 
-from aphrodite.config import AphroditeConfig, ModelConfig
+from aphrodite.config import ModelConfig, AphroditeConfig
 from aphrodite.config.multimodal import BaseDummyOptions
 from aphrodite.distributed import parallel_state
 from aphrodite.distributed import utils as dist_utils
@@ -25,9 +25,6 @@ from aphrodite.model_executor.layers.linear import (
     RowParallelLinear,
 )
 from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.model_loader.weight_utils import (
-    default_weight_loader,
-)
 from aphrodite.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsLoRA,
@@ -75,11 +72,17 @@ from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
 from .vision import is_vit_use_data_parallel
 
 
-def create_cumulative_seq_lengths(seq_sizes: torch.Tensor, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+def create_cumulative_seq_lengths(
+    seq_sizes: torch.Tensor, device: torch.device
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Create cumulative sequence lengths for variable-length attention."""
     cu_seqlens = torch.zeros(len(seq_sizes) + 1, dtype=torch.int32, device=device)
     cu_seqlens[1:] = seq_sizes.cumsum(0)
-    max_seqlen = seq_sizes.max() if len(seq_sizes) > 0 else torch.tensor(0, dtype=torch.int32, device=device)
+    max_seqlen = (
+        seq_sizes.max()
+        if len(seq_sizes) > 0
+        else torch.tensor(0, dtype=torch.int32, device=device)
+    )
     return cu_seqlens, max_seqlen
 
 
@@ -105,7 +108,9 @@ class Siglip2VariableSequenceEmbeddings(nn.Module):
     ) -> torch.Tensor:
         # Prepare positional embeddings grid: (1, embed_dim, h, w)
         positional_embeddings = (
-            self.position_embedding.weight.reshape(self.position_embedding_size, self.position_embedding_size, -1)
+            self.position_embedding.weight.reshape(
+                self.position_embedding_size, self.position_embedding_size, -1
+            )
             .permute(2, 0, 1)
             .unsqueeze(0)
         )
@@ -128,7 +133,9 @@ class Siglip2VariableSequenceEmbeddings(nn.Module):
                 )
                 # Reshape from (1, embed_dim, height, width) to
                 # (height*width, embed_dim)
-                resized_pos_embed = resized_pos_embed.reshape(self.embed_dim, height * width).transpose(0, 1)
+                resized_pos_embed = resized_pos_embed.reshape(
+                    self.embed_dim, height * width
+                ).transpose(0, 1)
             else:
                 # Fallback - should never happen in practice
                 resized_pos_embed = positional_embeddings.reshape(
@@ -141,11 +148,15 @@ class Siglip2VariableSequenceEmbeddings(nn.Module):
         pos_embeds = torch.cat(pos_embeds_list, dim=0)
         return pos_embeds
 
-    def forward(self, packed_seq_patches: tuple[torch.Tensor, torch.Tensor, torch.Tensor]):
+    def forward(
+        self, packed_seq_patches: tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+    ):
         seq_patches, _seq_sizes, _spatial_shapes = packed_seq_patches
 
         target_weight = self.patch_embedding.weight
-        seq_patches = seq_patches.to(device=target_weight.device, dtype=target_weight.dtype)
+        seq_patches = seq_patches.to(
+            device=target_weight.device, dtype=target_weight.dtype
+        )
         patch_embeds = self.patch_embedding(seq_patches)
         pos_embeds = self.positional_embeddings(packed_seq_patches)
 
@@ -195,7 +206,8 @@ def create_pixel_shuffle_index_map(
         (token_grids[:, 0] % r == 0).all() and (token_grids[:, 1] % r == 0).all()
     ):
         raise AssertionError(
-            f"Every (H,W) in `token_grids` must be divisible by scale_factor={r}, got {token_grids.tolist()}"
+            "Every (H,W) in `token_grids` must be divisible by "
+            f"scale_factor={r}, got {token_grids.tolist()}"
         )
 
     gather_chunks: list[torch.Tensor] = []
@@ -301,12 +313,20 @@ class IsaacProcessingInfo(BaseProcessingInfo):
                 # Vision parameters - map from HF names
                 vision_config=getattr(original_config, "vision_config", None),
                 vision_patch_size=getattr(original_config, "video_patch_size", 16),
-                vision_max_num_patches=getattr(original_config, "vision_max_num_patches", 256),
-                vision_min_num_patches=getattr(original_config, "vision_min_num_patches", None),
+                vision_max_num_patches=getattr(
+                    original_config, "vision_max_num_patches", 256
+                ),
+                vision_min_num_patches=getattr(
+                    original_config, "vision_min_num_patches", None
+                ),
                 pixel_shuffle_scale=getattr(original_config, "pixel_shuffle_scale", 1),
-                max_sequence_length=getattr(original_config, "max_sequence_length", 16384),
+                max_sequence_length=getattr(
+                    original_config, "max_sequence_length", 16384
+                ),
                 vision_token=getattr(original_config, "vision_token", "<image>"),
-                vision_attn_implementation=getattr(original_config, "vision_attn_implementation", None),
+                vision_attn_implementation=getattr(
+                    original_config, "vision_attn_implementation", None
+                ),
             )
         return IsaacConfig()
 
@@ -344,7 +364,9 @@ class IsaacProcessingInfo(BaseProcessingInfo):
         mm_counts: Mapping[str, int],
     ) -> Mapping[str, int]:
         hf_config = self.get_hf_config()
-        num_vision_tokens = hf_config.vision_max_num_patches // (hf_config.pixel_shuffle_scale**2)
+        num_vision_tokens = hf_config.vision_max_num_patches // (
+            hf_config.pixel_shuffle_scale**2
+        )
         return {"image": num_vision_tokens}
 
 
@@ -415,7 +437,9 @@ class IsaacMultiModalProcessor(BaseMultiModalProcessor):
         image_grid_sizes = image_grid_thw.prod(-1)
 
         return {
-            "pixel_values": MultiModalFieldConfig.flat_from_sizes("image", image_grid_sizes),
+            "pixel_values": MultiModalFieldConfig.flat_from_sizes(
+                "image", image_grid_sizes
+            ),
             "image_grid_thw": MultiModalFieldConfig.batched("image"),
         }
 
@@ -459,10 +483,18 @@ class Siglip2VisionAttention(nn.Module):
         super().__init__()
 
         use_data_parallel = is_vit_use_data_parallel()
-        self.tp_size = 1 if use_data_parallel else parallel_state.get_tensor_model_parallel_world_size()
+        self.tp_size = (
+            1
+            if use_data_parallel
+            else parallel_state.get_tensor_model_parallel_world_size()
+        )
         self.tp_rank = parallel_state.get_tensor_model_parallel_rank()
-        self.hidden_size_per_attention_head = dist_utils.divide(config.hidden_size, config.num_attention_heads)
-        self.num_attention_heads_per_partition = dist_utils.divide(config.num_attention_heads, self.tp_size)
+        self.hidden_size_per_attention_head = dist_utils.divide(
+            config.hidden_size, config.num_attention_heads
+        )
+        self.num_attention_heads_per_partition = dist_utils.divide(
+            config.num_attention_heads, self.tp_size
+        )
 
         self.qkv_proj = QKVParallelLinear(
             hidden_size=config.hidden_size,
@@ -617,6 +649,14 @@ class Siglip2Encoder(nn.Module):
 
 
 class Siglip2VisionTransformer(nn.Module):
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_stacked={
+            ".q_proj": (".qkv_proj", "q"),
+            ".k_proj": (".qkv_proj", "k"),
+            ".v_proj": (".qkv_proj", "v"),
+        }
+    )
+
     def __init__(
         self,
         config: PixelShuffleSiglip2VisionConfig,
@@ -656,7 +696,9 @@ class Siglip2VisionTransformer(nn.Module):
         # Add a pseudo batch dimension for the encoder
         hidden_states = hidden_states.unsqueeze(0)
 
-        cu_seqlens, max_seqlen = create_cumulative_seq_lengths(seq_sizes, hidden_states.device)
+        cu_seqlens, max_seqlen = create_cumulative_seq_lengths(
+            seq_sizes, hidden_states.device
+        )
 
         hidden_states = self.encoder(
             inputs_embeds=hidden_states,
@@ -678,31 +720,8 @@ class Siglip2VisionTransformer(nn.Module):
         return hidden_states
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            # (param_name, shard_name, shard_id)
-            ("qkv_proj", "q_proj", "q"),
-            ("qkv_proj", "k_proj", "k"),
-            ("qkv_proj", "v_proj", "v"),
-        ]
-        params_dict = dict(self.named_parameters())
-        loaded_params: set[str] = set()
-
-        for name, loaded_weight in weights:
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                if weight_name not in name:
-                    continue
-                name = name.replace(weight_name, param_name)
-
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
+        loader = AutoWeightsLoader(self)
+        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
 
 
 def _resolve_vision_token_id(model_config: ModelConfig, vision_token: str) -> int:
@@ -744,7 +763,9 @@ class IsaacVisionEmbedding(nn.Module):
             return_bias=False,
         )
 
-    def forward(self, packed_seq_patches: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+    def forward(
+        self, packed_seq_patches: tuple[torch.Tensor, torch.Tensor]
+    ) -> torch.Tensor:
         hidden_states = self.transformer(packed_seq_patches)
         hidden_states = self.linear_fc1(hidden_states)
         hidden_states = self.act(hidden_states)
@@ -757,7 +778,9 @@ class IsaacVisionEmbedding(nn.Module):
     info=IsaacProcessingInfo,
     dummy_inputs=IsaacDummyInputsBuilder,
 )
-class IsaacForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA, SupportsPP, SupportsMRoPE):
+class IsaacForConditionalGeneration(
+    nn.Module, SupportsMultiModal, SupportsLoRA, SupportsPP, SupportsMRoPE
+):
     packed_modules_mapping = {
         "qkv_proj": [
             "q_proj",
@@ -808,11 +831,17 @@ class IsaacForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
             head_dim // 8,
         ]
 
-        self.vision_token_id = _resolve_vision_token_id(aphrodite_config.model_config, config.vision_token)
+        self.vision_token_id = _resolve_vision_token_id(
+            aphrodite_config.model_config, config.vision_token
+        )
         config.image_token_id = self.vision_token_id
 
         text_cfg = getattr(config, "text_config", None)
-        target_cfg = text_cfg if text_cfg is not None and not isinstance(text_cfg, dict) else config
+        target_cfg = (
+            text_cfg
+            if text_cfg is not None and not isinstance(text_cfg, dict)
+            else config
+        )
 
         rope_scaling = getattr(target_cfg, "rope_scaling", None)
         if rope_scaling is None and target_cfg is config:
@@ -822,7 +851,9 @@ class IsaacForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
         rope_parameters = target_cfg.rope_parameters
         rope_parameters["mrope_section"] = calculated_mrope_section
         if rope_scaling is not None and "mrope_interleaved" in rope_scaling:
-            rope_parameters.setdefault("mrope_interleaved", rope_scaling["mrope_interleaved"])
+            rope_parameters.setdefault(
+                "mrope_interleaved", rope_scaling["mrope_interleaved"]
+            )
         target_cfg.rope_parameters = rope_parameters
 
         with self._mark_language_model(aphrodite_config):
@@ -832,7 +863,9 @@ class IsaacForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
-        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.language_model.make_empty_intermediate_tensors
+        )
 
         vision_cfg = config.vision_config
         if vision_cfg is None:
@@ -876,10 +909,14 @@ class IsaacForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
     ) -> tuple[torch.Tensor, int]:
         llm_pos_ids_list = []
         st = 0
-        for offset, llm_grid_h, llm_grid_w in self.iter_mm_grid_hw(input_tokens, mm_features):
+        for offset, llm_grid_h, llm_grid_w in self.iter_mm_grid_hw(
+            input_tokens, mm_features
+        ):
             text_len = offset - st
             st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-            llm_pos_ids_list.append(np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx)
+            llm_pos_ids_list.append(
+                np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx
+            )
 
             grid_indices = np.indices((1, llm_grid_h, llm_grid_w)).reshape(3, -1)
             grid_indices[0, :] = grid_indices[0, :] + text_len + st_idx
@@ -889,14 +926,18 @@ class IsaacForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
         if st < len(input_tokens):
             st_idx = llm_pos_ids_list[-1][0, -1] + 1 if len(llm_pos_ids_list) > 0 else 0
             text_len = len(input_tokens) - st
-            llm_pos_ids_list.append(np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx)
+            llm_pos_ids_list.append(
+                np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx
+            )
 
         llm_positions = np.concatenate(llm_pos_ids_list, axis=1).reshape(3, -1)
         mrope_position_delta = (llm_positions.max() + 1 - len(input_tokens)).item()
 
         return torch.from_numpy(llm_positions), mrope_position_delta
 
-    def _parse_and_validate_image_input(self, **kwargs: object) -> IsaacImagePixelInputs | None:
+    def _parse_and_validate_image_input(
+        self, **kwargs: object
+    ) -> IsaacImagePixelInputs | None:
         pixel_values = kwargs.get("pixel_values")
         image_grid_thw = kwargs.get("image_grid_thw")
         if pixel_values is None or image_grid_thw is None:

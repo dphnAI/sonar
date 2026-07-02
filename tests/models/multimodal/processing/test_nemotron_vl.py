@@ -23,7 +23,10 @@ def _get_expected_num_patches(
     min_num: int,
     max_num: int,
 ):
-    from aphrodite.modeling.models.nemotron_vl import calculate_nemotron_vl_targets, get_nemotron_vl_target_ratios
+    from aphrodite.transformers_utils.processors.nemotron_vl import (
+        calculate_nemotron_vl_targets,
+        get_nemotron_vl_target_ratios,
+    )
 
     width, height = image.size
 
@@ -61,10 +64,15 @@ def _run_check(
     mm_data = {"image": images}
 
     total_expected_num_patches = sum(
-        _get_expected_num_patches(config, image, len(images), min_num, max_num) for image in images
+        _get_expected_num_patches(config, image, len(images), min_num, max_num)
+        for image in images
     )
     print(total_expected_num_patches)
-    processed_inputs = processor.apply(prompt, mm_data, mm_processor_kwargs)
+    processed_inputs = processor(
+        prompt,
+        mm_items=processor.info.parse_mm_data(mm_data),
+        hf_processor_mm_kwargs=mm_processor_kwargs,
+    )
 
     # Ensure we have the right number of placeholders per num_crops size
     image_token_id = tokenizer.convert_tokens_to_ids("<image>")

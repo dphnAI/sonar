@@ -13,7 +13,7 @@ This reduces the number of NCCL calls per attention layer by exchanging
 the partial output and LSE in a single packed All-to-All payload.
 
 Usage:
-    aphrodite run model --tp 16 --dcp 16 --dcp-comm-backend a2a
+    aphrodite serve model --tp 16 --dcp 16 --dcp-comm-backend a2a
 
 Reference: https://arxiv.org/abs/2507.07120
 """
@@ -26,10 +26,6 @@ import torch
 import torch.distributed as dist
 
 from aphrodite.triton_utils import tl, triton
-from aphrodite.v1.worker.workspace import (
-    current_workspace_manager,
-    is_workspace_manager_initialized,
-)
 
 if TYPE_CHECKING:
     from aphrodite.distributed.parallel_state import GroupCoordinator
@@ -117,13 +113,16 @@ def _dcp_a2a_send_recv_buffers(
     device: torch.device,
     dtype: torch.dtype,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    if is_workspace_manager_initialized():
-        send_buffer, recv_buffer = current_workspace_manager().get_simultaneous(
-            (shape, dtype),
-            (shape, dtype),
-        )
-        return send_buffer, recv_buffer
-
+    # Don't use the shared WorkspaceManager here. A FULL cudagraph bakes in the
+    # buffer address at capture, but the workspace is growable and sized only to
+    # the largest *captured* batch (the cudagraph capture cap). Any eager a2a
+    # with a bigger batch regrows it, freeing that address and poisoning every
+    # captured graph -> illegal memory access on replay. This bites the very
+    # first request: the post-capture warmup runs an eager decode at
+    # max_num_seqs (> the cap), so the graphs are already dangling before the
+    # server is ready. torch.empty buffers instead live in the graph's private
+    # pool and stay valid for its lifetime (as _dcp_a2a_unpack_combine and the
+    # AG+RS combine path already rely on).
     return (
         torch.empty(shape, device=device, dtype=dtype),
         torch.empty(shape, device=device, dtype=dtype),
@@ -155,15 +154,25 @@ def _dcp_a2a_pack_send_kernel(
 
     for rank_idx in tl.static_range(N):
         src_head_idx = rank_idx * H_PER_RANK + local_head_idx
-        send_base = rank_idx * send_stride_N + batch_idx * send_stride_B + local_head_idx * send_stride_H
+        send_base = (
+            rank_idx * send_stride_N
+            + batch_idx * send_stride_B
+            + local_head_idx * send_stride_H
+        )
 
-        out_offsets = batch_idx * out_stride_B + src_head_idx * out_stride_H + d_offsets * out_stride_D
+        out_offsets = (
+            batch_idx * out_stride_B
+            + src_head_idx * out_stride_H
+            + d_offsets * out_stride_D
+        )
         tl.store(
             send_ptr + send_base + d_offsets * send_stride_D,
             tl.load(out_ptr + out_offsets),
         )
 
-        lse_val = tl.load(lse_ptr + batch_idx * lse_stride_B + src_head_idx * lse_stride_H)
+        lse_val = tl.load(
+            lse_ptr + batch_idx * lse_stride_B + src_head_idx * lse_stride_H
+        )
         if LSE_PACK_DIM == 1:
             tl.store(
                 send_ptr + send_base + HEAD_DIM * send_stride_D,
@@ -209,9 +218,15 @@ def _dcp_a2a_unpack_combine_kernel(
 
     lse_max = -float("inf")
     for rank_idx in tl.static_range(N):
-        recv_base = rank_idx * recv_stride_N + batch_idx * recv_stride_B + head_idx * recv_stride_H
+        recv_base = (
+            rank_idx * recv_stride_N
+            + batch_idx * recv_stride_B
+            + head_idx * recv_stride_H
+        )
         if LSE_PACK_DIM == 1:
-            lse_val = tl.load(recv_ptr + recv_base + HEAD_DIM * recv_stride_D).to(tl.float32)
+            lse_val = tl.load(recv_ptr + recv_base + HEAD_DIM * recv_stride_D).to(
+                tl.float32
+            )
         else:
             lo_raw = tl.load(recv_ptr + recv_base + HEAD_DIM * recv_stride_D)
             hi_raw = tl.load(recv_ptr + recv_base + (HEAD_DIM + 1) * recv_stride_D)
@@ -229,9 +244,15 @@ def _dcp_a2a_unpack_combine_kernel(
 
     lse_sum = 0.0
     for rank_idx in tl.static_range(N):
-        recv_base = rank_idx * recv_stride_N + batch_idx * recv_stride_B + head_idx * recv_stride_H
+        recv_base = (
+            rank_idx * recv_stride_N
+            + batch_idx * recv_stride_B
+            + head_idx * recv_stride_H
+        )
         if LSE_PACK_DIM == 1:
-            lse_val = tl.load(recv_ptr + recv_base + HEAD_DIM * recv_stride_D).to(tl.float32)
+            lse_val = tl.load(recv_ptr + recv_base + HEAD_DIM * recv_stride_D).to(
+                tl.float32
+            )
         else:
             lo_raw = tl.load(recv_ptr + recv_base + HEAD_DIM * recv_stride_D)
             hi_raw = tl.load(recv_ptr + recv_base + (HEAD_DIM + 1) * recv_stride_D)
@@ -255,9 +276,15 @@ def _dcp_a2a_unpack_combine_kernel(
 
     acc = tl.zeros([HEAD_DIM], dtype=tl.float32)
     for rank_idx in tl.static_range(N):
-        recv_base = rank_idx * recv_stride_N + batch_idx * recv_stride_B + head_idx * recv_stride_H
+        recv_base = (
+            rank_idx * recv_stride_N
+            + batch_idx * recv_stride_B
+            + head_idx * recv_stride_H
+        )
         if LSE_PACK_DIM == 1:
-            lse_val = tl.load(recv_ptr + recv_base + HEAD_DIM * recv_stride_D).to(tl.float32)
+            lse_val = tl.load(recv_ptr + recv_base + HEAD_DIM * recv_stride_D).to(
+                tl.float32
+            )
         else:
             lo_raw = tl.load(recv_ptr + recv_base + HEAD_DIM * recv_stride_D)
             hi_raw = tl.load(recv_ptr + recv_base + (HEAD_DIM + 1) * recv_stride_D)
@@ -274,9 +301,14 @@ def _dcp_a2a_unpack_combine_kernel(
         else:
             weight = tl.exp2(lse_val - global_lse)
         weight = tl.where(weight != weight, 0.0, weight)
-        acc += tl.load(recv_ptr + recv_base + d_offsets * recv_stride_D).to(tl.float32) * weight
+        acc += (
+            tl.load(recv_ptr + recv_base + d_offsets * recv_stride_D).to(tl.float32)
+            * weight
+        )
 
-    final_offsets = batch_idx * out_stride_B + head_idx * out_stride_H + d_offsets * out_stride_D
+    final_offsets = (
+        batch_idx * out_stride_B + head_idx * out_stride_H + d_offsets * out_stride_D
+    )
     tl.store(out_ptr + final_offsets, acc)
 
     if RETURN_LSE:
@@ -420,4 +452,6 @@ def dcp_a2a_lse_reduce(
     )
     work.wait()
 
-    return _dcp_a2a_unpack_combine(recv_buffer, D, lse_pack_dim, return_lse, is_lse_base_on_e)
+    return _dcp_a2a_unpack_combine(
+        recv_buffer, D, lse_pack_dim, return_lse, is_lse_base_on_e
+    )

@@ -1,4 +1,4 @@
-#ifndef APHRODITE_NUMA_DISABLED
+#ifndef VLLM_NUMA_DISABLED
   #include <numa.h>
   #include <unistd.h>
   #include <string>
@@ -12,7 +12,7 @@
 
 #include "cpu/utils.hpp"
 
-#ifdef APHRODITE_NUMA_DISABLED
+#ifdef VLLM_NUMA_DISABLED
 void init_cpu_memory_env(std::vector<int64_t> node_ids) {}
 #else
 void init_cpu_memory_env(std::vector<int64_t> node_ids) {
@@ -86,7 +86,7 @@ void init_cpu_memory_env(std::vector<int64_t> node_ids) {
     }
   }
 }
-#endif  // APHRODITE_NUMA_DISABLED
+#endif  // VLLM_NUMA_DISABLED
 
 namespace cpu_utils {
 ScratchPadManager::ScratchPadManager() : size_(0), ptr_(nullptr) {

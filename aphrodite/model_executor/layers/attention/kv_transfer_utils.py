@@ -30,7 +30,9 @@ def maybe_transfer_kv_layer(func: Callable) -> Callable:
     try:
         layer_name_index = param_names.index("layer_name")
     except ValueError as e:
-        raise TypeError(f"Function {func.__name__} must have a 'layer_name' parameter") from e
+        raise TypeError(
+            f"Function {func.__name__} must have a 'layer_name' parameter"
+        ) from e
 
     @wraps(func)
     def wrapper(*args, **kwargs):

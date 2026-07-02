@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-# Copyright 2024 The Aphrodite team.
+# Copyright 2024 The vLLM team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,7 +35,9 @@ class EmbeddingMixin(AphroditeModelForPooling):
 
     def __init__(self, *, aphrodite_config: "AphroditeConfig", prefix: str = ""):
         # Skip AphroditeModelForPooling.__init__ and call the next class in MRO
-        super(AphroditeModelForPooling, self).__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+        super(AphroditeModelForPooling, self).__init__(
+            aphrodite_config=aphrodite_config, prefix=prefix
+        )
 
         pooler_config = aphrodite_config.model_config.pooler_config
         assert pooler_config is not None
@@ -48,7 +50,9 @@ class SequenceClassificationMixin(SupportsCrossEncoding, AphroditeModelForPoolin
 
     def __init__(self, *, aphrodite_config: "AphroditeConfig", prefix: str = ""):
         # Skip AphroditeModelForPooling.__init__ and call the next class in MRO
-        super(AphroditeModelForPooling, self).__init__(aphrodite_config=aphrodite_config, prefix=prefix)
+        super(AphroditeModelForPooling, self).__init__(
+            aphrodite_config=aphrodite_config, prefix=prefix
+        )
 
         pooler_config = aphrodite_config.model_config.pooler_config
         assert pooler_config is not None
@@ -74,7 +78,8 @@ class SequenceClassificationMixin(SupportsCrossEncoding, AphroditeModelForPoolin
         self.classifier = getattr_iter(seq_cls_model, ["classifier", "score"], None)
         if self.classifier is None:
             raise ValueError(
-                "Could not find `classifier` or `score` layer in the `AutoModelForSequenceClassification` instance."
+                "Could not find `classifier` or `score` layer in the "
+                "`AutoModelForSequenceClassification` instance."
             )
         self.init_parameters(self.classifier, dtype=self.model_config.head_dtype)
 

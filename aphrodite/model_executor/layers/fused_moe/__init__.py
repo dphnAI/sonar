@@ -11,6 +11,8 @@ from aphrodite.model_executor.layers.fused_moe.activation import (
 )
 from aphrodite.model_executor.layers.fused_moe.config import (
     FusedMoEConfig,
+    FusedMoEParallelConfig,
+    FusedMoEQuantConfig,
     RoutingMethodType,
 )
 from aphrodite.model_executor.layers.fused_moe.fused_moe_method_base import (
@@ -18,7 +20,6 @@ from aphrodite.model_executor.layers.fused_moe.fused_moe_method_base import (
 )
 from aphrodite.model_executor.layers.fused_moe.layer import (
     FusedMoE,
-    FusedMoeWeightScaleSupported,
     fused_moe_make_expert_params_mapping,
 )
 from aphrodite.model_executor.layers.fused_moe.modular_kernel import (
@@ -26,10 +27,20 @@ from aphrodite.model_executor.layers.fused_moe.modular_kernel import (
     FusedMoEExpertsModular,
     FusedMoEPrepareAndFinalizeModular,
 )
+from aphrodite.model_executor.layers.fused_moe.routed_experts import (
+    FusedMoeWeightScaleSupported,
+    RoutedExperts,
+)
 from aphrodite.model_executor.layers.fused_moe.router.fused_moe_router import (
     FusedMoERouter,
 )
 from aphrodite.model_executor.layers.fused_moe.router.gate_linear import GateLinear
+from aphrodite.model_executor.layers.fused_moe.runner.moe_runner import (
+    MoERunner,
+)
+from aphrodite.model_executor.layers.fused_moe.runner.shared_experts import (
+    SharedExperts,
+)
 from aphrodite.model_executor.layers.fused_moe.unquantized_fused_moe_method import (
     UnquantizedFusedMoEMethod,
 )
@@ -55,6 +66,8 @@ __all__ = [
     "FusedMoE",
     "FusedMoERouter",
     "FusedMoEConfig",
+    "FusedMoEQuantConfig",
+    "FusedMoEParallelConfig",
     "FusedMoEMethodBase",
     "MoEActivation",
     "UnquantizedFusedMoEMethod",
@@ -63,7 +76,10 @@ __all__ = [
     "FusedMoEActivationFormat",
     "FusedMoEPrepareAndFinalizeModular",
     "GateLinear",
+    "MoERunner",
     "RoutingMethodType",
+    "RoutedExperts",
+    "SharedExperts",
     "activation_without_mul",
     "apply_moe_activation",
     "fused_moe_make_expert_params_mapping",
@@ -80,36 +96,37 @@ if HAS_TRITON:
         CutlassBatchedExpertsFp8,
         CutlassExpertsFp8,
         CutlassExpertsW4A8Fp8,
-        cutlass_moe_w4a8_fp8,
     )
     from aphrodite.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
         DeepGemmExperts,
     )
+    from aphrodite.model_executor.layers.fused_moe.experts.fused_batched_moe import (
+        BatchedTritonExperts,
+    )
+    from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+        AiterExperts,
+    )
+    from aphrodite.model_executor.layers.fused_moe.experts.triton_deep_gemm_moe import (
+        TritonOrDeepGemmExperts,
+    )
+    from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import (
+        TritonExperts,
+        TritonWNA16Experts,
+    )
     from aphrodite.model_executor.layers.fused_moe.experts.xpu_moe import (
         XPUExperts,
         XPUExpertsFp8,
-        XPUExpertsMXFp4,
-    )
-    from aphrodite.model_executor.layers.fused_moe.fused_batched_moe import (
-        BatchedTritonExperts,
+        XPUExpertsMxFp4,
     )
     from aphrodite.model_executor.layers.fused_moe.fused_moe import (
-        TritonExperts,
-        TritonWNA16Experts,
         fused_experts,
         get_config_file_name,
-    )
-    from aphrodite.model_executor.layers.fused_moe.rocm_aiter_fused_moe import (
-        AiterExperts,
     )
     from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import (
         fused_topk,
     )
     from aphrodite.model_executor.layers.fused_moe.router.grouped_topk_router import (
         GroupedTopk,
-    )
-    from aphrodite.model_executor.layers.fused_moe.triton_deep_gemm_moe import (
-        TritonOrDeepGemmExperts,
     )
 
     __all__ += [
@@ -118,7 +135,6 @@ if HAS_TRITON:
         "fused_experts",
         "get_config_file_name",
         "GroupedTopk",
-        "cutlass_moe_w4a8_fp8",
         "CutlassExpertsFp8",
         "CutlassBatchedExpertsFp8",
         "CutlassExpertsW4A8Fp8",
@@ -130,7 +146,9 @@ if HAS_TRITON:
         "TritonOrDeepGemmExperts",
         "XPUExperts",
         "XPUExpertsFp8",
-        "XPUExpertsMXFp4",
+        "XPUExpertsBlockFp8",
+        "XPUExpertsMxFp8",
+        "XPUExpertsMxFp4",
     ]
 else:
     # Some model classes directly use the custom ops. Add placeholders

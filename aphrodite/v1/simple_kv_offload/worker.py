@@ -8,7 +8,7 @@ import torch
 
 from aphrodite.config import AphroditeConfig
 from aphrodite.logger import init_logger
-from aphrodite.utils.platform_utils import is_pin_memory_available
+from aphrodite.utils.torch_utils import PIN_MEMORY
 from aphrodite.v1.simple_kv_offload.copy_backend import DmaCopyBackend
 from aphrodite.v1.simple_kv_offload.cuda_mem_ops import pin_tensor
 from aphrodite.v1.simple_kv_offload.metadata import (
@@ -56,6 +56,10 @@ class SimpleCPUOffloadWorker:
 
         # Metadata for the current step
         self._connector_metadata: SimpleCPUOffloadMetadata | None = None
+
+        # Compute-done event recorded before each store; reused across steps
+        # (get_finished runs once per step, copy queue is FIFO).
+        self._store_compute_done: torch.Event | None = None
 
         # Pending event index sets, populated in bind_connector_metadata
         self._pending_load_event_indices: set[int] = set()
@@ -115,10 +119,14 @@ class SimpleCPUOffloadWorker:
         unique_gpu_caches: dict[str, torch.Tensor] = {}
         for name, tensor in seen_ptrs.values():
             storage = tensor.untyped_storage()
-            raw = torch.empty(0, dtype=torch.int8, device=self.device).set_(storage, 0, (storage.nbytes(),))
+            raw = torch.empty(0, dtype=torch.int8, device=self.device).set_(
+                storage, 0, (storage.nbytes(),)
+            )
             el = tensor.element_size()
             page_size_bytes = storage.nbytes() // num_blocks
-            outer_dims = [d for d in range(tensor.ndim) if tensor.stride(d) * el > page_size_bytes]
+            outer_dims = [
+                d for d in range(tensor.ndim) if tensor.stride(d) * el > page_size_bytes
+            ]
             if not outer_dims:
                 unique_gpu_caches[name] = raw.view(num_blocks, -1)
             else:
@@ -130,21 +138,26 @@ class SimpleCPUOffloadWorker:
 
         # Compute per-tensor bytes_per_block. Tensors may have different
         # page_size_bytes (e.g., UniformTypeKVCacheSpecs with varying head_size).
-        per_tensor_bpb = [t.stride(0) * t.element_size() for t in unique_gpu_caches.values()]
+        per_tensor_bpb = [
+            t.stride(0) * t.element_size() for t in unique_gpu_caches.values()
+        ]
         total_bytes_per_block = sum(per_tensor_bpb)
 
         self.num_cpu_blocks = max(1, self.cpu_capacity_bytes // total_bytes_per_block)
 
         logger.info(
-            "SimpleCPUOffloadWorker: %d unique GPU KV tensors, allocating %d CPU blocks (%.2f GB)",
+            "SimpleCPUOffloadWorker: %d unique GPU KV tensors, "
+            "allocating %d CPU blocks (%.2f GB)",
             len(unique_gpu_caches),
             self.num_cpu_blocks,
             (self.num_cpu_blocks * total_bytes_per_block) / (1024**3),
         )
 
-        pin_memory = is_pin_memory_available()
+        pin_memory = PIN_MEMORY
         if not pin_memory:
-            logger.warning("Pinned memory not available. CPU offload performance may be degraded.")
+            logger.warning(
+                "Pinned memory not available. CPU offload performance may be degraded."
+            )
 
         self.gpu_kv_caches = unique_gpu_caches
         self.cpu_kv_caches = {}
@@ -197,9 +210,11 @@ class SimpleCPUOffloadWorker:
     ) -> tuple[set[str] | None, set[str] | None]:
         """Submit transfers and report completed events to the scheduler.
 
-        Called after model execution. The manager only schedules stores for
-        blocks whose KV data is confirmed computed, so we launch both loads
-        and stores immediately — no deferral or cross-stream sync needed.
+        Stores (GPU->CPU) read the live KV cache, which the compute stream may
+        still be writing under v1 overlapped execution, so they are ordered
+        after a compute-done event recorded on the current stream. Loads
+        (CPU->GPU) read stable pinned host memory and launch immediately. See
+        #45704 for the bug and #39306 for the srcAccessOrder rationale.
 
         Returns:
             tuple of (finished_sending, finished_recving).
@@ -209,7 +224,6 @@ class SimpleCPUOffloadWorker:
         # (1) Submit transfers
         metadata = self._connector_metadata
         if metadata is not None:
-            # Launch loads (CPU->GPU).
             if metadata.load_cpu_blocks:
                 self._backend.launch_copy(
                     metadata.load_cpu_blocks,
@@ -218,14 +232,17 @@ class SimpleCPUOffloadWorker:
                     event_idx=metadata.load_event,
                     events_list=self._load_events,
                 )
-            # Launch stores (GPU->CPU).
             if metadata.store_gpu_blocks:
+                if self._store_compute_done is None:
+                    self._store_compute_done = torch.Event()
+                self._store_compute_done.record(torch.cuda.current_stream())
                 self._backend.launch_copy(
                     metadata.store_gpu_blocks,
                     metadata.store_cpu_blocks,
                     is_store=True,
                     event_idx=metadata.store_event,
                     events_list=self._store_events,
+                    wait_event=self._store_compute_done,
                 )
 
         # (2) Track completed transfer events
@@ -235,7 +252,9 @@ class SimpleCPUOffloadWorker:
             load_wm = self._poll_stream_events(is_store=False)
             for j in [j for j in self._pending_load_event_indices if j <= load_wm]:
                 self._pending_load_event_indices.discard(j)
-                req_ids = metadata.load_event_to_reqs.get(j) if metadata is not None else None
+                req_ids = (
+                    metadata.load_event_to_reqs.get(j) if metadata is not None else None
+                )
                 if req_ids:
                     finished_recving.update(req_ids)
 
@@ -257,7 +276,9 @@ class SimpleCPUOffloadWorker:
         self._completed_store_events = {}
         return meta
 
-    def handle_preemptions(self, kv_connector_metadata: SimpleCPUOffloadMetadata) -> None:
+    def handle_preemptions(
+        self, kv_connector_metadata: SimpleCPUOffloadMetadata
+    ) -> None:
         """Sync all in-flight transfers before preempted blocks are reused."""
         if not kv_connector_metadata.need_flush:
             return

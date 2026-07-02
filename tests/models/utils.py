@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import warnings
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -9,10 +10,11 @@ import torch
 import torch.nn.functional as F
 from transformers import PretrainedConfig
 
-from aphrodite.config.model import ModelConfig, ModelDType, RunnerOption
+from aphrodite.config.model import AttnTypeStr, ModelConfig, ModelDType, RunnerOption
+from aphrodite.config.pooler import SequencePoolingType, TokenPoolingType
 from aphrodite.logprobs import Logprob, PromptLogprobs, SampleLogprobs
 from aphrodite.multimodal.processing import InputProcessingContext
-from aphrodite.transformers_utils.tokenizer import cached_tokenizer_from_config
+from aphrodite.tokenizers import cached_tokenizer_from_config
 
 from .. import ci_envs
 from .registry import HF_EXAMPLE_MODELS
@@ -33,12 +35,18 @@ def check_outputs_equal(
     """
     assert len(outputs_0_lst) == len(outputs_1_lst)
 
-    for prompt_idx, (outputs_0, outputs_1) in enumerate(zip(outputs_0_lst, outputs_1_lst)):
+    for prompt_idx, (outputs_0, outputs_1) in enumerate(
+        zip(outputs_0_lst, outputs_1_lst)
+    ):
         output_ids_0, output_str_0 = outputs_0
         output_ids_1, output_str_1 = outputs_1
 
         # The text and token outputs should exactly match
-        fail_msg = f"Test{prompt_idx}:\n{name_0}:\t{output_str_0!r}\n{name_1}:\t{output_str_1!r}"
+        fail_msg = (
+            f"Test{prompt_idx}:"
+            f"\n{name_0}:\t{output_str_0!r}"
+            f"\n{name_1}:\t{output_str_1!r}"
+        )
 
         assert output_str_0 == output_str_1, fail_msg
         assert output_ids_0 == output_ids_1, fail_msg
@@ -50,7 +58,9 @@ def check_outputs_equal(
 # * List of top sample logprobs for each sampled token
 #
 # Assumes prompt logprobs were not requested.
-TokensTextLogprobs = tuple[list[int], str, list[dict[int, float]] | SampleLogprobs | None]
+TokensTextLogprobs = tuple[
+    list[int], str, list[dict[int, float]] | SampleLogprobs | None
+]
 
 # Allow for tokens to be represented as str's rather than IDs;
 # tuple of
@@ -59,7 +69,9 @@ TokensTextLogprobs = tuple[list[int], str, list[dict[int, float]] | SampleLogpro
 # * Optional list of top sample logprobs for each sampled token
 #
 # Assumes prompt logprobs were not requested.
-TextTextLogprobs = tuple[list[str], str, list[dict[str, float]] | list[dict[str, Logprob]] | None]
+TextTextLogprobs = tuple[
+    list[str], str, list[dict[str, float]] | list[dict[str, Logprob]] | None
+]
 
 # Representation of generated sequence as a tuple of
 # * Token ID list
@@ -78,8 +90,12 @@ TokensTextLogprobsPromptLogprobs = tuple[
 
 def check_logprobs_close(
     *,
-    outputs_0_lst: Sequence[TokensTextLogprobs | TokensTextLogprobsPromptLogprobs | TextTextLogprobs],
-    outputs_1_lst: Sequence[TokensTextLogprobs | TokensTextLogprobsPromptLogprobs | TextTextLogprobs],
+    outputs_0_lst: Sequence[
+        TokensTextLogprobs | TokensTextLogprobsPromptLogprobs | TextTextLogprobs
+    ],
+    outputs_1_lst: Sequence[
+        TokensTextLogprobs | TokensTextLogprobsPromptLogprobs | TextTextLogprobs
+    ],
     name_0: str,
     name_1: str,
     num_outputs_0_skip_tokens: int = 0,
@@ -119,7 +135,9 @@ def check_logprobs_close(
     assert len(outputs_0_lst) == len(outputs_1_lst)
 
     # Loop through responses to each prompt.
-    for prompt_idx, (outputs_0, outputs_1) in enumerate(zip(outputs_0_lst, outputs_1_lst)):
+    for prompt_idx, (outputs_0, outputs_1) in enumerate(
+        zip(outputs_0_lst, outputs_1_lst)
+    ):
         assert len(outputs_0) == len(outputs_1)
         if len(outputs_0) == 3:
             assert len(outputs_1) == 3
@@ -148,7 +166,9 @@ def check_logprobs_close(
                 # Both sequences' prompt logprobs lists are not `None`
                 # (although individual list elements may be `None`);
                 # for each token's logprobs:
-                for idx, (logprobs_elem_0, logprobs_elem_1) in enumerate(zip(prompt_logprobs_0, prompt_logprobs_1)):
+                for idx, (logprobs_elem_0, logprobs_elem_1) in enumerate(
+                    zip(prompt_logprobs_0, prompt_logprobs_1)
+                ):
                     fail_msg = (
                         f"Prompt logprobs test:"
                         f"\n{name_0}:\tPrompt index {idx}\t{logprobs_elem_0}"
@@ -164,7 +184,9 @@ def check_logprobs_close(
                         # the seq 1 token's logprobs must not be `None`
                         assert logprobs_elem_1 is not None, fail_msg
                         # Logprobs check: top-k token choices must be the same
-                        assert set(logprobs_elem_0.keys()) == set(logprobs_elem_1.keys()), fail_msg
+                        assert set(logprobs_elem_0.keys()) == set(
+                            logprobs_elem_1.keys()
+                        ), fail_msg
             else:
                 # Both sequence logprobs lists must be `None`
                 fail_msg = (
@@ -176,7 +198,9 @@ def check_logprobs_close(
                 assert prompt_logprobs_0 is None and prompt_logprobs_1 is None, fail_msg
         else:
             raise ValueError(
-                f"Outputs tuple must have 3 or 4 elements but {len(outputs_0)} elements were provided: {outputs_0}"
+                f"Outputs tuple must have 3 or 4 elements but "
+                f"{len(outputs_0)} elements were provided: "
+                f"{outputs_0}"
             )
 
         if logprobs_0 is None:
@@ -194,7 +218,9 @@ def check_logprobs_close(
         logprobs_0 = logprobs_0[num_outputs_0_skip_tokens:]
 
         # Loop through generated tokens.
-        for idx, (output_id_0, output_id_1) in enumerate(zip(output_ids_0, output_ids_1)):
+        for idx, (output_id_0, output_id_1) in enumerate(
+            zip(output_ids_0, output_ids_1)
+        ):
             is_tok_mismatch = output_id_0 != output_id_1
 
             # If generated tokens don't match
@@ -231,7 +257,11 @@ def check_logprobs_close(
             if output_str_0 != output_str_1 and warn_on_mismatch:
                 # The token outputs exactly match,
                 # so the text outputs should exactly match as well
-                fail_msg = f"Test{prompt_idx}:\n{name_0}:\t{output_str_0!r}\n{name_1}:\t{output_str_1!r}"
+                fail_msg = (
+                    f"Test{prompt_idx}:"
+                    f"\n{name_0}:\t{output_str_0!r}"
+                    f"\n{name_1}:\t{output_str_1!r}"
+                )
 
                 with warnings.catch_warnings():
                     # This ensures that repeated warnings are shown
@@ -247,7 +277,7 @@ def build_model_context(
     dtype: ModelDType = "auto",
     model_config_kwargs: dict[str, Any] | None = None,
     mm_processor_kwargs: dict[str, Any] | None = None,
-    limit_mm_per_prompt: dict[str, int] | None = None,
+    limit_mm_per_prompt: Mapping[str, int | Mapping[str, int]] | None = None,
     mm_processor_cache_gb: int = 0,
 ):
     """Creates an InputProcessingContext for a given model.
@@ -263,10 +293,17 @@ def build_model_context(
     """
     model_info = HF_EXAMPLE_MODELS.find_hf_info(model_id)
     model_info.check_available_online(on_fail="skip")
-    model_info.check_transformers_version(on_fail="skip")
+    model_info.check_transformers_version(
+        on_fail="skip",
+        check_max_version=False,
+        check_version_reason="aphrodite",
+    )
 
     model_config_kwargs = model_config_kwargs or {}
-    limit_mm_per_prompt = limit_mm_per_prompt or {}
+    limit_mm_per_prompt = {
+        modality: dict(limit) if isinstance(limit, Mapping) else limit
+        for modality, limit in (limit_mm_per_prompt or {}).items()
+    }
     model_config = ModelConfig(
         model_id,
         runner=runner,
@@ -303,10 +340,16 @@ def check_embeddings_close(
 ) -> None:
     assert len(embeddings_0_lst) == len(embeddings_1_lst)
 
-    for prompt_idx, (embeddings_0, embeddings_1) in enumerate(zip(embeddings_0_lst, embeddings_1_lst)):
-        assert len(embeddings_0) == len(embeddings_1), f"Length mismatch: {len(embeddings_0)} vs. {len(embeddings_1)}"
+    for prompt_idx, (embeddings_0, embeddings_1) in enumerate(
+        zip(embeddings_0_lst, embeddings_1_lst)
+    ):
+        assert len(embeddings_0) == len(embeddings_1), (
+            f"Length mismatch: {len(embeddings_0)} vs. {len(embeddings_1)}"
+        )
 
-        sim = F.cosine_similarity(torch.tensor(embeddings_0), torch.tensor(embeddings_1), dim=0)
+        sim = F.cosine_similarity(
+            torch.tensor(embeddings_0), torch.tensor(embeddings_1), dim=0
+        )
 
         fail_msg = (
             f"Test{prompt_idx}:"
@@ -335,12 +378,17 @@ def softmax(data):
 @dataclass
 class ModelInfo:
     name: str
+    revision: str | None = None
     architecture: str = ""
     dtype: str = "auto"
     max_model_len: int | None = None
     hf_dtype: str = "float32"
     hf_overrides: dict[str, Any] | None = None
-    default_pooling_type: str = ""
+    seq_pooling_type: SequencePoolingType | None = None
+    tok_pooling_type: TokenPoolingType | None = None
+    attn_type: AttnTypeStr | None = None
+    is_prefix_caching_supported: bool | None = None
+    is_chunked_prefill_supported: bool | None = None
     enable_test: bool = True
 
 
@@ -352,28 +400,9 @@ class EmbedModelInfo(ModelInfo):
 
 
 @dataclass
-class CLSPoolingEmbedModelInfo(EmbedModelInfo):
-    default_pooling_type: str = "CLS"
-
-
-@dataclass
-class LASTPoolingEmbedModelInfo(EmbedModelInfo):
-    default_pooling_type: str = "LAST"
-
-
-@dataclass
 class RerankModelInfo(ModelInfo):
     mteb_score: float | None = None
-
-
-@dataclass
-class CLSPoolingRerankModelInfo(RerankModelInfo):
-    default_pooling_type: str = "CLS"
-
-
-@dataclass
-class LASTPoolingRerankModelInfo(RerankModelInfo):
-    default_pooling_type: str = "LAST"
+    chat_template_name: str | None = None
 
 
 @dataclass
@@ -382,7 +411,7 @@ class GenerateModelInfo(ModelInfo):
     hf_ppl: float | None = None
 
 
-def get_aphrodite_extra_kwargs(model_info: ModelInfo, aphrodite_extra_kwargs):
+def get_vllm_extra_kwargs(model_info: ModelInfo, vllm_extra_kwargs):
     # A model family has many models with the same architecture,
     # and we don't need to test each one.
     if not ci_envs.APHRODITE_CI_NO_SKIP and not model_info.enable_test:
@@ -391,24 +420,24 @@ def get_aphrodite_extra_kwargs(model_info: ModelInfo, aphrodite_extra_kwargs):
         pytest.skip("Skipping test.")
 
     # Allow aphrodite to test using the given dtype, such as float32
-    aphrodite_extra_kwargs = aphrodite_extra_kwargs or {}
-    aphrodite_extra_kwargs["dtype"] = ci_envs.APHRODITE_CI_DTYPE or model_info.dtype
+    vllm_extra_kwargs = vllm_extra_kwargs or {}
+    vllm_extra_kwargs["dtype"] = ci_envs.APHRODITE_CI_DTYPE or model_info.dtype
 
     # Allow aphrodite to test using hf_overrides
     if model_info.hf_overrides is not None:
-        aphrodite_extra_kwargs["hf_overrides"] = model_info.hf_overrides
+        vllm_extra_kwargs["hf_overrides"] = model_info.hf_overrides
 
     # Allow changing the head dtype used by aphrodite in tests
     if ci_envs.APHRODITE_CI_HEAD_DTYPE is not None:
-        if "hf_overrides" not in aphrodite_extra_kwargs:
-            aphrodite_extra_kwargs["hf_overrides"] = {}
-        aphrodite_extra_kwargs["hf_overrides"]["head_dtype"] = ci_envs.APHRODITE_CI_HEAD_DTYPE
+        if "hf_overrides" not in vllm_extra_kwargs:
+            vllm_extra_kwargs["hf_overrides"] = {}
+        vllm_extra_kwargs["hf_overrides"]["head_dtype"] = ci_envs.APHRODITE_CI_HEAD_DTYPE
 
     # Allow control over whether tests use enforce_eager
     if ci_envs.APHRODITE_CI_ENFORCE_EAGER is not None:
-        aphrodite_extra_kwargs["enforce_eager"] = ci_envs.APHRODITE_CI_ENFORCE_EAGER
+        vllm_extra_kwargs["enforce_eager"] = ci_envs.APHRODITE_CI_ENFORCE_EAGER
 
-    return aphrodite_extra_kwargs
+    return vllm_extra_kwargs
 
 
 def dummy_hf_overrides(
@@ -422,13 +451,23 @@ def dummy_hf_overrides(
     Dummy HF overrides function used to create dummy model
     with only minimum nums of layer.
     """
-    hf_config.update(exist_overrides or {})
+    # Copy because this helper is called more than once
+    # while loading config, and we `.pop()`
+    exist_overrides = (exist_overrides or {}).copy()
+    text_config_override = exist_overrides.pop("text_config", None)
+    hf_config.update(exist_overrides)
 
     text_config = hf_config.get_text_config()
+    if text_config_override is not None:
+        # multimodal test models may override *some* text-model fields
+        text_config.update(text_config_override)
 
     # Ensure at least 2 expert per group
     # Since `grouped_topk` assumes top-2
     n_group = getattr(text_config, "n_group", None)
+    # Kimi uses `num_expert_group` instead of `n_group`.
+    if n_group is None:
+        n_group = getattr(text_config, "num_expert_group", None)
     num_experts = n_group * 2 if n_group is not None else 2
 
     # we use three layers for Gemma-3n to check
@@ -440,7 +479,17 @@ def dummy_hf_overrides(
     else:
         # Use minimal layers for testing
         num_layers = 1
-        num_hidden_layers = 3 if model_arch == "Gemma3nForConditionalGeneration" else 1
+        num_hidden_layers = (
+            3
+            if model_arch
+            in (
+                "Gemma3nForConditionalGeneration",
+                "Gemma4ForCausalLM",
+                "Gemma4ForConditionalGeneration",
+                "DiffusionGemmaForBlockDiffusion",
+            )
+            else 1
+        )
 
     update_dict = {
         "num_layers": num_layers,
@@ -448,16 +497,29 @@ def dummy_hf_overrides(
         "num_kv_shared_layers": 1,
     }
 
+    _hf_config = hf_config
+
     class DummyConfig:
+        hf_config = _hf_config
         hf_text_config = text_config
 
+    model_arch_config = ModelConfig.get_model_arch_config(DummyConfig)
     # Only set MoE related config when the model has MoE layers.
     # Otherwise all models detected as MoE by _get_transformers_backend_cls.
-    if ModelConfig.get_num_experts(DummyConfig) > 0:
+    if model_arch_config.num_experts > 0:
+        num_experts_per_tok = 2
+        if model_arch in (
+            "Llama4ForConditionalGeneration",
+            "Llama4ForCausalLM",
+            "EagleLlama4ForCausalLM",
+        ):
+            num_experts_per_tok = 1
         update_dict.update(
             {
                 "num_experts": num_experts,
-                "num_experts_per_tok": 2,
+                "num_experts_per_tok": num_experts_per_tok,
+                # Kimi uses `num_experts_per_token`.
+                "num_experts_per_token": num_experts_per_tok,
                 "num_local_experts": num_experts,
                 # Otherwise there will not be any expert layers
                 "first_k_dense_replace": 0,
@@ -472,6 +534,17 @@ def dummy_hf_overrides(
 
     text_config.update(update_dict)
 
+    # Update n_layers and moe configs for Moondream3 model
+    if model_arch in ("Moondream3ForCausalLM", "HfMoondream"):
+        text_config.update(
+            {
+                "n_layers": num_hidden_layers,
+                "moe_num_experts": num_experts,
+                "moe_experts_per_token": 2,
+                "moe_start_layer": num_hidden_layers,
+            }
+        )
+
     if hasattr(hf_config, "vision_config"):
         hf_config.vision_config.update(
             {
@@ -479,6 +552,9 @@ def dummy_hf_overrides(
                 "num_hidden_layers": 1,
             }
         )
+
+        if model_arch in ("Moondream3ForCausalLM", "HfMoondream"):
+            hf_config.vision_config.update({"enc_n_layers": 1})
 
     # e.g.: ibm-granite/granite-speech-3.3-2b
     if hasattr(hf_config, "encoder_config"):
@@ -490,7 +566,8 @@ def dummy_hf_overrides(
         )
 
     # e.g.: Qwen/Qwen2-Audio-7B-Instruct
-    if hasattr(hf_config, "audio_config"):
+    # audio_config may exist but be None (e.g. audio-less Gemma4 variants).
+    if getattr(hf_config, "audio_config", None) is not None:
         hf_config.audio_config.update(
             {
                 "num_layers": 1,

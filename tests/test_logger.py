@@ -10,16 +10,15 @@ from dataclasses import dataclass
 from json.decoder import JSONDecodeError
 from tempfile import NamedTemporaryFile
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from aphrodite.endpoints.logger import RequestLogger
 
 from aphrodite.logger import (
     _DATE_FORMAT,
     _FORMAT,
-    _configure_aphrodite_root_logger,
+    _configure_vllm_root_logger,
     enable_trace_function_call,
     init_logger,
 )
@@ -49,12 +48,15 @@ def test_trace_function_call():
     os.remove(path)
 
 
-def test_default_aphrodite_root_logger_configuration():
+def test_default_vllm_root_logger_configuration(monkeypatch):
     """This test presumes that APHRODITE_CONFIGURE_LOGGING (default: True) and
     APHRODITE_LOGGING_CONFIG_PATH (default: None) are not configured and default
     behavior is activated."""
+    monkeypatch.setenv("APHRODITE_LOGGING_COLOR", "0")
+    _configure_vllm_root_logger()
+
     logger = logging.getLogger("aphrodite")
-    assert logger.level == logging.DEBUG
+    assert logger.level == logging.INFO
     assert not logger.propagate
 
     handler = logger.handlers[0]
@@ -70,12 +72,13 @@ def test_default_aphrodite_root_logger_configuration():
     assert formatter.datefmt == _DATE_FORMAT
 
 
-@patch("aphrodite.logger.APHRODITE_CONFIGURE_LOGGING", 1)
-@patch("aphrodite.logger.APHRODITE_LOGGING_CONFIG_PATH", None)
-def test_descendent_loggers_depend_on_and_propagate_logs_to_root_logger():
+def test_descendent_loggers_depend_on_and_propagate_logs_to_root_logger(monkeypatch):
     """This test presumes that APHRODITE_CONFIGURE_LOGGING (default: True) and
     APHRODITE_LOGGING_CONFIG_PATH (default: None) are not configured and default
     behavior is activated."""
+    monkeypatch.setenv("APHRODITE_CONFIGURE_LOGGING", "1")
+    monkeypatch.delenv("APHRODITE_LOGGING_CONFIG_PATH", raising=False)
+
     root_logger = logging.getLogger("aphrodite")
     root_handler = root_logger.handlers[0]
 
@@ -99,49 +102,50 @@ def test_descendent_loggers_depend_on_and_propagate_logs_to_root_logger():
     assert log_record.levelno == logging.INFO
 
 
-@patch("aphrodite.logger.APHRODITE_CONFIGURE_LOGGING", 0)
-@patch("aphrodite.logger.APHRODITE_LOGGING_CONFIG_PATH", None)
-def test_logger_configuring_can_be_disabled():
-    """This test calls _configure_aphrodite_root_logger again to test custom logging
+def test_logger_configuring_can_be_disabled(monkeypatch):
+    """This test calls _configure_vllm_root_logger again to test custom logging
     config behavior, however mocks are used to ensure no changes in behavior or
     configuration occur."""
+    monkeypatch.setenv("APHRODITE_CONFIGURE_LOGGING", "0")
+    monkeypatch.delenv("APHRODITE_LOGGING_CONFIG_PATH", raising=False)
 
     with patch("aphrodite.logger.dictConfig") as dict_config_mock:
-        _configure_aphrodite_root_logger()
+        _configure_vllm_root_logger()
     dict_config_mock.assert_not_called()
 
 
-@patch("aphrodite.logger.APHRODITE_CONFIGURE_LOGGING", 1)
-@patch(
-    "aphrodite.logger.APHRODITE_LOGGING_CONFIG_PATH",
-    "/if/there/is/a/file/here/then/you/did/this/to/yourself.json",
-)
-def test_an_error_is_raised_when_custom_logging_config_file_does_not_exist():
-    """This test calls _configure_aphrodite_root_logger again to test custom logging
+def test_an_error_is_raised_when_custom_logging_config_file_does_not_exist(monkeypatch):
+    """This test calls _configure_vllm_root_logger again to test custom logging
     config behavior, however it fails before any change in behavior or
     configuration occurs."""
+    monkeypatch.setenv("APHRODITE_CONFIGURE_LOGGING", "1")
+    monkeypatch.setenv(
+        "APHRODITE_LOGGING_CONFIG_PATH",
+        "/if/there/is/a/file/here/then/you/did/this/to/yourself.json",
+    )
+
     with pytest.raises(RuntimeError) as ex_info:
-        _configure_aphrodite_root_logger()
+        _configure_vllm_root_logger()
     assert ex_info.type == RuntimeError  # noqa: E721
     assert "File does not exist" in str(ex_info)
 
 
-@patch("aphrodite.logger.APHRODITE_CONFIGURE_LOGGING", 1)
-def test_an_error_is_raised_when_custom_logging_config_is_invalid_json():
-    """This test calls _configure_aphrodite_root_logger again to test custom logging
+def test_an_error_is_raised_when_custom_logging_config_is_invalid_json(monkeypatch):
+    """This test calls _configure_vllm_root_logger again to test custom logging
     config behavior, however it fails before any change in behavior or
     configuration occurs."""
+    monkeypatch.setenv("APHRODITE_CONFIGURE_LOGGING", "1")
+
     with NamedTemporaryFile(encoding="utf-8", mode="w") as logging_config_file:
         logging_config_file.write("---\nloggers: []\nversion: 1")
         logging_config_file.flush()
-        with patch("aphrodite.logger.APHRODITE_LOGGING_CONFIG_PATH", logging_config_file.name):
-            with pytest.raises(JSONDecodeError) as ex_info:
-                _configure_aphrodite_root_logger()
-            assert ex_info.type == JSONDecodeError
-            assert "Expecting value" in str(ex_info)
+        monkeypatch.setenv("APHRODITE_LOGGING_CONFIG_PATH", logging_config_file.name)
+        with pytest.raises(JSONDecodeError) as ex_info:
+            _configure_vllm_root_logger()
+        assert ex_info.type == JSONDecodeError
+        assert "Expecting value" in str(ex_info)
 
 
-@patch("aphrodite.logger.APHRODITE_CONFIGURE_LOGGING", 1)
 @pytest.mark.parametrize(
     "unexpected_config",
     (
@@ -151,26 +155,30 @@ def test_an_error_is_raised_when_custom_logging_config_is_invalid_json():
     ),
 )
 def test_an_error_is_raised_when_custom_logging_config_is_unexpected_json(
+    monkeypatch,
     unexpected_config: Any,
 ):
-    """This test calls _configure_aphrodite_root_logger again to test custom logging
+    """This test calls _configure_vllm_root_logger again to test custom logging
     config behavior, however it fails before any change in behavior or
     configuration occurs."""
+    monkeypatch.setenv("APHRODITE_CONFIGURE_LOGGING", "1")
+
     with NamedTemporaryFile(encoding="utf-8", mode="w") as logging_config_file:
         logging_config_file.write(json.dumps(unexpected_config))
         logging_config_file.flush()
-        with patch("aphrodite.logger.APHRODITE_LOGGING_CONFIG_PATH", logging_config_file.name):
-            with pytest.raises(ValueError) as ex_info:
-                _configure_aphrodite_root_logger()
-            assert ex_info.type == ValueError  # noqa: E721
-            assert "Invalid logging config. Expected dict, got" in str(ex_info)
+        monkeypatch.setenv("APHRODITE_LOGGING_CONFIG_PATH", logging_config_file.name)
+        with pytest.raises(ValueError) as ex_info:
+            _configure_vllm_root_logger()
+        assert ex_info.type == ValueError  # noqa: E721
+        assert "Invalid logging config. Expected dict, got" in str(ex_info)
 
 
-@patch("aphrodite.logger.APHRODITE_CONFIGURE_LOGGING", 1)
-def test_custom_logging_config_is_parsed_and_used_when_provided():
-    """This test calls _configure_aphrodite_root_logger again to test custom logging
+def test_custom_logging_config_is_parsed_and_used_when_provided(monkeypatch):
+    """This test calls _configure_vllm_root_logger again to test custom logging
     config behavior, however mocks are used to ensure no changes in behavior or
     configuration occur."""
+    monkeypatch.setenv("APHRODITE_CONFIGURE_LOGGING", "1")
+
     valid_logging_config = {
         "loggers": {
             "aphrodite.test_logger.logger": {
@@ -183,19 +191,18 @@ def test_custom_logging_config_is_parsed_and_used_when_provided():
     with NamedTemporaryFile(encoding="utf-8", mode="w") as logging_config_file:
         logging_config_file.write(json.dumps(valid_logging_config))
         logging_config_file.flush()
-        with (
-            patch("aphrodite.logger.APHRODITE_LOGGING_CONFIG_PATH", logging_config_file.name),
-            patch("aphrodite.logger.dictConfig") as dict_config_mock,
-        ):
-            _configure_aphrodite_root_logger()
+        monkeypatch.setenv("APHRODITE_LOGGING_CONFIG_PATH", logging_config_file.name)
+        with patch("aphrodite.logger.dictConfig") as dict_config_mock:
+            _configure_vllm_root_logger()
             dict_config_mock.assert_called_with(valid_logging_config)
 
 
-@patch("aphrodite.logger.APHRODITE_CONFIGURE_LOGGING", 0)
-def test_custom_logging_config_causes_an_error_if_configure_logging_is_off():
-    """This test calls _configure_aphrodite_root_logger again to test custom logging
+def test_custom_logging_config_causes_an_error_if_configure_logging_is_off(monkeypatch):
+    """This test calls _configure_vllm_root_logger again to test custom logging
     config behavior, however mocks are used to ensure no changes in behavior or
     configuration occur."""
+    monkeypatch.setenv("APHRODITE_CONFIGURE_LOGGING", "0")
+
     valid_logging_config = {
         "loggers": {
             "aphrodite.test_logger.logger": {
@@ -207,14 +214,15 @@ def test_custom_logging_config_causes_an_error_if_configure_logging_is_off():
     with NamedTemporaryFile(encoding="utf-8", mode="w") as logging_config_file:
         logging_config_file.write(json.dumps(valid_logging_config))
         logging_config_file.flush()
-        with patch("aphrodite.logger.APHRODITE_LOGGING_CONFIG_PATH", logging_config_file.name):
-            with pytest.raises(RuntimeError) as ex_info:
-                _configure_aphrodite_root_logger()
-            assert ex_info.type is RuntimeError
-            expected_message_snippet = (
-                "APHRODITE_CONFIGURE_LOGGING evaluated to false, but APHRODITE_LOGGING_CONFIG_PATH was given."
-            )
-            assert expected_message_snippet in str(ex_info)
+        monkeypatch.setenv("APHRODITE_LOGGING_CONFIG_PATH", logging_config_file.name)
+        with pytest.raises(RuntimeError) as ex_info:
+            _configure_vllm_root_logger()
+        assert ex_info.type is RuntimeError
+        expected_message_snippet = (
+            "APHRODITE_CONFIGURE_LOGGING evaluated to false, but "
+            "APHRODITE_LOGGING_CONFIG_PATH was given."
+        )
+        assert expected_message_snippet in str(ex_info)
 
         # Remember! The root logger is assumed to have been configured as
         # though APHRODITE_CONFIGURE_LOGGING=1 and APHRODITE_LOGGING_CONFIG_PATH=None.
@@ -260,248 +268,6 @@ def test_prepare_object_to_dump():
     assert prepare_object_to_dump(CustomClass(1, "b")) == "CustomClass(a=1, b='b')"
 
 
-def test_request_logger_log_outputs():
-    """Test the new log_outputs functionality."""
-    # Create a mock logger to capture log calls
-    mock_logger = MagicMock()
-
-    with patch("aphrodite.endpoints.logger.logger", mock_logger):
-        request_logger = RequestLogger(max_log_len=None)
-
-        # Test basic output logging
-        request_logger.log_outputs(
-            request_id="test-123",
-            outputs="Hello, world!",
-            output_token_ids=[1, 2, 3, 4],
-            finish_reason="stop",
-            is_streaming=False,
-            delta=False,
-        )
-
-        mock_logger.info.assert_called_once()
-        call_args = mock_logger.info.call_args.args
-        assert "Generated response %s%s" in call_args[0]
-        assert call_args[1] == "test-123"
-        assert call_args[3] == "Hello, world!"
-        assert call_args[4] == [1, 2, 3, 4]
-        assert call_args[5] == "stop"
-
-
-def test_request_logger_log_outputs_streaming_delta():
-    """Test log_outputs with streaming delta mode."""
-    mock_logger = MagicMock()
-
-    with patch("aphrodite.endpoints.logger.logger", mock_logger):
-        request_logger = RequestLogger(max_log_len=None)
-
-        # Test streaming delta logging
-        request_logger.log_outputs(
-            request_id="test-456",
-            outputs="Hello",
-            output_token_ids=[1],
-            finish_reason=None,
-            is_streaming=True,
-            delta=True,
-        )
-
-        mock_logger.info.assert_called_once()
-        call_args = mock_logger.info.call_args.args
-        assert "Generated response %s%s" in call_args[0]
-        assert call_args[1] == "test-456"
-        assert call_args[2] == " (streaming delta)"
-        assert call_args[3] == "Hello"
-        assert call_args[4] == [1]
-        assert call_args[5] is None
-
-
-def test_request_logger_log_outputs_streaming_complete():
-    """Test log_outputs with streaming complete mode."""
-    mock_logger = MagicMock()
-
-    with patch("aphrodite.endpoints.logger.logger", mock_logger):
-        request_logger = RequestLogger(max_log_len=None)
-
-        # Test streaming complete logging
-        request_logger.log_outputs(
-            request_id="test-789",
-            outputs="Complete response",
-            output_token_ids=[1, 2, 3],
-            finish_reason="length",
-            is_streaming=True,
-            delta=False,
-        )
-
-        mock_logger.info.assert_called_once()
-        call_args = mock_logger.info.call_args.args
-        assert "Generated response %s%s" in call_args[0]
-        assert call_args[1] == "test-789"
-        assert call_args[2] == " (streaming complete)"
-        assert call_args[3] == "Complete response"
-        assert call_args[4] == [1, 2, 3]
-        assert call_args[5] == "length"
-
-
-def test_request_logger_log_outputs_with_truncation():
-    """Test log_outputs respects max_log_len setting."""
-    mock_logger = MagicMock()
-
-    with patch("aphrodite.endpoints.logger.logger", mock_logger):
-        # Set max_log_len to 10
-        request_logger = RequestLogger(max_log_len=10)
-
-        # Test output truncation
-        long_output = "This is a very long output that should be truncated"
-        long_token_ids = list(range(20))  # 20 tokens
-
-        request_logger.log_outputs(
-            request_id="test-truncate",
-            outputs=long_output,
-            output_token_ids=long_token_ids,
-            finish_reason="stop",
-            is_streaming=False,
-            delta=False,
-        )
-
-        mock_logger.info.assert_called_once()
-        call_args = mock_logger.info.call_args
-
-        # Check that output was truncated to first 10 characters
-        logged_output = call_args[0][3]
-        assert logged_output == "This is a "
-        assert len(logged_output) == 10
-
-        # Check that token IDs were truncated to first 10 tokens
-        logged_token_ids = call_args[0][4]
-        assert logged_token_ids == list(range(10))
-        assert len(logged_token_ids) == 10
-
-
-def test_request_logger_log_outputs_none_values():
-    """Test log_outputs handles None values correctly."""
-    mock_logger = MagicMock()
-
-    with patch("aphrodite.endpoints.logger.logger", mock_logger):
-        request_logger = RequestLogger(max_log_len=None)
-
-        # Test with None output_token_ids
-        request_logger.log_outputs(
-            request_id="test-none",
-            outputs="Test output",
-            output_token_ids=None,
-            finish_reason="stop",
-            is_streaming=False,
-            delta=False,
-        )
-
-        mock_logger.info.assert_called_once()
-        call_args = mock_logger.info.call_args.args
-        assert "Generated response %s%s" in call_args[0]
-        assert call_args[1] == "test-none"
-        assert call_args[3] == "Test output"
-        assert call_args[4] is None
-        assert call_args[5] == "stop"
-
-
-def test_request_logger_log_outputs_empty_output():
-    """Test log_outputs handles empty output correctly."""
-    mock_logger = MagicMock()
-
-    with patch("aphrodite.endpoints.logger.logger", mock_logger):
-        request_logger = RequestLogger(max_log_len=5)
-
-        # Test with empty output
-        request_logger.log_outputs(
-            request_id="test-empty",
-            outputs="",
-            output_token_ids=[],
-            finish_reason="stop",
-            is_streaming=False,
-            delta=False,
-        )
-
-        mock_logger.info.assert_called_once()
-        call_args = mock_logger.info.call_args.args
-        assert "Generated response %s%s" in call_args[0]
-        assert call_args[1] == "test-empty"
-        assert call_args[3] == ""
-        assert call_args[4] == []
-        assert call_args[5] == "stop"
-
-
-def test_request_logger_log_outputs_integration():
-    """Test that log_outputs can be called alongside log_inputs."""
-    mock_logger = MagicMock()
-
-    with patch("aphrodite.endpoints.logger.logger", mock_logger):
-        request_logger = RequestLogger(max_log_len=None)
-
-        # Test that both methods can be called without interference
-        request_logger.log_inputs(
-            request_id="test-integration",
-            prompt="Test prompt",
-            prompt_token_ids=[1, 2, 3],
-            prompt_embeds=None,
-            params=None,
-            lora_request=None,
-        )
-
-        request_logger.log_outputs(
-            request_id="test-integration",
-            outputs="Test output",
-            output_token_ids=[4, 5, 6],
-            finish_reason="stop",
-            is_streaming=False,
-            delta=False,
-        )
-
-        # Should have been called twice - once for inputs, once for outputs
-        assert mock_logger.info.call_count == 2
-
-        # Check that the calls were made with correct patterns
-        input_call = mock_logger.info.call_args_list[0][0]
-        output_call = mock_logger.info.call_args_list[1][0]
-
-        assert "Received request %s" in input_call[0]
-        assert input_call[1] == "test-integration"
-
-        assert "Generated response %s%s" in output_call[0]
-        assert output_call[1] == "test-integration"
-
-
-def test_streaming_complete_logs_full_text_content():
-    """Test that streaming complete logging includes
-    full accumulated text, not just token count."""
-    mock_logger = MagicMock()
-
-    with patch("aphrodite.endpoints.logger.logger", mock_logger):
-        request_logger = RequestLogger(max_log_len=None)
-
-        # Test with actual content instead of token count format
-        full_response = "This is a complete response from streaming"
-        request_logger.log_outputs(
-            request_id="test-streaming-full-text",
-            outputs=full_response,
-            output_token_ids=None,
-            finish_reason="streaming_complete",
-            is_streaming=True,
-            delta=False,
-        )
-
-        mock_logger.info.assert_called_once()
-        call_args = mock_logger.info.call_args.args
-
-        # Verify the logged output is the full text, not a token count format
-        logged_output = call_args[3]
-        assert logged_output == full_response
-        assert "tokens>" not in logged_output
-        assert "streaming_complete" not in logged_output
-
-        # Verify other parameters
-        assert call_args[1] == "test-streaming-full-text"
-        assert call_args[2] == " (streaming complete)"
-        assert call_args[5] == "streaming_complete"
-
-
 # Add aphrodite prefix to make sure logs go through the aphrodite logger
 test_logger = init_logger("aphrodite.test_logger")
 
@@ -514,8 +280,8 @@ def mp_function(**kwargs):
     test_logger.debug("This is a subprocess debug message: %s.", kwargs.get("b"))
 
 
-def test_caplog_mp_fork(caplog_aphrodite, caplog_mp_fork):
-    with caplog_aphrodite.at_level(logging.DEBUG), caplog_mp_fork():
+def test_caplog_mp_fork(caplog_vllm, caplog_mp_fork):
+    with caplog_vllm.at_level(logging.DEBUG, logger="aphrodite"), caplog_mp_fork():
         import multiprocessing
 
         ctx = multiprocessing.get_context("fork")
@@ -527,8 +293,8 @@ def test_caplog_mp_fork(caplog_aphrodite, caplog_mp_fork):
         p.start()
         p.join()
 
-    assert "AAAA" in caplog_aphrodite.text
-    assert "BBBBB" in caplog_aphrodite.text
+    assert "AAAA" in caplog_vllm.text
+    assert "BBBBB" in caplog_vllm.text
 
 
 def test_caplog_mp_spawn(caplog_mp_spawn):

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 # Adapted from
 # https://github.com/fmmoret/aphrodite/blob/fm-support-lora-on-quantized-models/tests/lora/test_llama.py
 from dataclasses import dataclass
@@ -22,16 +23,24 @@ MODELS: list[ModelWithQuantization]
 # AWQ quantization is currently not supported in ROCm.
 if current_platform.is_rocm():
     MODELS = [
-        ModelWithQuantization(model_path="TheBloke/TinyLlama-1.1B-Chat-v0.3-GPTQ", quantization="gptq"),
+        ModelWithQuantization(
+            model_path="TheBloke/TinyLlama-1.1B-Chat-v0.3-GPTQ", quantization="gptq"
+        ),
     ]
 else:
     MODELS = [
-        ModelWithQuantization(model_path="TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ", quantization="awq"),
-        ModelWithQuantization(model_path="TheBloke/TinyLlama-1.1B-Chat-v0.3-GPTQ", quantization="gptq"),
+        ModelWithQuantization(
+            model_path="TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ", quantization="awq"
+        ),
+        ModelWithQuantization(
+            model_path="TheBloke/TinyLlama-1.1B-Chat-v0.3-GPTQ", quantization="gptq"
+        ),
     ]
 
 
-def do_sample(llm: aphrodite.LLM, lora_path: str, lora_id: int, max_tokens: int = 256) -> list[str]:
+def do_sample(
+    llm: aphrodite.LLM, lora_path: str, lora_id: int, max_tokens: int = 256
+) -> list[str]:
     raw_prompts = [
         "Give me an orange-ish brown color",
         "Give me a neon pink color",
@@ -42,7 +51,9 @@ def do_sample(llm: aphrodite.LLM, lora_path: str, lora_id: int, max_tokens: int 
 
     prompts = [format_prompt_tuples(p) for p in raw_prompts]
 
-    sampling_params = aphrodite.SamplingParams(temperature=0, max_tokens=max_tokens, stop=["<|im_end|>"])
+    sampling_params = aphrodite.SamplingParams(
+        temperature=0, max_tokens=max_tokens, stop=["<|im_end|>"]
+    )
     outputs = llm.generate(
         prompts,
         sampling_params,
@@ -94,7 +105,9 @@ def test_quant_model_lora(tinyllama_lora_files, model):
         # Assert that the outputs changed.
         if model.quantization == "gptq" and expected_output is expected_lora_output:
             for i, o in enumerate(output):
-                assert o.startswith("#"), f"Expected example {i} to start with # but got {o}"
+                assert o.startswith("#"), (
+                    f"Expected example {i} to start with # but got {o}"
+                )
             return
         assert output == expected_output
 

@@ -3,20 +3,44 @@
 import tempfile
 from collections import defaultdict
 from collections.abc import Callable
-from itertools import count
-from typing import Any
+from dataclasses import dataclass
+from itertools import chain, count
+from typing import Any, Literal
 
 import torch
-from aphrodite.distributed.kv_transfer.kv_connector.v1.shared_storage_connector import SharedStorageConnector  # noqa
 
 from aphrodite import SamplingParams
-from aphrodite.config import AphroditeConfig, CacheConfig, DeviceConfig, KVTransferConfig, ModelConfig, SchedulerConfig
+from aphrodite.config import (
+    AttentionConfig,
+    CacheConfig,
+    DeviceConfig,
+    KVTransferConfig,
+    ModelConfig,
+    SchedulerConfig,
+    AphroditeConfig,
+)
 from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
+from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+    KVConnectorBase_V1,
+    KVConnectorMetadata,
+    KVConnectorRole,
+    KVConnectorWorkerMetadata,
+)
+from aphrodite.distributed.kv_transfer.kv_connector.v1.example_connector import (  # noqa
+    ExampleConnector,
+)
 from aphrodite.utils.hashing import sha256
 from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
 from aphrodite.v1.core.kv_cache_utils import get_request_block_hasher, init_none_hash
-from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheConfig, KVCacheGroupSpec
+from aphrodite.v1.core.sched.async_scheduler import AsyncScheduler
+from aphrodite.v1.core.sched.scheduler import Scheduler, SchedulerOutput
+from aphrodite.v1.kv_cache_interface import (
+    FullAttentionSpec,
+    KVCacheConfig,
+    KVCacheGroupSpec,
+    MambaSpec,
+    SlidingWindowSpec,
+)
 from aphrodite.v1.outputs import KVConnectorOutput, ModelRunnerOutput
 from aphrodite.v1.request import Request
 from aphrodite.v1.structured_output import StructuredOutputManager
@@ -32,15 +56,30 @@ def assert_scheduler_empty(scheduler: Scheduler):
     assert len(scheduler.running) == 0
     assert len(scheduler.finished_req_ids) == 0
     assert len(scheduler.finished_recving_kv_req_ids) == 0
+    assert len(scheduler._inflight_prefills) == 0
 
     # EncoderCacheManager.
     assert len(scheduler.encoder_cache_manager.freed) == 0
     assert len(scheduler.encoder_cache_manager.cached) == 0
 
     # KVCache Manager.
-    assert len(scheduler.kv_cache_manager.coordinator.single_type_managers[0].req_to_blocks) == 0
-    assert len(scheduler.kv_cache_manager.coordinator.single_type_managers[0].num_cached_block) == 0
-    num_free_blocks = scheduler.kv_cache_manager.block_pool.free_block_queue.num_free_blocks
+    assert (
+        len(
+            scheduler.kv_cache_manager.coordinator.single_type_managers[0].req_to_blocks
+        )
+        == 0
+    )
+    assert (
+        len(
+            scheduler.kv_cache_manager.coordinator.single_type_managers[
+                0
+            ].num_cached_block
+        )
+        == 0
+    )
+    num_free_blocks = (
+        scheduler.kv_cache_manager.block_pool.free_block_queue.num_free_blocks
+    )
     assert num_free_blocks == (scheduler.kv_cache_manager.block_pool.num_gpu_blocks - 1)
 
     # NOTE(rob): just the ref count on blocks will be 0. The hash
@@ -49,7 +88,7 @@ def assert_scheduler_empty(scheduler: Scheduler):
         assert block.ref_cnt == 0
 
 
-def create_aphrodite_config(
+def create_vllm_config(
     model: str = "facebook/opt-125m",
     max_num_seqs: int = 16,
     max_num_batched_tokens: int = 64,
@@ -57,62 +96,92 @@ def create_aphrodite_config(
     max_model_len: int = 10000,
     enable_chunked_prefill: bool = True,
     enable_permute_local_kv: bool = False,
+    kv_connector_extra_config: dict[str, Any] | None = None,
+    dtype: str = "float16",
+    cache_dtype: str = "auto",
+    hf_overrides: dict[str, Any] | None = None,
+    attention_backend: str | None = None,
+    kv_load_failure_policy: Literal["recompute", "fail"] = "fail",
+    kv_connector: str = "NixlConnector",
+    kv_connector_module_path: str | None = None,
+    kv_role: str = "kv_consumer",
+    disable_hybrid_kv_cache_manager: bool | None = None,
 ) -> AphroditeConfig:
     """Initialize AphroditeConfig For Testing."""
+    model_config = ModelConfig(
+        model=model,
+        trust_remote_code=True,
+        dtype=dtype,
+        seed=42,
+        hf_overrides=hf_overrides or {},
+    )
     scheduler_config = SchedulerConfig(
         max_num_seqs=max_num_seqs,
         max_num_batched_tokens=max_num_batched_tokens,
         max_model_len=max_model_len,
         enable_chunked_prefill=enable_chunked_prefill,
-        # Disable hybrid KV cache manager for testing
-        # Should be removed after we support hybrid KV cache manager-based testing.
-        disable_hybrid_kv_cache_manager=True,
-    )
-    model_config = ModelConfig(
-        model=model,
-        trust_remote_code=True,
-        dtype="float16",
-        seed=42,
+        is_encoder_decoder=model_config.is_encoder_decoder,
+        disable_hybrid_kv_cache_manager=disable_hybrid_kv_cache_manager,
     )
     # Cache config, optionally force APC
     cache_config = CacheConfig(
         block_size=block_size,
         gpu_memory_utilization=0.9,
-        swap_space=0,
-        cache_dtype="auto",
+        cache_dtype=cache_dtype,
         enable_prefix_caching=True,
     )
     kv_transfer_config = KVTransferConfig(
-        kv_connector="NixlConnector",
-        kv_role="kv_both",
+        kv_connector=kv_connector,
+        kv_connector_module_path=kv_connector_module_path,
+        kv_role=kv_role,
         enable_permute_local_kv=enable_permute_local_kv,
+        kv_connector_extra_config=kv_connector_extra_config or {},
+        kv_load_failure_policy=kv_load_failure_policy,
     )
+    attention_config = AttentionConfig(backend=attention_backend)
     return AphroditeConfig(
         scheduler_config=scheduler_config,
         model_config=model_config,
         cache_config=cache_config,
         kv_transfer_config=kv_transfer_config,
         device_config=DeviceConfig("cpu"),
+        attention_config=attention_config,
     )
 
 
 def create_scheduler(
-    aphrodite_config: AphroditeConfig,
+    vllm_config: AphroditeConfig,
     num_blocks: int = 10000,
-) -> Scheduler:
+    kv_cache_config: KVCacheConfig | None = None,
+) -> Scheduler | AsyncScheduler:
     """Initialize Scheduler For Testing."""
-    block_size = aphrodite_config.cache_config.block_size
-    kv_cache_config = KVCacheConfig(
-        num_blocks=num_blocks,  # A large number of blocks to hold all requests
-        kv_cache_tensors=[],
-        kv_cache_groups=[KVCacheGroupSpec(["layer"], FullAttentionSpec(block_size, 1, 1, torch.float32, False))],
+    block_size = vllm_config.cache_config.block_size
+    if kv_cache_config is None:
+        kv_cache_config = KVCacheConfig(
+            num_blocks=num_blocks,  # A large number of blocks to hold all requests
+            kv_cache_tensors=[],
+            kv_cache_groups=[
+                KVCacheGroupSpec(
+                    ["layer"],
+                    FullAttentionSpec(
+                        block_size=block_size,
+                        num_kv_heads=1,
+                        head_size=1,
+                        dtype=torch.float32,
+                    ),
+                )
+            ],
+        )
+    vllm_config.cache_config.num_gpu_blocks = num_blocks
+
+    scheduler_cls = (
+        AsyncScheduler if vllm_config.scheduler_config.async_scheduling else Scheduler
     )
-    aphrodite_config.cache_config.num_gpu_blocks = num_blocks
-    return Scheduler(
-        aphrodite_config=aphrodite_config,
+    return scheduler_cls(
+        vllm_config=vllm_config,
         kv_cache_config=kv_cache_config,
         log_stats=True,
-        structured_output_manager=StructuredOutputManager(aphrodite_config),
+        structured_output_manager=StructuredOutputManager(vllm_config),
         block_size=block_size,
     )
 
@@ -153,13 +222,16 @@ def create_request(
             do_remote_prefill=True,
             do_remote_decode=False,
             remote_engine_id="my-engine-id",
+            remote_request_id=f"prefill-{request_id}",
             remote_block_ids=list(range(num_remote_blocks)),
             remote_host="my-host",
             remote_port=1234,
+            tp_size=1,
         )
 
     max_tokens = 1 if do_remote_decode else max_tokens
     sampling_params = SamplingParams(max_tokens=max_tokens)
+    sampling_params.update_from_generation_config({}, EOS_TOKEN_ID)
 
     common_prefix = [1] * common_prefix_len if common_prefix_len > 0 else []
     suffix = [i * request_id for i in range(num_tokens - common_prefix_len)]
@@ -171,7 +243,6 @@ def create_request(
         sampling_params=sampling_params,
         pooling_params=None,
         mm_features=None,
-        eos_token_id=EOS_TOKEN_ID,
         block_hasher=get_request_block_hasher(block_size, hash_fn),
     )
     req.kv_transfer_params = kv_transfer_params
@@ -185,6 +256,7 @@ def create_model_runner_output(
     invalid_block_ids: set[int] | None = None,
     use_eos: bool = False,
     token_id: int = 0,
+    kv_connector_worker_meta: KVConnectorWorkerMetadata | None = None,
 ) -> ModelRunnerOutput:
     """Make dummy model runner output for testing."""
 
@@ -198,11 +270,17 @@ def create_model_runner_output(
 
     kv_connector_output = (
         None
-        if (finished_sending is None and finished_recving is None and invalid_block_ids is None)
+        if (
+            finished_sending is None
+            and finished_recving is None
+            and invalid_block_ids is None
+            and kv_connector_worker_meta is None
+        )
         else KVConnectorOutput(
             finished_sending=finished_sending,
             finished_recving=finished_recving,
             invalid_block_ids=invalid_block_ids or set(),
+            kv_connector_worker_meta=kv_connector_worker_meta,
         )
     )
 
@@ -218,13 +296,21 @@ def create_model_runner_output(
     )
 
 
-class TestSharedStorageConnector(SharedStorageConnector):
-    def __init__(self, config: AphroditeConfig, role):
+class TestExampleConnector(ExampleConnector):
+    def __init__(
+        self,
+        config: AphroditeConfig,
+        role: KVConnectorRole,
+        kv_cache_config: KVCacheConfig,
+    ):
         self.name = config.kv_transfer_config.kv_connector_extra_config["name"]
-        self._connector = SharedStorageConnector(config, role)
+        self._connector = ExampleConnector(config, role, kv_cache_config)
         self.call_record: dict[str, int] = defaultdict(int)
         # Use a unique temp file per connector
-        self._event_file = tempfile.gettempdir() + f"/connector_{self.name}-{self.role.name}_events.log"
+        self._event_file = (
+            tempfile.gettempdir()
+            + f"/connector_{self.name}-{self.role.name}_events.log"
+        )
         # Start with an empty file
         with open(self._event_file, "w") as _:
             pass
@@ -272,4 +358,232 @@ class TestSharedStorageConnector(SharedStorageConnector):
         return attr
 
 
-KVConnectorFactory.register_connector("TestSharedStorageConnector", __name__, TestSharedStorageConnector.__name__)
+@dataclass(frozen=True)
+class MockKVConfig:
+    matched_tokens: int = 0
+    is_async: bool = False
+
+
+class MockKVConnectorMetadata(KVConnectorMetadata):
+    def __init__(self):
+        # Scheduler tests check metadata.requests
+        self.requests: list = []
+
+
+class MockKVConnector(KVConnectorBase_V1):
+    """Mock KV connector for scheduler tests, supporting both sync and async mode."""
+
+    def __init__(
+        self,
+        vllm_config: AphroditeConfig,
+        role: KVConnectorRole,
+        kv_cache_config: KVCacheConfig,
+    ):
+        super().__init__(vllm_config, role, kv_cache_config)
+        extra_config = self._kv_transfer_config.kv_connector_extra_config
+        self.config = MockKVConfig(
+            matched_tokens=extra_config["matched_tokens"],
+            is_async=extra_config["is_async"],
+        )
+
+    def get_num_new_matched_tokens(
+        self,
+        request: Request,
+        num_computed_tokens: int,
+    ) -> tuple[int | None, bool]:
+        return (self.config.matched_tokens, self.config.is_async)
+
+    def update_state_after_alloc(
+        self,
+        request: Request,
+        blocks: KVCacheBlocks,
+        num_external_tokens: int,
+    ):
+        pass
+
+    def build_connector_meta(
+        self, scheduler_output: SchedulerOutput
+    ) -> KVConnectorMetadata:
+        metadata = MockKVConnectorMetadata()
+        cached_reqs = scheduler_output.scheduled_cached_reqs
+        for req_id in chain(
+            (req.req_id for req in scheduler_output.scheduled_new_reqs),
+            (
+                req_id
+                for req_id in cached_reqs.req_ids
+                if req_id in cached_reqs.resumed_req_ids
+            ),
+        ):
+            metadata.requests.append({"req_id": req_id})
+        return metadata
+
+    def start_load_kv(self, kv_caches, finished_req_ids):
+        pass
+
+    def wait_for_layer_load(self, layer_name):
+        pass
+
+    def save_kv_layer(self, layer_name, kv_layer, attn_metadata, **kwargs):
+        pass
+
+    def wait_for_save(self):
+        pass
+
+
+KVConnectorFactory.register_connector(
+    "TestExampleConnector", __name__, TestExampleConnector.__name__
+)
+
+KVConnectorFactory.register_connector(
+    "MockKVConnector", __name__, MockKVConnector.__name__
+)
+
+
+def make_kv_cache_config(
+    block_size: int,
+    swa_enabled: bool = False,
+    mamba_enabled: bool = False,
+    sw_size: int = 128,
+    num_blocks: int = 100,
+) -> KVCacheConfig:
+    kv_cache_groups = [
+        KVCacheGroupSpec(
+            ["layer0", "layer2"],
+            FullAttentionSpec(
+                block_size=block_size,
+                num_kv_heads=4,
+                head_size=16,
+                dtype=torch.float16,
+            ),
+        )
+    ]
+    if swa_enabled:
+        kv_cache_groups.append(
+            KVCacheGroupSpec(
+                ["layer1", "layer3"],
+                SlidingWindowSpec(
+                    block_size=block_size,
+                    num_kv_heads=4,
+                    head_size=16,
+                    dtype=torch.float16,
+                    sliding_window=sw_size,
+                ),
+            )
+        )
+    if mamba_enabled:
+        kv_cache_groups.append(
+            KVCacheGroupSpec(
+                ["mamba0", "mamba1"],
+                MambaSpec(
+                    block_size=block_size,
+                    shapes=((16,), (16,)),
+                    dtypes=(torch.float16,),
+                ),
+            )
+        )
+    return KVCacheConfig(
+        num_blocks=num_blocks, kv_cache_tensors=[], kv_cache_groups=kv_cache_groups
+    )
+
+
+def make_nixl_scheduler(
+    has_mamba: bool = False,
+    is_hma_required: bool = False,
+    heartbeat: bool = False,
+    kv_lease_duration: int = 30,
+):
+    """Create a NixlConnectorScheduler via __new__ (skipping __init__).
+
+    Only sets the flags needed by the tests.  When *heartbeat=True* the
+    scheduler-side heartbeat bookkeeping fields are also initialised.
+    """
+    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.scheduler import (
+        NixlConnectorScheduler,
+    )
+
+    sched = object.__new__(NixlConnectorScheduler)
+    sched._has_mamba = has_mamba
+    sched._is_hma_required = is_hma_required
+
+    if heartbeat:
+        sched._heartbeat_by_engine = {}
+        sched._heartbeat_req_engine = {}
+        sched._last_heartbeat_time = 0.0
+        sched._kv_lease_duration = kv_lease_duration
+        sched._heartbeat_interval = kv_lease_duration // 6
+        # Fields touched by build_connector_meta / request_finished:
+        sched._reqs_need_recv = {}
+        sched._reqs_need_send = {}
+        sched._reqs_in_batch = set()
+        sched._reqs_not_processed = set()
+        sched._reqs_need_save = {}
+        sched.use_host_buffer = False
+        sched.engine_id = "test-engine"
+        sched.side_channel_host = "localhost"
+        sched.side_channel_port = 5555
+        sched.blocks_per_sw = []
+        sched.is_bidirectional_kv_xfer_enabled = False
+    return sched
+
+
+def make_nixl_push_scheduler(
+    *,
+    decoder_kv_blocks_ttl: float = 30.0,
+    push_registration_timeout: float | None = None,
+    is_bidirectional_kv_xfer_enabled: bool = False,
+    has_mamba: bool = False,
+):
+    """Create a NixlPushConnectorScheduler via __new__ (skipping __init__).
+
+    The push scheduler can't reuse :func:`make_nixl_scheduler` because it
+    is a different class (``NixlPushConnectorScheduler`` vs
+    ``NixlConnectorScheduler``) and carries push-specific state. Only the
+    fields touched by the unit tests are populated.
+    """
+    from unittest.mock import MagicMock
+
+    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_scheduler import (
+        NixlPushConnectorScheduler,
+    )
+
+    sched = object.__new__(NixlPushConnectorScheduler)
+
+    # Base scheduler fields (shared with pull / heartbeat path).
+    sched._reqs_need_recv = {}
+    sched._reqs_need_send = {}
+    sched._reqs_in_batch = set()
+    sched._reqs_not_processed = set()
+    sched._reqs_need_save = {}
+    sched._kv_lease_duration = 30
+    sched.decoder_kv_blocks_ttl = decoder_kv_blocks_ttl
+    sched.use_host_buffer = False
+    sched.engine_id = "decode-engine"
+    sched.side_channel_host = "127.0.0.1"
+    sched.side_channel_port = 5600
+    sched.is_bidirectional_kv_xfer_enabled = is_bidirectional_kv_xfer_enabled
+    sched._has_mamba = has_mamba
+
+    # vllm_config is consulted for parallel_config.tensor_parallel_size.
+    vllm_config = MagicMock()
+    vllm_config.parallel_config.tensor_parallel_size = 1
+    sched.vllm_config = vllm_config
+
+    # Push-specific state.
+    sched._push_pending_registrations = {}
+    sched._push_registration_deadlines = {}
+    sched._finished_request_blocks = {}
+    sched._newly_finished_push_blocks = {}
+    sched._push_registration_timeout = (
+        push_registration_timeout
+        if push_registration_timeout is not None
+        else decoder_kv_blocks_ttl
+    )
+
+    # Heartbeat fields touched by base request_finished /
+    # update_connector_output.
+    sched._heartbeat_by_engine = {}
+    sched._heartbeat_req_engine = {}
+    sched._last_heartbeat_time = 0.0
+    sched.blocks_per_sw = []
+
+    return sched

@@ -40,7 +40,10 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1 import (
     KVConnectorBase_V1,
     KVConnectorRole,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.base import KVConnectorMetadata
+from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
+    KVConnectorMetadata,
+    SupportsHMA,
+)
 from aphrodite.logger import init_logger
 from aphrodite.utils.math_utils import cdiv
 from aphrodite.v1.attention.backend import AttentionMetadata
@@ -71,7 +74,7 @@ class DecodeBenchConnectorMetadata(KVConnectorMetadata):
     reqs_to_fill: dict[str, tuple[tuple[list[int], ...], int]]
 
 
-class DecodeBenchConnector(KVConnectorBase_V1):
+class DecodeBenchConnector(KVConnectorBase_V1, SupportsHMA):
     """
     A KV Connector for decode instance performance testing.
 
@@ -84,7 +87,7 @@ class DecodeBenchConnector(KVConnectorBase_V1):
         self,
         aphrodite_config: "AphroditeConfig",
         role: KVConnectorRole,
-        kv_cache_config: "KVCacheConfig | None" = None,
+        kv_cache_config: "KVCacheConfig",
     ):
         super().__init__(aphrodite_config, role, kv_cache_config)
 
@@ -137,13 +140,21 @@ class DecodeBenchConnector(KVConnectorBase_V1):
         num_computed_tokens: int,
     ) -> tuple[int | None, bool]:
         assert self.connector_scheduler is not None
-        return self.connector_scheduler.get_num_new_matched_tokens(request, num_computed_tokens)
+        return self.connector_scheduler.get_num_new_matched_tokens(
+            request, num_computed_tokens
+        )
 
-    def update_state_after_alloc(self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int):
+    def update_state_after_alloc(
+        self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int
+    ):
         assert self.connector_scheduler is not None
-        return self.connector_scheduler.update_state_after_alloc(request, blocks, num_external_tokens)
+        return self.connector_scheduler.update_state_after_alloc(
+            request, blocks, num_external_tokens
+        )
 
-    def build_connector_meta(self, scheduler_output: "SchedulerOutput") -> KVConnectorMetadata:
+    def build_connector_meta(
+        self, scheduler_output: "SchedulerOutput"
+    ) -> KVConnectorMetadata:
         assert self.connector_scheduler is not None
         return self.connector_scheduler.build_connector_meta(scheduler_output)
 
@@ -152,6 +163,17 @@ class DecodeBenchConnector(KVConnectorBase_V1):
         request: "Request",
         block_ids: list[int],
     ) -> tuple[bool, dict[str, Any] | None]:
+        assert self.connector_scheduler is not None
+        self.connector_scheduler.request_finished(request)
+        return False, None
+
+    def request_finished_all_groups(
+        self,
+        request: "Request",
+        block_ids: tuple[list[int], ...],
+    ) -> tuple[bool, dict[str, Any] | None]:
+        # HMA-enabled path: same cleanup as the single-group variant since
+        # this connector owns no external state per block.
         assert self.connector_scheduler is not None
         self.connector_scheduler.request_finished(request)
         return False, None
@@ -207,7 +229,9 @@ class DecodeBenchConnectorScheduler:
         # that async overhead isn't worth it
         return num_tokens_to_fill, False
 
-    def update_state_after_alloc(self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int):
+    def update_state_after_alloc(
+        self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int
+    ):
         """
         Called after blocks are allocated. Store the block IDs so we can
         fill them with dummy values.
@@ -232,7 +256,9 @@ class DecodeBenchConnectorScheduler:
 
         # Extract the first num_blocks_to_fill blocks from each group
         # All groups should have the same block IDs for the same request
-        block_ids_per_group = tuple(group_blocks[:num_blocks_to_fill] for group_blocks in block_groups)
+        block_ids_per_group = tuple(
+            group_blocks[:num_blocks_to_fill] for group_blocks in block_groups
+        )
 
         # Store the blocks to fill for all group. _pending_fills doesn't need cleanup
         # as it's cleared after build_connector_meta
@@ -243,13 +269,16 @@ class DecodeBenchConnectorScheduler:
         self._filled_requests.add(req_id)
 
         logger.debug(
-            "DecodeBenchConnector: Allocated %d blocks across %d KV cache groups for request %s",
+            "DecodeBenchConnector: Allocated %d blocks across %d KV cache groups "
+            "for request %s",
             num_blocks_to_fill,
             len(block_groups),
             req_id,
         )
 
-    def build_connector_meta(self, scheduler_output: "SchedulerOutput") -> KVConnectorMetadata:
+    def build_connector_meta(
+        self, scheduler_output: "SchedulerOutput"
+    ) -> KVConnectorMetadata:
         """
         Build metadata containing information about which blocks to fill
         with dummy KV values.
@@ -322,7 +351,8 @@ class DecodeBenchConnectorWorker:
                 self._fill_blocks(group_idx, block_ids, num_tokens)
 
             logger.debug(
-                "DecodeBenchConnector: Filled %d blocks (%d tokens) across %d groups for request %s",
+                "DecodeBenchConnector: Filled %d blocks (%d tokens) across %d groups "
+                "for request %s",
                 len(block_ids_per_group[0]) if block_ids_per_group else 0,
                 num_tokens,
                 len(block_ids_per_group),
@@ -350,49 +380,101 @@ class DecodeBenchConnectorWorker:
         # Fill only the layers in this group
         for layer_name in layer_names:
             if layer_name not in self.kv_caches:
-                logger.warning("DecodeBenchConnector: Layer %s not found in KV caches", layer_name)
+                logger.warning(
+                    "DecodeBenchConnector: Layer %s not found in KV caches", layer_name
+                )
                 continue
 
             kv_cache = self.kv_caches[layer_name]
 
-            # Convert block_ids to tensor on device
-            block_ids_tensor = torch.tensor(block_ids, dtype=torch.long, device=kv_cache.device)
-
-            # Filter invalid block IDs
-            valid_mask = block_ids_tensor < kv_cache.shape[0]
-            valid_block_ids = block_ids_tensor[valid_mask]
-
-            if len(valid_block_ids) == 0:
+            # Attention layers store KV as a single block-indexed tensor whose
+            # first dim is num_blocks; fill the requested block rows. Hybrid /
+            # linear-attention layers (e.g. Mamba, Kimi Delta Attention) store
+            # their state as a list/tuple of tensors that are NOT block-indexed
+            # — each tensor is a single state buffer with no num_blocks
+            # dimension — so fill each tensor in its entirety with the same
+            # dummy values.
+            if isinstance(kv_cache, torch.Tensor):
+                self._fill_block_tensor(kv_cache, block_ids)
+            elif isinstance(kv_cache, (list, tuple)) and all(
+                isinstance(t, torch.Tensor) for t in kv_cache
+            ):
+                for state_tensor in kv_cache:
+                    self._fill_state_tensor(state_tensor)
+            else:
+                logger.warning_once(
+                    "DecodeBenchConnector: skipping fill for layer %s whose KV "
+                    "cache is %s, not a tensor or a list/tuple of tensors.",
+                    layer_name,
+                    type(kv_cache).__name__,
+                )
                 continue
 
-            # Create fill values - either constant or random
-            block_shape = kv_cache.shape[1:]
-            if self.fill_std > 0:
-                # Random normal sampling
-                fill_values = torch.normal(
-                    mean=self.fill_mean,
-                    std=self.fill_std,
-                    size=(len(valid_block_ids),) + block_shape,
-                    dtype=kv_cache.dtype,
-                    device=kv_cache.device,
-                )
-            else:
-                # Constant fill value
-                fill_values = torch.full(
-                    (len(valid_block_ids),) + block_shape,
-                    self.fill_mean,
-                    dtype=kv_cache.dtype,
-                    device=kv_cache.device,
-                )
-
-            # Batch fill operation
-            kv_cache[valid_block_ids] = fill_values
-
         logger.debug(
-            "DecodeBenchConnector: Filled %d blocks in group %d with %s values (mean=%.3f, std=%.3f)",
+            "DecodeBenchConnector: Filled %d blocks in group %d with %s values "
+            "(mean=%.3f, std=%.3f)",
             len(block_ids),
             group_idx,
             "random" if self.fill_std > 0 else "constant",
             self.fill_mean,
             self.fill_std,
         )
+
+    def _fill_block_tensor(self, kv_cache: torch.Tensor, block_ids: list[int]):
+        """Fill the requested block rows of a block-indexed KV cache tensor.
+
+        Args:
+            kv_cache: A KV cache tensor whose first dim is num_blocks.
+            block_ids: Block IDs to fill. IDs that are out of range for this
+                tensor's first dim are ignored.
+        """
+        # Convert block_ids to tensor on device
+        block_ids_tensor = torch.tensor(
+            block_ids, dtype=torch.long, device=kv_cache.device
+        )
+
+        # Filter invalid block IDs
+        valid_mask = block_ids_tensor < kv_cache.shape[0]
+        valid_block_ids = block_ids_tensor[valid_mask]
+
+        if len(valid_block_ids) == 0:
+            return
+
+        # Create fill values - either constant or random
+        block_shape = kv_cache.shape[1:]
+        if self.fill_std > 0:
+            # Random normal sampling
+            fill_values = torch.normal(
+                mean=self.fill_mean,
+                std=self.fill_std,
+                size=(len(valid_block_ids),) + block_shape,
+                dtype=kv_cache.dtype,
+                device=kv_cache.device,
+            )
+        else:
+            # Constant fill value
+            fill_values = torch.full(
+                (len(valid_block_ids),) + block_shape,
+                self.fill_mean,
+                dtype=kv_cache.dtype,
+                device=kv_cache.device,
+            )
+
+        # Batch fill operation
+        kv_cache[valid_block_ids] = fill_values
+
+    def _fill_state_tensor(self, kv_cache: torch.Tensor):
+        """Fill an entire non-block-indexed state tensor with dummy values.
+
+        Hybrid / linear-attention layers (e.g. Mamba, Kimi Delta Attention)
+        store their per-layer state as tensors with no num_blocks dimension,
+        so the whole tensor is filled with the same constant or random values
+        used for block fills, rather than selected block rows.
+
+        Args:
+            kv_cache: A state tensor to fill in its entirety.
+        """
+        if self.fill_std > 0:
+            kv_cache.normal_(mean=self.fill_mean, std=self.fill_std)
+        else:
+            kv_cache.fill_(self.fill_mean)

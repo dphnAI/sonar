@@ -8,7 +8,7 @@ import torch
 from torch import nn
 from transformers import RobertaConfig
 
-from aphrodite.config import AphroditeConfig, ModelConfig, PoolerConfig
+from aphrodite.config import ModelConfig, PoolerConfig, AphroditeConfig
 from aphrodite.model_executor.layers.pooler import (
     BgeM3Pooler,
     BOSEOSFilter,
@@ -49,7 +49,9 @@ class RobertaEmbedding(nn.Module):
     def __init__(self, config: RobertaConfig):
         super().__init__()
         self.size = config.hidden_size
-        self.word_embeddings = VocabParallelEmbedding(config.vocab_size, config.hidden_size)
+        self.word_embeddings = VocabParallelEmbedding(
+            config.vocab_size, config.hidden_size
+        )
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
             config.max_position_embeddings,
@@ -57,7 +59,9 @@ class RobertaEmbedding(nn.Module):
             padding_idx=self.padding_idx,
         )
 
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+        self.token_type_embeddings = nn.Embedding(
+            config.type_vocab_size, config.hidden_size
+        )
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.register_buffer(
             "position_ids",
@@ -80,7 +84,9 @@ class RobertaEmbedding(nn.Module):
         # buffer -- in-place += would accumulate on CUDA graph padding
         # slots that aren't refreshed between requests, eventually
         # overflowing max_position_embeddings.
-        position_embeddings = self.position_embeddings(position_ids + self.padding_idx + 1)
+        position_embeddings = self.position_embeddings(
+            position_ids + self.padding_idx + 1
+        )
 
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
         embeddings = inputs_embeds + token_type_embeddings + position_embeddings
@@ -97,7 +103,9 @@ class RobertaClassificationHead(nn.Module):
         config = model_config.hf_config
         head_dtype = model_config.head_dtype
         self.dense = nn.Linear(config.hidden_size, config.hidden_size, dtype=head_dtype)
-        self.out_proj = nn.Linear(config.hidden_size, config.num_labels, dtype=head_dtype)
+        self.out_proj = nn.Linear(
+            config.hidden_size, config.num_labels, dtype=head_dtype
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Token extraction has already been applied in `pooler.pooling`
@@ -129,7 +137,9 @@ class RobertaEmbeddingModel(BertEmbeddingModel):
             intermediate_tensors=intermediate_tensors,
         )
 
-    def _build_model(self, aphrodite_config: AphroditeConfig, prefix: str = "") -> BertModel | BertWithRope:
+    def _build_model(
+        self, aphrodite_config: AphroditeConfig, prefix: str = ""
+    ) -> BertModel | BertWithRope:
         hf_config = aphrodite_config.model_config.hf_config
         kwargs = dict(aphrodite_config=aphrodite_config, prefix=prefix)
         if getattr(hf_config, "position_embedding_type", "absolute") == "absolute":
@@ -139,7 +149,9 @@ class RobertaEmbeddingModel(BertEmbeddingModel):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
         weights_list = list(weights)
-        has_roberta_prefix = any(name.startswith("roberta.") for name, _ in weights_list)
+        has_roberta_prefix = any(
+            name.startswith("roberta.") for name, _ in weights_list
+        )
         if has_roberta_prefix:
             # For models with the `roberta.` prefix e.g.
             # `FacebookAI/roberta-base`
@@ -162,7 +174,9 @@ def filter_secondary_weights(
     def filtered(n):
         return any(n.startswith(f) for f in secondary_weights)
 
-    return ((n, w) for n, w in all_weights1 if filtered(n)), ((n, w) for n, w in all_weights2 if not filtered(n))
+    return ((n, w) for n, w in all_weights1 if filtered(n)), (
+        (n, w) for n, w in all_weights2 if not filtered(n)
+    )
 
 
 class BgeM3EmbeddingModel(RobertaEmbeddingModel):
@@ -182,21 +196,27 @@ class BgeM3EmbeddingModel(RobertaEmbeddingModel):
 
         super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
         self.secondary_weight_prefixes = ["sparse_linear.", "colbert_linear."]
-        self.secondary_weight_files = [prefix + "pt" for prefix in self.secondary_weight_prefixes]
+        self.secondary_weight_files = [
+            prefix + "pt" for prefix in self.secondary_weight_prefixes
+        ]
 
         self.secondary_weights = [
             DefaultModelLoader.Source(
                 model_or_path=aphrodite_config.model_config.model,
-                revision=None,
+                revision=aphrodite_config.model_config.revision,
                 prefix=prefix,
                 allow_patterns_overrides=[filename],
             )
-            for filename, prefix in zip(self.secondary_weight_files, self.secondary_weight_prefixes)
+            for filename, prefix in zip(
+                self.secondary_weight_files, self.secondary_weight_prefixes
+            )
         ]
 
     def _build_pooler(self, pooler_config: PoolerConfig) -> Pooler:
         self.sparse_linear = nn.Linear(self.hidden_size, 1, dtype=self.head_dtype)
-        self.colbert_linear = nn.Linear(self.hidden_size, self.hidden_size, dtype=self.head_dtype)
+        self.colbert_linear = nn.Linear(
+            self.hidden_size, self.hidden_size, dtype=self.head_dtype
+        )
         embed_pooler = pooler_for_embed(pooler_config)
         token_classify_pooler = BOSEOSFilter(
             pooler_for_token_classify(
@@ -218,19 +238,25 @@ class BgeM3EmbeddingModel(RobertaEmbeddingModel):
                     # for some reason m3 only filters the bos for colbert vectors
                 ),
                 "token_classify": token_classify_pooler,
-                "embed&token_classify": BgeM3Pooler(token_classify_pooler, embed_pooler),
+                "embed&token_classify": BgeM3Pooler(
+                    token_classify_pooler, embed_pooler
+                ),
             }
         )
 
     def load_weights(self, all_weights: Iterable[tuple[str, torch.Tensor]]):
-        secondary, weights = filter_secondary_weights(all_weights, self.secondary_weight_prefixes)
+        secondary, weights = filter_secondary_weights(
+            all_weights, self.secondary_weight_prefixes
+        )
 
         super().load_weights(weights)
 
         params_dict = dict(self.named_parameters())
 
         for name, loaded_weight in secondary:
-            if any(name.startswith(prefix) for prefix in self.secondary_weight_prefixes):
+            if any(
+                name.startswith(prefix) for prefix in self.secondary_weight_prefixes
+            ):
                 param = params_dict[name]
                 weight_loader = getattr(param, "weight_loader", default_weight_loader)
                 weight_loader(param, loaded_weight)

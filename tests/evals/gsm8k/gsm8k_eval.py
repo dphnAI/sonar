@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """
-Isolated GSM8K evaluation script for Aphrodite run endpoint.
+Isolated GSM8K evaluation script for Aphrodite serve endpoint.
 """
 
 import argparse
@@ -75,7 +75,7 @@ def get_answer_value(answer_str: str) -> int:
         return INVALID
 
 
-async def call_aphrodite_api(
+async def call_vllm_api(
     session: aiohttp.ClientSession,
     prompt: str,
     temperature: float,
@@ -83,8 +83,12 @@ async def call_aphrodite_api(
     stop: list[str] | None = None,
     url: str | None = None,
     seed: int | None = None,
-) -> str:
-    """Call Aphrodite's OpenAI-compatible completions endpoint."""
+) -> tuple[str, int]:
+    """Call Aphrodite's OpenAI-compatible completions endpoint.
+
+    Returns:
+        Tuple of (response_text, completion_tokens)
+    """
     data = {
         "prompt": prompt,
         "temperature": temperature,
@@ -98,111 +102,234 @@ async def call_aphrodite_api(
         async with session.post(f"{url}/v1/completions", json=data) as response:
             response.raise_for_status()
             result = await response.json()
-            return result["choices"][0]["text"]
+            text = result["choices"][0]["text"]
+            completion_tokens = result.get("usage", {}).get("completion_tokens", 0)
+            return text, completion_tokens
     except Exception as e:
-        print(f"Error calling Aphrodite API: {e}")
-        return ""
+        print(f"Error calling Aphrodite API ({type(e).__name__}): {e}")
+        return "", 0
 
 
-def evaluate_gsm8k(
+async def call_vllm_chat_api(
+    session: aiohttp.ClientSession,
+    model: str,
+    prompt: str,
+    temperature: float,
+    max_tokens: int,
+    stop: list[str] | None = None,
+    url: str | None = None,
+    seed: int | None = None,
+) -> tuple[str, int]:
+    """Call Aphrodite's OpenAI-compatible chat completions endpoint."""
+    data = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stop": stop,
+    }
+    if seed is not None:
+        data["seed"] = seed
+
+    try:
+        async with session.post(f"{url}/v1/chat/completions", json=data) as response:
+            response.raise_for_status()
+            result = await response.json()
+            text = result["choices"][0]["message"]["content"] or ""
+            completion_tokens = result.get("usage", {}).get("completion_tokens", 0)
+            return text, completion_tokens
+    except Exception as e:
+        print(f"Error calling Aphrodite chat API ({type(e).__name__}): {e}")
+        return "", 0
+
+
+def _build_gsm8k_prompts(
     num_questions: int = 1319,
     num_shots: int = 5,
-    max_tokens: int = 256,
-    host: str = "http://127.0.0.1",
-    port: int = 8000,
-    temperature: float = 0.0,
-    seed: int | None = 42,
-) -> dict[str, float | int]:
-    """
-    Evaluate GSM8K accuracy using Aphrodite run endpoint.
-
-    Returns dict with accuracy, invalid_rate, latency, etc.
-    """
-    base_url = f"{host}:{port}"
-
-    # Load GSM8K train and test data
+) -> tuple[list[str], list[int]]:
+    """Build few-shot GSM8K completion prompts and ground-truth labels."""
+    if num_questions == 0:
+        return [], []
     train_data, test_data = load_gsm8k_data()
-
-    # Limit to available test questions
     num_questions = min(num_questions, len(test_data))
 
-    # Build few-shot examples from train split (like lm-eval does)
     few_shot_examples = ""
     for i in range(num_shots):
-        few_shot_examples += f"Question: {train_data[i]['question']}\nAnswer: {train_data[i]['answer']}\n\n"
+        few_shot_examples += (
+            f"Question: {train_data[i]['question']}\n"
+            f"Answer: {train_data[i]['answer']}\n\n"
+        )
 
-    # Prepare test questions and labels from test split
-    questions = []
+    prompts = []
     labels = []
     for i in range(num_questions):
-        questions.append(f"Question: {test_data[i]['question']}\nAnswer:")
+        prompts.append(
+            few_shot_examples + f"Question: {test_data[i]['question']}\nAnswer:"
+        )
         labels.append(get_answer_value(test_data[i]["answer"]))
 
     assert all(label != INVALID for label in labels), "Some labels are invalid"
+    return prompts, labels
 
-    # Run evaluation
-    async def run_async_evaluation():
-        states: list[str] = [""] * num_questions
 
-        async def get_answer(session: aiohttp.ClientSession, i: int) -> str:
-            prompt = few_shot_examples + questions[i]
-            answer = await call_aphrodite_api(
-                session=session,
-                prompt=prompt,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                stop=["Question", "Assistant:", "<|separator|>"],
-                url=base_url,
-                seed=seed,
-            )
-            states[i] = answer
-            return answer
-
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=600)) as session:
-            tasks = [get_answer(session, i) for i in range(num_questions)]
-            await tqdm.gather(*tasks, desc="Evaluating")
-
-        return states
-
-    print(f"Running GSM8K evaluation: {num_questions} questions, {num_shots}-shot")
-
-    tic = time.perf_counter()
-    states = asyncio.run(run_async_evaluation())
-    latency = time.perf_counter() - tic
-
-    # Compute metrics
+def _score_gsm8k(
+    states: list[str],
+    output_tokens: list[int],
+    labels: list[int],
+    num_shots: int,
+    max_tokens: int,
+    latency: float,
+) -> dict[str, float | int]:
+    """Score GSM8K responses and return a results dict."""
+    num_questions = len(labels)
     preds = [get_answer_value(state) for state in states]
     accuracy = np.mean(np.array(preds) == np.array(labels))
     invalid_rate = np.mean(np.array(preds) == INVALID)
+    total_output_tokens = sum(output_tokens)
+    tokens_per_second = total_output_tokens / latency if latency > 0 else 0.0
 
-    result = {
+    return {
         "accuracy": accuracy,
         "invalid_rate": invalid_rate,
         "latency": latency,
-        "questions_per_second": num_questions / latency,
+        "questions_per_second": num_questions / latency if latency > 0 else 0.0,
+        "total_output_tokens": total_output_tokens,
+        "tokens_per_second": tokens_per_second,
         "num_questions": num_questions,
         "num_shots": num_shots,
         "max_tokens": max_tokens,
         "timestamp": time.time(),
     }
 
-    return result
+
+def evaluate_gsm8k(
+    num_questions: int = 1319,
+    num_shots: int = 5,
+    max_tokens: int = 256,
+    model: str | None = None,
+    use_chat_completions: bool = False,
+    host: str = "http://127.0.0.1",
+    port: int = 8000,
+    temperature: float = 0.0,
+    seed: int | None = 42,
+    request_timeout_seconds: float = 600,
+) -> dict[str, float | int]:
+    """
+    Evaluate GSM8K accuracy using Aphrodite serve endpoint.
+
+    Returns dict with accuracy, invalid_rate, latency, etc.
+    """
+    base_url = f"{host}:{port}"
+    prompts, labels = _build_gsm8k_prompts(num_questions, num_shots)
+    num_questions = len(prompts)
+
+    async def run_async_evaluation():
+        states: list[str] = [""] * num_questions
+        output_tokens: list[int] = [0] * num_questions
+
+        async def get_answer(session: aiohttp.ClientSession, i: int) -> tuple[str, int]:
+            stop = ["Question", "Assistant:", "<|separator|>"]
+            if use_chat_completions:
+                if model is None:
+                    raise ValueError("model is required for chat completions")
+                answer, tokens = await call_vllm_chat_api(
+                    session=session,
+                    model=model,
+                    prompt=prompts[i],
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stop=stop,
+                    url=base_url,
+                    seed=seed,
+                )
+            else:
+                answer, tokens = await call_vllm_api(
+                    session=session,
+                    prompt=prompts[i],
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stop=stop,
+                    url=base_url,
+                    seed=seed,
+                )
+            states[i] = answer
+            output_tokens[i] = tokens
+            return answer, tokens
+
+        timeout = aiohttp.ClientTimeout(total=request_timeout_seconds)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            tasks = [get_answer(session, i) for i in range(num_questions)]
+            await tqdm.gather(*tasks, desc="Evaluating")
+
+        return states, output_tokens
+
+    print(f"Running GSM8K evaluation: {num_questions} questions, {num_shots}-shot")
+
+    tic = time.perf_counter()
+    states, output_tokens = asyncio.run(run_async_evaluation())
+    latency = time.perf_counter() - tic
+
+    return _score_gsm8k(states, output_tokens, labels, num_shots, max_tokens, latency)
+
+
+def evaluate_gsm8k_offline(
+    llm,
+    num_questions: int = 1319,
+    num_shots: int = 5,
+    max_tokens: int = 256,
+    temperature: float = 0.0,
+) -> dict[str, float | int]:
+    """Evaluate GSM8K accuracy using an offline aphrodite.LLM object.
+
+    Same prompts and scoring as evaluate_gsm8k(), but runs generation
+    directly via llm.generate() instead of calling a server over HTTP.
+    """
+    from aphrodite import SamplingParams
+
+    prompts, labels = _build_gsm8k_prompts(num_questions, num_shots)
+
+    sampling_params = SamplingParams(
+        temperature=temperature,
+        max_tokens=max_tokens,
+        stop=["Question", "Assistant:", "<|separator|>"],
+    )
+
+    print(
+        f"Running offline GSM8K evaluation: {len(prompts)} questions, {num_shots}-shot"
+    )
+
+    tic = time.perf_counter()
+    outputs = llm.generate(prompts, sampling_params)
+    latency = time.perf_counter() - tic
+
+    states = [o.outputs[0].text for o in outputs]
+    output_tokens = [len(o.outputs[0].token_ids) for o in outputs]
+
+    return _score_gsm8k(states, output_tokens, labels, num_shots, max_tokens, latency)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="GSM8K evaluation for Aphrodite run")
-    parser.add_argument("--num-shots", type=int, default=5, help="Number of few-shot examples")
+    parser = argparse.ArgumentParser(description="GSM8K evaluation for Aphrodite serve")
+    parser.add_argument(
+        "--num-shots", type=int, default=5, help="Number of few-shot examples"
+    )
     parser.add_argument(
         "--num-questions",
         type=int,
         default=1319,
         help="Number of questions to evaluate",
     )
-    parser.add_argument("--max-tokens", type=int, default=256, help="Max tokens for generation")
+    parser.add_argument(
+        "--max-tokens", type=int, default=256, help="Max tokens for generation"
+    )
     parser.add_argument("--host", type=str, default="http://127.0.0.1", help="Host URL")
     parser.add_argument("--port", type=int, default=8000, help="Port number")
-    parser.add_argument("--temperature", type=float, default=0.0, help="Temperature for generation")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
+    parser.add_argument(
+        "--temperature", type=float, default=0.0, help="Temperature for generation"
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Random seed for reproducibility"
+    )
     parser.add_argument("--save-results", type=str, help="Save results to JSON file")
 
     args = parser.parse_args()
@@ -223,6 +350,8 @@ def main() -> None:
     print(f"Invalid responses: {result['invalid_rate']:.3f}")
     print(f"Total latency: {result['latency']:.3f} s")
     print(f"Questions per second: {result['questions_per_second']:.3f}")
+    print(f"Total output tokens: {result['total_output_tokens']}")
+    print(f"Output tokens per second: {result['tokens_per_second']:.3f}")
 
     # Optional file saving
     if args.save_results:

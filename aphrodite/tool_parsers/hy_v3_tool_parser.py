@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-import ast
 import json
 from collections.abc import Sequence
 from typing import Any
@@ -27,6 +26,7 @@ from aphrodite.tool_parsers.abstract_tool_parser import (
     Tool,
     ToolParser,
 )
+from aphrodite.tool_parsers.utils import safe_literal_eval
 
 logger = init_logger(__name__)
 
@@ -108,6 +108,14 @@ class HYV3ToolParser(ToolParser):
         Note: single ``type`` has the highest priority.
         """
         if "type" in arg_schema:
+            type_val = arg_schema["type"]
+            # JSON Schema allows "type" to be an array to represent union types,
+            # e.g. "type": ["string", "object"].
+            # Expand it into an anyOf-equivalent format:
+            #   [{"type": "string"}, {"type": "object"}]
+            # so that _get_types / _parse_value can handle it uniformly later.
+            if isinstance(type_val, list):
+                return [{"type": t} for t in type_val]
             return [arg_schema]
         if "anyOf" in arg_schema:
             return arg_schema["anyOf"]
@@ -120,7 +128,9 @@ class HYV3ToolParser(ToolParser):
     def _get_types(arg_schema: dict) -> set[str]:
         """Extract normalized, non-null type set from a property schema."""
         schemas = HYV3ToolParser._get_schema_options(arg_schema)
-        return {HYV3ToolParser._normalize_type(s.get("type", "string")) for s in schemas} - {"null"}
+        return {
+            HYV3ToolParser._normalize_type(s.get("type", "string")) for s in schemas
+        } - {"null"}
 
     @staticmethod
     def _is_only_string_type(
@@ -181,13 +191,13 @@ class HYV3ToolParser(ToolParser):
 
     @staticmethod
     def _deserialize(value: str) -> Any:
-        """Deserialize a string value using json.loads then ast.literal_eval."""
+        """Deserialize a string value using json.loads then safe_literal_eval."""
         try:
             return json.loads(value)
         except Exception:
             pass
         try:
-            return ast.literal_eval(value)
+            return safe_literal_eval(value)
         except Exception:
             pass
         return value
@@ -244,10 +254,11 @@ class HYV3ToolParser(ToolParser):
     def __init__(self, tokenizer: TokenizerLike, tools: list[Tool] | None = None):
         super().__init__(tokenizer, tools)
 
-        self.current_tool_name_sent: bool = False
         self.prev_tool_call_arr: list[dict] = []
         self.current_tool_id: int = -1
-        self.streamed_args_for_tool: list[str] = []  # map what has been streamed for each tool so far to a list
+        self.streamed_args_for_tool: list[
+            str
+        ] = []  # map what has been streamed for each tool so far to a list
 
         # Streaming state: send tool name first, then return arguments at once
         self._streaming_tool_name: str | None = None  # tool name being streamed
@@ -258,19 +269,22 @@ class HYV3ToolParser(ToolParser):
         self._current_arg_is_string: bool = False  # is current arg pure string?
         self._streamed_json_len: int = 0  # bytes of JSON already sent
 
-        self.tool_calls_start_token: str = "<tool_calls>"
-        self.tool_calls_end_token: str = "</tool_calls>"
+        init_kwargs = getattr(tokenizer, "init_kwargs", None) or {}
+        self.suffix: str = init_kwargs.get("token_suffix") or ""
 
-        self.tool_call_start_token: str = "<tool_call>"
-        self.tool_call_end_token: str = "</tool_call>"
+        self.tool_calls_start_token: str = f"<tool_calls{self.suffix}>"
+        self.tool_calls_end_token: str = f"</tool_calls{self.suffix}>"
 
-        self.tool_sep_token: str = "<tool_sep>"
+        self.tool_call_start_token: str = f"<tool_call{self.suffix}>"
+        self.tool_call_end_token: str = f"</tool_call{self.suffix}>"
 
-        self.arg_key_start_token: str = "<arg_key>"
-        self.arg_key_end_token: str = "</arg_key>"
+        self.tool_sep_token: str = f"<tool_sep{self.suffix}>"
 
-        self.arg_value_start_token: str = "<arg_value>"
-        self.arg_value_end_token: str = "</arg_value>"
+        self.arg_key_start_token: str = f"<arg_key{self.suffix}>"
+        self.arg_key_end_token: str = f"</arg_key{self.suffix}>"
+
+        self.arg_value_start_token: str = f"<arg_value{self.suffix}>"
+        self.arg_value_end_token: str = f"</arg_value{self.suffix}>"
 
         self.tool_call_regex = re.compile(
             rf"{self.tool_call_start_token}(.*?){self.tool_sep_token}"
@@ -289,7 +303,10 @@ class HYV3ToolParser(ToolParser):
         )
 
         if not self.model_tokenizer:
-            raise ValueError("The model tokenizer must be passed to the ToolParser constructor during construction.")
+            raise ValueError(
+                "The model tokenizer must be passed to the ToolParser "
+                "constructor during construction."
+            )
         self.tool_calls_start_token_id = self.vocab.get(self.tool_calls_start_token)
         self.tool_calls_end_token_id = self.vocab.get(self.tool_calls_end_token)
 
@@ -297,8 +314,14 @@ class HYV3ToolParser(ToolParser):
         self.tool_call_end_token_id = self.vocab.get(self.tool_call_end_token)
         self._buffer = ""
 
-        if self.tool_calls_start_token_id is None or self.tool_calls_end_token_id is None:
-            raise RuntimeError("HYV3 Tool parser could not locate tool call start/end tokens in the tokenizer!")
+        if (
+            self.tool_calls_start_token_id is None
+            or self.tool_calls_end_token_id is None
+        ):
+            raise RuntimeError(
+                "HYV3 Tool parser could not locate tool call "
+                "start/end tokens in the tokenizer!"
+            )
 
     def _extract_tool_calls(
         self,
@@ -327,7 +350,9 @@ class HYV3ToolParser(ToolParser):
                 arg_pairs = self.func_args_regex.findall(function_args)
                 arg_dict = {}
                 for key, value in arg_pairs:
-                    parsed_value = HYV3ToolParser._parse_value(value, function_name, key, request.tools)
+                    parsed_value = HYV3ToolParser._parse_value(
+                        value, function_name, key, request.tools
+                    )
                     arg_dict[key] = parsed_value
                 tool_calls.append(
                     ToolCall(
@@ -350,7 +375,9 @@ class HYV3ToolParser(ToolParser):
     ) -> ExtractedToolCallInformation:
         # sanity check; avoid unnecessary processing
         if self.tool_calls_start_token not in model_output:
-            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
+            return ExtractedToolCallInformation(
+                tools_called=False, tool_calls=[], content=model_output
+            )
         else:
             try:
                 tool_calls = self._extract_tool_calls(model_output, request)
@@ -365,7 +392,9 @@ class HYV3ToolParser(ToolParser):
 
             except Exception:
                 logger.exception("Error in extracting tool call from response.")
-                return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
+                return ExtractedToolCallInformation(
+                    tools_called=False, tool_calls=[], content=model_output
+                )
 
     def _reset_streaming_tool_state(self):
         """Reset the streaming state for a single tool call."""
@@ -401,7 +430,8 @@ class HYV3ToolParser(ToolParser):
 
         # Encountered finish, extract valid arguments
         if (
-            current_text.find(self.tool_call_end_token + self.tool_calls_end_token) != -1
+            current_text.find(self.tool_call_end_token + self.tool_calls_end_token)
+            != -1
             and self._buffer.find(self.tool_call_end_token) == -1
         ):
             self._buffer += self.tool_call_end_token + self.tool_calls_end_token
@@ -498,7 +528,9 @@ class HYV3ToolParser(ToolParser):
         for key, value in arg_pairs:
             key = key.strip()
             if key not in self._completed_args:
-                parsed_value = HYV3ToolParser._parse_value(value, self._streaming_tool_name or "", key, request.tools)
+                parsed_value = HYV3ToolParser._parse_value(
+                    value, self._streaming_tool_name or "", key, request.tools
+                )
                 self._completed_args[key] = parsed_value
 
         # --- detect partial (unclosed) kv at the tail ---
@@ -517,7 +549,9 @@ class HYV3ToolParser(ToolParser):
                 ak_start + len(self.arg_key_start_token),
             )
             if ak_end != -1:
-                partial_key = tail[ak_start + len(self.arg_key_start_token) : ak_end].strip()
+                partial_key = tail[
+                    ak_start + len(self.arg_key_start_token) : ak_end
+                ].strip()
                 self._current_arg_key = partial_key
                 self._current_arg_is_string = HYV3ToolParser._is_only_string_type(
                     self._streaming_tool_name or "",

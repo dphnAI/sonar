@@ -11,6 +11,10 @@ from aphrodite.model_executor.layers.attention.encoder_only_attention import (
 )
 from aphrodite.model_executor.layers.attention.mla_attention import MLAAttention
 from aphrodite.model_executor.layers.attention.mm_encoder_attention import MMEncoderAttention
+from aphrodite.model_executor.layers.attention.prefill_prefix_lm_attention import (
+    PrefillPrefixLMAttention,
+)
+from aphrodite.model_executor.layers.attention.rswa_attention import RSWAAttention
 from aphrodite.model_executor.layers.attention.static_sink_attention import (
     StaticSinkAttention,
 )
@@ -22,5 +26,7 @@ __all__ = [
     "EncoderOnlyAttention",
     "MLAAttention",
     "MMEncoderAttention",
+    "PrefillPrefixLMAttention",
+    "RSWAAttention",
     "StaticSinkAttention",
 ]

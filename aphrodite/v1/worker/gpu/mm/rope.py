@@ -20,7 +20,7 @@ class RopeState:
     NOTE: `positions` is implemented with one additional dummy position on
     purpose to make it non-contiguous so that it can work with torch compile.
     See detailed explanation in
-    https://github.com/aphrodite-project/aphrodite/pull/12128#discussion_r1926431923
+    https://github.com/vllm-project/aphrodite/pull/12128#discussion_r1926431923
 
     NOTE: When M-RoPE is enabled, position ids are 3D regardless of the
     modality of inputs. For text-only inputs, each dimension has identical
@@ -52,7 +52,9 @@ class RopeState:
             device=device,
             uva_instead_of_gpu=True,
         )
-        self.positions = torch.zeros((num_dims, max_num_tokens + 1), dtype=torch.int64, device=device)
+        self.positions = torch.zeros(
+            (num_dims, max_num_tokens + 1), dtype=torch.int64, device=device
+        )
 
         # Delta is non-zero for M-RoPE, always 0 for XD-RoPE.
         self.prefill_delta = UvaBackedTensor(max_num_reqs, dtype=torch.int32)
@@ -66,11 +68,15 @@ class RopeState:
     ) -> None:
         if self.has_delta:
             mrope_model = cast(SupportsMRoPE, model)
-            prefill_positions, delta = mrope_model.get_mrope_input_positions(prefill_token_ids, mm_features)
+            prefill_positions, delta = mrope_model.get_mrope_input_positions(
+                prefill_token_ids, mm_features
+            )
             self.prefill_delta.np[req_idx] = delta
         else:
             xdrope_model = cast(SupportsXDRoPE, model)
-            prefill_positions = xdrope_model.get_xdrope_input_positions(prefill_token_ids, mm_features)
+            prefill_positions = xdrope_model.get_xdrope_input_positions(
+                prefill_token_ids, mm_features
+            )
 
         for i in range(self.num_dims):
             pos = prefill_positions[i].tolist()
@@ -83,6 +89,23 @@ class RopeState:
 
     def get_positions(self, num_tokens: int) -> torch.Tensor:
         return self.positions[:, :num_tokens]
+
+    def read_prefill_positions(self, req_idx: int, length: int) -> torch.Tensor:
+        """Return staged per-request prefill positions as [num_dims, length]."""
+        base = self.num_dims * req_idx
+        return self.prefill_positions.gpu[base : base + self.num_dims, :length]
+
+    def update_prefill_positions(
+        self, req_idx: int, positions: torch.Tensor, delta: int
+    ) -> None:
+        """Overwrite a request's staged prefill positions with recomputed values."""
+        base = self.num_dims * req_idx
+        length = positions.shape[1]
+        self.prefill_positions.gpu[base : base + self.num_dims, :length].copy_(
+            positions
+        )
+        if self.has_delta:
+            self.prefill_delta.np[req_idx] = delta
 
     def prepare_positions(
         self,

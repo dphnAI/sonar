@@ -16,11 +16,9 @@ from aphrodite.inputs import MultiModalDataDict
 from aphrodite.model_executor.layers.activation import get_act_fn
 from aphrodite.model_executor.layers.fused_moe import (
     FusedMoE,
+    RoutedExperts,
 )
-from aphrodite.model_executor.layers.linear import (
-    ColumnParallelLinear,
-    RowParallelLinear,
-)
+from aphrodite.model_executor.layers.linear import ColumnParallelLinear, RowParallelLinear
 from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
 from aphrodite.model_executor.layers.quantization import QuantizationConfig
 from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
@@ -136,8 +134,12 @@ class AriaProjectorMLP(nn.Module):
     ) -> None:
         super().__init__()
 
-        self.linear_in = ColumnParallelLinear(in_features, hidden_features, bias=False, prefix=f"{prefix}.linear_in")
-        self.linear_out = RowParallelLinear(hidden_features, output_dim, bias=False, prefix=f"{prefix}.linear_out")
+        self.linear_in = ColumnParallelLinear(
+            in_features, hidden_features, bias=False, prefix=f"{prefix}.linear_in"
+        )
+        self.linear_out = RowParallelLinear(
+            hidden_features, output_dim, bias=False, prefix=f"{prefix}.linear_out"
+        )
         self.act = get_act_fn("gelu_new")
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -170,7 +172,11 @@ class AriaProjector(nn.Module):
         self.hidden_features = config.text_config.hidden_size
         self.output_dim = config.text_config.hidden_size
 
-        self.query = nn.Parameter(torch.empty(config.max_value_projector_patch_to_query_dict, self.in_features))
+        self.query = nn.Parameter(
+            torch.empty(
+                config.max_value_projector_patch_to_query_dict, self.in_features
+            )
+        )
 
         self.cross_attn = AriaCrossAttention(config)
 
@@ -211,29 +217,34 @@ class AriaProjector(nn.Module):
         return out
 
 
-class AriaFusedMoE(FusedMoE):
-    def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor, shard_id: str) -> None:
+class AriaRoutedExperts(RoutedExperts):
+    def weight_loader(
+        self, param: nn.Parameter, loaded_weight: torch.Tensor, shard_id: str
+    ) -> None:
         # Override the weight_loader to handle the expert weights in the Aria
         # model, which are already packed with experts, and merge the gate and
         # up weights for each expert.
         # Note: Loading expert weights with quantization is not supported
         tp_rank = get_tensor_model_parallel_rank()
+        tp_size = self.moe_config.tp_size
         if shard_id == "w13":
             # the shape of loaded_weight is
             # (num_experts, hidden_size, 2 * moe_intermediate_size)
-            if self.tp_size > 1:
+            if tp_size > 1:
                 up, gate = loaded_weight.chunk(2, dim=-1)
-                up_current_rank = up.chunk(self.tp_size, dim=-1)[tp_rank]
-                gate_current_rank = gate.chunk(self.tp_size, dim=-1)[tp_rank]
-                up_and_gate = torch.cat([up_current_rank, gate_current_rank], dim=-1).transpose(1, 2)
+                up_current_rank = up.chunk(tp_size, dim=-1)[tp_rank]
+                gate_current_rank = gate.chunk(tp_size, dim=-1)[tp_rank]
+                up_and_gate = torch.cat(
+                    [up_current_rank, gate_current_rank], dim=-1
+                ).transpose(1, 2)
                 param.data.copy_(up_and_gate)
             else:
                 param.data.copy_(loaded_weight.transpose(1, 2))
         elif shard_id == "w2":
             # the shape of loaded_weight is
             # (num_experts, moe_intermediate_size, hidden_size)
-            if self.tp_size > 1:
-                down_current_rank = loaded_weight.chunk(self.tp_size, dim=1)[tp_rank]
+            if tp_size > 1:
+                down_current_rank = loaded_weight.chunk(tp_size, dim=1)[tp_rank]
                 param.data.copy_(down_current_rank.transpose(1, 2))
             else:
                 param.data.copy_(loaded_weight.transpose(1, 2))
@@ -257,7 +268,9 @@ class AriaTextMoELayer(nn.Module):
         super().__init__()
         self.config = config
 
-        self.router_weight = nn.Parameter(torch.empty((self.config.moe_num_experts, self.config.hidden_size)))
+        self.router_weight = nn.Parameter(
+            torch.empty((self.config.moe_num_experts, self.config.hidden_size))
+        )
 
         self.shared_experts = LlamaMLP(
             config.hidden_size,
@@ -267,7 +280,7 @@ class AriaTextMoELayer(nn.Module):
             bias=config.mlp_bias,
         )
 
-        self.experts = AriaFusedMoE(
+        self.experts = FusedMoE(
             shared_experts=self.shared_experts,
             num_experts=config.moe_num_experts,
             top_k=config.moe_topk,
@@ -275,6 +288,7 @@ class AriaTextMoELayer(nn.Module):
             intermediate_size=config.intermediate_size,
             quant_config=quant_config,
             prefix=f"{prefix}.experts",
+            routed_experts_cls=AriaRoutedExperts,
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -307,7 +321,9 @@ class AriaTextDecoderLayer(LlamaDecoderLayer):
         config = aphrodite_config.model_config.hf_config
         quant_config = aphrodite_config.quant_config
 
-        self.mlp = AriaTextMoELayer(config, quant_config=quant_config, prefix=f"{prefix}.mlp")
+        self.mlp = AriaTextMoELayer(
+            config, quant_config=quant_config, prefix=f"{prefix}.mlp"
+        )
 
 
 class AriaTextModel(LlamaModel, SupportsQuant):
@@ -319,15 +335,13 @@ class AriaTextModel(LlamaModel, SupportsQuant):
     packed_modules_mapping = {
         "qkv_proj": ["q_proj", "k_proj", "v_proj"],
         "gate_up_proj": ["gate_proj", "up_proj"],
-        "experts.w13_weight": ["experts.fc1.weight"],
-        "experts.w2_weight": ["experts.fc2.weight"],
+        "experts.routed_experts.w13_weight": ["experts.fc1.weight"],
+        "experts.routed_experts.w2_weight": ["experts.fc2.weight"],
     }
 
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__(
-            aphrodite_config=aphrodite_config,
-            prefix=prefix,
-            layer_type=AriaTextDecoderLayer,
+            aphrodite_config=aphrodite_config, prefix=prefix, layer_type=AriaTextDecoderLayer
         )
 
     # Adapted from LlamaModel.load_weights with the modification of adding
@@ -340,8 +354,8 @@ class AriaTextModel(LlamaModel, SupportsQuant):
             (".qkv_proj", ".v_proj", "v"),
             (".gate_up_proj", ".gate_proj", 0),
             (".gate_up_proj", ".up_proj", 1),
-            ("experts.w13_weight", "experts.fc1.weight", "w13"),
-            ("experts.w2_weight", "experts.fc2.weight", "w2"),
+            ("experts.routed_experts.w13_weight", "experts.fc1.weight", "w13"),
+            ("experts.routed_experts.w2_weight", "experts.fc2.weight", "w2"),
         ]
         params_dict = dict(self.named_parameters())
         loaded_params: set[str] = set()
@@ -351,14 +365,6 @@ class AriaTextModel(LlamaModel, SupportsQuant):
             if "rotary_emb.cos_cached" in name or "rotary_emb.sin_cached" in name:
                 # Models trained using ColossalAI may include these tensors in
                 # the checkpoint. Skip them.
-                continue
-            if self.quant_config is not None and (scale_name := self.quant_config.get_cache_scale(name)):
-                # Loading kv cache quantization scales
-                param = params_dict[scale_name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                loaded_weight = loaded_weight if loaded_weight.dim() == 0 else loaded_weight[0]
-                weight_loader(param, loaded_weight)
-                loaded_params.add(scale_name)
                 continue
             for param_name, weight_name, shard_id in stacked_params_mapping:
                 if weight_name not in name:
@@ -525,9 +531,11 @@ class AriaForConditionalGeneration(nn.Module, SupportsMultiModal):
             self.vision_tower = AriaVisionTransformer(
                 config.vision_config,
                 quant_config=quant_config,
-                prefix=f"{prefix}.vision_tower",
+                prefix=maybe_prefix(prefix, "vision_tower"),
             )
-            self.multi_modal_projector = AriaProjector(config, prefix=maybe_prefix(prefix, "multi_modal_projector"))
+            self.multi_modal_projector = AriaProjector(
+                config, prefix=maybe_prefix(prefix, "multi_modal_projector")
+            )
 
         with self._mark_language_model(aphrodite_config):
             self.language_model = AriaTextModel(
@@ -543,9 +551,13 @@ class AriaForConditionalGeneration(nn.Module, SupportsMultiModal):
             )
 
             logit_scale = getattr(config, "logit_scale", 1.0)
-            self.logits_processor = LogitsProcessor(config.text_config.vocab_size, scale=logit_scale)
+            self.logits_processor = LogitsProcessor(
+                config.text_config.vocab_size, scale=logit_scale
+            )
 
-    def _parse_and_validate_image_input(self, **kwargs: object) -> AriaImagePixelInputs | None:
+    def _parse_and_validate_image_input(
+        self, **kwargs: object
+    ) -> AriaImagePixelInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         pixel_mask = kwargs.pop("pixel_mask", None)
 
@@ -576,7 +588,9 @@ class AriaForConditionalGeneration(nn.Module, SupportsMultiModal):
         )
         return (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
 
-    def _process_image_input(self, image_input: AriaImagePixelInputs) -> tuple[torch.Tensor, torch.Tensor]:
+    def _process_image_input(
+        self, image_input: AriaImagePixelInputs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         pixel_values = image_input["pixel_values"]
         pixel_mask = image_input["pixel_mask"]
 

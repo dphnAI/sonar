@@ -4,14 +4,17 @@
 #ifdef CPU_CAPABILITY_AMXBF16
   #include "cpu/micro_gemm/cpu_micro_gemm_amx.hpp"
 #endif
+#if defined(__riscv_v)
+  #include "cpu/micro_gemm/cpu_micro_gemm_rvv.hpp"
+#endif
 #include "cpu/micro_gemm/cpu_micro_gemm_vec.hpp"
 
-#define APHRODITE_DISPATCH_CASE_16B_TYPES(...)            \
+#define VLLM_DISPATCH_CASE_16B_TYPES(...)                 \
   AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__) \
   AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__)
 
-#define APHRODITE_DISPATCH_16B_TYPES(TYPE, NAME, ...) \
-  AT_DISPATCH_SWITCH(TYPE, NAME, APHRODITE_DISPATCH_CASE_16B_TYPES(__VA_ARGS__))
+#define VLLM_DISPATCH_16B_TYPES(TYPE, NAME, ...) \
+  AT_DISPATCH_SWITCH(TYPE, NAME, VLLM_DISPATCH_CASE_16B_TYPES(__VA_ARGS__))
 
 template <typename T>
 void print_logits(const char* name, T* ptr, int32_t row, int32_t col,
@@ -152,7 +155,7 @@ void cpu_gemm_wna16_impl(
   constexpr int32_t gemm_m_tile_size = gemm_t::MaxMSize;
   constexpr int32_t n_block_size = 16;
   static_assert(gemm_n_tile_size % n_block_size == 0);
-  const int32_t thread_num = omp_get_max_threads();
+  const int32_t thread_num = cpu_utils::get_max_threads();
 
   // a simple schedule policy, just to hold more B tiles in L2 and make sure
   // each thread has tasks
@@ -319,6 +322,8 @@ void cpu_gemm_wna16(
       return ISA::AMX;
     } else if (isa_hint == "vec") {
       return ISA::VEC;
+    } else if (isa_hint == "rvv") {
+      return ISA::RVV;
     } else {
       TORCH_CHECK(false, "unsupported isa hint: " + isa_hint);
     }
@@ -328,7 +333,7 @@ void cpu_gemm_wna16(
   const int64_t zeros_group_stride = has_zp ? zeros->stride(0) : 0;
   int32_t* g_idx_ptr = use_desc_act ? g_idx->data_ptr<int32_t>() : nullptr;
 
-  APHRODITE_DISPATCH_16B_TYPES(input.scalar_type(), "cpu_gemm_wna16", [&]() {
+  VLLM_DISPATCH_16B_TYPES(input.scalar_type(), "cpu_gemm_wna16", [&]() {
     if (isa == ISA::AMX) {
       using gemm_t = cpu_micro_gemm::MicroGemm<ISA::AMX, scalar_t>;
       if (has_zp) {
@@ -388,6 +393,40 @@ void cpu_gemm_wna16(
         return;
       } else {
         using dequantizer_t = Dequantizer4b<scalar_t, ISA::VEC, false, false>;
+        cpu_gemm_wna16_impl<scalar_t, dequantizer_t, gemm_t>(
+            input.data_ptr<scalar_t>(), q_weight.data_ptr<int32_t>(),
+            output.data_ptr<scalar_t>(), scales.data_ptr<scalar_t>(), zeros_ptr,
+            g_idx_ptr, bias.has_value() ? bias->data_ptr<scalar_t>() : nullptr,
+            a_m_size, b_n_size, a_k_size, a_m_stride, output_m_stride,
+            scales_group_stride, zeros_group_stride, group_num, group_size,
+            pack_factor);
+        return;
+      }
+    } else if (isa == ISA::RVV) {
+      using gemm_t = cpu_micro_gemm::MicroGemm<ISA::RVV, scalar_t>;
+      if (has_zp) {
+        using dequantizer_t = Dequantizer4b<scalar_t, ISA::RVV, true, false>;
+        cpu_gemm_wna16_impl<scalar_t, dequantizer_t, gemm_t>(
+            input.data_ptr<scalar_t>(), q_weight.data_ptr<int32_t>(),
+            output.data_ptr<scalar_t>(), scales.data_ptr<scalar_t>(), zeros_ptr,
+            g_idx_ptr, bias.has_value() ? bias->data_ptr<scalar_t>() : nullptr,
+            a_m_size, b_n_size, a_k_size, a_m_stride, output_m_stride,
+            scales_group_stride, zeros_group_stride, group_num, group_size,
+            pack_factor);
+        return;
+      }
+      if (use_desc_act) {
+        using dequantizer_t = Dequantizer4b<scalar_t, ISA::RVV, false, true>;
+        cpu_gemm_wna16_impl<scalar_t, dequantizer_t, gemm_t>(
+            input.data_ptr<scalar_t>(), q_weight.data_ptr<int32_t>(),
+            output.data_ptr<scalar_t>(), scales.data_ptr<scalar_t>(), zeros_ptr,
+            g_idx_ptr, bias.has_value() ? bias->data_ptr<scalar_t>() : nullptr,
+            a_m_size, b_n_size, a_k_size, a_m_stride, output_m_stride,
+            scales_group_stride, zeros_group_stride, group_num, group_size,
+            pack_factor);
+        return;
+      } else {
+        using dequantizer_t = Dequantizer4b<scalar_t, ISA::RVV, false, false>;
         cpu_gemm_wna16_impl<scalar_t, dequantizer_t, gemm_t>(
             input.data_ptr<scalar_t>(), q_weight.data_ptr<int32_t>(),
             output.data_ptr<scalar_t>(), scales.data_ptr<scalar_t>(), zeros_ptr,

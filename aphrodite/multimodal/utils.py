@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+import bisect
 import mimetypes
 from collections import defaultdict
 from collections.abc import Generator, Sequence
@@ -18,6 +19,7 @@ from aphrodite.utils.import_utils import LazyLoader
 from .hasher import MultiModalHasher
 from .inputs import (
     BatchedTensorInputs,
+    MultiModalFeatureSpec,
     MultiModalFieldElem,
     MultiModalKwargsItem,
     MultiModalSharedField,
@@ -109,6 +111,29 @@ def encode_video_url(
     return f"data:{mimetype};base64,{video_b64}"
 
 
+def get_mm_features_in_window(
+    mm_features: list[MultiModalFeatureSpec],
+    start: int,
+    end: int,
+) -> tuple[int, int]:
+    """Return (lo, hi) indices for features overlapping [start, end).
+
+    Assumes mm_features are sorted by offset and non-overlapping, so
+    offset + length is also sorted.
+    """
+    lo = bisect.bisect_left(
+        mm_features,
+        start + 1,
+        key=lambda f: f.mm_position.offset + f.mm_position.length,
+    )
+    hi = bisect.bisect_left(
+        mm_features,
+        end,
+        key=lambda f: f.mm_position.offset,
+    )
+    return lo, hi
+
+
 def argsort_mm_positions(
     mm_positions: MultiModalPlaceholders,
 ) -> list[tuple[str, int]]:
@@ -121,7 +146,11 @@ def argsort_mm_positions(
         A list of `(modality, idx)`, which can be used to access an item
         by `mm_positions[modality][idx]`.
     """
-    flat_items = ((modality, idx, item) for modality, items in mm_positions.items() for idx, item in enumerate(items))
+    flat_items = (
+        (modality, idx, item)
+        for modality, items in mm_positions.items()
+        for idx, item in enumerate(items)
+    )
 
     sorted_flat_items = sorted(flat_items, key=lambda x: x[2].offset)
 
@@ -181,7 +210,10 @@ def group_and_batch_mm_items(
         - `num_items` is the corresponding number of items.
     """
     group_ids = [
-        tuple((key, _get_group_hash(elem)) for key, elem in sorted(item.items(), key=lambda kv: kv[0]))
+        tuple(
+            (key, _get_group_hash(elem))
+            for key, elem in sorted(item.items(), key=lambda kv: kv[0])
+        )
         for item in items
     ]
     group_sizes = [sum(1 for _ in group) for _, group in groupby(group_ids)]

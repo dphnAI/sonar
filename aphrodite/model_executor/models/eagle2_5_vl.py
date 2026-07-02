@@ -63,7 +63,9 @@ class Eagle2_5_VLImageEmbeddingInputs(TensorSchema):
     data: Annotated[torch.Tensor | list[torch.Tensor], TensorShape("n", "f", "h")]
 
 
-Eagle2_5_VLImageInputs: TypeAlias = Eagle2_5_VLImagePixelInputs | Eagle2_5_VLImageEmbeddingInputs
+Eagle2_5_VLImageInputs: TypeAlias = (
+    Eagle2_5_VLImagePixelInputs | Eagle2_5_VLImageEmbeddingInputs
+)
 
 
 class Eagle2_5_VLProcessingInfo(BaseInternVLProcessingInfo):
@@ -74,7 +76,9 @@ class Eagle2_5_VLProcessingInfo(BaseInternVLProcessingInfo):
         vision_config = config.vision_config
 
         kwargs = self.ctx.get_merged_mm_kwargs(kwargs)
-        kwargs.setdefault("image_size", config.force_image_size or vision_config.image_size)
+        kwargs.setdefault(
+            "image_size", config.force_image_size or vision_config.image_size
+        )
         kwargs.setdefault("min_dynamic_patch", config.min_dynamic_patch)
         kwargs.setdefault("max_dynamic_patch", config.max_dynamic_patch)
         kwargs.setdefault("dynamic_image_size", config.dynamic_image_size)
@@ -99,13 +103,17 @@ class Eagle2_5_VLProcessingInfo(BaseInternVLProcessingInfo):
         )
 
 
-class Eagle2_5_VLDummyInputsBuilder(BaseInternVLDummyInputsBuilder[Eagle2_5_VLProcessingInfo]):
+class Eagle2_5_VLDummyInputsBuilder(
+    BaseInternVLDummyInputsBuilder[Eagle2_5_VLProcessingInfo]
+):
     """Dummy inputs builder for Eagle2.5-VL model."""
 
     pass
 
 
-class Eagle2_5_VLMultiModalProcessor(BaseInternVLMultiModalProcessor[Eagle2_5_VLProcessingInfo]):
+class Eagle2_5_VLMultiModalProcessor(
+    BaseInternVLMultiModalProcessor[Eagle2_5_VLProcessingInfo]
+):
     """Multi-modal processor for Eagle2.5-VL model."""
 
     pass
@@ -116,7 +124,9 @@ class Eagle2_5_VLMultiModalProcessor(BaseInternVLMultiModalProcessor[Eagle2_5_VL
     info=Eagle2_5_VLProcessingInfo,
     dummy_inputs=Eagle2_5_VLDummyInputsBuilder,
 )
-class Eagle2_5_VLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
+class Eagle2_5_VLForConditionalGeneration(
+    nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA
+):
     """
     Eagle2.5-VL model for conditional generation.
 
@@ -146,11 +156,15 @@ class Eagle2_5_VLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
 
         # Image configuration
-        image_size = getattr(config, "force_image_size", None) or config.vision_config.image_size
+        image_size = (
+            getattr(config, "force_image_size", None) or config.vision_config.image_size
+        )
         patch_size = config.vision_config.patch_size
         self.patch_size = patch_size
         self.downsample_ratio = getattr(config, "downsample_ratio", 0.5)
-        self.num_image_token = int((image_size // patch_size) ** 2 * (self.downsample_ratio**2))
+        self.num_image_token = int(
+            (image_size // patch_size) ** 2 * (self.downsample_ratio**2)
+        )
 
         self.select_layer = getattr(config, "select_layer", -1)
 
@@ -175,7 +189,9 @@ class Eagle2_5_VLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
 
         self.img_context_token_id = None
 
-        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.language_model.make_empty_intermediate_tensors
+        )
 
     def _init_vision_model(
         self,
@@ -189,7 +205,9 @@ class Eagle2_5_VLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
         # Determine number of hidden layers based on select_layer
         vision_feature_layer = self.select_layer
         if vision_feature_layer < 0:
-            num_hidden_layers = vision_config.num_hidden_layers + vision_feature_layer + 1
+            num_hidden_layers = (
+                vision_config.num_hidden_layers + vision_feature_layer + 1
+            )
         else:
             num_hidden_layers = vision_feature_layer + 1
 
@@ -211,7 +229,9 @@ class Eagle2_5_VLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
 
         return nn.Sequential(
             nn.LayerNorm(vit_hidden_size * int(1 / self.downsample_ratio) ** 2),
-            nn.Linear(vit_hidden_size * int(1 / self.downsample_ratio) ** 2, llm_hidden_size),
+            nn.Linear(
+                vit_hidden_size * int(1 / self.downsample_ratio) ** 2, llm_hidden_size
+            ),
             nn.GELU(),
             nn.Linear(llm_hidden_size, llm_hidden_size),
         )
@@ -261,7 +281,9 @@ class Eagle2_5_VLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
         vit_embeds = self.mlp1(vit_embeds)
         return vit_embeds
 
-    def _parse_and_validate_image_input(self, **kwargs: object) -> Eagle2_5_VLImageInputs | None:
+    def _parse_and_validate_image_input(
+        self, **kwargs: object
+    ) -> Eagle2_5_VLImageInputs | None:
         """Parse and validate image inputs."""
         pixel_values_flat = kwargs.pop("pixel_values_flat", None)
         image_num_patches = kwargs.pop("image_num_patches", None)
@@ -320,7 +342,9 @@ class Eagle2_5_VLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
         # Split embeddings by image
         feature_size = image_embeds.shape[1]
         image_embeds = image_embeds.view(-1, self.config.text_config.hidden_size)
-        image_feature_sizes = [num_patches * feature_size for num_patches in num_patches]
+        image_feature_sizes = [
+            num_patches * feature_size for num_patches in num_patches
+        ]
         return image_embeds.split(image_feature_sizes)
 
     def embed_multimodal(self, **kwargs: object) -> MultiModalEmbeddings:

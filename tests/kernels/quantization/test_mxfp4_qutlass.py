@@ -19,16 +19,20 @@
 import numpy as np
 import pytest
 import torch
-from aphrodite.quantization.qutlass_utils import to_blocked
 from compressed_tensors.transform.utils.hadamard import deterministic_hadamard_matrix
 
 from aphrodite._custom_ops import fusedQuantizeMx, matmul_mxf4_bf16_tn
+from aphrodite.model_executor.layers.quantization.qutlass_utils import to_blocked
 from aphrodite.platforms import current_platform
+from aphrodite.utils.torch_utils import set_random_seed
 
 if not torch.cuda.is_available():
     pytest.skip("CUDA required for these tests.", allow_module_level=True)
 
-if not (current_platform.has_device_capability(100) or current_platform.has_device_capability(120)):
+if not (
+    current_platform.has_device_capability(100)
+    or current_platform.has_device_capability(120)
+):
     pytest.skip(
         reason="Tests require compute capability 10.0 (100) or 12.0 (120).",
         allow_module_level=True,
@@ -37,7 +41,10 @@ if not (current_platform.has_device_capability(100) or current_platform.has_devi
 
 # ----- Helpers -----
 def get_hadamard_matrix(group_size: int, dtype: torch.dtype, device: torch.device):
-    return deterministic_hadamard_matrix(group_size, dtype=dtype, device=device) * group_size**-0.5
+    return (
+        deterministic_hadamard_matrix(group_size, dtype=dtype, device=device)
+        * group_size**-0.5
+    )
 
 
 def _rtne_fp4(x: torch.Tensor):
@@ -83,7 +90,9 @@ def _dq_fp4(x_e2m1: torch.Tensor, x_e8m0: torch.Tensor, alpha: float):
     device = x_e2m1.device
 
     x_e2m1_i32 = x_e2m1.view(dtype=torch.uint8).to(dtype=torch.int32)
-    x_e2m1_unpacked = torch.stack([x_e2m1_i32 & 0xF, (x_e2m1_i32 >> 4) & 0xF], dim=-1).flatten(start_dim=-2)
+    x_e2m1_unpacked = torch.stack(
+        [x_e2m1_i32 & 0xF, (x_e2m1_i32 >> 4) & 0xF], dim=-1
+    ).flatten(start_dim=-2)
 
     grid_dq = torch.tensor(
         [
@@ -110,7 +119,9 @@ def _dq_fp4(x_e2m1: torch.Tensor, x_e8m0: torch.Tensor, alpha: float):
     x_fp4_dq = grid_dq[x_e2m1_unpacked]
     scales_dq = x_e8m0.to(torch.float64)
 
-    x_dq = (x_fp4_dq.unflatten(dim=-1, sizes=(-1, 32)) * scales_dq[..., None]).flatten(start_dim=-2) / alpha
+    x_dq = (x_fp4_dq.unflatten(dim=-1, sizes=(-1, 32)) * scales_dq[..., None]).flatten(
+        start_dim=-2
+    ) / alpha
     return x_dq, x_fp4_dq, scales_dq
 
 
@@ -126,7 +137,9 @@ def _unpack_mask(clip_mask: torch.Tensor) -> torch.Tensor:
     return clip_mask_unpacked_dq
 
 
-def _forward_quantize_ref(x: torch.Tensor, h: torch.Tensor, rot_size: int, quest: bool = True):
+def _forward_quantize_ref(
+    x: torch.Tensor, h: torch.Tensor, rot_size: int, quest: bool = True
+):
     device = x.device
     xh_ref64 = (
         x.unflatten(dim=-1, sizes=(-1, rot_size)).to(dtype=torch.float64)
@@ -134,7 +147,11 @@ def _forward_quantize_ref(x: torch.Tensor, h: torch.Tensor, rot_size: int, quest
     ).flatten(start_dim=-2)
 
     if quest:
-        scales_ref64_ = xh_ref64.unflatten(dim=-1, sizes=(-1, 32)).std(dim=-1, correction=0) * (2.92247856 / 6.0) + 1e-8
+        scales_ref64_ = (
+            xh_ref64.unflatten(dim=-1, sizes=(-1, 32)).std(dim=-1, correction=0)
+            * (2.92247856 / 6.0)
+            + 1e-8
+        )
     else:
         abs_max = xh_ref64.unflatten(dim=-1, sizes=(-1, 32)).abs().amax(dim=-1)
         scales_ref64_ = abs_max + 1e-8
@@ -142,17 +159,23 @@ def _forward_quantize_ref(x: torch.Tensor, h: torch.Tensor, rot_size: int, quest
     xh_e8m0_ref = scales_ref64_.log2().floor().exp2().to(dtype=torch.float8_e8m0fnu)
     scales_ref64 = xh_e8m0_ref.to(dtype=torch.float64)
 
-    xh_scaled_ref64 = (xh_ref64.unflatten(dim=-1, sizes=(-1, 32)) / scales_ref64[..., None]).flatten(start_dim=-2)
+    xh_scaled_ref64 = (
+        xh_ref64.unflatten(dim=-1, sizes=(-1, 32)) / scales_ref64[..., None]
+    ).flatten(start_dim=-2)
     if not quest:
         xh_scaled_ref64 *= 3
 
     clip_mask_unpacked_ref = xh_scaled_ref64.abs() < 6.0
-    clip_mask_ref = torch.zeros(*x.shape[:-1], x.size(-1) // 8, dtype=torch.uint8, device=device)
+    clip_mask_ref = torch.zeros(
+        *x.shape[:-1], x.size(-1) // 8, dtype=torch.uint8, device=device
+    )
     for i in range(8):
         clip_mask_ref |= clip_mask_unpacked_ref[..., i::8].to(dtype=torch.uint8) << i
 
     xh_fp4_ref, xh_e2m1_ref = _rtne_fp4(xh_scaled_ref64)
-    xh_dq, xh_fp4_dq, scales_dq = _dq_fp4(xh_e2m1_ref, xh_e8m0_ref, alpha=1.0 if quest else 3.0)
+    xh_dq, xh_fp4_dq, scales_dq = _dq_fp4(
+        xh_e2m1_ref, xh_e8m0_ref, alpha=1.0 if quest else 3.0
+    )
     clip_mask_unpacked_dq = _unpack_mask(clip_mask_ref)
 
     assert xh_fp4_dq.equal(xh_fp4_ref)
@@ -183,7 +206,7 @@ LLAMA_MODELS = {
 
 @pytest.fixture(autouse=True)
 def _seed_each_test():
-    current_platform.seed_everything(0)
+    set_random_seed(0)
     np.random.seed(0)
     torch.random.manual_seed(0)
 

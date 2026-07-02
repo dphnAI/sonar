@@ -13,18 +13,18 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/mixed_dtype_utils.hpp"
 
-// aphrodite includes
+// vllm includes
 #include <torch/csrc/stable/library.h>
 #include <torch/csrc/stable/tensor.h>
 #include "libtorch_stable/torch_utils.h"
 #include "cutlass_extensions/torch_utils.hpp"
-#include "cutlass_extensions/common.hpp"
+#include "libtorch_stable/cutlass_extensions/common.hpp"
 
 #include "get_group_starts.cuh"
 #include "cutlass_extensions/epilogue/scaled_mm_epilogues_c3x.hpp"
 #include "w4a8_utils.cuh"
 
-namespace aphrodite::cutlass_w4a8_moe {
+namespace vllm::cutlass_w4a8_moe {
 
 using namespace cute;
 
@@ -118,8 +118,8 @@ struct W4A8GroupedGemmKernel {
 
   // per-channel, per-token scales epilogue
   using ChTokScalesEpilogue =
-      typename aphrodite::c3x::ScaledEpilogueArray<ElementAccumulator, ElementD,
-                                                   TileShape>;
+      typename vllm::c3x::ScaledEpilogueArray<ElementAccumulator, ElementD,
+                                              TileShape>;
   using EVTCompute = typename ChTokScalesEpilogue::EVTCompute;
   using CollectiveEpilogue =
       typename cutlass::epilogue::collective::CollectiveBuilder<
@@ -453,8 +453,8 @@ encode_and_reorder_int4b(torch::stable::Tensor const& b_tensors) {
 
   // multiply by ull so result does not overflow int32
   size_t num_int4_elems = 1ull * num_experts * n * k;
-  bool ok = aphrodite::cutlass_w4a8_utils::unified_encode_int4b(
-      b_ptr, b_packed_ptr, num_int4_elems);
+  bool ok = vllm::cutlass_w4a8_utils::unified_encode_int4b(b_ptr, b_packed_ptr,
+                                                           num_int4_elems);
   STD_TORCH_CHECK(ok, "unified_encode_int4b failed");
 
   // construct the layout once; assumes each expert has the same layout
@@ -500,4 +500,4 @@ STABLE_TORCH_LIBRARY_IMPL(_C, CUDA, m) {
          TORCH_BOX(&encode_and_reorder_int4b));
 }
 
-}  // namespace aphrodite::cutlass_w4a8_moe
+}  // namespace vllm::cutlass_w4a8_moe

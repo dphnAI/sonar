@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import os
-from dataclasses import fields, is_dataclass
+from dataclasses import fields
 from typing import Any
 
 from transformers import PretrainedConfig
@@ -16,11 +16,8 @@ class SpeculatorsConfig(PretrainedConfig):
     model_type = "speculators"
 
     def __init__(self, **kwargs):
-        # Transformers v4 - super().__init__ which sets all kwargs as attributes
-        if not is_dataclass(PretrainedConfig):
-            return super().__init__(**kwargs)
-        # Transformers v5 - super().__init__ performs some validation before
-        # setting all kwargs as attributes, so we set them first to be safe
+        # super().__init__ performs some validation before setting all kwargs as
+        # attributes, so we set them first to be safe
         pre_trained_config_fields = {f.name for f in fields(PretrainedConfig)}
         super_kwargs = dict()
         for key, value in kwargs.items():
@@ -39,13 +36,17 @@ class SpeculatorsConfig(PretrainedConfig):
         **kwargs,
     ) -> "SpeculatorsConfig":
         """Load speculators Eagle config and convert to Aphrodite format."""
-        config_dict, _ = cls.get_config_dict(pretrained_model_name_or_path, **without_trust_remote_code(kwargs))
+        config_dict, _ = cls.get_config_dict(
+            pretrained_model_name_or_path, **without_trust_remote_code(kwargs)
+        )
 
         aphrodite_config = cls.extract_transformers_pre_trained_config(config_dict)
         return cls(**aphrodite_config)
 
     @classmethod
-    def extract_transformers_pre_trained_config(cls, config_dict: dict[str, Any]) -> dict[str, Any]:
+    def extract_transformers_pre_trained_config(
+        cls, config_dict: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Extract standard Transformers PreTrainedConfig config from speculators config.
         """
@@ -64,7 +65,9 @@ class SpeculatorsConfig(PretrainedConfig):
         return pre_trained_config
 
     @classmethod
-    def extract_aphrodite_speculative_config(cls, config_dict: dict[str, Any]) -> dict[str, Any]:
+    def extract_aphrodite_speculative_config(
+        cls, config_dict: dict[str, Any]
+    ) -> dict[str, Any]:
         """Extract Aphrodite speculative config from speculators config."""
         # validate fields
         # TODO: @dsikka - use speculators pydantic model to validate
@@ -88,10 +91,14 @@ class SpeculatorsConfig(PretrainedConfig):
             raise ValueError("Must provide transformer_layer_config")
 
         if not isinstance(config_dict["transformer_layer_config"], dict):
-            raise TypeError("'transformer_layer_config' must be a dictionary if provided")
+            raise TypeError(
+                "'transformer_layer_config' must be a dictionary if provided"
+            )
 
     @classmethod
-    def build_aphrodite_speculative_config(cls, config_dict: dict[str, Any]) -> dict[str, Any]:
+    def build_aphrodite_speculative_config(
+        cls, config_dict: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Build Aphrodite-compatible speculative configuration from speculators format.
 
@@ -116,10 +123,15 @@ class SpeculatorsConfig(PretrainedConfig):
         num_speculative_tokens = first_method.get("speculative_tokens")
 
         if num_speculative_tokens is None:
-            raise ValueError(f"Missing 'speculative_tokens' in proposal method. Got: {first_method}")
+            raise ValueError(
+                f"Missing 'speculative_tokens' in proposal method. Got: {first_method}"
+            )
 
         # Build base Aphrodite speculative configuration
-        return {
+        result = {
             "method": config_dict.get("speculators_model_type"),
             "num_speculative_tokens": num_speculative_tokens,
         }
+        if result["method"] == "peagle":
+            result.update({"method": "eagle3", "parallel_drafting": True})
+        return result

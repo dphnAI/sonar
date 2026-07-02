@@ -67,7 +67,9 @@ def get_compressed_slot_mapping(
         out.fill_(-1)
         slot_mapping = out[:num_tokens]
     else:
-        slot_mapping = torch.full((num_tokens,), -1, dtype=torch.int64, device=query_start_loc.device)
+        slot_mapping = torch.full(
+            (num_tokens,), -1, dtype=torch.int64, device=query_start_loc.device
+        )
 
     num_reqs = block_table.shape[0]
     _compressed_slot_mapping_kernel[(num_reqs,)](

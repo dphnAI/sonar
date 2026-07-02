@@ -30,7 +30,6 @@ The resulting JSONL file can then be used with the serving benchmark::
 
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 import random
@@ -40,6 +39,7 @@ import numpy as np
 from transformers import AutoTokenizer
 
 from aphrodite.benchmarks.datasets.utils import RangeRatio, get_sampling_params
+from aphrodite.utils.argparse_utils import FlexibleArgumentParser
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,9 @@ def create_txt_slices_jsonl(
     """Read *input_path*, slice it into prompts, and write JSONL to
     *output_path*."""
 
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, trust_remote_code=trust_remote_code)
+    tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer_name, trust_remote_code=trust_remote_code
+    )
 
     text = load_text(input_path)
     if not text:
@@ -99,7 +101,10 @@ def create_txt_slices_jsonl(
 
         # Randomly select a start position and slice with cycling
         start_pos = rng_py.randint(0, num_available_tokens - 1)
-        prompt_token_ids = [token_ids[(start_pos + j) % num_available_tokens] for j in range(req_input_len)]
+        prompt_token_ids = [
+            token_ids[(start_pos + j) % num_available_tokens]
+            for j in range(req_input_len)
+        ]
         prompt = tokenizer.decode(prompt_token_ids, skip_special_tokens=False)
 
         records.append({"prompt": prompt, "output_tokens": req_output_len})
@@ -116,8 +121,9 @@ def create_txt_slices_jsonl(
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(
-        description="Convert a plain-text file into a JSONL dataset for CustomDataset (--dataset-name custom).",
+    parser = FlexibleArgumentParser(
+        description="Convert a plain-text file into a JSONL dataset "
+        "for CustomDataset (--dataset-name custom).",
     )
     parser.add_argument(
         "--input",

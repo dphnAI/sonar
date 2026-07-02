@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-# Copyright 2023 The Aphrodite team.
+# Copyright 2023 The vLLM team.
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -57,7 +57,7 @@ class TeleChat2Model(LlamaModel):
         super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
         # 2. Remove the bias from the qkv_proj and gate_up_proj based on config
         # Telechat2's gate_up_proj and qkv_proj don't have bias
-        # see: https://github.com/vllm-project/vllm/pull/10311#issuecomment-2490297566
+        # see: https://github.com/vllm-project/aphrodite/pull/10311#issuecomment-2490297566
         for layer in self.layers:
             if not isinstance(layer, PPMissingLayer):
                 layer.self_attn.qkv_proj.bias = None
@@ -81,7 +81,9 @@ class TeleChat2Model(LlamaModel):
                 for i in range(total_num_heads):
                     start = i * head_dim * 2
                     k_weight.append(loaded_weight[start : start + head_dim, :])
-                    v_weight.append(loaded_weight[start + head_dim : start + 2 * head_dim :])
+                    v_weight.append(
+                        loaded_weight[start + head_dim : start + 2 * head_dim :]
+                    )
                 k_weight = torch.cat(k_weight, dim=0)
                 v_weight = torch.cat(v_weight, dim=0)
                 name = name.replace("key_value", "qkv_proj")
@@ -113,7 +115,9 @@ class TeleChat2Model(LlamaModel):
                     if is_pp_missing_parameter(name, self):
                         continue
                     param = params_dict[name]
-                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
+                    weight_loader = getattr(
+                        param, "weight_loader", default_weight_loader
+                    )
                     weight_loader(param, loaded_weight)
             loaded_params.add(name)
         return loaded_params

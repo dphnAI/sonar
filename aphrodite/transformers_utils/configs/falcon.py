@@ -3,7 +3,7 @@
 
 # Adapted from
 # https://huggingface.co/tiiuae/falcon-7b/blob/main/configuration_RW.py
-# Copyright 2023 The Aphrodite team.
+# Copyright 2023 The vLLM team.
 # Copyright 2022 the Big Science Workshop and HuggingFace Inc. team.
 # All rights reserved.
 #

@@ -1,7 +1,7 @@
 include(FetchContent)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_EXTENSIONS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -13,31 +13,46 @@ endif()
 #
 # Define environment variables for special configurations
 #
-set(ENABLE_AVX512BF16 $ENV{APHRODITE_CPU_AVX512BF16})
-set(ENABLE_AVX512VNNI $ENV{APHRODITE_CPU_AVX512VNNI})
+set(ENABLE_X86_ISA $ENV{APHRODITE_CPU_X86})
+set(ENABLE_ARM_BF16 $ENV{APHRODITE_CPU_ARM_BF16})
 
 include_directories("${CMAKE_SOURCE_DIR}/csrc")
-
 
 set (ENABLE_NUMA TRUE)
 
 #
 # Check the compile flags
 #
-
-if (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-    list(APPEND CXX_COMPILE_FLAGS
-        "-mf16c"
-    )
-endif()
-
 if(MACOSX_FOUND)
+    # Apple clang needs -Xpreprocessor to enable OpenMP. No runtime link is
+    # needed: _C is a dynamic_lookup bundle and resolves libomp from torch.
     list(APPEND CXX_COMPILE_FLAGS
+        "-Xpreprocessor" "-fopenmp"
         "-DAPHRODITE_CPU_EXTENSION")
 else()
     list(APPEND CXX_COMPILE_FLAGS
         "-fopenmp"
         "-DAPHRODITE_CPU_EXTENSION")
+
+    # locate PyTorch's libgomp (e.g. site-packages/torch.libs/libgomp-947d5fa1.so.1.0.0)
+    # and create a local shim dir with it. When PyTorch is built from source or packaged
+    # by a distro (common on RISC-V, s390x, Fedora/RHEL aarch64), no vendored libgomp
+    # exists and the shim dir is empty; fall back to the system libgomp in that case.
+    vllm_prepare_torch_gomp_shim(APHRODITE_TORCH_GOMP_SHIM_DIR)
+
+    if(APHRODITE_TORCH_GOMP_SHIM_DIR)
+        find_library(OPEN_MP
+            NAMES gomp
+            PATHS "${APHRODITE_TORCH_GOMP_SHIM_DIR}"
+            NO_DEFAULT_PATH
+            REQUIRED
+        )
+        # Use the same libgomp as PyTorch at runtime
+        set(ENV{LD_LIBRARY_PATH} "${APHRODITE_TORCH_GOMP_SHIM_DIR}:$ENV{LD_LIBRARY_PATH}")
+    else()
+        # Fall back to system / toolchain libgomp
+        find_library(OPEN_MP NAMES gomp REQUIRED)
+    endif()
 endif()
 
 if (NOT MACOSX_FOUND)
@@ -74,18 +89,6 @@ function(check_sysctl TARGET OUT)
     endif()
 endfunction()
 
-
-function (is_avx512_disabled OUT)
-    set(DISABLE_AVX512 $ENV{APHRODITE_CPU_DISABLE_AVX512})
-    if(DISABLE_AVX512 AND DISABLE_AVX512 STREQUAL "true")
-        set(${OUT} ON PARENT_SCOPE)
-    else()
-        set(${OUT} OFF PARENT_SCOPE)
-    endif()
-endfunction()
-
-is_avx512_disabled(AVX512_DISABLED)
-
 if (MACOSX_FOUND AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
     message(STATUS "Apple Silicon Detected")
     set(APPLE_SILICON_FOUND TRUE)
@@ -93,58 +96,44 @@ if (MACOSX_FOUND AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
     check_sysctl(hw.optional.neon ASIMD_FOUND)
     check_sysctl(hw.optional.arm.FEAT_BF16 ARM_BF16_FOUND)
 else()
-    find_isa(${CPUINFO} "avx2" AVX2_FOUND)
-    find_isa(${CPUINFO} "avx512f" AVX512_FOUND)
     find_isa(${CPUINFO} "Power11" POWER11_FOUND)
     find_isa(${CPUINFO} "POWER10" POWER10_FOUND)
     find_isa(${CPUINFO} "POWER9" POWER9_FOUND)
     find_isa(${CPUINFO} "asimd" ASIMD_FOUND) # Check for ARM NEON support
     find_isa(${CPUINFO} "bf16" ARM_BF16_FOUND) # Check for ARM BF16 support
     find_isa(${CPUINFO} "S390" S390_FOUND)
-    find_isa(${CPUINFO} "v" RVV_FOUND) # Check for RISC-V RVV support
+    find_isa(${CPUINFO} "zvfhmin" RVV_FP16_FOUND) # Check for RISC-V Vector FP16 support
+    find_isa(${CPUINFO} "zvfbfmin" RVV_BF16_FOUND) # Check for RISC-V Vector BF16 support
+
+    # Support cross-compilation by allowing override via environment variables
+    if (ENABLE_ARM_BF16)
+        set(ARM_BF16_FOUND ON)
+        message(STATUS "ARM BF16 support enabled via APHRODITE_CPU_ARM_BF16 environment variable")
+    endif()
 endif()
 
-if (AVX512_FOUND AND NOT AVX512_DISABLED)
-    list(APPEND CXX_COMPILE_FLAGS
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64" OR ENABLE_X86_ISA)
+    set(ENABLE_X86_ISA ON)
+    if (NOT (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
+            CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 12.3))
+        message(FATAL_ERROR "X86 backend requires gcc/g++ >= 12.3")
+    endif()
+    list(APPEND CXX_COMPILE_FLAGS "-mf16c")
+    list(APPEND CXX_COMPILE_FLAGS_AVX512 ${CXX_COMPILE_FLAGS})
+    list(APPEND CXX_COMPILE_FLAGS_AVX2 ${CXX_COMPILE_FLAGS})
+    list(APPEND CXX_COMPILE_FLAGS_AVX512
         "-mavx512f"
         "-mavx512vl"
         "-mavx512bw"
         "-mavx512dq")
-
-    find_isa(${CPUINFO} "avx512_bf16" AVX512BF16_FOUND)
-    if (AVX512BF16_FOUND OR ENABLE_AVX512BF16)
-        if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
-            CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 12.3)
-            list(APPEND CXX_COMPILE_FLAGS "-mavx512bf16")
-            set(ENABLE_AVX512BF16 ON)
-        else()
-            set(ENABLE_AVX512BF16 OFF)
-            message(WARNING "Disable AVX512-BF16 ISA support, requires gcc/g++ >= 12.3")
-        endif()
-    else()
-        set(ENABLE_AVX512BF16 OFF)
-        message(WARNING "Disable AVX512-BF16 ISA support, no avx512_bf16 found in local CPU flags." " If cross-compilation is required, please set env APHRODITE_CPU_AVX512BF16=1.")
-    endif()
-
-    find_isa(${CPUINFO} "avx512_vnni" AVX512VNNI_FOUND)
-    if (AVX512VNNI_FOUND OR ENABLE_AVX512VNNI)
-        if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
-            CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 12.3)
-            list(APPEND CXX_COMPILE_FLAGS "-mavx512vnni")
-            set(ENABLE_AVX512VNNI ON)
-        else()
-            set(ENABLE_AVX512VNNI OFF)
-            message(WARNING "Disable AVX512-VNNI ISA support, requires gcc/g++ >= 12.3")
-        endif()
-    else()
-        set(ENABLE_AVX512VNNI OFF)
-        message(WARNING "Disable AVX512-VNNI ISA support, no avx512_vnni found in local CPU flags." " If cross-compilation is required, please set env APHRODITE_CPU_AVX512VNNI=1.")
-    endif()
-    
-elseif (AVX2_FOUND)
-    list(APPEND CXX_COMPILE_FLAGS "-mavx2")
-    message(WARNING "Aphrodite CPU backend using AVX2 ISA")
-    
+    list(APPEND CXX_COMPILE_FLAGS_AVX512_AMX 
+        ${CXX_COMPILE_FLAGS_AVX512}
+        "-mamx-bf16"
+        "-mamx-tile"
+        "-mavx512bf16"
+        "-mavx512vnni")
+    list(APPEND CXX_COMPILE_FLAGS_AVX2
+        "-mavx2")
 elseif (POWER9_FOUND OR POWER10_FOUND OR POWER11_FOUND)
     message(STATUS "PowerPC detected")
     if (POWER9_FOUND)
@@ -179,21 +168,77 @@ elseif (S390_FOUND)
         "-march=native"
         "-mtune=native")
 elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "riscv64")
-    if(RVV_FOUND)
-	    message(FAIL_ERROR "Can't support rvv now.")
-    else()
-        list(APPEND CXX_COMPILE_FLAGS "-march=rv64gc")
+    message(STATUS "RISC-V detected")
+    if(DEFINED APHRODITE_RVV_VLEN AND APHRODITE_RVV_VLEN LESS 0)
+        message(FATAL_ERROR
+            "APHRODITE_RVV_VLEN must be zero or a positive integer; got '${APHRODITE_RVV_VLEN}'")
     endif()
+    # APHRODITE_RVV_VLEN selects the target VLEN. Auto-detected from /proc/cpuinfo
+    # by default; set -DAPHRODITE_RVV_VLEN=0 to force scalar RISC-V build.
+    # Override with -DAPHRODITE_RVV_VLEN=128 or -DAPHRODITE_RVV_VLEN=256 for RVV.
+    if(NOT DEFINED APHRODITE_RVV_VLEN)
+        # Auto-detect: find the largest zvl<N>b in /proc/cpuinfo isa line.
+        if(EXISTS /proc/cpuinfo)
+            file(READ /proc/cpuinfo _cpuinfo)
+            set(_best 0)
+            foreach(_n IN ITEMS 128 256 512 1024)
+                if(_cpuinfo MATCHES "zvl${_n}b")
+                    set(_best ${_n})
+                endif()
+            endforeach()
+            if(_best GREATER 0)
+                set(APHRODITE_RVV_VLEN ${_best})
+            endif()
+        endif()
+        # If auto-detect failed (no /proc/cpuinfo or no zvl<N>b reported)
+        # but the compiler supports RVV, require explicit specification.
+        if(NOT DEFINED APHRODITE_RVV_VLEN AND (RVV_FP16_FOUND OR RVV_BF16_FOUND))
+            message(FATAL_ERROR
+                "RISC-V RVV is available but VLEN could not be auto-detected. "
+                "Please specify VLEN explicitly:\n"
+                "  -DAPHRODITE_RVV_VLEN=128   (for VLEN=128 hardware)\n"
+                "  -DAPHRODITE_RVV_VLEN=256   (for VLEN=256 hardware, e.g. Spacemit X100)")
+        endif()
+    endif()
+    if(APHRODITE_RVV_VLEN AND APHRODITE_RVV_VLEN GREATER 0)
+        message(STATUS "RISC-V RVV VLEN=${APHRODITE_RVV_VLEN}")
+        # Sources gate FP16/BF16 paths on the compiler-provided
+        # __riscv_zvfh / __riscv_zvfbfmin macros, which GCC and clang
+        # define automatically when those extensions appear in -march.
+        if(RVV_BF16_FOUND)
+            message(STATUS "BF16 extension detected")
+            set(MARCH_FLAGS -march=rv64gcv_zvfh_zfbfmin_zvfbfmin_zvl${APHRODITE_RVV_VLEN}b -mrvv-vector-bits=zvl -mabi=lp64d)
+        elseif(RVV_FP16_FOUND)
+            message(WARNING "BF16 functionality is not available")
+            set(MARCH_FLAGS -march=rv64gcv_zvfh_zvl${APHRODITE_RVV_VLEN}b -mrvv-vector-bits=zvl -mabi=lp64d)
+        else()
+            message(STATUS "compile riscv with scalar (no FP16/BF16)")
+            set(MARCH_FLAGS -march=rv64gc)
+        endif()
+    else()
+        message(STATUS "compile riscv with scalar")
+        set(MARCH_FLAGS -march=rv64gc)
+    endif()
+    list(APPEND CXX_COMPILE_FLAGS ${MARCH_FLAGS})
 else()
-    message(FATAL_ERROR "Aphrodite CPU backend requires AVX512, AVX2, Power9+ ISA, S390X ISA, ARMv8 or RISC-V support.")
+    message(FATAL_ERROR "Aphrodite CPU backend requires X86, Power9+ ISA, S390X ISA, ARMv8 or RISC-V support.")
 endif()
 
 
-# Build oneDNN for GEMM kernels (only for x86-AVX512 /ARM platforms)
-if ((AVX512_FOUND AND NOT AVX512_DISABLED) OR (ASIMD_FOUND AND NOT APPLE_SILICON_FOUND) OR POWER9_FOUND OR POWER10_FOUND OR POWER11_FOUND)
+# Build oneDNN for GEMM kernels
+if (ENABLE_X86_ISA OR (ASIMD_FOUND AND NOT APPLE_SILICON_FOUND) OR POWER9_FOUND OR POWER10_FOUND OR POWER11_FOUND OR RVV_FP16_FOUND OR RVV_BF16_FOUND)
     # Fetch and build Arm Compute Library (ACL) as oneDNN's backend for AArch64
     # TODO [fadara01]: remove this once ACL can be fetched and built automatically as a dependency of oneDNN
+    set(ONEDNN_AARCH64_USE_ACL OFF CACHE BOOL "")
     if(ASIMD_FOUND)
+        # Set number of parallel build processes
+        include(ProcessorCount)
+        ProcessorCount(NPROC)
+        if(NOT NPROC)
+            set(NPROC 4)
+        endif()
+
+        # Fetch and populate ACL
         if(DEFINED ENV{ACL_ROOT_DIR} AND IS_DIRECTORY "$ENV{ACL_ROOT_DIR}")
             message(STATUS "Using ACL from specified source directory: $ENV{ACL_ROOT_DIR}")
         else()
@@ -202,43 +247,47 @@ if ((AVX512_FOUND AND NOT AVX512_DISABLED) OR (ASIMD_FOUND AND NOT APPLE_SILICON
                 SUBBUILD_DIR "${FETCHCONTENT_BASE_DIR}/arm_compute-subbuild"
                 SOURCE_DIR   "${FETCHCONTENT_BASE_DIR}/arm_compute-src"
                 GIT_REPOSITORY https://github.com/ARM-software/ComputeLibrary.git
-                GIT_TAG        v52.2.0
+                GIT_TAG        v52.6.0
                 GIT_SHALLOW    TRUE
                 GIT_PROGRESS   TRUE
             )
             set(ENV{ACL_ROOT_DIR} "${arm_compute_SOURCE_DIR}")
+            set(ACL_LIB_DIR "$ENV{ACL_ROOT_DIR}/build")
         endif()
 
-        # Build ACL with scons
-        include(ProcessorCount)
-        ProcessorCount(_NPROC)
-        set(_scons_cmd
-        scons -j${_NPROC}
-            Werror=0 debug=0 neon=1 examples=0 embed_kernels=0 os=linux
-            arch=armv8.2-a build=native benchmark_examples=0 fixed_format_kernels=1
-            multi_isa=1 openmp=1 cppthreads=0
+        # Build ACL with CMake
+        set(_cmake_config_cmd
+             ${CMAKE_COMMAND} -G Ninja -B build 
+            -DARM_COMPUTE_BUILD_SHARED_LIB=OFF 
+            -DCMAKE_BUILD_TYPE=Release 
+            -DARM_COMPUTE_ARCH=armv8.2-a 
+            -DARM_COMPUTE_ENABLE_ASSERTS=OFF 
+            -DARM_COMPUTE_ENABLE_CPPTHREADS=OFF 
+            -DARM_COMPUTE_ENABLE_OPENMP=ON 
+            -DARM_COMPUTE_ENABLE_WERROR=OFF 
+            -DARM_COMPUTE_BUILD_EXAMPLES=OFF 
+            -DARM_COMPUTE_BUILD_TESTING=OFF)
+        set(_cmake_build_cmd
+            ${CMAKE_COMMAND} --build build -- -j${NPROC}
         )
 
-        # locate PyTorch's libgomp (e.g. site-packages/torch.libs/libgomp-947d5fa1.so.1.0.0)
-        # and create a local shim dir with it
-        include("${CMAKE_CURRENT_LIST_DIR}/utils.cmake")
-        aphrodite_prepare_torch_gomp_shim(APHRODITE_TORCH_GOMP_SHIM_DIR)
-
-        if(NOT APHRODITE_TORCH_GOMP_SHIM_DIR STREQUAL "")
-            list(APPEND _scons_cmd extra_link_flags=-L${APHRODITE_TORCH_GOMP_SHIM_DIR})
-        endif()
-
         execute_process(
-            COMMAND ${_scons_cmd}
+            COMMAND ${_cmake_config_cmd}
+            WORKING_DIRECTORY "$ENV{ACL_ROOT_DIR}"
+        )
+        execute_process(
+            COMMAND ${_cmake_build_cmd}
             WORKING_DIRECTORY "$ENV{ACL_ROOT_DIR}"
             RESULT_VARIABLE _acl_rc
         )
+
         if(NOT _acl_rc EQUAL 0)
             message(FATAL_ERROR "ACL SCons build failed (exit ${_acl_rc}).")
         endif()
+        message(STATUS "Arm Compute Library (ACL) built successfully.")
 
-        set(ONEDNN_AARCH64_USE_ACL "ON")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wl,-rpath,$ENV{ACL_ROOT_DIR}/build/")
+        # VLLM/oneDNN settings for ACL
+        set(ONEDNN_AARCH64_USE_ACL ON CACHE BOOL "" FORCE)
         add_compile_definitions(APHRODITE_USE_ACL)
     endif()
 
@@ -252,13 +301,24 @@ if ((AVX512_FOUND AND NOT AVX512_DISABLED) OR (ASIMD_FOUND AND NOT APPLE_SILICON
         )
     else()
         message(STATUS "Downloading oneDNN from GitHub")
-        FetchContent_Declare(
-            oneDNN
-            GIT_REPOSITORY https://github.com/oneapi-src/oneDNN.git
-            GIT_TAG v3.9
-            GIT_PROGRESS TRUE
-            GIT_SHALLOW TRUE
-        )
+        if(ASIMD_FOUND AND NOT APPLE_SILICON_FOUND)
+            message(STATUS "aarch64 detected: using pinned oneDNN commit 9c5be1cc59e368aebf0909e6cf20f981ea61462a")
+            FetchContent_Declare(
+                oneDNN
+                GIT_REPOSITORY https://github.com/oneapi-src/oneDNN.git
+                GIT_TAG        9c5be1cc59e368aebf0909e6cf20f981ea61462a
+                GIT_PROGRESS   TRUE
+                GIT_SHALLOW    FALSE
+            )
+        else()
+            FetchContent_Declare(
+                oneDNN
+                GIT_REPOSITORY https://github.com/oneapi-src/oneDNN.git
+                GIT_TAG        v3.10
+                GIT_PROGRESS   TRUE
+                GIT_SHALLOW    TRUE
+            )
+        endif()
     endif()
 
     set(ONEDNN_LIBRARY_TYPE "STATIC")
@@ -268,14 +328,17 @@ if ((AVX512_FOUND AND NOT AVX512_DISABLED) OR (ASIMD_FOUND AND NOT APPLE_SILICON
     set(ONEDNN_ENABLE_WORKLOAD "INFERENCE")
     set(ONEDNN_ENABLE_PRIMITIVE "MATMUL;REORDER")
     set(ONEDNN_BUILD_GRAPH "OFF")
-    set(ONEDNN_ENABLE_JIT_PROFILING "OFF")
+    set(ONEDNN_ENABLE_JIT_PROFILING "ON")
     set(ONEDNN_ENABLE_ITT_TASKS "OFF")
-    set(ONEDNN_ENABLE_MAX_CPU_ISA "OFF")
-    set(ONEDNN_ENABLE_CPU_ISA_HINTS "OFF")
-    set(ONEDNN_VERBOSE "OFF")
+    set(ONEDNN_ENABLE_MAX_CPU_ISA "ON")
+    set(ONEDNN_ENABLE_CPU_ISA_HINTS "ON")
+    set(ONEDNN_VERBOSE "ON")
     set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 
+    set(APHRODITE_BUILD_TYPE ${CMAKE_BUILD_TYPE})
+    set(CMAKE_BUILD_TYPE "Release") # remove oneDNN debug symbols to reduce size
     FetchContent_MakeAvailable(oneDNN)
+    set(CMAKE_BUILD_TYPE ${APHRODITE_BUILD_TYPE})
     add_library(dnnl_ext OBJECT "csrc/cpu/dnnl_helper.cpp")
     target_include_directories(
         dnnl_ext
@@ -283,15 +346,28 @@ if ((AVX512_FOUND AND NOT AVX512_DISABLED) OR (ASIMD_FOUND AND NOT APPLE_SILICON
         PUBLIC ${oneDNN_BINARY_DIR}/include
         PRIVATE ${oneDNN_SOURCE_DIR}/src
     )
-    target_link_libraries(dnnl_ext dnnl)
-    target_compile_options(dnnl_ext PRIVATE ${CXX_COMPILE_FLAGS} -fPIC)
+    target_link_libraries(dnnl_ext dnnl torch)
+    if (ENABLE_X86_ISA)
+        target_compile_options(dnnl_ext PRIVATE ${CXX_COMPILE_FLAGS_AVX2} -fPIC)
+    else()
+        target_compile_options(dnnl_ext PRIVATE ${CXX_COMPILE_FLAGS} -fPIC)
+    endif()
     list(APPEND LIBS dnnl_ext)
+
+
     set(USE_ONEDNN ON)
 else()
     set(USE_ONEDNN OFF)
 endif()
 
-message(STATUS "CPU extension compile flags: ${CXX_COMPILE_FLAGS}")
+# TODO: Refactor this
+if (ENABLE_X86_ISA)
+    message(STATUS "CPU extension (AVX512F + BF16 + VNNI + AMX) compile flags: ${CXX_COMPILE_FLAGS_AVX512_AMX}")
+    message(STATUS "CPU extension (AVX512F) compile flags: ${CXX_COMPILE_FLAGS_AVX512}")
+    message(STATUS "CPU extension (AVX2) compile flags: ${CXX_COMPILE_FLAGS_AVX2}")
+else()
+    message(STATUS "CPU extension compile flags: ${CXX_COMPILE_FLAGS}")
+endif()
 
 if(ENABLE_NUMA)
     list(APPEND LIBS numa)
@@ -300,35 +376,66 @@ else()
     add_compile_definitions(-DAPHRODITE_NUMA_DISABLED)
 endif()
 
+# check if the pytorch wheel ships libopenblas.so.
+set(APHRODITE_OPENBLAS_LIB "")
+if (NOT ENABLE_X86_ISA)
+    file(GLOB _APHRODITE_TORCH_OPENBLAS_LIBS
+        "${TORCH_INSTALL_PREFIX}/lib/libopenblas*.so*")
+    # Note: we don't link openblas directly to _C extension, as it's available through libtorch.so 
+    if (_APHRODITE_TORCH_OPENBLAS_LIBS)
+        list(GET _APHRODITE_TORCH_OPENBLAS_LIBS 0 APHRODITE_OPENBLAS_LIB)
+        message(STATUS "CPU OpenBLAS library: ${APHRODITE_OPENBLAS_LIB}")
+    endif()
+endif()
+
+#
+# Generate CPU attention dispatch header
+#
+message(STATUS "Generating CPU attention dispatch header")
+execute_process(
+    COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/csrc/cpu/generate_cpu_attn_dispatch.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/csrc/cpu
+    RESULT_VARIABLE GEN_RESULT
+)
+if(NOT GEN_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to generate CPU attention dispatch header")
+endif()
+
 #
 # _C extension
 #
 set(APHRODITE_EXT_SRC
     "csrc/cpu/activation.cpp"
-    "csrc/cpu/attention.cpp"
-    "csrc/cpu/cache.cpp"
+    "csrc/cpu/sgl-kernels/fla.cpp"
     "csrc/cpu/utils.cpp"
+    "csrc/cpu/spec_decode_utils.cpp"
     "csrc/cpu/layernorm.cpp"
     "csrc/cpu/mla_decode.cpp"
     "csrc/cpu/pos_encoding.cpp"
-    "csrc/cpu/torch_bindings.cpp"
-    "csrc/moe/dynamic_4bit_int_moe_cpu.cpp")
+    "csrc/moe/dynamic_4bit_int_moe_cpu.cpp"
+    "csrc/cpu/cpu_attn.cpp"
+    "csrc/cpu/torch_bindings.cpp")
 
-if (AVX512_FOUND AND NOT AVX512_DISABLED)
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "riscv64" AND APHRODITE_RVV_VLEN AND
+        APHRODITE_RVV_VLEN GREATER 0 AND (RVV_FP16_FOUND OR RVV_BF16_FOUND))
+    set(APHRODITE_EXT_SRC
+        "csrc/cpu/cpu_wna16.cpp"
+        ${APHRODITE_EXT_SRC})
+endif()
+
+if (ASIMD_FOUND AND NOT APPLE_SILICON_FOUND)
+    set(APHRODITE_EXT_SRC
+        "csrc/cpu/shm.cpp"
+        "csrc/cpu/activation_lut_bf16.cpp"
+        "csrc/cpu/cpu_tanhf_neon.hpp"
+        "csrc/cpu/cpu_fused_moe.cpp"
+        ${APHRODITE_EXT_SRC})
+endif()
+
+if (POWER9_FOUND OR POWER10_FOUND OR POWER11_FOUND)	
     set(APHRODITE_EXT_SRC
         "csrc/cpu/shm.cpp"
         ${APHRODITE_EXT_SRC})
-    if (ENABLE_AVX512BF16 AND ENABLE_AVX512VNNI)
-        set(APHRODITE_EXT_SRC
-            "csrc/cpu/sgl-kernels/gemm.cpp"
-            "csrc/cpu/sgl-kernels/gemm_int8.cpp"
-            "csrc/cpu/sgl-kernels/gemm_fp8.cpp"
-            "csrc/cpu/sgl-kernels/moe.cpp"
-            "csrc/cpu/sgl-kernels/moe_int8.cpp"
-            "csrc/cpu/sgl-kernels/moe_fp8.cpp"
-            ${APHRODITE_EXT_SRC})
-        add_compile_definitions(-DCPU_CAPABILITY_AVX512)
-    endif()
 endif()
 
 if(USE_ONEDNN)
@@ -337,21 +444,119 @@ if(USE_ONEDNN)
         ${APHRODITE_EXT_SRC})
 endif()
 
-message(STATUS "CPU extension source files: ${APHRODITE_EXT_SRC}")
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "riscv64")
+    set(APHRODITE_EXT_SRC
+        "csrc/cpu/sgl-kernels/gemm_int4.cpp"
+        ${APHRODITE_EXT_SRC})
+endif()
 
-#
-# Define extension targets
-#
+if (ENABLE_X86_ISA)
+    set(APHRODITE_EXT_SRC_SGL
+        "csrc/cpu/sgl-kernels/conv.cpp"
+        "csrc/cpu/sgl-kernels/gemm.cpp"
+        "csrc/cpu/sgl-kernels/gemm_int8.cpp"
+        "csrc/cpu/sgl-kernels/gemm_fp8.cpp"
+        "csrc/cpu/sgl-kernels/gemm_int4.cpp"
+        "csrc/cpu/sgl-kernels/moe.cpp"
+        "csrc/cpu/sgl-kernels/moe_int8.cpp"
+        "csrc/cpu/sgl-kernels/moe_int4.cpp"
+        "csrc/cpu/sgl-kernels/moe_fp8.cpp")
 
-define_gpu_extension_target(
-    _C
-    DESTINATION aphrodite
-    LANGUAGE CXX
-    SOURCES ${APHRODITE_EXT_SRC}
-    LIBRARIES ${LIBS}
-    COMPILE_FLAGS ${CXX_COMPILE_FLAGS}
-    USE_SABI 3
-    WITH_SOABI
-)
+    set(APHRODITE_EXT_SRC_AVX512
+        "csrc/cpu/sgl-kernels/fla.cpp"
+        "csrc/cpu/shm.cpp"
+        "csrc/cpu/cpu_wna16.cpp"
+        "csrc/cpu/cpu_fused_moe.cpp"
+        "csrc/cpu/utils.cpp"
+        "csrc/cpu/spec_decode_utils.cpp"
+        "csrc/cpu/cpu_attn.cpp"
+        "csrc/cpu/dnnl_kernels.cpp"
+        "csrc/cpu/torch_bindings.cpp"
+        # TODO: Remove these files
+        "csrc/cpu/activation.cpp"
+        "csrc/cpu/layernorm.cpp"
+        "csrc/cpu/mla_decode.cpp"
+        "csrc/cpu/pos_encoding.cpp"
+        "csrc/moe/dynamic_4bit_int_moe_cpu.cpp") 
+
+    set(APHRODITE_EXT_SRC_AVX2
+        "csrc/cpu/sgl-kernels/fla.cpp"
+        "csrc/cpu/utils.cpp"
+        "csrc/cpu/spec_decode_utils.cpp"
+        "csrc/cpu/cpu_attn.cpp"
+        "csrc/cpu/dnnl_kernels.cpp"
+        "csrc/cpu/torch_bindings.cpp"
+        # TODO: Remove these files
+        "csrc/cpu/activation.cpp"
+        "csrc/cpu/layernorm.cpp"
+        "csrc/cpu/mla_decode.cpp"
+        "csrc/cpu/pos_encoding.cpp"
+        "csrc/moe/dynamic_4bit_int_moe_cpu.cpp") 
+
+    message(STATUS "CPU extension (AVX512F + BF16 + VNNI + AMX) source files: ${APHRODITE_EXT_SRC_AVX512} ${APHRODITE_EXT_SRC_SGL}")
+    message(STATUS "CPU extension (AVX512F) source files: ${APHRODITE_EXT_SRC_AVX512}")
+    message(STATUS "CPU extension (AVX2) source files: ${APHRODITE_EXT_SRC_AVX2}")
+
+    set(_C_LIBS numa dnnl_ext)
+    set(_C_AVX512_LIBS numa dnnl_ext)
+    set(_C_AVX2_LIBS numa dnnl_ext)
+
+    # AMX + AVX512F + AVX512BF16 + AVX512VNNI
+    define_extension_target(
+        _C
+        DESTINATION aphrodite
+        LANGUAGE CXX
+        SOURCES ${APHRODITE_EXT_SRC_AVX512} ${APHRODITE_EXT_SRC_SGL}
+        LIBRARIES ${_C_LIBS}
+        COMPILE_FLAGS ${CXX_COMPILE_FLAGS_AVX512_AMX}
+        USE_SABI 3
+        WITH_SOABI
+    )
+
+    # For AMX kernels
+    target_compile_definitions(_C PRIVATE "-DCPU_CAPABILITY_AMXBF16")
+
+    # AVX512F 
+    define_extension_target(
+        _C_AVX512
+        DESTINATION aphrodite
+        LANGUAGE CXX
+        SOURCES ${APHRODITE_EXT_SRC_AVX512}
+        LIBRARIES ${_C_AVX512_LIBS}
+        COMPILE_FLAGS ${CXX_COMPILE_FLAGS_AVX512}
+        USE_SABI 3
+        WITH_SOABI
+    )
+
+    # AVX2 
+    define_extension_target(
+        _C_AVX2
+        DESTINATION aphrodite
+        LANGUAGE CXX
+        SOURCES ${APHRODITE_EXT_SRC_AVX2}
+        LIBRARIES ${_C_AVX2_LIBS}
+        COMPILE_FLAGS ${CXX_COMPILE_FLAGS_AVX2}
+        USE_SABI 3
+        WITH_SOABI
+    )
+else()
+    message(STATUS "CPU extension source files: ${APHRODITE_EXT_SRC}")
+    #
+    # Define extension targets
+    #
+    define_extension_target(
+        _C
+        DESTINATION aphrodite
+        LANGUAGE CXX
+        SOURCES ${APHRODITE_EXT_SRC}
+        LIBRARIES ${LIBS}
+        COMPILE_FLAGS ${CXX_COMPILE_FLAGS}
+        USE_SABI 3
+        WITH_SOABI
+    )
+    if (APHRODITE_OPENBLAS_LIB)
+        target_compile_definitions(_C PRIVATE APHRODITE_HAS_OPENBLAS)
+    endif()
+endif()
 
 message(STATUS "Enabling C extension.")

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import asyncio
 import random
 from collections.abc import Callable
@@ -14,7 +15,7 @@ MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 
 
 @pytest.fixture(scope="module")
-def server():  # noqa: F811
+def server():
     args = [
         # use half precision for speed and memory savings in CI environment
         "--dtype",
@@ -60,10 +61,15 @@ async def test_with_and_without_truncate(
     body = {"model": MODEL_NAME, **content_body, "max_tokens": 10}
 
     num_requests = 10
-    truncate_prompt_tokens = [1000] * (num_requests // 2) + [None] * (num_requests - num_requests // 2)
+    truncate_prompt_tokens = [1000] * (num_requests // 2) + [None] * (
+        num_requests - num_requests // 2
+    )
     random.shuffle(truncate_prompt_tokens)
 
-    bodies = [{**body, "extra_body": {"truncate_prompt_tokens": t}} for t in truncate_prompt_tokens]
+    bodies = [
+        {**body, "extra_body": {"truncate_prompt_tokens": t}}
+        for t in truncate_prompt_tokens
+    ]
 
     async def get_status_code(**kwargs):
         try:

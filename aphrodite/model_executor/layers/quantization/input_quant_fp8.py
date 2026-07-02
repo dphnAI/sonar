@@ -46,16 +46,17 @@ class QuantFP8(CustomOp):
         compile_native: bool = True,
     ):
         """
-        :param static: static or dynamic quantization
-        :param group_shape: quantization group shape (PER_TOKEN, PER_TENSOR,
-            PER_CHANNEL, or arbitrary block size)
-        :param num_token_padding: Pad the token dimension of output to this
-            size
-        :param tma_aligned_scales: For group quantization, output scales in
-            TMA-aligned layout
-        :param column_major_scales: For group quantization, output scales in
-            column major format
-        :param compile_native: Manually compile forward_native if compile mode > None
+        Args:
+            static: static or dynamic quantization
+            group_shape: quantization group shape (PER_TOKEN, PER_TENSOR,
+                PER_CHANNEL, or arbitrary block size)
+            num_token_padding: Pad the token dimension of output to this
+                size
+            tma_aligned_scales: For group quantization, output scales in
+                TMA-aligned layout
+            column_major_scales: For group quantization, output scales in
+                column major format
+            compile_native: Manually compile forward_native if compile mode > None
         """
         super().__init__(compile_native=compile_native)
         self.static = static
@@ -76,7 +77,8 @@ class QuantFP8(CustomOp):
             self.use_per_token_if_dynamic = group_shape == GroupShape.PER_TOKEN
             if not static:
                 assert group_shape in (GroupShape.PER_TOKEN, GroupShape.PER_TENSOR), (
-                    "Only per-token or per-tensor scales are supported for dynamic non-group quantization."
+                    "Only per-token or per-tensor scales are supported for dynamic "
+                    "non-group quantization."
                 )
 
     def forward_cuda(
@@ -114,7 +116,9 @@ class QuantFP8(CustomOp):
 
         assert (scale is not None) == self.static
         assert scale_ub is None or (
-            not self.static and self.group_shape == GroupShape.PER_TOKEN and scale_ub.numel() == 1
+            not self.static
+            and self.group_shape == GroupShape.PER_TOKEN
+            and scale_ub.numel() == 1
         )
 
         return ops.scaled_fp8_quant(
@@ -123,7 +127,9 @@ class QuantFP8(CustomOp):
             num_token_padding=self.num_token_padding,
             scale_ub=scale_ub,
             use_per_token_if_dynamic=self.use_per_token_if_dynamic,
-            group_shape=(self.group_shape.row, self.group_shape.col) if self.static else None,
+            group_shape=(self.group_shape.row, self.group_shape.col)
+            if self.static
+            else None,
         )
 
     def forward_hip(
@@ -139,7 +145,9 @@ class QuantFP8(CustomOp):
             return torch.ops.aphrodite.triton_per_token_group_quant_fp8(x, self.group_size)
 
         use_aiter_quant = self.use_aiter and scale_ub is None and x.is_contiguous()
-        use_aiter_per_tensor_quant = use_aiter_quant and self.group_shape.is_per_tensor()
+        use_aiter_per_tensor_quant = (
+            use_aiter_quant and self.group_shape.is_per_tensor()
+        )
         use_aiter_per_token_quant = use_aiter_quant and self.group_shape.is_per_token()
 
         use_aiter_per_group_quant = use_aiter_quant and self.group_shape.is_per_group()
@@ -151,11 +159,6 @@ class QuantFP8(CustomOp):
         if use_aiter_per_token_quant:
             return rocm_aiter_ops.per_token_quant(x, _FP8_DTYPE, scale)
 
-        # Fallback to native implementation for group quantization.
-        if self.is_group_quant:
-            assert scale is None, "Dynamic group quantization does not use scale"
-            return self._quantize_group_native(x)
-
         # Fallback to CUDA implementation
         return self.forward_cuda(x, scale, scale_ub)
 
@@ -166,7 +169,16 @@ class QuantFP8(CustomOp):
         scale_ub: torch.Tensor | None = None,
         use_triton: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        # XPU can use same code path as CUDA.
+        if self.is_group_quant and not self.static:
+            from aphrodite.model_executor.layers.quantization.utils import fp8_utils
+
+            return fp8_utils.per_token_group_quant_fp8(
+                x,
+                group_size=self.group_size,
+                column_major_scales=self.column_major_scales,
+                dtype=_FP8_DTYPE,
+                use_ue8m0=self.use_ue8m0,
+            )
         return self.forward_cuda(x, scale, scale_ub, use_triton)
 
     def forward_native(
@@ -182,7 +194,9 @@ class QuantFP8(CustomOp):
 
         assert (scale is not None) == self.static
         assert scale_ub is None or (
-            not self.static and self.group_shape == GroupShape.PER_TOKEN and scale_ub.numel() == 1
+            not self.static
+            and self.group_shape == GroupShape.PER_TOKEN
+            and scale_ub.numel() == 1
         )
 
         if scale is None:
@@ -200,7 +214,10 @@ class QuantFP8(CustomOp):
 
         # Even for dynamic per-token scales,
         # reciprocal performs slightly better than division
-        out = x.to(torch.float32) * group_broadcast(scale.to(torch.float32), x.shape[-2:]).reciprocal()
+        out = (
+            x.to(torch.float32)
+            * group_broadcast(scale.to(torch.float32), x.shape[-2:]).reciprocal()
+        )
         out = out.clamp(_FP8_MIN, _FP8_MAX).to(_FP8_DTYPE)
 
         # This currently generates an extra Triton kernel in compilation.
@@ -213,7 +230,9 @@ class QuantFP8(CustomOp):
 
         return out, scale
 
-    def _quantize_group_native(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def _quantize_group_native(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         orig_shape = x.shape
         hidden_dim = x.shape[-1]
         num_groups = (hidden_dim + self.group_size - 1) // self.group_size

@@ -43,7 +43,7 @@ import uvloop
 
 from aphrodite import envs
 from aphrodite.engine.arg_utils import AsyncEngineArgs
-from aphrodite.entrypoints.utils import log_version_and_model
+from aphrodite.entrypoints.serve.utils.api_utils import log_version_and_model
 from aphrodite.logger import init_logger
 from aphrodite.usage.usage_lib import UsageContext
 from aphrodite.utils.argparse_utils import FlexibleArgumentParser

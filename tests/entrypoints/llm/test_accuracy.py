@@ -47,11 +47,14 @@ def run_test(model_name, more_args=None):
     )
 
     measured_value = results["results"][TASK][FILTER]
-    assert model_name in EXPECTED_VALUES, f"Cannot find the expected value for the model {model_name=}"
-    expected_value = EXPECTED_VALUES[model_name]
-    assert measured_value - RTOL < expected_value and measured_value + RTOL > expected_value, (
-        f"Expected: {expected_value} |  Measured: {measured_value}"
+    assert model_name in EXPECTED_VALUES, (
+        f"Cannot find the expected value for the model {model_name=}"
     )
+    expected_value = EXPECTED_VALUES[model_name]
+    assert (
+        measured_value - RTOL < expected_value
+        and measured_value + RTOL > expected_value
+    ), f"Expected: {expected_value} |  Measured: {measured_value}"
 
 
 # TODO: [AlexM] Fix it with new CI/CD tests

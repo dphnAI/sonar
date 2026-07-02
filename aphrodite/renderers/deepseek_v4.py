@@ -28,7 +28,9 @@ class DeepseekV4Renderer(BaseRenderer[DeepseekV4Tokenizer]):
     ) -> None:
         super().__init__(config, tokenizer)
 
-        self._apply_chat_template_async = make_async(self._apply_chat_template, executor=self._executor)
+        self._apply_chat_template_async = make_async(
+            self._apply_chat_template, executor=self._executor
+        )
 
     def _apply_chat_template(self, *args, **kwargs):
         return self.get_tokenizer().apply_chat_template(*args, **kwargs)

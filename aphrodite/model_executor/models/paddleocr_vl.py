@@ -48,10 +48,6 @@ from aphrodite.model_executor.layers.quantization import QuantizationConfig
 from aphrodite.model_executor.layers.rotary_embedding.common import (
     ApplyRotaryEmb,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
-    default_weight_loader,
-    maybe_remap_kv_scale_name,
-)
 from aphrodite.multimodal import MULTIMODAL_REGISTRY
 from aphrodite.multimodal.inputs import (
     MultiModalFeatureSpec,
@@ -81,7 +77,6 @@ from .utils import (
     AutoWeightsLoader,
     PPMissingLayer,
     WeightsMapper,
-    is_pp_missing_parameter,
     maybe_prefix,
 )
 from .vision import get_vit_attn_backend
@@ -114,7 +109,8 @@ def smart_resize(
 
     if max(height, width) / min(height, width) > 200:
         raise ValueError(
-            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
+            f"absolute aspect ratio must be smaller than 200, "
+            f"got {max(height, width) / min(height, width)}"
         )
     h_bar = round(height / factor) * factor
     w_bar = round(width / factor) * factor
@@ -244,7 +240,9 @@ class PaddleOCRVLDummyInputsBuilder(BaseDummyInputsBuilder[PaddleOCRVLProcessing
         }
 
 
-class PaddleOCRVLMultiModalProcessor(BaseMultiModalProcessor[PaddleOCRVLProcessingInfo]):
+class PaddleOCRVLMultiModalProcessor(
+    BaseMultiModalProcessor[PaddleOCRVLProcessingInfo]
+):
     def _call_hf_processor(
         self,
         prompt: str,
@@ -263,10 +261,14 @@ class PaddleOCRVLMultiModalProcessor(BaseMultiModalProcessor[PaddleOCRVLProcessi
                 dict(**mm_kwargs, **tok_kwargs),
             )
             num_patches_per_image = processed_outputs["image_grid_thw"].prod(-1)
-            processed_outputs["pixel_values"] = processed_outputs["pixel_values"].split(num_patches_per_image.tolist())
+            processed_outputs["pixel_values"] = processed_outputs["pixel_values"].split(
+                num_patches_per_image.tolist()
+            )
         else:
             tokenizer = self.info.get_tokenizer()
-            processed_outputs = tokenizer(prompt, add_special_tokens=True, return_tensors="pt")
+            processed_outputs = tokenizer(
+                prompt, add_special_tokens=True, return_tensors="pt"
+            )
         return processed_outputs
 
     def _get_mm_fields_config(
@@ -323,12 +325,18 @@ class Projector(nn.Module):
         self.vision_config = vision_config
         self.merge_kernel_size = (2, 2)
 
-        self.hidden_size = self.vision_config.hidden_size * self.merge_kernel_size[0] * self.merge_kernel_size[1]
+        self.hidden_size = (
+            self.vision_config.hidden_size
+            * self.merge_kernel_size[0]
+            * self.merge_kernel_size[1]
+        )
 
         self.pre_norm = torch.nn.LayerNorm(self.vision_config.hidden_size, eps=1e-05)
         self.linear_1 = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
         self.act = GELUActivation()
-        self.linear_2 = nn.Linear(self.hidden_size, self.text_config.hidden_size, bias=True)
+        self.linear_2 = nn.Linear(
+            self.hidden_size, self.text_config.hidden_size, bias=True
+        )
 
     def forward(
         self,
@@ -430,7 +438,9 @@ class SiglipVisionEmbeddings(nn.Module):
             new_width = width // self.patch_size
 
         sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.reshape(
+            1, sqrt_num_positions, sqrt_num_positions, dim
+        )
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
         patch_pos_embed = nn.functional.interpolate(
@@ -443,7 +453,9 @@ class SiglipVisionEmbeddings(nn.Module):
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return patch_pos_embed
 
-    def fetch_position_embedding_lfu_cache(self, embeddings: torch.Tensor, h: int, w: int, max_cache: int = 20):
+    def fetch_position_embedding_lfu_cache(
+        self, embeddings: torch.Tensor, h: int, w: int, max_cache: int = 20
+    ):
         grid = (h, w)
         if grid in self.cache_position_embedding:
             self.cache_position_count[grid] += 1
@@ -466,14 +478,17 @@ class SiglipVisionEmbeddings(nn.Module):
         self,
         pixel_values: torch.FloatTensor,
         position_ids: torch.Tensor | None = None,
-        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]]
+        | None = None,
         interpolate_pos_encoding=False,
     ) -> torch.Tensor:
         if pixel_values.dim() == 4:
             pixel_values = pixel_values.unsqueeze(0)
         if pixel_values.dim() == 5:
             if position_ids is None:
-                raise ValueError("position_ids cannot be None when pixel_values.dim() is 5.")
+                raise ValueError(
+                    "position_ids cannot be None when pixel_values.dim() is 5."
+                )
             (
                 batch_size,
                 sequence_len,
@@ -492,7 +507,11 @@ class SiglipVisionEmbeddings(nn.Module):
                 t, h, w = image_grid
                 end = start + t * h * w
                 image_embeddings = embeddings[start:end, :]
-                position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w, True).squeeze(0).repeat(t, 1)
+                position_embedding = (
+                    self.interpolate_pos_encoding(image_embeddings, h, w, True)
+                    .squeeze(0)
+                    .repeat(t, 1)
+                )
                 image_embeddings = image_embeddings + position_embedding
                 tmp_embeddings.append(image_embeddings)
                 start = end
@@ -500,7 +519,10 @@ class SiglipVisionEmbeddings(nn.Module):
 
             return embeddings
         else:
-            raise ValueError(f"Unsupported pixel_values dimension: {pixel_values.dim()}. Expected 4 or 5.")
+            raise ValueError(
+                "Unsupported pixel_values dimension:"
+                f" {pixel_values.dim()}. Expected 4 or 5."
+            )
 
 
 def all_gather_interleave(local_tensor: torch.Tensor, hidden_size: int, tp_size: int):
@@ -508,10 +530,16 @@ def all_gather_interleave(local_tensor: torch.Tensor, hidden_size: int, tp_size:
     import torch.distributed as dist
 
     gathered_tensors = [torch.zeros_like(local_tensor) for _ in range(tp_size)]
-    dist.all_gather(gathered_tensors, local_tensor, group=parallel_state.get_tp_group().device_group)
+    dist.all_gather(
+        gathered_tensors, local_tensor, group=parallel_state.get_tp_group().device_group
+    )
 
-    gathered_tensors_split = [torch.split(tensor, hidden_size // tp_size, -1) for tensor in gathered_tensors]
-    ordered_tensors = [tensor for pair in zip(*gathered_tensors_split) for tensor in pair]
+    gathered_tensors_split = [
+        torch.split(tensor, hidden_size // tp_size, -1) for tensor in gathered_tensors
+    ]
+    ordered_tensors = [
+        tensor for pair in zip(*gathered_tensors_split) for tensor in pair
+    ]
     result_tensor = torch.cat(ordered_tensors, dim=-1)
     return result_tensor
 
@@ -532,8 +560,12 @@ class SiglipAttention(nn.Module):
 
         self.tp_size = parallel_state.get_tensor_model_parallel_world_size()
         self.tp_rank = parallel_state.get_tensor_model_parallel_rank()
-        self.hidden_size_per_attention_head = dist_utils.divide(projection_size, num_heads)
-        self.num_attention_heads_per_partition = dist_utils.divide(num_heads, self.tp_size)
+        self.hidden_size_per_attention_head = dist_utils.divide(
+            projection_size, num_heads
+        )
+        self.num_attention_heads_per_partition = dist_utils.divide(
+            num_heads, self.tp_size
+        )
 
         self.qkv_proj = QKVParallelLinear(
             hidden_size=embed_dim,
@@ -569,7 +601,9 @@ class SiglipAttention(nn.Module):
         q, k, v = qkv.chunk(3, dim=2)
 
         if self.tp_size > 1:
-            splitter = partial(dist_utils.split_tensor_along_last_dim, num_partitions=self.tp_size)
+            splitter = partial(
+                dist_utils.split_tensor_along_last_dim, num_partitions=self.tp_size
+            )
             q = splitter(q)[self.tp_rank]
             k = splitter(k)[self.tp_rank]
             v = splitter(v)[self.tp_rank]
@@ -628,7 +662,9 @@ class SigLIPRotaryEmbedding(nn.Module):
         self.rope_init()
 
     def rope_init(self):
-        inv_freq = 1.0 / (self.theta ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
+        inv_freq = 1.0 / (
+            self.theta ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim)
+        )
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(self, seqlen: int) -> torch.Tensor:
@@ -738,7 +774,8 @@ class SiglipEncoder(nn.Module):
         self,
         inputs_embeds,
         cu_seqlens: torch.Tensor | None = None,
-        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]]
+        | None = None,
         height_position_ids: torch.Tensor | None = None,
         width_position_ids: torch.Tensor | None = None,
     ) -> torch.Tensor:
@@ -842,6 +879,14 @@ class SiglipVisionTransformer(nn.Module):
 
 
 class SiglipVisionModel(nn.Module):
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_stacked={
+            ".q_proj": (".qkv_proj", "q"),
+            ".k_proj": (".qkv_proj", "k"),
+            ".v_proj": (".qkv_proj", "v"),
+        }
+    )
+
     def __init__(
         self,
         config,
@@ -853,7 +898,7 @@ class SiglipVisionModel(nn.Module):
         self.vision_model = SiglipVisionTransformer(
             config,
             quant_config=quant_config,
-            prefix=f"{prefix}.vision_model",
+            prefix=maybe_prefix(prefix, "vision_model"),
         )
         self.quant_config = quant_config
 
@@ -873,7 +918,8 @@ class SiglipVisionModel(nn.Module):
         pixel_values,
         interpolate_pos_encoding: bool = False,
         position_ids: torch.Tensor | None = None,
-        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]]
+        | None = None,
         cu_seqlens: torch.Tensor | None = None,
     ) -> BaseModelOutputWithPooling:
         return self.vision_model(
@@ -885,66 +931,19 @@ class SiglipVisionModel(nn.Module):
         )
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            ("qkv_proj", "q_proj", "q"),
-            ("qkv_proj", "k_proj", "k"),
-            ("qkv_proj", "v_proj", "v"),
-        ]
-        params_dict = dict(self.named_parameters(remove_duplicate=False))
-        loaded_params: set[str] = set()
-        for name, loaded_weight in weights:
-            if "rotary_emb.inv_freq" in name:
-                continue
-            if "head.attention" in name or "head.layernorm" in name:
-                continue
-            if "head.mlp" in name or "head.probe" in name:
-                continue
-            if "packing_position_embedding" in name:
-                continue
-            if self.quant_config is not None and (scale_name := self.quant_config.get_cache_scale(name)):
-                param = params_dict[scale_name]
-                weight_loader = getattr(
-                    param,
-                    "weight_loader",
-                    default_weight_loader,
-                )
-                loaded_weight = loaded_weight if loaded_weight.dim() == 0 else loaded_weight[0]
-                weight_loader(param, loaded_weight)
-                loaded_params.add(scale_name)
-                continue
-            for (
-                param_name,
-                weight_name,
-                shard_id,
-            ) in stacked_params_mapping:
-                if weight_name not in name:
-                    continue
-                name = name.replace(weight_name, param_name)
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-                if is_pp_missing_parameter(name, self):
-                    continue
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-                name = maybe_remap_kv_scale_name(name, params_dict)
-                if name is None:
-                    continue
-                if is_pp_missing_parameter(name, self):
-                    continue
-                param = params_dict[name]
-                weight_loader = getattr(
-                    param,
-                    "weight_loader",
-                    default_weight_loader,
-                )
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
+        # Skip the SigLIP attention pooling head and packing pos embedding
+        # present in the checkpoint but absent from this vision tower.
+        loader = AutoWeightsLoader(
+            self,
+            skip_substrs=[
+                "head.attention",
+                "head.layernorm",
+                "head.mlp",
+                "head.probe",
+                "packing_position_embedding",
+            ],
+        )
+        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
 
 
 @MULTIMODAL_REGISTRY.register_processor(
@@ -999,7 +998,9 @@ class PaddleOCRVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
                 if not isinstance(layer, PPMissingLayer):
                     layer.self_attn.rotary_emb.is_neox_style = True
 
-        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.language_model.make_empty_intermediate_tensors
+        )
 
     def compute_logits(
         self,
@@ -1007,7 +1008,9 @@ class PaddleOCRVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
     ) -> torch.Tensor | None:
         return self.language_model.compute_logits(hidden_states)
 
-    def iter_mm_grid_thw(self, mm_features: list[MultiModalFeatureSpec]) -> Iterator[tuple[int, int, int, int, float]]:
+    def iter_mm_grid_thw(
+        self, mm_features: list[MultiModalFeatureSpec]
+    ) -> Iterator[tuple[int, int, int, int, float]]:
         """
         Iterate over multimodal features and yield grid information.
 
@@ -1029,7 +1032,9 @@ class PaddleOCRVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
                 t, h, w = mm_feature.data["video_grid_thw"].data.tolist()
                 second_per_grid_ts = 1.0
                 if mm_feature.data.get("second_per_grid_ts", None):
-                    second_per_grid_ts = mm_feature.data["second_per_grid_ts"].data.item()
+                    second_per_grid_ts = mm_feature.data[
+                        "second_per_grid_ts"
+                    ].data.item()
                 t_factor = second_per_grid_ts * tokens_per_second
                 yield (
                     offset,
@@ -1058,7 +1063,9 @@ class PaddleOCRVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
         ) in self.iter_mm_grid_thw(mm_features):
             text_len = offset - st
             st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-            llm_pos_ids_list.append(np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx)
+            llm_pos_ids_list.append(
+                np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx
+            )
 
             grid_indices = np.indices((llm_grid_t, llm_grid_h, llm_grid_w))
             if t_factor != 1.0:
@@ -1070,14 +1077,18 @@ class PaddleOCRVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
         if st < len(input_tokens):
             st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
             text_len = len(input_tokens) - st
-            llm_pos_ids_list.append(np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx)
+            llm_pos_ids_list.append(
+                np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx
+            )
 
         llm_positions = np.concatenate(llm_pos_ids_list, axis=1).reshape(3, -1)
         mrope_position_delta = (llm_positions.max() + 1 - len(input_tokens)).item()
 
         return torch.from_numpy(llm_positions), mrope_position_delta
 
-    def _parse_and_validate_image_input(self, **kwargs: object) -> PaddleOCRImagePixelInputs | None:
+    def _parse_and_validate_image_input(
+        self, **kwargs: object
+    ) -> PaddleOCRImagePixelInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         image_grid_thw = kwargs.pop("image_grid_thw", None)
 
@@ -1101,9 +1112,13 @@ class PaddleOCRVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
         if intermediate_tensors is not None:
             inputs_embeds = None
 
-        return self.language_model(input_ids, positions, intermediate_tensors, inputs_embeds)
+        return self.language_model(
+            input_ids, positions, intermediate_tensors, inputs_embeds
+        )
 
-    def encode_image(self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor) -> torch.Tensor:
+    def encode_image(
+        self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor
+    ) -> torch.Tensor:
         pixel_values = pixel_values.type(self.visual.dtype)
         siglip_position_ids = list()
         image_grid_hws = list()
@@ -1116,7 +1131,9 @@ class PaddleOCRVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
         siglip_position_ids.append(image_position_ids)
         cu_seqlens.append(cu_seqlens[-1] + numel)
 
-        siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
+        siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(
+            pixel_values.device
+        )
         cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
 
         vision_outputs = self.visual(
@@ -1128,11 +1145,14 @@ class PaddleOCRVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
         )
         return vision_outputs
 
-    def _process_image_input(self, image_input: PaddleOCRImagePixelInputs) -> MultiModalEmbeddings:
+    def _process_image_input(
+        self, image_input: PaddleOCRImagePixelInputs
+    ) -> MultiModalEmbeddings:
         pixel_values = image_input.pixel_values
         image_grid_thw = image_input.image_grid_thw
         vision_outputs = tuple(
-            self.encode_image(pixel, grid).squeeze(0) for pixel, grid in zip(pixel_values, image_grid_thw)
+            self.encode_image(pixel, grid).squeeze(0)
+            for pixel, grid in zip(pixel_values, image_grid_thw)
         )
         image_embeds = self.mlp_AR(vision_outputs, image_grid_thw)
         return image_embeds

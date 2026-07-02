@@ -20,7 +20,6 @@ except ImportError as e:
     ) from e
 
 
-from aphrodite.entrypoints.mcp.tool_server import ToolServer
 from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
@@ -39,16 +38,20 @@ REPLACEMENT_CHAR = "\ufffd"
 
 
 class CohereTagRegistry(NamedTuple):
-    """A single ``structural_tag`` begin("trigger")/end pair."""
+    """A single ``structural_tag`` trigger / end pair (``begin`` uses ``trigger``)."""
 
     trigger: str
     end: str
 
 
 class CohereTagStyle(NamedTuple):
-    """The structural tags style for a given model architecture."""
+    """The structural tags style for a given model architecture.
 
-    json: CohereTagRegistry
+    ``json_tags`` lists every JSON-schema wrapper the model may emit (MOE uses
+    both response and text delimiters). ``tools`` is the tool-call wrapper.
+    """
+
+    json_tags: tuple[CohereTagRegistry, ...]
     tools: CohereTagRegistry
 
 
@@ -63,12 +66,32 @@ class CohereNormalizedTool(TypedDict):
     parameters: dict[str, Any]
 
 
-COMMAND_A_TOOLS_TAG = CohereTagRegistry(trigger="<|START_ACTION|>", end="<|END_ACTION|>")
-COMMAND_A_JSON_TAG = CohereTagRegistry(trigger="<|START_RESPONSE|>", end="<|END_RESPONSE|>")
+COMMAND_A_TOOLS_TAG = CohereTagRegistry(
+    trigger="<|START_ACTION|>",
+    end="<|END_ACTION|>",
+)
+COMMAND_A_JSON_TAG = CohereTagRegistry(
+    trigger="<|START_RESPONSE|>",
+    end="<|END_RESPONSE|>",
+)
+COMMAND_A_PLUS_JSON_TAG = CohereTagRegistry(
+    trigger="<|START_TEXT|>",
+    end="<|END_TEXT|>",
+)
 
 MODEL_TO_TAG_STYLE: dict[str, CohereTagStyle] = {
-    "Cohere2ForCausalLM": CohereTagStyle(json=COMMAND_A_JSON_TAG, tools=COMMAND_A_TOOLS_TAG),
-    "Cohere2VisionForConditionalGeneration": CohereTagStyle(json=COMMAND_A_JSON_TAG, tools=COMMAND_A_TOOLS_TAG),
+    "Cohere2ForCausalLM": CohereTagStyle(
+        json_tags=(COMMAND_A_JSON_TAG,),
+        tools=COMMAND_A_TOOLS_TAG,
+    ),
+    "Cohere2VisionForConditionalGeneration": CohereTagStyle(
+        json_tags=(COMMAND_A_JSON_TAG, COMMAND_A_PLUS_JSON_TAG),
+        tools=COMMAND_A_TOOLS_TAG,
+    ),
+    "Cohere2MoeForCausalLM": CohereTagStyle(
+        json_tags=(COMMAND_A_JSON_TAG, COMMAND_A_PLUS_JSON_TAG),
+        tools=COMMAND_A_TOOLS_TAG,
+    ),
 }
 
 
@@ -98,7 +121,9 @@ def collect_tool_schema(tool_schema: list[CohereNormalizedTool]) -> str:
                             }}"""
         tool_grammar = str(xgr.Grammar.from_json_schema(json_schema))
         for match in re.findall(r"\b(\w+)\s*::=", tool_grammar):
-            tool_grammar = re.sub(rf"\b{re.escape(match)}\b", tool_name + match, tool_grammar)
+            tool_grammar = re.sub(
+                rf"\b{re.escape(match)}\b", tool_name + match, tool_grammar
+            )
         tool_dictionary[tool_name] = f"{tool_name} ::= {tool_name}root\n{tool_grammar}"
     # Emitted grammar shape:
     #   root  ::= tools
@@ -201,15 +226,18 @@ def convert_schema_to_structural_tags(
     style = MODEL_TO_TAG_STYLE[model_architecture]
 
     tags: list[dict] = []
+    triggers: list[str] = []
 
     def _add_tag(tag: CohereTagRegistry, content: dict) -> None:
         tags.append({"begin": tag.trigger, "content": content, "end": tag.end})
+        triggers.append(tag.trigger)
 
     if schema is not None:
-        # Add the JSON-schema tag both for schema-only requests and for the
-        # "tools plus JSON mode" case (North use case: follow the schema when
-        # the model decides not to call any tool).
-        _add_tag(style.json, {"type": "json_schema", "json_schema": schema})
+        # One structural tag per JSON wrapper (e.g. MOE: response + text).
+        # Same for schema-only and "tools plus JSON mode" (North: schema when
+        # the model does not call tools).
+        for jt in style.json_tags:
+            _add_tag(jt, {"type": "json_schema", "json_schema": schema})
 
     if _has_effective_tools(tools):
         # ``tools`` may be a JSON string (poseidon / RESPONSE_FORMAT_TOOL_DEFINITIONS)
@@ -217,7 +245,8 @@ def convert_schema_to_structural_tags(
         tool_schema_list = _tool_definitions_to_schema_list(tools)
         if not tool_schema_list:
             raise ValueError(
-                "No valid tool definitions could be parsed from the request for structural tag conversion."
+                "No valid tool definitions could be parsed from the request for "
+                "structural tag conversion."
             )
         tool_grammar = collect_tool_schema(tool_schema_list)
         _add_tag(style.tools, {"type": "grammar", "grammar": tool_grammar})
@@ -229,7 +258,7 @@ def convert_schema_to_structural_tags(
             "type": "structural_tag",
             "format": {
                 "type": "triggered_tags",
-                "triggers": [t["begin"] for t in tags],
+                "triggers": triggers,
                 "tags": tags,
             },
         }
@@ -323,7 +352,11 @@ def _schema_dict_from_chat_response_format(
         return {"type": "object"}
     if rf_type != "json_schema":
         return None
-    js_wr = rf.get("json_schema") if isinstance(rf, dict) else getattr(rf, "json_schema", None)
+    js_wr = (
+        rf.get("json_schema")
+        if isinstance(rf, dict)
+        else getattr(rf, "json_schema", None)
+    )
     return _schema_from_json_schema_field(js_wr)
 
 
@@ -347,7 +380,9 @@ def _schema_dict_from_structured_outputs(
     if hasattr(raw, "model_dump"):
         out = _schema_from_json_schema_field(raw)
         if out is None:
-            raise ValueError("structured_outputs.json model has no extractable JSON Schema.")
+            raise ValueError(
+                "structured_outputs.json model has no extractable JSON Schema."
+            )
         return out
 
     if isinstance(raw, str):
@@ -364,7 +399,9 @@ def _schema_dict_from_structured_outputs(
         body = raw if isinstance(raw, dict) else dict(raw)
         return _schema_from_json_schema_field(body) or body
 
-    raise ValueError(f"structured_outputs.json has unsupported type {type(raw).__name__}.")
+    raise ValueError(
+        f"structured_outputs.json has unsupported type {type(raw).__name__}."
+    )
 
 
 class BaseCohereCommandReasoningParser(ReasoningParser):
@@ -377,7 +414,9 @@ class BaseCohereCommandReasoningParser(ReasoningParser):
         **kwargs,
     ):
         super().__init__(tokenizer, *args, **kwargs)
+        self.start_token_id = tokenizer.convert_tokens_to_ids("<|START_THINKING|>")
         self.end_token_id = tokenizer.convert_tokens_to_ids("<|END_THINKING|>")
+        self.chatbot_token_id = tokenizer.convert_tokens_to_ids("<|CHATBOT_TOKEN|>")
         self.unary_opts = unary_opts
         self.melody_unary = PyFilter(unary_opts)
         self.melody_streaming = PyFilter(streaming_opts)
@@ -441,14 +480,21 @@ class BaseCohereCommandReasoningParser(ReasoningParser):
         return content_ids
 
     def is_reasoning_end(self, input_ids: Sequence[int]) -> bool:
-        return any(tid == self.end_token_id for tid in reversed(input_ids))
+        chatbot = self.chatbot_token_id
+        start = self.start_token_id
+        end = self.end_token_id
+        has_end_token = False
 
-    def prepare_structured_tag(self, original_tag: str | None, tool_server: ToolServer | None) -> str | None:
-        # Responses API replaces ``structural_tag`` via the reasoning parser.
-        # Default ``ReasoningParser.prepare_structured_tag`` returns None, which
-        # would clear a Cohere tag produced in ``adjust_request`` and break
-        # ``StructuredOutputsParams`` validation. Preserve the existing tag.
-        return original_tag
+        for i in reversed(range(len(input_ids))):
+            tid = input_ids[i]
+            if tid == start:
+                return has_end_token
+            if tid == chatbot:
+                return False
+            if tid == end:
+                has_end_token = True
+
+        return has_end_token
 
     def adjust_request(
         self, request: ChatCompletionRequest | ResponsesRequest
@@ -459,10 +505,16 @@ class BaseCohereCommandReasoningParser(ReasoningParser):
         # Schema: prefer ``response_format`` (OpenAI Chat Completions), then
         # ``structured_outputs.json`` / ``json_object`` (Aphrodite direct). Tools stay
         # on ``request.tools``.
-        rf = request.response_format if isinstance(request, ChatCompletionRequest) else None
+        rf = (
+            request.response_format
+            if isinstance(request, ChatCompletionRequest)
+            else None
+        )
         if rf is not None and _response_format_type(rf) == "structural_tag":
             return request
-        model_architecture = self._model_config.architecture if self._model_config is not None else None
+        model_architecture = (
+            self._model_config.architecture if self._model_config is not None else None
+        )
         tools = request.tools
         # ``response_format`` wins if both it and ``structured_outputs`` supply JSON.
         schema = _schema_dict_from_chat_response_format(rf)
@@ -478,7 +530,7 @@ class BaseCohereCommandReasoningParser(ReasoningParser):
             model_architecture=model_architecture,
         )
         if result is None:
-            # Unsupported architectures are not in ``MODEL_TO_TAG_STYLE``; conversion
+            # Unsupported architectures are not in ``MODEL_TO_TAG_STYLE``.
             raise ValueError(
                 "Failed to build structural_tag guided decoding constraints from "
                 "this request's JSON schema and/or tools. The configured model "

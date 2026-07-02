@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 
 from ..conftest import IMAGE_ASSETS
@@ -15,16 +16,22 @@ models = ["llava-hf/llava-1.5-7b-hf"]
 
 
 @pytest.mark.parametrize("model", models)
-def test_context_length_too_short(aphrodite_runner, image_assets, model):
+def test_context_length_too_short(vllm_runner, image_assets, model):
     images = [asset.pil_image for asset in image_assets]
 
     with pytest.raises(ValueError, match="longer than the maximum model length"):
-        aphrodite_model = aphrodite_runner(
+        vllm_model = vllm_runner(
             model,
-            max_model_len=128,  # LLaVA has a feature size of 576
+            # LLaVA has a feature size of 576
+            # For the HF processor to execute successfully but still
+            # failing the overall context length check, we need the
+            # max_model_len to at least contain all image tokens
+            max_model_len=579,
             enforce_eager=True,
             load_format="dummy",
         )
 
-        with aphrodite_model:
-            aphrodite_model.generate_greedy([HF_IMAGE_PROMPTS[0]], max_tokens=1, images=[images[0]])
+        with vllm_model:
+            vllm_model.generate_greedy(
+                [HF_IMAGE_PROMPTS[0]], max_tokens=1, images=[images[0]]
+            )

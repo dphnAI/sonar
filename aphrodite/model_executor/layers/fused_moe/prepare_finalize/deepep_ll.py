@@ -31,7 +31,9 @@ DEEPEP_QUANT_BLOCK_SHAPE = [DEEPEP_QUANT_BLOCK_SIZE, DEEPEP_QUANT_BLOCK_SIZE]
 logger = init_logger(__name__)
 
 
-def dequant_fp8(expert_x_fp8: torch.Tensor, expert_x_scales: torch.Tensor) -> torch.Tensor:
+def dequant_fp8(
+    expert_x_fp8: torch.Tensor, expert_x_scales: torch.Tensor
+) -> torch.Tensor:
     """
     Return dequantized tensor in fp32
     """
@@ -40,7 +42,9 @@ def dequant_fp8(expert_x_fp8: torch.Tensor, expert_x_scales: torch.Tensor) -> to
     expert_x_scales = expert_x_scales.contiguous()
     num_experts = expert_x_fp8.size(0)
 
-    expert_x_fp32 = expert_x_fp8.to(torch.float32).view(num_experts, -1, DEEPEP_QUANT_BLOCK_SIZE)
+    expert_x_fp32 = expert_x_fp8.to(torch.float32).view(
+        num_experts, -1, DEEPEP_QUANT_BLOCK_SIZE
+    )
     expert_x_scales = expert_x_scales.view(num_experts, -1, 1)
     return (expert_x_fp32 * expert_x_scales).view(expert_x_fp8.size())
 
@@ -62,14 +66,20 @@ class DeepEPLLPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
         _supported_hs = DeepEPLLPrepareAndFinalize.SUPPORTED_HIDDEN_SIZES
         # Check sorted
         num_supported_hs = len(_supported_hs)
-        assert all([_supported_hs[i] < _supported_hs[i + 1] for i in range(num_supported_hs - 1)])
+        assert all(
+            [
+                _supported_hs[i] < _supported_hs[i + 1]
+                for i in range(num_supported_hs - 1)
+            ]
+        )
 
         for x in _supported_hs:
             if x >= hidden_size:
                 return x
 
         raise ValueError(
-            f"Hidden Size {hidden_size} is greater than the maximum supported hidden size {_supported_hs[-1]}"
+            f"Hidden Size {hidden_size} is greater than the "
+            f"maximum supported hidden size {_supported_hs[-1]}"
         )
 
     def __init__(
@@ -115,7 +125,9 @@ class DeepEPLLPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
             return
 
         if self.use_fp8_dispatch:
-            logger.debug_once("Update DeepEPLLPrepareFinalize to do packed ue8m0 scales dispatch.")
+            logger.debug_once(
+                "Update DeepEPLLPrepareFinalize to do packed ue8m0 scales dispatch."
+            )
             self.use_ue8m0_dispatch = True
         else:
             logger.warning_once(
@@ -152,7 +164,11 @@ class DeepEPLLPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
         quant_config: FusedMoEQuantConfig,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         if self.use_fp8_dispatch:
-            block_k = quant_config.block_shape[1] if quant_config.block_shape is not None else None
+            block_k = (
+                quant_config.block_shape[1]
+                if quant_config.block_shape is not None
+                else None
+            )
             if block_k == DEEPEP_QUANT_BLOCK_SIZE:
                 # DeepEP kernels did the quantization for us.
                 x, x_scales = x
@@ -184,7 +200,8 @@ class DeepEPLLPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
             if q_dtype == "nvfp4":
                 q_dtype = None
                 logger.info_once(
-                    "Using DeepEP bfloat16 dispatch for FlashInfer CUTEDSL as APHRODITE_DEEPEPLL_NVFP4_DISPATCH==0"
+                    "Using DeepEP bfloat16 dispatch for FlashInfer CUTEDSL as "
+                    "APHRODITE_DEEPEPLL_NVFP4_DISPATCH==0"
                 )
             assert isinstance(x, torch.Tensor)
             num_experts, max_tokens, hidden_dim = x.size()
@@ -228,31 +245,46 @@ class DeepEPLLPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
 
         hidden_size = a1.size(1)
         assert hidden_size in self.SUPPORTED_HIDDEN_SIZES, (
-            f"Hidden Size {hidden_size} not in supported list of hidden sizes{self.SUPPORTED_HIDDEN_SIZES}"
+            f"Hidden Size {hidden_size} not in supported list of hidden sizes"
+            f"{self.SUPPORTED_HIDDEN_SIZES}"
         )
 
         a2a_idx = dbo_current_ubatch_id()
 
         if self.use_fp8_dispatch:
-            assert hidden_size % 128 == 0, "DeepEP kernels quantize the inputs in blocks of shape 128"
+            assert hidden_size % 128 == 0, (
+                "DeepEP kernels quantize the inputs in blocks of shape 128"
+            )
 
         use_nvfp4 = False
-        nvfp4_dispatch = quant_config.quant_dtype == "nvfp4" and envs.APHRODITE_DEEPEPLL_NVFP4_DISPATCH
+        nvfp4_dispatch = (
+            quant_config.quant_dtype == "nvfp4" and envs.APHRODITE_DEEPEPLL_NVFP4_DISPATCH
+        )
         if nvfp4_dispatch:
             use_nvfp4 = True
-        qc_a1_gscale_or_scale = quant_config.a1_gscale if nvfp4_dispatch else quant_config.a1_scale
+        qc_a1_gscale_or_scale = (
+            quant_config.a1_gscale if nvfp4_dispatch else quant_config.a1_scale
+        )
         has_per_token_scales = (
             qc_a1_gscale_or_scale.numel() != 1
             if qc_a1_gscale_or_scale is not None
-            else (quant_config.a2_scale.numel() != 1 if quant_config.a2_scale is not None else False)
+            else (
+                quant_config.a2_scale.numel() != 1
+                if quant_config.a2_scale is not None
+                else False
+            )
         )
         if not use_nvfp4:
-            assert not has_per_token_scales, "low_latency kernels doesn't support dispatching per-token scales"
+            assert not has_per_token_scales, (
+                "low_latency kernels doesn't support dispatching per-token scales"
+            )
 
         if apply_router_weight_on_input:
             topk = topk_ids.size(1)
             # TODO: this only works for topK=1, will need to update for topK>1
-            assert topk == 1, "apply_router_weight_on_input is only implemented for topk=1"
+            assert topk == 1, (
+                "apply_router_weight_on_input is only implemented for topk=1"
+            )
             a1 = a1 * topk_weights.to(a1.dtype)
 
         # Dispatch
@@ -303,7 +335,9 @@ class DeepEPLLPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
     ) -> mk.PrepareResultType:
         expert_x, expert_x_scale = self._do_quant(expert_x, a1_dtype, quant_config)
 
-        expert_tokens_meta = mk.ExpertTokensMetadata(expert_num_tokens=expert_num_tokens, expert_num_tokens_cpu=None)
+        expert_tokens_meta = mk.ExpertTokensMetadata(
+            expert_num_tokens=expert_num_tokens, expert_num_tokens_cpu=None
+        )
 
         return expert_x, expert_x_scale, expert_tokens_meta, None, None
 

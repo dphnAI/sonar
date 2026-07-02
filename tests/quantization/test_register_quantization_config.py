@@ -2,22 +2,30 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Tests register custom quantization config.
 
-See https://github.com/vllm-project/vllm/issues/11926 for more details.
+See https://github.com/vllm-project/aphrodite/issues/11926 for more details.
 
 Run `pytest tests/quantization/test_register_quantization_config.py`.
 """
 
+import logging
 from typing import Any
 
 import pytest
 import torch
 import torch.nn.functional as F
-from aphrodite.modeling.layers.linear import (
+
+from aphrodite.model_executor.layers.linear import (
     LinearBase,  # noqa: E501
     UnquantizedLinearMethod,
 )
-from aphrodite.quantization import QuantizationMethods, get_quantization_config, register_quantization_config
-from aphrodite.quantization.base_config import QuantizationConfig  # noqa: E501
+from aphrodite.model_executor.layers.quantization import (
+    QuantizationMethods,
+    get_quantization_config,
+    register_quantization_config,
+)
+from aphrodite.model_executor.layers.quantization.base_config import (
+    QuantizationConfig,  # noqa: E501
+)
 
 
 class FakeQuantLinearMethod(UnquantizedLinearMethod):
@@ -84,23 +92,30 @@ class CustomQuantConfig(QuantizationConfig):
         """Create a config class from the model's quantization config."""
         return CustomQuantConfig(num_bits=config.get("num_bits", 8))
 
-    def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> FakeQuantLinearMethod | None:
+    def get_quant_method(
+        self, layer: torch.nn.Module, prefix: str
+    ) -> FakeQuantLinearMethod | None:
         """Get the quantize method to use for the quantized layer."""
         if isinstance(layer, LinearBase):
             return FakeQuantLinearMethod(num_bits=self.num_bits)
         return None
 
 
-def test_register_quantization_config():
+def test_register_quantization_config(caplog_vllm):
     """Test register custom quantization config."""
 
     # The quantization method `custom_quant` should be registered.
     assert get_quantization_config("custom_quant") == CustomQuantConfig
 
     # The quantization method `custom_quant` is already exists,
-    # should raise an error.
-    with pytest.raises(ValueError):
+    # should raise a debug message when re-registering it.
+    with caplog_vllm.at_level(logging.DEBUG, logger="aphrodite"):
         register_quantization_config("custom_quant")(CustomQuantConfig)
+
+    assert any(
+        "The quantization method 'custom_quant' already exists" in message
+        for message in caplog_vllm.messages
+    ), "Expected a debug message when re-registering custom_quant"
 
 
 @pytest.mark.parametrize(
@@ -109,12 +124,14 @@ def test_register_quantization_config():
         "meta-llama/Llama-3.2-1B-Instruct",
     ],
 )
-def test_custom_quant(aphrodite_runner, model, monkeypatch):
+def test_custom_quant(vllm_runner, model, monkeypatch):
     """Test infer with the custom quantization method."""
     # `LLM.apply_model` requires pickling a function.
     monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
 
-    with aphrodite_runner(model_name=model, quantization="custom_quant", enforce_eager=True) as llm:
+    with vllm_runner(
+        model_name=model, quantization="custom_quant", enforce_eager=True
+    ) as llm:
 
         def check_model(model):
             layer = model.model.layers[0]
@@ -125,5 +142,5 @@ def test_custom_quant(aphrodite_runner, model, monkeypatch):
 
         llm.apply_model(check_model)
 
-        output = llm.generate_greedy("Hello my name is", max_tokens=20)
+        output = llm.generate_greedy("Hello my name is", max_tokens=1)
         assert output

@@ -149,7 +149,9 @@ def validate_embedding_ndim(
         )
 
 
-class EmbeddingItems(ModalityDataItems[torch.Tensor | list[torch.Tensor], torch.Tensor]):
+class EmbeddingItems(
+    ModalityDataItems[torch.Tensor | list[torch.Tensor], torch.Tensor]
+):
     """
     Base class for data items that are expressed as a batched embedding tensor,
     or a list of embedding tensors (one per item).
@@ -212,7 +214,9 @@ class EmbeddingItems(ModalityDataItems[torch.Tensor | list[torch.Tensor], torch.
                         f"Embedding shape: {tuple(tensor.shape)}"
                     )
 
-    def _unwrap(self, item: torch.Tensor | MediaWithBytes[torch.Tensor]) -> torch.Tensor:
+    def _unwrap(
+        self, item: torch.Tensor | MediaWithBytes[torch.Tensor]
+    ) -> torch.Tensor:
         """Extract media from wrapper if present."""
         return item.media if isinstance(item, MediaWithBytes) else item
 
@@ -232,7 +236,9 @@ class EmbeddingItems(ModalityDataItems[torch.Tensor | list[torch.Tensor], torch.
         return len(self.get(item_idx))
 
 
-class DictEmbeddingItems(ModalityDataItems[Mapping[str, torch.Tensor], Mapping[str, torch.Tensor]]):
+class DictEmbeddingItems(
+    ModalityDataItems[Mapping[str, torch.Tensor], Mapping[str, torch.Tensor]]
+):
     """
     Base class for data items that are expressed as a dictionary of tensors.
 
@@ -257,7 +263,8 @@ class DictEmbeddingItems(ModalityDataItems[Mapping[str, torch.Tensor], Mapping[s
         if missing_required_data_keys:
             data_keys = set(data.keys())
             msg = (
-                f"The data should contain the fields: {required_fields}, but only found the following keys: {data_keys}"
+                f"The data should contain the fields: {required_fields}, "
+                f"but only found the following keys: {data_keys}"
             )
             raise ValueError(msg)
 
@@ -327,7 +334,13 @@ class ImageProcessorItems(ProcessorBatchItems[HfImageItem | None]):
         if isinstance(image, PILImage.Image):
             return ImageSize(*image.size)
         if isinstance(image, (np.ndarray, torch.Tensor)):
-            _, h, w = image.shape
+            if image.ndim == 3 and image.shape[-1] in (1, 3, 4):
+                # HWC format (e.g. from np.array(PIL.Image)).
+                # PIL images are always channels-last.
+                h, w = image.shape[0], image.shape[1]
+            else:
+                # CHW format (standard PyTorch / numpy convention).
+                _, h, w = image.shape
             return ImageSize(w, h)
 
         assert_never(image)
@@ -371,7 +384,14 @@ class VideoProcessorItems(ProcessorBatchItems[HfVideoItem | None]):
         if isinstance(image, PILImage.Image):
             return ImageSize(*image.size)
         if isinstance(image, (np.ndarray, torch.Tensor)):
-            _, h, w = image.shape
+            if image.ndim == 3 and image.shape[-1] in (1, 3, 4):
+                # HWC format (e.g. from np.array(PIL.Image) via
+                # _get_video_with_metadata).  PIL images are always
+                # channels-last.
+                h, w = image.shape[0], image.shape[1]
+            else:
+                # CHW format (standard PyTorch / numpy convention).
+                _, h, w = image.shape
             return ImageSize(w, h)
 
         assert_never(image)
@@ -407,7 +427,9 @@ class MultiModalDataItems(UserDict[str, ModalityDataItems[Any, Any]]):
         Construct a new `MultiModalDataItems` instance containing only the
         selected modalities.
         """
-        return MultiModalDataItems({modality: self[modality] for modality in modalities})
+        return MultiModalDataItems(
+            {modality: self[modality] for modality in modalities}
+        )
 
     def get_count(self, modality: str, *, strict: bool = True) -> int:
         """
@@ -419,7 +441,10 @@ class MultiModalDataItems(UserDict[str, ModalityDataItems[Any, Any]]):
         if modality not in self:
             if strict:
                 available_modalities = set(self.keys())
-                raise KeyError(f"Modality {modality!r} not found. Available modalities: {available_modalities}")
+                raise KeyError(
+                    f"Modality {modality!r} not found. "
+                    f"Available modalities: {available_modalities}"
+                )
 
             return 0
 
@@ -440,18 +465,25 @@ class MultiModalDataItems(UserDict[str, ModalityDataItems[Any, Any]]):
         """
         if modality not in self:
             available_modalities = set(self.keys())
-            raise KeyError(f"Modality {modality!r} not found. Available modalities: {available_modalities}")
+            raise KeyError(
+                f"Modality {modality!r} not found. "
+                f"Available modalities: {available_modalities}"
+            )
 
         items = self[modality]
         if not isinstance(items, typ):
             raise TypeError(
-                f"Invalid type of data items for {modality=}. Expected type: {typ}, but found type: {type(items)}"
+                f"Invalid type of data items for {modality=}. "
+                f"Expected type: {typ}, but "
+                f"found type: {type(items)}"
             )
 
         return items  # type: ignore[return-value]
 
 
-ModalityDataParser: TypeAlias = Callable[[ModalityData[Any]], ModalityDataItems[Any, Any] | None]
+ModalityDataParser: TypeAlias = Callable[
+    [ModalityData[Any]], ModalityDataItems[Any, Any] | None
+]
 
 
 class MultiModalDataParser:
@@ -476,7 +508,7 @@ class MultiModalDataParser:
         *,
         target_sr: float | None = None,
         target_channels: int | None = None,
-        audio_resample_method: Literal["pyav", "scipy"] = "pyav",
+        audio_resample_method: Literal["pyav", "scipy", "soxr"] = "pyav",
         video_needs_metadata: bool = False,
         expected_hidden_size: int | None = None,
     ) -> None:
@@ -491,11 +523,13 @@ class MultiModalDataParser:
         self.expected_hidden_size = expected_hidden_size
 
     @classmethod
-    def is_embeddings(cls, data: object) -> TypeGuard[torch.Tensor | list[torch.Tensor]]:
+    def is_embeddings(
+        cls, data: object
+    ) -> TypeGuard[torch.Tensor | list[torch.Tensor]]:
         if isinstance(data, torch.Tensor):
             return data.ndim == 3
-        if isinstance(data, list) and is_list_of(data, torch.Tensor) and data:
-            return data[0].ndim == 2
+        if is_list_of(data, torch.Tensor) and len(data) > 0:
+            return data[0].ndim == 2  # type: ignore[index]
 
         return False
 
@@ -681,4 +715,7 @@ def parse_mm_uuids(mm_uuids: MultiModalUUIDDict | None) -> MultiModalUUIDItems:
     if mm_uuids is None:
         return {}
 
-    return {modality: [uuids] if isinstance(uuids, str) else uuids for modality, uuids in mm_uuids.items()}
+    return {
+        modality: [uuids] if isinstance(uuids, str) else uuids
+        for modality, uuids in mm_uuids.items()
+    }

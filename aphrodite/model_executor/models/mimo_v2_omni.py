@@ -29,7 +29,6 @@ from aphrodite.model_executor.layers.linear import (
 from aphrodite.model_executor.layers.quantization import QuantizationConfig
 from aphrodite.model_executor.layers.rotary_embedding import get_rope
 from aphrodite.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 from aphrodite.model_executor.models.vision import is_vit_use_data_parallel
 from aphrodite.multimodal import MULTIMODAL_REGISTRY
 from aphrodite.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
@@ -140,7 +139,11 @@ class MiMoVisionAttention(nn.Module):
     ) -> None:
         super().__init__()
         use_data_parallel = is_vit_use_data_parallel()
-        self.tp_size = 1 if use_data_parallel else parallel_state.get_tensor_model_parallel_world_size()
+        self.tp_size = (
+            1
+            if use_data_parallel
+            else parallel_state.get_tensor_model_parallel_world_size()
+        )
         self.tp_rank = parallel_state.get_tensor_model_parallel_rank()
 
         self.num_heads = num_heads
@@ -212,7 +215,7 @@ class MiMoVisionAttention(nn.Module):
         max_seqlen: torch.Tensor,
     ) -> torch.Tensor:
         """Window attention via flash_attn_varlen_func with window_size."""
-        from aphrodite.aphrodite_flash_attn import flash_attn_varlen_func
+        from aphrodite.vllm_flash_attn import flash_attn_varlen_func
 
         w = self.visual_token_window_size
         output = flash_attn_varlen_func(
@@ -257,8 +260,12 @@ class MiMoVisionAttention(nn.Module):
 
         # Rearrange to [batch, seq, head, head_dim] for rotary application
         q = einops.rearrange(q, "s b (h d) -> b s h d", h=self.num_heads_per_partition)
-        k = einops.rearrange(k, "s b (h d) -> b s h d", h=self.num_kv_heads_per_partition)
-        v = einops.rearrange(v, "s b (h d) -> b s h d", h=self.num_kv_heads_per_partition)
+        k = einops.rearrange(
+            k, "s b (h d) -> b s h d", h=self.num_kv_heads_per_partition
+        )
+        v = einops.rearrange(
+            v, "s b (h d) -> b s h d", h=self.num_kv_heads_per_partition
+        )
 
         # Apply rotary embeddings to Q and K independently (handles GQA)
         if rotary_pos_emb_cos is not None and rotary_pos_emb_sin is not None:
@@ -281,18 +288,26 @@ class MiMoVisionAttention(nn.Module):
             # context_layer: [batch, seq, num_heads, head_dim] or [batch, seq, hidden]
             # Ensure shape is [seq, batch, num_heads * kv_channels]
             if context_layer.dim() == 4:
-                context_layer = einops.rearrange(context_layer, "b s h d -> s b (h d)").contiguous()
+                context_layer = einops.rearrange(
+                    context_layer, "b s h d -> s b (h d)"
+                ).contiguous()
             else:
-                context_layer = einops.rearrange(context_layer, "b s d -> s b d").contiguous()
+                context_layer = einops.rearrange(
+                    context_layer, "b s d -> s b d"
+                ).contiguous()
         else:
             # Window attention via flash_attn_varlen_func with window_size
             # Flatten batch dimension: [seq, head, head_dim]
             q_varlen = einops.rearrange(q, "b s h d -> (b s) h d")
             k_varlen = einops.rearrange(k, "b s h d -> (b s) h d")
             v_varlen = einops.rearrange(v, "b s h d -> (b s) h d")
-            output = self._forward_window_attn(q_varlen, k_varlen, v_varlen, cu_seqlens, max_seqlen)
+            output = self._forward_window_attn(
+                q_varlen, k_varlen, v_varlen, cu_seqlens, max_seqlen
+            )
             # output: [total_tokens, num_heads, kv_channels]
-            context_layer = einops.rearrange(output, "(b s) h d -> s b (h d)", b=batch_size).contiguous()
+            context_layer = einops.rearrange(
+                output, "(b s) h d -> s b (h d)", b=batch_size
+            ).contiguous()
 
         output, _ = self.proj(context_layer)
         return output
@@ -362,6 +377,13 @@ class MiMoVisionBlock(nn.Module):
 
 
 class MiMoVisionTransformer(nn.Module):
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_stacked={
+            "mlp.gate_proj": ("mlp.gate_up_proj", 0),
+            "mlp.up_proj": ("mlp.gate_up_proj", 1),
+        }
+    )
+
     def __init__(
         self,
         vision_cfg: PretrainedConfig,
@@ -416,7 +438,10 @@ class MiMoVisionTransformer(nn.Module):
                     mlp_hidden_dim=vision_cfg.intermediate_size,
                     act_fn=get_act_and_mul_fn(vision_cfg.hidden_act),
                     norm_eps=norm_eps,
-                    use_sink=(vision_cfg.use_sink and i not in vision_cfg.fullatt_block_indexes),
+                    use_sink=(
+                        vision_cfg.use_sink
+                        and i not in vision_cfg.fullatt_block_indexes
+                    ),
                     visual_token_window_size=vision_cfg.visual_token_window_size,
                     quant_config=quant_config,
                     prefix=f"{prefix}.blocks.{i}",
@@ -449,14 +474,18 @@ class MiMoVisionTransformer(nn.Module):
         tensor = tensor.flatten(0, 1)
         return tensor
 
-    def get_window_index_1d(self, grid_thw: torch.Tensor, col: bool = True) -> torch.Tensor:
+    def get_window_index_1d(
+        self, grid_thw: torch.Tensor, col: bool = True
+    ) -> torch.Tensor:
         """Compute 1D window indices for col-based or row-based SWA reordering."""
         window_index: list[torch.Tensor] = []
         window_index_id = 0
         for grid_t, grid_h, grid_w in grid_thw:
             llm_grid_h = grid_h // self.spatial_merge_size
             llm_grid_w = grid_w // self.spatial_merge_size
-            index = torch.arange(grid_t * llm_grid_h * llm_grid_w).reshape(grid_t, llm_grid_h, llm_grid_w)
+            index = torch.arange(grid_t * llm_grid_h * llm_grid_w).reshape(
+                grid_t, llm_grid_h, llm_grid_w
+            )
             index_new = index.transpose(1, 2).reshape(-1) if col else index.reshape(-1)
             window_index.append(index_new + window_index_id)
             window_index_id += int((grid_t * llm_grid_h * llm_grid_w).item())
@@ -537,7 +566,9 @@ class MiMoVisionTransformer(nn.Module):
         rotary_sin = rotary_sin.to(device=x.device)
 
         # Compute cu_seqlens for flash_attn (per-image/video sequence lengths)
-        seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0])
+        seqlens = torch.repeat_interleave(
+            grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]
+        )
         cu_seqlens = torch.cat(
             [
                 torch.tensor([0], device=x.device, dtype=torch.int32),
@@ -547,7 +578,9 @@ class MiMoVisionTransformer(nn.Module):
         max_seqlen = seqlens.max()
 
         # Precompute col-based window index for type=1 (col SWA) layers
-        window_index_1d_col = self.get_window_index_1d(grid_thw, col=True).to(device=x.device)
+        window_index_1d_col = self.get_window_index_1d(grid_thw, col=True).to(
+            device=x.device
+        )
         reverse_window_index_1d_col = torch.argsort(window_index_1d_col)
 
         # Col-based rotary embeddings (reordered at spatial_merge_unit granularity).
@@ -562,11 +595,17 @@ class MiMoVisionTransformer(nn.Module):
             window_attn_type = self.vit_window_attn_types[i]
 
             # Reorder tokens to col-based layout when entering col-SWA region
-            if window_attn_type == 1 and (i == 0 or self.vit_window_attn_types[i - 1] != 1):
+            if window_attn_type == 1 and (
+                i == 0 or self.vit_window_attn_types[i - 1] != 1
+            ):
                 x = self.apply_index(x, window_index_1d_col)
 
             # Restore row-based order when leaving col-SWA region
-            if i > 0 and window_attn_type != 1 and self.vit_window_attn_types[i - 1] == 1:
+            if (
+                i > 0
+                and window_attn_type != 1
+                and self.vit_window_attn_types[i - 1] == 1
+            ):
                 x = self.apply_index(x, reverse_window_index_1d_col)
 
             # Use col-based embeddings for col-SWA layers
@@ -594,28 +633,8 @@ class MiMoVisionTransformer(nn.Module):
         return x
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            ("mlp.gate_up_proj", "mlp.gate_proj", 0),
-            ("mlp.gate_up_proj", "mlp.up_proj", 1),
-        ]
-        params_dict = dict(self.named_parameters(remove_duplicate=False))
-        loaded_params: set[str] = set()
-
-        for name, loaded_weight in weights:
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                if weight_name not in name:
-                    continue
-                name = name.replace(weight_name, param_name)
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
+        loader = AutoWeightsLoader(self)
+        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
 
 
 class MiMoV2OmniProcessingInfo(BaseProcessingInfo):
@@ -739,7 +758,9 @@ class MiMoV2OmniProcessingInfo(BaseProcessingInfo):
         )
         return num_video_tokens
 
-    def get_image_size_with_most_features(self, max_pixels: int | None = None) -> ImageSize:
+    def get_image_size_with_most_features(
+        self, max_pixels: int | None = None
+    ) -> ImageSize:
         hf_config = self.get_hf_config()
         vision_config = hf_config.vision_config
         patch_size = vision_config.patch_size
@@ -810,7 +831,9 @@ class MiMoV2OmniProcessingInfo(BaseProcessingInfo):
     ) -> int:
         max_videos = mm_counts.get("video", 0)
         max_total_frames = self._get_max_video_frames(seq_len)
-        max_frames_per_video = min(max_total_frames // max(max_videos, 1), max_frames_per_video)
+        max_frames_per_video = min(
+            max_total_frames // max(max_videos, 1), max_frames_per_video
+        )
         return max(max_frames_per_video, 1)
 
     def get_max_video_tokens(
@@ -1107,7 +1130,9 @@ class MiMoV2OmniDummyInputsBuilder(BaseDummyInputsBuilder[MiMoV2OmniProcessingIn
         num_videos = mm_counts.get("video", 0)
 
         target_width, target_height = self.info.get_image_size_with_most_features()
-        target_num_frames = self.info.get_num_frames_with_most_features(seq_len, mm_counts)
+        target_num_frames = self.info.get_num_frames_with_most_features(
+            seq_len, mm_counts
+        )
 
         return {
             "image": self._get_dummy_images(
@@ -1178,7 +1203,9 @@ class MiMoV2OmniForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsQ
         model_path = aphrodite_config.model_config.model
         if audio_config is not None:
             with self._mark_tower_model(aphrodite_config, "audio"):
-                self.audio_encoder = MimoAudioEncoder(audio_config, model_path=model_path)
+                self.audio_encoder = MimoAudioEncoder(
+                    audio_config, model_path=model_path
+                )
         else:
             self.audio_encoder = None
         with self._mark_language_model(aphrodite_config):
@@ -1187,9 +1214,13 @@ class MiMoV2OmniForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsQ
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
-        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.language_model.make_empty_intermediate_tensors
+        )
 
-    def _parse_and_validate_image_input(self, **kwargs: object) -> Qwen2_5_VLImageInputs | None:
+    def _parse_and_validate_image_input(
+        self, **kwargs: object
+    ) -> Qwen2_5_VLImageInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         image_embeds = kwargs.pop("image_embeds", None)
         image_grid_thw = kwargs.pop("image_grid_thw", None)
@@ -1211,7 +1242,9 @@ class MiMoV2OmniForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsQ
                 image_grid_thw=image_grid_thw,
             )
 
-    def _parse_and_validate_video_input(self, **kwargs: object) -> Qwen2_5_VLVideoInputs | None:
+    def _parse_and_validate_video_input(
+        self, **kwargs: object
+    ) -> Qwen2_5_VLVideoInputs | None:
         pixel_values_videos = kwargs.pop("pixel_values_videos", None)
         video_embeds = kwargs.pop("video_embeds", None)
         video_grid_thw = kwargs.pop("video_grid_thw", None)
@@ -1236,7 +1269,9 @@ class MiMoV2OmniForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsQ
                 second_per_grid_ts=second_per_grid_ts,
             )
 
-    def _process_image_input(self, image_input: Qwen2_5_VLImageInputs) -> tuple[torch.Tensor, ...]:
+    def _process_image_input(
+        self, image_input: Qwen2_5_VLImageInputs
+    ) -> tuple[torch.Tensor, ...]:
         grid_thw = image_input["image_grid_thw"]
         assert grid_thw.ndim == 2
         grid_thw_list = grid_thw.tolist()
@@ -1252,7 +1287,9 @@ class MiMoV2OmniForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsQ
         sizes = (grid_thw.prod(-1) // merge_size // merge_size).tolist()
         return image_embeds.split(sizes)
 
-    def _process_video_input(self, video_input: Qwen2_5_VLVideoInputs) -> tuple[torch.Tensor, ...]:
+    def _process_video_input(
+        self, video_input: Qwen2_5_VLVideoInputs
+    ) -> tuple[torch.Tensor, ...]:
         grid_thw = video_input["video_grid_thw"]
         assert grid_thw.ndim == 2
         grid_thw_list = grid_thw.tolist()
@@ -1285,12 +1322,24 @@ class MiMoV2OmniForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsQ
         # Preserve the order of modalities if there are multiple of them
         # from the order of kwargs.
         for input_key in kwargs:
-            if input_key in ("pixel_values", "image_embeds") and "image" not in mm_input_by_modality:
-                mm_input_by_modality["image"] = self._parse_and_validate_image_input(**kwargs)
-            if input_key in ("pixel_values_videos", "video_embeds") and "video" not in mm_input_by_modality:
-                mm_input_by_modality["video"] = self._parse_and_validate_video_input(**kwargs)
+            if (
+                input_key in ("pixel_values", "image_embeds")
+                and "image" not in mm_input_by_modality
+            ):
+                mm_input_by_modality["image"] = self._parse_and_validate_image_input(
+                    **kwargs
+                )
+            if (
+                input_key in ("pixel_values_videos", "video_embeds")
+                and "video" not in mm_input_by_modality
+            ):
+                mm_input_by_modality["video"] = self._parse_and_validate_video_input(
+                    **kwargs
+                )
             if input_key == "audio_features" and "audio" not in mm_input_by_modality:
-                mm_input_by_modality["audio"] = self._parse_and_validate_audio_input(**kwargs)
+                mm_input_by_modality["audio"] = self._parse_and_validate_audio_input(
+                    **kwargs
+                )
         return mm_input_by_modality
 
     def _process_audio_input(self, audio_input: dict) -> tuple[torch.Tensor, ...]:
@@ -1327,7 +1376,9 @@ class MiMoV2OmniForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsQ
         va_audio_embs_list: list[tuple[torch.Tensor, ...]] = []
         if va_audio_features is not None and self.audio_encoder is not None:
             mel_list = (
-                list(va_audio_features) if isinstance(va_audio_features, torch.Tensor) else list(va_audio_features)
+                list(va_audio_features)
+                if isinstance(va_audio_features, torch.Tensor)
+                else list(va_audio_features)
             )
             for mel_spec in mel_list:
                 embs, tok_lens = self.audio_encoder.get_audio_feature([mel_spec])
@@ -1340,7 +1391,9 @@ class MiMoV2OmniForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsQ
         for modality in mm_input_by_modality:
             multimodal_input = mm_input_by_modality[modality]
             if modality == "image":
-                multimodal_embeddings.extend(self._process_image_input(multimodal_input))
+                multimodal_embeddings.extend(
+                    self._process_image_input(multimodal_input)
+                )
             elif modality == "video":
                 video_embs_tuple = self._process_video_input(multimodal_input)
                 if video_audio_n_segs is None:
@@ -1367,10 +1420,14 @@ class MiMoV2OmniForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsQ
                             # Interleave: all vid frames in group, then audio for group
                             for g in range(n_segs):
                                 for f in range(frames_per_group):
-                                    multimodal_embeddings.append(frames[g * frames_per_group + f])
+                                    multimodal_embeddings.append(
+                                        frames[g * frames_per_group + f]
+                                    )
                                 multimodal_embeddings.append(group_audio_embs[g])
             elif modality == "audio":
-                multimodal_embeddings.extend(self._process_audio_input(multimodal_input))
+                multimodal_embeddings.extend(
+                    self._process_audio_input(multimodal_input)
+                )
         return tuple(multimodal_embeddings)
 
     def forward(

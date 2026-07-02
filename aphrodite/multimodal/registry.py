@@ -29,7 +29,7 @@ from .processing import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import AphroditeConfig, ModelConfig, ObservabilityConfig
+    from aphrodite.config import ModelConfig, ObservabilityConfig, AphroditeConfig
     from aphrodite.model_executor.models.interfaces import SupportsMultiModal
 
 logger = init_logger(__name__)
@@ -111,17 +111,29 @@ class MultiModalRegistry:
             return False
 
         mm_config = model_config.get_multimodal_config()
-        info = self._create_processing_info(model_config, tokenizer=None)
+        try:
+            info = self._create_processing_info(model_config, tokenizer=None)
+        except ValueError:
+            logger.warning_once(
+                "Model %s is treated as multimodal but has no registered "
+                "multimodal processor; running in text-only mode.",
+                model_config.model,
+            )
+            return False
 
         # Check if all supported modalities have limit == 0
-        if all(mm_config.get_limit_per_prompt(modality) == 0 for modality in info.supported_mm_limits):
+        if all(
+            mm_config.get_limit_per_prompt(modality) == 0
+            for modality in info.supported_mm_limits
+        ):
             # If enable_mm_embeds is True, we still need MM infrastructure
             # to process pre-computed embeddings even though encoder won't run
             if mm_config.enable_mm_embeds:
                 return True
 
             logger.info_once(
-                "All limits of multimodal modalities supported by the model are set to 0, running in text-only mode."
+                "All limits of multimodal modalities supported by the model "
+                "are set to 0, running in text-only mode."
             )
             return False
 
@@ -166,7 +178,11 @@ class MultiModalRegistry:
         from aphrodite.model_executor.model_loader import get_model_architecture
 
         model_cls, _ = get_model_architecture(model_config)
-        assert hasattr(model_cls, "_processor_factory")
+        if not hasattr(model_cls, "_processor_factory"):
+            raise ValueError(
+                f"Model class {model_cls.__name__} has no registered "
+                "multimodal processor"
+            )
         return cast("SupportsMultiModal", model_cls)
 
     def _create_processing_ctx(
@@ -265,7 +281,8 @@ class MultiModalRegistry:
         # Check if IPC caching is supported.
         parallel_config = aphrodite_config.parallel_config
         is_ipc_supported = parallel_config._api_process_count == 1 and (
-            parallel_config.data_parallel_size == 1 or parallel_config.data_parallel_external_lb
+            parallel_config.data_parallel_size == 1
+            or parallel_config.data_parallel_external_lb
         )
 
         if not is_ipc_supported:
@@ -353,6 +370,9 @@ class MultiModalTimingRegistry:
             return {}
 
         with self._lock:
-            stats = {req_id: ctx.get_stats_dict() for req_id, ctx in self._ctx_by_request_id.items()}
+            stats = {
+                req_id: ctx.get_stats_dict()
+                for req_id, ctx in self._ctx_by_request_id.items()
+            }
             self._ctx_by_request_id.clear()
             return stats

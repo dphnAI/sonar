@@ -5,7 +5,7 @@
 # that's based on https://huggingface.co/nvidia/NVIDIA-Nemotron-Parse-v1.1/blob/main/hf_nemotron_parse_modeling.py
 #
 # Bart classes based on old Aphrodite codebase:
-# https://github.com/vllm-project/vllm/blob/v0.10.2/aphrodite/model_executor/models/bart.py
+# https://github.com/vllm-project/aphrodite/blob/v0.10.2/aphrodite/model_executor/models/bart.py
 
 import math
 from collections.abc import Iterable, Mapping, Sequence
@@ -20,7 +20,7 @@ from transformers import (
     PretrainedConfig,
 )
 
-from aphrodite.config import AphroditeConfig, CacheConfig
+from aphrodite.config import CacheConfig, AphroditeConfig
 from aphrodite.config.lora import LoRAConfig
 from aphrodite.config.multimodal import BaseDummyOptions
 from aphrodite.inputs import MultiModalDataDict
@@ -67,7 +67,9 @@ class BartScaledWordEmbedding(VocabParallelEmbedding):
     forward by multiplying with embeddings scale.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, embed_scale: float = 1.0):
+    def __init__(
+        self, num_embeddings: int, embedding_dim: int, embed_scale: float = 1.0
+    ):
         super().__init__(num_embeddings, embedding_dim)
         self.embed_scale = embed_scale
 
@@ -83,7 +85,9 @@ class BartParallelLMHead(ParallelLMHead):
     BartScaledWordEmbedding
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, embed_scale: float = 1.0):
+    def __init__(
+        self, num_embeddings: int, embedding_dim: int, embed_scale: float = 1.0
+    ):
         super().__init__(num_embeddings, embedding_dim)
         self.embed_scale = embed_scale
 
@@ -255,7 +259,9 @@ class MBartDecoderNoPos(nn.Module):
         self.lora_config = lora_config
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        self.embed_tokens = BartScaledWordEmbedding(config.vocab_size, config.d_model, embed_scale=embed_scale)
+        self.embed_tokens = BartScaledWordEmbedding(
+            config.vocab_size, config.d_model, embed_scale=embed_scale
+        )
 
         if embed_tokens is not None:
             self.embed_tokens.weight = embed_tokens.weight
@@ -274,6 +280,9 @@ class MBartDecoderNoPos(nn.Module):
 
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
         self.layer_norm = nn.LayerNorm(config.d_model)
+
+    def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
+        return self.embed_tokens(input_ids)
 
     def forward(
         self,
@@ -387,7 +396,9 @@ class NemotronParseProcessingInfo(BaseProcessingInfo):
         return {"image": image_tokens}
 
 
-class NemotronParseDummyInputsBuilder(BaseDummyInputsBuilder[NemotronParseProcessingInfo]):
+class NemotronParseDummyInputsBuilder(
+    BaseDummyInputsBuilder[NemotronParseProcessingInfo]
+):
     def get_dummy_text(self, mm_counts: Mapping[str, int]) -> str:
         return ""
 
@@ -401,10 +412,16 @@ class NemotronParseDummyInputsBuilder(BaseDummyInputsBuilder[NemotronParseProces
 
         target_width, target_height = self.info.get_hf_config().image_size
 
-        return {"image": self._get_dummy_images(width=target_width, height=target_height, num_images=num_images)}
+        return {
+            "image": self._get_dummy_images(
+                width=target_width, height=target_height, num_images=num_images
+            )
+        }
 
 
-class NemotronParseMultiModalProcessor(EncDecMultiModalProcessor[NemotronParseProcessingInfo]):
+class NemotronParseMultiModalProcessor(
+    EncDecMultiModalProcessor[NemotronParseProcessingInfo]
+):
     def create_encoder_prompt(
         self,
         prompt: str | list[int],
@@ -420,11 +437,15 @@ class NemotronParseMultiModalProcessor(EncDecMultiModalProcessor[NemotronParsePr
         tok_kwargs: Mapping[str, object],
     ) -> BatchFeature:
         if mm_data:
-            processed_outputs = super()._call_hf_processor(prompt, mm_data, mm_kwargs, tok_kwargs)
+            processed_outputs = super()._call_hf_processor(
+                prompt, mm_data, mm_kwargs, tok_kwargs
+            )
         else:
             hf_processor = self.info.get_hf_processor()
             tokenizer = hf_processor.tokenizer
-            processed_outputs = tokenizer(prompt, add_special_tokens=False, return_tensors="pt")
+            processed_outputs = tokenizer(
+                prompt, add_special_tokens=False, return_tensors="pt"
+            )
         return processed_outputs
 
     def _get_mm_fields_config(
@@ -463,12 +484,16 @@ class RadioWithNeck(nn.Module):
         super().__init__()
         self.config = config.encoder
 
-        self.model_encoder = self.get_vit_model_from_radio_config(config, quant_config=quant_config)
+        self.model_encoder = self.get_vit_model_from_radio_config(
+            config, quant_config=quant_config
+        )
 
         # Neck components
         last_hidden_state = 1024
         self.conv1 = nn.Conv1d(1280, last_hidden_state, 1)
-        self.layer_norm1 = nn.LayerNorm(last_hidden_state, eps=1e-06, elementwise_affine=True)
+        self.layer_norm1 = nn.LayerNorm(
+            last_hidden_state, eps=1e-06, elementwise_affine=True
+        )
         self.conv2 = nn.Conv2d(
             last_hidden_state,
             last_hidden_state,
@@ -477,14 +502,18 @@ class RadioWithNeck(nn.Module):
             padding=0,
             bias=False,
         )
-        self.layer_norm2 = nn.LayerNorm(last_hidden_state, eps=1e-06, elementwise_affine=True)
+        self.layer_norm2 = nn.LayerNorm(
+            last_hidden_state, eps=1e-06, elementwise_affine=True
+        )
         self.sum_proj = ColumnParallelLinear(
             3840,
             last_hidden_state,
             quant_config=quant_config,
             prefix=f"{prefix}.sum_proj",
         )
-        self.layer_norm3 = nn.LayerNorm(last_hidden_state, eps=1e-06, elementwise_affine=True)
+        self.layer_norm3 = nn.LayerNorm(
+            last_hidden_state, eps=1e-06, elementwise_affine=True
+        )
 
     def get_vit_model_from_radio_config(
         self,
@@ -529,7 +558,9 @@ class RadioWithNeck(nn.Module):
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
         model_encoder_weights = []
         adaptor_dict = {
-            name: param for name, param in dict(self.named_parameters()).items() if not name.startswith("model_encoder")
+            name: param
+            for name, param in dict(self.named_parameters()).items()
+            if not name.startswith("model_encoder")
         }
         for name, w in weights:
             if name.startswith("model_encoder"):
@@ -558,7 +589,9 @@ class NemotronParseForConditionalGeneration(nn.Module, SupportsMultiModal):
         quant_config = aphrodite_config.quant_config
 
         with self._mark_tower_model(aphrodite_config, "image"):
-            self.encoder = RadioWithNeck(config=config, quant_config=quant_config, prefix=f"{prefix}.encoder")
+            self.encoder = RadioWithNeck(
+                config=config, quant_config=quant_config, prefix=f"{prefix}.encoder"
+            )
 
         with self._mark_language_model(aphrodite_config):
             self.decoder = MBartDecoderNoPos(
@@ -569,8 +602,12 @@ class NemotronParseForConditionalGeneration(nn.Module, SupportsMultiModal):
             )
 
         self.vocab_size = config.decoder.vocab_size
-        self.lm_head = ParallelLMHead(config.decoder.vocab_size, config.decoder.d_model, quant_config=quant_config)
-        self.logits_processor = LogitsProcessor(self.vocab_size, config.decoder.vocab_size)
+        self.lm_head = ParallelLMHead(
+            config.decoder.vocab_size, config.decoder.d_model, quant_config=quant_config
+        )
+        self.logits_processor = LogitsProcessor(
+            self.vocab_size, config.decoder.vocab_size
+        )
 
     @classmethod
     def get_placeholder_str(cls, modality: str, i: int) -> str | None:
@@ -579,7 +616,9 @@ class NemotronParseForConditionalGeneration(nn.Module, SupportsMultiModal):
 
         raise ValueError("Only image modality is supported")
 
-    def _parse_and_validate_image_input(self, **kwargs: object) -> NemotronParsePixelInputs | None:
+    def _parse_and_validate_image_input(
+        self, **kwargs: object
+    ) -> NemotronParsePixelInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         image_embeds = kwargs.pop("image_embeds", None)
 
@@ -605,7 +644,9 @@ class NemotronParseForConditionalGeneration(nn.Module, SupportsMultiModal):
 
         raise AssertionError("This line should be unreachable.")
 
-    def _process_image_input(self, image_input: NemotronParsePixelInputs) -> torch.Tensor:
+    def _process_image_input(
+        self, image_input: NemotronParsePixelInputs
+    ) -> torch.Tensor:
         assert image_input["type"] == "pixel_values"
         pixel_values = image_input["data"]
         dtype = next(self.encoder.parameters()).dtype
@@ -638,7 +679,9 @@ class NemotronParseForConditionalGeneration(nn.Module, SupportsMultiModal):
         inputs_embeds = None
         if encoder_outputs:
             inputs_embeds = torch.cat(encoder_outputs, dim=0)
-        hidden_states = self.decoder(decoder_input_ids=input_ids, encoder_hidden_states=inputs_embeds)
+        hidden_states = self.decoder(
+            decoder_input_ids=input_ids, encoder_hidden_states=inputs_embeds
+        )
         return hidden_states
 
     def compute_logits(

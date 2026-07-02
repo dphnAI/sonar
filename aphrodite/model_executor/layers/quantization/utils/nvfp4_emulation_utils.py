@@ -17,27 +17,30 @@ __all__ = [
 FLOAT4_E2M1_MAX = scalar_types.float4_e2m1f.max()
 FLOAT4_E2M1_MAX_RECIPROCAL = 1 / FLOAT4_E2M1_MAX
 
-kE2M1ToFloat_handle = SimpleNamespace(val=torch.tensor([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0], dtype=torch.float32))
+kE2M1ToFloat_handle = SimpleNamespace(
+    val=torch.tensor([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0], dtype=torch.float32)
+)
 
 
 @triton.jit
-def _e2m1_inline(magnitude):
-    """Inline E2M1 lookup using binary tree - 3 levels instead of 7 sequential.
-    Maps 3-bit magnitude to float: [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0]
-    Uses bit decomposition for fewer comparisons.
-    """
-    # Bit 2 (MSB): separates 0-3 from 4-7
-    # Bit 1: separates within groups
-    # Bit 0 (LSB): separates within pairs
-    b2 = (magnitude >> 2) & 1  # 0 for mag 0-3, 1 for mag 4-7
-    b1 = (magnitude >> 1) & 1  # middle bit
-    b0 = magnitude & 1  # LSB
+def _e2m1_inline(nibble):
+    """Decode an NVFP4 nibble (4 bits: 1 sign + 3 magnitude) to float32.
 
-    # For mag 0-3: [0.0, 0.5, 1.0, 1.5]
-    low_group = tl.where(b1 == 1, tl.where(b0 == 1, 1.5, 1.0), tl.where(b0 == 1, 0.5, 0.0))
-    # For mag 4-7: [2.0, 3.0, 4.0, 6.0]
-    high_group = tl.where(b1 == 1, tl.where(b0 == 1, 6.0, 4.0), tl.where(b0 == 1, 3.0, 2.0))
-    return tl.where(b2 == 1, high_group, low_group)
+    Uses direct IEEE 754 bit construction.
+    For magnitudes 2-7 the FP32 bit pattern is 0x3F000000 + (mag << 22),
+    which is a single shift + add + bitcast.  Magnitudes 0 (zero) and 1
+    (E2M1 subnormal = 0.5) are patched with two tl.where ops.
+    """
+    magnitude = nibble & 0x07
+    sign = (nibble >> 3) & 1
+
+    fp32_bits = 0x3F000000 + (magnitude.to(tl.int32) << 22)
+    val = fp32_bits.to(tl.float32, bitcast=True)
+
+    val = tl.where(magnitude == 0, 0.0, val)
+    val = tl.where(magnitude == 1, 0.5, val)
+
+    return tl.where(sign == 1, -val, val)
 
 
 @triton.jit
@@ -53,11 +56,12 @@ def _dequantize_nvfp4_kernel(
     TILE_BLOCKS: tl.constexpr,
 ):
     """Triton kernel for NVFP4 dequantization (swizzle=False).
+
     Optimized with 2D tile processing + interleave for coalesced stores.
     """
     BLOCK_PACKED: tl.constexpr = BLOCK_SIZE // 2
 
-    row_idx = tl.program_id(0)
+    row_idx = tl.program_id(0).to(tl.int64)
     tile_idx = tl.program_id(1)
 
     if has_batch_global_scale:
@@ -86,29 +90,29 @@ def _dequantize_nvfp4_kernel(
 
     # Load [TILE_BLOCKS, BLOCK_PACKED] packed bytes
     packed_offsets = tl.arange(0, BLOCK_PACKED)[None, :]
-    byte_indices = fp4_row_offset + (start_block + block_offsets[:, None]) * BLOCK_PACKED + packed_offsets
+    byte_indices = (
+        fp4_row_offset
+        + (start_block + block_offsets[:, None]) * BLOCK_PACKED
+        + packed_offsets
+    )
     elem_mask = block_mask[:, None]
     raw_bytes = tl.load(fp4_ptr + byte_indices, mask=elem_mask, other=0)
 
     low_nibble = raw_bytes & 0x0F
     high_nibble = (raw_bytes >> 4) & 0x0F
 
-    # Binary tree E2M1 decode
-    low_mag = low_nibble & 0x07
-    low_val = _e2m1_inline(low_mag)
-    low_sign = (low_nibble >> 3) & 1
-    low_result = tl.where(low_sign == 1, -low_val, low_val) * scale_values
-
-    high_mag = high_nibble & 0x07
-    high_val = _e2m1_inline(high_mag)
-    high_sign = (high_nibble >> 3) & 1
-    high_result = tl.where(high_sign == 1, -high_val, high_val) * scale_values
+    low_result = _e2m1_inline(low_nibble) * scale_values
+    high_result = _e2m1_inline(high_nibble) * scale_values
 
     # Interleave for coalesced contiguous store
     result = tl.interleave(low_result, high_result)
 
     elem_offsets = tl.arange(0, BLOCK_SIZE)[None, :]
-    out_indices = output_row_offset + (start_block + block_offsets[:, None]) * BLOCK_SIZE + elem_offsets
+    out_indices = (
+        output_row_offset
+        + (start_block + block_offsets[:, None]) * BLOCK_SIZE
+        + elem_offsets
+    )
     tl.store(output_ptr + out_indices, result, mask=block_mask[:, None])
 
 
@@ -128,6 +132,7 @@ def _e2m1_lookup(magnitude):
 @triton.jit
 def _round_to_fp4(x):
     """Round float values to the nearest E2M1 representable value.
+
     Matches the thresholds in the Python ``cast_to_fp4`` exactly.
     """
     sign = tl.where(x < 0.0, -1.0, 1.0)
@@ -154,6 +159,7 @@ def _nvfp4_quant_dequant_kernel(
     TILE_BLOCKS: tl.constexpr,
 ):
     """Fused NVFP4 quantize-dequantize kernel.
+
     Uses a 2D grid (rows x tiles) to parallelize across both rows
     and quantization groups within a row. Each program handles
     TILE_BLOCKS groups at once using vectorized 2D operations.
@@ -168,7 +174,11 @@ def _nvfp4_quant_dequant_kernel(
     block_mask = (start_block + block_offsets) < num_blocks
 
     # Load [TILE_BLOCKS, BLOCK_SIZE] elements
-    indices = row_offset + (start_block + block_offsets[:, None]) * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)[None, :]
+    indices = (
+        row_offset
+        + (start_block + block_offsets[:, None]) * BLOCK_SIZE
+        + tl.arange(0, BLOCK_SIZE)[None, :]
+    )
     mask_2d = block_mask[:, None]
     x = tl.load(input_ptr + indices, mask=mask_2d, other=0.0).to(tl.float32)
 
@@ -201,7 +211,9 @@ def _triton_nvfp4_quant_dequant(
     x_m, x_k = x.shape
 
     if not torch.compiler.is_compiling():
-        assert x_k % block_size == 0, f"Weight shape K={x_k} is not divisible by block_size={block_size}"
+        assert x_k % block_size == 0, (
+            f"Weight shape K={x_k} is not divisible by block_size={block_size}"
+        )
 
     output_dtype = x.dtype
     num_blocks = x_k // block_size
@@ -233,6 +245,7 @@ def _triton_dequantize_nvfp4(
     block_size: int = 16,
 ) -> torch.Tensor:
     """Dequantize NVFP4 using Triton (swizzle=False only).
+
     Supports both 2D and 3D inputs:
     - 2D: [m, packed_k] -> [m, k]
     - 3D: [dim0, m, packed_k] -> [dim0, m, k]
@@ -348,7 +361,9 @@ def dequantize_to_dtype(
     assert tensor_fp4.dtype == torch.uint8
 
     if not swizzle and current_platform.is_cuda_alike():
-        return _triton_dequantize_nvfp4(tensor_fp4, tensor_sf, global_scale, dtype, block_size)
+        return _triton_dequantize_nvfp4(
+            tensor_fp4, tensor_sf, global_scale, dtype, block_size
+        )
 
     # We handle 3D tensors reshaping them to 2D.
     is_3d = tensor_fp4.ndim == 3
@@ -426,7 +441,9 @@ def ref_nvfp4_quant(x, global_scale, block_size):
     return cast_to_fp4(clipped_x), scale.squeeze(-1)
 
 
-def ref_nvfp4_quant_dequant(x: torch.Tensor, global_scale: torch.Tensor, block_size: int) -> torch.Tensor:
+def ref_nvfp4_quant_dequant(
+    x: torch.Tensor, global_scale: torch.Tensor, block_size: int
+) -> torch.Tensor:
     """
     NVFP4 quantize-dequantize operation.
 

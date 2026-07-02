@@ -43,6 +43,16 @@ class EmbeddingPoolerHead(SequencePoolerHead):
         self.head_dtype = head_dtype
         self.activation = activation
 
+    def extra_repr(self) -> str:
+        attrs = []
+        if self.head_dtype is not None:
+            attrs.append(f"head_dtype={self.head_dtype}")
+        if self.projector is not None:
+            attrs.append("projector=True")
+        if self.activation is not None:
+            attrs.append(f"activation={self.activation.__class__.__name__}")
+        return ", ".join(attrs)
+
     def get_supported_tasks(self) -> Set[PoolingTask]:
         return {"embed"}
 
@@ -52,7 +62,11 @@ class EmbeddingPoolerHead(SequencePoolerHead):
         pooling_metadata: PoolingMetadata,
     ) -> SequencePoolerHeadOutput:
         pooling_params = pooling_metadata.pooling_params
-        assert len(pooled_data) == len(pooling_params)
+        if len(pooled_data) != len(pooling_params):
+            raise ValueError(
+                f"pooled_data length ({len(pooled_data)}) does not match "
+                f"pooling_params length ({len(pooling_params)})"
+            )
 
         if isinstance(pooled_data, list):
             pooled_data = torch.stack(pooled_data)
@@ -72,13 +86,20 @@ class EmbeddingPoolerHead(SequencePoolerHead):
         dimensions_list = [pooling_param.dimensions for pooling_param in pooling_params]
         if any(d is not None for d in dimensions_list):
             # change the output dimension
-            assert len(embeddings) == len(dimensions_list)
+            if len(embeddings) != len(dimensions_list):
+                raise ValueError(
+                    f"embeddings length ({len(embeddings)}) does not match "
+                    f"dimensions_list length ({len(dimensions_list)})"
+                )
             if len(set(dimensions_list)) == 1 and not isinstance(embeddings, list):
                 # if all dimensions are the same
                 d = dimensions_list[0]
                 embeddings = embeddings[..., :d]
             else:
-                embeddings = [vecs if d is None else vecs[..., :d] for vecs, d in zip(embeddings, dimensions_list)]
+                embeddings = [
+                    vecs if d is None else vecs[..., :d]
+                    for vecs, d in zip(embeddings, dimensions_list)
+                ]
 
         # for normalize
         if self.activation is not None:
@@ -87,7 +108,10 @@ class EmbeddingPoolerHead(SequencePoolerHead):
                 if flags[0]:
                     embeddings = self.activation(embeddings)
             else:
-                embeddings = [self.activation(vecs) if f else vecs for vecs, f in zip(embeddings, flags)]
+                embeddings = [
+                    self.activation(vecs) if f else vecs
+                    for vecs, f in zip(embeddings, flags)
+                ]
 
         # embeddings shape: [batchsize, embedding_size]
         return embeddings
@@ -110,6 +134,20 @@ class ClassifierPoolerHead(SequencePoolerHead):
         self.head_dtype = head_dtype
         self.activation = activation
 
+    def extra_repr(self) -> str:
+        attrs = []
+        if self.head_dtype is not None:
+            attrs.append(f"head_dtype={self.head_dtype}")
+        if self.classifier is not None:
+            attrs.append("classifier=True")
+        if self.logit_mean is not None:
+            attrs.append(f"logit_mean={self.logit_mean}")
+        if self.logit_sigma is not None:
+            attrs.append(f"logit_sigma={self.logit_sigma}")
+        if self.activation is not None:
+            attrs.append(f"activation={self.activation.__class__.__name__}")
+        return ", ".join(attrs)
+
     def get_supported_tasks(self) -> Set[PoolingTask]:
         return {"classify"}
 
@@ -119,7 +157,11 @@ class ClassifierPoolerHead(SequencePoolerHead):
         pooling_metadata: PoolingMetadata,
     ) -> SequencePoolerHeadOutput:
         pooling_params = pooling_metadata.pooling_params
-        assert len(pooled_data) == len(pooling_params)
+        if len(pooled_data) != len(pooling_params):
+            raise ValueError(
+                f"pooled_data length ({len(pooled_data)}) does not match "
+                f"pooling_params length ({len(pooling_params)})"
+            )
 
         if isinstance(pooled_data, list):
             pooled_data = torch.stack(pooled_data)
@@ -145,7 +187,10 @@ class ClassifierPoolerHead(SequencePoolerHead):
             if len(set(flags)) == 1:
                 logits = self.activation(logits) if flags[0] else logits
             else:
-                logits = [self.activation(vecs) if f else vecs for vecs, f in zip(logits, flags)]
+                logits = [
+                    self.activation(vecs) if f else vecs
+                    for vecs, f in zip(logits, flags)
+                ]
 
         # logits shape: [batchsize, num_labels]
         return logits

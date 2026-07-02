@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-# Copyright 2024 The Aphrodite team.
+# Copyright 2024 The vLLM team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ from aphrodite.model_executor.layers.linear import (
     ReplicatedLinear,
     RowParallelLinear,
 )
+from aphrodite.model_executor.models.utils import maybe_prefix
 from aphrodite.transformers_utils.config import is_rope_parameters_nested
 
 if TYPE_CHECKING:
@@ -63,7 +64,9 @@ def init_on_device_without_buffers(device: torch.device):
             param_cls = type(module._parameters[name])
             kwargs = module._parameters[name].__dict__
             kwargs["requires_grad"] = param.requires_grad
-            module._parameters[name] = param_cls(module._parameters[name].to(device), **kwargs)
+            module._parameters[name] = param_cls(
+                module._parameters[name].to(device), **kwargs
+            )
 
     tensor_constructors_to_patch = {}
 
@@ -98,8 +101,6 @@ Style = Literal[
     "replicate",
     "colwise_gather_output",
     "rowwise_split_input",
-    "colwise_rep",
-    "rowwise_rep",
 ]
 
 
@@ -128,12 +129,8 @@ def replace_linear_class(
         "colwise": (ColumnParallelLinear, {}),
         "rowwise": (RowParallelLinear, {}),
         "replicate": (ReplicatedLinear, {}),
-        # Transformers v5
         "colwise_gather_output": (ColumnParallelLinear, {"gather_output": True}),
         "rowwise_split_input": (RowParallelLinear, {"input_is_parallel": False}),
-        # Transformers v4
-        "colwise_rep": (ColumnParallelLinear, {"gather_output": True}),
-        "rowwise_rep": (RowParallelLinear, {"input_is_parallel": False}),
     }.get(style, (ReplicatedLinear, {}))
 
     return aphrodite_linear_cls(
@@ -208,7 +205,10 @@ def replace_rms_norm_class(rms_norm: nn.Module, hidden_size: int) -> RMSNorm:
         with torch.device("cpu"):
             weight_test = getattr(rms_norm.__class__(1), "weight", None)
     except Exception:
-        logger.warning("Failed to determine if RMSNorm weight is centered on zero or one. Defaulting to one.")
+        logger.warning(
+            "Failed to determine if RMSNorm weight is centered on zero or one. "
+            "Defaulting to one."
+        )
         weight_test = None
     if weight_test is not None and torch.all(weight_test == 0):
         return GemmaRMSNorm(**kwargs)
@@ -220,6 +220,34 @@ def replace_rms_norm_class(rms_norm: nn.Module, hidden_size: int) -> RMSNorm:
         # No weight, fall back to weightless RMSNorm
         kwargs["has_weight"] = False
     return RMSNorm(**kwargs)
+
+
+def recursive_replace_linear(
+    model: nn.Module,
+    quant_config: "QuantizationConfig | None",
+    prefix: str = "",
+):
+    """Recursively replace linear modules in the model as needed."""
+
+    def _recursive_replace(module: nn.Module, prefix: str):
+        for child_name, child_module in module.named_children():
+            new_module = child_module
+            qual_name = maybe_prefix(prefix, child_name)
+            # Replace modules as needed
+            if isinstance(child_module, nn.Linear):
+                style = "replicate"
+                new_module = replace_linear_class(
+                    child_module,
+                    style,
+                    quant_config,
+                    prefix=qual_name,
+                )
+            else:
+                _recursive_replace(child_module, prefix=qual_name)
+            if new_module is not child_module:
+                setattr(module, child_name, new_module)
+
+    _recursive_replace(model, prefix=prefix)
 
 
 def log_replacement(name: str, old_module: nn.Module, new_module: nn.Module):
@@ -236,7 +264,7 @@ def get_feature_request_tip(
     prefix = f"Please open {url} to request support for this feature. "
     if Path(model).exists():
         prefix = ""
-    doc_url = "https://docs.vllm.ai/en/latest/models/supported_models.html#writing-custom-models"
+    doc_url = "https://docs.aphrodite.ai/en/latest/models/supported_models.html#writing-custom-models"
     tip = f"See {doc_url} for instructions on how to add support yourself."
     return f"{prefix}{tip}"
 

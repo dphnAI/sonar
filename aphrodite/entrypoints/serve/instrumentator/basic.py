@@ -5,8 +5,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.openai.engine.serving import OpenAIServing
-from aphrodite.entrypoints.serve.tokenize.serving import OpenAIServingTokenization
+from aphrodite.entrypoints.serve.tokenize.serving import ServingTokenization
 from aphrodite.logger import init_logger
 from aphrodite.version import __version__ as APHRODITE_VERSION
 
@@ -15,13 +14,13 @@ router = APIRouter()
 logger = init_logger(__name__)
 
 
-def base(request: Request) -> OpenAIServing:
+def base(request: Request) -> ServingTokenization:
     # Reuse the existing instance
     return tokenization(request)
 
 
-def tokenization(request: Request) -> OpenAIServingTokenization:
-    return request.app.state.openai_serving_tokenization
+def tokenization(request: Request) -> ServingTokenization:
+    return request.app.state.serving_tokenization
 
 
 def engine_client(request: Request) -> EngineClient:

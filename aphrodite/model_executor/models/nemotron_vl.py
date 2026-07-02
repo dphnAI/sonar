@@ -11,7 +11,7 @@ from aphrodite.config import AphroditeConfig
 from aphrodite.model_executor.layers.linear import ReplicatedLinear
 from aphrodite.model_executor.layers.pooler import DispatchPooler
 from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.awq import AWQConfig
+from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
 from aphrodite.model_executor.models.internvl import (
     BaseInternVLDummyInputsBuilder,
     BaseInternVLMultiModalProcessor,
@@ -54,7 +54,9 @@ class NemotronVLProcessingInfo(BaseInternVLProcessingInfo):
 
     def get_image_processor(self, **kwargs: object):
         kwargs = self.ctx.get_merged_mm_kwargs(kwargs)
-        orig_processor = cached_image_processor_from_config(self.ctx.model_config, **kwargs)
+        orig_processor = cached_image_processor_from_config(
+            self.ctx.model_config, **kwargs
+        )
 
         return LlamaNemotronNanoVLImageProcessor(
             image_size=orig_processor.image_size,
@@ -109,7 +111,9 @@ class LlamaNemotronVLChatModel(nn.Module, SupportsMultiModal, SupportsPP, Suppor
         image_size = config.force_image_size or config.vision_config.image_size
         patch_size = config.vision_config.patch_size
         self.patch_size = patch_size
-        self.num_image_token = int((image_size // patch_size) ** 2 * (config.downsample_ratio**2))
+        self.num_image_token = int(
+            (image_size // patch_size) ** 2 * (config.downsample_ratio**2)
+        )
         self.downsample_ratio = config.downsample_ratio
         self.ps_version = config.ps_version
 
@@ -131,15 +135,21 @@ class LlamaNemotronVLChatModel(nn.Module, SupportsMultiModal, SupportsPP, Suppor
         self.img_context_token_id = None
 
         self.visual_token_mask = None
-        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.language_model.make_empty_intermediate_tensors
+        )
 
-    def _patch_quant_config(self, config: PretrainedConfig, quant_config: QuantizationConfig):
+    def _patch_quant_config(
+        self, config: PretrainedConfig, quant_config: QuantizationConfig
+    ):
         # the awq models from OpenGVLab missing `modules_to_not_convert`
         # patch the quant_config to add `modules_to_not_convert` back
-        if isinstance(quant_config, AWQConfig):
+        if isinstance(quant_config, AutoAWQConfig):
             text_config = config.get_text_config()
             llm_quant_config = getattr(text_config, "quantization_config", None)
-            if (not quant_config.modules_to_not_convert) and (llm_quant_config is not None):
+            if (not quant_config.modules_to_not_convert) and (
+                llm_quant_config is not None
+            ):
                 quant_config.modules_to_not_convert.append("vision_model")
 
     def _init_vision_model(
@@ -167,7 +177,9 @@ class LlamaNemotronVLChatModel(nn.Module, SupportsMultiModal, SupportsPP, Suppor
         llm_hidden_size = config.get_text_config().hidden_size
 
         return nn.Sequential(
-            nn.LayerNorm(vit_hidden_size * int(1 / self.downsample_ratio) ** 2, bias=True),
+            nn.LayerNorm(
+                vit_hidden_size * int(1 / self.downsample_ratio) ** 2, bias=True
+            ),
             nn.Linear(
                 vit_hidden_size * int(1 / self.downsample_ratio) ** 2,
                 vision_projection_hidden_size,
@@ -215,7 +227,9 @@ class LlamaNemotronVLChatModel(nn.Module, SupportsMultiModal, SupportsPP, Suppor
         vit_embeds = self.mlp1(vit_embeds)
         return vit_embeds
 
-    def _parse_and_validate_image_input(self, **kwargs: object) -> InternVLImageInputs | None:
+    def _parse_and_validate_image_input(
+        self, **kwargs: object
+    ) -> InternVLImageInputs | None:
         pixel_values_flat = kwargs.pop("pixel_values_flat", None)
         image_num_patches = kwargs.pop("image_num_patches", None)
         image_embeds = kwargs.pop("image_embeds", None)
@@ -269,7 +283,9 @@ class LlamaNemotronVLChatModel(nn.Module, SupportsMultiModal, SupportsPP, Suppor
         # by the size of each embedding.
         feature_size = image_embeds.shape[1]
         image_embeds = image_embeds.view(-1, hidden_size)
-        image_feature_sizes = [num_patches * feature_size for num_patches in num_patches]
+        image_feature_sizes = [
+            num_patches * feature_size for num_patches in num_patches
+        ]
         return image_embeds.split(image_feature_sizes)
 
     def _parse_and_validate_multimodal_inputs(self, **kwargs: object) -> dict:
@@ -278,7 +294,10 @@ class LlamaNemotronVLChatModel(nn.Module, SupportsMultiModal, SupportsPP, Suppor
         # Preserve the order of modalities if there are multiple of them
         # from the order of kwargs.
         for input_key in kwargs:
-            if input_key in ("pixel_values_flat", "image_embeds") and "images" not in modalities:
+            if (
+                input_key in ("pixel_values_flat", "image_embeds")
+                and "images" not in modalities
+            ):
                 modalities["images"] = self._parse_and_validate_image_input(**kwargs)
 
         return modalities
@@ -458,7 +477,7 @@ class LlamaNemotronVLForEmbedding(LlamaNemotronVLChatModel, AphroditeModelForPoo
 
     # Weight mapping from checkpoint format to Aphrodite format
     # Different from parent class due to different vision model structure
-    weight_mapper = WeightsMapper(
+    hf_to_aphrodite_mapper = WeightsMapper(
         orig_to_new_prefix={
             # Language model mapping
             "language_model.layers.": "language_model.model.layers.",
@@ -514,15 +533,19 @@ class LlamaNemotronVLForEmbedding(LlamaNemotronVLChatModel, AphroditeModelForPoo
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         """Override to use different weight mapping for SigLIP."""
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights, mapper=self.weight_mapper)
+        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
 
 
-class LlamaNemotronVLForSequenceClassification(LlamaNemotronVLForEmbedding, SupportsCrossEncoding):
+class LlamaNemotronVLForSequenceClassification(
+    LlamaNemotronVLForEmbedding, SupportsCrossEncoding
+):
     """LlamaNemotronVL model variant for sequence classification / reranking."""
 
     # Reranker checkpoint places base model weights under `model.*`,
     # while `score.*` remains at the top level.
-    weight_mapper = WeightsMapper(orig_to_new_prefix={"model.": ""}) | (LlamaNemotronVLForEmbedding.weight_mapper)
+    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_prefix={"model.": ""}) | (
+        LlamaNemotronVLForEmbedding.hf_to_aphrodite_mapper
+    )
 
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
         super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)

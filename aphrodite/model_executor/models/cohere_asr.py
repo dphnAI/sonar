@@ -11,12 +11,7 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import (
-    AphroditeConfig,
-    CacheConfig,
-    ModelConfig,
-    SpeechToTextConfig,
-)
+from aphrodite.config import CacheConfig, ModelConfig, SpeechToTextConfig, AphroditeConfig
 from aphrodite.config.multimodal import BaseDummyOptions
 from aphrodite.config.speech_to_text import SpeechToTextParams
 from aphrodite.distributed import get_tensor_model_parallel_world_size
@@ -69,7 +64,7 @@ from .interfaces import (
     SupportsMultiModal,
     SupportsTranscription,
 )
-from .utils import AutoWeightsLoader, WeightsMapper, make_layers
+from .utils import AutoWeightsLoader, WeightsMapper, make_layers, maybe_prefix
 
 logger = init_logger(__name__)
 
@@ -141,7 +136,9 @@ class CohereASRAttention(nn.Module):
             prefix=f"{prefix}.out_projection",
         )
         if attn_type == AttentionType.ENCODER:
-            raise NotImplementedError("CohereASRAttention does not support Encoder Self-Attention yet.")
+            raise NotImplementedError(
+                "CohereASRAttention does not support Encoder Self-Attention yet."
+            )
 
         elif self.attn_type == AttentionType.ENCODER_DECODER:
             self.attn = CrossAttention(
@@ -311,7 +308,9 @@ class FixedPositionalEncoding(nn.Module):
 
         self._hidden_size = hidden_size
         self._max_sequence_length = max_sequence_length
-        self._build_pos_enc(hidden_size=self._hidden_size, max_sequence_length=self._max_sequence_length)
+        self._build_pos_enc(
+            hidden_size=self._hidden_size, max_sequence_length=self._max_sequence_length
+        )
 
     def _build_pos_enc(self, hidden_size: int, max_sequence_length: int) -> None:
         """Builds/replaces pre-computed positional encoding."""
@@ -442,7 +441,9 @@ class CohereASRDecoder(nn.Module):
 
         self.start_layer, self.end_layer, self.layers = make_layers(
             self.num_decoder_layers,
-            lambda prefix: CohereASRDecoderLayer(aphrodite_config=aphrodite_config, prefix=f"{prefix}.layers"),
+            lambda prefix: CohereASRDecoderLayer(
+                aphrodite_config=aphrodite_config, prefix=f"{prefix}.layers"
+            ),
             prefix=f"{prefix}.layers",
         )
         self.final_layer_norm = nn.LayerNorm(self.hidden_size)
@@ -463,7 +464,9 @@ class CohereASRDecoder(nn.Module):
         hidden_states = self.final_layer_norm(hidden_states)
         return hidden_states
 
-    def get_input_embeddings(self, input_ids: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
+    def get_input_embeddings(
+        self, input_ids: torch.Tensor, positions: torch.Tensor
+    ) -> torch.Tensor:
         return self.embedding(input_ids, positions)
 
 
@@ -472,7 +475,9 @@ class CohereASRDecoder(nn.Module):
 
 # ----- Encoder START -----
 class MaskedConvSequential(nn.Sequential):
-    def forward(self, x: torch.Tensor, lengths: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor, lengths: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         x = x.unsqueeze(1)  # (batch, 1, time, features)
         current_lengths = lengths.clone().float()
         mask = self._create_mask(x, current_lengths.long())
@@ -510,10 +515,14 @@ class MaskedConvSequential(nn.Sequential):
         features without materializing a full (B, C, T, F) tensor.
         """
         batch_size, channels, time, features = tensor.shape
-        time_mask = torch.arange(time, device=tensor.device).expand(batch_size, time) < lengths.unsqueeze(1)
+        time_mask = torch.arange(time, device=tensor.device).expand(
+            batch_size, time
+        ) < lengths.unsqueeze(1)
         return time_mask.to(tensor.dtype).unsqueeze(1).unsqueeze(-1)
 
-    def apply_channel_mask(self, tensor: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+    def apply_channel_mask(
+        self, tensor: torch.Tensor, mask: torch.Tensor
+    ) -> torch.Tensor:
         """Apply mask in-place via broadcasting.
 
         tensor: (B, C, T, F),  mask: (B, 1, T, 1)
@@ -557,7 +566,9 @@ class ConvSubsampling(nn.Module):
             and subsampling_conv_chunking_factor != 1
             and subsampling_conv_chunking_factor % 2 != 0
         ):
-            raise ValueError("subsampling_conv_chunking_factor should be -1, 1, or a power of 2")
+            raise ValueError(
+                "subsampling_conv_chunking_factor should be -1, 1, or a power of 2"
+            )
 
         in_channels = 1
         layers = []
@@ -655,7 +666,9 @@ class ConvSubsampling(nn.Module):
             lengths = torch.ceil(lengths) if ceil_mode else torch.floor(lengths)
         return lengths.to(dtype=torch.int)
 
-    def forward(self, x: torch.Tensor, lengths: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor, lengths: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         x, lengths = self.conv(x, lengths)
 
         if self.conv2d_subsampling:
@@ -676,7 +689,9 @@ class PositionalEncoding(torch.nn.Module):
         xscale (bool): whether to scale the input by sqrt(d_model)
     """
 
-    def __init__(self, d_model: int, max_len: int = 5000, xscale: float | None = None) -> None:
+    def __init__(
+        self, d_model: int, max_len: int = 5000, xscale: float | None = None
+    ) -> None:
         super().__init__()
         self.d_model = d_model
         self.xscale = xscale
@@ -686,7 +701,9 @@ class PositionalEncoding(torch.nn.Module):
         pos_length = positions.size(0)
         pe = torch.zeros(pos_length, self.d_model, device=positions.device)
         div_term = torch.exp(
-            torch.arange(0, self.d_model, 2, dtype=torch.float32, device=positions.device)
+            torch.arange(
+                0, self.d_model, 2, dtype=torch.float32, device=positions.device
+            )
             * -(math.log(10000.0) / self.d_model)
         )
         pe[:, 0::2] = torch.sin(positions * div_term)
@@ -697,7 +714,9 @@ class PositionalEncoding(torch.nn.Module):
         else:
             self.register_buffer("pe", pe, persistent=False)
 
-    def forward(self, x: torch.Tensor, cache_len: int = 0) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor, cache_len: int = 0
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Adds positional encoding.
         Args:
             x (torch.Tensor): Input. Its shape is (batch, time, feature_size)
@@ -728,10 +747,14 @@ class RelPositionalEncoding(PositionalEncoding):
         needed_size = 2 * length - 1
         if hasattr(self, "pe") and self.pe.size(1) >= needed_size:
             return
-        positions = torch.arange(length - 1, -length, -1, dtype=torch.float32, device=device).unsqueeze(1)
+        positions = torch.arange(
+            length - 1, -length, -1, dtype=torch.float32, device=device
+        ).unsqueeze(1)
         self.create_pe(positions=positions, dtype=dtype)
 
-    def forward(self, x: torch.Tensor, cache_len: int = 0) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor, cache_len: int = 0
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute positional encoding.
         Args:
             x (torch.Tensor): Input. Its shape is (batch, time, feature_size)
@@ -831,7 +854,11 @@ class CausalConv1D(nn.Conv1d):
             if isinstance(padding, int):
                 self._left_padding = padding
                 self._right_padding = padding
-            elif isinstance(padding, list) and len(padding) == 2 and padding[0] + padding[1] == kernel_size - 1:
+            elif (
+                isinstance(padding, list)
+                and len(padding) == 2
+                and padding[0] + padding[1] == kernel_size - 1
+            ):
                 self._left_padding = padding[0]
                 self._right_padding = padding[1]
             else:
@@ -921,7 +948,9 @@ class ConformerConvolution(nn.Module):
             bias=use_bias,
         )
 
-    def forward(self, x: torch.Tensor, pad_mask: torch.Tensor | None = None) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, pad_mask: torch.Tensor | None = None
+    ) -> torch.Tensor:
         x = x.transpose(1, 2)
         x = self.pointwise_conv1(x)
 
@@ -1012,12 +1041,16 @@ class CohereASRMultiHeadAttention(nn.Module):
         if mask is not None:
             mask = mask.unsqueeze(1)  # (batch, 1, time1, time2)
             scores = scores.masked_fill(mask, -INF_VAL)
-            attn = torch.softmax(scores, dim=-1).masked_fill(mask, 0.0)  # (batch, head, time1, time2)
+            attn = torch.softmax(scores, dim=-1).masked_fill(
+                mask, 0.0
+            )  # (batch, head, time1, time2)
         else:
             attn = torch.softmax(scores, dim=-1)  # (batch, head, time1, time2)
 
         x = torch.matmul(attn, value)  # (batch, head, time1, d_k)
-        x = x.transpose(1, 2).reshape(n_batch, -1, self.h * self.d_k)  # (batch, time1, d_model)
+        x = x.transpose(1, 2).reshape(
+            n_batch, -1, self.h * self.d_k
+        )  # (batch, time1, d_model)
 
         return self.linear_out(x)  # (batch, time1, d_model)
 
@@ -1077,8 +1110,12 @@ class RelPositionMultiHeadAttention(CohereASRMultiHeadAttention):
         # these two learnable biases are used in matrix c and matrix d
         # as described in https://arxiv.org/abs/1901.02860 Section 3.3
         if pos_bias_u is None or pos_bias_v is None:
-            self.pos_bias_u = nn.Parameter(torch.zeros(self.h, self.d_k), requires_grad=False)
-            self.pos_bias_v = nn.Parameter(torch.zeros(self.h, self.d_k), requires_grad=False)
+            self.pos_bias_u = nn.Parameter(
+                torch.zeros(self.h, self.d_k), requires_grad=False
+            )
+            self.pos_bias_v = nn.Parameter(
+                torch.zeros(self.h, self.d_k), requires_grad=False
+            )
         else:
             self.pos_bias_u = pos_bias_u
             self.pos_bias_v = pos_bias_v
@@ -1191,7 +1228,9 @@ class ConformerLayer(torch.nn.Module):
 
         # first feed forward module
         self.norm_feed_forward1 = nn.LayerNorm(d_model)
-        self.feed_forward1 = ConformerFeedForward(d_model=d_model, d_ff=d_ff, use_bias=use_bias)
+        self.feed_forward1 = ConformerFeedForward(
+            d_model=d_model, d_ff=d_ff, use_bias=use_bias
+        )
 
         # convolution module
         self.norm_conv = nn.LayerNorm(d_model)
@@ -1218,7 +1257,9 @@ class ConformerLayer(torch.nn.Module):
 
         # second feed forward module
         self.norm_feed_forward2 = nn.LayerNorm(d_model)
-        self.feed_forward2 = ConformerFeedForward(d_model=d_model, d_ff=d_ff, use_bias=use_bias)
+        self.feed_forward2 = ConformerFeedForward(
+            d_model=d_model, d_ff=d_ff, use_bias=use_bias
+        )
 
         self.norm_out = nn.LayerNorm(d_model)
 
@@ -1301,7 +1342,9 @@ class ConformerEncoder(nn.Module):
         causal_downsampling = self.hf_config.encoder["causal_downsampling"]
         subsampling = self.hf_config.encoder["subsampling"]
         subsampling_factor = self.hf_config.encoder["subsampling_factor"]
-        subsampling_conv_chunking_factor = self.hf_config.encoder.get("subsampling_conv_chunking_factor", 1)
+        subsampling_conv_chunking_factor = self.hf_config.encoder.get(
+            "subsampling_conv_chunking_factor", 1
+        )
         subsampling_conv_channels = self.hf_config.encoder["subsampling_conv_channels"]
         ff_expansion_factor = self.hf_config.encoder["ff_expansion_factor"]
         self_attention_model = self.hf_config.encoder["self_attention_model"]
@@ -1367,8 +1410,12 @@ class ConformerEncoder(nn.Module):
             d_head = d_model // n_heads
             # Register as buffers instead of parameters since they're not trainable
             # and need to respect dtype during weight loading
-            self.register_buffer("pos_bias_u", torch.zeros(n_heads, d_head), persistent=True)
-            self.register_buffer("pos_bias_v", torch.zeros(n_heads, d_head), persistent=True)
+            self.register_buffer(
+                "pos_bias_u", torch.zeros(n_heads, d_head), persistent=True
+            )
+            self.register_buffer(
+                "pos_bias_v", torch.zeros(n_heads, d_head), persistent=True
+            )
             pos_bias_u = self.pos_bias_u
             pos_bias_v = self.pos_bias_v
         else:
@@ -1410,7 +1457,9 @@ class ConformerEncoder(nn.Module):
         self.set_max_audio_length(self.pos_emb_max_len)
 
     def get_num_encoder_cross_attn_tokens(self, num_encoder_input_tokens: int) -> int:
-        num_encoder_cross_attn_tokens = math.ceil(num_encoder_input_tokens / self.subsampling_factor)
+        num_encoder_cross_attn_tokens = math.ceil(
+            num_encoder_input_tokens / self.subsampling_factor
+        )
         return num_encoder_cross_attn_tokens
 
     def set_max_audio_length(self, max_audio_length: int) -> None:
@@ -1501,7 +1550,9 @@ class ConformerEncoder(nn.Module):
         device: torch.device,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         if self.self_attention_model != "rel_pos_local_attn":
-            att_mask = torch.ones(1, max_audio_length, max_audio_length, dtype=torch.bool, device=device)
+            att_mask = torch.ones(
+                1, max_audio_length, max_audio_length, dtype=torch.bool, device=device
+            )
 
             if self.att_context_style == "regular":
                 if att_context_size[0] >= 0:
@@ -1524,13 +1575,17 @@ class ConformerEncoder(nn.Module):
                     else:
                         left_chunks_num = 10000
 
-                    chunk_idx = torch.arange(0, max_audio_length, dtype=torch.int, device=att_mask.device)
+                    chunk_idx = torch.arange(
+                        0, max_audio_length, dtype=torch.int, device=att_mask.device
+                    )
                     chunk_idx = torch.div(chunk_idx, chunk_size, rounding_mode="trunc")
                     diff_chunks = chunk_idx.unsqueeze(1) - chunk_idx.unsqueeze(0)
                     chunked_limited_mask = torch.logical_and(
                         torch.le(diff_chunks, left_chunks_num), torch.ge(diff_chunks, 0)
                     )
-                    att_mask = torch.logical_and(att_mask, chunked_limited_mask.unsqueeze(0))
+                    att_mask = torch.logical_and(
+                        att_mask, chunked_limited_mask.unsqueeze(0)
+                    )
         else:
             att_mask = None
 
@@ -1547,8 +1602,12 @@ class ConformerEncoder(nn.Module):
 
         if att_mask is not None:
             # pad_mask_for_att_mask is the mask which helps to ignore paddings
-            pad_mask_for_att_mask = pad_mask.unsqueeze(1).repeat([1, max_audio_length, 1])
-            pad_mask_for_att_mask = torch.logical_and(pad_mask_for_att_mask, pad_mask_for_att_mask.transpose(1, 2))
+            pad_mask_for_att_mask = pad_mask.unsqueeze(1).repeat(
+                [1, max_audio_length, 1]
+            )
+            pad_mask_for_att_mask = torch.logical_and(
+                pad_mask_for_att_mask, pad_mask_for_att_mask.transpose(1, 2)
+            )
             # att_mask is the masking to be used by MHA
             # layers to ignore tokens not supposed to be
             # visible
@@ -1556,7 +1615,9 @@ class ConformerEncoder(nn.Module):
             # paddings should also get ignored, so
             # pad_mask_for_att_mask is used to ignore their
             # corresponding scores
-            att_mask = torch.logical_and(pad_mask_for_att_mask, att_mask.to(pad_mask_for_att_mask.device))
+            att_mask = torch.logical_and(
+                pad_mask_for_att_mask, att_mask.to(pad_mask_for_att_mask.device)
+            )
             att_mask = ~att_mask
 
         pad_mask = ~pad_mask
@@ -1578,34 +1639,56 @@ class ConformerEncoder(nn.Module):
             for i, att_cs in enumerate(att_context_size_all):
                 if att_context_style == "chunked_limited":
                     if att_cs[0] > 0 and att_cs[0] % (att_cs[1] + 1) > 0:
-                        raise ValueError(f"att_context_size[{i}][0] % (att_context_size[{i}][1] + 1) should be zero!")
+                        raise ValueError(
+                            f"att_context_size[{i}][0] % "
+                            f"(att_context_size[{i}][1]"
+                            f" + 1) should be zero!"
+                        )
                     if att_cs[1] < 0 and len(att_context_size_all) <= 1:
                         raise ValueError(
-                            f"Right context (att_context_size[{i}][1]) can not be unlimited for chunked_limited style!"
+                            f"Right context "
+                            f"(att_context_size[{i}][1])"
+                            f" can not be unlimited for"
+                            f" chunked_limited style!"
                         )
         else:
             att_context_size_all = [[-1, -1]]
 
         if att_context_probs:
             if len(att_context_probs) != len(att_context_size_all):
-                raise ValueError("The size of the att_context_probs should be the same as att_context_size.")
+                raise ValueError(
+                    "The size of the att_context_probs "
+                    "should be the same as att_context_size."
+                )
             att_context_probs = list(att_context_probs)
             if sum(att_context_probs) != 1:
-                raise ValueError("The sum of numbers in att_context_probs should be equal to one to be a distribution.")
+                raise ValueError(
+                    "The sum of numbers in "
+                    "att_context_probs should be equal "
+                    "to one to be a distribution."
+                )
         else:
-            att_context_probs = [1.0 / len(att_context_size_all)] * len(att_context_size_all)
+            att_context_probs = [1.0 / len(att_context_size_all)] * len(
+                att_context_size_all
+            )
 
         if conv_context_size is not None:
-            if not isinstance(conv_context_size, list) and not isinstance(conv_context_size, str):
+            if not isinstance(conv_context_size, list) and not isinstance(
+                conv_context_size, str
+            ):
                 raise ValueError(
-                    "Invalid conv_context_size! It should be the string 'causal' or a list of two integers."
+                    "Invalid conv_context_size! It should "
+                    "be the string 'causal' or a list of "
+                    "two integers."
                 )
             if conv_context_size == "causal":
                 conv_context_size = [conv_kernel_size - 1, 0]
             else:
                 total = conv_context_size[0] + conv_context_size[1] + 1
                 if total != conv_kernel_size:
-                    raise ValueError(f"Invalid conv_context_size: {self.conv_context_size}!")
+                    raise ValueError(
+                        f"Invalid conv_context_size: {self.conv_context_size}!"
+                    )
         else:
             conv_context_size = [
                 (conv_kernel_size - 1) // 2,
@@ -1633,10 +1716,15 @@ class CohereASRModel(nn.Module):
         super().__init__()
         self.encoder = ConformerEncoder(aphrodite_config=aphrodite_config)
 
-        self.decoder = CohereASRDecoder(aphrodite_config=aphrodite_config, prefix=f"{prefix}.decoder")
+        self.decoder = CohereASRDecoder(
+            aphrodite_config=aphrodite_config,
+            prefix=maybe_prefix(prefix, "decoder"),
+        )
 
         if self.encoder.d_model != self.decoder.hidden_size:
-            self.encoder_decoder_proj = CohereASRProjector(self.encoder.d_model, self.decoder.hidden_size)
+            self.encoder_decoder_proj = CohereASRProjector(
+                self.encoder.d_model, self.decoder.hidden_size
+            )
 
     def forward(
         self,
@@ -1663,7 +1751,9 @@ class CohereASRModel(nn.Module):
 
         if isinstance(input_features, torch.Tensor):
             encoder_input_length = seq_lens
-            out, encoder_output_length = self.encoder(input_features, length=encoder_input_length)  # B x D x T
+            out, encoder_output_length = self.encoder(
+                input_features, length=encoder_input_length
+            )  # B x D x T
             out = out.permute(0, 2, 1)
 
             if hasattr(self, "encoder_decoder_proj"):
@@ -1822,7 +1912,9 @@ class CohereASRDummyInputsBuilder(BaseDummyInputsBuilder[CohereASRProcessingInfo
         audio_len = feature_extractor.max_duration * sampling_rate
         num_audios = mm_counts.get("audio", 0)
 
-        return {"audio": self._get_dummy_audios(length=audio_len, num_audios=num_audios)}
+        return {
+            "audio": self._get_dummy_audios(length=audio_len, num_audios=num_audios)
+        }
 
 
 class CohereASRMultiModalProcessor(EncDecMultiModalProcessor[CohereASRProcessingInfo]):
@@ -1899,7 +1991,9 @@ class CohereASRMultiModalProcessor(EncDecMultiModalProcessor[CohereASRProcessing
     info=CohereASRProcessingInfo,
     dummy_inputs=CohereASRDummyInputsBuilder,
 )
-class CohereAsrForConditionalGeneration(nn.Module, SupportsTranscription, SupportsMultiModal):
+class CohereAsrForConditionalGeneration(
+    nn.Module, SupportsTranscription, SupportsMultiModal
+):
     packed_modules_mapping = {
         "self_attn.qkv_proj": [
             "self_attn.q_proj",
@@ -1909,13 +2003,17 @@ class CohereAsrForConditionalGeneration(nn.Module, SupportsTranscription, Suppor
         "encoder_attn.kv_proj": ["encoder_attn.k_proj", "encoder_attn.v_proj"],
     }
 
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_substr={".fc1.": ".mlp.fc1.", ".fc2.": ".mlp.fc2."})
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_substr={".fc1.": ".mlp.fc1.", ".fc2.": ".mlp.fc2."}
+    )
 
     supports_transcription_only = True
     supported_languages = ISO639_1_SUPPORTED_LANGS
     skip_warmup_audio_preprocessing = True
     no_space_languages = {"ja", "zh"}
-    _default_prompt_token_ids_cache: ClassVar[dict[tuple[str | None, str | None, str], tuple[int, ...]]] = {}
+    _default_prompt_token_ids_cache: ClassVar[
+        dict[tuple[str | None, str | None, str], tuple[int, ...]]
+    ] = {}
 
     @classmethod
     def validate_language(cls, language: str | None) -> str | None:
@@ -1936,7 +2034,9 @@ class CohereAsrForConditionalGeneration(nn.Module, SupportsTranscription, Suppor
         model_config = stt_params.model_config
 
         if language is None:
-            raise ValueError("Language must be specified when creating the CohereASR prompt")
+            raise ValueError(
+                "Language must be specified when creating the CohereASR prompt"
+            )
 
         tokenizer = cached_tokenizer_from_config(model_config)
 
@@ -1994,9 +2094,12 @@ class CohereAsrForConditionalGeneration(nn.Module, SupportsTranscription, Suppor
             if not isinstance(token_ids, list):
                 token_ids = [token_ids]
             unk_token_id = getattr(tokenizer, "unk_token_id", None)
-            if unk_token_id is not None and any(token_id == unk_token_id for token_id in token_ids):
+            if unk_token_id is not None and any(
+                token_id == unk_token_id for token_id in token_ids
+            ):
                 raise ValueError(
-                    "Failed to resolve the CohereASR decoder control tokens with the configured tokenizer."
+                    "Failed to resolve the CohereASR decoder control tokens "
+                    "with the configured tokenizer."
                 )
             prompt_token_ids = tuple(int(token_id) for token_id in token_ids)
             cls._default_prompt_token_ids_cache[cache_key] = prompt_token_ids
@@ -2012,7 +2115,9 @@ class CohereAsrForConditionalGeneration(nn.Module, SupportsTranscription, Suppor
         raise ValueError("Only audio modality is supported")
 
     @classmethod
-    def get_speech_to_text_config(cls, model_config: ModelConfig, task_type: str) -> SpeechToTextConfig:
+    def get_speech_to_text_config(
+        cls, model_config: ModelConfig, task_type: str
+    ) -> SpeechToTextConfig:
         sampling_rate = model_config.hf_config.sample_rate
         assert sampling_rate == 16000
         max_audio_clip_s = model_config.hf_config.max_audio_clip_s
@@ -2036,7 +2141,9 @@ class CohereAsrForConditionalGeneration(nn.Module, SupportsTranscription, Suppor
         return math.ceil(audio_duration_s * stt_config.sample_rate / hop_length)
 
     def get_num_encoder_cross_attn_tokens(self, num_encoder_input_tokens: int) -> int:
-        return self.model.encoder.get_num_encoder_cross_attn_tokens(num_encoder_input_tokens)
+        return self.model.encoder.get_num_encoder_cross_attn_tokens(
+            num_encoder_input_tokens
+        )
 
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
@@ -2062,7 +2169,9 @@ class CohereAsrForConditionalGeneration(nn.Module, SupportsTranscription, Suppor
         )  # NOTE: bias is True
 
         logit_scale = getattr(head_config, "logit_scale", 1.0)
-        self.logits_processor = LogitsProcessor(head_config["num_classes"], scale=logit_scale)
+        self.logits_processor = LogitsProcessor(
+            head_config["num_classes"], scale=logit_scale
+        )
 
     def forward(
         self,
@@ -2096,7 +2205,9 @@ class CohereAsrForConditionalGeneration(nn.Module, SupportsTranscription, Suppor
 
         return out
 
-    def _parse_and_validate_audio_input(self, **kwargs: object) -> tuple[torch.Tensor, torch.Tensor]:
+    def _parse_and_validate_audio_input(
+        self, **kwargs: object
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         input_features = kwargs.pop("input_features", None)
         length = kwargs.pop("length", None)
 
@@ -2104,14 +2215,21 @@ class CohereAsrForConditionalGeneration(nn.Module, SupportsTranscription, Suppor
             raise ValueError("Audio features are required for CohereASR model.")
 
         if not isinstance(input_features, (torch.Tensor, list)):
-            raise ValueError(f"Incorrect type of audio features. Got type: {type(input_features)}")
+            raise ValueError(
+                f"Incorrect type of audio features. Got type: {type(input_features)}"
+            )
 
         if isinstance(input_features, torch.Tensor):
             seq_lens = length.reshape(-1)
         else:
-            input_features = [feat.to(self.dtype).squeeze(0).transpose(1, 0) for feat in input_features]
+            input_features = [
+                feat.to(self.dtype).squeeze(0).transpose(1, 0)
+                for feat in input_features
+            ]
             seq_lens = length.reshape(-1)
-            input_features = torch.nn.utils.rnn.pad_sequence(input_features, batch_first=True, padding_value=0.0)
+            input_features = torch.nn.utils.rnn.pad_sequence(
+                input_features, batch_first=True, padding_value=0.0
+            )
             input_features = input_features.transpose(1, 2)
 
         return input_features, seq_lens
@@ -2129,7 +2247,9 @@ class CohereAsrForConditionalGeneration(nn.Module, SupportsTranscription, Suppor
             if name.startswith("transf_decoder._embedding"):
                 name = name.replace("transf_decoder._embedding", "decoder.embedding")
             if "second_sub_layer.query_net" in name:
-                name = name.replace("second_sub_layer.query_net", "second_sub_layer.q_proj")
+                name = name.replace(
+                    "second_sub_layer.query_net", "second_sub_layer.q_proj"
+                )
 
             if name in ["log_softmax.mlp.layer0.weight", "log_softmax.mlp.layer0.bias"]:
                 name = name.replace("log_softmax.mlp.layer0", "proj_out")
@@ -2147,4 +2267,6 @@ class CohereAsrForConditionalGeneration(nn.Module, SupportsTranscription, Suppor
             skip_substrs=["model.conv.batch_norm.num_batches_tracked"],
         )
 
-        return loader.load_weights(map(transform, weights), mapper=self.hf_to_aphrodite_mapper)
+        return loader.load_weights(
+            map(transform, weights), mapper=self.hf_to_aphrodite_mapper
+        )
