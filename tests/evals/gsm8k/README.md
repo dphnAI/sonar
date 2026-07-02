@@ -32,7 +32,7 @@ num_questions: 1319       # Number of questions (default: full test set)
 num_fewshot: 5            # Few-shot examples from train set
 server_args: "--max-model-len 4096 --tensor-parallel-size 2 --moe-backend flashinfer_cutlass"  # Server arguments
 env:                      # Environment variables (optional)
-  VLLM_LOGGING_LEVEL: "DEBUG"
+  APHRODITE_LOGGING_LEVEL: "DEBUG"
 ```
 
 The `server_args` field accepts any arguments that can be passed to `vllm serve`.

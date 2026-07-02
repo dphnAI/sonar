@@ -19,7 +19,7 @@
 #   MODEL_NAMES              - model to test (default: Qwen/Qwen3-0.6B)
 #   KV_CACHE_MEMORY_BYTES    - GPU KV cache size in bytes (default: 268435456 = 256 MiB)
 #   BLOCK_SIZE               - KV cache block size (default: 128)
-#   VLLM_SERVE_EXTRA_ARGS    - comma-separated extra args for vllm serve
+#   APHRODITE_SERVE_EXTRA_ARGS    - comma-separated extra args for vllm serve
 set -xe
 
 # ── Configuration ────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ fi
 KV_CACHE_MEMORY_BYTES=${KV_CACHE_MEMORY_BYTES:-268435456}  # 256 MiB
 MAX_MODEL_LEN=${MAX_MODEL_LEN:-2048}
 BLOCK_SIZE=${BLOCK_SIZE:-128}
-VLLM_SERVE_EXTRA_ARGS=${VLLM_SERVE_EXTRA_ARGS:-}
+APHRODITE_SERVE_EXTRA_ARGS=${APHRODITE_SERVE_EXTRA_ARGS:-}
 
 GIT_ROOT=$(git rev-parse --show-toplevel)
 
@@ -92,9 +92,9 @@ run_tests_for_model() {
   # ── Start prefill instance ──
   echo "Starting prefill instance on GPU $PREFILL_GPU, port $PREFILL_PORT"
   BASE_CMD="CUDA_VISIBLE_DEVICES=$PREFILL_GPU \
-    VLLM_KV_CACHE_LAYOUT='HND' \
+    APHRODITE_KV_CACHE_LAYOUT='HND' \
     UCX_NET_DEVICES=all \
-    VLLM_NIXL_SIDE_CHANNEL_PORT=$PREFILL_SIDE_CHANNEL_PORT \
+    APHRODITE_NIXL_SIDE_CHANNEL_PORT=$PREFILL_SIDE_CHANNEL_PORT \
     vllm serve \"$model_name\" \
     --port $PREFILL_PORT \
     --enforce-eager \
@@ -104,8 +104,8 @@ run_tests_for_model() {
     --tensor-parallel-size 1 \
     --kv-transfer-config '$KV_CONFIG'"
 
-  if [[ -n "$VLLM_SERVE_EXTRA_ARGS" ]]; then
-    IFS=',' read -r -a extra_args <<< "$VLLM_SERVE_EXTRA_ARGS"
+  if [[ -n "$APHRODITE_SERVE_EXTRA_ARGS" ]]; then
+    IFS=',' read -r -a extra_args <<< "$APHRODITE_SERVE_EXTRA_ARGS"
     for arg in "${extra_args[@]}"; do
       BASE_CMD="${BASE_CMD} $arg"
     done
@@ -115,9 +115,9 @@ run_tests_for_model() {
   # ── Start decode instance ──
   echo "Starting decode instance on GPU $DECODE_GPU, port $DECODE_PORT"
   BASE_CMD="CUDA_VISIBLE_DEVICES=$DECODE_GPU \
-    VLLM_KV_CACHE_LAYOUT='HND' \
+    APHRODITE_KV_CACHE_LAYOUT='HND' \
     UCX_NET_DEVICES=all \
-    VLLM_NIXL_SIDE_CHANNEL_PORT=$DECODE_SIDE_CHANNEL_PORT \
+    APHRODITE_NIXL_SIDE_CHANNEL_PORT=$DECODE_SIDE_CHANNEL_PORT \
     vllm serve \"$model_name\" \
     --port $DECODE_PORT \
     --enforce-eager \
@@ -127,8 +127,8 @@ run_tests_for_model() {
     --tensor-parallel-size 1 \
     --kv-transfer-config '$KV_CONFIG'"
 
-  if [[ -n "$VLLM_SERVE_EXTRA_ARGS" ]]; then
-    IFS=',' read -r -a extra_args <<< "$VLLM_SERVE_EXTRA_ARGS"
+  if [[ -n "$APHRODITE_SERVE_EXTRA_ARGS" ]]; then
+    IFS=',' read -r -a extra_args <<< "$APHRODITE_SERVE_EXTRA_ARGS"
     for arg in "${extra_args[@]}"; do
       BASE_CMD="${BASE_CMD} $arg"
     done

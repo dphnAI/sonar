@@ -132,7 +132,7 @@ def test_sharded_state_loader(
         # If p.join() is called before queue.get() and the queue is full,
         # the child process may block while writing to the queue and never
         # terminate, causing the parent to wait indefinitely on p.join().
-        # See: https://github.com/vllm-project/aphrodite/pull/22371#discussion_r2257773814
+        # See: https://github.com/vllm-project/vllm/pull/22371#discussion_r2257773814
         out_before = queue.get()
         p.join()
         queue.close()
@@ -156,7 +156,7 @@ def test_sharded_state_loader(
         # If p.join() is called before queue.get() and the queue is full,
         # the child process may block while writing to the queue and never
         # terminate, causing the parent to wait indefinitely on p.join().
-        # See: https://github.com/vllm-project/aphrodite/pull/22371#discussion_r2257773814
+        # See: https://github.com/vllm-project/vllm/pull/22371#discussion_r2257773814
         out_after = queue.get()
         p.join()
         queue.close()

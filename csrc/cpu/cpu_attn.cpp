@@ -64,7 +64,7 @@ torch::Tensor get_scheduler_metadata(
   input.dynamic_causal =
       dynamic_causal.has_value() ? dynamic_causal->data_ptr<bool>() : nullptr;
 
-  VLLM_DISPATCH_FLOATING_TYPES(dtype, "get_scheduler_metadata", [&]() {
+  APHRODITE_DISPATCH_FLOATING_TYPES(dtype, "get_scheduler_metadata", [&]() {
     CPU_ATTN_DISPATCH(head_dim, isa, 0, [&]() {
       input.elem_size = sizeof(scalar_t);
       input.q_buffer_elem_size = sizeof(attn_impl::q_buffer_t);
@@ -149,7 +149,7 @@ void cpu_attn_reshape_and_cache(
                 "FP8 KV cache is only supported on x86 (AMX/VEC) ISA");
   }
 
-  VLLM_DISPATCH_FLOATING_TYPES(
+  APHRODITE_DISPATCH_FLOATING_TYPES(
       key.scalar_type(), "cpu_attn_reshape_and_cache", [&]() {
         CPU_ATTN_DISPATCH(head_dim, isa_tag, kv_cache_idx, [&]() {
           using kv_t = typename attn_impl::kv_cache_t;
@@ -237,7 +237,7 @@ void cpu_attention_with_kv_cache(
                 "FP8 KV cache is only supported on x86 (AMX/VEC) ISA");
   }
 
-  VLLM_DISPATCH_FLOATING_TYPES(
+  APHRODITE_DISPATCH_FLOATING_TYPES(
       query.scalar_type(), "cpu_attention_with_kv_cache", [&]() {
         CPU_ATTN_DISPATCH(
             query.size(2), input.metadata->isa, kv_cache_idx, [&]() {

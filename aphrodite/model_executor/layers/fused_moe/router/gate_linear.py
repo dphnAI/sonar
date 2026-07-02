@@ -78,7 +78,7 @@ class GateLinear(ReplicatedLinear):
             and input_size in self.DSV3_SUPPORTED_HIDDEN_SIZES
             and (input_size, output_size) not in self.DSV3_UNSUPPORTED_SHAPES
         )
-        # See https://github.com/vllm-project/aphrodite/pull/44217
+        # See https://github.com/vllm-project/vllm/pull/44217
         # for more details.
         self._dsv3_max_batch = 16 if is_hopper else 8
 

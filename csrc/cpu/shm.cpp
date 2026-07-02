@@ -780,7 +780,7 @@ void shm_gather(int64_t handle, torch::Tensor& data,
                 const std::optional<std::vector<torch::Tensor>>& outputs,
                 int64_t dst) {
   TORCH_CHECK(data.is_contiguous())
-  VLLM_DISPATCH_FLOATING_TYPES(data.scalar_type(), "shm_gather_impl", [&] {
+  APHRODITE_DISPATCH_FLOATING_TYPES(data.scalar_type(), "shm_gather_impl", [&] {
     CPU_KERNEL_GUARD_IN(shm_gather_impl)
 
     if (outputs.has_value()) {
@@ -812,7 +812,7 @@ void shm_all_gather(int64_t handle, const torch::Tensor& data,
   TORCH_CHECK_EQ(output_elem_num % input_elem_num, 0);
   const int world_size = output_elem_num / input_elem_num;
 
-  VLLM_DISPATCH_FLOATING_TYPES(data.scalar_type(), "shm_all_gather_impl", [&] {
+  APHRODITE_DISPATCH_FLOATING_TYPES(data.scalar_type(), "shm_all_gather_impl", [&] {
     CPU_KERNEL_GUARD_IN(shm_all_gather_impl)
     auto ctx = SHMManager::get_singleton_instance(handle)->get_shm_ctx();
     TORCH_CHECK_EQ(ctx->group_size, world_size);
@@ -829,7 +829,7 @@ void shm_all_gather(int64_t handle, const torch::Tensor& data,
 
 void shm_allreduce(int64_t handle, torch::Tensor& data) {
   TORCH_CHECK(data.is_contiguous())
-  VLLM_DISPATCH_FLOATING_TYPES(data.scalar_type(), "shm_allreduce_sum", [&] {
+  APHRODITE_DISPATCH_FLOATING_TYPES(data.scalar_type(), "shm_allreduce_sum", [&] {
     CPU_KERNEL_GUARD_IN(shm_allreduce_sum)
     shm_allreduce_sum(SHMManager::get_singleton_instance(handle)->get_shm_ctx(),
                       data.data_ptr<scalar_t>(), data.numel());

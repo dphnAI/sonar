@@ -5,7 +5,7 @@
 # that's based on https://huggingface.co/nvidia/NVIDIA-Nemotron-Parse-v1.1/blob/main/hf_nemotron_parse_modeling.py
 #
 # Bart classes based on old Aphrodite codebase:
-# https://github.com/vllm-project/aphrodite/blob/v0.10.2/aphrodite/model_executor/models/bart.py
+# https://github.com/vllm-project/vllm/blob/v0.10.2/aphrodite/model_executor/models/bart.py
 
 import math
 from collections.abc import Iterable, Mapping, Sequence

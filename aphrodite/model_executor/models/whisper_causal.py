@@ -236,7 +236,7 @@ def create_whisper_attention_backend_with_block_pooling(
             "This backend was recently enabled for this model. "
             "If you encounter any accuracy or performance issues, "
             "please open an issue at "
-            "https://github.com/vllm-project/aphrodite/issues "
+            "https://github.com/vllm-project/vllm/issues "
             "with the [ROCm] tag so it can be triaged by the "
             "appropriate team.",
             underlying_attn_backend.get_name(),

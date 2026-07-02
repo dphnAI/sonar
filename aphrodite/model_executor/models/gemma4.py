@@ -1227,7 +1227,7 @@ class Gemma4Model(nn.Module, EagleModelMixin):
             )
 
         # NOTE: Keep .clone() until fix in
-        # https://github.com/vllm-project/aphrodite/pull/22282
+        # https://github.com/vllm-project/vllm/pull/22282
         hidden_states = self_decoder_hidden_states.clone()
 
         num_padded = logits_indices_padded.size(0)

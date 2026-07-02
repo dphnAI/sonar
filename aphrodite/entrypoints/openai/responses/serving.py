@@ -1467,7 +1467,7 @@ class OpenAIServingResponses(OpenAIServing):
         async with AsyncExitStack() as exit_stack:
             if self.use_harmony:
                 # TODO: in streaming, we noticed this bug:
-                # https://github.com/vllm-project/aphrodite/issues/25697
+                # https://github.com/vllm-project/vllm/issues/25697
                 await self._initialize_tool_sessions(request, context, exit_stack)
                 processor = self._process_harmony_streaming_events
             else:

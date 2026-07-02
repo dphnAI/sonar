@@ -151,8 +151,8 @@ void rms_norm_dynamic_per_token_quant_dispatch(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
 
-  VLLM_STABLE_DISPATCH_BOOL(residual.has_value(), has_residual, [&] {
-    VLLM_STABLE_DISPATCH_QUANT_TYPES(
+  APHRODITE_STABLE_DISPATCH_BOOL(residual.has_value(), has_residual, [&] {
+    APHRODITE_STABLE_DISPATCH_QUANT_TYPES(
         out.scalar_type(), "rms_norm_dynamic_per_token_quant_kernel", [&] {
           vllm::rms_norm_dynamic_per_token_quant_kernel<scalar_in_t, scalar_t,
                                                         has_residual>
@@ -197,7 +197,7 @@ void rms_norm_dynamic_per_token_quant(
     STD_TORCH_CHECK(residual->is_contiguous());
   }
 
-  VLLM_STABLE_DISPATCH_FLOATING_TYPES(
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "rms_norm_dynamic_per_token_quant_dispatch", [&] {
         rms_norm_dynamic_per_token_quant_dispatch<scalar_t>(
             out, input, weight, scales, var_epsilon, scale_ub, residual);
@@ -237,14 +237,14 @@ void rms_norm_per_block_quant_dispatch(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
 
-  VLLM_STABLE_DISPATCH_FLOATING_TYPES(
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "rms_norm_per_block_quant_fp_dispatch", [&] {
         using scalar_in_t = scalar_t;
-        VLLM_STABLE_DISPATCH_GROUP_SIZE(group_size, gs, [&] {
-          VLLM_STABLE_DISPATCH_BOOL(residual.has_value(), has_residual, [&] {
-            VLLM_STABLE_DISPATCH_BOOL(
+        APHRODITE_STABLE_DISPATCH_GROUP_SIZE(group_size, gs, [&] {
+          APHRODITE_STABLE_DISPATCH_BOOL(residual.has_value(), has_residual, [&] {
+            APHRODITE_STABLE_DISPATCH_BOOL(
                 is_scale_transposed, transpose_scale, [&] {
-                  VLLM_STABLE_DISPATCH_QUANT_TYPES(
+                  APHRODITE_STABLE_DISPATCH_QUANT_TYPES(
                       out.scalar_type(), "rms_norm_per_block_quant_kernel",
                       [&] {
                         vllm::rms_norm_per_block_quant_kernel<

@@ -220,16 +220,16 @@ void rms_norm_static_fp8_quant(
   const torch::stable::accelerator::DeviceGuard device_guard(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
-  VLLM_STABLE_DISPATCH_FLOATING_TYPES(
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "rms_norm_kernel_scalar_type", [&] {
-        VLLM_STABLE_DISPATCH_FP8_TYPES(
+        APHRODITE_STABLE_DISPATCH_FP8_TYPES(
             out.scalar_type(), "rms_norm_kernel_fp8_type", [&] {
               const int calculated_vec_size =
                   std::gcd(16 / sizeof(scalar_t), hidden_size);
               const int block_size =
                   std::min(hidden_size / calculated_vec_size, max_block_size);
               dim3 block(block_size);
-              VLLM_STABLE_DISPATCH_VEC_SIZE(calculated_vec_size, [&] {
+              APHRODITE_STABLE_DISPATCH_VEC_SIZE(calculated_vec_size, [&] {
                 vllm::rms_norm_static_fp8_quant_kernel<scalar_t, fp8_t,
                                                        vec_size>
                     <<<grid, block, 0, stream>>>(
@@ -244,9 +244,9 @@ void rms_norm_static_fp8_quant(
 }
 
 #define LAUNCH_FUSED_ADD_RMS_NORM(width)                                     \
-  VLLM_STABLE_DISPATCH_FLOATING_TYPES(                                       \
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                       \
       input.scalar_type(), "fused_add_rms_norm_kernel_scalar_type", [&] {    \
-        VLLM_STABLE_DISPATCH_FP8_TYPES(                                      \
+        APHRODITE_STABLE_DISPATCH_FP8_TYPES(                                      \
             out.scalar_type(), "fused_add_rms_norm_kernel_fp8_type", [&] {   \
               vllm::fused_add_rms_norm_static_fp8_quant_kernel<scalar_t,     \
                                                                width, fp8_t> \

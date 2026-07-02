@@ -647,7 +647,7 @@ class RadioInternVisionModel(nn.Module):
             list(accumulate(seq_lens, initial=0)), dtype=torch.int32, device=device
         )
         # Keep max_seqlen on CPU to avoid .item() sync
-        # See: https://github.com/vllm-project/aphrodite/blob/20b6b01/aphrodite/v1/attention/ops/vit_attn_wrappers.py#L48
+        # See: https://github.com/vllm-project/vllm/blob/20b6b01/aphrodite/v1/attention/ops/vit_attn_wrappers.py#L48
         max_seqlen = torch.tensor(max(seq_lens), dtype=torch.int32)
         return MaskMetadata(cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)
 

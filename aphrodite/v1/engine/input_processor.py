@@ -475,7 +475,7 @@ class InputProcessor:
             # not exist in the tokenizer, and vice versa for multimodal
             # placeholder tokens in some multimodal models.
             # See https://github.com/QwenLM/Qwen3/issues/29#issuecomment-1933720399 # noqa: E501
-            # and https://github.com/vllm-project/aphrodite/pull/22471#discussion_r2312251421 # noqa: E501
+            # and https://github.com/vllm-project/vllm/pull/22471#discussion_r2312251421 # noqa: E501
 
             # Here we take the max of the two to determine if a token id is
             # truly out-of-vocabulary.

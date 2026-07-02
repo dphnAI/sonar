@@ -17,7 +17,7 @@
 # limitations under the License.
 
 # Adapted from
-# https://github.com/vllm-project/aphrodite/blob/v0.7.3/aphrodite/model_executor/models/deepseek_mtp.py
+# https://github.com/vllm-project/vllm/blob/v0.7.3/aphrodite/model_executor/models/deepseek_mtp.py
 from collections.abc import Iterable
 
 import torch

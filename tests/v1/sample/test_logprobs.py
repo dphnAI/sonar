@@ -1098,7 +1098,7 @@ def test_spec_decode_logprobs(
     # causes logprob differences that get misattributed to spec decode.
     # Disable them so this test isolates spec decode correctness only.
     # TODO(akaratza): Remove this workaround once the follow-up to
-    # https://github.com/vllm-project/aphrodite/pull/33493#issuecomment-3906083975
+    # https://github.com/vllm-project/vllm/pull/33493#issuecomment-3906083975
     # lands with a determinism fix for wvSplitK kernels.
     monkeypatch.setenv("APHRODITE_ROCM_USE_SKINNY_GEMM", "0")
 

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # Adapted from
-# https://github.com/vllm-project/aphrodite/blob/main/aphrodite/entrypoints/openai/chat_completion/serving.py
+# https://github.com/vllm-project/vllm/blob/main/aphrodite/entrypoints/openai/chat_completion/serving.py
 
 """Anthropic Messages API serving handler"""
 

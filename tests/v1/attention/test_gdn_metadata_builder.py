@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Tests for GDNAttentionMetadataBuilder.build() — specifically the
 reclassification of non-spec decodes as prefills when spec decodes exist.
-Covers the fix for https://github.com/vllm-project/aphrodite/issues/34845.
+Covers the fix for https://github.com/vllm-project/vllm/issues/34845.
 """
 
 from dataclasses import dataclass

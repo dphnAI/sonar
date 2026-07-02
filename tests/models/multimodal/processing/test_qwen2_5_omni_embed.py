@@ -4,7 +4,7 @@
 Unit tests for Qwen2.5-Omni embed_input_ids to verify embeddings are
 correctly assigned to audio/image/video token positions.
 
-Regression test for: https://github.com/vllm-project/aphrodite/issues/34506
+Regression test for: https://github.com/vllm-project/vllm/issues/34506
   - Non-interleaved mixed modalities (audio + image + video) should correctly
     assign audio embeddings to audio positions, image to image, video to video.
   - Interleaved (use_audio_in_video) should also work correctly.
@@ -118,7 +118,7 @@ class TestCheckInterleavedAudioVideo:
 
     def test_batched_non_interleaved_no_false_positive(self):
         """
-        Regression test for https://github.com/vllm-project/aphrodite/issues/35394.
+        Regression test for https://github.com/vllm-project/vllm/issues/35394.
 
         5 identical non-interleaved mixed-modality requests batched together:
         each has [audio][image][video] in separate blocks with text between them.

@@ -22,51 +22,51 @@ import pytest
 
 from aphrodite.env_override import (
     _patch_inductor_fallback_allow_list,
-    _VllmFallbackAllowList,
+    _AphroditeFallbackAllowList,
 )
 
 
-class TestVllmFallbackAllowListProxy:
+class TestAphroditeFallbackAllowListProxy:
     """Unit tests for the membership-proxy semantics."""
 
     def test_vllm_namespace_auto_allowed(self):
-        proxy = _VllmFallbackAllowList(set())
+        proxy = _AphroditeFallbackAllowList(set())
         assert "aphrodite::all_reduce" in proxy
         assert "aphrodite::fused_add_rms_norm" in proxy
         assert "aphrodite::all_reduce.default" in proxy
 
     def test_vllm_aiter_namespace_auto_allowed(self):
-        proxy = _VllmFallbackAllowList(set())
+        proxy = _AphroditeFallbackAllowList(set())
         assert "vllm_aiter::fused_add_rms_norm" in proxy
         assert "vllm_aiter::rocm_aiter_fused_moe" in proxy
 
     def test_unknown_namespace_falls_through(self):
-        proxy = _VllmFallbackAllowList({"torchvision::roi_align"})
+        proxy = _AphroditeFallbackAllowList({"torchvision::roi_align"})
         assert "torchvision::roi_align" in proxy
         assert "made_up_ns::nonexistent_op" not in proxy
 
     def test_non_string_falls_through_to_inner(self):
         sentinel = object()
         inner = {sentinel}
-        proxy = _VllmFallbackAllowList(inner)
+        proxy = _AphroditeFallbackAllowList(inner)
         assert sentinel in proxy
         assert object() not in proxy
 
     def test_prefix_only_match_not_substring(self):
-        proxy = _VllmFallbackAllowList(set())
+        proxy = _AphroditeFallbackAllowList(set())
         assert "not_vllm::something" not in proxy
         assert "  aphrodite::space_prefixed" not in proxy
 
     def test_standard_entries_preserved(self):
         base = {"torchvision::roi_align", "aten::index_add"}
-        proxy = _VllmFallbackAllowList(base)
+        proxy = _AphroditeFallbackAllowList(base)
         assert "torchvision::roi_align" in proxy
         assert "aten::index_add" in proxy
         assert "aten::__not_present__" not in proxy
 
     def test_add_and_discard_delegate_to_inner(self):
         inner: set[str] = set()
-        proxy = _VllmFallbackAllowList(inner)
+        proxy = _AphroditeFallbackAllowList(inner)
         proxy.add("custom::op")
         assert "custom::op" in inner
         proxy.discard("custom::op")
@@ -74,7 +74,7 @@ class TestVllmFallbackAllowListProxy:
 
     def test_iter_len_repr(self):
         base = {"torchvision::roi_align", "aten::index_add"}
-        proxy = _VllmFallbackAllowList(base)
+        proxy = _AphroditeFallbackAllowList(base)
         assert set(iter(proxy)) == base
         assert len(proxy) == len(base)
         assert "torchvision::roi_align" in repr(proxy)
@@ -87,12 +87,12 @@ class TestVllmFallbackAllowListProxy:
                 return 42
 
         inner = _Inner()
-        proxy = _VllmFallbackAllowList(inner)
+        proxy = _AphroditeFallbackAllowList(inner)
         assert proxy.sentinel == "i_am_inner"
         assert proxy.some_method() == 42
 
     def test_sentinel_attribute(self):
-        proxy = _VllmFallbackAllowList(set())
+        proxy = _AphroditeFallbackAllowList(set())
         assert proxy._vllm_patched is True
 
 

@@ -66,7 +66,7 @@ class MockParallelConfig:
 
 
 @dataclass
-class MockVllmConfig:
+class MockAphroditeConfig:
     model_config: MockModelConfig
     parallel_config: MockParallelConfig
 
@@ -103,7 +103,7 @@ def register_mock_resolver():
 
 def _build_renderer(model_config: MockModelConfig):
     return HfRenderer(
-        MockVllmConfig(model_config, parallel_config=MockParallelConfig()),
+        MockAphroditeConfig(model_config, parallel_config=MockParallelConfig()),
         cached_tokenizer_from_config(model_config),
     )
 

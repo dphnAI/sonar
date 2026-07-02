@@ -765,7 +765,7 @@ void fused_minimax_m3_qknorm_rope_kv_insert(
       qkv.get_device_index());
   auto stream = get_current_cuda_stream(qkv.get_device_index());
 
-  VLLM_STABLE_DISPATCH_HALF_TYPES(
+  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
       qkv.scalar_type(), "fused_minimax_m3_qknorm_rope_kv_insert", [&] {
         using st = scalar_t;
         DISPATCH_BY_KV_CACHE_DTYPE(qkv.scalar_type(), kv_cache_dtype,

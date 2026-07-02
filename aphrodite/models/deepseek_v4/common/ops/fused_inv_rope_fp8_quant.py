@@ -203,7 +203,7 @@ def fused_inv_rope_fp8_quant(
         scale_inner = num_scale_blocks
 
     # Run kernel through a custom op so inductor sees an opaque boundary.
-    # It's a pytorch bug, see https://github.com/vllm-project/aphrodite/issues/41106
+    # It's a pytorch bug, see https://github.com/vllm-project/vllm/issues/41106
     fp8_buf, scale_buf = torch.ops.aphrodite.fused_inv_rope_fp8_quant_kernel(
         o,
         positions,

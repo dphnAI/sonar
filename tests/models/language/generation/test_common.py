@@ -196,7 +196,7 @@ def test_models(
         trust_remote_code=model_info.trust_remote_code,
         # Remove the effects of batch variance on ROCm since batch invariance
         # is not yet supported.
-        # See: https://github.com/vllm-project/aphrodite/issues/27433
+        # See: https://github.com/vllm-project/vllm/issues/27433
         max_num_seqs=1 if current_platform.is_rocm() else 2,
         enable_prompt_embeds=use_prompt_embeds,
         compilation_config={"cudagraph_capture_sizes": [1, 2]},

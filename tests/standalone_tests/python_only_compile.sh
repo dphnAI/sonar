@@ -5,16 +5,16 @@
 set -e
 
 # ROCm CI runs this script inside `run-amd-test.sh` where /vllm-workspace often has no .git
-# (wheel artifact layout). The wrapper passes VLLM_STANDALONE_MERGE_BASE from the agent checkout.
+# (wheel artifact layout). The wrapper passes APHRODITE_STANDALONE_MERGE_BASE from the agent checkout.
 merge_base_commit=""
-if [[ -n "${VLLM_STANDALONE_MERGE_BASE:-}" ]]; then
-    merge_base_commit="${VLLM_STANDALONE_MERGE_BASE}"
+if [[ -n "${APHRODITE_STANDALONE_MERGE_BASE:-}" ]]; then
+    merge_base_commit="${APHRODITE_STANDALONE_MERGE_BASE}"
 elif merge_base_commit="$(git -C /vllm-workspace merge-base HEAD origin/main 2>/dev/null)"; then
     :
 elif merge_base_commit="$(git merge-base HEAD origin/main 2>/dev/null)"; then
     :
 else
-    echo "ERROR: need a git checkout or VLLM_STANDALONE_MERGE_BASE to resolve wheels.vllm.ai commit." >&2
+    echo "ERROR: need a git checkout or APHRODITE_STANDALONE_MERGE_BASE to resolve wheels.vllm.ai commit." >&2
     exit 1
 fi
 
@@ -90,11 +90,11 @@ apt autoremove -y
 echo 'import os; os.system("touch /tmp/changed.file")' >> vllm/__init__.py
 
 # ROCm CI uses setuptools develop for editable installs (see Dockerfile.rocm and run-amd-test.sh).
-_vllm_target_lower="$(printf '%s' "${VLLM_TARGET_DEVICE:-}" | tr '[:upper:]' '[:lower:]')"
+_vllm_target_lower="$(printf '%s' "${APHRODITE_TARGET_DEVICE:-}" | tr '[:upper:]' '[:lower:]')"
 if [[ "${_vllm_target_lower}" == "rocm" ]]; then
-  VLLM_PRECOMPILED_WHEEL_COMMIT=$merge_base_commit VLLM_USE_PRECOMPILED=1 python3 setup.py develop
+  APHRODITE_PRECOMPILED_WHEEL_COMMIT=$merge_base_commit APHRODITE_USE_PRECOMPILED=1 python3 setup.py develop
 else
-  VLLM_PRECOMPILED_WHEEL_COMMIT=$merge_base_commit VLLM_USE_PRECOMPILED=1 pip3 install -vvv -e .
+  APHRODITE_PRECOMPILED_WHEEL_COMMIT=$merge_base_commit APHRODITE_USE_PRECOMPILED=1 pip3 install -vvv -e .
 fi
 unset -v _vllm_target_lower
 # Run the script

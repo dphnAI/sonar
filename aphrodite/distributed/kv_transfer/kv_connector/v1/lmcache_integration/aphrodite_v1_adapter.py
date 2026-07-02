@@ -182,7 +182,7 @@ class RequestTracker:
             unfolded_block_ids = new_request.block_ids.copy()
         else:
             # According to the Aphrodite code
-            # (https://github.com/vllm-project/aphrodite/blob/main/aphrodite/v1/core/
+            # (https://github.com/vllm-project/vllm/blob/main/aphrodite/v1/core/
             # sched/scheduler.py#L943),
             # only one KVCacheGroup is supported in connector for now.
             unfolded_block_ids = new_request.block_ids[0].copy()
@@ -223,7 +223,7 @@ class RequestTracker:
         self.token_ids.extend(new_token_ids)
 
         if new_block_ids is None:
-            # https://github.com/vllm-project/aphrodite/commit/
+            # https://github.com/vllm-project/vllm/commit/
             # b029de9902aa3ac58806c8c17776c7074175b6db
             new_block_ids = []
         elif len(new_block_ids) == 0:

@@ -259,7 +259,7 @@ def test_eagle3_acceptance_length(
             disable_log_stats=False,
             max_model_len=DEFAULT_MAX_MODEL_LEN,
             # Qwen/Qwen3-30B-A3B-FP8 with TP=4 needs EP
-            # https://github.com/vllm-project/aphrodite/issues/25292
+            # https://github.com/vllm-project/vllm/issues/25292
             enable_expert_parallel=(
                 tp_size == 4 and "Qwen3-VL" in model_config.verifier
             ),

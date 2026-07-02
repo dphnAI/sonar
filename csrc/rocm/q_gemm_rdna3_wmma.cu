@@ -504,10 +504,10 @@ __global__ void gemm_q4_wmma_kernel_16x16_1w(
       b_frag[i] = bitcast_elem<T, E>(b_lds[i][lane_lo]);
     }
 
-  #ifdef VLLM_WMMA_LAYOUT_DEBUG
+  #ifdef APHRODITE_WMMA_LAYOUT_DEBUG
     // Diagnostic: skip WMMA, force c_acc to encode (lane, slot) so the
     // store pattern reveals the C-output lane→matrix mapping. Compile with
-    // -DVLLM_WMMA_LAYOUT_DEBUG to enable. Output: c[m][n] = lane + slot/16.
+    // -DAPHRODITE_WMMA_LAYOUT_DEBUG to enable. Output: c[m][n] = lane + slot/16.
     (void)a_frag;
     (void)b_frag;
     #pragma unroll

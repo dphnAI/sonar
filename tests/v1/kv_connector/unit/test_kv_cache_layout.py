@@ -26,7 +26,7 @@ def test_mla_common_backend_rejects_cross_layer_kv_cache():
 
 @pytest.mark.parametrize(
     "backend_path",
-    # See: https://github.com/vllm-project/aphrodite/issues/46411
+    # See: https://github.com/vllm-project/vllm/issues/46411
     [
         "aphrodite.v1.attention.backends.mla.triton_mla.TritonMLABackend",
     ]

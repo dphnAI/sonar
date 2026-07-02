@@ -389,7 +389,7 @@ class MultiModalMixin(SupportsMultiModal, SupportsMRoPE):
                     "for vision encoder. Currently ROCm platform has "
                     "accuracy issues with `flash_sdp` and"
                     "`mem_efficient_sdp` backends. See issue: "
-                    "https://github.com/vllm-project/aphrodite/issues/30167"
+                    "https://github.com/vllm-project/vllm/issues/30167"
                 )
                 with torch.nn.attention.sdpa_kernel(
                     backends=[torch.nn.attention.SDPBackend.MATH]

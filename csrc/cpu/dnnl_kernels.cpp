@@ -339,7 +339,7 @@ int64_t create_onednn_scaled_mm_handler(
     args.use_a_zero_point = use_azp;
   }
 
-  VLLM_DISPATCH_FLOATING_TYPES(output_type, "create_onednn_scaled_mm_handler",
+  APHRODITE_DISPATCH_FLOATING_TYPES(output_type, "create_onednn_scaled_mm_handler",
                                [&] {
                                  if (dynamic_act_quant) {
                                    args.c_type = get_dnnl_type<float>();
@@ -384,7 +384,7 @@ void onednn_scaled_mm(
   exec_args.a_scales_ptr = nullptr;
   exec_args.a_zero_points_ptr = nullptr;
 
-  VLLM_DISPATCH_FLOATING_TYPES(c.scalar_type(), "onednn_scaled_mm", [&] {
+  APHRODITE_DISPATCH_FLOATING_TYPES(c.scalar_type(), "onednn_scaled_mm", [&] {
     if (ptr->get_input_scale_strategy() ==
         W8A8MatMulPrimitiveHandler::QuantizationStrategy::PER_TENSOR) {
       if (bias.has_value()) {
@@ -448,7 +448,7 @@ void static_scaled_int8_quant(
   const int64_t stride = input.stride(0);
   const int64_t hidden_size = input.size(1);
   const int64_t num_tokens = input.size(0);
-  VLLM_DISPATCH_FLOATING_TYPES(
+  APHRODITE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "static_scaled_int8_quant_impl", [&] {
         if (azp.has_value()) {
           static_scaled_int8_quant_impl<true>(
@@ -478,7 +478,7 @@ void dynamic_scaled_int8_quant(
   const int64_t hidden_size = input.size(1);
   const int64_t num_tokens = input.size(0);
   const int64_t stride = input.stride(0);
-  VLLM_DISPATCH_FLOATING_TYPES(
+  APHRODITE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "dynamic_scaled_int8_quant_impl", [&] {
         if (azp.has_value()) {
           dynamic_scaled_int8_quant_impl<true>(
@@ -507,7 +507,7 @@ int64_t create_onednn_mm_handler(const torch::Tensor& b,
   args.b_n_stride = b.stride(1);
   args.b_ptr = b.data_ptr();
 
-  VLLM_DISPATCH_FLOATING_TYPES(b.scalar_type(), "create_onednn_mm_handler",
+  APHRODITE_DISPATCH_FLOATING_TYPES(b.scalar_type(), "create_onednn_mm_handler",
                                [&] {
                                  args.c_type = get_dnnl_type<scalar_t>();
                                  args.ab_type = get_dnnl_type<scalar_t>();
@@ -528,24 +528,24 @@ void onednn_mm(torch::Tensor& c,        // [M, OC], row-major
       reinterpret_cast<MatMulPrimitiveHandler*>(handler_tensor.item<int64_t>());
 
 // ACL matmuls expect contiguous source tensors
-#ifdef VLLM_USE_ACL
+#ifdef APHRODITE_USE_ACL
   torch::Tensor a_contig = a.contiguous();
 #endif
 
   MatMulPrimitiveHandler::ExecArgs exec_args;
 
-#ifdef VLLM_USE_ACL
+#ifdef APHRODITE_USE_ACL
   exec_args.a_m_size = a_contig.size(0);
   exec_args.a_m_stride = a_contig.stride(0);
 #else
   exec_args.a_m_size = a.size(0);
   exec_args.a_m_stride = a.stride(0);
 #endif
-  VLLM_DISPATCH_FLOATING_TYPES(a.scalar_type(), "onednn_mm", [&] {
+  APHRODITE_DISPATCH_FLOATING_TYPES(a.scalar_type(), "onednn_mm", [&] {
     if (bias.has_value()) {
       exec_args.use_bias = true;
       exec_args.bias_type = get_dnnl_type<scalar_t>();
-#ifdef VLLM_USE_ACL
+#ifdef APHRODITE_USE_ACL
       // ACL matmuls in oneDNN do not support a bias.
       // We handle a matmul with bias by doing: c = bias; c += matmul(a, b)
       c.copy_(bias.value());
@@ -557,7 +557,7 @@ void onednn_mm(torch::Tensor& c,        // [M, OC], row-major
       exec_args.bias_type = get_dnnl_type<void>();
       exec_args.bias_ptr = nullptr;
     }
-#ifdef VLLM_USE_ACL
+#ifdef APHRODITE_USE_ACL
     exec_args.a_ptr = a_contig.data_ptr<scalar_t>();
 #else
     exec_args.a_ptr = a.data_ptr<scalar_t>();

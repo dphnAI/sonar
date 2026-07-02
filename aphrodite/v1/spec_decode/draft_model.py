@@ -38,7 +38,7 @@ class DraftModelProposer(SpecDecodeBaseProposer):
         # the draft model with TP = 1, then the different TP ranks collide.
         # Specifically when all ranks compile the draft model on rank 0
         # (because TP=1), then the torch compile cache is overwritten and corrupted.
-        # We need a mechanism like this: https://github.com/vllm-project/aphrodite/pull/5414
+        # We need a mechanism like this: https://github.com/vllm-project/vllm/pull/5414
         # To prevent this error, we assert that both TP sizes must be the same.
         spec_cfg = self.speculative_config
         tgt_tp = spec_cfg.target_parallel_config.tensor_parallel_size

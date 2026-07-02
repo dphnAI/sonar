@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # --------------------------------------------------------
 # Adapted from
-# https://github.com/vllm-project/aphrodite/blob/main/aphrodite/model_executor/models/internvl.py
+# https://github.com/vllm-project/vllm/blob/main/aphrodite/model_executor/models/internvl.py
 # under Apache-2.0 License
 #     LICENSE is in root directory.
 # --------------------------------------------------------

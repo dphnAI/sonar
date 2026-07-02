@@ -646,7 +646,7 @@ void apply_repetition_penalties_(
   const torch::stable::accelerator::DeviceGuard device_guard(
       logits.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
-  VLLM_STABLE_DISPATCH_FLOATING_TYPES(
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
       logits.scalar_type(), "apply_repetition_penalties_kernel", [&] {
         vllm::apply_repetition_penalties_kernel<scalar_t>
             <<<grid, block, 0, stream>>>(

@@ -260,7 +260,7 @@ void reshape_and_cache_nvfp4_dispatch(torch::stable::Tensor& key,
       key.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
 
-  VLLM_STABLE_DISPATCH_HALF_TYPES(
+  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
       key.scalar_type(), "reshape_and_cache_nvfp4", [&] {
         vllm::reshape_and_cache_nvfp4_kernel<scalar_t>
             <<<grid, block, 0, stream>>>(

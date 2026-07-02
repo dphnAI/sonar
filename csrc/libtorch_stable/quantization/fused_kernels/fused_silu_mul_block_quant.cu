@@ -145,16 +145,16 @@ void silu_and_mul_per_block_quant(torch::stable::Tensor& out,
   dim3 grid(num_tokens, num_groups);
   dim3 block(group_size);
 
-  VLLM_STABLE_DISPATCH_FLOATING_TYPES(
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "silu_and_mul_per_block_quant", [&] {
         using scalar_in_t = scalar_t;
 
-        VLLM_STABLE_DISPATCH_QUANT_TYPES(
+        APHRODITE_STABLE_DISPATCH_QUANT_TYPES(
             out.scalar_type(), "silu_and_mul_per_block_quant", [&] {
               using scalar_out_t = scalar_t;
 
-              VLLM_STABLE_DISPATCH_GROUP_SIZE(group_size, gs, [&] {
-                VLLM_STABLE_DISPATCH_BOOL(
+              APHRODITE_STABLE_DISPATCH_GROUP_SIZE(group_size, gs, [&] {
+                APHRODITE_STABLE_DISPATCH_BOOL(
                     is_scale_transposed, transpose_scale, [&] {
                       vllm::silu_and_mul_per_block_quant_kernel<
                           scalar_in_t, scalar_out_t, transpose_scale, gs>

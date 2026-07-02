@@ -269,12 +269,12 @@ void per_token_group_quant_8bit(const torch::stable::Tensor& input,
     }                                                                   \
   } while (0)
 
-  VLLM_STABLE_DISPATCH_FLOATING_TYPES(
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "per_token_group_quant_8bit", ([&] {
         if (dst_type == torch::headeronly::ScalarType::Char) {
           LAUNCH_KERNEL(scalar_t, int8_t);
         } else {
-          VLLM_STABLE_DISPATCH_FP8_TYPES(
+          APHRODITE_STABLE_DISPATCH_FP8_TYPES(
               dst_type, "per_token_group_quant_8bit_fp8",
               ([&] { LAUNCH_KERNEL(scalar_t, fp8_t); }));
         }
@@ -591,12 +591,12 @@ void per_token_group_quant_8bit_packed(const torch::stable::Tensor& input,
     }                                                      \
   } while (0)
 
-  VLLM_STABLE_DISPATCH_HALF_TYPES(
+  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
       input.scalar_type(), "per_token_group_quant_8bit_packed_register", ([&] {
         if (dst_type == torch::headeronly::ScalarType::Char) {
           LAUNCH_REG_KERNEL(scalar_t, int8_t);
         } else {
-          VLLM_STABLE_DISPATCH_FP8_TYPES(
+          APHRODITE_STABLE_DISPATCH_FP8_TYPES(
               dst_type, "per_token_group_quant_8bit_packed_fp8",
               ([&] { LAUNCH_REG_KERNEL(scalar_t, fp8_t); }));
         }

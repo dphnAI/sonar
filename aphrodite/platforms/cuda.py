@@ -115,7 +115,7 @@ def _get_backend_priorities(
     if use_mla:
         if device_capability.major == 10:
             # Sparse MLA backend priorities
-            # See https://github.com/vllm-project/aphrodite/issues/35807 for
+            # See https://github.com/vllm-project/vllm/issues/35807 for
             # benchmark results
             if kv_cache_dtype is not None and is_quantized_kv_cache(kv_cache_dtype):
                 # Prefer FlashInfer for fp8 kv cache

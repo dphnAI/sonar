@@ -24,7 +24,7 @@ __global__ void ConcatMLAQKernel(
   const int head_id = flat_warp_id % num_heads;
   const int lane_id = threadIdx.x & 31;
 
-  constexpr bool use_256b = VLLM_256B_PTX_ENABLED;
+  constexpr bool use_256b = APHRODITE_256B_PTX_ENABLED;
   constexpr int nope_vec_loads =
       NOPE_DIM * sizeof(DType) / (VecTraits<use_256b>::ARCH_MAX_VEC_SIZE * 32);
 

@@ -293,7 +293,7 @@ void merge_attn_states_launcher(
 
   if (output_scale.has_value()) {
     // FP8 output path - dispatch on output FP8 type
-    VLLM_STABLE_DISPATCH_FP8_TYPES(
+    APHRODITE_STABLE_DISPATCH_FP8_TYPES(
         output.scalar_type(), "merge_attn_states_fp8",
         [&] { LAUNCH_MERGE_ATTN_STATES(scalar_t, fp8_t, NUM_THREADS, true); });
   } else {

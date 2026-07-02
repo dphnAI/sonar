@@ -15,7 +15,7 @@ def test_fast_inc_detok_invalid_utf8_err_case():
     Test edge case where tokenizer can produce non-monotonic,
     invalid UTF-8 output, which breaks the internal state of
     tokenizers' DecodeStream.
-    See https://github.com/vllm-project/aphrodite/issues/17448.
+    See https://github.com/vllm-project/vllm/issues/17448.
 
     Thanks to reproducer from @fpaupier:
     https://gist.github.com/fpaupier/0ed1375bd7633c5be6c894b1c7ac1be3.

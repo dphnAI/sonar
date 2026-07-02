@@ -46,7 +46,7 @@ class MockParallelConfig:
 
 
 @dataclass
-class MockVllmConfig:
+class MockAphroditeConfig:
     model_config: MockModelConfig
     parallel_config: MockParallelConfig
 
@@ -64,7 +64,7 @@ async def test_async_mistral_tokenizer_does_not_block_event_loop():
     mock_tokenizer = Mock(spec=MistralTokenizer)
     mock_tokenizer.apply_chat_template = mocked_apply_chat_template
     mock_renderer = MistralRenderer(
-        MockVllmConfig(mock_model_config, parallel_config=MockParallelConfig()),
+        MockAphroditeConfig(mock_model_config, parallel_config=MockParallelConfig()),
         tokenizer=mock_tokenizer,
     )
 

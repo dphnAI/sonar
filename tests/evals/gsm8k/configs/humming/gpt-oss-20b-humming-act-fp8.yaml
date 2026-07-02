@@ -8,4 +8,4 @@ server_args: >-
   --tensor-parallel-size 1
   --moe-backend humming
 env:
-  VLLM_HUMMING_INPUT_QUANT_CONFIG: '{"dtype":"float8e4m3"}'
+  APHRODITE_HUMMING_INPUT_QUANT_CONFIG: '{"dtype":"float8e4m3"}'

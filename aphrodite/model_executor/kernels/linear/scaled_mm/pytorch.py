@@ -49,7 +49,7 @@ class TorchFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         #
         # The perf gain is still relevant as of 16/1/2026
         # torch version == 2.9.0. More details in the link below:
-        # https://github.com/vllm-project/aphrodite/issues/32269
+        # https://github.com/vllm-project/vllm/issues/32269
         aphrodite_config = get_current_aphrodite_config().compilation_config
         pad_output = aphrodite_config.mode < CompilationMode.APHRODITE_COMPILE
         return 17 if pad_output else None

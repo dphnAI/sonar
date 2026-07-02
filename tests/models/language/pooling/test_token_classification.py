@@ -41,7 +41,7 @@ def test_bert_models(
         vllm_outputs = vllm_model.token_classify(example_prompts)
 
     # Use eager attention on ROCm to avoid HF Transformers flash attention
-    # accuracy issues: https://github.com/vllm-project/aphrodite/issues/30167
+    # accuracy issues: https://github.com/vllm-project/vllm/issues/30167
     hf_model_kwargs = {}
     if current_platform.is_rocm():
         hf_model_kwargs["attn_implementation"] = "eager"
@@ -78,7 +78,7 @@ def test_modernbert_models(
     model: str,
     dtype: str,
 ) -> None:
-    # NOTE: https://github.com/vllm-project/aphrodite/pull/32403
+    # NOTE: https://github.com/vllm-project/vllm/pull/32403
     # `disham993/electrical-ner-ModernBERT-base` is a randomly initialized
     # model, which can cause numerical precision variance and edge cases.
     # We use @flaky(reruns=3) to mitigate intermittent failures.
@@ -91,7 +91,7 @@ def test_modernbert_models(
         vllm_outputs = vllm_model.token_classify(example_prompts)
 
     # Use eager attention on ROCm to avoid HF Transformers flash attention
-    # accuracy issues: https://github.com/vllm-project/aphrodite/issues/30167
+    # accuracy issues: https://github.com/vllm-project/vllm/issues/30167
     hf_model_kwargs = {}
     if current_platform.is_rocm():
         hf_model_kwargs["attn_implementation"] = "eager"

@@ -140,8 +140,8 @@ __global__ void act_and_mul_kernel(
   } else {
     // Scalar fallback for unaligned data or small d
     for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
-      const scalar_t x = VLLM_LDG(&x_ptr[idx]);
-      const scalar_t y = VLLM_LDG(&y_ptr[idx]);
+      const scalar_t x = APHRODITE_LDG(&x_ptr[idx]);
+      const scalar_t y = APHRODITE_LDG(&y_ptr[idx]);
       out_ptr[idx] = compute<scalar_t, ACT_FN, act_first, HAS_CLAMP>(
           x, y, limit, alpha, beta);
     }
@@ -254,7 +254,7 @@ packed_gelu_tanh_kernel(const packed_t& val, const float /*alpha*/) {
   if (use_vec) {                                                               \
     dim3 block(std::min(d / vec_size, 1024));                                  \
     if (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128) {         \
-      VLLM_STABLE_DISPATCH_FLOATING_TYPES(dtype, "act_and_mul_kernel", [&] {   \
+      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(dtype, "act_and_mul_kernel", [&] {   \
         vllm::act_and_mul_kernel<                                              \
             scalar_t, typename vllm::PackedTypeConverter<scalar_t>::Type,      \
             KERNEL<scalar_t>,                                                  \
@@ -264,7 +264,7 @@ packed_gelu_tanh_kernel(const packed_t& val, const float /*alpha*/) {
             input.const_data_ptr<scalar_t>(), d, LIMIT, ALPHA, BETA);          \
       });                                                                      \
     } else {                                                                   \
-      VLLM_STABLE_DISPATCH_FLOATING_TYPES(dtype, "act_and_mul_kernel", [&] {   \
+      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(dtype, "act_and_mul_kernel", [&] {   \
         vllm::act_and_mul_kernel<                                              \
             scalar_t, typename vllm::PackedTypeConverter<scalar_t>::Type,      \
             KERNEL<scalar_t>,                                                  \
@@ -276,7 +276,7 @@ packed_gelu_tanh_kernel(const packed_t& val, const float /*alpha*/) {
     }                                                                          \
   } else {                                                                     \
     dim3 block(std::min(d, 1024));                                             \
-    VLLM_STABLE_DISPATCH_FLOATING_TYPES(dtype, "act_and_mul_kernel", [&] {     \
+    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(dtype, "act_and_mul_kernel", [&] {     \
       vllm::act_and_mul_kernel<                                                \
           scalar_t, typename vllm::PackedTypeConverter<scalar_t>::Type,        \
           KERNEL<scalar_t>,                                                    \
@@ -388,8 +388,8 @@ __global__ void act_and_mul_kernel_with_param(
   } else {
     // Scalar fallback for unaligned data or small d
     for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
-      const scalar_t x = VLLM_LDG(&x_ptr[idx]);
-      const scalar_t y = VLLM_LDG(&y_ptr[idx]);
+      const scalar_t x = APHRODITE_LDG(&x_ptr[idx]);
+      const scalar_t y = APHRODITE_LDG(&y_ptr[idx]);
       out_ptr[idx] = ACT_FN(x, param) * y;
     }
   }
@@ -437,7 +437,7 @@ __global__ void swigluoai_and_mul_kernel(
     const int vec_end = num_vecs * PAIRS;
 
     for (int i = threadIdx.x; i < num_vecs; i += blockDim.x) {
-      int4 v = VLLM_LDG(&in_vec[i]);
+      int4 v = APHRODITE_LDG(&in_vec[i]);
       int2 r;
       auto* vp = reinterpret_cast<scalar_t*>(&v);
       auto* rp = reinterpret_cast<scalar_t*>(&r);
@@ -449,16 +449,16 @@ __global__ void swigluoai_and_mul_kernel(
     }
     // Scalar cleanup for remaining elements
     for (int i = vec_end + threadIdx.x; i < d; i += blockDim.x) {
-      out_ptr[i] = ACT_FN(VLLM_LDG(&in_ptr[2 * i]),
-                          VLLM_LDG(&in_ptr[2 * i + 1]), alpha, limit);
+      out_ptr[i] = ACT_FN(APHRODITE_LDG(&in_ptr[2 * i]),
+                          APHRODITE_LDG(&in_ptr[2 * i + 1]), alpha, limit);
     }
   } else {
     // Scalar fallback for unaligned data or small d
     for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
       // gate = x[..., ::2]  (even indices)
-      const scalar_t gate = VLLM_LDG(&in_ptr[2 * idx]);
+      const scalar_t gate = APHRODITE_LDG(&in_ptr[2 * idx]);
       // up = x[..., 1::2]   (odd indices)
-      const scalar_t up = VLLM_LDG(&in_ptr[2 * idx + 1]);
+      const scalar_t up = APHRODITE_LDG(&in_ptr[2 * idx + 1]);
       out_ptr[idx] = ACT_FN(gate, up, alpha, limit);
     }
   }
@@ -487,7 +487,7 @@ __global__ void swigluoai_and_mul_kernel(
   if (use_vec) {                                                               \
     dim3 block(std::min(d / vec_size, 1024));                                  \
     if (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128) {         \
-      VLLM_STABLE_DISPATCH_FLOATING_TYPES(                                     \
+      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                     \
           dtype, "act_and_mul_kernel_with_param", [&] {                        \
             vllm::act_and_mul_kernel_with_param<                               \
                 scalar_t, typename vllm::PackedTypeConverter<scalar_t>::Type,  \
@@ -499,7 +499,7 @@ __global__ void swigluoai_and_mul_kernel(
                 input.const_data_ptr<scalar_t>(), d, PARAM);                   \
           });                                                                  \
     } else {                                                                   \
-      VLLM_STABLE_DISPATCH_FLOATING_TYPES(                                     \
+      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                     \
           dtype, "act_and_mul_kernel_with_param", [&] {                        \
             vllm::act_and_mul_kernel_with_param<                               \
                 scalar_t, typename vllm::PackedTypeConverter<scalar_t>::Type,  \
@@ -513,7 +513,7 @@ __global__ void swigluoai_and_mul_kernel(
     }                                                                          \
   } else {                                                                     \
     dim3 block(std::min(d, 1024));                                             \
-    VLLM_STABLE_DISPATCH_FLOATING_TYPES(                                       \
+    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                       \
         dtype, "act_and_mul_kernel_with_param", [&] {                          \
           vllm::act_and_mul_kernel_with_param<                                 \
               scalar_t, typename vllm::PackedTypeConverter<scalar_t>::Type,    \
@@ -534,7 +534,7 @@ __global__ void swigluoai_and_mul_kernel(
   const torch::stable::accelerator::DeviceGuard device_guard(                 \
       input.get_device_index());                                              \
   const cudaStream_t stream = get_current_cuda_stream();                      \
-  VLLM_STABLE_DISPATCH_FLOATING_TYPES(                                        \
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                        \
       input.scalar_type(), "clamp_swiglu_kernel_with_params", [&] {           \
         vllm::swigluoai_and_mul_kernel<scalar_t, KERNEL<scalar_t>>            \
             <<<grid, block, 0, stream>>>(out.mutable_data_ptr<scalar_t>(),    \
@@ -579,7 +579,7 @@ __global__ void activation_kernel(
       if constexpr (use_256b) {
         ld256(v, &in_vec[i]);
       } else {
-        v = VLLM_LDG(&in_vec[i]);
+        v = APHRODITE_LDG(&in_vec[i]);
       }
       auto* vp = reinterpret_cast<scalar_t*>(&v);
 #pragma unroll
@@ -595,7 +595,7 @@ __global__ void activation_kernel(
   } else {
     // Scalar fallback for unaligned data or small d
     for (int64_t idx = threadIdx.x; idx < d; idx += blockDim.x) {
-      const scalar_t x = VLLM_LDG(&in_ptr[idx]);
+      const scalar_t x = APHRODITE_LDG(&in_ptr[idx]);
       out_ptr[idx] = ACT_FN(x);
     }
   }
@@ -625,13 +625,13 @@ __global__ void activation_kernel(
   if (use_vec) {                                                               \
     dim3 block(std::min(d / vec_size, 1024));                                  \
     if (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128) {         \
-      VLLM_STABLE_DISPATCH_FLOATING_TYPES(dtype, "activation_kernel", [&] {    \
+      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(dtype, "activation_kernel", [&] {    \
         vllm::activation_kernel<scalar_t, KERNEL<scalar_t>, true, true>        \
             <<<grid, block, 0, stream>>>(out.mutable_data_ptr<scalar_t>(),     \
                                          input.const_data_ptr<scalar_t>(), d); \
       });                                                                      \
     } else {                                                                   \
-      VLLM_STABLE_DISPATCH_FLOATING_TYPES(dtype, "activation_kernel", [&] {    \
+      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(dtype, "activation_kernel", [&] {    \
         vllm::activation_kernel<scalar_t, KERNEL<scalar_t>, true, false>       \
             <<<grid, block, 0, stream>>>(out.mutable_data_ptr<scalar_t>(),     \
                                          input.const_data_ptr<scalar_t>(), d); \
@@ -639,7 +639,7 @@ __global__ void activation_kernel(
     }                                                                          \
   } else {                                                                     \
     dim3 block(std::min(d, 1024));                                             \
-    VLLM_STABLE_DISPATCH_FLOATING_TYPES(dtype, "activation_kernel", [&] {      \
+    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(dtype, "activation_kernel", [&] {      \
       vllm::activation_kernel<scalar_t, KERNEL<scalar_t>, false>               \
           <<<grid, block, 0, stream>>>(out.mutable_data_ptr<scalar_t>(),       \
                                        input.const_data_ptr<scalar_t>(), d);   \

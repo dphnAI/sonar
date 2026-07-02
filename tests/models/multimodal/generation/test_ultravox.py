@@ -169,7 +169,7 @@ def test_variable_length_audio_batching(
 
     This exercises the variable-length tensor handling in
     MultiModalFlatField._reduce_data() which was buggy before
-    https://github.com/vllm-project/aphrodite/issues/31658 was fixed.
+    https://github.com/vllm-project/vllm/issues/31658 was fixed.
     """
     model_info = HF_EXAMPLE_MODELS.find_hf_info(MODEL_NAME)
     model_info.check_available_online(on_fail="skip")

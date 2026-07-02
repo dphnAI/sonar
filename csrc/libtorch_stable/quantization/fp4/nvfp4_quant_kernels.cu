@@ -37,7 +37,7 @@ namespace vllm {
 
 // Use UE4M3 by default.
 template <class Type, bool UE8M0_SF = false>
-__global__ void __launch_bounds__(512, VLLM_BLOCKS_PER_SM(512))
+__global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
     cvt_fp16_to_fp4(int32_t numRows, int32_t numCols, int32_t outputCols,
                     int32_t num_padded_cols, Type const* __restrict__ in,
                     float const* __restrict__ SFScale,
@@ -108,7 +108,7 @@ __global__ void __launch_bounds__(512, VLLM_BLOCKS_PER_SM(512))
 
 // Use UE4M3 by default.
 template <class Type, bool UE8M0_SF = false>
-__global__ void __launch_bounds__(512, VLLM_BLOCKS_PER_SM(512))
+__global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
     cvt_fp16_to_fp4_sf_major(int32_t numRows, int32_t numCols,
                              int32_t outputCols, int32_t sf_n_unpadded,
                              int32_t num_packed_cols,
@@ -220,7 +220,7 @@ void scaled_fp4_quant_sm1xxa(torch::stable::Tensor const& output,
                  std::max(1, (multiProcessorCount * numBlocksPerSM) / grid_y));
     dim3 grid(grid_x, grid_y);
 
-    VLLM_STABLE_DISPATCH_HALF_TYPES(
+    APHRODITE_STABLE_DISPATCH_HALF_TYPES(
         input.scalar_type(), "nvfp4_quant_kernel", [&] {
           using cuda_type = vllm::CUDATypeConverter<scalar_t>::Type;
           auto input_ptr = static_cast<cuda_type const*>(input.data_ptr());
@@ -236,7 +236,7 @@ void scaled_fp4_quant_sm1xxa(torch::stable::Tensor const& output,
         m, std::max(1, (multiProcessorCount * numBlocksPerSM) / grid_y));
     dim3 grid(grid_x, grid_y);
 
-    VLLM_STABLE_DISPATCH_HALF_TYPES(
+    APHRODITE_STABLE_DISPATCH_HALF_TYPES(
         input.scalar_type(), "nvfp4_quant_kernel", [&] {
           using cuda_type = vllm::CUDATypeConverter<scalar_t>::Type;
           auto input_ptr = static_cast<cuda_type const*>(input.data_ptr());

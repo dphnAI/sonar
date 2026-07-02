@@ -898,7 +898,7 @@ class CompilationConfig:
         # 2. Custom passes (fusion) rely on auto-functionalization V1 and don't
         #    work with V2. Addressing this will take extra engineering effort
         #    and it is not yet a priority. RFC here:
-        #    https://github.com/vllm-project/aphrodite/issues/14703
+        #    https://github.com/vllm-project/vllm/issues/14703
 
         KEY = "enable_auto_functionalized_v2"
         if KEY not in self.inductor_compile_config:
@@ -945,14 +945,14 @@ class CompilationConfig:
             and "+rotary_embedding" not in self.custom_ops
         ):
             # TODO(zhuhaoran): support rope native forward match and remove this.
-            # Linked issue: https://github.com/vllm-project/aphrodite/issues/28042
+            # Linked issue: https://github.com/vllm-project/vllm/issues/28042
             self.custom_ops.append("+rotary_embedding")
         if (
             self.pass_config.fuse_rope_kvcache
             and "+rotary_embedding" not in self.custom_ops
         ):
             # TODO(Rohan138): support rope native forward match and remove this.
-            # Linked issue: https://github.com/vllm-project/aphrodite/issues/28042
+            # Linked issue: https://github.com/vllm-project/vllm/issues/28042
             self.custom_ops.append("+rotary_embedding")
 
         if (
@@ -1116,7 +1116,7 @@ class CompilationConfig:
                 # graph, we keep the piecewise fx graph structure but capture
                 # the full cudagraph outside the fx graph. This reduces some
                 # cpu overhead when the runtime batch_size is not cudagraph
-                # captured. see https://github.com/vllm-project/aphrodite/pull/20059
+                # captured. see https://github.com/vllm-project/vllm/pull/20059
                 # for details. Make a copy to avoid mutating the class-level
                 # list via reference.
                 self.splitting_ops = list(self._attention_ops)
@@ -1125,7 +1125,7 @@ class CompilationConfig:
                 # from reusing piecewise graphs. Remove it from the compiled graph.
                 # This has the side-effect of excluding cache from cudagraphs but
                 # that doesn't seem to affect performance.
-                # https://github.com/vllm-project/aphrodite/issues/33267
+                # https://github.com/vllm-project/vllm/issues/33267
                 if not self.use_inductor_graph_partition:
                     if self.pass_config.fuse_rope_kvcache:
                         logger.warning_once(
@@ -1194,7 +1194,7 @@ class CompilationConfig:
         ):
             # TODO: Piecewise Cuda graph might be enabled
             # if torch compile cache key issue fixed
-            # See https://github.com/vllm-project/aphrodite/pull/25093
+            # See https://github.com/vllm-project/vllm/pull/25093
             logger.info(
                 "DeepEP: Disabling CUDA Graphs since DeepEP high-throughput kernels "
                 "are optimized for prefill and are incompatible with CUDA Graphs. "
@@ -1233,7 +1233,7 @@ class CompilationConfig:
         # when using Dynamo partition while splitting ops is None
         # and attn+quant fusion disabled, the kv_cache_update_ops are
         # appended to splitting_ops in set_splitting_ops_for_v1 due to
-        # https://github.com/vllm-project/aphrodite/issues/33267
+        # https://github.com/vllm-project/vllm/issues/33267
         # In this case, we return True if the kv_cache_update_ops
         # are not in the splitting_ops yet, but will subsequently
         # be added to splitting_ops.
@@ -1422,8 +1422,8 @@ class CompilationConfig:
             )
 
         # Adjust cudagraph sizes to be a multiple of uniform_decode_query_len
-        # to avoid: https://github.com/vllm-project/aphrodite/issues/28207 and temp-fix:
-        # https://github.com/vllm-project/aphrodite/issues/28207#issuecomment-3504004536
+        # to avoid: https://github.com/vllm-project/vllm/issues/28207 and temp-fix:
+        # https://github.com/vllm-project/vllm/issues/28207#issuecomment-3504004536
         # Will be removed in the near future when we have separate cudagraph capture
         # sizes for decode and mixed prefill-decode.
         if (
@@ -1441,7 +1441,7 @@ class CompilationConfig:
         # need to verify that enough blocks exist. Raising here instead
         # of silently capping cudagraph_capture_sizes avoids unintended
         # restrictions on PIECEWISE (prefill) cudagraphs.
-        # See: https://github.com/vllm-project/aphrodite/issues/34094
+        # See: https://github.com/vllm-project/vllm/issues/34094
         if (
             kv_cache_config is not None
             and max_num_reqs is not None

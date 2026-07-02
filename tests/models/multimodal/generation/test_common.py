@@ -519,7 +519,7 @@ VLM_TEST_SETTINGS = {
             pytest.mark.skip(
                 reason="This test fails on both AMD and NV"
                 "hardware. please see the issue:"
-                "https://github.com/vllm-project/aphrodite/issues/42016"
+                "https://github.com/vllm-project/vllm/issues/42016"
             ),
             large_gpu_mark(min_gb=32),
         ],
@@ -1021,7 +1021,7 @@ VLM_TEST_SETTINGS = {
             )
         ],
     ),
-    # regression test for https://github.com/vllm-project/aphrodite/issues/15122
+    # regression test for https://github.com/vllm-project/vllm/issues/15122
     "qwen2_5_vl-windows-attention": VLMTestInfo(
         models=["Qwen/Qwen2.5-VL-3B-Instruct"],
         test_type=VLMTestType.CUSTOM_INPUTS,

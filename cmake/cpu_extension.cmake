@@ -286,7 +286,7 @@ if (ENABLE_X86_ISA OR (ASIMD_FOUND AND NOT APPLE_SILICON_FOUND) OR POWER9_FOUND 
         endif()
         message(STATUS "Arm Compute Library (ACL) built successfully.")
 
-        # VLLM/oneDNN settings for ACL
+        # APHRODITE/oneDNN settings for ACL
         set(ONEDNN_AARCH64_USE_ACL ON CACHE BOOL "" FORCE)
         add_compile_definitions(APHRODITE_USE_ACL)
     endif()

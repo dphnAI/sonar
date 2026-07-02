@@ -987,7 +987,7 @@ def test_prefill_hybrid_model_combinations_eagle(
 def test_prefill_hybrid_model_mamba_align():
     """Test that MambaManager.cache_blocks() handles null blocks in align mode.
 
-    Regression test for https://github.com/vllm-project/aphrodite/issues/34361.
+    Regression test for https://github.com/vllm-project/vllm/issues/34361.
     In mamba_cache_mode="align", allocate_new_blocks() pads req_to_blocks with
     null blocks. cache_full_blocks() correctly skips them, but
     MambaManager.cache_blocks() must also skip null blocks when tracking
@@ -1085,7 +1085,7 @@ def test_hybrid_cache_mamba_align_shared_prefix_detection():
 
 
 def test_hybrid_model_mamba_align_with_dynamic_draft_tokens():
-    """Regression test for https://github.com/vllm-project/aphrodite/issues/39271.
+    """Regression test for https://github.com/vllm-project/vllm/issues/39271.
 
     With suffix decoding enabled, the number of proposed draft token may
     change dynamically each round, causing the MambaManager to crash during

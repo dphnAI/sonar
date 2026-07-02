@@ -56,7 +56,7 @@ def server(request):
         # pass (large M) while cache-hit requests compute only the
         # uncached suffix (small M), seeding a divergence that amplifies
         # through the residual stream and flips argmax tokens.
-        # See: https://github.com/vllm-project/aphrodite/issues/33123
+        # See: https://github.com/vllm-project/vllm/issues/33123
         #
         # Either disable prefix caching entirely, or enable it with
         # --deterministic-prefix-caching which forces cache-miss prefills
@@ -80,7 +80,7 @@ def server(request):
         )
 
     envs = os.environ.copy()
-    # See: https://github.com/vllm-project/aphrodite/pull/33493#issuecomment-3888060787
+    # See: https://github.com/vllm-project/vllm/pull/33493#issuecomment-3888060787
     envs["APHRODITE_ROCM_USE_SKINNY_GEMM"] = "0"
 
     with RemoteOpenAIServer(MODEL_NAME, args, env_dict=envs) as remote_server:

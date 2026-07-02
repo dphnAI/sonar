@@ -34,16 +34,16 @@
 #include "nvfp4_utils.cuh"
 
 #if defined(CUDART_VERSION) && CUDART_VERSION >= 12090
-  #define VLLM_MXFP4_EXPERTS_QUANT_SUPPORTED 1
+  #define APHRODITE_MXFP4_EXPERTS_QUANT_SUPPORTED 1
 static_assert(CVT_FP4_ELTS_PER_THREAD == 16,
               "MXFP4 experts quant requires PACK16 mode (CUDA >= 12.9)");
 #else
-  #define VLLM_MXFP4_EXPERTS_QUANT_SUPPORTED 0
+  #define APHRODITE_MXFP4_EXPERTS_QUANT_SUPPORTED 0
 #endif
 
 #include "libtorch_stable/launch_bounds_utils.h"
 
-#if VLLM_MXFP4_EXPERTS_QUANT_SUPPORTED
+#if APHRODITE_MXFP4_EXPERTS_QUANT_SUPPORTED
 
 namespace vllm {
 
@@ -61,7 +61,7 @@ static constexpr int MXFP4_NUM_THREADS_PER_SF =
 // SiLU(gate)*up before quantization.
 template <class Type, bool FUSE_SILU_MUL = false,
           bool SMALL_NUM_EXPERTS = false>
-__global__ void __launch_bounds__(512, VLLM_BLOCKS_PER_SM(512))
+__global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
     mxfp4_cvt_fp16_to_fp4(int32_t numRows, int32_t numCols, Type const* in,
                           fp4_packed_t* out, uint32_t* SFout,
                           uint32_t* input_offset_by_experts,
@@ -160,7 +160,7 @@ __global__ void __launch_bounds__(512, VLLM_BLOCKS_PER_SM(512))
 // Large M_topk variant using shared memory for expert offsets
 template <class Type, bool FUSE_SILU_MUL = false,
           bool SMALL_NUM_EXPERTS = false>
-__global__ void __launch_bounds__(1024, VLLM_BLOCKS_PER_SM(1024))
+__global__ void __launch_bounds__(1024, APHRODITE_BLOCKS_PER_SM(1024))
     mxfp4_cvt_fp16_to_fp4(int32_t numRows, int32_t numCols, Type const* in,
                           fp4_packed_t* out, uint32_t* SFout,
                           uint32_t* input_offset_by_experts,
@@ -373,10 +373,10 @@ static void validate_mxfp4_experts_quant_inputs(
   STD_TORCH_CHECK(output_scale.size(1) * 4 == padded_k);
 }
 
-#endif  // VLLM_MXFP4_EXPERTS_QUANT_SUPPORTED
+#endif  // APHRODITE_MXFP4_EXPERTS_QUANT_SUPPORTED
 
 static bool mxfp4_experts_quant_sm_supported(int64_t cuda_device_capability) {
-#if VLLM_MXFP4_EXPERTS_QUANT_SUPPORTED
+#if APHRODITE_MXFP4_EXPERTS_QUANT_SUPPORTED
   return cuda_device_capability >= 100 && cuda_device_capability < 120;
 #else
   return false;
@@ -389,7 +389,7 @@ void mxfp4_experts_quant(
     torch::stable::Tensor const& input_offset_by_experts,
     torch::stable::Tensor const& output_scale_offset_by_experts,
     int64_t n_experts) {
-#if VLLM_MXFP4_EXPERTS_QUANT_SUPPORTED
+#if APHRODITE_MXFP4_EXPERTS_QUANT_SUPPORTED
   int32_t sm = get_sm_version_num();
   STD_TORCH_CHECK(mxfp4_experts_quant_sm_supported(sm),
                   "No compiled MXFP4 experts quant kernel for SM ", sm,
@@ -406,7 +406,7 @@ void mxfp4_experts_quant(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream(input.get_device_index());
 
-  VLLM_STABLE_DISPATCH_HALF_TYPES(
+  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
       input.scalar_type(), "mxfp4_experts_quant_kernel", [&] {
         using cuda_type = vllm::CUDATypeConverter<scalar_t>::Type;
         vllm::mxfp4_quant_impl<cuda_type, /*FUSE_SILU_MUL=*/false>(
@@ -427,7 +427,7 @@ void silu_and_mul_mxfp4_experts_quant(
     torch::stable::Tensor const& input_offset_by_experts,
     torch::stable::Tensor const& output_scale_offset_by_experts,
     int64_t n_experts) {
-#if VLLM_MXFP4_EXPERTS_QUANT_SUPPORTED
+#if APHRODITE_MXFP4_EXPERTS_QUANT_SUPPORTED
   int32_t sm = get_sm_version_num();
   STD_TORCH_CHECK(mxfp4_experts_quant_sm_supported(sm),
                   "No compiled SiLU+Mul MXFP4 experts quant kernel for SM ", sm,
@@ -446,7 +446,7 @@ void silu_and_mul_mxfp4_experts_quant(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream(input.get_device_index());
 
-  VLLM_STABLE_DISPATCH_HALF_TYPES(
+  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
       input.scalar_type(), "silu_mul_mxfp4_experts_quant_kernel", [&] {
         using cuda_type = vllm::CUDATypeConverter<scalar_t>::Type;
         vllm::mxfp4_quant_impl<cuda_type, /*FUSE_SILU_MUL=*/true>(

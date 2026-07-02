@@ -169,7 +169,7 @@ def dummy_model_gate_up(default_vllm_config) -> nn.Module:
 @pytest.fixture(scope="session")
 def mixtral_lora_files():
     # Note: this module has incorrect adapter_config.json to test
-    # https://github.com/vllm-project/aphrodite/pull/5909/files.
+    # https://github.com/vllm-project/vllm/pull/5909/files.
     return snapshot_download(repo_id="SangBinCho/mixtral-lora")
 
 

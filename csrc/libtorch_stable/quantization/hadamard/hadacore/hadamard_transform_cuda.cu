@@ -794,7 +794,7 @@ torch::stable::Tensor hadacore_transform(torch::stable::Tensor& x, bool inplace)
     torch::stable::accelerator::DeviceGuard device_guard(x.get_device_index());
     auto stream = get_current_cuda_stream();
 
-    VLLM_STABLE_DISPATCH_HALF_TYPES(x.scalar_type(), "hadacore_transform_runfht", [&] {
+    APHRODITE_STABLE_DISPATCH_HALF_TYPES(x.scalar_type(), "hadacore_transform_runfht", [&] {
       auto constexpr SCALAR_TYPE = torch::headeronly::CppTypeToScalarType<scalar_t>::value;
       hadacore::run_fht<SCALAR_TYPE>(x.data_ptr(), x.data_ptr(), x.numel(), had_size, stream);
     });

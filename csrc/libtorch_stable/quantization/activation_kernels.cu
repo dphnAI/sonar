@@ -78,8 +78,8 @@ __global__ void act_and_mul_quant_kernel(
 #pragma unroll
   for (int32_t vec_idx = vec_start_idx + threadIdx.x; vec_idx < vec_end_idx;
        vec_idx += blockDim.x) {
-    const int4 x_128bit = VLLM_LDG(&x_128bit_ptr[vec_idx]);
-    const int4 y_128bit = VLLM_LDG(&y_128bit_ptr[vec_idx]);
+    const int4 x_128bit = APHRODITE_LDG(&x_128bit_ptr[vec_idx]);
+    const int4 y_128bit = APHRODITE_LDG(&y_128bit_ptr[vec_idx]);
     using scalar_128bit_vec_t = std::array<scalar_t, elems_per_128bit_load>;
     using scalar_64bit_vec_t = std::array<fp8_type, elems_per_128bit_load>;
 
@@ -100,8 +100,8 @@ __global__ void act_and_mul_quant_kernel(
   if (block_end > vec_loop_end) {
     for (int64_t idx = vec_loop_end + threadIdx.x; idx < block_end;
          idx += blockDim.x) {
-      const scalar_t x = VLLM_LDG(&x_ptr[idx]);
-      const scalar_t y = VLLM_LDG(&y_ptr[idx]);
+      const scalar_t x = APHRODITE_LDG(&x_ptr[idx]);
+      const scalar_t y = APHRODITE_LDG(&y_ptr[idx]);
       out_ptr[idx] =
           scaled_fp8_conversion<true, fp8_type>(ACT_FN(x) * y, inverted_scale);
     }
@@ -568,9 +568,9 @@ __global__ void silu_mul_fp8_quant_deep_gemm_kernel(
       input.get_device_index());                                          \
   const cudaStream_t stream =                                             \
       get_current_cuda_stream(input.get_device_index());                  \
-  VLLM_STABLE_DISPATCH_FLOATING_TYPES(                                    \
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                    \
       input.scalar_type(), "act_and_mul_kernel", [&] {                    \
-        VLLM_STABLE_DISPATCH_FP8_TYPES(                                   \
+        APHRODITE_STABLE_DISPATCH_FP8_TYPES(                                   \
             out.scalar_type(), "act_and_mul_quant_kernel_fp8_type", [&] { \
               vllm::act_and_mul_quant_kernel<scalar_t, KERNEL<scalar_t>,  \
                                              fp8_t>                       \
@@ -650,7 +650,7 @@ void persistent_masked_m_silu_mul_quant(
     dim3 grid(sms), block(THREAD_COUNT);                                       \
     const torch::stable::accelerator::DeviceGuard device_guard(                \
         input.get_device_index());                                             \
-    VLLM_STABLE_DISPATCH_FP8_TYPES(                                            \
+    APHRODITE_STABLE_DISPATCH_FP8_TYPES(                                            \
         y_q.scalar_type(), "silu_mul_fp8_quant_deep_gemm_kernel", [&] {        \
           vllm::silu_mul_fp8_quant_deep_gemm_kernel<                           \
               BLOCK_COUNT, max_shared_mem_bytes, fp8_t, scale_t, THREAD_COUNT, \

@@ -151,7 +151,7 @@ struct MacheteKernelTemplate {
           EVTCompute>::CollectiveOp;
 
   using CollectiveMainloop =
-      typename cutlass::gemm::collective::VLLMCollectiveBuilder<
+      typename cutlass::gemm::collective::APHRODITECollectiveBuilder<
           cutlass::gemm::collective::MacheteKernelTag, ArchTag, OperatorClass,
           BTypeTuple, PrepackedLayoutB, AlignmentB, ElementA, LayoutA_Transpose,
           AlignmentA, ElementAccumulator, TileShape, ClusterShape,

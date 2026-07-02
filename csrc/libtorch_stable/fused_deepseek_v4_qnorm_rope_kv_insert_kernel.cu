@@ -820,7 +820,7 @@ __global__ void fusedDeepseekV4FullCacheKernel(
     // ── Store ─────────────────────────────────────────────────────────────
     if (!isKV) {
       if constexpr (STORE_Q_FP8) {
-        float const scale_inv = VLLM_LDG(q_fp8_scale_inv);
+        float const scale_inv = APHRODITE_LDG(q_fp8_scale_inv);
         uint4 const out = packFp8E4M3x16(elements, scale_inv);
         uint8_t* dst = q_fp8_out +
                        static_cast<int64_t>(tokenIdx) * q_fp8_stride0 +
@@ -855,7 +855,7 @@ __global__ void fusedDeepseekV4FullCacheKernel(
         uint8_t* cache_row =
             k_cache + block_idx * kv_block_stride + pos_in_block * kv_token_stride;
         if constexpr (STORE_KV_FP8) {
-          float const inv_scale = 1.0f / VLLM_LDG(fp8_scale_ptr);
+          float const inv_scale = 1.0f / APHRODITE_LDG(fp8_scale_ptr);
           uint4 const out = packFp8E4M3x16(elements, inv_scale);
           *reinterpret_cast<uint4*>(cache_row + dim_base) = out;
         } else {
@@ -1004,7 +1004,7 @@ torch::stable::Tensor fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert(
   auto q_out = torch::stable::new_empty(
       q_in, {q_in.size(0), q_head_padded, q_in.size(2)}, q_in.scalar_type());
 
-  VLLM_STABLE_DISPATCH_HALF_TYPES(
+  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
       q_in.scalar_type(), "fused_deepseek_v4_qnorm_rope_kv_insert", [&] {
         using qkv_scalar_t = scalar_t;
         vllm::deepseek_v4_fused_ops::
@@ -1078,7 +1078,7 @@ void fused_deepseek_v4_qnorm_rope_kv_rope_full_cache_bf16_insert(
   int64_t const kv_block_stride = k_cache.stride(0) * 2;
   int64_t const kv_token_stride = k_cache.stride(1) * 2;
 
-  VLLM_STABLE_DISPATCH_HALF_TYPES(
+  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
       q.scalar_type(),
       "fused_deepseek_v4_qnorm_rope_kv_rope_full_cache_bf16_insert", [&] {
         vllm::deepseek_v4_fused_ops::launchFullCacheKernel<scalar_t, false,
@@ -1160,7 +1160,7 @@ void fused_deepseek_v4_qnorm_rope_kv_rope_full_cache_fp8_insert(
       q.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream(q.get_device_index());
 
-  VLLM_STABLE_DISPATCH_HALF_TYPES(
+  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
       q.scalar_type(),
       "fused_deepseek_v4_qnorm_rope_kv_rope_full_cache_fp8_insert", [&] {
         vllm::deepseek_v4_fused_ops::launchFullCacheKernel<scalar_t, true,

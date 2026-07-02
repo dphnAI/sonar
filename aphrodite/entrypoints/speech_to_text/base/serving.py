@@ -137,7 +137,7 @@ class OpenAISpeechToText(OpenAIServing):
         # setup preprocess resources
         # we keep separate thread pool for frontend preprocessing instead
         # of reusing the one from Renderer which showed lower throughput
-        # https://github.com/vllm-project/aphrodite/pull/44612#issuecomment-4662757781
+        # https://github.com/vllm-project/vllm/pull/44612#issuecomment-4662757781
         num_audio_preprocess_workers = envs.APHRODITE_MAX_AUDIO_PREPROCESS_WORKERS
         self._preprocess_executor = ThreadPoolExecutor(
             max_workers=num_audio_preprocess_workers,

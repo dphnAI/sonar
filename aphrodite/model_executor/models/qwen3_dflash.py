@@ -93,7 +93,7 @@ def _resolve_layer_attention(
             raise NotImplementedError(
                 "DFlash does not yet support mixed sliding/full attention via "
                 "layer_types; see "
-                "https://github.com/vllm-project/aphrodite/issues/40898."
+                "https://github.com/vllm-project/vllm/issues/40898."
             )
 
     default_causal = False

@@ -513,7 +513,7 @@ def get_vllm_version() -> str:
     # Allow overriding the version. This is useful to build platform-specific
     # wheels (e.g. CPU, TPU) without modifying the source.
     if env_version := os.getenv("APHRODITE_VERSION_OVERRIDE"):
-        print(f"Overriding VLLM version with {env_version} from APHRODITE_VERSION_OVERRIDE")
+        print(f"Overriding APHRODITE version with {env_version} from APHRODITE_VERSION_OVERRIDE")
         os.environ["SETUPTOOLS_SCM_PRETEND_VERSION"] = env_version
         return get_version(write_to="aphrodite/_version.py")
 

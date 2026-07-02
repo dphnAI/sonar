@@ -413,7 +413,7 @@ class TestEnvSetWithChoices:
             assert env_func() == {"option1", "option2"}
 
 
-class TestVllmConfigureLogging:
+class TestAphroditeConfigureLogging:
     """Test cases for APHRODITE_CONFIGURE_LOGGING environment variable."""
 
     def test_configure_logging_defaults_to_true(self):
@@ -464,7 +464,7 @@ class TestVllmConfigureLogging:
                 _ = envs.APHRODITE_CONFIGURE_LOGGING
 
 
-class TestVllmMaxNSequences:
+class TestAphroditeMaxNSequences:
     def test_default_value(self):
         """Test that APHRODITE_MAX_N_SEQUENCES defaults to 64."""
         with patch.dict(os.environ, {}, clear=False):

@@ -428,7 +428,7 @@ def test_get_numactl_executable_points_to_fixed_wrapper(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/numactl")
     executable, debug_str = numa_utils._get_numactl_executable()
     assert executable.endswith("/aphrodite/utils/numa_wrapper.sh")
-    assert "_VLLM_INTERNAL_NUMACTL_ARGS" in debug_str
+    assert "_APHRODITE_INTERNAL_NUMACTL_ARGS" in debug_str
 
 
 def test_set_numa_wrapper_env_restores_previous_values():

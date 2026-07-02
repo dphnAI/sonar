@@ -168,7 +168,7 @@ class EplbModelState:
     The recorded load will be multiplied by dp_size when using naive all-to-all
     due to each DP rank contributing the same token set to the calculation.
     See:
-    https://github.com/vllm-project/aphrodite/pull/22167#pullrequestreview-3086143856
+    https://github.com/vllm-project/vllm/pull/22167#pullrequestreview-3086143856
     """
     model_name: str
     model: MixtureOfExperts

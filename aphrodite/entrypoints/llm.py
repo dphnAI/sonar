@@ -366,7 +366,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, OfflineInferenceMixin):
         # The renderer thread pool is only consumed by the async renderer
         # path; the synchronous `LLM` entrypoint runs multimodal
         # preprocessing serially. Warn so the setting is not a silent
-        # no-op. See vllm-project/aphrodite#42901.
+        # no-op. See vllm-project/vllm#42901.
         if self.model_config.renderer_num_workers > 1:
             logger.warning_once(
                 "`renderer_num_workers=%d` was set, but the offline `LLM` "

@@ -780,7 +780,7 @@ class PrometheusStatLogger(AggregateStatLoggerBase):
 
         # TODO: This metric might be incorrect in case of using multiple
         # api_server counts which uses prometheus mp.
-        # See: https://github.com/vllm-project/aphrodite/pull/18053
+        # See: https://github.com/vllm-project/vllm/pull/18053
         histogram_iteration_tokens = self._histogram_cls(
             name="aphrodite:iteration_tokens_total",
             documentation="Histogram of number of tokens per engine_step.",

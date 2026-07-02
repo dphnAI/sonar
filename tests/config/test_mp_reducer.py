@@ -12,7 +12,7 @@ def test_mp_reducer():
     """
     Test that _reduce_config reducer is registered when AsyncLLM is instantiated
     without transformers_modules. This is a regression test for
-    https://github.com/vllm-project/aphrodite/pull/18640.
+    https://github.com/vllm-project/vllm/pull/18640.
     """
 
     # Ensure transformers_modules is not in sys.modules

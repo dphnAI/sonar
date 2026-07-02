@@ -18,13 +18,13 @@ from vllm_cutlass_library_extension import (
     MixedInputKernelScheduleType,
     TileSchedulerTag,
     TileSchedulerType,
-    VLLMDataType,
-    VLLMDataTypeNames,
-    VLLMDataTypeSize,
-    VLLMDataTypeTag,
-    VLLMDataTypeTorchDataTypeTag,
-    VLLMDataTypeVLLMScalarTypeTag,
-    VLLMKernelScheduleTag,
+    APHRODITEDataType,
+    APHRODITEDataTypeNames,
+    APHRODITEDataTypeSize,
+    APHRODITEDataTypeTag,
+    APHRODITEDataTypeTorchDataTypeTag,
+    APHRODITEDataTypeAPHRODITEScalarTypeTag,
+    APHRODITEKernelScheduleTag,
 )
 
 #
@@ -85,7 +85,7 @@ torch::stable::Tensor mm_dispatch(MMArgs args) {
   {% for impl_config in impl_configs %}
   {% set t = impl_config.types -%}
   {% set type_sig = gen_type_sig(t) -%}
-  if (args.b_type == {{VLLMScalarTypeTag[t.b]}}
+  if (args.b_type == {{APHRODITEScalarTypeTag[t.b]}}
       && a_type == {{TorchTypeTag[t.a]}}
       && out_type == {{TorchTypeTag[t.out]}}
       && {%if t.b_group_scale != void -%}
@@ -133,7 +133,7 @@ std::vector<std::string> supported_schedules_dispatch(
     {% for impl_config in impl_configs %}
     {% set t = impl_config.types -%}
     {% set schs = impl_config.schedules -%}
-    if (args.b_type == {{VLLMScalarTypeTag[t.b]}}
+    if (args.b_type == {{APHRODITEScalarTypeTag[t.b]}}
         && args.a_type == {{TorchTypeTag[t.a]}}
         && out_type == {{TorchTypeTag[t.out]}}
         && {%if t.b_group_scale != void -%}
@@ -258,7 +258,7 @@ class ScheduleConfig:
 @dataclass(frozen=True)
 class TypeConfig:
     a: DataType
-    b: DataType | VLLMDataType
+    b: DataType | APHRODITEDataType
     b_group_scale: DataType
     b_group_zeropoint: DataType
     b_channel_scale: DataType
@@ -291,7 +291,7 @@ def generate_sch_sig(schedule_config: ScheduleConfig) -> str:
         f"x{schedule_config.cluster_shape_mnk[1]}"
         f"x{schedule_config.cluster_shape_mnk[2]}"
     )
-    kernel_schedule = VLLMKernelScheduleTag[schedule_config.kernel_schedule].split(
+    kernel_schedule = APHRODITEKernelScheduleTag[schedule_config.kernel_schedule].split(
         "::"
     )[-1]
     epilogue_schedule = EpilogueScheduleTag[schedule_config.epilogue_schedule].split(
@@ -324,7 +324,7 @@ def generate_type_signature(kernel_types: TypeConfig):
     return str(
         "".join(
             [
-                VLLMDataTypeNames[getattr(kernel_types, field.name)]
+                APHRODITEDataTypeNames[getattr(kernel_types, field.name)]
                 for field in fields(TypeConfig)
             ]
         )
@@ -335,7 +335,7 @@ def generate_type_option_name(kernel_types: TypeConfig):
     return ", ".join(
         [
             f"{field.name.replace('b_', 'with_') + '_type'}="
-            + VLLMDataTypeNames[getattr(kernel_types, field.name)]
+            + APHRODITEDataTypeNames[getattr(kernel_types, field.name)]
             for field in fields(TypeConfig)
         ]
     )
@@ -379,10 +379,10 @@ def unsigned_type_with_bitwidth(num_bits):
 
 template_globals = {
     "void": DataType.void,
-    "DataTypeTag": VLLMDataTypeTag,
-    "VLLMScalarTypeTag": VLLMDataTypeVLLMScalarTypeTag,
-    "TorchTypeTag": VLLMDataTypeTorchDataTypeTag,
-    "KernelScheduleTag": VLLMKernelScheduleTag,
+    "DataTypeTag": APHRODITEDataTypeTag,
+    "APHRODITEScalarTypeTag": APHRODITEDataTypeAPHRODITEScalarTypeTag,
+    "TorchTypeTag": APHRODITEDataTypeTorchDataTypeTag,
+    "KernelScheduleTag": APHRODITEKernelScheduleTag,
     "EpilogueScheduleTag": EpilogueScheduleTag,
     "TileSchedulerTag": TileSchedulerTag,
     "to_cute_constant": to_cute_constant,
@@ -425,7 +425,7 @@ def create_sources(impl_configs: list[ImplConfig], num_impl_files=8):
         prepack_types.append(
             PrepackTypeConfig(
                 a=impl_config.types.a,
-                b_num_bits=VLLMDataTypeSize[impl_config.types.b],
+                b_num_bits=APHRODITEDataTypeSize[impl_config.types.b],
                 convert=convert_type,
                 accumulator=impl_config.types.accumulator,
             )
@@ -562,7 +562,7 @@ def generate():
             out=a,
             accumulator=DataType.f32,
         )
-        for b in (VLLMDataType.u4b8, VLLMDataType.u8b128)
+        for b in (APHRODITEDataType.u4b8, APHRODITEDataType.u8b128)
         for a in (DataType.f16, DataType.bf16)
     )
 
@@ -646,7 +646,7 @@ def generate():
     # QQQ_kernel_types = [
     #     *(TypeConfig(
     #         a=DataType.s8,
-    #         b=VLLMDataType.u4b8,
+    #         b=APHRODITEDataType.u4b8,
     #         b_group_scale=b_group_scale,
     #         b_group_zeropoint=DataType.void,
     #         b_channel_scale=DataType.f32,
@@ -656,7 +656,7 @@ def generate():
     #     ) for b_group_scale in (DataType.f16, DataType.void)),
     #     *(TypeConfig(
     #         a=DataType.e4m3,
-    #         b=VLLMDataType.u4b8,
+    #         b=APHRODITEDataType.u4b8,
     #         b_group_scale=b_group_scale,
     #         b_group_zeropoint=DataType.void,
     #         b_channel_scale=DataType.f32,

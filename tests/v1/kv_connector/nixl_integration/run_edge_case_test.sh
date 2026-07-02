@@ -66,7 +66,7 @@ run_tests_for_model() {
   # Start prefill instance
   PREFILL_PORT=8001
 
-  BASE_CMD="CUDA_VISIBLE_DEVICES=$PREFILL_GPU_ID VLLM_NIXL_SIDE_CHANNEL_PORT=5559 vllm serve $model_name \
+  BASE_CMD="CUDA_VISIBLE_DEVICES=$PREFILL_GPU_ID APHRODITE_NIXL_SIDE_CHANNEL_PORT=5559 vllm serve $model_name \
   --port $PREFILL_PORT \
   --enforce-eager \
   --gpu-memory-utilization 0.2 \
@@ -80,7 +80,7 @@ run_tests_for_model() {
   DECODE_PORT=8002
 
   # Build the command with or without model-specific args
-  BASE_CMD="CUDA_VISIBLE_DEVICES=$DECODE_GPU_ID VLLM_NIXL_SIDE_CHANNEL_PORT=6000 vllm serve $model_name \
+  BASE_CMD="CUDA_VISIBLE_DEVICES=$DECODE_GPU_ID APHRODITE_NIXL_SIDE_CHANNEL_PORT=6000 vllm serve $model_name \
   --port $DECODE_PORT \
   --enforce-eager \
   --gpu-memory-utilization 0.2 \

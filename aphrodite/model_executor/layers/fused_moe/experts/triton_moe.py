@@ -333,7 +333,7 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
             lora_x = hidden_states
 
         # TODO: The fallback to self.a1_scale was added for deferred static
-        # activation quantization in https://github.com/vllm-project/aphrodite/pull/40857.
+        # activation quantization in https://github.com/vllm-project/vllm/pull/40857.
         # Activation emulation relies solely on `a1q_scale` output of
         # `moe_kernel_quantize_input` - this should be adapted to
         # always solely rely on `a1q_scale`.

@@ -279,7 +279,7 @@ void static_scaled_int8_quant(
   const torch::stable::accelerator::DeviceGuard device_guard(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
-  VLLM_STABLE_DISPATCH_FLOATING_TYPES(
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "static_scaled_int8_quant_kernel", [&] {
         if (!azp) {
           vllm::static_scaled_int8_quant_kernel<scalar_t, float>
@@ -314,7 +314,7 @@ void dynamic_scaled_int8_quant(
   const torch::stable::accelerator::DeviceGuard device_guard(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
-  VLLM_STABLE_DISPATCH_FLOATING_TYPES(
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "dynamic_scaled_int8_quant_kernel", [&] {
         if (!azp) {
           vllm::dynamic_scaled_int8_quant_kernel<scalar_t, float>

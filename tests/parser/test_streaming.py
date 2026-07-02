@@ -264,7 +264,7 @@ def test_parse_delta_reasoning_only_no_think_leak(tokenizer, request_obj):
 
 
 def test_parse_delta_reasoning_only_thinking_disabled(tokenizer, request_obj):
-    """Regression test for vllm-project/aphrodite#40466.
+    """Regression test for vllm-project/vllm#40466.
 
     When enable_thinking=False, the chat template places <think>\\n\\n</think>
     in the prompt. The model then generates pure content (no think tokens).

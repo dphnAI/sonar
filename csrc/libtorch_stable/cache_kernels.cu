@@ -516,7 +516,7 @@ __global__ void concat_and_cache_ds_mla_kernel(
   // Warp-level reduction to find the max absolute value in each half-warp
 #pragma unroll
   for (int offset = 8; offset > 0; offset /= 2) {
-    max_abs = fmaxf(max_abs, VLLM_SHFL_XOR_SYNC_WIDTH(max_abs, offset, 16));
+    max_abs = fmaxf(max_abs, APHRODITE_SHFL_XOR_SYNC_WIDTH(max_abs, offset, 16));
   }
 
   // Compute the scale for the tile
@@ -1588,7 +1588,7 @@ void concat_mla_q(
       ql_nope.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
 
-  VLLM_STABLE_DISPATCH_HALF_TYPES(ql_nope.scalar_type(), "concat_mla_q", [&] {
+  APHRODITE_STABLE_DISPATCH_HALF_TYPES(ql_nope.scalar_type(), "concat_mla_q", [&] {
     vllm::ConcatMLAQKernel<scalar_t, 512><<<grid_size, block_size, 0, stream>>>(
         q_out.mutable_data_ptr<scalar_t>(), ql_nope.const_data_ptr<scalar_t>(),
         q_pe.const_data_ptr<scalar_t>(), num_tokens, num_heads, q_out.stride(0),

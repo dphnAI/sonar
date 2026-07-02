@@ -489,7 +489,7 @@ class GPUModelRunner(
         # Broadcast PP output for external_launcher (torchrun)
         # to make sure we are synced across pp ranks
         # TODO: Support overlapping micro-batches
-        # https://github.com/vllm-project/aphrodite/issues/18019
+        # https://github.com/vllm-project/vllm/issues/18019
         self.broadcast_pp_output = (
             self.parallel_config.distributed_executor_backend == "external_launcher"
             and len(get_pp_group().ranks) > 1
@@ -662,7 +662,7 @@ class GPUModelRunner(
         # Input Batch
         # NOTE(Chen): Ideally, we should initialize the input batch inside
         # `initialize_kv_cache` based on the kv cache config. However, as in
-        # https://github.com/vllm-project/aphrodite/pull/18298, due to some unknown
+        # https://github.com/vllm-project/vllm/pull/18298, due to some unknown
         # reasons, we have to initialize the input batch before `load_model`,
         # quantization + weight offloading will fail otherwise. As a temporary
         # solution, we initialize the input batch here, and re-initialize it
@@ -788,7 +788,7 @@ class GPUModelRunner(
             # NOTE: `mrope_positions` is implemented with one additional dummy
             # position on purpose to make it non-contiguous so that it can work
             # with torch compile.
-            # See detailed explanation in https://github.com/vllm-project/aphrodite/pull/12128#discussion_r1926431923
+            # See detailed explanation in https://github.com/vllm-project/vllm/pull/12128#discussion_r1926431923
 
             # NOTE: When M-RoPE is enabled, position ids are 3D regardless of
             # the modality of inputs. For text-only inputs, each dimension has
@@ -6018,7 +6018,7 @@ class GPUModelRunner(
                 # Note(gnovack) - We need to disable cudagraphs for one of the two
                 # lora cases when cudagraph_specialize_lora is enabled. This is a
                 # short term mitigation for issue mentioned in
-                # https://github.com/vllm-project/aphrodite/issues/28334
+                # https://github.com/vllm-project/vllm/issues/28334
                 if (
                     self.compilation_config.cudagraph_specialize_lora
                     and num_active_loras > 0
@@ -7575,7 +7575,7 @@ class GPUModelRunner(
 
     def _to_list(self, sampled_token_ids: torch.Tensor) -> list[list[int]]:
         # This is a short term mitigation for issue mentioned in
-        # https://github.com/vllm-project/aphrodite/issues/22754.
+        # https://github.com/vllm-project/vllm/issues/22754.
         # `tolist` would trigger a cuda wise stream sync, which
         # would block other copy ops from other cuda streams.
         # A cuda event sync would avoid such a situation. Since

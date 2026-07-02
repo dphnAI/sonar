@@ -6,7 +6,7 @@
 // Unlike brgemm, PyTorch does not publicly expose at::native::cpublas::gemm
 // If OpenBLS is available in the PyTorch wheel, we rely on it for fast
 // bf16:bf16->fp32 GEMMs Otherwise, we fall back to PyTorch reference BLAS path.
-#if defined(VLLM_HAS_OPENBLAS)
+#if defined(APHRODITE_HAS_OPENBLAS)
 extern "C" void sbgemm_(char* transa, char* transb, int* m, int* n, int* k,
                         float* alpha, const at::BFloat16* a, int* lda,
                         const at::BFloat16* b, int* ldb, float* beta, float* c,

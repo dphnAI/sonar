@@ -15,13 +15,13 @@ inline __device__ void apply_token_rotary_embedding(
   if (IS_NEOX) {
     x_index = rot_offset;
     y_index = embed_dim + rot_offset;
-    cos_f = static_cast<float>(VLLM_LDG(cos_ptr + x_index));
-    sin_f = static_cast<float>(VLLM_LDG(sin_ptr + x_index));
+    cos_f = static_cast<float>(APHRODITE_LDG(cos_ptr + x_index));
+    sin_f = static_cast<float>(APHRODITE_LDG(sin_ptr + x_index));
   } else {
     x_index = 2 * rot_offset;
     y_index = 2 * rot_offset + 1;
-    cos_f = static_cast<float>(VLLM_LDG(cos_ptr + x_index / 2));
-    sin_f = static_cast<float>(VLLM_LDG(sin_ptr + x_index / 2));
+    cos_f = static_cast<float>(APHRODITE_LDG(cos_ptr + x_index / 2));
+    sin_f = static_cast<float>(APHRODITE_LDG(sin_ptr + x_index / 2));
   }
   if (inverse) {
     sin_f = -sin_f;
@@ -169,10 +169,10 @@ void rotary_embedding(
   const torch::stable::accelerator::DeviceGuard device_guard(
       query.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
-  VLLM_STABLE_DISPATCH_FLOATING_TYPES(
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
       query.scalar_type(), "rotary_embedding", [&] {
         using query_t = scalar_t;
-        VLLM_STABLE_DISPATCH_FLOATING_TYPES(
+        APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
             cos_sin_cache.scalar_type(), "rotary_embedding_cache", [&] {
               using cache_t = scalar_t;
               if (is_neox) {

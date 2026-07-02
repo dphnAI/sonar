@@ -1462,7 +1462,7 @@ class PixtralHFVisionModel(nn.Module):
         return torch.split(out.squeeze(0), embed_sizes)
 
     # (TODO) Add prefix argument for filtering out weights to be loaded
-    #        ref: https://github.com/vllm-project/aphrodite/pull/7186#discussion_r1734163986
+    #        ref: https://github.com/vllm-project/vllm/pull/7186#discussion_r1734163986
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         stacked_params_mapping = [
             # (param_name, shard_name, shard_id)

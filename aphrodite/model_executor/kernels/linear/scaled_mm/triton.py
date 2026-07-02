@@ -182,7 +182,7 @@ class TritonFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
 
 # TODO we should be able to change the type of block_size to GroupShape
 # after we resolve GroupShape compilation issue
-# https://github.com/vllm-project/aphrodite/issues/25270
+# https://github.com/vllm-project/vllm/issues/25270
 def _w8a8_triton_block_scaled_mm_func(
     qx: torch.Tensor,
     weight: torch.Tensor,

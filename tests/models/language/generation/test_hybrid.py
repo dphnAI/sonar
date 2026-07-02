@@ -622,7 +622,7 @@ def test_apc_multiple_prompts_all_cached_outputs(
     )
     vllm_runner_kwargs["mamba_ssm_cache_dtype"] = "float32"
     # Reduce the effects of batch variance on ROCm since batch invariance is not
-    # yet supported. See: https://github.com/vllm-project/aphrodite/issues/27433
+    # yet supported. See: https://github.com/vllm-project/vllm/issues/27433
     if current_platform.is_rocm():
         vllm_runner_kwargs["max_num_seqs"] = 4
 

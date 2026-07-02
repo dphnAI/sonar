@@ -183,7 +183,7 @@ class RocmAttentionBackend(AttentionBackend):
         # due to shared memory (LDS) constraints on AMD GPUs.
         # See csrc/rocm/attention.cu CALL_CUSTOM_LAUNCHER_BLK macro.
         # However, Aphrodite allows support for any multiple of 16 via the Triton path.
-        # As addressed in PR: https://github.com/vllm-project/aphrodite/pull/31380,
+        # As addressed in PR: https://github.com/vllm-project/vllm/pull/31380,
         # non-standard models (like qwen3-next with block_size 544, or qwen3_5
         # with 784 and 1056) are dynamically routed to our optimized Triton kernel
         # in `do_kv_cache_update`.

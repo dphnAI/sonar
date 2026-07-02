@@ -96,7 +96,7 @@ def test_mm_prefix_lm_raises_batched_tokens_floor():
     """Verify that prefix-LM multimodal models auto-raise
     max_num_batched_tokens to fit at least one multimodal item.
 
-    Regression test for https://github.com/vllm-project/aphrodite/issues/42687
+    Regression test for https://github.com/vllm-project/vllm/issues/42687
     """
     from unittest.mock import patch
 

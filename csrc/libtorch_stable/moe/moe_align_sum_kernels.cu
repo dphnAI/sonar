@@ -443,7 +443,7 @@ __global__ void moe_sum_scalar_kernel(
     float x = 0.f;
     for (int k = 0; k < topk; ++k) {
       x += static_cast<float>(
-          VLLM_LDG(&in_tok[k * stride_topk + idx * stride_hidden]));
+          APHRODITE_LDG(&in_tok[k * stride_topk + idx * stride_hidden]));
     }
     out[token_idx * d + idx] = static_cast<scalar_t>(x);
   }
@@ -605,7 +605,7 @@ void moe_align_block_size(
                                           torch::headeronly::ScalarType::Int);
   }
 
-  VLLM_STABLE_DISPATCH_INTEGRAL_AND_UNSIGNED_TYPES(
+  APHRODITE_STABLE_DISPATCH_INTEGRAL_AND_UNSIGNED_TYPES(
       topk_ids.scalar_type(), "moe_align_block_size_kernel", [&] {
         // calc needed amount of shared mem for `cumsum` tensors
         bool small_batch_expert_mode =
@@ -733,7 +733,7 @@ void moe_sum(torch::stable::Tensor& input,   // [num_tokens, topk, hidden_size]
       <<<grid, dim3(block), 0, stream>>>(       \
           out_ptr, in_ptr, num_tokens, hidden_size, stride_token, stride_topk)
 
-  VLLM_STABLE_DISPATCH_FLOATING_TYPES(input.scalar_type(), "moe_sum", [&] {
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(input.scalar_type(), "moe_sum", [&] {
     constexpr int VEC = vllm::moe::MOE_SUM_VEC<scalar_t>;
     constexpr int WIDTH = VEC * sizeof(scalar_t);  // 16 bytes
     auto* out_ptr = reinterpret_cast<scalar_t*>(output.mutable_data_ptr());
@@ -825,7 +825,7 @@ void moe_lora_align_block_size(
                                           torch::headeronly::ScalarType::Int);
   }
 
-  VLLM_STABLE_DISPATCH_INTEGRAL_TYPES(
+  APHRODITE_STABLE_DISPATCH_INTEGRAL_TYPES(
       topk_ids.scalar_type(), "moe_lora_align_sum_kernel", [&] {
         bool small_batch_expert_mode =
             (topk_ids.numel() < 1024) && (num_experts <= 64);
@@ -847,7 +847,7 @@ void moe_lora_align_block_size(
           auto kernel =
               vllm::moe::moe_lora_align_block_size_small_batch_expert_kernel<
                   scalar_t, fill_threads>;
-          STD_CUDA_CHECK(VLLM_DevFuncAttribute_SET_MaxDynamicSharedMemorySize(
+          STD_CUDA_CHECK(APHRODITE_DevFuncAttribute_SET_MaxDynamicSharedMemorySize(
               (void*)kernel, shared_mem));
           // Grid size is (max_loras + 1) because active_lora_ids has length
           // max_loras + 1: sorted-unique values of token_lora_mapping, which

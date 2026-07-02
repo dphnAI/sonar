@@ -46,7 +46,7 @@ def import_pynvml():
     unofficial one by mistake, and we have to handle this case.
     For example, `nvcr.io/nvidia/pytorch:24.12-py3` uses the unofficial
     one, and it will cause errors, see the issue
-    https://github.com/vllm-project/aphrodite/issues/12847 for example.
+    https://github.com/vllm-project/vllm/issues/12847 for example.
     After all the troubles, we decide to copy the official `pynvml`
     module to our codebase, and use it directly.
     """

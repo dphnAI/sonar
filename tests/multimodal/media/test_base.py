@@ -18,7 +18,7 @@ def test_media_with_bytes_pickle_roundtrip():
     """Regression test for pickle/unpickle of MediaWithBytes.
 
     Verifies that MediaWithBytes can be pickled and unpickled without
-    RecursionError. See: https://github.com/vllm-project/aphrodite/issues/30818
+    RecursionError. See: https://github.com/vllm-project/vllm/issues/30818
     """
     original_image = Image.open(ASSETS_DIR / "image1.png").convert("RGB")
     original_bytes = b"test_bytes_data"

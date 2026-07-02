@@ -171,7 +171,7 @@ class ForwardContext:
     # order and that torch.compile will not try to reorder these
     # operations with respect to each other.
     #
-    # TODO(https://github.com/vllm-project/aphrodite/issues/31985):
+    # TODO(https://github.com/vllm-project/vllm/issues/31985):
     # There are longer-term solutions, like unwrapping the moe custom operator,
     # that aren't ready yet.
     # We could also treat the string as a "symbolic input" to the graph but

@@ -500,7 +500,7 @@ class GraniteMoeHybridModel(nn.Module):
             if _load_quant_expert(n, p):
                 continue
 
-            # Logic analogous to: https://github.com/vllm-project/aphrodite/blob/f49e5aff11c986ed4d45202b1716c5d74786efa9/aphrodite/model_executor/models/granitemoeshared.py#L215
+            # Logic analogous to: https://github.com/vllm-project/vllm/blob/f49e5aff11c986ed4d45202b1716c5d74786efa9/aphrodite/model_executor/models/granitemoeshared.py#L215
             # Mapping different experts' layout:
             #  from HF (input_linear, output_linear, router)
             #  to Aphrodite (experts_w13({e}.w1, {e}.w2), experts_w3({e}.w3), gate)

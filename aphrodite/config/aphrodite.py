@@ -101,7 +101,7 @@ IS_DENSE = False
 # if model_config is not None:
 #     IS_QUANTIZED = lambda c: c.model_config.is_quantized()
 #     IS_DENSE = lambda c: not c.model_config.is_model_moe()
-# See https://github.com/vllm-project/aphrodite/issues/25689.
+# See https://github.com/vllm-project/vllm/issues/25689.
 
 
 def enable_norm_fusion(cfg: "AphroditeConfig") -> bool:
@@ -1141,7 +1141,7 @@ class AphroditeConfig:
         # Enable quant_fp8 CUDA ops (TODO disable in follow up)
         # On H100 the CUDA kernel is faster than
         # native implementation
-        # https://github.com/vllm-project/aphrodite/issues/25094
+        # https://github.com/vllm-project/vllm/issues/25094
         if has_blocked_weights():
             custom_ops = self.compilation_config.custom_ops
             if "-quant_fp8" not in custom_ops:
@@ -1389,7 +1389,7 @@ class AphroditeConfig:
             # incorrect residual shape.
             # Use custom rms norm to unblock. In the future,
             # the pass will operate on higher-level IR to avoid the issue.
-            # TODO: https://github.com/vllm-project/aphrodite/issues/27894
+            # TODO: https://github.com/vllm-project/vllm/issues/27894
             if self.compilation_config.mode != CompilationMode.APHRODITE_COMPILE:
                 logger.warning(
                     "Sequence parallelism is enabled, but running in wrong "
@@ -1566,7 +1566,7 @@ class AphroditeConfig:
         # Enable quant_fp8 CUDA ops (TODO disable in follow up)
         # On H100 the CUDA kernel is faster than
         # native implementation
-        # https://github.com/vllm-project/aphrodite/issues/25094
+        # https://github.com/vllm-project/vllm/issues/25094
         if has_blocked_weights():
             custom_ops = self.compilation_config.custom_ops
             if "-quant_fp8" not in custom_ops:
@@ -2065,7 +2065,7 @@ class AphroditeConfig:
             unsupported.append("elastic expert parallelism")
 
         if model_config is not None and model_config.enable_return_routed_experts:
-            # Will be added by https://github.com/vllm-project/aphrodite/pull/38163
+            # Will be added by https://github.com/vllm-project/vllm/pull/38163
             unsupported.append("routed experts capture")
 
         has_logitsproc_plugins = False
@@ -2090,11 +2090,11 @@ class AphroditeConfig:
             unsupported.append(f"logprobs mode '{model_config.logprobs_mode}'")
 
         if self.cache_config.kv_sharing_fast_prefill:
-            # Will be added by https://github.com/vllm-project/aphrodite/pull/35045
+            # Will be added by https://github.com/vllm-project/vllm/pull/35045
             unsupported.append("KV sharing fast prefill")
 
         if self.ec_transfer_config is not None:
-            # Will be added by https://github.com/vllm-project/aphrodite/pull/38390
+            # Will be added by https://github.com/vllm-project/vllm/pull/38390
             unsupported.append("EC transfer")
 
         return unsupported

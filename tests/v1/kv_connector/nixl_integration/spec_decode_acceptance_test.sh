@@ -26,8 +26,8 @@
 #                         ROCm options: TRITON_ATTN, ROCM_ATTN, ROCM_AITER_FA,
 #                                       ROCM_AITER_UNIFIED_ATTN
 #                         NVIDIA options: FLASH_ATTN, FLASHINFER
-#   VLLM_SSM_CONV_STATE_LAYOUT - SSM conv state layout (e.g. "DS" required for Mamba models)
-#   VLLM_SERVE_EXTRA_ARGS - comma-separated extra args for vllm serve
+#   APHRODITE_SSM_CONV_STATE_LAYOUT - SSM conv state layout (e.g. "DS" required for Mamba models)
+#   APHRODITE_SERVE_EXTRA_ARGS - comma-separated extra args for vllm serve
 set -ex
 
 # ── Model & spec decode config ──────────────────────────────────────────
@@ -87,8 +87,8 @@ echo "Using attention backend: ${ATTENTION_BACKEND}"
 # ── Extra serve args ─────────────────────────────────────────────────
 
 EXTRA_SERVE_ARGS=()
-if [[ -n "${VLLM_SERVE_EXTRA_ARGS:-}" ]]; then
-  IFS=',' read -r -a EXTRA_SERVE_ARGS <<< "$VLLM_SERVE_EXTRA_ARGS"
+if [[ -n "${APHRODITE_SERVE_EXTRA_ARGS:-}" ]]; then
+  IFS=',' read -r -a EXTRA_SERVE_ARGS <<< "$APHRODITE_SERVE_EXTRA_ARGS"
   echo "Extra serve args: ${EXTRA_SERVE_ARGS[*]}"
 fi
 
@@ -238,11 +238,11 @@ run_test_for_device() {
     echo "Starting prefill instance $i on GPU $GPU_ID, port $PORT"
     env \
     ${GPU_DEVICE_VAR}=$GPU_ID \
-    VLLM_KV_CACHE_LAYOUT='HND' \
+    APHRODITE_KV_CACHE_LAYOUT='HND' \
     UCX_NET_DEVICES=all \
-    ${VLLM_SSM_CONV_STATE_LAYOUT:+VLLM_SSM_CONV_STATE_LAYOUT=$VLLM_SSM_CONV_STATE_LAYOUT} \
-    VLLM_NIXL_SIDE_CHANNEL_HOST=$NIXL_SIDE_CHANNEL_HOST \
-    VLLM_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
+    ${APHRODITE_SSM_CONV_STATE_LAYOUT:+APHRODITE_SSM_CONV_STATE_LAYOUT=$APHRODITE_SSM_CONV_STATE_LAYOUT} \
+    APHRODITE_NIXL_SIDE_CHANNEL_HOST=$NIXL_SIDE_CHANNEL_HOST \
+    APHRODITE_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
     vllm serve $MODEL_NAME \
       --port $PORT \
       --enforce-eager \
@@ -277,11 +277,11 @@ run_test_for_device() {
     echo "Starting decode instance $i on GPU $GPU_ID, port $PORT"
     env \
     ${GPU_DEVICE_VAR}=$GPU_ID \
-    VLLM_KV_CACHE_LAYOUT='HND' \
+    APHRODITE_KV_CACHE_LAYOUT='HND' \
     UCX_NET_DEVICES=all \
-    ${VLLM_SSM_CONV_STATE_LAYOUT:+VLLM_SSM_CONV_STATE_LAYOUT=$VLLM_SSM_CONV_STATE_LAYOUT} \
-    VLLM_NIXL_SIDE_CHANNEL_HOST=$NIXL_SIDE_CHANNEL_HOST \
-    VLLM_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
+    ${APHRODITE_SSM_CONV_STATE_LAYOUT:+APHRODITE_SSM_CONV_STATE_LAYOUT=$APHRODITE_SSM_CONV_STATE_LAYOUT} \
+    APHRODITE_NIXL_SIDE_CHANNEL_HOST=$NIXL_SIDE_CHANNEL_HOST \
+    APHRODITE_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
     vllm serve $MODEL_NAME \
       --port $PORT \
       --enforce-eager \

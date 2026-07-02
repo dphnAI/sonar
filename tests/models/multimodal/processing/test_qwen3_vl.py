@@ -3,7 +3,7 @@
 """Regression tests for Qwen3-VL processor.
 
 Covers the fix for num_frames-based timestamp calculation
-(issue vllm-project/aphrodite#35909).
+(issue vllm-project/vllm#35909).
 """
 
 from typing import Any

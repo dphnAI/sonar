@@ -712,7 +712,7 @@ class TestStreamingExtraction:
     def test_streaming_split_delimiter_no_invalid_json(self, parser, mock_request):
         """Partial <|"|> delimiter chars must not leak into streamed JSON.
 
-        Reproduces the bug from https://github.com/vllm-project/aphrodite/issues/38946
+        Reproduces the bug from https://github.com/vllm-project/vllm/issues/38946
         where a token boundary splits the string delimiter, leaving fragments
         like '<|' at the end of a parsed value which then corrupt the JSON.
         """

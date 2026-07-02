@@ -344,7 +344,7 @@ void rotary_embedding(torch::Tensor& positions, torch::Tensor& query,
   int64_t key_stride = key.has_value() ? key->stride(-2) : 0;
   int64_t query_stride = query.stride(-2);
 
-  VLLM_DISPATCH_FLOATING_TYPES(
+  APHRODITE_DISPATCH_FLOATING_TYPES(
       query.scalar_type(), "rotary_embedding_impl", [&] {
         CPU_KERNEL_GUARD_IN(rotary_embedding_impl)
         if (is_neox) {

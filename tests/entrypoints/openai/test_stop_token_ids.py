@@ -5,7 +5,7 @@
 Unit tests for stop_token_ids propagation from default_sampling_params
 to SamplingParams in ChatCompletionRequest and CompletionRequest.
 
-Regression test for https://github.com/vllm-project/aphrodite/issues/22519
+Regression test for https://github.com/vllm-project/vllm/issues/22519
 where gpt-oss model stop tokens (e.g., </call> = 200012) were loaded into
 default_sampling_params at server startup but silently discarded on every
 request because to_sampling_params() never fell back to defaults.

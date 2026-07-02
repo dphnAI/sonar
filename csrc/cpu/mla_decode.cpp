@@ -367,7 +367,7 @@ void mla_decode_kvcache(torch::Tensor& out, torch::Tensor& query,
   const int q_stride = query.stride(0);
   const int kv_stride = kv_cache.stride(0);
 
-  VLLM_DISPATCH_FLOATING_TYPES(
+  APHRODITE_DISPATCH_FLOATING_TYPES(
       query.scalar_type(), "mla_decode_kvcache_cpu_impl", [&] {
         CPU_KERNEL_GUARD_IN(mla_decode_kvcache_cpu_impl)
         if (head_dim == 576 && v_head_dim == 512 && block_size == 16)

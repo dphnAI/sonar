@@ -163,7 +163,7 @@ def apply_grammar_bitmask(
     # CPU case, use list for indices.
     indices = None if skip_out_indices else out_indices
     # Handle dtype conversion for CPU (older xgrammar CPU kernels require float32)
-    # See: https://github.com/vllm-project/aphrodite/issues/31901
+    # See: https://github.com/vllm-project/vllm/issues/31901
     if logits.dtype != torch.float32:
         # Convert to float32, apply bitmask, then convert back
         logits_fp32 = logits.to(torch.float32)

@@ -557,7 +557,7 @@ def _log_chat_template_content_format(
             "which is different from the detected format '%s'. "
             "If our automatic detection is incorrect, please consider "
             "opening a GitHub issue so that we can improve it: "
-            "https://github.com/vllm-project/aphrodite/issues/new/choose",
+            "https://github.com/vllm-project/vllm/issues/new/choose",
             given_format,
             detected_format,
         )

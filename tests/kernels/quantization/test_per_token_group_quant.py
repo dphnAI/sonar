@@ -350,7 +350,7 @@ def test_per_token_group_quant_fp8_packed_zero_fills_padded_output_q(
     reason="packed FP8 per-token-group quant kernel requires a CUDA-alike GPU",
 )
 def test_per_token_group_quant_fp8_packed_large_mn():
-    """Regression test for https://github.com/vllm-project/aphrodite/issues/45099.
+    """Regression test for https://github.com/vllm-project/vllm/issues/45099.
 
     Some background: gridDim.x and gridDim.y have different limits of 2^31 - 1 and
     2^16 - 1, respectively.

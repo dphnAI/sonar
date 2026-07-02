@@ -930,7 +930,7 @@ class Gemma3nTextModel(nn.Module, SupportsQuant):
         # to weakref, causing memory to be prematurely freed
         # when there are multiple compilation units
         # Keep .clone() until fix in
-        # https://github.com/vllm-project/aphrodite/pull/22282
+        # https://github.com/vllm-project/vllm/pull/22282
         hidden_states = self_decoder_hidden_states.clone()
 
         # Copy inputs for cudagraph

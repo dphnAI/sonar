@@ -57,7 +57,7 @@ class TestMaybeRemapKvScaleName:
 
     def test_qkv_proj_k_scale(self):
         """Qwen3-MoE / llm-compressor format: qkv_proj.k_scale -> attn.k_scale
-        Regression test for https://github.com/vllm-project/aphrodite/issues/25047"""
+        Regression test for https://github.com/vllm-project/vllm/issues/25047"""
         result = maybe_remap_kv_scale_name(
             "model.layers.0.self_attn.qkv_proj.k_scale", self.PARAMS_DICT
         )
@@ -65,7 +65,7 @@ class TestMaybeRemapKvScaleName:
 
     def test_qkv_proj_v_scale(self):
         """Qwen3-MoE / llm-compressor format: qkv_proj.v_scale -> attn.v_scale
-        Regression test for https://github.com/vllm-project/aphrodite/issues/25047"""
+        Regression test for https://github.com/vllm-project/vllm/issues/25047"""
         result = maybe_remap_kv_scale_name(
             "model.layers.0.self_attn.qkv_proj.v_scale", self.PARAMS_DICT
         )

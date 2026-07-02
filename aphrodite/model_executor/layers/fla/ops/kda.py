@@ -469,7 +469,7 @@ class FusedRMSNormGated(CustomOp):
         residual_in_fp32: bool = False,
     ) -> torch.Tensor:
         """Decomposed PyTorch ops for torch.compile/inductor fusion."""
-        # TODO(https://github.com/vllm-project/aphrodite/issues/36175): implement
+        # TODO(https://github.com/vllm-project/vllm/issues/36175): implement
         # native residual/prenorm path and unify with RMSNormGated.
         # For now, fall back to the triton kernel.
         if residual is not None or prenorm:

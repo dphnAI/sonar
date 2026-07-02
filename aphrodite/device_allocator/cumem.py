@@ -138,7 +138,7 @@ class CuMemAllocator:
         self.allocator_and_pools: dict[str, Any] = {}
         # Creating strong references to the two callbacks here to prevent
         # these ephemeral bound-method objects being garbage collected.
-        # See discussions in https://github.com/vllm-project/aphrodite/pull/22724
+        # See discussions in https://github.com/vllm-project/vllm/pull/22724
         self.python_malloc_callback = self._python_malloc_callback
         self.python_free_callback = self._python_free_callback
 

@@ -559,7 +559,7 @@ class CustomAllreduce {
     int blocks = std::min(block_limit, (size + threads - 1) / threads);
 
     // Check environment variable once
-    const char* env_algo = std::getenv("VLLM_CUSTOM_ALLREDUCE_ALGO");
+    const char* env_algo = std::getenv("APHRODITE_CUSTOM_ALLREDUCE_ALGO");
     bool force_1stage = false;
     bool force_2stage = false;
     if (env_algo != nullptr) {
@@ -571,7 +571,7 @@ class CustomAllreduce {
         force_2stage = true;
       } else {
         throw std::runtime_error(
-            "Invalid VLLM_CUSTOM_ALLREDUCE_ALGO: " + std::string(env_algo) +
+            "Invalid APHRODITE_CUSTOM_ALLREDUCE_ALGO: " + std::string(env_algo) +
             ". Valid values: 1stage, oneshot, 2stage, twoshot");
       }
     }

@@ -230,7 +230,7 @@ def can_actually_p2p(
     `torch.cuda.can_device_access_peer(src, tgt)`. However, sometimes
     the driver might be broken, and `torch.cuda.can_device_access_peer(src, tgt)`
     returns `True` even if P2P access is not actually possible.
-    See https://github.com/vllm-project/aphrodite/issues/2728 and
+    See https://github.com/vllm-project/vllm/issues/2728 and
     https://forums.developer.nvidia.com/t/direct-gpu-gpu-communication-does-not-seem-to-work-properly/283264/10
     Therefore, we have to perform a real P2P access to check if it is actually
     possible.

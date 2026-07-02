@@ -279,7 +279,7 @@ class RayDistributedExecutor(Executor):
             # convert them to integers for consistency.
             # NOTE: physical GPU IDs can be larger than 9 (e.g. 16 GPUs),
             # string sorting is not sufficient.
-            # see https://github.com/vllm-project/aphrodite/issues/5590
+            # see https://github.com/vllm-project/vllm/issues/5590
             physical_gpu_ids = [
                 current_platform.device_control_id_to_physical_device_id(str(x))
                 for x in physical_gpu_ids

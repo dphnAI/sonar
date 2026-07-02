@@ -567,7 +567,7 @@ _SLEEP_VISION_PROMPT = (
     reason="sleep mode regression requires a CUDA GPU",
 )
 def test_sleep_wake_preserves_mm_cache_consistency():
-    """Regression for vllm-project/aphrodite#42995."""
+    """Regression for vllm-project/vllm#42995."""
     from aphrodite import LLM, SamplingParams
     from aphrodite.assets.image import ImageAsset
 

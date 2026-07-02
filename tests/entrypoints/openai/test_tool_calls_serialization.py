@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Unit tests for tool_calls Iterable → list materialisation.
 
-Regression tests for https://github.com/vllm-project/aphrodite/issues/34792.
+Regression tests for https://github.com/vllm-project/vllm/issues/34792.
 
 Setting APHRODITE_LOGGING_LEVEL=debug caused tool calling to break for Mistral
 models because:

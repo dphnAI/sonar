@@ -85,7 +85,7 @@ class Qwen3_5MultiTokenPredictor(nn.Module):
 
         # Workaround: mtp.fc is stored as BF16 in NVFP4 checkpoints but is
         # missing from hf_quant_config.json exclude_modules. Force unquantized.
-        # Ref: https://github.com/vllm-project/aphrodite/pull/38650
+        # Ref: https://github.com/vllm-project/vllm/pull/38650
         # Ref: https://github.com/NVIDIA/Model-Optimizer/pull/1124
         fc_quant = (
             None

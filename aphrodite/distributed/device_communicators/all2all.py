@@ -148,7 +148,7 @@ class DeepEPAll2AllManagerBase(All2AllManagerBase):
 
     def __init__(self, cpu_group, tcp_store_group=None):
         assert has_deep_ep(), (
-            "DeepEP kernels not found. Please follow https://github.com/vllm-project/aphrodite/blob/main/tools/ep_kernels/README.md"
+            "DeepEP kernels not found. Please follow https://github.com/vllm-project/vllm/blob/main/tools/ep_kernels/README.md"
             " to install DeepEP kernels."
         )  # noqa
         super().__init__(cpu_group, tcp_store_group)
@@ -561,7 +561,7 @@ class FlashInferNVLinkTwoSidedManager(All2AllManagerBase):
     """
 
     # This type lint could be removed after all of the work in
-    # https://github.com/vllm-project/aphrodite/issues/26533 done.
+    # https://github.com/vllm-project/vllm/issues/26533 done.
     rank: int
     world_size: int
 

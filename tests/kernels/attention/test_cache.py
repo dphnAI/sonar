@@ -440,7 +440,7 @@ def test_reshape_and_cache_flash_unaligned_rows(
     kv_cache_layout: str,
     implementation: str,
 ) -> None:
-    """Regression test for https://github.com/vllm-project/aphrodite/issues/41257.
+    """Regression test for https://github.com/vllm-project/vllm/issues/41257.
 
     head_size=46 with num_heads=13 places KV-cache rows at byte offsets
     that are not a multiple of the vector width (NHD row pitch

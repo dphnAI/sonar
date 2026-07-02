@@ -19,7 +19,7 @@ pytestmark = pytest.mark.skipif(
 
 models_config = {
     "ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL-Sen1Floods11": {
-        "image_url": "https://huggingface.co/christian-pinto/Prithvi-EO-2.0-300M-TL-APHRODITE/resolve/main/valencia_example_2024-10-26.tiff",  # noqa: E501
+        "image_url": "https://huggingface.co/christian-pinto/Prithvi-EO-2.0-300M-TL-VLLM/resolve/main/valencia_example_2024-10-26.tiff",  # noqa: E501
         "out_hash": "aa6d92ad25926a5e",
         "plugin": "prithvi_to_tiff",
     },

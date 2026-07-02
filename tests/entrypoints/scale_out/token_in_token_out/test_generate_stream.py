@@ -75,7 +75,7 @@ class MockSchedulerConfig:
 
 
 @dataclass
-class MockVllmConfig:
+class MockAphroditeConfig:
     model_config: MockModelConfig
     parallel_config: MockParallelConfig
     scheduler_config: MockSchedulerConfig = field(default_factory=MockSchedulerConfig)
@@ -83,7 +83,7 @@ class MockVllmConfig:
 
 def _build_renderer(model_config: MockModelConfig):
     return renderer_from_config(
-        MockVllmConfig(model_config, parallel_config=MockParallelConfig()),
+        MockAphroditeConfig(model_config, parallel_config=MockParallelConfig()),
     )
 
 
@@ -154,7 +154,7 @@ def _mock_engine() -> MagicMock:
     engine = MagicMock(spec=AsyncLLM)
     engine.errored = False
     engine.model_config = MockModelConfig()
-    engine.vllm_config = MockVllmConfig(
+    engine.vllm_config = MockAphroditeConfig(
         engine.model_config, parallel_config=MockParallelConfig()
     )
     engine.input_processor = MagicMock()
@@ -515,7 +515,7 @@ async def test_stream_prompt_tokens_details():
 async def test_stream_prompt_tokens_details_zero_cached():
     """enable_prompt_tokens_details includes cached_tokens=0 in final usage.
 
-    Regression test for https://github.com/vllm-project/aphrodite/issues/44377:
+    Regression test for https://github.com/vllm-project/vllm/issues/44377:
     zero cached tokens must not be treated as falsy and omitted.
     """
     engine = _mock_engine()

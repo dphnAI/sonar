@@ -573,7 +573,7 @@ class MultiModalFlatField(BaseMultiModalField):
             # Variable-length case: non-concat dimensions differ
             # (e.g., Ultravox with different audio durations).
             # Use slice-assign approach (more efficient than padding).
-            # See: https://github.com/vllm-project/aphrodite/issues/31658
+            # See: https://github.com/vllm-project/vllm/issues/31658
 
             ndim = batch[0].ndim
 

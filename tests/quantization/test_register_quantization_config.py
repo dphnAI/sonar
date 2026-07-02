@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Tests register custom quantization config.
 
-See https://github.com/vllm-project/aphrodite/issues/11926 for more details.
+See https://github.com/vllm-project/vllm/issues/11926 for more details.
 
 Run `pytest tests/quantization/test_register_quantization_config.py`.
 """

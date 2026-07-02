@@ -132,7 +132,7 @@ def gptoss_speculative_server(default_server_args: list[str]):
     ]
     # gpt-oss requires AITER unified attention on ROCm
     # TODO: Remove after fixing TRITON_ATTN issue on ROCm
-    # https://github.com/vllm-project/aphrodite/issues/32434
+    # https://github.com/vllm-project/vllm/issues/32434
     env_dict = None
     if is_aiter_found_and_supported():
         env_dict = {"APHRODITE_ROCM_USE_AITER": "1"}
@@ -555,14 +555,14 @@ class MockParallelConfig:
 
 
 @dataclass
-class MockVllmConfig:
+class MockAphroditeConfig:
     model_config: MockModelConfig
     parallel_config: MockParallelConfig
 
 
 def _build_renderer(model_config: MockModelConfig):
     return HfRenderer(
-        MockVllmConfig(model_config, parallel_config=MockParallelConfig()),
+        MockAphroditeConfig(model_config, parallel_config=MockParallelConfig()),
         cached_tokenizer_from_config(model_config),
     )
 
@@ -960,7 +960,7 @@ async def test_serving_chat_mistral_token_ids_prompt_is_validated():
 
     mock_tokenizer = MagicMock(spec=MistralTokenizer)
     mock_renderer = MistralRenderer(
-        MockVllmConfig(mock_engine.model_config, parallel_config=MockParallelConfig()),
+        MockAphroditeConfig(mock_engine.model_config, parallel_config=MockParallelConfig()),
         tokenizer=mock_tokenizer,
     )
     # Force the Mistral chat template renderer to return token IDs.
@@ -999,7 +999,7 @@ async def test_serving_chat_mistral_token_ids_prompt_too_long_is_rejected():
 
     mock_tokenizer = MagicMock(spec=MistralTokenizer)
     mock_renderer = MistralRenderer(
-        MockVllmConfig(mock_engine.model_config, parallel_config=MockParallelConfig()),
+        MockAphroditeConfig(mock_engine.model_config, parallel_config=MockParallelConfig()),
         tokenizer=mock_tokenizer,
     )
     # prompt_token_ids length == max_model_len should be rejected for

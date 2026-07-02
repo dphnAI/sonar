@@ -36,7 +36,7 @@ namespace vllm {
 // Use UE4M3 by default.
 template <class Type, bool FUSE_SILU_MUL = false, bool UE8M0_SF = false,
           bool SMALL_NUM_EXPERTS = false>
-__global__ void __launch_bounds__(512, VLLM_BLOCKS_PER_SM(512))
+__global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
     cvt_fp16_to_fp4(int32_t numRows, int32_t numCols, Type const* in,
                     float const* SFScale, uint32_t* out, uint32_t* SFout,
                     uint32_t* input_offset_by_experts,
@@ -149,7 +149,7 @@ __global__ void __launch_bounds__(512, VLLM_BLOCKS_PER_SM(512))
 // fuses SiLU(gate)*up before quantization.
 template <class Type, bool FUSE_SILU_MUL = false, bool UE8M0_SF = false,
           bool SMALL_NUM_EXPERTS = false>
-__global__ void __launch_bounds__(1024, VLLM_BLOCKS_PER_SM(1024))
+__global__ void __launch_bounds__(1024, APHRODITE_BLOCKS_PER_SM(1024))
     cvt_fp16_to_fp4(int32_t numRows, int32_t numCols, Type const* in,
                     float const* SFScale, uint32_t* out, uint32_t* SFout,
                     uint32_t* input_offset_by_experts,
@@ -408,7 +408,7 @@ void scaled_fp4_experts_quant_sm1xxa(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream(input.get_device_index());
 
-  VLLM_STABLE_DISPATCH_HALF_TYPES(
+  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
       input.scalar_type(), "nvfp4_experts_quant_kernel", [&] {
         using cuda_type = vllm::CUDATypeConverter<scalar_t>::Type;
         vllm::quant_impl<cuda_type, /*FUSE_SILU_MUL=*/false>(
@@ -440,7 +440,7 @@ void silu_and_mul_scaled_fp4_experts_quant_sm1xxa(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream(input.get_device_index());
 
-  VLLM_STABLE_DISPATCH_HALF_TYPES(
+  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
       input.scalar_type(), "silu_mul_nvfp4_experts_quant_kernel", [&] {
         using cuda_type = vllm::CUDATypeConverter<scalar_t>::Type;
         vllm::quant_impl<cuda_type, /*FUSE_SILU_MUL=*/true>(

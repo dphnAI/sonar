@@ -60,7 +60,7 @@ def _pop_unallowed_keys_and_warn(
 
 
 def maybe_serialize_tool_calls(request: "MistralChatCompletionRequest"):
-    # SEE: https://github.com/vllm-project/aphrodite/pull/9951
+    # SEE: https://github.com/vllm-project/vllm/pull/9951
     # Credits go to: @gcalmettes
     # NOTE: There is currently a bug in pydantic where attributes
     # declared as iterables are replaced in the instances by
@@ -522,8 +522,8 @@ class MistralTokenizer(TokenizerLike):
         if any("�" in t for t in tokens) and self.is_tekken:
             # if a decoded token contains the replacement character, then the
             # token has an incomplete UTF-8 character so we must use bytes
-            # See: https://github.com/vllm-project/aphrodite/pull/8640
-            #      https://github.com/vllm-project/aphrodite/pull/9625
+            # See: https://github.com/vllm-project/vllm/pull/8640
+            #      https://github.com/vllm-project/vllm/pull/9625
             # if underlying tokenizer is sentencepiece, we just add "�".
             # We filtered unwanted special tokens so we can decode the rest.
             tokens = [

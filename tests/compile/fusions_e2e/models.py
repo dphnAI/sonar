@@ -106,7 +106,7 @@ llama3_8b_fp4 = ModelFusionInfo(
 
 # MoEs cannot do act+quant fusion because those ops are hidden from torch.compile.
 # MoEs also only expose 1 rms+quant fusion because the quant for up_proj is hidden.
-# TODO(luka): https://github.com/vllm-project/aphrodite/issues/31985
+# TODO(luka): https://github.com/vllm-project/vllm/issues/31985
 # Also, for MoEs, gemm+collective fusion only happens for dense GEMMs (o_proj/qkv proj)
 
 llama4_scout_fp8 = ModelFusionInfo(

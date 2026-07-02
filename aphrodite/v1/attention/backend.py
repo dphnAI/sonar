@@ -785,7 +785,7 @@ class AttentionImplBase(ABC, Generic[T]):
     # with compatible attention kernels (e.g., TRT-LLM).
     # Subclasses should set this in __init__.
     # TODO add support to more backends:
-    # https://github.com/vllm-project/aphrodite/issues/25584
+    # https://github.com/vllm-project/vllm/issues/25584
     supports_quant_query_input: bool = False
 
     dcp_world_size: int

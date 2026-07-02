@@ -22,7 +22,7 @@ PROMPT = "Hello, my name is Lee, and I'm a student in the " + "college of engine
 def test_min_tokens_with_stop(min_tokens: int, stop: str, truth: str):
     """Test for a specific min_tokens and stop.
 
-    See https://github.com/vllm-project/aphrodite/pull/22014
+    See https://github.com/vllm-project/vllm/pull/22014
     """
     tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
     all_prompt_ids = tokenizer(PROMPT, add_special_tokens=False).input_ids

@@ -253,7 +253,7 @@ class CpuPlatform(Platform):
         ):
             # We need to LD_PRELOAD PyTorch's libgomp, otherwise only
             # one core will be properly utilized when we thread-bind
-            # See: https://github.com/vllm-project/aphrodite/issues/27369
+            # See: https://github.com/vllm-project/vllm/issues/27369
             # TODO: Remove once:
             # https://github.com/pytorch/pytorch/issues/166087 is fixed
 
@@ -261,7 +261,7 @@ class CpuPlatform(Platform):
             torch_pkg = os.path.dirname(torch.__file__)
             site_root = os.path.dirname(torch_pkg)
             # Search both torch.libs and torch/lib - See:
-            # https://github.com/vllm-project/aphrodite/issues/30470
+            # https://github.com/vllm-project/vllm/issues/30470
             torch_libs_paths = [
                 os.path.join(site_root, "torch.libs"),
                 os.path.join(torch_pkg, "lib"),

@@ -312,11 +312,11 @@ async def test_shutdown_if_supervisor_server_error_on_startup(
 
 
 # ---------------------------------------------------------------------------
-# Lifecycle integration tests – MockVLLMServer
+# Lifecycle integration tests – MockAPHRODITEServer
 # ---------------------------------------------------------------------------
 
 
-class MockVLLMServer:
+class MockAPHRODITEServer:
     """
     Minimal FastAPI server that mimics one Aphrodite replica.
     GET /health returns 200 when healthy, 503 otherwise.
@@ -409,7 +409,7 @@ class MockVLLMServer:
 
 def launch_mock_vllm(child_args: argparse.Namespace):
     logger.info("Launching mock Aphrodite on port %s", child_args.port)
-    mock_vllm = MockVLLMServer(
+    mock_vllm = MockAPHRODITEServer(
         port=child_args.port,
         ssl_keyfile=child_args.ssl_keyfile,
         ssl_certfile=child_args.ssl_certfile,
@@ -421,7 +421,7 @@ def launch_mock_vllm_with_drain(
     child_args: argparse.Namespace,
 ):
     logger.info("Launching mock Aphrodite with 15s drain on port %s", child_args.port)
-    mock_vllm = MockVLLMServer(
+    mock_vllm = MockAPHRODITEServer(
         port=child_args.port,
         drain_seconds=10.0,
         ssl_keyfile=child_args.ssl_keyfile,

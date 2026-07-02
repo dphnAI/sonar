@@ -1267,7 +1267,7 @@ def _use_packed_kv_cache_config(
         else {}
     )
     # NOTE: enable_cross_layers_blocks is an experimental API and subject to change with
-    # https://github.com/vllm-project/aphrodite/issues/42082
+    # https://github.com/vllm-project/vllm/issues/42082
     enable_cross_layers = (
         str(extra_config.get("enable_cross_layers_blocks", "False")).lower() == "true"
     )

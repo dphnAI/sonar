@@ -177,7 +177,7 @@ constexpr auto select_fp8_quant_fn() {
 // ---------------------------------------------------------------------------
 // VEC reshape impl — parameterised on the quantisation function.
 // Writes key (column-major) and value (row-major) into uint8 FP8 KV cache.
-// The pragma omp must live outside VLLM_DISPATCH_FLOATING_TYPES because
+// The pragma omp must live outside APHRODITE_DISPATCH_FLOATING_TYPES because
 // #pragma cannot appear inside variadic macro arguments.
 // ---------------------------------------------------------------------------
 template <typename scalar_t, uint8_t (*quant_fn)(float, float)>

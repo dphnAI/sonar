@@ -52,7 +52,7 @@ class MockParallelConfig:
 
 
 @dataclass
-class MockVllmConfig:
+class MockAphroditeConfig:
     model_config: MockModelConfig
     parallel_config: MockParallelConfig
 
@@ -94,7 +94,7 @@ def _build_renderer(
     max_chars_per_token: int = 1,
 ):
     renderer = HfRenderer(
-        MockVllmConfig(model_config, parallel_config=MockParallelConfig()),
+        MockAphroditeConfig(model_config, parallel_config=MockParallelConfig()),
         tokenizer=(
             None
             if model_config.skip_tokenizer_init

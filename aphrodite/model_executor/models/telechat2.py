@@ -57,7 +57,7 @@ class TeleChat2Model(LlamaModel):
         super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
         # 2. Remove the bias from the qkv_proj and gate_up_proj based on config
         # Telechat2's gate_up_proj and qkv_proj don't have bias
-        # see: https://github.com/vllm-project/aphrodite/pull/10311#issuecomment-2490297566
+        # see: https://github.com/vllm-project/vllm/pull/10311#issuecomment-2490297566
         for layer in self.layers:
             if not isinstance(layer, PPMissingLayer):
                 layer.self_attn.qkv_proj.bias = None

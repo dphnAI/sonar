@@ -178,7 +178,7 @@ async def test_empty_commit_does_not_crash_engine(
 ):
     """Test that committing without audio does not crash the engine.
 
-    Regression test for https://github.com/vllm-project/aphrodite/issues/34532.
+    Regression test for https://github.com/vllm-project/vllm/issues/34532.
     An empty commit (no prior input_audio_buffer.append) used to trigger
     ``AssertionError: For realtime you must provide a multimodal_embedding
     at every step`` which killed the entire engine process, disconnecting

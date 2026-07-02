@@ -525,7 +525,7 @@ def test_mla_attention_quant_pattern(
         cleanup_pass = PostCleanupPass(vllm_config)
 
         test_backend = TestBackend(noop_pass, attn_pass, cleanup_pass)
-        # HACK: See https://github.com/vllm-project/aphrodite/issues/31044
+        # HACK: See https://github.com/vllm-project/vllm/issues/31044
         result_fused_0 = model_fused(q, kv_c_normed, k_pe)  # noqa: F841
 
         compiled_fused = torch.compile(

@@ -280,7 +280,7 @@ class TestGemma4PromptOpenReasoning:
     channel. Tokens generated before ``<channel|>`` must be classified as
     ``reasoning``, not visible ``content``.
 
-    Regression test for vllm-project/aphrodite#45834.
+    Regression test for vllm-project/vllm#45834.
     """
 
     @pytest.fixture

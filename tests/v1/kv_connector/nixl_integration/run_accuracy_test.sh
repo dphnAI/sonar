@@ -32,8 +32,8 @@ echo "Running accuracy tests with kv_buffer_device=$KV_BUFFER_DEVICE"
 if [[ -n "$ATTENTION_BACKEND" ]]; then
   echo "Using attention backend: $ATTENTION_BACKEND"
 fi
-if [[ -n "$VLLM_SERVE_EXTRA_ARGS" ]]; then
-  echo "vLLM serve extra args: $VLLM_SERVE_EXTRA_ARGS"
+if [[ -n "$APHRODITE_SERVE_EXTRA_ARGS" ]]; then
+  echo "vLLM serve extra args: $APHRODITE_SERVE_EXTRA_ARGS"
 fi
 
 DECODER_KV_LAYOUT=${DECODER_KV_LAYOUT:-"HND"} # Default to HND, optional NHD
@@ -77,7 +77,7 @@ GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.2}
 PREFILL_BLOCK_SIZE=${PREFILL_BLOCK_SIZE:-128}
 DECODE_BLOCK_SIZE=${DECODE_BLOCK_SIZE:-128}
 # Comma-separated extra args for vllm serve (e.g. --max-model-len,2048)
-VLLM_SERVE_EXTRA_ARGS=${VLLM_SERVE_EXTRA_ARGS:-}
+APHRODITE_SERVE_EXTRA_ARGS=${APHRODITE_SERVE_EXTRA_ARGS:-}
 
 # Resolve the repository root from the script location instead of `.git`.
 # The ROCm CI image copies `/vllm-workspace` without the Git metadata, so
@@ -152,9 +152,9 @@ run_tests_for_model() {
 
     # Build the command with or without model-specific args
     BASE_CMD="CUDA_VISIBLE_DEVICES=$GPU_ID \
-    VLLM_KV_CACHE_LAYOUT='HND' \
+    APHRODITE_KV_CACHE_LAYOUT='HND' \
     UCX_NET_DEVICES=all \
-    VLLM_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
+    APHRODITE_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
     vllm serve $model_name \
     --port $PORT \
     --enforce-eager \
@@ -162,8 +162,8 @@ run_tests_for_model() {
     --gpu-memory-utilization $GPU_MEMORY_UTILIZATION \
     --tensor-parallel-size $PREFILLER_TP_SIZE \
     --kv-transfer-config '$KV_CONFIG_P'"
-    if [[ -n "$VLLM_SERVE_EXTRA_ARGS" ]]; then
-      IFS=',' read -r -a extra_args <<< "$VLLM_SERVE_EXTRA_ARGS"
+    if [[ -n "$APHRODITE_SERVE_EXTRA_ARGS" ]]; then
+      IFS=',' read -r -a extra_args <<< "$APHRODITE_SERVE_EXTRA_ARGS"
       for arg in "${extra_args[@]}"; do
         BASE_CMD="${BASE_CMD} $arg"
       done
@@ -201,17 +201,17 @@ run_tests_for_model() {
 
     # Build the command with or without model-specific args
     BASE_CMD="CUDA_VISIBLE_DEVICES=$GPU_ID \
-    VLLM_KV_CACHE_LAYOUT=$DECODER_KV_LAYOUT \
+    APHRODITE_KV_CACHE_LAYOUT=$DECODER_KV_LAYOUT \
     UCX_NET_DEVICES=all \
-    VLLM_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
+    APHRODITE_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
     vllm serve $model_name \
     --port $PORT \
     --enforce-eager \
     --block-size ${DECODE_BLOCK_SIZE} \
     --gpu-memory-utilization $GPU_MEMORY_UTILIZATION \
     --kv-transfer-config '$KV_CONFIG_D'"
-    if [[ -n "$VLLM_SERVE_EXTRA_ARGS" ]]; then
-      IFS=',' read -r -a extra_args <<< "$VLLM_SERVE_EXTRA_ARGS"
+    if [[ -n "$APHRODITE_SERVE_EXTRA_ARGS" ]]; then
+      IFS=',' read -r -a extra_args <<< "$APHRODITE_SERVE_EXTRA_ARGS"
       for arg in "${extra_args[@]}"; do
         BASE_CMD="${BASE_CMD} $arg"
       done

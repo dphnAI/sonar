@@ -1521,7 +1521,7 @@ def test_mamba_cache_raises_when_max_num_seqs_exceeds_blocks():
     """Test that a ValueError is raised when max_num_seqs exceeds the
     available Mamba cache blocks for hybrid models with FULL cudagraphs.
 
-    See: https://github.com/vllm-project/aphrodite/issues/34094
+    See: https://github.com/vllm-project/vllm/issues/34094
     """
     set_random_seed(42)
 

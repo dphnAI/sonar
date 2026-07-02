@@ -2331,7 +2331,7 @@ void wvSplitKQ(const at::Tensor& in_b, const at::Tensor& in_a,
     auto c_ptr = reinterpret_cast<fptype*>(out_c.data_ptr());
     auto s_a = scale_a.data_ptr<float>();
     auto s_b = scale_b.data_ptr<float>();
-    VLLM_DISPATCH_FP8_TYPES(in_a.scalar_type(), "wvSplitKQ", [&] {
+    APHRODITE_DISPATCH_FP8_TYPES(in_a.scalar_type(), "wvSplitKQ", [&] {
       auto a_ptr = in_a.data_ptr<fp8_t>();
       auto b_ptr = in_b.data_ptr<fp8_t>();
       auto bias_ptr = (in_bias.has_value() && in_bias->numel() > 0)

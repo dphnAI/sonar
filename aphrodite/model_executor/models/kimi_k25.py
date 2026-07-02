@@ -296,7 +296,7 @@ class KimiK25ForConditionalGeneration(
     hf_to_aphrodite_mapper = WeightsMapper(
         orig_to_new_prefix={
             # For legacy NVFP4 checkpoint compatibility:
-            # see https://github.com/vllm-project/aphrodite/pull/33346#issuecomment-3851475033
+            # see https://github.com/vllm-project/vllm/pull/33346#issuecomment-3851475033
             "language_model.layers.": "language_model.model.layers.",
             # mm projector
             "mm_projector.proj.0": "mm_projector.linear_1",

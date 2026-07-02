@@ -9,5 +9,5 @@ server_args: >-
   --gpu-memory-utilization 0.35
   --moe-backend aiter
 env:
-  VLLM_ROCM_USE_AITER: "1"
+  APHRODITE_ROCM_USE_AITER: "1"
   ENABLE_CK: "0"  # Avoid AITER CK-based MHA JIT compilation to save time

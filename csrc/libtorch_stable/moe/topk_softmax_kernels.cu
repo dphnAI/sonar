@@ -411,7 +411,7 @@ __launch_bounds__(WARPS_PER_CTA* WARP_SIZE_PARAM) __global__
 #pragma unroll
       for (int mask = THREADS_PER_ROW / 2; mask > 0; mask /= 2)
       {
-        thread_max = max(thread_max, VLLM_SHFL_XOR_SYNC_WIDTH(thread_max, mask, THREADS_PER_ROW));
+        thread_max = max(thread_max, APHRODITE_SHFL_XOR_SYNC_WIDTH(thread_max, mask, THREADS_PER_ROW));
       }
 
       // From this point, thread max in all the threads have the max within the row.
@@ -428,7 +428,7 @@ __launch_bounds__(WARPS_PER_CTA* WARP_SIZE_PARAM) __global__
 #pragma unroll
       for (int mask = THREADS_PER_ROW / 2; mask > 0; mask /= 2)
       {
-        row_sum += VLLM_SHFL_XOR_SYNC_WIDTH(row_sum, mask, THREADS_PER_ROW);
+        row_sum += APHRODITE_SHFL_XOR_SYNC_WIDTH(row_sum, mask, THREADS_PER_ROW);
       }
 
       // From this point, all threads have the max and the sum for their rows in the thread_max and thread_sum variables
@@ -523,9 +523,9 @@ __launch_bounds__(WARPS_PER_CTA* WARP_SIZE_PARAM) __global__
 #pragma unroll
         for (int mask = THREADS_PER_ROW / 2; mask > 0; mask /= 2)
         {
-            float other_max_for_choice = VLLM_SHFL_XOR_SYNC_WIDTH(max_val_for_choice, mask, THREADS_PER_ROW);
-            float other_max = VLLM_SHFL_XOR_SYNC_WIDTH(max_val, mask, THREADS_PER_ROW);
-            int other_expert = VLLM_SHFL_XOR_SYNC_WIDTH(expert, mask, THREADS_PER_ROW);
+            float other_max_for_choice = APHRODITE_SHFL_XOR_SYNC_WIDTH(max_val_for_choice, mask, THREADS_PER_ROW);
+            float other_max = APHRODITE_SHFL_XOR_SYNC_WIDTH(max_val, mask, THREADS_PER_ROW);
+            int other_expert = APHRODITE_SHFL_XOR_SYNC_WIDTH(expert, mask, THREADS_PER_ROW);
 
             // We want lower indices to "win" in every thread so we break ties this way
             if (other_max_for_choice > max_val_for_choice || (other_max_for_choice == max_val_for_choice && other_expert < expert))

@@ -6,7 +6,7 @@ import os
 import sys
 import types
 
-# In symlink mode (VLLM_FLASH_ATTN_SRC_DIR), cute/ is a symlink to the real
+# In symlink mode (APHRODITE_FLASH_ATTN_SRC_DIR), cute/ is a symlink to the real
 # source tree and its files use `flash_attn.cute.*` imports (not rewritten).
 # Register a virtual `flash_attn` package so those imports resolve.
 _cute_dir = os.path.join(os.path.dirname(__file__), "cute")

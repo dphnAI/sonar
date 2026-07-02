@@ -22,9 +22,9 @@
 // Use for PTX instruction selection with architecture fallback paths.
 #if !defined(USE_ROCM) && defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 1000 && \
     defined(CUDART_VERSION) && CUDART_VERSION >= 12090
-  #define VLLM_256B_PTX_ENABLED 1
+  #define APHRODITE_256B_PTX_ENABLED 1
 #else
-  #define VLLM_256B_PTX_ENABLED 0
+  #define APHRODITE_256B_PTX_ENABLED 0
 #endif
 
 namespace vllm {
@@ -137,7 +137,7 @@ struct alignas(VecTraits<use_256b>::ARCH_MAX_VEC_SIZE) PackedVec {
 
 // 256-bit load / store — SM100+ only (PTX v8 instructions).
 __device__ __forceinline__ void ld256(u32x8_t& val, const u32x8_t* ptr) {
-#if VLLM_256B_PTX_ENABLED
+#if APHRODITE_256B_PTX_ENABLED
   asm volatile("ld.global.nc.v8.u32 {%0,%1,%2,%3,%4,%5,%6,%7}, [%8];\n"
                : "=r"(val.d[0]), "=r"(val.d[1]), "=r"(val.d[2]), "=r"(val.d[3]),
                  "=r"(val.d[4]), "=r"(val.d[5]), "=r"(val.d[6]), "=r"(val.d[7])
@@ -148,7 +148,7 @@ __device__ __forceinline__ void ld256(u32x8_t& val, const u32x8_t* ptr) {
 }
 
 __device__ __forceinline__ void st256(u32x8_t& val, u32x8_t* ptr) {
-#if VLLM_256B_PTX_ENABLED
+#if APHRODITE_256B_PTX_ENABLED
   asm volatile("st.global.v8.u32 [%0], {%1,%2,%3,%4,%5,%6,%7,%8};\n"
                :
                : "l"(ptr), "r"(val.d[0]), "r"(val.d[1]), "r"(val.d[2]),
@@ -189,7 +189,7 @@ __device__ __forceinline__ void st128(T& val, T* ptr) {
 
 // 256-bit cache-streaming (.cs) load / store  — SM100+ only.
 __forceinline__ __device__ u32x8_t ld256_cs(const u32x8_t* addr) {
-#if VLLM_256B_PTX_ENABLED
+#if APHRODITE_256B_PTX_ENABLED
   u32x8_t val;
   asm volatile("ld.global.cs.v8.u32 {%0,%1,%2,%3,%4,%5,%6,%7}, [%8];"
                : "=r"(val.d[0]), "=r"(val.d[1]), "=r"(val.d[2]), "=r"(val.d[3]),
@@ -203,7 +203,7 @@ __forceinline__ __device__ u32x8_t ld256_cs(const u32x8_t* addr) {
 }
 
 __forceinline__ __device__ void st256_cs(u32x8_t* addr, u32x8_t val) {
-#if VLLM_256B_PTX_ENABLED
+#if APHRODITE_256B_PTX_ENABLED
   asm volatile(
       "st.global.cs.v8.u32 [%0], {%1,%2,%3,%4,%5,%6,%7,%8};" ::"l"(addr),
       "r"(val.d[0]), "r"(val.d[1]), "r"(val.d[2]), "r"(val.d[3]), "r"(val.d[4]),
@@ -265,7 +265,7 @@ __forceinline__ __device__ void st128_cs(int4* addr, int4 val) {
 // Returns zero if pred is false.  SM100+ only.
 __device__ __forceinline__ void ld256_cg_or_zero(u32x8_t& val, const void* ptr,
                                                  bool pred) {
-#if VLLM_256B_PTX_ENABLED
+#if APHRODITE_256B_PTX_ENABLED
   asm volatile(
       "{\n"
       "  .reg .pred pr;\n"

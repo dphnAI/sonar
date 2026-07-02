@@ -623,7 +623,7 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
         the local TP partition. Qwen3-Next's interleaved [num_v_heads*2]
         layout is unaffected and stays TP-sharded.
 
-        See https://github.com/vllm-project/aphrodite/issues/35924
+        See https://github.com/vllm-project/vllm/issues/35924
         """
         return (
             current_platform.is_cuda()
@@ -946,7 +946,7 @@ class QwenGatedDeltaNetAttention(GatedDeltaNetAttention):
         # Part 2: Core Attention (Custom Op)
         # ============================================================
         # Note: we should not use torch.empty here like other attention backends,
-        # see discussions in https://github.com/vllm-project/aphrodite/pull/28182
+        # see discussions in https://github.com/vllm-project/vllm/pull/28182
         core_attn_out = torch.zeros(
             (num_tokens, self.num_v_heads // self.tp_size, self.head_v_dim),
             dtype=hidden_states.dtype,

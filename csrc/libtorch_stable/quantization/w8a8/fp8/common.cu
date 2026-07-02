@@ -314,12 +314,12 @@ void static_scaled_fp8_quant(
   const cudaStream_t stream = get_current_cuda_stream();
 
   // Dispatch to template-specialized kernel based on stride pattern
-  VLLM_STABLE_DISPATCH_FLOATING_TYPES(
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "scaled_fp8_quant_kernel_scalar_type", [&] {
-        VLLM_STABLE_DISPATCH_FP8_TYPES(
+        APHRODITE_STABLE_DISPATCH_FP8_TYPES(
             out.scalar_type(), "scaled_fp8_quant_kernel_fp8_type", [&] {
-              VLLM_STABLE_DISPATCH_BOOL(scale_stride_i == 0, S0_ZERO, [&] {
-                VLLM_STABLE_DISPATCH_BOOL(scale_stride_j == 0, S1_ZERO, [&] {
+              APHRODITE_STABLE_DISPATCH_BOOL(scale_stride_i == 0, S0_ZERO, [&] {
+                APHRODITE_STABLE_DISPATCH_BOOL(scale_stride_j == 0, S1_ZERO, [&] {
                   vllm::scaled_fp8_quant_kernel_strided_group_shape<
                       scalar_t, fp8_t, S0_ZERO, S1_ZERO>
                       <<<grid, block, 0, stream>>>(
@@ -360,9 +360,9 @@ void dynamic_scaled_fp8_quant(torch::stable::Tensor& out,          // [..., d]
   STD_CUDA_CHECK(cudaMemsetAsync(scale.mutable_data_ptr<float>(), 0,
                                  sizeof(float), stream));
 
-  VLLM_STABLE_DISPATCH_FLOATING_TYPES(
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "scaled_fp8_quant_kernel_scalar_type", [&] {
-        VLLM_STABLE_DISPATCH_FP8_TYPES(
+        APHRODITE_STABLE_DISPATCH_FP8_TYPES(
             out.scalar_type(), "scaled_fp8_quant_kernel_fp8_type", [&] {
               vllm::segmented_max_reduction_strided<scalar_t, fp8_t>
                   <<<grid, block, 0, stream>>>(
@@ -402,10 +402,10 @@ void dynamic_per_token_scaled_fp8_quant(
   const torch::stable::accelerator::DeviceGuard device_guard(
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
-  VLLM_STABLE_DISPATCH_FLOATING_TYPES(
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(),
       "dynamic_per_token_scaled_fp8_quant_kernel_scalar_type", [&] {
-        VLLM_STABLE_DISPATCH_FP8_TYPES(
+        APHRODITE_STABLE_DISPATCH_FP8_TYPES(
             out.scalar_type(),
             "dynamic_per_token_scaled_fp8_quant_kernel_fp8_type", [&] {
               vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<scalar_t,

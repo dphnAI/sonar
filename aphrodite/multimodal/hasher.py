@@ -30,7 +30,7 @@ def _get_hasher_factory(algorithm: str) -> Callable[[], "hashlib._Hash"]:
     Returns a callable that creates a new hasher instance.
     Supports blake3 (default), sha256, and sha512 for FIPS compliance.
 
-    See: https://github.com/vllm-project/aphrodite/issues/18334
+    See: https://github.com/vllm-project/vllm/issues/18334
     """
     algorithm = algorithm.lower()
 

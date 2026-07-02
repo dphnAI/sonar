@@ -23,13 +23,13 @@ struct fp8_e5m2_tag {};
 
 // NOTE: FP16 (Half) is supported on s390x via custom bit-manipulation
 // conversion. PyTorch itself lacks native s390x FP16 support.
-#define VLLM_DISPATCH_CASE_FLOATING_TYPES(...)            \
+#define APHRODITE_DISPATCH_CASE_FLOATING_TYPES(...)            \
   AT_DISPATCH_CASE(at::ScalarType::Float, __VA_ARGS__)    \
   AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__) \
   AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__)
 
-#define VLLM_DISPATCH_FLOATING_TYPES(TYPE, NAME, ...) \
-  AT_DISPATCH_SWITCH(TYPE, NAME, VLLM_DISPATCH_CASE_FLOATING_TYPES(__VA_ARGS__))
+#define APHRODITE_DISPATCH_FLOATING_TYPES(TYPE, NAME, ...) \
+  AT_DISPATCH_SWITCH(TYPE, NAME, APHRODITE_DISPATCH_CASE_FLOATING_TYPES(__VA_ARGS__))
 
 #ifndef CPU_OP_GUARD
   #define CPU_KERNEL_GUARD_IN(NAME)

@@ -945,7 +945,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
     ),
     # Maximum number of worker threads used for STT preprocessing. The default
     # intentionally caps at 2 because that performed best in profiling.
-    # https://github.com/vllm-project/aphrodite/pull/44612#issuecomment-4662757781
+    # https://github.com/vllm-project/vllm/pull/44612#issuecomment-4662757781
     "APHRODITE_MAX_AUDIO_PREPROCESS_WORKERS": lambda: int(
         os.getenv(
             "APHRODITE_MAX_AUDIO_PREPROCESS_WORKERS",
@@ -1106,7 +1106,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # potantially caused by a bug in the driver (535 series),
     # if might be helpful to set APHRODITE_SKIP_P2P_CHECK=0
     # so that Aphrodite can verify if p2p is actually working.
-    # See https://github.com/vllm-project/aphrodite/blob/a9b15c606fea67a072416ea0ea115261a2756058/aphrodite/distributed/device_communicators/custom_all_reduce_utils.py#L101-L108 for details. # noqa
+    # See https://github.com/vllm-project/vllm/blob/a9b15c606fea67a072416ea0ea115261a2756058/aphrodite/distributed/device_communicators/custom_all_reduce_utils.py#L101-L108 for details. # noqa
     "APHRODITE_SKIP_P2P_CHECK": lambda: os.getenv("APHRODITE_SKIP_P2P_CHECK", "1") == "1",
     # List of quantization kernels that should be disabled, used for testing
     # and performance comparisons. Currently only affects MPLinearKernel

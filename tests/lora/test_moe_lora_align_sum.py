@@ -133,7 +133,7 @@ def _build_and_run_align(
 
     Tokens are assigned to LoRA slot 0 (first ``num_lora_tokens``) then -1
     (remaining ``num_base_tokens``), matching the "mixed base + 1 LoRA"
-    shape used to repro vllm-project/aphrodite#32235.
+    shape used to repro vllm-project/vllm#32235.
 
     ``lora_ids_override``: optional 1-D int tensor of length ``max_loras+1``
     used verbatim. Default mirrors ``prepare_tensors`` (sorted-unique into

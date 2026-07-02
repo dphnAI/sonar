@@ -1084,7 +1084,7 @@ class Glm4vProcessingInfo(BaseProcessingInfo):
         # makes smart_resize constrain 16*H*W <= max_pixels, vastly
         # underestimating the spatial budget for a single image and
         # causing encoder cache overflow for large images
-        # (see https://github.com/vllm-project/aphrodite/issues/34040).
+        # (see https://github.com/vllm-project/vllm/issues/34040).
         max_image_size, _ = self._get_vision_info(
             image_width=9999999,
             image_height=9999999,

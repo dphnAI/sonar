@@ -96,12 +96,12 @@ logger = init_logger(__name__)
 # that interact with aphrodite workers.
 # they are executed whenever `import aphrodite` is called.
 
-# see https://github.com/vllm-project/aphrodite/pull/15951
+# see https://github.com/vllm-project/vllm/pull/15951
 # it avoids unintentional cuda initialization from torch.cuda.is_available()
 os.environ["PYTORCH_NVML_BASED_CUDA_CHECK"] = "1"
 
-# see https://github.com/vllm-project/aphrodite/issues/10480 and
-# https://github.com/vllm-project/aphrodite/issues/10619.
+# see https://github.com/vllm-project/vllm/issues/10480 and
+# https://github.com/vllm-project/vllm/issues/10619.
 os.environ["TORCHINDUCTOR_COMPILE_THREADS"] = "1"
 
 # Enable Triton autotuning result caching to disk by default.
@@ -116,7 +116,7 @@ os.environ.setdefault("TRITON_CACHE_AUTOTUNING", "1")
 # /tmp/tvm-debug-mode-tempdirs/ whose ownership is pinned to whichever
 # user compiled first, breaking every other user on a shared host.
 # Opt into per-process tempdirs unless the user explicitly chose the
-# debug layout (see https://github.com/vllm-project/aphrodite/issues/41410).
+# debug layout (see https://github.com/vllm-project/vllm/issues/41410).
 os.environ.setdefault("TILELANG_CLEANUP_TEMP_FILES", "1")
 
 # ===================================================
@@ -340,7 +340,7 @@ def get_graph_partition_signature_patched(
 # torch 2.9 Inductor Scheduler monkeypatch
 # ========================================
 # This change monkeypatches a function in Inductor to work around the following
-# bug: https://github.com/vllm-project/aphrodite/issues/26678
+# bug: https://github.com/vllm-project/vllm/issues/26678
 #
 # The bug occurs when `use_inductor_graph_partition` is turned on and there
 # exists operators inside of `splitting_ops` that have an in-place mutation. In
@@ -464,7 +464,7 @@ def _update_scheduler_patched(self) -> None:
 # ===================================================
 # Workaround for TorchInductor autotune using get_raw_stream() without defining it.
 # This occurs when compile_sizes > 1 in compilation_config.
-# For more context, see https://github.com/vllm-project/aphrodite/issues/30905.
+# For more context, see https://github.com/vllm-project/vllm/issues/30905.
 def _patch_get_raw_stream_if_needed():
     """Workaround for TorchInductor autotune get_raw_stream() bug."""
     from aphrodite.utils.torch_utils import is_torch_equal

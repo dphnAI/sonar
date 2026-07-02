@@ -27,7 +27,7 @@ TRUTH = [
     # Burmese text triggers an edge-case for Mistral's V3-Tekken tokenizer (eg.
     # for mistralai/Pixtral-12B-2409) where tokens may map to bytes with
     # incomplete UTF-8 characters
-    # see https://github.com/vllm-project/aphrodite/pull/9625
+    # see https://github.com/vllm-project/vllm/pull/9625
     "ပုံပြင်လေးပြောပြပါ်",
 ] + SPECIAL_TOKS_TRUTH
 
@@ -112,7 +112,7 @@ def tokenizer(tokenizer_name):
 def test_mistral_edge_case(tokenizer, truth):
     """Test for a specific edge cases with V3-Tekken MistralTokenizer.
 
-    See https://github.com/vllm-project/aphrodite/pull/9625
+    See https://github.com/vllm-project/vllm/pull/9625
     """
     starting_index = 0
     all_input_ids = tokenizer(truth, add_special_tokens=False).input_ids

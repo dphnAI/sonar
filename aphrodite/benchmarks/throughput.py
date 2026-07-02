@@ -915,7 +915,7 @@ def validate_args(args):
         args.distributed_executor_backend != "external_launcher" or args.async_engine
     ):
         # --data-parallel is not supported fully.
-        # Old issue: https://github.com/vllm-project/aphrodite/issues/16222
+        # Old issue: https://github.com/vllm-project/vllm/issues/16222
         # Currently we only support data parallel with external launcher
         # mode (i.e., launch with toruchrun).
         raise ValueError(
@@ -1261,9 +1261,9 @@ def main(args: argparse.Namespace):
             "\033[91mWARNING\033[0m: Multi-modal request with "
             f"{args.backend} backend detected. The "
             "following metrics are not accurate because image tokens are not"
-            " counted. See vllm-project/aphrodite/issues/9778 for details."
+            " counted. See vllm-project/vllm/issues/9778 for details."
         )
-        # TODO(vllm-project/aphrodite/issues/9778): Count multi-modal token length.
+        # TODO(vllm-project/vllm/issues/9778): Count multi-modal token length.
         # aphrodite-chat backend counts the image tokens now
 
     print(

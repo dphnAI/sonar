@@ -22,21 +22,21 @@ from aphrodite.v1.kv_offload.file_mapper import FileMapper
 # Shared mocks (mirrors test_fs_tier.py pattern)
 # ---------------------------------------------------------------------------
 
-_MOCK_VLLM_CONFIG = MagicMock()
-_MOCK_VLLM_CONFIG.model_config.model = "test-model"
-_MOCK_VLLM_CONFIG.cache_config.block_size = 16
-_MOCK_VLLM_CONFIG.cache_config.cache_dtype = "torch.float32"
-_MOCK_VLLM_CONFIG.parallel_config.tensor_parallel_size = 1
-_MOCK_VLLM_CONFIG.parallel_config.pipeline_parallel_size = 1
-_MOCK_VLLM_CONFIG.parallel_config.prefill_context_parallel_size = 1
-_MOCK_VLLM_CONFIG.parallel_config.decode_context_parallel_size = 1
-_MOCK_VLLM_CONFIG.parallel_config.rank = 0
+_MOCK_APHRODITE_CONFIG = MagicMock()
+_MOCK_APHRODITE_CONFIG.model_config.model = "test-model"
+_MOCK_APHRODITE_CONFIG.cache_config.block_size = 16
+_MOCK_APHRODITE_CONFIG.cache_config.cache_dtype = "torch.float32"
+_MOCK_APHRODITE_CONFIG.parallel_config.tensor_parallel_size = 1
+_MOCK_APHRODITE_CONFIG.parallel_config.pipeline_parallel_size = 1
+_MOCK_APHRODITE_CONFIG.parallel_config.prefill_context_parallel_size = 1
+_MOCK_APHRODITE_CONFIG.parallel_config.decode_context_parallel_size = 1
+_MOCK_APHRODITE_CONFIG.parallel_config.rank = 0
 
 _MOCK_KV_CACHE_CONFIG = MagicMock()
 _MOCK_KV_CACHE_CONFIG.kv_cache_groups = []
 
 _MOCK_OFFLOADING_SPEC = MagicMock(spec=OffloadingSpec)
-_MOCK_OFFLOADING_SPEC.vllm_config = _MOCK_VLLM_CONFIG
+_MOCK_OFFLOADING_SPEC.vllm_config = _MOCK_APHRODITE_CONFIG
 _MOCK_OFFLOADING_SPEC.kv_cache_config = _MOCK_KV_CACHE_CONFIG
 _MOCK_OFFLOADING_SPEC.block_size_factor = 1
 

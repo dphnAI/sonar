@@ -132,7 +132,7 @@ APHRODITE_PATH = Path(__file__).parent.parent
 
 # ROCm: disable skinny GEMM to avoid non-deterministic results from
 # atomic reductions in wvSplitKrc kernel.
-# See: https://github.com/vllm-project/aphrodite/pull/33493#issuecomment-3906083975
+# See: https://github.com/vllm-project/vllm/pull/33493#issuecomment-3906083975
 ROCM_ENV_OVERRIDES = (
     {"APHRODITE_ROCM_USE_SKINNY_GEMM": "0"} if current_platform.is_rocm() else {}
 )
@@ -206,7 +206,7 @@ def _run_in_new_process_group(
     child_process_fxn(env_dict, model, vllm_serve_args)
 
 
-class RemoteVLLMServer:
+class RemoteAPHRODITEServer:
     """Base class for launching Aphrodite server subprocesses for testing.
 
     Subclasses must override ``_create_cli_subcommand`` and
@@ -214,7 +214,7 @@ class RemoteVLLMServer:
     """
 
     DUMMY_API_KEY = "token-abc123"  # Aphrodite's OpenAI server does not need API key
-    _active_servers: set["RemoteVLLMServer"] = set()
+    _active_servers: set["RemoteAPHRODITEServer"] = set()
     _active_servers_lock = threading.RLock()
     _cleanup_hooks_registered = False
     _signal_hooks_registered = False
@@ -347,7 +347,7 @@ class RemoteVLLMServer:
     @classmethod
     def _ensure_cleanup_hooks_registered(cls) -> None:
         """Register process-exit cleanup for detached server subprocesses."""
-        root_cls = RemoteVLLMServer
+        root_cls = RemoteAPHRODITEServer
         with root_cls._active_servers_lock:
             if not root_cls._cleanup_hooks_registered:
                 atexit.register(root_cls._shutdown_active_servers)
@@ -366,17 +366,17 @@ class RemoteVLLMServer:
 
     def _register_active_server(self) -> None:
         """Track this server so parent-process exits still clean it up."""
-        RemoteVLLMServer._ensure_cleanup_hooks_registered()
-        with RemoteVLLMServer._active_servers_lock:
-            RemoteVLLMServer._active_servers.add(self)
+        RemoteAPHRODITEServer._ensure_cleanup_hooks_registered()
+        with RemoteAPHRODITEServer._active_servers_lock:
+            RemoteAPHRODITEServer._active_servers.add(self)
 
     def _unregister_active_server(self) -> None:
-        with RemoteVLLMServer._active_servers_lock:
-            RemoteVLLMServer._active_servers.discard(self)
+        with RemoteAPHRODITEServer._active_servers_lock:
+            RemoteAPHRODITEServer._active_servers.discard(self)
 
     @classmethod
     def _shutdown_active_servers(cls) -> None:
-        """Best-effort shutdown for all live RemoteVLLMServer instances."""
+        """Best-effort shutdown for all live RemoteAPHRODITEServer instances."""
         with cls._active_servers_lock:
             servers = list(cls._active_servers)
 
@@ -448,10 +448,10 @@ class RemoteVLLMServer:
         self._kill_process_group_survivors(pgid)
 
     @classmethod
-    def shutdown_many(cls, servers: Sequence["RemoteVLLMServer"]) -> None:
+    def shutdown_many(cls, servers: Sequence["RemoteAPHRODITEServer"]) -> None:
         """Shut down multiple sibling servers and wait for GPU memory once.
 
-        Test fixtures that hold several ``RemoteVLLMServer`` instances at
+        Test fixtures that hold several ``RemoteAPHRODITEServer`` instances at
         once must NOT shut them down by calling each server's ``__exit__``
         sequentially: every server measures total GPU memory across all
         visible devices in ``_wait_for_gpu_memory_release``, so the first
@@ -760,7 +760,7 @@ class RemoteVLLMServer:
         )
 
 
-class RemoteOpenAIServer(RemoteVLLMServer):
+class RemoteOpenAIServer(RemoteAPHRODITEServer):
     """Launches ``aphrodite serve`` for testing OpenAI-compatible endpoints."""
 
     def _create_cli_subcommand(self):
@@ -790,7 +790,7 @@ class RemoteOpenAIServer(RemoteVLLMServer):
         )
 
 
-class RemoteLaunchRenderServer(RemoteVLLMServer):
+class RemoteLaunchRenderServer(RemoteAPHRODITEServer):
     """Launches ``aphrodite launch render`` for GPU-less serving tests."""
 
     def _create_cli_subcommand(self):
@@ -1668,7 +1668,7 @@ _P = ParamSpec("_P")
 
 def fork_new_process_for_each_test(func: Callable[_P, None]) -> Callable[_P, None]:
     """Decorator to fork a new process for each test function.
-    See https://github.com/vllm-project/aphrodite/issues/7053 for more details.
+    See https://github.com/vllm-project/vllm/issues/7053 for more details.
     """
 
     @functools.wraps(func)
@@ -1797,7 +1797,7 @@ def spawn_new_process_for_each_test(f: Callable[_P, None]) -> Callable[_P, None]
 
     Uses subprocess to run each test in a fresh interpreter and propagates
     exceptions back to the parent, so test failures are never silently
-    swallowed (fixes https://github.com/vllm-project/aphrodite/issues/41415).
+    swallowed (fixes https://github.com/vllm-project/vllm/issues/41415).
 
     The child resolves the test function by importing its module and looking
     it up by qualified name, rather than reconstructing it from a cloudpickle

@@ -21,7 +21,7 @@
 #   PREFILL_BLOCK_SIZE          default 128
 #   DECODE_BLOCK_SIZE           default 128
 #   CPU_BYTES                   default 209715200 (200 MB)
-#   VLLM_SERVE_EXTRA_ARGS       comma-separated extra args for vllm serve
+#   APHRODITE_SERVE_EXTRA_ARGS       comma-separated extra args for vllm serve
 #   --decoder-first             toggle decoder-first proxy mode
 #
 # Examples:
@@ -76,7 +76,7 @@ MAX_MODEL_LEN=${MAX_MODEL_LEN:-512}
 PREFILL_BLOCK_SIZE=${PREFILL_BLOCK_SIZE:-128}
 DECODE_BLOCK_SIZE=${DECODE_BLOCK_SIZE:-128}
 CPU_BYTES=${CPU_BYTES:-209715200}
-VLLM_SERVE_EXTRA_ARGS=${VLLM_SERVE_EXTRA_ARGS:-}
+APHRODITE_SERVE_EXTRA_ARGS=${APHRODITE_SERVE_EXTRA_ARGS:-}
 
 # Base ports — per-instance offsets layered on top.
 PREFILL_HTTP_BASE=8100
@@ -92,13 +92,13 @@ P2P_HOST=127.0.0.1
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 GIT_ROOT="${GIT_ROOT:-$(cd -- "${SCRIPT_DIR}/../../../../.." && pwd -P)}"
 
-if [[ -z "${VLLM_BIN:-}" ]]; then
+if [[ -z "${APHRODITE_BIN:-}" ]]; then
     if [[ -x "${GIT_ROOT}/.venv/bin/vllm" ]]; then
-        VLLM_BIN="${GIT_ROOT}/.venv/bin/vllm"
+        APHRODITE_BIN="${GIT_ROOT}/.venv/bin/vllm"
     elif [[ -x "/workspace/venv/bin/vllm" ]]; then
-        VLLM_BIN="/workspace/venv/bin/vllm"
+        APHRODITE_BIN="/workspace/venv/bin/vllm"
     else
-        VLLM_BIN="$(command -v vllm)"
+        APHRODITE_BIN="$(command -v vllm)"
     fi
 fi
 if [[ -z "${PYTHON_BIN:-}" ]]; then
@@ -110,7 +110,7 @@ if [[ -z "${PYTHON_BIN:-}" ]]; then
         PYTHON_BIN="$(command -v python3 || command -v python)"
     fi
 fi
-echo "Using vllm: ${VLLM_BIN}"
+echo "Using vllm: ${APHRODITE_BIN}"
 echo "Using python: ${PYTHON_BIN}"
 
 SMI_BIN=$(command -v nvidia-smi || command -v rocm-smi || echo "")
@@ -195,7 +195,7 @@ run_tests_for_model() {
 
     BASE_CMD="CUDA_VISIBLE_DEVICES=${cuda_devs} \
     PYTHONHASHSEED=42 \
-    ${VLLM_BIN} serve ${model_name} \
+    ${APHRODITE_BIN} serve ${model_name} \
     --port ${http_port} \
     --enforce-eager \
     --block-size ${PREFILL_BLOCK_SIZE} \
@@ -204,8 +204,8 @@ run_tests_for_model() {
     --tensor-parallel-size ${PREFILLER_TP_SIZE} \
     --kv-transfer-config '${kv_cfg}'"
 
-    if [[ -n "$VLLM_SERVE_EXTRA_ARGS" ]]; then
-      IFS=',' read -r -a extra_args <<< "$VLLM_SERVE_EXTRA_ARGS"
+    if [[ -n "$APHRODITE_SERVE_EXTRA_ARGS" ]]; then
+      IFS=',' read -r -a extra_args <<< "$APHRODITE_SERVE_EXTRA_ARGS"
       for arg in "${extra_args[@]}"; do
         BASE_CMD="${BASE_CMD} $arg"
       done
@@ -235,7 +235,7 @@ run_tests_for_model() {
 
     BASE_CMD="CUDA_VISIBLE_DEVICES=${cuda_devs} \
     PYTHONHASHSEED=42 \
-    ${VLLM_BIN} serve ${model_name} \
+    ${APHRODITE_BIN} serve ${model_name} \
     --port ${http_port} \
     --enforce-eager \
     --block-size ${DECODE_BLOCK_SIZE} \
@@ -244,8 +244,8 @@ run_tests_for_model() {
     --tensor-parallel-size ${DECODER_TP_SIZE} \
     --kv-transfer-config '${kv_cfg}'"
 
-    if [[ -n "$VLLM_SERVE_EXTRA_ARGS" ]]; then
-      IFS=',' read -r -a extra_args <<< "$VLLM_SERVE_EXTRA_ARGS"
+    if [[ -n "$APHRODITE_SERVE_EXTRA_ARGS" ]]; then
+      IFS=',' read -r -a extra_args <<< "$APHRODITE_SERVE_EXTRA_ARGS"
       for arg in "${extra_args[@]}"; do
         BASE_CMD="${BASE_CMD} $arg"
       done

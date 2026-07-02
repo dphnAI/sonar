@@ -38,7 +38,7 @@ IMAGE_ONLY_LIMIT_MM_PER_PROMPT = {"image": 1, "video": 0}
 
 
 def _window_attention_regression_image():
-    # image from regression issue: https://github.com/vllm-project/aphrodite/issues/15122
+    # image from regression issue: https://github.com/vllm-project/vllm/issues/15122
     image = ImageAsset("hato").pil_image
     return image.resize((image.width // 2, image.height // 2))
 

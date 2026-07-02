@@ -15,7 +15,7 @@ pytestmark = pytest.mark.cpu_test
     reason=(
         "Applying huggingface processor on text inputs results in "
         "significant performance regression for multimodal models. "
-        "See https://github.com/vllm-project/aphrodite/issues/26320"
+        "See https://github.com/vllm-project/vllm/issues/26320"
     )
 )
 def test_preprocessor_always_mm_code_path(model_id, prompt):

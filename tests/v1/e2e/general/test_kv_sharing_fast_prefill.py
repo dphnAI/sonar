@@ -58,7 +58,7 @@ def test_kv_sharing_fast_prefill(
     enforce_eager: bool,
 ):
     if not enforce_eager and current_platform.is_rocm():
-        # Relevant context: https://github.com/vllm-project/aphrodite/pull/29244
+        # Relevant context: https://github.com/vllm-project/vllm/pull/29244
         pytest.skip(
             "ROCm: torch.compile produces incorrect output for gemma-3n's GELU "
             "with tanh approximation. Use enforce_eager=True instead."

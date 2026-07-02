@@ -243,7 +243,7 @@ run_baseline_1p_1d() {
     # Start prefill instance
     echo "Starting prefill instance on GPU $GPU_P, port $PREFILL_PORT"
     CUDA_VISIBLE_DEVICES="$GPU_P" \
-    VLLM_NIXL_SIDE_CHANNEL_PORT=5559 \
+    APHRODITE_NIXL_SIDE_CHANNEL_PORT=5559 \
     vllm serve "$MODEL" \
         --port "$PREFILL_PORT" \
         --enforce-eager \
@@ -261,7 +261,7 @@ run_baseline_1p_1d() {
     # Start decode instance
     echo "Starting decode instance on GPU $GPU_D, port $DECODE_PORT"
     CUDA_VISIBLE_DEVICES="$GPU_D" \
-    VLLM_NIXL_SIDE_CHANNEL_PORT=6000 \
+    APHRODITE_NIXL_SIDE_CHANNEL_PORT=6000 \
     vllm serve "$MODEL" \
         --port "$DECODE_PORT" \
         --enforce-eager \
@@ -361,7 +361,7 @@ run_epd_1e_1p_1d() {
     # Start prefill instance
     echo "Starting prefill instance on GPU $GPU_P, port $PREFILL_PORT"
     CUDA_VISIBLE_DEVICES="$GPU_P" \
-    VLLM_NIXL_SIDE_CHANNEL_PORT=5559 \
+    APHRODITE_NIXL_SIDE_CHANNEL_PORT=5559 \
     vllm serve "$MODEL" \
         --port "$PREFILL_PORT" \
         --enforce-eager \
@@ -386,7 +386,7 @@ run_epd_1e_1p_1d() {
     # Start decode instance
     echo "Starting decode instance on GPU $GPU_D, port $DECODE_PORT"
     CUDA_VISIBLE_DEVICES="$GPU_D" \
-    VLLM_NIXL_SIDE_CHANNEL_PORT=6000 \
+    APHRODITE_NIXL_SIDE_CHANNEL_PORT=6000 \
     vllm serve "$MODEL" \
         --port "$DECODE_PORT" \
         --enforce-eager \

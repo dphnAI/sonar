@@ -30,13 +30,13 @@ struct fp8_e5m2_tag {};
 // BFloat16 is always supported on RISC-V: natively when __riscv_zvfbfmin
 // is defined (compiler-provided when -march includes zvfbfmin), otherwise
 // via the FP32-simulation fallback path.
-#define VLLM_DISPATCH_CASE_FLOATING_TYPES(...)         \
+#define APHRODITE_DISPATCH_CASE_FLOATING_TYPES(...)         \
   AT_DISPATCH_CASE(at::ScalarType::Float, __VA_ARGS__) \
   AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__)  \
   AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__)
 
-#define VLLM_DISPATCH_FLOATING_TYPES(TYPE, NAME, ...) \
-  AT_DISPATCH_SWITCH(TYPE, NAME, VLLM_DISPATCH_CASE_FLOATING_TYPES(__VA_ARGS__))
+#define APHRODITE_DISPATCH_FLOATING_TYPES(TYPE, NAME, ...) \
+  AT_DISPATCH_SWITCH(TYPE, NAME, APHRODITE_DISPATCH_CASE_FLOATING_TYPES(__VA_ARGS__))
 
 #define FORCE_INLINE __attribute__((always_inline)) inline
 

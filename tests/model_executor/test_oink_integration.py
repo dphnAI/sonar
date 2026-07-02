@@ -65,7 +65,7 @@ def test_oink_availability_checks(
 
     # Use spawn to run function in fresh process with clean imports
     # TODO migrate to spawn utility:
-    # https://github.com/vllm-project/aphrodite/issues/41415
+    # https://github.com/vllm-project/vllm/issues/41415
     ctx = multiprocessing.get_context("spawn")
     process = ctx.Process(
         target=_test_oink_availability_impl,

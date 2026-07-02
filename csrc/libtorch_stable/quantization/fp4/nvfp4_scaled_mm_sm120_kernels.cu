@@ -304,7 +304,7 @@ void cutlass_scaled_fp4_mm_sm120a(torch::stable::Tensor& D,
   }
 #else
   STD_TORCH_CHECK(false,
-                  "Unsupported CUTLASS version. Set VLLM_CUTLASS_SRC_DIR to "
+                  "Unsupported CUTLASS version. Set APHRODITE_CUTLASS_SRC_DIR to "
                   "a CUTLASS 3.8 source directory to enable support.");
 #endif  // defined(CUTLASS_ARCH_MMA_SM120_SUPPORTED)
 }

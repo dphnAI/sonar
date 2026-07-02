@@ -255,8 +255,8 @@ void rms_norm(torch::stable::Tensor& out,    // [..., hidden_size]
       input.get_device_index());
   const cudaStream_t stream = get_current_cuda_stream();
   const bool has_weight = weight.has_value();
-  VLLM_STABLE_DISPATCH_RANK234(num_dims, [&] {
-    VLLM_STABLE_DISPATCH_FLOATING_TYPES(
+  APHRODITE_STABLE_DISPATCH_RANK234(num_dims, [&] {
+    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
         input.scalar_type(), "rms_norm_kernel", [&] {
           const scalar_t* weight_ptr =
               has_weight ? weight->const_data_ptr<scalar_t>() : nullptr;
@@ -265,7 +265,7 @@ void rms_norm(torch::stable::Tensor& out,    // [..., hidden_size]
           const int block_size =
               std::min(hidden_size / calculated_vec_size, max_block_size);
           dim3 block(block_size);
-          VLLM_STABLE_DISPATCH_VEC_SIZE(calculated_vec_size, [&] {
+          APHRODITE_STABLE_DISPATCH_VEC_SIZE(calculated_vec_size, [&] {
             if (has_weight) {
               vllm::rms_norm_kernel<scalar_t, vec_size, tensor_rank, true>
                   <<<grid, block, 0, stream>>>(
@@ -289,7 +289,7 @@ void rms_norm(torch::stable::Tensor& out,    // [..., hidden_size]
 }
 
 #define LAUNCH_FUSED_ADD_RMS_NORM(width, has_weight)                       \
-  VLLM_STABLE_DISPATCH_FLOATING_TYPES(                                     \
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                     \
       input.scalar_type(), "fused_add_rms_norm_kernel", [&] {              \
         if (has_weight) {                                                  \
           vllm::fused_add_rms_norm_kernel<scalar_t, width, true>           \

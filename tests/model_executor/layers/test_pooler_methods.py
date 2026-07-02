@@ -259,14 +259,14 @@ class _FakeSchedulerConfig:
 
 
 @dataclass
-class _FakeVllmConfig:
+class _FakeAphroditeConfig:
     scheduler_config: _FakeSchedulerConfig
 
 
 class TestAllPool:
     @staticmethod
     def _make_all_pool(*, chunked: bool = False) -> AllPool:
-        fake_config = _FakeVllmConfig(
+        fake_config = _FakeAphroditeConfig(
             scheduler_config=_FakeSchedulerConfig(
                 enable_chunked_prefill=chunked,
             ),
@@ -363,7 +363,7 @@ class TestAllPool:
 class TestStepPool:
     @staticmethod
     def _make_step_pool(*, chunked: bool = False) -> StepPool:
-        fake_config = _FakeVllmConfig(
+        fake_config = _FakeAphroditeConfig(
             scheduler_config=_FakeSchedulerConfig(
                 enable_chunked_prefill=chunked,
             ),
@@ -471,7 +471,7 @@ class TestStepPool:
 # ---------------------------------------------------------------------------
 class TestGetTokPoolingMethod:
     def test_all(self):
-        fake_config = _FakeVllmConfig(
+        fake_config = _FakeAphroditeConfig(
             scheduler_config=_FakeSchedulerConfig(
                 enable_chunked_prefill=False,
             ),
@@ -483,7 +483,7 @@ class TestGetTokPoolingMethod:
             assert isinstance(get_tok_pooling_method("ALL"), AllPool)
 
     def test_step(self):
-        fake_config = _FakeVllmConfig(
+        fake_config = _FakeAphroditeConfig(
             scheduler_config=_FakeSchedulerConfig(
                 enable_chunked_prefill=False,
             ),

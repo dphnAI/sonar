@@ -31,7 +31,7 @@ ATTN_BACKENDS = ROCM_ATTN_BACKENDS if current_platform.is_rocm() else ["auto"]
 BACKEND_TOL: dict[str, float] = {
     "default": 0.05,  # 5% tolerance for other backends (e.g. FLASH_ATTN)
     # Relaxed tolerances for ROCm attn
-    # See: https://github.com/vllm-project/aphrodite/issues/35569
+    # See: https://github.com/vllm-project/vllm/issues/35569
     "ROCM_ATTN": 0.09,  # gfx950:~8.45%, gfx942:~3.70%
     "ROCM_AITER_FA": 0.045,  # gfx950:~2.00%, gfx942:~0.80%
     "TRITON_ATTN": 0.045,  # gfx950:~3.00%, gfx942:~2.20%
@@ -54,7 +54,7 @@ BACKEND_ABS_TOL: dict[str, float] = {
 
 # ROCm: disable skinny GEMM to avoid non-deterministic results from
 # atomic reductions in wvSplitKrc kernel.
-# See: https://github.com/vllm-project/aphrodite/pull/33493#issuecomment-3906083975
+# See: https://github.com/vllm-project/vllm/pull/33493#issuecomment-3906083975
 ROCM_ENV_OVERRIDES = (
     {"APHRODITE_ROCM_USE_SKINNY_GEMM": "0"} if current_platform.is_rocm() else {}
 )

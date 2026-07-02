@@ -158,7 +158,7 @@ async def test_chat_completion_with_tools(
     assert "".join(chunks) == output_text
 
 
-# Regression test for https://github.com/vllm-project/aphrodite/issues/32006
+# Regression test for https://github.com/vllm-project/vllm/issues/32006
 # Engine crash when combining response_format: json_object with
 # tool_choice: required
 @pytest.mark.asyncio

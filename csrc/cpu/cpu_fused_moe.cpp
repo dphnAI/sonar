@@ -830,7 +830,7 @@ void prepack_moe_weight(
   const int64_t expert_stride = weight.stride(0);
   cpu_utils::ISA isa_type = cpu_utils::get_isa(isa);
 
-  VLLM_DISPATCH_FLOATING_TYPES(
+  APHRODITE_DISPATCH_FLOATING_TYPES(
       weight.scalar_type(), "prepack_moe_weight", [&]() {
         CPU_ISA_DISPATCH_IMPL(isa_type, [&]() {
           scalar_t* weight_ptr = weight.data_ptr<scalar_t>();
@@ -869,7 +869,7 @@ void cpu_fused_moe(
   TORCH_CHECK(!skip_weighted || topk_num == 1,
               "skip_weighted is only supported for topk=1 on CPU");
 
-  VLLM_DISPATCH_FLOATING_TYPES(w13.scalar_type(), "cpu_fused_moe", [&]() {
+  APHRODITE_DISPATCH_FLOATING_TYPES(w13.scalar_type(), "cpu_fused_moe", [&]() {
     CPU_ISA_DISPATCH_IMPL(isa_type, [&]() {
       fused_moe_impl<scalar_t, scalar_t, gemm_t>(
           output.data_ptr<scalar_t>(), input.data_ptr<scalar_t>(),

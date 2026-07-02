@@ -1256,7 +1256,7 @@ def test_partial_gpu_prefix_plus_cpu_load() -> None:
 # Test 11: TOCTOU between Phase A and Phase B (regression for #39702)
 # ---------------------------------------------------------------------------
 def test_toctou_cpu_hit_evicted_between_phases_no_crash() -> None:
-    """Regression for vllm-project/aphrodite#39702.
+    """Regression for vllm-project/vllm#39702.
 
     When ``get_num_new_matched_tokens`` (Phase A) reports a CPU cache hit
     of ``N`` tokens but ``update_state_after_alloc`` (Phase B) runs after

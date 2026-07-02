@@ -408,7 +408,7 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
 
         # Disable calculate_kv_scales for hybrid models: uninitialized
         # recurrent state corrupts scales during the calibration pass.
-        # See issue: https://github.com/vllm-project/aphrodite/issues/37554
+        # See issue: https://github.com/vllm-project/vllm/issues/37554
 
         if cache_config.calculate_kv_scales:
             logger.warning(
@@ -722,7 +722,7 @@ class Qwen3ForSequenceClassificationConfig(VerifyAndUpdateConfig):
         tokens = getattr(config, "classifier_from_token", None)
         assert tokens is not None and len(tokens) == 2, (
             "Try loading the original Qwen3 Reranker?, see: "
-            "https://github.com/vllm-project/aphrodite/tree/main/examples/pooling/score/qwen3_reranker_offline.py"
+            "https://github.com/vllm-project/vllm/tree/main/examples/pooling/score/qwen3_reranker_offline.py"
         )
         text_config = config.get_text_config()
         text_config.method = "from_2_way_softmax"

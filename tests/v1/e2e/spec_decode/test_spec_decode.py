@@ -34,7 +34,7 @@ MTP_SIMILARITY_RATE = 0.8
 class AsyncSchedulingNotEnabledError(AssertionError):
     """Raised when async_scheduling is expected to be True for draft_model
     spec decode but is False. Tracked in:
-    https://github.com/vllm-project/aphrodite/issues/38929
+    https://github.com/vllm-project/vllm/issues/38929
     """
 
 
@@ -943,7 +943,7 @@ cases = [
 @pytest.mark.parametrize("args", cases)
 @pytest.mark.parametrize("enforce_eager", [True, False])
 @single_gpu_only
-# TODO: Fix async_scheduling & engine initialization issues - see https://github.com/vllm-project/aphrodite/issues/38929
+# TODO: Fix async_scheduling & engine initialization issues - see https://github.com/vllm-project/vllm/issues/38929
 @pytest.mark.xfail(
     raises=AsyncSchedulingNotEnabledError,
     reason="draft_model does not yet enable async_scheduling: issue #38929",
@@ -954,7 +954,7 @@ def test_draft_model_correctness(args: ArgsTest, enforce_eager: bool):
 
 
 @single_gpu_only
-# TODO: Fix async_scheduling and engine initialization issues - see https://github.com/vllm-project/aphrodite/issues/38929
+# TODO: Fix async_scheduling and engine initialization issues - see https://github.com/vllm-project/vllm/issues/38929
 @pytest.mark.xfail(
     raises=AsyncSchedulingNotEnabledError,
     reason="draft_model does not yet enable async_scheduling: issue #38929",
@@ -974,7 +974,7 @@ def test_draft_model_realistic_example():
 
 
 @single_gpu_only
-# TODO: Fix async_scheduling and engine initialization issues - see https://github.com/vllm-project/aphrodite/issues/38929
+# TODO: Fix async_scheduling and engine initialization issues - see https://github.com/vllm-project/vllm/issues/38929
 @pytest.mark.xfail(
     raises=AsyncSchedulingNotEnabledError,
     reason="draft_model does not yet enable async_scheduling: issue #38929",
@@ -1005,7 +1005,7 @@ def test_draft_model_parallel_drafting():
 )
 @pytest.mark.parametrize("enforce_eager", [True, False])
 @single_gpu_only
-# TODO: Fix async_scheduling and engine initialization issues - see https://github.com/vllm-project/aphrodite/issues/38929
+# TODO: Fix async_scheduling and engine initialization issues - see https://github.com/vllm-project/vllm/issues/38929
 @pytest.mark.xfail(
     raises=AsyncSchedulingNotEnabledError,
     reason="draft_model does not yet enable async_scheduling: issue #38929",
@@ -1022,7 +1022,7 @@ def test_draft_model_quantization(models: tuple[str, str], enforce_eager: bool):
 
 
 @multi_gpu_only(num_gpus=2)
-# TODO: Fix async_scheduling and engine initialization issues - see https://github.com/vllm-project/aphrodite/issues/38929
+# TODO: Fix async_scheduling and engine initialization issues - see https://github.com/vllm-project/vllm/issues/38929
 @pytest.mark.xfail(
     raises=AsyncSchedulingNotEnabledError,
     reason="draft_model does not yet enable async_scheduling: issue #38929",
@@ -1234,7 +1234,7 @@ def assert_draft_model_correctness(args: ArgsTest):
     if not has_async:
         raise AsyncSchedulingNotEnabledError(
             "Expected async_scheduling=True for draft_model spec decode, got False."
-            " See https://github.com/vllm-project/aphrodite/issues/38929"
+            " See https://github.com/vllm-project/vllm/issues/38929"
         )
 
 

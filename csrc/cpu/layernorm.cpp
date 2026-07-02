@@ -105,7 +105,7 @@ void rms_norm(torch::Tensor& out, torch::Tensor& input,
     TORCH_CHECK(weight->is_contiguous());
   }
 
-  VLLM_DISPATCH_FLOATING_TYPES(input.scalar_type(), "rms_norm_impl", [&] {
+  APHRODITE_DISPATCH_FLOATING_TYPES(input.scalar_type(), "rms_norm_impl", [&] {
     CPU_KERNEL_GUARD_IN(rms_norm_impl)
     rms_norm_impl(out.data_ptr<scalar_t>(), input.data_ptr<scalar_t>(),
                   has_weight ? weight->data_ptr<scalar_t>() : nullptr,
@@ -124,7 +124,7 @@ void fused_add_rms_norm(torch::Tensor& input, torch::Tensor& residual,
     TORCH_CHECK(weight->is_contiguous());
   }
 
-  VLLM_DISPATCH_FLOATING_TYPES(
+  APHRODITE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "fused_add_rms_norm_impl", [&] {
         CPU_KERNEL_GUARD_IN(fused_add_rms_norm_impl)
         fused_add_rms_norm_impl(

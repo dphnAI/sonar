@@ -64,7 +64,7 @@ class _MockParallelConfig:
     tensor_parallel_size = 1
 
 
-class _MockVllmConfig:
+class _MockAphroditeConfig:
     """Minimal mock for AphroditeConfig used in __init__ tests."""
 
     def __init__(
@@ -854,7 +854,7 @@ class TestInitInvariantValidation:
         min_budget=4,
         max_budget=128,
     ):
-        vllm_config = _MockVllmConfig(token_budgets, max_mm_items)
+        vllm_config = _MockAphroditeConfig(token_budgets, max_mm_items)
         model = _MockModel(min_budget, max_budget)
         return EncoderCudaGraphManager(
             vllm_config=vllm_config,

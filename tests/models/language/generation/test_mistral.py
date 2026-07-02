@@ -31,7 +31,7 @@ SYMBOLIC_LANG_PROMPTS = [
     "勇敢な船乗りについての詩を書く",  # japanese
     "寫一首關於勇敢的水手的詩",  # chinese
     "ပုံပြင်လေးပြောပြပါ်:\n",  # burmese
-    "Repeat the phrase 'URGENCY🌶️':\nURGENCY🌶️\nURGENCY🌶️\n",  # see https://github.com/vllm-project/aphrodite/pull/9625
+    "Repeat the phrase 'URGENCY🌶️':\nURGENCY🌶️\nURGENCY🌶️\n",  # see https://github.com/vllm-project/vllm/pull/9625
 ]
 
 # for function calling

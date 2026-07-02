@@ -12,7 +12,7 @@ template <class ElementPairA_, class GmemLayoutA_, int AlignmentA,
           class ElementPairB_, class GmemLayoutB_, int AlignmentB,
           class ElementAccumulator, class TileShape_MNK, class ClusterShape_MNK,
           class StageCountType, class KernelScheduleType>
-struct VLLMCollectiveBuilder<
+struct APHRODITECollectiveBuilder<
     MacheteKernelTag, arch::Sm90, arch::OpClassTensorOp, ElementPairA_,
     GmemLayoutA_, AlignmentA, ElementPairB_, GmemLayoutB_, AlignmentB,
     ElementAccumulator, TileShape_MNK, ClusterShape_MNK, StageCountType,

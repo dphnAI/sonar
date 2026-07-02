@@ -88,13 +88,13 @@ def test_custom_op():
         _ = CompilationConfig(custom_ops=["quant_fp8"])
 
 
-# forked needed to workaround https://github.com/vllm-project/aphrodite/issues/21073
+# forked needed to workaround https://github.com/vllm-project/vllm/issues/21073
 @pytest.mark.forked
 # NB: We don't test APHRODITE_DISABLE_COMPILE_CACHE=0 because that depends
 # on the state of the cache directory on the current machine, which
 # may be influenced by other tests.
 @pytest.mark.parametrize("val", ["1"])
-def test_VLLM_DISABLE_COMPILE_CACHE(vllm_runner, monkeypatch, val):
+def test_APHRODITE_DISABLE_COMPILE_CACHE(vllm_runner, monkeypatch, val):
     # Disable multiprocessing so that the counter is in the same process
     monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
     monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", val)
@@ -116,7 +116,7 @@ def test_VLLM_DISABLE_COMPILE_CACHE(vllm_runner, monkeypatch, val):
         pass
 
 
-# forked needed to workaround https://github.com/vllm-project/aphrodite/issues/21073
+# forked needed to workaround https://github.com/vllm-project/vllm/issues/21073
 @pytest.mark.forked
 @pytest.mark.parametrize(
     "cudagraph_mode,num_cudagraph_captured",
@@ -154,7 +154,7 @@ def test_use_cudagraphs(
         pass
 
 
-# forked needed to workaround https://github.com/vllm-project/aphrodite/issues/21073
+# forked needed to workaround https://github.com/vllm-project/vllm/issues/21073
 @pytest.mark.forked
 def test_stock_torch_compile(vllm_runner, monkeypatch):
     # Disable multiprocessing so that the counter is in the same process
@@ -172,7 +172,7 @@ def test_stock_torch_compile(vllm_runner, monkeypatch):
         pass
 
 
-# forked needed to workaround https://github.com/vllm-project/aphrodite/issues/21073
+# forked needed to workaround https://github.com/vllm-project/vllm/issues/21073
 @pytest.mark.forked
 def test_no_compilation(vllm_runner, monkeypatch):
     # Disable multiprocessing so that the counter is in the same process
@@ -189,7 +189,7 @@ def test_no_compilation(vllm_runner, monkeypatch):
         pass
 
 
-# forked needed to workaround https://github.com/vllm-project/aphrodite/issues/21073
+# forked needed to workaround https://github.com/vllm-project/vllm/issues/21073
 @pytest.mark.forked
 def test_enforce_eager(vllm_runner, monkeypatch):
     # Disable multiprocessing so that the counter is in the same process

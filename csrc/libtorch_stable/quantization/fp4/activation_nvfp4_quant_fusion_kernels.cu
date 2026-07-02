@@ -36,7 +36,7 @@ namespace vllm {
 
 // Use UE4M3 by default.
 template <class Type, bool UE8M0_SF = false>
-__global__ void __launch_bounds__(512, VLLM_BLOCKS_PER_SM(512))
+__global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
     silu_mul_cvt_fp16_to_fp4(int32_t numRows, int32_t numCols,
                              int32_t num_packed_cols,
                              Type const* __restrict__ in,
@@ -151,7 +151,7 @@ void silu_and_mul_nvfp4_quant_sm1xxa(
       int(m), std::max(1, (multiProcessorCount * numBlocksPerSM) / grid_y));
   dim3 grid(grid_x, grid_y);
 
-  VLLM_STABLE_DISPATCH_HALF_TYPES(
+  APHRODITE_STABLE_DISPATCH_HALF_TYPES(
       input.scalar_type(), "silu_and_mul_nvfp4_quant_kernel", [&] {
         using cuda_type = vllm::CUDATypeConverter<scalar_t>::Type;
         auto input_ptr = static_cast<cuda_type const*>(input.data_ptr());

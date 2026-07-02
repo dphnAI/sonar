@@ -222,7 +222,7 @@ class SchedulerConfig:
         # 2. Inductor decides whether using 32-bit or 64-bit indexing integer
         #   based on the data sizes. `max_num_batched_tokens` has an
         #   impact on that. For more details, please check
-        #   https://github.com/vllm-project/aphrodite/issues/29585
+        #   https://github.com/vllm-project/vllm/issues/29585
         factors.append(self.max_num_batched_tokens)
 
         hash_str = safe_hash(str(factors).encode(), usedforsecurity=False).hexdigest()

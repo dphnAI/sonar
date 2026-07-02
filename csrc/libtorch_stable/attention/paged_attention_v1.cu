@@ -25,7 +25,7 @@
 #define DIVIDE_ROUND_UP(a, b) (((a) + (b) - 1) / (b))
 
 #define LAUNCH_PAGED_ATTENTION_V1(HEAD_SIZE)                                \
-  VLLM_DevFuncAttribute_SET_MaxDynamicSharedMemorySize(                     \
+  APHRODITE_DevFuncAttribute_SET_MaxDynamicSharedMemorySize(                     \
       ((void*)vllm::paged_attention_v1_kernel<T, CACHE_T, HEAD_SIZE,        \
                                               BLOCK_SIZE, NUM_THREADS,      \
                                               KV_DTYPE, IS_BLOCK_SPARSE>),  \

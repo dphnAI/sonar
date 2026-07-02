@@ -155,7 +155,7 @@ async def test_abort_during_final_step(async_scheduling: bool):
     4. Aborts the request, then deletes the file to unblock execute_model
     5. Verifies the KV connector received FINISHED_ABORTED not FINISHED_LENGTH_CAPPED
 
-    See https://github.com/vllm-project/aphrodite/pull/29987.
+    See https://github.com/vllm-project/vllm/pull/29987.
 
     Without the fix, the KV connector would see FINISHED_LENGTH_CAPPED because
     update_from_output() would mark the request as completed before processing

@@ -85,7 +85,7 @@ class TestSetting:
             ),
         ),
         # vision language model
-        # See https://github.com/vllm-project/aphrodite/issues/26716.
+        # See https://github.com/vllm-project/vllm/issues/26716.
         # TestSetting(
         #     model="microsoft/Phi-3.5-vision-instruct",
         #     model_args=["--trust-remote-code", "--max-model-len", "2048"],

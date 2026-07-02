@@ -21,7 +21,7 @@ else:
     ATTN_BACKENDS = ["FLASH_ATTN"]
 
 # On SM<90 (e.g., L4), batch invariance does not support CUDA graphs.
-# See https://github.com/vllm-project/aphrodite/pull/30018 and
+# See https://github.com/vllm-project/vllm/pull/30018 and
 # tests/v1/determinism/utils.py for the documented limitation.
 IS_DEVICE_CAPABILITY_BELOW_90 = not current_platform.has_device_capability(90)
 
@@ -31,7 +31,7 @@ IS_DEVICE_CAPABILITY_BELOW_90 = not current_platform.has_device_capability(90)
 @pytest.mark.xfail(
     current_platform.is_rocm(),
     reason="Test may fail on ROCm until batch invariance is enabled. "
-    "See: https://github.com/vllm-project/aphrodite/issues/27433",
+    "See: https://github.com/vllm-project/vllm/issues/27433",
     strict=False,
 )
 async def test_run_eagle_dp(monkeypatch: pytest.MonkeyPatch, attn_backend: str):
@@ -45,7 +45,7 @@ async def test_run_eagle_dp(monkeypatch: pytest.MonkeyPatch, attn_backend: str):
         #
         # TODO[ROCm]: Test is passing on ROCm CI but may break in future.
         # Enable batch invariance for ROCm when possible. See:
-        # https://github.com/vllm-project/aphrodite/issues/27433
+        # https://github.com/vllm-project/vllm/issues/27433
 
         monkeypatch.setenv("APHRODITE_BATCH_INVARIANT", "1")
 
