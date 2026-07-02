@@ -229,8 +229,8 @@ def build_embedding_inputs_from_test_info(
     assert len(images) == len(model_prompts)
 
     inputs = build_single_image_inputs(images, model_prompts, size_wrapper)
-    vllm_embeddings = build_single_image_inputs(embeds, model_prompts, size_wrapper)
-    return inputs, vllm_embeddings
+    aphrodite_embeddings = build_single_image_inputs(embeds, model_prompts, size_wrapper)
+    return inputs, aphrodite_embeddings
 
 
 def build_video_inputs_from_test_info(

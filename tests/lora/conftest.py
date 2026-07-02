@@ -58,13 +58,13 @@ def maybe_enable_lora_dual_stream(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture
 def dist_init():
-    from tests.utils import ensure_current_vllm_config
+    from tests.utils import ensure_current_aphrodite_config
 
     temp_file = tempfile.mkstemp()[1]
 
     backend = "gloo" if current_platform.is_tpu() else current_platform.dist_backend
 
-    with ensure_current_vllm_config():
+    with ensure_current_aphrodite_config():
         init_distributed_environment(
             world_size=1,
             rank=0,
@@ -94,7 +94,7 @@ class DummyLoRAModel(nn.Sequential, SupportsLoRA):
 
 
 @pytest.fixture
-def dummy_model(default_vllm_config) -> nn.Module:
+def dummy_model(default_aphrodite_config) -> nn.Module:
     model = DummyLoRAModel(
         OrderedDict(
             [
@@ -127,7 +127,7 @@ def dummy_model(default_vllm_config) -> nn.Module:
 
 
 @pytest.fixture
-def dummy_model_gate_up(default_vllm_config) -> nn.Module:
+def dummy_model_gate_up(default_aphrodite_config) -> nn.Module:
     model = DummyLoRAModel(
         OrderedDict(
             [

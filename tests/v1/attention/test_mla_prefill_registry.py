@@ -36,7 +36,7 @@ def test_prefill_backend_clone_has_isolated_metadata():
         qk_nope_head_dim=16,
         qk_rope_head_dim=8,
         v_head_dim=32,
-        vllm_config=object(),
+        aphrodite_config=object(),
     )
 
     clone = backend.clone()

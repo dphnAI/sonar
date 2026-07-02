@@ -91,7 +91,7 @@ def _get_prompt(audio_count, question, placeholder):
 
 
 def run_multi_audio_test(
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     prompts_and_audios: list[tuple[str, list[AudioTuple]]],
     model: str,
     *,
@@ -104,7 +104,7 @@ def run_multi_audio_test(
     model_info.check_available_online(on_fail="skip")
     model_info.check_transformers_version(on_fail="skip")
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         dtype=dtype,
         enforce_eager=True,
@@ -112,8 +112,8 @@ def run_multi_audio_test(
             "audio": max((len(audio) for _, audio in prompts_and_audios))
         },
         **kwargs,
-    ) as vllm_model:
-        vllm_outputs = vllm_model.generate_greedy_logprobs(
+    ) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
             [prompt for prompt, _ in prompts_and_audios],
             max_tokens,
             num_logprobs=num_logprobs,
@@ -122,7 +122,7 @@ def run_multi_audio_test(
 
     # The HuggingFace model doesn't support multiple audios yet, so
     # just assert that some tokens were generated.
-    assert all(tokens for tokens, *_ in vllm_outputs)
+    assert all(tokens for tokens, *_ in aphrodite_outputs)
 
 
 @pytest.mark.core_model
@@ -130,29 +130,29 @@ def run_multi_audio_test(
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("num_logprobs", [5])
 @pytest.mark.parametrize(
-    "vllm_kwargs",
+    "aphrodite_kwargs",
     [
         pytest.param({}, marks=pytest.mark.cpu_model),
         pytest.param(CHUNKED_PREFILL_KWARGS),
     ],
 )
 def test_models_with_multiple_audios(
-    vllm_runner,
+    aphrodite_runner,
     audio_assets: AudioTestAssets,
     dtype: str,
     max_tokens: int,
     num_logprobs: int,
-    vllm_kwargs: dict,
+    aphrodite_kwargs: dict,
 ) -> None:
-    vllm_prompt = _get_prompt(len(audio_assets), MULTI_AUDIO_PROMPT, APHRODITE_PLACEHOLDER)
+    aphrodite_prompt = _get_prompt(len(audio_assets), MULTI_AUDIO_PROMPT, APHRODITE_PLACEHOLDER)
     run_multi_audio_test(
-        vllm_runner,
-        [(vllm_prompt, [audio.audio_and_sample_rate for audio in audio_assets])],
+        aphrodite_runner,
+        [(aphrodite_prompt, [audio.audio_and_sample_rate for audio in audio_assets])],
         MODEL_NAME,
         dtype=dtype,
         max_tokens=max_tokens,
         num_logprobs=num_logprobs,
-        **vllm_kwargs,
+        **aphrodite_kwargs,
     )
 
 
@@ -160,7 +160,7 @@ def test_models_with_multiple_audios(
 @pytest.mark.parametrize("dtype", ["half"])
 @pytest.mark.parametrize("max_tokens", [32])
 def test_variable_length_audio_batching(
-    vllm_runner,
+    aphrodite_runner,
     audio_assets: AudioTestAssets,
     dtype: str,
     max_tokens: int,
@@ -181,15 +181,15 @@ def test_variable_length_audio_batching(
         prompt = _get_prompt(1, question, APHRODITE_PLACEHOLDER)
         prompts_and_audios.append((prompt, [audio.audio_and_sample_rate]))
 
-    with vllm_runner(
+    with aphrodite_runner(
         MODEL_NAME,
         dtype=dtype,
         enforce_eager=True,
         limit_mm_per_prompt={"audio": 1},
-    ) as vllm_model:
+    ) as aphrodite_model:
         # Generate for all prompts in a single batch
         # This triggers the variable-length batching code path
-        outputs = vllm_model.generate_greedy(
+        outputs = aphrodite_model.generate_greedy(
             [prompt for prompt, _ in prompts_and_audios],
             max_tokens,
             audios=[audios for _, audios in prompts_and_audios],

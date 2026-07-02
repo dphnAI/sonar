@@ -91,7 +91,7 @@ def _create_proposer(
         speculative_config.draft_model_config.hf_config.pard_token = 0
 
     device = DEVICE_TYPE
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=model_config,
         cache_config=CacheConfig(block_size=16),
         speculative_config=speculative_config,
@@ -106,11 +106,11 @@ def _create_proposer(
     )
 
     if method == "dflash":
-        proposer = DFlashProposer(vllm_config=vllm_config, device=device)
+        proposer = DFlashProposer(aphrodite_config=aphrodite_config, device=device)
     elif "eagle" in method:
-        proposer = EagleProposer(vllm_config=vllm_config, device=device)
+        proposer = EagleProposer(aphrodite_config=aphrodite_config, device=device)
     else:
-        proposer = DraftModelProposer(vllm_config=vllm_config, device=device)
+        proposer = DraftModelProposer(aphrodite_config=aphrodite_config, device=device)
     proposer.block_size = BLOCK_SIZE
     return proposer
 
@@ -739,7 +739,7 @@ def test_set_inputs_first_pass_parallel_drafting():
 @pytest.mark.parametrize("use_distinct_embed_tokens", [True, False])
 @pytest.mark.parametrize("use_distinct_lm_head", [True, False])
 @mock.patch("aphrodite.v1.spec_decode.llm_base_proposer.get_pp_group")
-@mock.patch("aphrodite.v1.spec_decode.llm_base_proposer.get_layers_from_vllm_config")
+@mock.patch("aphrodite.v1.spec_decode.llm_base_proposer.get_layers_from_aphrodite_config")
 @mock.patch("aphrodite.v1.spec_decode.llm_base_proposer.get_model")
 def test_load_model(
     mock_get_model,
@@ -954,9 +954,9 @@ def test_propose(method, attn_backend, num_speculative_tokens, monkeypatch):
         raise ValueError(f"Unsupported attention backend: {attn_backend}")
 
     attn_metadata_builder = attn_metadata_builder_cls(
-        kv_cache_spec=create_standard_kv_cache_spec(proposer.vllm_config),
+        kv_cache_spec=create_standard_kv_cache_spec(proposer.aphrodite_config),
         layer_names=proposer._draft_attn_layer_names,
-        vllm_config=proposer.vllm_config,
+        aphrodite_config=proposer.aphrodite_config,
         device=device,
     )
 
@@ -1060,9 +1060,9 @@ def test_propose_stores_probabilistic_draft_probs(attn_backend, monkeypatch):
         AttentionBackendEnum[attn_backend]
     )
     attn_metadata_builder = attn_metadata_builder_cls(
-        kv_cache_spec=create_standard_kv_cache_spec(proposer.vllm_config),
+        kv_cache_spec=create_standard_kv_cache_spec(proposer.aphrodite_config),
         layer_names=proposer._draft_attn_layer_names,
-        vllm_config=proposer.vllm_config,
+        aphrodite_config=proposer.aphrodite_config,
         device=device,
     )
     proposer.runner = mock.MagicMock()

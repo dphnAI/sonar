@@ -24,15 +24,15 @@ def test_get_draft_quant_config_with_draft_model():
     mock_speculative_config = Mock(spec=SpeculativeConfig)
     mock_speculative_config.draft_model_config = mock_draft_model_config
 
-    mock_vllm_config = Mock(spec=AphroditeConfig)
-    mock_vllm_config.speculative_config = mock_speculative_config
-    mock_vllm_config.load_config = mock_load_config
+    mock_aphrodite_config = Mock(spec=AphroditeConfig)
+    mock_aphrodite_config.speculative_config = mock_speculative_config
+    mock_aphrodite_config.load_config = mock_load_config
 
     mock_quant_config = Mock()
     with patch.object(
         AphroditeConfig, "get_quantization_config", return_value=mock_quant_config
     ):
-        result = get_draft_quant_config(mock_vllm_config)
+        result = get_draft_quant_config(mock_aphrodite_config)
 
         # Verify the function calls get_quantization_config with draft model config
         AphroditeConfig.get_quantization_config.assert_called_once_with(
@@ -45,18 +45,18 @@ def test_get_draft_quant_config_without_draft_model():
     mock_speculative_config = Mock(spec=SpeculativeConfig)
     mock_speculative_config.draft_model_config = None
 
-    mock_vllm_config = Mock(spec=AphroditeConfig)
-    mock_vllm_config.speculative_config = mock_speculative_config
-    mock_vllm_config.load_config = Mock(spec=LoadConfig)
+    mock_aphrodite_config = Mock(spec=AphroditeConfig)
+    mock_aphrodite_config.speculative_config = mock_speculative_config
+    mock_aphrodite_config.load_config = Mock(spec=LoadConfig)
 
-    result = get_draft_quant_config(mock_vllm_config)
+    result = get_draft_quant_config(mock_aphrodite_config)
 
     assert result is None
 
 
 @torch.inference_mode()
 @pytest.mark.parametrize("device", DEVICES)
-def test_fc_layer_quant_config_usage(default_vllm_config, dist_init, device) -> None:
+def test_fc_layer_quant_config_usage(default_aphrodite_config, dist_init, device) -> None:
     import torch
 
     from aphrodite.model_executor.layers.linear import ReplicatedLinear
@@ -131,10 +131,10 @@ def test_eagle3_lm_head_receives_quant_config():
     mock_hf_config.vocab_size = 32000
     mock_hf_config.logit_scale = 1.0
 
-    mock_vllm_config = Mock()
-    mock_vllm_config.speculative_config.draft_model_config.hf_config = mock_hf_config
-    mock_vllm_config.model_config.get_num_layers.return_value = 32
-    mock_vllm_config.speculative_config.parallel_drafting = False
+    mock_aphrodite_config = Mock()
+    mock_aphrodite_config.speculative_config.draft_model_config.hf_config = mock_hf_config
+    mock_aphrodite_config.model_config.get_num_layers.return_value = 32
+    mock_aphrodite_config.speculative_config.parallel_drafting = False
 
     with (
         patch("aphrodite.model_executor.models.llama_eagle3.LlamaModel") as MockModel,
@@ -147,7 +147,7 @@ def test_eagle3_lm_head_receives_quant_config():
     ):
         MockModel.return_value.use_aux_hidden_state = True
 
-        Eagle3LlamaForCausalLM(vllm_config=mock_vllm_config)
+        Eagle3LlamaForCausalLM(aphrodite_config=mock_aphrodite_config)
 
         MockLMHead.assert_called_once()
         call_kwargs = MockLMHead.call_args.kwargs

@@ -17,8 +17,8 @@ class DummyPlatform(Platform):
     dispatch_key: str = "PrivateUse1"
 
     @classmethod
-    def check_and_update_config(cls, vllm_config: AphroditeConfig) -> None:
-        vllm_config.compilation_config.custom_ops = ["all"]
+    def check_and_update_config(cls, aphrodite_config: AphroditeConfig) -> None:
+        aphrodite_config.compilation_config.custom_ops = ["all"]
 
     def get_attn_backend_cls(
         self,
@@ -32,4 +32,4 @@ class DummyPlatform(Platform):
         use_sparse,
         use_mm_prefix,
     ):
-        return "vllm_add_dummy_platform.dummy_attention_backend.DummyAttentionBackend"  # noqa E501
+        return "aphrodite_add_dummy_platform.dummy_attention_backend.DummyAttentionBackend"  # noqa E501

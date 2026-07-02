@@ -820,7 +820,7 @@ def test_einsum_end_to_end(num_tokens, num_heads, n_groups):
 
 @pytest.mark.parametrize("num_tokens", [1, 32, 256])
 @torch.inference_mode()
-def test_with_real_deepseek_v4_rope(num_tokens, default_vllm_config):
+def test_with_real_deepseek_v4_rope(num_tokens, default_aphrodite_config):
     """Test with real DeepseekV4ScalingRotaryEmbedding (GPT-J style,
     mscale=0, YaRN scaling) matching the production config."""
 

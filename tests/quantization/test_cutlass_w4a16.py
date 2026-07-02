@@ -130,9 +130,9 @@ def test_kernel_selection_with_disabled_machete(monkeypatch):
         "nm-testing/TinyLlama-1.1B-Chat-v1.0-W4A16-G128-Asym-Updated-ActOrder",
     ],
 )
-def test_w4a16_machete_e2e(vllm_runner, model_name):
+def test_w4a16_machete_e2e(aphrodite_runner, model_name):
     """Load a W4A16 model, verify Machete kernel is used, and generate."""
-    with vllm_runner(model_name, enforce_eager=True, gpu_memory_utilization=0.5) as llm:
+    with aphrodite_runner(model_name, enforce_eager=True, gpu_memory_utilization=0.5) as llm:
 
         def check_model(model):
             layer = model.model.layers[0]
@@ -156,12 +156,12 @@ def test_w4a16_machete_e2e(vllm_runner, model_name):
         assert len(output[0][1]) > 0
 
 
-def test_w4a16_machete_bfloat16_deterministic(vllm_runner):
+def test_w4a16_machete_bfloat16_deterministic(aphrodite_runner):
     """Verify Machete works with bf16 activations and is deterministic."""
     model_name = "nm-testing/tinyllama-oneshot-w4a16-channel-v2"
     prompt = "The capital of France is"
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_name,
         enforce_eager=True,
         dtype="bfloat16",

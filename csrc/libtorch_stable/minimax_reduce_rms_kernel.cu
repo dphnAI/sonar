@@ -35,7 +35,7 @@
 #define FINAL_MASK 0xffffffff
 #define MINIMAX_REDUCE_RMS_WARP_SIZE 32
 
-namespace vllm {
+namespace aphrodite {
 namespace tensorrt_llm {
 
 template <int NRanks>
@@ -802,7 +802,7 @@ void minimax_reduce_rms_op(MiniMaxReduceRMSParams const& params) {
   }
 }
 }  // namespace tensorrt_llm
-}  // namespace vllm
+}  // namespace aphrodite
 
 std::tuple<torch::stable::Tensor, torch::stable::Tensor>
 minimax_allreduce_rms_qk(torch::stable::Tensor qkv,
@@ -832,7 +832,7 @@ minimax_allreduce_rms_qk(torch::stable::Tensor qkv,
   torch::stable::Tensor k_out =
       torch::stable::new_empty(qkv, {num_tokens, kv_size}, qkv.scalar_type());
 
-  auto params = vllm::tensorrt_llm::MiniMaxReduceRMSParams();
+  auto params = aphrodite::tensorrt_llm::MiniMaxReduceRMSParams();
   params.nranks = static_cast<int>(nranks);
   params.rank = static_cast<int>(rank);
   params.dtype = qkv.scalar_type();
@@ -858,6 +858,6 @@ minimax_allreduce_rms_qk(torch::stable::Tensor qkv,
   params.rms_norm_out = q_out.mutable_data_ptr();
   params.rms_norm_out_k = k_out.mutable_data_ptr();
 
-  vllm::tensorrt_llm::minimax_reduce_rms_op(params);
+  aphrodite::tensorrt_llm::minimax_reduce_rms_op(params);
   return {q_out, k_out};
 }

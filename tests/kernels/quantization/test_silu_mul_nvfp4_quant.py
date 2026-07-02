@@ -31,7 +31,7 @@ BLOCK_SIZE = 16
 @pytest.mark.parametrize("shape", SHAPES)
 @torch.inference_mode()
 def test_silu_mul_nvfp4_quant(
-    default_vllm_config,
+    default_aphrodite_config,
     dtype: torch.dtype,
     shape: tuple[int, int],
 ) -> None:

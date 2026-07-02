@@ -20,9 +20,9 @@ from aphrodite.engine.arg_utils import EngineArgs
 from aphrodite.model_executor.model_loader.tensorizer import (
     TensorizerConfig,
     TensorSerializer,
-    is_vllm_tensorized,
+    is_aphrodite_tensorized,
     open_stream,
-    tensorize_vllm_model,
+    tensorize_aphrodite_model,
 )
 from aphrodite.model_executor.model_loader.tensorizer_loader import (
     BLACKLISTED_TENSORIZER_ARGS,
@@ -106,39 +106,39 @@ def write_keyfile(keyfile_path: str):
 
 
 @pytest.mark.skipif(not is_curl_installed(), reason="cURL is not installed")
-def test_deserialized_encrypted_vllm_model_has_same_outputs(
-    model_ref, vllm_runner, tmp_path, model_path
+def test_deserialized_encrypted_aphrodite_model_has_same_outputs(
+    model_ref, aphrodite_runner, tmp_path, model_path
 ):
     args = EngineArgs(model=model_ref)
-    with vllm_runner(model_ref) as vllm_model:
+    with aphrodite_runner(model_ref) as aphrodite_model:
         key_path = tmp_path / model_ref / "model.key"
         write_keyfile(key_path)
 
-        outputs = vllm_model.generate(prompts, sampling_params)
+        outputs = aphrodite_model.generate(prompts, sampling_params)
 
     config_for_serializing = TensorizerConfig(
         tensorizer_uri=str(model_path), encryption_keyfile=str(key_path)
     )
 
-    tensorize_vllm_model(args, config_for_serializing)
+    tensorize_aphrodite_model(args, config_for_serializing)
 
     config_for_deserializing = TensorizerConfig(
         tensorizer_uri=str(model_path), encryption_keyfile=str(key_path)
     )
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_ref,
         load_format="tensorizer",
         model_loader_extra_config=config_for_deserializing,
-    ) as loaded_vllm_model:  # noqa: E501
-        deserialized_outputs = loaded_vllm_model.generate(prompts, sampling_params)
+    ) as loaded_aphrodite_model:  # noqa: E501
+        deserialized_outputs = loaded_aphrodite_model.generate(prompts, sampling_params)
         # noqa: E501
 
         assert outputs == deserialized_outputs
 
 
 def test_deserialized_hf_model_has_same_outputs(
-    hf_runner, vllm_runner, tmp_path, model_ref, model_path
+    hf_runner, aphrodite_runner, tmp_path, model_ref, model_path
 ):
     with hf_runner(model_ref) as hf_model:
         max_tokens = 50
@@ -147,7 +147,7 @@ def test_deserialized_hf_model_has_same_outputs(
             serializer = TensorSerializer(stream)
             serializer.write_module(hf_model.model)
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_ref,
         load_format="tensorizer",
         model_loader_extra_config=TensorizerConfig(
@@ -162,10 +162,10 @@ def test_deserialized_hf_model_has_same_outputs(
         assert outputs == deserialized_outputs
 
 
-def test_load_without_tensorizer_load_format(vllm_runner, capfd, model_ref):
+def test_load_without_tensorizer_load_format(aphrodite_runner, capfd, model_ref):
     model = None
     try:
-        model = vllm_runner(
+        model = aphrodite_runner(
             model_ref, model_loader_extra_config=TensorizerConfig(tensorizer_uri="test")
         )
         pytest.fail("Expected RuntimeError for extra config keys")
@@ -181,10 +181,10 @@ def test_load_without_tensorizer_load_format(vllm_runner, capfd, model_ref):
         torch.accelerator.empty_cache()
 
 
-def test_raise_value_error_on_invalid_load_format(vllm_runner, capfd, model_ref):
+def test_raise_value_error_on_invalid_load_format(aphrodite_runner, capfd, model_ref):
     model = None
     try:
-        model = vllm_runner(
+        model = aphrodite_runner(
             model_ref,
             load_format="safetensors",
             model_loader_extra_config=TensorizerConfig(tensorizer_uri="test"),
@@ -204,12 +204,12 @@ def test_raise_value_error_on_invalid_load_format(vllm_runner, capfd, model_ref)
 
 
 @pytest.mark.skipif(torch.accelerator.device_count() < 2, reason="Requires 2 GPUs")
-def test_tensorizer_with_tp_path_without_template(vllm_runner, capfd):
+def test_tensorizer_with_tp_path_without_template(aphrodite_runner, capfd):
     try:
         model_ref = "EleutherAI/pythia-1.4b"
         tensorized_path = f"s3://tensorized/{model_ref}/fp16/model.tensors"
 
-        vllm_runner(
+        aphrodite_runner(
             model_ref,
             load_format="tensorizer",
             model_loader_extra_config=TensorizerConfig(
@@ -232,12 +232,12 @@ def test_tensorizer_with_tp_path_without_template(vllm_runner, capfd):
 
 
 @pytest.mark.skipif(torch.accelerator.device_count() < 2, reason="Requires 2 GPUs")
-def test_deserialized_encrypted_vllm_model_with_tp_has_same_outputs(
-    vllm_runner, tmp_path
+def test_deserialized_encrypted_aphrodite_model_with_tp_has_same_outputs(
+    aphrodite_runner, tmp_path
 ):
     model_ref = "EleutherAI/pythia-1.4b"
     # record outputs from un-sharded un-tensorized model
-    with vllm_runner(
+    with aphrodite_runner(
         model_ref,
         disable_custom_all_reduce=True,
         enforce_eager=True,
@@ -253,7 +253,7 @@ def test_deserialized_encrypted_vllm_model_with_tp_has_same_outputs(
         encryption_keyfile=str(key_path),
     )
 
-    tensorize_vllm_model(
+    tensorize_aphrodite_model(
         engine_args=EngineArgs(
             model=model_ref,
             tensor_parallel_size=2,
@@ -265,38 +265,38 @@ def test_deserialized_encrypted_vllm_model_with_tp_has_same_outputs(
     assert os.path.isfile(model_path % 0), "Serialization subprocess failed"
     assert os.path.isfile(model_path % 1), "Serialization subprocess failed"
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_ref,
         tensor_parallel_size=2,
         load_format="tensorizer",
         disable_custom_all_reduce=True,
         enforce_eager=True,
         model_loader_extra_config=tensorizer_config,
-    ) as loaded_vllm_model:
-        deserialized_outputs = loaded_vllm_model.generate(prompts, sampling_params)
+    ) as loaded_aphrodite_model:
+        deserialized_outputs = loaded_aphrodite_model.generate(prompts, sampling_params)
 
     assert outputs == deserialized_outputs
 
 
 @pytest.mark.flaky(reruns=3)
-def test_vllm_tensorized_model_has_same_outputs(
-    model_ref, vllm_runner, tmp_path, model_path
+def test_aphrodite_tensorized_model_has_same_outputs(
+    model_ref, aphrodite_runner, tmp_path, model_path
 ):
     gc.collect()
     torch.accelerator.empty_cache()
     config = TensorizerConfig(tensorizer_uri=str(model_path))
     args = EngineArgs(model=model_ref)
 
-    with vllm_runner(model_ref) as vllm_model:
-        outputs = vllm_model.generate(prompts, sampling_params)
+    with aphrodite_runner(model_ref) as aphrodite_model:
+        outputs = aphrodite_model.generate(prompts, sampling_params)
 
-    tensorize_vllm_model(args, config)
-    assert is_vllm_tensorized(config)
+    tensorize_aphrodite_model(args, config)
+    assert is_aphrodite_tensorized(config)
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_ref, load_format="tensorizer", model_loader_extra_config=config
-    ) as loaded_vllm_model:
-        deserialized_outputs = loaded_vllm_model.generate(prompts, sampling_params)
+    ) as loaded_aphrodite_model:
+        deserialized_outputs = loaded_aphrodite_model.generate(prompts, sampling_params)
         # noqa: E501
 
         assert outputs == deserialized_outputs
@@ -384,7 +384,7 @@ def test_assert_deserialization_kwargs_passed_to_tensor_deserializer(tmp_path, c
     )
 
     args = EngineArgs(model=model_ref)
-    tensorize_vllm_model(args, config)
+    tensorize_aphrodite_model(args, config)
 
     loader_tc = TensorizerConfig(
         tensorizer_uri=str(model_path),
@@ -397,8 +397,8 @@ def test_assert_deserialization_kwargs_passed_to_tensor_deserializer(tmp_path, c
         model_loader_extra_config=loader_tc.to_serializable(),
     )
 
-    vllm_config = engine_args.create_engine_config()
-    executor = DummyExecutor(vllm_config)
+    aphrodite_config = engine_args.create_engine_config()
+    executor = DummyExecutor(aphrodite_config)
 
     assert_specific_tensorizer_error_is_raised(
         executor,
@@ -424,7 +424,7 @@ def test_assert_stream_kwargs_passed_to_tensor_deserializer(tmp_path, capfd):
     )
 
     args = EngineArgs(model=model_ref)
-    tensorize_vllm_model(args, config)
+    tensorize_aphrodite_model(args, config)
 
     stream_kwargs = {"mode": "foo"}
 
@@ -440,8 +440,8 @@ def test_assert_stream_kwargs_passed_to_tensor_deserializer(tmp_path, capfd):
         model_loader_extra_config=loader_tc.to_serializable(),
     )
 
-    vllm_config = engine_args.create_engine_config()
-    executor = DummyExecutor(vllm_config)
+    aphrodite_config = engine_args.create_engine_config()
+    executor = DummyExecutor(aphrodite_config)
 
     assert_specific_tensorizer_error_is_raised(
         executor,
@@ -460,7 +460,7 @@ async def test_serialize_and_serve_entrypoints(tmp_path):
         result = subprocess.run(
             [
                 sys.executable,
-                f"{APHRODITE_PATH}/examples/features/tensorize_vllm_model.py",
+                f"{APHRODITE_PATH}/examples/features/tensorize_aphrodite_model.py",
                 "--model",
                 model_ref,
                 "serialize",
@@ -530,7 +530,7 @@ async def test_serialize_and_serve_entrypoints(tmp_path):
 
 
 @pytest.mark.parametrize("illegal_value", BLACKLISTED_TENSORIZER_ARGS)
-def test_blacklisted_parameter_for_loading(tmp_path, vllm_runner, capfd, illegal_value):
+def test_blacklisted_parameter_for_loading(tmp_path, aphrodite_runner, capfd, illegal_value):
     serialization_params = {
         "limit_cpu_concurrency": 2,
     }
@@ -542,12 +542,12 @@ def test_blacklisted_parameter_for_loading(tmp_path, vllm_runner, capfd, illegal
     )
 
     args = EngineArgs(model=model_ref)
-    tensorize_vllm_model(args, config)
+    tensorize_aphrodite_model(args, config)
 
     loader_tc = {"tensorizer_uri": str(model_path), illegal_value: "foo"}
 
     try:
-        vllm_runner(
+        aphrodite_runner(
             model_ref,
             load_format="tensorizer",
             model_loader_extra_config=loader_tc,

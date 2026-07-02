@@ -85,7 +85,7 @@ MODELS_TO_TEST = [GEMMA3_CONFIG, GEMMA3_CONFIG_PAN_AND_SCAN]
 
 def run_multimodal_gguf_test(
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     model: GGUFMMTestConfig,
     dtype: str,
     max_tokens: int,
@@ -106,7 +106,7 @@ def run_multimodal_gguf_test(
     # Run GGUF model via Aphrodite.
     with (
         set_default_torch_num_threads(1),
-        vllm_runner(
+        aphrodite_runner(
             model_name=model.gguf_model,
             enforce_eager=True,
             tokenizer_name=model.original_model,
@@ -156,12 +156,12 @@ def run_multimodal_gguf_test(
 @pytest.mark.parametrize("num_logprobs", [10])
 def test_gemma3_mm_gguf(
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     model: GGUFMMTestConfig,
     dtype: str,
     max_tokens: int,
     num_logprobs: int,
 ) -> None:
     run_multimodal_gguf_test(
-        hf_runner, vllm_runner, model, dtype, max_tokens, num_logprobs
+        hf_runner, aphrodite_runner, model, dtype, max_tokens, num_logprobs
     )

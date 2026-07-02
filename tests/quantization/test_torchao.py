@@ -19,8 +19,8 @@ TORCHAO_AVAILABLE = importlib.util.find_spec("torchao") is not None
     reason="Only fp8_fnuz supported on CDNA3 architecture",
 )
 @pytest.mark.skipif(not TORCHAO_AVAILABLE, reason="torchao is not available")
-def test_pre_quantized_model(vllm_runner):
-    with vllm_runner(
+def test_pre_quantized_model(aphrodite_runner):
+    with aphrodite_runner(
         "torchao-testing/opt-125m-Float8WeightOnlyConfig-v2-0.15.0",
         quantization="torchao",
         dtype="bfloat16",
@@ -38,10 +38,10 @@ def test_pre_quantized_model(vllm_runner):
         # {"": "cuda"},
     ],
 )
-def test_opt_125m_int8wo_model_loading_with_params(vllm_runner, pt_load_map_location):
+def test_opt_125m_int8wo_model_loading_with_params(aphrodite_runner, pt_load_map_location):
     torch._dynamo.reset()
     model_name = "jerryzh168/opt-125m-int8wo-partial-quant"
-    with vllm_runner(
+    with aphrodite_runner(
         model_name=model_name,
         quantization="torchao",
         dtype="bfloat16",
@@ -54,10 +54,10 @@ def test_opt_125m_int8wo_model_loading_with_params(vllm_runner, pt_load_map_loca
 
 
 @pytest.mark.skipif(not TORCHAO_AVAILABLE, reason="torchao is not available")
-def test_qwenvl_int8wo_model_loading_with_params(vllm_runner):
+def test_qwenvl_int8wo_model_loading_with_params(aphrodite_runner):
     torch._dynamo.reset()
     model_name = "mobicham/Qwen2.5-VL-3B-Instruct_int8wo_ao"
-    with vllm_runner(
+    with aphrodite_runner(
         model_name=model_name,
         quantization="torchao",
         dtype="bfloat16",
@@ -75,10 +75,10 @@ def test_qwenvl_int8wo_model_loading_with_params(vllm_runner):
     "currently https://github.com/pytorch/ao/issues/2919, we'll have to skip "
     "torchao tests that requires newer versions (0.14.0.dev+) for now"
 )
-def test_opt_125m_awq_int4wo_model_loading_with_params(vllm_runner):
+def test_opt_125m_awq_int4wo_model_loading_with_params(aphrodite_runner):
     torch._dynamo.reset()
     model_name = "torchao-testing/opt-125m-AWQConfig-Int4WeightOnlyConfig-v2-0.14.0.dev"
-    with vllm_runner(
+    with aphrodite_runner(
         model_name=model_name,
         quantization="torchao",
         dtype="bfloat16",
@@ -90,7 +90,7 @@ def test_opt_125m_awq_int4wo_model_loading_with_params(vllm_runner):
 
 
 @pytest.mark.skipif(not TORCHAO_AVAILABLE, reason="torchao is not available")
-def test_online_quant_config_dict_json(vllm_runner, enable_pickle):
+def test_online_quant_config_dict_json(aphrodite_runner, enable_pickle):
     """Testing online quantization, load_weights integration point,
     with config dict serialized to json string
     """
@@ -110,7 +110,7 @@ def test_online_quant_config_dict_json(vllm_runner, enable_pickle):
             config_to_dict(torchao_quant_config)
         )
     }
-    with vllm_runner(
+    with aphrodite_runner(
         model_name=model_name,
         dtype="bfloat16",
         pt_load_map_location=f"{DEVICE_TYPE}:0",
@@ -120,8 +120,8 @@ def test_online_quant_config_dict_json(vllm_runner, enable_pickle):
     ) as llm:
         output = llm.generate_greedy(["The capital of France is"], max_tokens=4)
 
-        load_config = llm.llm.llm_engine.vllm_config.load_config
-        model_config = llm.llm.llm_engine.vllm_config.model_config
+        load_config = llm.llm.llm_engine.aphrodite_config.load_config
+        model_config = llm.llm.llm_engine.aphrodite_config.model_config
 
         def load_weights(model):
             model_loader = get_model_loader(load_config)
@@ -135,7 +135,7 @@ def test_online_quant_config_dict_json(vllm_runner, enable_pickle):
 
 
 @pytest.mark.skipif(not TORCHAO_AVAILABLE, reason="torchao is not available")
-def test_online_quant_config_file(vllm_runner):
+def test_online_quant_config_file(aphrodite_runner):
     """Testing on the fly quantization, load_weights integration point,
     with config file
     """
@@ -156,7 +156,7 @@ def test_online_quant_config_file(vllm_runner):
         config_file_name = str(f.name)
 
         hf_overrides = {"quantization_config_file": config_file_name}
-        with vllm_runner(
+        with aphrodite_runner(
             model_name=model_name,
             dtype="bfloat16",
             pt_load_map_location=f"{DEVICE_TYPE}:0",
@@ -229,11 +229,11 @@ def test_reload_weights():
     "currently https://github.com/pytorch/ao/issues/2919, we'll have to skip "
     "torchao tests that requires newer versions (0.15.0.dev+) for now"
 )
-def test_safetensors_model_loading_with_params(vllm_runner):
+def test_safetensors_model_loading_with_params(aphrodite_runner):
     torch._dynamo.reset()
     # using this model to test safetensors loading with file sharding
     model_name = "torchao-testing/Qwen3-8B-INT4-0.15.0dev-safetensors"
-    with vllm_runner(model_name=model_name, dtype="bfloat16") as llm:
+    with aphrodite_runner(model_name=model_name, dtype="bfloat16") as llm:
         output = llm.generate_greedy(["The capital of France is"], max_tokens=4)
 
         assert output
@@ -245,10 +245,10 @@ def test_safetensors_model_loading_with_params(vllm_runner):
     "currently https://github.com/pytorch/ao/issues/2919, we'll have to skip "
     "torchao tests that requires newer versions (0.14.0.dev+) for now"
 )
-def test_opt_125m_module_fqn_to_config_regex_model(vllm_runner):
+def test_opt_125m_module_fqn_to_config_regex_model(aphrodite_runner):
     torch._dynamo.reset()
     model_name = "torchao-testing/opt-125m-ModuleFqnToConfig-v1-regex-0.14.0.dev"
-    with vllm_runner(
+    with aphrodite_runner(
         model_name=model_name, dtype="bfloat16", pt_load_map_location=f"{DEVICE_TYPE}:0"
     ) as llm:
         output = llm.generate_greedy(["The capital of France is"], max_tokens=4)
@@ -262,7 +262,7 @@ def test_opt_125m_module_fqn_to_config_regex_model(vllm_runner):
     "currently https://github.com/pytorch/ao/issues/2919, we'll have to skip "
     "torchao tests that requires newer versions (0.14.0.dev+) for now"
 )
-def test_opt_125m_int4wo_model_running_preshuffled_kernel(vllm_runner, monkeypatch):
+def test_opt_125m_int4wo_model_running_preshuffled_kernel(aphrodite_runner, monkeypatch):
     """We load a model with Int4Tensor (plain format) linear weights
     and verify that the weight is updated to Int4PreshuffledTensor
     after loading in aphrodite
@@ -275,7 +275,7 @@ def test_opt_125m_int4wo_model_running_preshuffled_kernel(vllm_runner, monkeypat
     model_name = "torchao-testing/opt-125m-Int4WeightOnlyConfig-v2-0.14.0.dev"
     # Note: using enforce_eager=True because the `bf16i4bf16_shuffled` doesn't
     # have meta kernel implemented yet, can remove this flag after that is implemented
-    with vllm_runner(
+    with aphrodite_runner(
         model_name=model_name,
         quantization="torchao",
         dtype="bfloat16",
@@ -325,7 +325,7 @@ def test_opt_125m_int4wo_model_running_preshuffled_kernel(vllm_runner, monkeypat
     "torchao tests that requires newer versions (0.14.0.dev+) for now"
 )
 def test_opt_125m_int4wo_model_running_preshuffled_kernel_online_quant(
-    vllm_runner, monkeypatch
+    aphrodite_runner, monkeypatch
 ):
     """We load a bf16 model and online quantize the model to int4, then verify that
     the weights are updated to Int4PreshuffledTensor after online quantization
@@ -354,7 +354,7 @@ def test_opt_125m_int4wo_model_running_preshuffled_kernel_online_quant(
 
     # Note: using enforce_eager=True because the `bf16i4bf16_shuffled` doesn't
     # have meta kernel implemented yet, can remove this flag after that is implemented
-    with vllm_runner(
+    with aphrodite_runner(
         model_name=model_name,
         quantization="torchao",
         dtype="bfloat16",

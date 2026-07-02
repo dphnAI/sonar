@@ -12,7 +12,7 @@ pytest -s -v tests/evals/mrcr/test_mrcr_correctness.py \
     --config-list-file=configs/models-small.txt
 
 # Standalone (server already running; model and context auto-discovered)
-vllm serve Qwen/Qwen3-0.6B --reasoning-parser qwen3 --port 8000
+aphrodite serve Qwen/Qwen3-0.6B --reasoning-parser qwen3 --port 8000
 python tests/evals/mrcr/mrcr_eval.py --port 8000
 ```
 

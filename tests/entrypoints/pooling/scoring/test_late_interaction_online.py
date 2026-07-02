@@ -68,11 +68,11 @@ async def test_score_api_queries_str_1_documents_str_1(
     assert score.data is not None
     assert len(score.data) == 1
 
-    vllm_outputs = [d.score for d in score.data]
+    aphrodite_outputs = [d.score for d in score.data]
     hf_outputs = hf_model.predict([[TEXTS_1[0], TEXTS_2[0]]]).tolist()
 
-    for i in range(len(vllm_outputs)):
-        assert hf_outputs[i] == pytest.approx(vllm_outputs[i], rel=0.01)
+    for i in range(len(aphrodite_outputs)):
+        assert hf_outputs[i] == pytest.approx(aphrodite_outputs[i], rel=0.01)
 
 
 @pytest.mark.asyncio
@@ -99,11 +99,11 @@ async def test_score_api_queries_str_1_documents_str_n(
     assert score.data is not None
     assert len(score.data) == 2
 
-    vllm_outputs = [d.score for d in score.data]
+    aphrodite_outputs = [d.score for d in score.data]
     hf_outputs = hf_model.predict(text_pairs).tolist()
 
-    for i in range(len(vllm_outputs)):
-        assert hf_outputs[i] == pytest.approx(vllm_outputs[i], rel=0.01)
+    for i in range(len(aphrodite_outputs)):
+        assert hf_outputs[i] == pytest.approx(aphrodite_outputs[i], rel=0.01)
 
 
 @pytest.mark.asyncio
@@ -130,11 +130,11 @@ async def test_score_api_queries_str_n_documents_str_n(
     assert score.data is not None
     assert len(score.data) == 2
 
-    vllm_outputs = [d.score for d in score.data]
+    aphrodite_outputs = [d.score for d in score.data]
     hf_outputs = hf_model.predict(text_pairs).tolist()
 
-    for i in range(len(vllm_outputs)):
-        assert hf_outputs[i] == pytest.approx(vllm_outputs[i], rel=0.01)
+    for i in range(len(aphrodite_outputs)):
+        assert hf_outputs[i] == pytest.approx(aphrodite_outputs[i], rel=0.01)
 
 
 @pytest.mark.asyncio

@@ -13,7 +13,7 @@ import pytest
 from transformers import AutoVideoProcessor
 from transformers.video_utils import VideoMetadata
 
-from aphrodite.assets.base import get_vllm_public_assets
+from aphrodite.assets.base import get_aphrodite_public_assets
 from aphrodite.multimodal.video import (
     PYNVVIDEOCODEC_DECODER_CACHE_SIZE,
     PYNVVIDEOCODEC_MAX_RETAINED_DECODERS,
@@ -393,24 +393,24 @@ def test_video_processor_from_model_repo(
             height=8,
         )
 
-        _, vllm_meta = loader.load_bytes(video_bytes)  # type: ignore[attr-defined]
+        _, aphrodite_meta = loader.load_bytes(video_bytes)  # type: ignore[attr-defined]
 
         hf_metadata = VideoMetadata(
-            total_num_frames=vllm_meta["total_num_frames"],
-            fps=vllm_meta["fps"],
-            duration=vllm_meta["duration"],
+            total_num_frames=aphrodite_meta["total_num_frames"],
+            fps=aphrodite_meta["fps"],
+            duration=aphrodite_meta["duration"],
         )
         hf_indices = processor.sample_frames(hf_metadata, **(hf_sample_kwargs or {}))
-        vllm_indices = np.array(vllm_meta["frames_indices"])
+        aphrodite_indices = np.array(aphrodite_meta["frames_indices"])
         np.testing.assert_array_equal(
             hf_indices,
-            vllm_indices,
+            aphrodite_indices,
             err_msg=(
                 f"{model_repo!r} fps={fps} duration={duration_secs}s: "
                 f"HF has {len(hf_indices)} indices "
                 f"{hf_indices[:5].tolist()}..{hf_indices[-5:].tolist()}, "
-                f"Aphrodite has {len(vllm_indices)} indices "
-                f"{vllm_indices[:5].tolist()}..{vllm_indices[-5:].tolist()}"
+                f"Aphrodite has {len(aphrodite_indices)} indices "
+                f"{aphrodite_indices[:5].tolist()}..{aphrodite_indices[-5:].tolist()}"
             ),
         )
 
@@ -668,7 +668,7 @@ def test_video_recovery_dynamic_backend(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture
 def dummy_video_path(tmp_path):
-    image_path = get_vllm_public_assets(
+    image_path = get_aphrodite_public_assets(
         filename="stop_sign.jpg", s3_prefix="vision_model_images"
     )
 

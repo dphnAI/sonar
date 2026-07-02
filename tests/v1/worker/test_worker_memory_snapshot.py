@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.config import set_current_vllm_config
+from aphrodite.config import set_current_aphrodite_config
 from aphrodite.engine.arg_utils import EngineArgs
 from aphrodite.utils.mem_utils import MemorySnapshot
 from aphrodite.v1.worker.gpu_worker import Worker, init_worker_distributed_environment
@@ -62,13 +62,13 @@ def worker_process(
         os.environ["WORLD_SIZE"] = str(world_size)
 
         # Create Aphrodite config with small model
-        vllm_config = EngineArgs(
+        aphrodite_config = EngineArgs(
             model="facebook/opt-125m", tensor_parallel_size=2, load_format="dummy"
         ).create_engine_config()
 
         # Create worker
         worker = Worker(
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             local_rank=rank,
             rank=rank,
             distributed_init_method=distributed_init_method,
@@ -100,7 +100,7 @@ def worker_process(
             init_patch,
             memory_patch,
             all_reduce_patch,
-            set_current_vllm_config(vllm_config),
+            set_current_aphrodite_config(aphrodite_config),
         ):
             # Initialize device (this is where we test the order)
             worker.init_device()

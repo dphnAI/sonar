@@ -123,7 +123,7 @@ class VLMTestInfo(NamedTuple):
     max_num_seqs: int = 256
     runner: RunnerOption = "auto"
     tensor_parallel_size: int = 1
-    vllm_runner_kwargs: dict[str, Any] | None = None
+    aphrodite_runner_kwargs: dict[str, Any] | None = None
 
     # Optional callable which gets a list of token IDs from the model tokenizer
     get_stop_token_ids: Callable[[TokenizerLike], list[int]] | None = None
@@ -141,7 +141,7 @@ class VLMTestInfo(NamedTuple):
 
     # Post processors that if defined, will run oun the outputs of the
     # Aphrodite and HF runner, respectively (useful for sanitization, etc).
-    vllm_output_post_proc: Callable[[RunnerOutput, str], Any] | None = None
+    aphrodite_output_post_proc: Callable[[RunnerOutput, str], Any] | None = None
     hf_output_post_proc: Callable[[RunnerOutput, str], Any] | None = None
 
     # Consumes the output of the callables above and checks if they're equal
@@ -189,9 +189,9 @@ class VLMTestInfo(NamedTuple):
             "max_num_seqs": self.max_num_seqs,
             "runner": self.runner,
             "tensor_parallel_size": self.tensor_parallel_size,
-            "vllm_runner_kwargs": self.vllm_runner_kwargs,
+            "aphrodite_runner_kwargs": self.aphrodite_runner_kwargs,
             "hf_output_post_proc": self.hf_output_post_proc,
-            "vllm_output_post_proc": self.vllm_output_post_proc,
+            "aphrodite_output_post_proc": self.aphrodite_output_post_proc,
             "auto_cls": self.auto_cls,
             "use_tokenizer_eos": self.use_tokenizer_eos,
             "comparator": self.comparator,

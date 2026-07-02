@@ -21,51 +21,51 @@ field."""
 
 
 def test_smaller_truncation_size(
-    vllm_runner, model_name=MODEL_NAME, input_str=input_str
+    aphrodite_runner, model_name=MODEL_NAME, input_str=input_str
 ):
     truncate_prompt_tokens = 10
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_name, runner="pooling", max_model_len=max_model_len
-    ) as vllm_model:
-        vllm_output = vllm_model.llm.embed(
+    ) as aphrodite_model:
+        aphrodite_output = aphrodite_model.llm.embed(
             input_str,
             tokenization_kwargs=dict(truncate_prompt_tokens=truncate_prompt_tokens),
         )
 
-    prompt_tokens = vllm_output[0].prompt_token_ids
+    prompt_tokens = aphrodite_output[0].prompt_token_ids
 
     assert len(prompt_tokens) == truncate_prompt_tokens
 
 
-def test_max_truncation_size(vllm_runner, model_name=MODEL_NAME, input_str=input_str):
+def test_max_truncation_size(aphrodite_runner, model_name=MODEL_NAME, input_str=input_str):
     truncate_prompt_tokens = -1
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_name, runner="pooling", max_model_len=max_model_len
-    ) as vllm_model:
-        vllm_output = vllm_model.llm.embed(
+    ) as aphrodite_model:
+        aphrodite_output = aphrodite_model.llm.embed(
             input_str,
             tokenization_kwargs=dict(truncate_prompt_tokens=truncate_prompt_tokens),
         )
 
-    prompt_tokens = vllm_output[0].prompt_token_ids
+    prompt_tokens = aphrodite_output[0].prompt_token_ids
 
     assert len(prompt_tokens) == max_model_len
 
 
 def test_bigger_truncation_size(
-    vllm_runner, model_name=MODEL_NAME, input_str=input_str
+    aphrodite_runner, model_name=MODEL_NAME, input_str=input_str
 ):
     truncate_prompt_tokens = max_model_len + 1
 
     with (
         pytest.raises(ValueError),
-        vllm_runner(
+        aphrodite_runner(
             model_name, runner="pooling", max_model_len=max_model_len
-        ) as vllm_model,
+        ) as aphrodite_model,
     ):
-        llm_output = vllm_model.llm.embed(
+        llm_output = aphrodite_model.llm.embed(
             input_str,
             tokenization_kwargs=dict(truncate_prompt_tokens=truncate_prompt_tokens),
         )

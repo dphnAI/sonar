@@ -15,7 +15,7 @@ from tests.kernels.quant_utils import (
     native_per_token_group_quant_fp8,
     native_w8a8_block_matmul,
 )
-from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.model_executor.layers.fused_moe import (
     fused_experts,
@@ -51,7 +51,7 @@ if current_platform.is_fp8_fnuz():
         allow_module_level=True,
     )
 
-vllm_config = AphroditeConfig()
+aphrodite_config = AphroditeConfig()
 
 # Test configurations
 DTYPES = [torch.bfloat16]  # [torch.half, torch.bfloat16, torch.float32]
@@ -176,7 +176,7 @@ def test_w8a8_block_fp8_fused_moe(
     topk_weights, topk_ids, _ = fused_topk(a, score.float(), topk, False)
 
     # Set the context to avoid lots of warning spam.
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         ref_out = torch_w8a8_block_fp8_moe(
             a,
             w1,
@@ -285,7 +285,7 @@ def test_w8a8_block_fp8_deep_gemm_fused_moe(M, N, K, E, topk, seed, monkeypatch)
         )
 
     # Set the context to avoid lots of warning spam.
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         ref_out = torch_w8a8_block_fp8_moe(
             a, w1, w2, w1_s, w2_s, topk_weights, topk_ids, block_size
         )

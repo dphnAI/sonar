@@ -14,7 +14,7 @@ import tempfile
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.distributed import (
     init_distributed_environment,
     initialize_model_parallel,
@@ -96,8 +96,8 @@ def test_routing_strategy_integration(monkeypatch, device):
     # Test different routing strategies
     strategies = RoutingSimulator.get_available_strategies()
 
-    vllm_config = AphroditeConfig()
-    with set_current_vllm_config(vllm_config):
+    aphrodite_config = AphroditeConfig()
+    with set_current_aphrodite_config(aphrodite_config):
         temp_file = tempfile.mkstemp()[1]
         init_distributed_environment(
             world_size=1,

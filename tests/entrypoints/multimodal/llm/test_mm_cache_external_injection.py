@@ -48,13 +48,13 @@ def _get_mm_cache_stats(metrics: list[Metric]):
     return mm_cache_queries, mm_cache_hits
 
 
-def _get_mm_cache_log(llm: LLM, caplog_vllm: pytest.LogCaptureFixture) -> float:
-    caplog_vllm.clear()
-    with caplog_vllm.at_level(logging.INFO, logger=stat_loggers.__name__):
+def _get_mm_cache_log(llm: LLM, caplog_aphrodite: pytest.LogCaptureFixture) -> float:
+    caplog_aphrodite.clear()
+    with caplog_aphrodite.at_level(logging.INFO, logger=stat_loggers.__name__):
         llm.llm_engine.do_log_stats()
 
-    assert len(caplog_vllm.records) == 1
-    msg = caplog_vllm.records[0].getMessage()
+    assert len(caplog_aphrodite.records) == 1
+    msg = caplog_aphrodite.records[0].getMessage()
 
     assert "MM cache hit rate" in msg
     match = re.search(r"MM cache hit rate: ([0-9.]+)%", msg)
@@ -68,7 +68,7 @@ def test_inject_into_mm_cache(
     num_gpus_available,
     image_urls,
     mm_processor_cache_type,
-    caplog_vllm,
+    caplog_aphrodite,
     multimodal_llm_factory,
 ):
     """Test that inject_into_mm_cache() injects pre-processed mm_kwargs into
@@ -95,7 +95,7 @@ def test_inject_into_mm_cache(
 
     llm.chat(_make_messages(image_urls[0]))
     assert _get_mm_cache_stats(llm.get_metrics()) == (2, 1)
-    assert _get_mm_cache_log(llm, caplog_vllm) == pytest.approx(50.0)
+    assert _get_mm_cache_log(llm, caplog_aphrodite) == pytest.approx(50.0)
 
     # Step 2: Use a second image to get valid expanded tokens and
     # placeholder positions via the renderer.
@@ -138,7 +138,7 @@ def test_inject_into_mm_cache(
     assert queries_after > queries_before, (
         "Cache should have been queried for the injected item"
     )
-    mm_rate = _get_mm_cache_log(llm, caplog_vllm)
+    mm_rate = _get_mm_cache_log(llm, caplog_aphrodite)
     assert mm_rate >= 0.0, "MM cache hit rate should be reported"
 
 

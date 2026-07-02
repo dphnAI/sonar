@@ -68,25 +68,25 @@ def run_radio_test(
         hf_model(pixel_value.to(DEVICE_TYPE)) for pixel_value in pixel_values
     ]
 
-    vllm_config = RadioConfig(
+    aphrodite_config = RadioConfig(
         model_name=hf_config.args["model"],
         **hf_config.args,
     )
-    vllm_model = RadioModel(vllm_config)
-    vllm_model.load_weights(hf_model.state_dict())
-    vllm_model = vllm_model.to(DEVICE_TYPE, torch_dtype)
+    aphrodite_model = RadioModel(aphrodite_config)
+    aphrodite_model.load_weights(hf_model.state_dict())
+    aphrodite_model = aphrodite_model.to(DEVICE_TYPE, torch_dtype)
 
-    vllm_outputs_per_image = [
-        vllm_model(pixel_values=pixel_value.to(DEVICE_TYPE))
+    aphrodite_outputs_per_image = [
+        aphrodite_model(pixel_values=pixel_value.to(DEVICE_TYPE))
         for pixel_value in pixel_values
     ]
-    del vllm_model, hf_model
+    del aphrodite_model, hf_model
     cleanup_dist_env_and_memory()
 
     cos_similar = nn.CosineSimilarity(dim=-1)
-    for vllm_output, hf_output in zip(vllm_outputs_per_image, hf_outputs_per_image):
-        assert cos_similar(vllm_output[0], hf_output[0]).mean() > 0.99
-        assert cos_similar(vllm_output[1], hf_output[1]).mean() > 0.99
+    for aphrodite_output, hf_output in zip(aphrodite_outputs_per_image, hf_outputs_per_image):
+        assert cos_similar(aphrodite_output[0], hf_output[0]).mean() > 0.99
+        assert cos_similar(aphrodite_output[1], hf_output[1]).mean() > 0.99
 
 
 @pytest.mark.parametrize(
@@ -97,7 +97,7 @@ def run_radio_test(
 )
 @pytest.mark.parametrize("dtype", ["half", "bfloat16"])
 def test_radio(
-    default_vllm_config, dist_init, image_assets, model_id, dtype: str
+    default_aphrodite_config, dist_init, image_assets, model_id, dtype: str
 ) -> None:
     run_radio_test(
         image_assets,

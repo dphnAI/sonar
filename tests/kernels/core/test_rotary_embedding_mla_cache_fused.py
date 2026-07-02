@@ -18,7 +18,7 @@ from aphrodite.utils.torch_utils import set_random_seed
 
 
 @pytest.fixture
-def default_vllm_config(monkeypatch):
+def default_aphrodite_config(monkeypatch):
     """Enable the AITER triton rope on ROCm for fp16-consistent numerics.
 
     The fused CUDA kernel runs native fp16 while forward_native upcasts to
@@ -26,7 +26,7 @@ def default_vllm_config(monkeypatch):
     to match. Its env gates are cached at import, hence refresh_env_variables().
     """
     from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.config import CompilationConfig, AphroditeConfig, set_current_vllm_config
+    from aphrodite.config import CompilationConfig, AphroditeConfig, set_current_aphrodite_config
 
     is_rocm = current_platform.is_rocm()
     if is_rocm:
@@ -36,7 +36,7 @@ def default_vllm_config(monkeypatch):
     else:
         config = AphroditeConfig()
     try:
-        with monkeypatch.context() as m, set_current_vllm_config(config):
+        with monkeypatch.context() as m, set_current_aphrodite_config(config):
             if is_rocm:
                 m.setenv("APHRODITE_ROCM_USE_AITER", "1")
                 m.setenv("APHRODITE_ROCM_USE_AITER_TRITON_ROPE", "1")
@@ -63,7 +63,7 @@ def default_vllm_config(monkeypatch):
 )
 @torch.inference_mode()
 def test_concat_and_cache_mla_rope_fused(
-    default_vllm_config,
+    default_aphrodite_config,
     dtype: torch.dtype,
     is_neox_style: bool,
     seq_len: int,

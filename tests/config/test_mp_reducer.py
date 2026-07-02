@@ -36,17 +36,17 @@ def test_mp_reducer():
             "multiprocessing.reducer.register should have been called"
         )
 
-        vllm_config_registered = False
+        aphrodite_config_registered = False
         for call_args in mock_register.call_args_list:
             # Verify that a reducer for AphroditeConfig was registered
             if len(call_args[0]) >= 2 and call_args[0][0] == AphroditeConfig:
-                vllm_config_registered = True
+                aphrodite_config_registered = True
 
                 reducer_func = call_args[0][1]
                 assert callable(reducer_func), "Reducer function should be callable"
                 break
 
-        assert vllm_config_registered, (
+        assert aphrodite_config_registered, (
             "AphroditeConfig should have been registered to multiprocessing.reducer"
         )
 

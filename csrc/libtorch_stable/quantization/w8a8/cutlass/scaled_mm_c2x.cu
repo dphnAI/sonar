@@ -12,7 +12,7 @@
 #include "core/batch_invariant.hpp"
 #include "libtorch_stable/cutlass_extensions/epilogue/scaled_mm_epilogues_c2x.hpp"
 
-using namespace vllm;
+using namespace aphrodite;
 
 /*
    This file defines quantized GEMM operations using the CUTLASS 2.x API, for
@@ -192,14 +192,14 @@ void cutlass_scaled_mm_sm89(torch::stable::Tensor& out,
     STD_TORCH_CHECK(bias->scalar_type() == out.scalar_type(),
                     "currently bias dtype must match output dtype ",
                     out.scalar_type());
-    if (vllm_is_batch_invariant()) {
+    if (aphrodite_is_batch_invariant()) {
       return cutlass_scaled_mm_sm89_fp8_batch_invariant_epilogue<
           c2x::ScaledEpilogueBias>(out, a, b, a_scales, b_scales, *bias);
     }
     return cutlass_scaled_mm_sm89_epilogue<c2x::ScaledEpilogueBias>(
         out, a, b, a_scales, b_scales, *bias);
   } else {
-    if (vllm_is_batch_invariant()) {
+    if (aphrodite_is_batch_invariant()) {
       return cutlass_scaled_mm_sm89_fp8_batch_invariant_epilogue<
           c2x::ScaledEpilogue>(out, a, b, a_scales, b_scales);
     }

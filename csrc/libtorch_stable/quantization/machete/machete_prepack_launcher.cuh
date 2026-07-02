@@ -15,7 +15,7 @@ namespace machete {
 struct PrepackBArgs {
   torch::stable::Tensor const& B;
   torch::headeronly::ScalarType a_type;
-  vllm::ScalarType b_type;
+  aphrodite::ScalarType b_type;
   std::optional<torch::headeronly::ScalarType> maybe_group_scales_type;
 };
 

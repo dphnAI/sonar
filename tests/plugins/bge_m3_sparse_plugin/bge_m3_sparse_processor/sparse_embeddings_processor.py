@@ -25,19 +25,19 @@ from .types import (
 class BgeM3SparseEmbeddingsProcessor(
     IOProcessor[SparseEmbeddingCompletionRequestMixin, SparseEmbeddingResponse]
 ):
-    def __init__(self, vllm_config: AphroditeConfig, renderer: BaseRenderer):
-        super().__init__(vllm_config, renderer)
+    def __init__(self, aphrodite_config: AphroditeConfig, renderer: BaseRenderer):
+        super().__init__(aphrodite_config, renderer)
         self.offline_requests: list[SparseEmbeddingCompletionRequestMixin] = []
         self.online_requests: dict[str, SparseEmbeddingCompletionRequestMixin] = {}
         self.renderer: BaseRenderer = renderer
         self.default_pooling_params = {}
-        pooler_config: PoolerConfig = vllm_config.model_config.pooler_config
+        pooler_config: PoolerConfig = aphrodite_config.model_config.pooler_config
         if pooler_config is not None:
             for param in ["use_activation", "dimensions"]:
                 if getattr(pooler_config, param, None) is None:
                     continue
                 self.default_pooling_params[param] = getattr(pooler_config, param)
-        self.embed_dimensions = vllm_config.model_config.embedding_size
+        self.embed_dimensions = aphrodite_config.model_config.embedding_size
         self.embed_request_queue: list[EmbedRequestMixin] = []
 
     def __repr__(self) -> str:
@@ -70,7 +70,7 @@ class BgeM3SparseEmbeddingsProcessor(
 
         params.dimensions = raw_embed_request.dimensions
 
-        model_config: ModelConfig = self.vllm_config.model_config
+        model_config: ModelConfig = self.aphrodite_config.model_config
         for param in self.default_pooling_params:
             if getattr(params, param, None) is None:
                 setattr(params, param, self.default_pooling_params[param])

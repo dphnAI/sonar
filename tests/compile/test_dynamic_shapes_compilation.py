@@ -11,7 +11,7 @@ import torch
 from tests.models.utils import check_logprobs_close
 from aphrodite import LLM, SamplingParams
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CompilationConfig, AphroditeConfig, set_current_vllm_config
+from aphrodite.config import CompilationConfig, AphroditeConfig, set_current_aphrodite_config
 from aphrodite.config.compilation import (
     CompilationMode,
     DynamicShapesConfig,
@@ -175,8 +175,8 @@ def test_model_specialization_with_evaluate_guards(
                 return x * 10
 
     @contextmanager
-    def use_vllm_config(vllm_config: AphroditeConfig):
-        with set_forward_context({}, vllm_config), set_current_vllm_config(vllm_config):
+    def use_aphrodite_config(aphrodite_config: AphroditeConfig):
+        with set_forward_context({}, aphrodite_config), set_current_aphrodite_config(aphrodite_config):
             yield
 
     monkeypatch.setenv("TOKENIZERS_PARALLELISM", "true")
@@ -186,7 +186,7 @@ def test_model_specialization_with_evaluate_guards(
     # Create aphrodite config with the desired settings
     from aphrodite.config import CompilationMode
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
             dynamic_shapes_config=DynamicShapesConfig(
@@ -199,12 +199,12 @@ def test_model_specialization_with_evaluate_guards(
     def test(model_class, input1, input2, is_01_specialization=False):
         with (
             torch.no_grad(),
-            use_vllm_config(vllm_config),
+            use_aphrodite_config(aphrodite_config),
             tempfile.TemporaryDirectory() as tmpdirname,
         ):
             monkeypatch.setenv("APHRODITE_CACHE_ROOT", tmpdirname)
 
-            model = model_class(vllm_config=vllm_config).cuda()
+            model = model_class(aphrodite_config=aphrodite_config).cuda()
 
             model(input1)
 

@@ -7,7 +7,7 @@
 #include <torch/headeronly/util/Float8_e4m3fnuz.h>
 #include <torch/headeronly/util/Float8_e4m3fn.h>
 
-namespace vllm {
+namespace aphrodite {
 
 // Vectorization containers
 template <typename scalar_t, size_t vec_size>
@@ -28,4 +28,4 @@ using vec4_t = vec_n_t<scalar_t, 4>;
 template <typename quant_type_t>
 using q8x4_t = q8_n_t<quant_type_t, 4>;
 
-}  // namespace vllm
+}  // namespace aphrodite

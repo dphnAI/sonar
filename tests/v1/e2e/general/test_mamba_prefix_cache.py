@@ -823,7 +823,7 @@ def test_mamba_prefix_cache_mrv2(monkeypatch: pytest.MonkeyPatch):
     def temporal_states(model_state, block_tables, kv_cache_config):
         # Qwen3-Next keeps the temporal (ssm) state as the last Mamba cache.
         forward_context = (
-            model_state.vllm_config.compilation_config.static_forward_context
+            model_state.aphrodite_config.compilation_config.static_forward_context
         )
         group_ids, _ = get_mamba_groups(kv_cache_config)
         for group_id in group_ids:

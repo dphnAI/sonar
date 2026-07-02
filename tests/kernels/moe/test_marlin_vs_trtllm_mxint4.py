@@ -81,7 +81,7 @@ __all__ = [
 ]
 
 
-def test_trtllm_mxint4_activation_supports_vllm_gated_silu():
+def test_trtllm_mxint4_activation_supports_aphrodite_gated_silu():
     assert TrtLlmMxint4ExpertsMonolithic._supports_activation(MoEActivation.SILU)
     assert TrtLlmMxint4ExpertsMonolithic._supports_activation(MoEActivation.SWIGLUOAI)
     assert not TrtLlmMxint4ExpertsMonolithic._supports_activation(

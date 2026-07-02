@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 #
-# Adapted from vllm-project/vllm-ascend
+# Adapted from vllm-project/aphrodite-ascend
 # (aphrodite_ascend/distributed/kv_transfer/kv_pool/ascend_store/).
 """Scheduler-side logic for MooncakeStoreConnector."""
 

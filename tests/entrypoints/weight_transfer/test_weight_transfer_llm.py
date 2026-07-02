@@ -64,8 +64,8 @@ class MockWeightTransferEngine(WeightTransferEngine[MockInitInfo, MockUpdateInfo
     last_init_info: MockInitInfo | None = None
     last_update_info: MockUpdateInfo | None = None
 
-    def __init__(self, config, vllm_config, device, model):
-        super().__init__(config, vllm_config, device, model)
+    def __init__(self, config, aphrodite_config, device, model):
+        super().__init__(config, aphrodite_config, device, model)
         # Reset tracking on init
         MockWeightTransferEngine.init_transfer_engine_called = False
         MockWeightTransferEngine.start_called = False
@@ -98,9 +98,9 @@ class MockWeightTransferEngine(WeightTransferEngine[MockInitInfo, MockUpdateInfo
         pass
 
 
-def mock_create_engine(config, vllm_config, device, model):
+def mock_create_engine(config, aphrodite_config, device, model):
     """Mock factory function that returns our mock engine."""
-    return MockWeightTransferEngine(config, vllm_config, device, model)
+    return MockWeightTransferEngine(config, aphrodite_config, device, model)
 
 
 # --- Tests ---
@@ -120,7 +120,7 @@ def test_get_world_size_tp1():
         weight_transfer_config=WeightTransferConfig(backend="nccl"),
     )
 
-    world_size = llm.llm_engine.vllm_config.parallel_config.world_size
+    world_size = llm.llm_engine.aphrodite_config.parallel_config.world_size
     assert world_size == 1
 
 
@@ -318,5 +318,5 @@ def test_weight_transfer_config_backend():
         weight_transfer_config=WeightTransferConfig(backend="nccl"),
     )
 
-    config = llm.llm_engine.vllm_config.weight_transfer_config
+    config = llm.llm_engine.aphrodite_config.weight_transfer_config
     assert config.backend == "nccl"

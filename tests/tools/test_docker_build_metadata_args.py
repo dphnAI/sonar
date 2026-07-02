@@ -132,7 +132,7 @@ def test_release_version_lookup_failure_falls_back_to_commit(
     assert build_args(args)["APHRODITE_IMAGE_TAG"] == ("aphrodite/aphrodite-openai:vfallback123-cu129")
 
 
-def test_vllm_openai_image_embeds_metadata_contract() -> None:
+def test_aphrodite_openai_image_embeds_metadata_contract() -> None:
     dockerfile = (REPO_ROOT / "docker" / "Dockerfile").read_text()
 
     for expected in (

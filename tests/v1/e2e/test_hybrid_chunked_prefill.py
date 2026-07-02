@@ -55,7 +55,7 @@ MESSAGES = [
 )
 @pytest.mark.parametrize("enable_prefix_caching", [False, True])
 def test_mtp_speculative_mixed_batch_short_prefill(
-    vllm_runner, model_name, enable_prefix_caching
+    aphrodite_runner, model_name, enable_prefix_caching
 ):
     """Test to ensure MTP speculative decoding correctly handles
     short prefill chunks that fall below the reorder_batch_threshold."""
@@ -65,7 +65,7 @@ def test_mtp_speculative_mixed_batch_short_prefill(
     chunk_size = 256 if not enable_prefix_caching else 16384
     num_draft_tokens = 100
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_name,
         speculative_config={
             "method": "mtp",

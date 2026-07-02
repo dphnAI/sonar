@@ -58,7 +58,7 @@ def _encoder_cudagraph_config(*, max_vision_items: int) -> dict:
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("use_bytecode_hook", [True, False])
 def test_qwen2_5_vl_evs_functionality(
-    vllm_runner,
+    aphrodite_runner,
     video_assets,
     model,
     video_pruning_rate: float,
@@ -84,16 +84,16 @@ def test_qwen2_5_vl_evs_functionality(
     videos = [sampled_vids[0]]
 
     # Initialize model with EVS configuration
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="generate",
         max_model_len=4000,
         dtype=dtype,
         limit_mm_per_prompt={"video": 1},
         video_pruning_rate=video_pruning_rate,
-    ) as vllm_model:
+    ) as aphrodite_model:
         # Generate output - this should not crash
-        outputs = vllm_model.generate_greedy(prompts, max_tokens, videos=videos)
+        outputs = aphrodite_model.generate_greedy(prompts, max_tokens, videos=videos)
 
         # Basic validation that we got a response
         assert len(outputs) == 1
@@ -115,7 +115,7 @@ def test_qwen2_5_vl_evs_functionality(
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("use_bytecode_hook", [True, False])
 def test_qwen2_5_vl_evs_batched_videos(
-    vllm_runner,
+    aphrodite_runner,
     video_assets,
     model,
     video_pruning_rate: float,
@@ -145,7 +145,7 @@ def test_qwen2_5_vl_evs_batched_videos(
     videos = [sampled_vids[0], sampled_vids[0]]  # Use same video twice for testing
 
     # Initialize model with EVS configuration
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="generate",
         max_model_len=4000,
@@ -154,9 +154,9 @@ def test_qwen2_5_vl_evs_batched_videos(
         limit_mm_per_prompt={"video": 2},
         tensor_parallel_size=1,
         video_pruning_rate=video_pruning_rate,
-    ) as vllm_model:
+    ) as aphrodite_model:
         # Generate output - this should not crash
-        outputs = vllm_model.generate_greedy(prompts, max_tokens, videos=videos)
+        outputs = aphrodite_model.generate_greedy(prompts, max_tokens, videos=videos)
 
         # Basic validation that we got responses for both videos
         assert len(outputs) == 2
@@ -176,7 +176,7 @@ def test_qwen2_5_vl_evs_batched_videos(
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("use_bytecode_hook", [True, False])
 def test_qwen2_5_vl_window_attention_image(
-    vllm_runner,
+    aphrodite_runner,
     model,
     dtype: str,
     max_tokens: int,
@@ -189,15 +189,15 @@ def test_qwen2_5_vl_window_attention_image(
     prompt = [WINDOW_ATTN_IMAGE_PROMPT]
     images = [[_window_attention_regression_image()]]
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="generate",
         max_model_len=4096,
         dtype=dtype,
         limit_mm_per_prompt=IMAGE_ONLY_LIMIT_MM_PER_PROMPT,
         compilation_config=_encoder_cudagraph_config(max_vision_items=1),
-    ) as vllm_model:
-        outputs = vllm_model.generate_greedy(prompt, max_tokens, images=images)
+    ) as aphrodite_model:
+        outputs = aphrodite_model.generate_greedy(prompt, max_tokens, images=images)
 
         assert len(outputs) == 1
         output_ids, output_text = outputs[0]
@@ -212,7 +212,7 @@ def test_qwen2_5_vl_window_attention_image(
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("use_bytecode_hook", [True, False])
 def test_qwen2_5_vl_window_attention_image_batch(
-    vllm_runner,
+    aphrodite_runner,
     model,
     dtype: str,
     max_tokens: int,
@@ -226,7 +226,7 @@ def test_qwen2_5_vl_window_attention_image_batch(
     prompts = [WINDOW_ATTN_IMAGE_PROMPT, WINDOW_ATTN_IMAGE_PROMPT]
     images = [[image], [image]]
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="generate",
         max_model_len=4096,
@@ -234,8 +234,8 @@ def test_qwen2_5_vl_window_attention_image_batch(
         dtype=dtype,
         limit_mm_per_prompt=IMAGE_ONLY_LIMIT_MM_PER_PROMPT,
         compilation_config=_encoder_cudagraph_config(max_vision_items=2),
-    ) as vllm_model:
-        outputs = vllm_model.generate_greedy(prompts, max_tokens, images=images)
+    ) as aphrodite_model:
+        outputs = aphrodite_model.generate_greedy(prompts, max_tokens, images=images)
 
         assert len(outputs) == 2
         for output_ids, output_text in outputs:

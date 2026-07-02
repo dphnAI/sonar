@@ -588,7 +588,7 @@ class _FakeWoA(torch.nn.Module):
 @pytest.mark.parametrize("pos_dtype", [torch.int32, torch.int64])
 @torch.inference_mode()
 def test_fused_inverse_rope_gptj_matches_rotary_native(
-    num_tokens: int, num_heads: int, pos_dtype: torch.dtype, default_vllm_config
+    num_tokens: int, num_heads: int, pos_dtype: torch.dtype, default_aphrodite_config
 ) -> None:
     from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import _fused_inverse_rope_gptj
 
@@ -616,7 +616,7 @@ def test_fused_inverse_rope_gptj_matches_rotary_native(
 
 
 @torch.inference_mode()
-def test_fused_inverse_rope_gptj_empty(default_vllm_config) -> None:
+def test_fused_inverse_rope_gptj_empty(default_aphrodite_config) -> None:
     from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import _fused_inverse_rope_gptj
 
     device = torch.device("cuda")
@@ -632,7 +632,7 @@ def test_fused_inverse_rope_gptj_empty(default_vllm_config) -> None:
 
 
 @torch.inference_mode()
-def test_rocm_inv_rope_einsum_matches_rotary_native(default_vllm_config) -> None:
+def test_rocm_inv_rope_einsum_matches_rotary_native(default_aphrodite_config) -> None:
     from aphrodite.v1.attention.ops.rocm_aiter_mla_sparse import rocm_inv_rope_einsum
 
     device = torch.device("cuda")

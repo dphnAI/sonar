@@ -104,7 +104,7 @@ class _TestMossAudioProcessingInfo(MossAudioProcessingInfo):
         return {}
 
 
-def _vllm_config(tensor_parallel_size=1, pipeline_parallel_size=1, hf_config=None):
+def _aphrodite_config(tensor_parallel_size=1, pipeline_parallel_size=1, hf_config=None):
     if hf_config is None:
         hf_config = MossAudioConfig(language_config=Qwen3Config())
     return SimpleNamespace(
@@ -323,17 +323,17 @@ def test_moss_audio_error_paths():
 
 
 def test_moss_audio_validates_tp_config():
-    vllm_config = _vllm_config(tensor_parallel_size=2)
-    vllm_config.model_config.hf_config.adapter_hidden_size = 7
+    aphrodite_config = _aphrodite_config(tensor_parallel_size=2)
+    aphrodite_config.model_config.hf_config.adapter_hidden_size = 7
 
     with pytest.raises(ValueError, match="adapter_hidden_size"):
-        MossAudioModel(vllm_config=vllm_config)
+        MossAudioModel(aphrodite_config=aphrodite_config)
 
-    vllm_config = _vllm_config(tensor_parallel_size=2)
-    vllm_config.model_config.hf_config.audio_config.d_model = 6
-    vllm_config.model_config.hf_config.audio_config.encoder_attention_heads = 3
+    aphrodite_config = _aphrodite_config(tensor_parallel_size=2)
+    aphrodite_config.model_config.hf_config.audio_config.d_model = 6
+    aphrodite_config.model_config.hf_config.audio_config.encoder_attention_heads = 3
     with pytest.raises(ValueError, match="encoder_attention_heads"):
-        MossAudioModel(vllm_config=vllm_config)
+        MossAudioModel(aphrodite_config=aphrodite_config)
 
 
 def test_moss_audio_rejects_audio_data_list_seqlen_count_mismatch():
@@ -594,7 +594,7 @@ def test_moss_qwen3_deepstack_keys_for_pp(monkeypatch):
 
 
 def test_moss_audio_encoder_loads_realistic_attention_weight_names(monkeypatch):
-    from aphrodite.config import AphroditeConfig, set_current_vllm_config
+    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
     from aphrodite.config.device import DeviceConfig
 
     _patch_tensor_parallel_for_linear_layers(monkeypatch, tp_size=2)
@@ -608,7 +608,7 @@ def test_moss_audio_encoder_loads_realistic_attention_weight_names(monkeypatch):
         downsample_hidden_size=2,
         deepstack_encoder_layer_indexes=[],
     )
-    with set_current_vllm_config(AphroditeConfig(device_config=DeviceConfig(device="cpu"))):
+    with set_current_aphrodite_config(AphroditeConfig(device_config=DeviceConfig(device="cpu"))):
         encoder = MossAudioEncoder(config)
 
     attention = encoder.layers[0].self_attn

@@ -53,7 +53,7 @@
   APHRODITE_CLAMP_BLOCKS_PER_SM(APHRODITE_BLOCKS_DIV(BLOCK_THREADS))
 
 // runtime-time helper to compute blocks/SM
-static inline int vllm_runtime_blocks_per_sm(int block_threads) {
+static inline int aphrodite_runtime_blocks_per_sm(int block_threads) {
   int device = -1;
   cudaGetDevice(&device);
   int max_threads_per_sm = APHRODITE_MAX_THREADS_PER_SM;

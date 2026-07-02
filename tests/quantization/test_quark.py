@@ -71,9 +71,9 @@ def enable_pickle(monkeypatch):
 
 @pytest.mark.parametrize("kv_cache_dtype", ["auto", "fp8"])
 @pytest.mark.parametrize("tp", [1])
-def test_quark_fp8_w_per_tensor_a_per_tensor(vllm_runner, kv_cache_dtype, tp):
+def test_quark_fp8_w_per_tensor_a_per_tensor(aphrodite_runner, kv_cache_dtype, tp):
     model_path = "amd/Llama-3.1-8B-Instruct-FP8-KV-Quark-test"
-    with vllm_runner(
+    with aphrodite_runner(
         model_path,
         enforce_eager=True,
         kv_cache_dtype=kv_cache_dtype,
@@ -100,9 +100,9 @@ def test_quark_fp8_w_per_tensor_a_per_tensor(vllm_runner, kv_cache_dtype, tp):
 
 
 @pytest.mark.parametrize("tp", [1])
-def test_quark_fp8_w_per_channel_a_per_token(vllm_runner, tp):
+def test_quark_fp8_w_per_channel_a_per_token(aphrodite_runner, tp):
     model_path = "amd/Qwen2.5-1.5B-Instruct-ptpc-Quark-ts"
-    with vllm_runner(model_path, enforce_eager=True, tensor_parallel_size=tp) as llm:
+    with aphrodite_runner(model_path, enforce_eager=True, tensor_parallel_size=tp) as llm:
 
         def check_model(model):
             layer = model.model.layers[0]
@@ -124,9 +124,9 @@ def test_quark_fp8_w_per_channel_a_per_token(vllm_runner, tp):
 
 
 @pytest.mark.parametrize("tp", [1])
-def test_quark_int8_w_per_tensor_a_per_tensor(vllm_runner, tp):
+def test_quark_int8_w_per_tensor_a_per_tensor(aphrodite_runner, tp):
     model_path = "amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test"
-    with vllm_runner(model_path, enforce_eager=True, tensor_parallel_size=tp) as llm:
+    with aphrodite_runner(model_path, enforce_eager=True, tensor_parallel_size=tp) as llm:
 
         def check_model(model):
             layer = model.model.layers[0]
@@ -143,10 +143,10 @@ def test_quark_int8_w_per_tensor_a_per_tensor(vllm_runner, tp):
 
 
 @pytest.mark.parametrize("tp", [1])
-def test_quark_int8_w8a8_moe(vllm_runner, tp):
+def test_quark_int8_w8a8_moe(aphrodite_runner, tp):
     """Test W8A8 INT8 MoE quantization with a tiny Qwen3 MoE model."""
     model_path = "nameistoken/tiny-qwen3-moe-w8a8-int8-quark"
-    with vllm_runner(
+    with aphrodite_runner(
         model_path,
         enforce_eager=True,
         tensor_parallel_size=tp,
@@ -170,7 +170,7 @@ def test_quark_int8_w8a8_moe(vllm_runner, tp):
         assert output
 
 
-def test_quark_fp8_parity(vllm_runner):
+def test_quark_fp8_parity(aphrodite_runner):
     quark_model_id = "amd-quark/llama-tiny-fp8-quark-quant-method"
     fp8_model_id = "amd-quark/llama-tiny-fp8-quant-method"
 
@@ -180,8 +180,8 @@ def test_quark_fp8_parity(vllm_runner):
         "gpu_memory_utilization": 0.1,
     }
     with (
-        vllm_runner(quark_model_id, **llm_kwargs) as quark_handle,
-        vllm_runner(fp8_model_id, **llm_kwargs) as fp8_handle,
+        aphrodite_runner(quark_model_id, **llm_kwargs) as quark_handle,
+        aphrodite_runner(fp8_model_id, **llm_kwargs) as fp8_handle,
     ):
 
         def get_state_dict(model):

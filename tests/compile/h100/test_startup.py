@@ -23,8 +23,8 @@ from ...utils import fork_new_process_for_each_test
 MODEL = "microsoft/Phi-tiny-MoE-instruct"
 
 
-def _run_vllm(vllm_runner):
-    with vllm_runner(
+def _run_aphrodite(aphrodite_runner):
+    with aphrodite_runner(
         MODEL,
         trust_remote_code=False,
         max_model_len=256,
@@ -42,13 +42,13 @@ def _run_vllm(vllm_runner):
         pass
 
 
-def _cold_start(vllm_runner):
+def _cold_start(aphrodite_runner):
     counters.clear()
     with compilation_counter.expect(
         num_compiled_artifacts_saved=3,
         num_compiled_artifacts_loaded=0,
     ):
-        _run_vllm(vllm_runner)
+        _run_aphrodite(aphrodite_runner)
     assert counters["aot_autograd"]["total"] == 33
     assert counters["aot_autograd"]["autograd_cache_miss"] == 3
     assert counters["aot_autograd"]["autograd_cache_hit"] == 0
@@ -56,7 +56,7 @@ def _cold_start(vllm_runner):
 
 @fork_new_process_for_each_test
 @pytest.mark.parametrize("mega_aot_artifact", ["0", "1"])
-def test_moe_startup(monkeypatch, vllm_runner, fresh_vllm_cache, mega_aot_artifact):
+def test_moe_startup(monkeypatch, aphrodite_runner, fresh_aphrodite_cache, mega_aot_artifact):
     monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
     monkeypatch.setenv("APHRODITE_USE_MEGA_AOT_ARTIFACT", mega_aot_artifact)
     monkeypatch.setenv("APHRODITE_DEEP_GEMM_WARMUP", "skip")
@@ -65,7 +65,7 @@ def test_moe_startup(monkeypatch, vllm_runner, fresh_vllm_cache, mega_aot_artifa
     # This model has 32 identical transformer layers which produce
     # 33 subgraphs after splitting on attention — only 3 are unique.
     ctx = mp.get_context("fork")
-    p = ctx.Process(target=_cold_start, args=(vllm_runner,))
+    p = ctx.Process(target=_cold_start, args=(aphrodite_runner,))
     p.start()
     p.join()
     assert p.exitcode == 0, "Cold-start child failed"
@@ -76,7 +76,7 @@ def test_moe_startup(monkeypatch, vllm_runner, fresh_vllm_cache, mega_aot_artifa
         num_compiled_artifacts_loaded=3,
         num_compiled_artifacts_saved=0,
     ):
-        _run_vllm(vllm_runner)
+        _run_aphrodite(aphrodite_runner)
     mega_aot_active = envs.APHRODITE_USE_MEGA_AOT_ARTIFACT and is_torch_equal_or_newer(
         "2.10.0"
     )
@@ -179,8 +179,8 @@ MODEL_SPECS = [
 ]
 
 
-def _run_model(vllm_runner, spec: ModelStartupSpec):
-    with vllm_runner(
+def _run_model(aphrodite_runner, spec: ModelStartupSpec):
+    with aphrodite_runner(
         spec.model,
         trust_remote_code=True,
         max_model_len=256,
@@ -198,10 +198,10 @@ def _run_model(vllm_runner, spec: ModelStartupSpec):
         pass
 
 
-def _check_model_run(vllm_runner, spec: ModelStartupSpec, is_cold_start: bool):
+def _check_model_run(aphrodite_runner, spec: ModelStartupSpec, is_cold_start: bool):
     """Runs a model and checks the number of compiled artifacts."""
     old = compilation_counter.clone()
-    _run_model(vllm_runner, spec)
+    _run_model(aphrodite_runner, spec)
     saved = (
         compilation_counter.num_compiled_artifacts_saved
         - old.num_compiled_artifacts_saved
@@ -231,22 +231,22 @@ def _check_model_run(vllm_runner, spec: ModelStartupSpec, is_cold_start: bool):
     )
 
 
-def _cold_start_model(vllm_runner, spec: ModelStartupSpec):
-    _check_model_run(vllm_runner, spec, is_cold_start=True)
+def _cold_start_model(aphrodite_runner, spec: ModelStartupSpec):
+    _check_model_run(aphrodite_runner, spec, is_cold_start=True)
 
 
 @pytest.mark.parametrize("spec", MODEL_SPECS)
 @fork_new_process_for_each_test
-def test_model_startup(monkeypatch, vllm_runner, fresh_vllm_cache, spec):
+def test_model_startup(monkeypatch, aphrodite_runner, fresh_aphrodite_cache, spec):
     monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
     monkeypatch.setenv("APHRODITE_DEEP_GEMM_WARMUP", "skip")
 
     # Cold start in a forked child (must fork before CUDA init).
     ctx = mp.get_context("fork")
-    p = ctx.Process(target=_cold_start_model, args=(vllm_runner, spec))
+    p = ctx.Process(target=_cold_start_model, args=(aphrodite_runner, spec))
     p.start()
     p.join()
     assert p.exitcode == 0, "Cold-start child failed"
 
     # Warm start — compiled artifacts loaded from disk cache.
-    _check_model_run(vllm_runner, spec, is_cold_start=False)
+    _check_model_run(aphrodite_runner, spec, is_cold_start=False)

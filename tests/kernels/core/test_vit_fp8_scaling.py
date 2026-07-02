@@ -33,7 +33,7 @@ def _build_attention(mm_config):
     invokes ``process_weights_after_loading`` to simulate the model loader's
     auto-scan. Yields ``None`` if FlashInfer cuDNN is not available.
     """
-    from aphrodite.config import AphroditeConfig, set_current_vllm_config
+    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
     from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
         MMEncoderAttention,
     )
@@ -43,11 +43,11 @@ def _build_attention(mm_config):
         yield None
         return
 
-    vllm_config = AphroditeConfig()
-    vllm_config.model_config = SimpleNamespace(multimodal_config=mm_config)
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.model_config = SimpleNamespace(multimodal_config=mm_config)
 
     with (
-        set_current_vllm_config(vllm_config),
+        set_current_aphrodite_config(aphrodite_config),
         patch(
             "aphrodite.model_executor.layers.attention.mm_encoder_attention"
             ".get_vit_attn_backend",
@@ -166,7 +166,7 @@ def test_static_scales_loaded(_make_static_attention) -> None:
 
 def test_static_scales_missing_layer(tmp_path) -> None:
     """Verify error when requested layer is not in the scale file."""
-    from aphrodite.config import AphroditeConfig, set_current_vllm_config
+    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
     from aphrodite.config.multimodal import MultiModalConfig
     from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 
@@ -181,15 +181,15 @@ def test_static_scales_missing_layer(tmp_path) -> None:
         mm_encoder_attn_dtype="fp8",
         mm_encoder_fp8_scale_path=str(scale_file),
     )
-    vllm_config = AphroditeConfig()
-    vllm_config.model_config = SimpleNamespace(multimodal_config=mm_config)
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.model_config = SimpleNamespace(multimodal_config=mm_config)
 
     from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
         MMEncoderAttention,
     )
 
     with (
-        set_current_vllm_config(vllm_config),
+        set_current_aphrodite_config(aphrodite_config),
         patch(
             "aphrodite.model_executor.layers.attention.mm_encoder_attention"
             ".get_vit_attn_backend",

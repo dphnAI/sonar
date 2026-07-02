@@ -9,15 +9,15 @@ from aphrodite.platforms import current_platform
 
 
 def test_compile():
-    vllm_config = AphroditeConfig()
+    aphrodite_config = AphroditeConfig()
     # Default configuration does not compile mm encoder
-    assert not vllm_config.compilation_config.compile_mm_encoder
+    assert not aphrodite_config.compilation_config.compile_mm_encoder
 
 
 # forked needed to workaround https://github.com/vllm-project/vllm/issues/21073
 @pytest.mark.forked
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="Skip if not cuda")
-def test_qwen2_5_vl_compilation(vllm_runner, monkeypatch):
+def test_qwen2_5_vl_compilation(aphrodite_runner, monkeypatch):
     """Test that Qwen2.5-VL vision submodules are compiled.
 
     This test verifies that the 3 vision submodules (Qwen2_5_VisionPatchEmbed,
@@ -35,7 +35,7 @@ def test_qwen2_5_vl_compilation(vllm_runner, monkeypatch):
         # and reuse the compiled code for all layers
         # See https://github.com/vllm-project/vllm/issues/27590
         compilation_counter.expect(num_models_seen=35),
-        vllm_runner(
+        aphrodite_runner(
             "Qwen/Qwen2.5-VL-3B-Instruct",
             max_model_len=2048,
             gpu_memory_utilization=0.8,
@@ -51,7 +51,7 @@ def test_qwen2_5_vl_compilation(vllm_runner, monkeypatch):
 # forked needed to workaround https://github.com/vllm-project/vllm/issues/21073
 @pytest.mark.forked
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="Skip if not cuda")
-def test_qwen2_5_vl_no_vit_compilation(vllm_runner, monkeypatch):
+def test_qwen2_5_vl_no_vit_compilation(aphrodite_runner, monkeypatch):
     """Test that Qwen2.5-VL vision submodules are not compiled when the
     config is passed off
     """
@@ -60,7 +60,7 @@ def test_qwen2_5_vl_no_vit_compilation(vllm_runner, monkeypatch):
 
     with (
         compilation_counter.expect(num_models_seen=1),
-        vllm_runner(
+        aphrodite_runner(
             "Qwen/Qwen2.5-VL-3B-Instruct",
             max_model_len=2048,
             gpu_memory_utilization=0.8,
@@ -77,7 +77,7 @@ def test_qwen2_5_vl_no_vit_compilation(vllm_runner, monkeypatch):
 # Requires Cuda and 8 gpus as well
 @pytest.mark.forked
 @pytest.mark.skip(reason="Skipping due to CI resource constraints")
-def test_mllama4_vit_compilation(vllm_runner, monkeypatch):
+def test_mllama4_vit_compilation(aphrodite_runner, monkeypatch):
     """Test that Mllama4 vision submodules are compiled.
 
     This test verifies that the 2 vision submodules (Llama4VisionEncoder,
@@ -96,7 +96,7 @@ def test_mllama4_vit_compilation(vllm_runner, monkeypatch):
         # counter. We should fix this in the future, but leave for now
         # to make sure that compilation runs (no crash) with llama vision encoder
         compilation_counter.expect(num_models_seen=0),
-        vllm_runner(
+        aphrodite_runner(
             "meta-llama/Llama-4-Scout-17B-16E-Instruct",
             max_model_len=512,
             gpu_memory_utilization=0.8,

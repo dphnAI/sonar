@@ -60,8 +60,8 @@ MODELS = [
     reason="Only supports CPU/XPU/CUDA backend.",
 )
 @pytest.mark.parametrize("model", MODELS)
-def test_auto_round_model(vllm_runner, model):
-    with vllm_runner(model, enforce_eager=True) as llm:
+def test_auto_round_model(aphrodite_runner, model):
+    with aphrodite_runner(model, enforce_eager=True) as llm:
         output = llm.generate_greedy(["The capital of France is"], max_tokens=8)
 
     assert output

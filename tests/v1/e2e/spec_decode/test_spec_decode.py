@@ -216,7 +216,7 @@ def test_ngram_gpu_default_with_async_scheduling(
     )
     # Assert the resolved async_scheduling config matches what was requested.
     assert (
-        spec_llm.llm_engine.vllm_config.scheduler_config.async_scheduling
+        spec_llm.llm_engine.aphrodite_config.scheduler_config.async_scheduling
         == async_scheduling
     )
     evaluate_llm_for_gsm8k(spec_llm, expected_accuracy_threshold=0.8)
@@ -329,11 +329,11 @@ def test_speculators_model_integration(
     spec_outputs = spec_llm.chat(test_prompts, sampling_config)
 
     # Verify speculative config was auto-detected
-    assert spec_llm.llm_engine.vllm_config.speculative_config is not None, (
+    assert spec_llm.llm_engine.aphrodite_config.speculative_config is not None, (
         f"Speculative config should be auto-detected for {model_path}"
     )
 
-    spec_config = spec_llm.llm_engine.vllm_config.speculative_config
+    spec_config = spec_llm.llm_engine.aphrodite_config.speculative_config
     assert spec_config.num_speculative_tokens > 0, (
         f"Expected positive speculative tokens, "
         f"got {spec_config.num_speculative_tokens}"
@@ -345,7 +345,7 @@ def test_speculators_model_integration(
     )
 
     # Extract verifier model for reference run
-    verifier_model = spec_llm.llm_engine.vllm_config.model_config.model
+    verifier_model = spec_llm.llm_engine.aphrodite_config.model_config.model
 
     del spec_llm
     torch.accelerator.empty_cache()
@@ -466,7 +466,7 @@ def _run_eagle_correctness(
             attention_config=attention_config,
         )
         # EAGLE/EAGLE3 supports async scheduling; assert it is active by default.
-        assert spec_llm.llm_engine.vllm_config.scheduler_config.async_scheduling
+        assert spec_llm.llm_engine.aphrodite_config.scheduler_config.async_scheduling
         evaluate_llm_for_gsm8k(
             spec_llm, expected_accuracy_threshold=expected_accuracy_threshold
         )
@@ -873,7 +873,7 @@ def test_mtp_correctness(
             **extra_kwargs,
         )
         # MTP supports async scheduling; assert it is active by default.
-        assert spec_llm.llm_engine.vllm_config.scheduler_config.async_scheduling
+        assert spec_llm.llm_engine.aphrodite_config.scheduler_config.async_scheduling
         evaluate_llm_for_gsm8k(
             spec_llm, expected_accuracy_threshold=expected_accuracy_threshold
         )
@@ -1044,7 +1044,7 @@ def test_draft_model_tensor_parallelism():
 
 @multi_gpu_only(num_gpus=2)
 def test_draft_model_engine_args_tensor_parallelism():
-    """Ensure the vllm_config for the draft model is created correctly,
+    """Ensure the aphrodite_config for the draft model is created correctly,
     and independently of the target model (quantization, TP, etc.)"""
     _skip_if_insufficient_gpus_for_tp(2)
 
@@ -1076,19 +1076,19 @@ def test_draft_model_engine_args_tensor_parallelism():
     assert draft_config.quant_config is None
 
 
-def _apply_draft_moe_backend(vllm_config: AphroditeConfig) -> AphroditeConfig:
-    """Replicate SpecDecodeBaseProposer._create_draft_vllm_config logic
+def _apply_draft_moe_backend(aphrodite_config: AphroditeConfig) -> AphroditeConfig:
+    """Replicate SpecDecodeBaseProposer._create_draft_aphrodite_config logic
     so we can test it without instantiating a full proposer."""
-    spec_cfg = vllm_config.speculative_config
+    spec_cfg = aphrodite_config.speculative_config
     if spec_cfg.moe_backend is not None:
         return replace(
-            vllm_config,
+            aphrodite_config,
             kernel_config=replace(
-                vllm_config.kernel_config,
+                aphrodite_config.kernel_config,
                 moe_backend=spec_cfg.moe_backend,
             ),
         )
-    return vllm_config
+    return aphrodite_config
 
 
 def test_draft_model_moe_backend_override():
@@ -1227,7 +1227,7 @@ def assert_draft_model_correctness(args: ArgsTest):
     # @pytest.mark.xfail(raises=AsyncSchedulingNotEnabledError) catches only this
     # specific failure — leaving all other assertion failures (e.g. correctness or
     # acceptance-rate checks above) visible as real test failures.
-    has_async = spec_llm.llm_engine.vllm_config.scheduler_config.async_scheduling
+    has_async = spec_llm.llm_engine.aphrodite_config.scheduler_config.async_scheduling
     del spec_llm  # CLEANUP
     torch.accelerator.empty_cache()
     cleanup_dist_env_and_memory()

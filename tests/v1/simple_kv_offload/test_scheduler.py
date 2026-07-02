@@ -73,7 +73,7 @@ def _make_kv_cache_config(
     groups = []
     tensors = []
     register_all_kvcache_specs(
-        vllm_config=None
+        aphrodite_config=None
     )  # Ensure specs are registered for tests
     for g in range(num_groups):
         layer_names = [f"layer_{g}"]
@@ -101,7 +101,7 @@ def _make_kv_cache_config(
     )
 
 
-def _make_vllm_config(block_size: int = BLOCK_SIZE) -> AphroditeConfig:
+def _make_aphrodite_config(block_size: int = BLOCK_SIZE) -> AphroditeConfig:
     """Minimal AphroditeConfig for scheduler tests (no GPU)."""
     model_config = ModelConfig(
         model="facebook/opt-125m",
@@ -140,7 +140,7 @@ class SchedulerFixture:
 
     scheduler: SimpleCPUOffloadScheduler
     gpu_block_pool: BlockPool
-    vllm_config: AphroditeConfig
+    aphrodite_config: AphroditeConfig
     kv_cache_config: KVCacheConfig
     num_groups: int = 1
 
@@ -153,11 +153,11 @@ def make_scheduler(
 ) -> SchedulerFixture:
     """Build a SimpleCPUOffloadScheduler with small block pools."""
     kv_cache_config = _make_kv_cache_config(num_gpu_blocks, num_groups)
-    vllm_config = _make_vllm_config()
+    aphrodite_config = _make_aphrodite_config()
     cpu_capacity_bytes = _BYTES_PER_BLOCK * num_cpu_blocks * num_groups
 
     sched = SimpleCPUOffloadScheduler(
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         kv_cache_config=kv_cache_config,
         cpu_capacity_bytes=cpu_capacity_bytes,
         scheduler_block_size=BLOCK_SIZE,
@@ -176,7 +176,7 @@ def make_scheduler(
     return SchedulerFixture(
         scheduler=sched,
         gpu_block_pool=gpu_block_pool,
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         kv_cache_config=kv_cache_config,
         num_groups=num_groups,
     )
@@ -1256,7 +1256,7 @@ def test_partial_gpu_prefix_plus_cpu_load() -> None:
 # Test 11: TOCTOU between Phase A and Phase B (regression for #39702)
 # ---------------------------------------------------------------------------
 def test_toctou_cpu_hit_evicted_between_phases_no_crash() -> None:
-    """Regression for vllm-project/vllm#39702.
+    """Regression for vllm-project/aphrodite#39702.
 
     When ``get_num_new_matched_tokens`` (Phase A) reports a CPU cache hit
     of ``N`` tokens but ``update_state_after_alloc`` (Phase B) runs after
@@ -1531,12 +1531,12 @@ def test_reset_pending_loads() -> None:
     assert num_used == 1, f"Expected only null block in use, got {num_used}"
 
 
-def _make_cp_vllm_config(
+def _make_cp_aphrodite_config(
     dcp_world_size: int = 1,
     pcp_world_size: int = 1,
 ) -> AphroditeConfig:
     """AphroditeConfig with context-parallel sizes set for scheduler-only tests."""
-    cfg = _make_vllm_config()
+    cfg = _make_aphrodite_config()
 
     cfg.parallel_config.decode_context_parallel_size = dcp_world_size
     cfg.parallel_config.prefill_context_parallel_size = pcp_world_size
@@ -1556,11 +1556,11 @@ def _make_cp_scheduler(
     virtual_block_size = BLOCK_SIZE * cp_world_size
 
     kv_cache_config = _make_kv_cache_config(num_gpu_blocks)
-    vllm_config = _make_cp_vllm_config(dcp_world_size, pcp_world_size)
+    aphrodite_config = _make_cp_aphrodite_config(dcp_world_size, pcp_world_size)
     cpu_capacity_bytes = _BYTES_PER_BLOCK * num_cpu_blocks
 
     sched = SimpleCPUOffloadScheduler(
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         kv_cache_config=kv_cache_config,
         cpu_capacity_bytes=cpu_capacity_bytes,
         scheduler_block_size=virtual_block_size,
@@ -1578,7 +1578,7 @@ def _make_cp_scheduler(
     return SchedulerFixture(
         scheduler=sched,
         gpu_block_pool=gpu_block_pool,
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         kv_cache_config=kv_cache_config,
     )
 

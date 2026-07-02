@@ -32,7 +32,7 @@ MODELS = [
 
 def _run_test(
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     input_texts: list[str],
     input_images: PromptImageInput,
     model: str,
@@ -44,7 +44,7 @@ def _run_test(
     if tokenization_kwargs is None:
         tokenization_kwargs = {}
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="pooling",
         dtype=dtype,
@@ -52,8 +52,8 @@ def _run_test(
         max_model_len=64,
         gpu_memory_utilization=0.7,
         attention_config=attention_config,
-    ) as vllm_model:
-        vllm_outputs = vllm_model.embed(
+    ) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.embed(
             input_texts, images=input_images, tokenization_kwargs=tokenization_kwargs
         )
 
@@ -84,7 +84,7 @@ def _run_test(
 
     check_embeddings_close(
         embeddings_0_lst=hf_outputs,
-        embeddings_1_lst=vllm_outputs,
+        embeddings_1_lst=aphrodite_outputs,
         name_0="hf",
         name_1="aphrodite",
     )
@@ -94,7 +94,7 @@ def _run_test(
 @pytest.mark.parametrize("dtype", ["float"])
 def test_models_text(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     image_assets,
     siglip_attention_config,
     model: str,
@@ -106,7 +106,7 @@ def test_models_text(
 
     _run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         input_texts,
         input_images,  # type: ignore
         model,
@@ -123,7 +123,7 @@ def test_models_text(
 @pytest.mark.parametrize("dtype", ["float"])
 def test_models_image(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     image_assets,
     siglip_attention_config,
     model: str,
@@ -137,7 +137,7 @@ def test_models_image(
 
     _run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         input_texts,
         input_images,
         model,
@@ -149,7 +149,7 @@ def test_models_image(
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("dtype", ["float"])
 def test_models_text_image_no_crash(
-    vllm_runner,
+    aphrodite_runner,
     image_assets,
     siglip_attention_config,
     model: str,
@@ -158,7 +158,7 @@ def test_models_text_image_no_crash(
     texts = [HF_TEXT_PROMPTS[0]]
     images = [image_assets[0].pil_image]
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="pooling",
         dtype=dtype,
@@ -166,9 +166,9 @@ def test_models_text_image_no_crash(
         max_model_len=64,
         gpu_memory_utilization=0.7,
         attention_config=siglip_attention_config,
-    ) as vllm_model:
+    ) as aphrodite_model:
         with pytest.raises(ValueError, match="not both"):
-            vllm_model.embed(texts, images=images)
+            aphrodite_model.embed(texts, images=images)
 
-        vllm_model.embed(texts)
-        vllm_model.embed([""], images=images)
+        aphrodite_model.embed(texts)
+        aphrodite_model.embed([""], images=images)

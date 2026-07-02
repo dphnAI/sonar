@@ -3,8 +3,8 @@
 
 
 def dummy_platform_plugin() -> str | None:
-    return "vllm_add_dummy_platform.dummy_platform.DummyPlatform"
+    return "aphrodite_add_dummy_platform.dummy_platform.DummyPlatform"
 
 
 def register_ops():
-    import vllm_add_dummy_platform.dummy_custom_ops  # noqa
+    import aphrodite_add_dummy_platform.dummy_custom_ops  # noqa

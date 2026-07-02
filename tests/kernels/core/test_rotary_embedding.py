@@ -37,7 +37,7 @@ def rotary_embedding_opcheck(
 @pytest.mark.parametrize("head_stride_is_contiguous", [True, False])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
 def test_rotary_embedding_opcheck(
-    default_vllm_config,
+    default_aphrodite_config,
     dist_init,
     device,
     max_position,

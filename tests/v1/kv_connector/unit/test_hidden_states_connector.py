@@ -83,18 +83,18 @@ def test_find_group_id_raises_when_multiple_hidden_groups():
 
 def test_get_block_size_reads_hidden_group_spec_not_global():
     # Hidden group keeps block size 22; the global is bumped to 528 for hybrids.
-    vllm_config = SimpleNamespace(cache_config=SimpleNamespace(block_size=528))
+    aphrodite_config = SimpleNamespace(cache_config=SimpleNamespace(block_size=528))
     cfg = _config(_full(528), _hidden(22))
     block_size = ExampleHiddenStatesConnector._get_cache_block_size(
-        vllm_config, cfg, cache_kv_group_id=1
+        aphrodite_config, cfg, cache_kv_group_id=1
     )
     assert block_size == 22
 
 
 def test_get_block_size_falls_back_to_cache_config_when_no_kv_cache_config():
-    vllm_config = SimpleNamespace(cache_config=SimpleNamespace(block_size=16))
+    aphrodite_config = SimpleNamespace(cache_config=SimpleNamespace(block_size=16))
     block_size = ExampleHiddenStatesConnector._get_cache_block_size(
-        vllm_config, None, cache_kv_group_id=0
+        aphrodite_config, None, cache_kv_group_id=0
     )
     assert block_size == 16
 
@@ -115,11 +115,11 @@ def test_find_group_id_errors_clearly_when_absorbed_by_mla_swa_verifier():
         ),
         "cache_only_layers.61": _hidden(64),
     }
-    vllm_config = SimpleNamespace(
+    aphrodite_config = SimpleNamespace(
         scheduler_config=SimpleNamespace(disable_hybrid_kv_cache_manager=False),
         speculative_config=None,
     )
-    groups = get_kv_cache_groups(vllm_config, spec)
+    groups = get_kv_cache_groups(aphrodite_config, spec)
     assert not any(isinstance(g.kv_cache_spec, HiddenStateCacheSpec) for g in groups)
     cfg = SimpleNamespace(kv_cache_groups=groups)
     with pytest.raises(ValueError, match="MLA verifiers are unsupported"):

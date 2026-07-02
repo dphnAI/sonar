@@ -10,7 +10,7 @@ from aphrodite.config import (
     CompilationConfig,
     ModelConfig,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.config.compilation import CompilationMode, CUDAGraphMode
 from aphrodite.model_executor.layers.rotary_embedding import get_rope
@@ -21,7 +21,7 @@ DEVICE_TYPE = current_platform.device_type
 
 @support_torch_compile
 class RotaryEmbeddingCompileModule(torch.nn.Module):
-    def __init__(self, *, vllm_config: AphroditeConfig, prefix: str = "") -> None:
+    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
         super().__init__()
         self.rotary_emb = get_rope(
             head_size=32,
@@ -52,7 +52,7 @@ def test_rotary_embedding_torch_compile_with_custom_op(monkeypatch):
     query = torch.randn(16, 32, device=device, dtype=torch.bfloat16)
     key = torch.randn(16, 32, device=device, dtype=torch.bfloat16)
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=ModelConfig(dtype=torch.bfloat16),
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
@@ -63,8 +63,8 @@ def test_rotary_embedding_torch_compile_with_custom_op(monkeypatch):
         ),
     )
 
-    with set_current_vllm_config(vllm_config):
-        model = RotaryEmbeddingCompileModule(vllm_config=vllm_config)
+    with set_current_aphrodite_config(aphrodite_config):
+        model = RotaryEmbeddingCompileModule(aphrodite_config=aphrodite_config)
         model(positions, query, key)
         assert model._compiled_bytecode is not None
         assert "update" not in model._compiled_bytecode.co_names

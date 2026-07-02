@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import torch
-from vllm_test_utils.monitor import monitor
+from aphrodite_test_utils.monitor import monitor
 
 from aphrodite.utils.mem_utils import MemorySnapshot, memory_profiling
 

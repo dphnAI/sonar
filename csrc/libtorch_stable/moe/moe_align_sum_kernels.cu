@@ -16,7 +16,7 @@
 
 #define CEILDIV(x, y) (((x) + (y) - 1) / (y))
 
-namespace vllm {
+namespace aphrodite {
 namespace moe {
 namespace batched_moe_align_block_size {
 
@@ -367,7 +367,7 @@ __global__ void moe_sum_vec_kernel(
     const scalar_t* __restrict__ input,  // [num_tokens, topk, d], d contiguous
     const int64_t num_tokens, const int d, const int64_t stride_token,
     const int64_t stride_topk) {
-  using vec_t = vllm::vec_n_t<scalar_t, MOE_SUM_VEC<scalar_t>>;  // 16-byte pack
+  using vec_t = aphrodite::vec_n_t<scalar_t, MOE_SUM_VEC<scalar_t>>;  // 16-byte pack
   constexpr int VEC = MOE_SUM_VEC<scalar_t>;
   const int64_t n_vec = d / VEC;
   const int64_t total = num_tokens * n_vec;
@@ -402,7 +402,7 @@ __global__ void moe_sum_vec_dynamic_kernel(
     const scalar_t* __restrict__ input,  // [num_tokens, topk, d], d contiguous
     const int64_t num_tokens, const int d, const int topk,
     const int64_t stride_token, const int64_t stride_topk) {
-  using vec_t = vllm::vec_n_t<scalar_t, MOE_SUM_VEC<scalar_t>>;
+  using vec_t = aphrodite::vec_n_t<scalar_t, MOE_SUM_VEC<scalar_t>>;
   constexpr int VEC = MOE_SUM_VEC<scalar_t>;
   const int64_t n_vec = d / VEC;
   const int64_t total = num_tokens * n_vec;
@@ -575,7 +575,7 @@ __global__ void moe_lora_align_block_size_small_batch_expert_kernel(
 }
 
 }  // namespace moe
-}  // namespace vllm
+}  // namespace aphrodite
 
 // taken from
 // https://github.com/sgl-project/sglang/blob/8b5f83ed3b7d2a49ad5c5cd5aa61c5d502f47dbc
@@ -621,7 +621,7 @@ void moe_align_block_size(
           // threadIdx.x < fill_threads: filling sorted_token_ids
           constexpr int32_t fill_threads = 256;
           auto small_batch_expert_kernel =
-              vllm::moe::moe_align_block_size_small_batch_expert_kernel<
+              aphrodite::moe::moe_align_block_size_small_batch_expert_kernel<
                   scalar_t, fill_threads>;
           small_batch_expert_kernel<<<1, fill_threads + threads,
                                       shared_mem_size, stream>>>(
@@ -636,7 +636,7 @@ void moe_align_block_size(
         } else {
           torch::stable::Tensor cumsum_buffer = torch::stable::new_empty(
               topk_ids, {num_experts + 1}, torch::headeronly::ScalarType::Int);
-          auto align_kernel = vllm::moe::moe_align_block_size_kernel<scalar_t>;
+          auto align_kernel = aphrodite::moe::moe_align_block_size_kernel<scalar_t>;
 
           size_t num_warps = CEILDIV(padded_num_experts, experts_per_warp);
           size_t shared_mem_size =
@@ -665,7 +665,7 @@ void moe_align_block_size(
           dim3 gridDims(1, actual_blocks);
 
           auto sort_kernel =
-              vllm::moe::count_and_sort_expert_tokens_kernel<scalar_t>;
+              aphrodite::moe::count_and_sort_expert_tokens_kernel<scalar_t>;
           sort_kernel<<<gridDims, block_threads, 0, stream>>>(
               reinterpret_cast<const scalar_t*>(topk_ids.const_data_ptr()),
               reinterpret_cast<int32_t*>(sorted_token_ids.mutable_data_ptr()),
@@ -683,7 +683,7 @@ void batched_moe_align_block_size(int64_t max_tokens_per_batch,
                                   torch::stable::Tensor sorted_ids,
                                   torch::stable::Tensor batch_ids,
                                   torch::stable::Tensor num_tokens_post_pad) {
-  namespace batched_kernel = vllm::moe::batched_moe_align_block_size;
+  namespace batched_kernel = aphrodite::moe::batched_moe_align_block_size;
 
   const cudaStream_t stream =
       get_current_cuda_stream(batch_num_tokens.get_device_index());
@@ -729,12 +729,12 @@ void moe_sum(torch::stable::Tensor& input,   // [num_tokens, topk, hidden_size]
       get_current_cuda_stream(output.get_device_index());
 
 #define LAUNCH_MOE_SUM_VEC(TOPK)                \
-  vllm::moe::moe_sum_vec_kernel<scalar_t, TOPK> \
+  aphrodite::moe::moe_sum_vec_kernel<scalar_t, TOPK> \
       <<<grid, dim3(block), 0, stream>>>(       \
           out_ptr, in_ptr, num_tokens, hidden_size, stride_token, stride_topk)
 
   APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(input.scalar_type(), "moe_sum", [&] {
-    constexpr int VEC = vllm::moe::MOE_SUM_VEC<scalar_t>;
+    constexpr int VEC = aphrodite::moe::MOE_SUM_VEC<scalar_t>;
     constexpr int WIDTH = VEC * sizeof(scalar_t);  // 16 bytes
     auto* out_ptr = reinterpret_cast<scalar_t*>(output.mutable_data_ptr());
     auto* in_ptr = reinterpret_cast<const scalar_t*>(input.const_data_ptr());
@@ -771,7 +771,7 @@ void moe_sum(torch::stable::Tensor& input,   // [num_tokens, topk, hidden_size]
           LAUNCH_MOE_SUM_VEC(9);
           break;
         default:
-          vllm::moe::moe_sum_vec_dynamic_kernel<scalar_t>
+          aphrodite::moe::moe_sum_vec_dynamic_kernel<scalar_t>
               <<<grid, dim3(block), 0, stream>>>(out_ptr, in_ptr, num_tokens,
                                                  hidden_size, topk,
                                                  stride_token, stride_topk);
@@ -780,7 +780,7 @@ void moe_sum(torch::stable::Tensor& input,   // [num_tokens, topk, hidden_size]
     } else {
       dim3 grid(num_tokens);
       dim3 block(std::min(hidden_size, 1024));
-      vllm::moe::moe_sum_scalar_kernel<scalar_t><<<grid, block, 0, stream>>>(
+      aphrodite::moe::moe_sum_scalar_kernel<scalar_t><<<grid, block, 0, stream>>>(
           out_ptr, in_ptr, hidden_size, topk, stride_token, stride_topk,
           stride_hidden);
     }
@@ -845,7 +845,7 @@ void moe_lora_align_block_size(
 
           dim3 blockDim(num_thread + fill_threads);
           auto kernel =
-              vllm::moe::moe_lora_align_block_size_small_batch_expert_kernel<
+              aphrodite::moe::moe_lora_align_block_size_small_batch_expert_kernel<
                   scalar_t, fill_threads>;
           STD_CUDA_CHECK(APHRODITE_DevFuncAttribute_SET_MaxDynamicSharedMemorySize(
               (void*)kernel, shared_mem));
@@ -856,7 +856,7 @@ void moe_lora_align_block_size(
           // when -1 is present at position 0 and leave output buffers
           // uninitialized, causing illegal memory accesses in downstream
           // MoE-LoRA kernels. This mirrors the fix made for the Triton
-          // _fused_moe_lora_kernel grid in vllm-project/vllm#32277.
+          // _fused_moe_lora_kernel grid in vllm-project/aphrodite#32277.
           kernel<<<max_loras + 1, blockDim, shared_mem, stream>>>(
               reinterpret_cast<scalar_t*>(topk_ids.mutable_data_ptr()),
               reinterpret_cast<int32_t*>(token_lora_mapping.mutable_data_ptr()),
@@ -886,7 +886,7 @@ void moe_lora_align_block_size(
               torch::headeronly::ScalarType::Int);
 
           auto align_kernel =
-              vllm::moe::moe_lora_align_block_size_kernel<scalar_t>;
+              aphrodite::moe::moe_lora_align_block_size_kernel<scalar_t>;
 
           // Launch two threadblocks per LoRA slot, across max_loras + 1 slots
           // to cover the extra "-1" (base-model tokens) entry that
@@ -894,7 +894,7 @@ void moe_lora_align_block_size(
           // LoRA slots. Using max_loras would drop the real LoRA slot when -1
           // occupies position 0 and leave the output buffers uninitialized,
           // causing illegal memory accesses downstream. Mirrors the grid fix
-          // applied to _fused_moe_lora_kernel in vllm-project/vllm#32277.
+          // applied to _fused_moe_lora_kernel in vllm-project/aphrodite#32277.
           // blockIdx.x % 2 == 0: counting experts and aligning
           // blockIdx.x % 2 == 1: filling sorted_token_ids
           align_kernel<<<(max_loras + 1) * 2, blockDim, shared_mem_size,
@@ -929,7 +929,7 @@ void moe_lora_align_block_size(
           // active_lora_ids has -1 at position 0.
           dim3 gridDims(max_loras + 1, actual_blocks);
           auto sort_kernel =
-              vllm::moe::lora_count_and_sort_expert_tokens_kernel<scalar_t>;
+              aphrodite::moe::lora_count_and_sort_expert_tokens_kernel<scalar_t>;
 
           sort_kernel<<<gridDims, block_threads, 0, stream>>>(
               reinterpret_cast<const scalar_t*>(topk_ids.const_data_ptr()),

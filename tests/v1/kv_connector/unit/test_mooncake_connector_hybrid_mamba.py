@@ -14,7 +14,7 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from aphrodite.config import set_current_vllm_config
+from aphrodite.config import set_current_aphrodite_config
 from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector import (
     KVConnectorRole,
     MooncakeConnector,
@@ -34,7 +34,7 @@ from aphrodite.v1.kv_cache_interface import (
 )
 
 from .test_mooncake_connector import patch_worker_dependencies
-from .utils import create_request, create_vllm_config
+from .utils import create_request, create_aphrodite_config
 
 
 def noop_shutdown():
@@ -71,16 +71,16 @@ def make_hybrid_gdn_kv_cache_config(block_size: int) -> KVCacheConfig:
 
 
 def make_hybrid_gdn_scheduler(kv_role: str) -> MooncakeConnectorScheduler:
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MooncakeConnector",
         kv_role=kv_role,
     )
-    vllm_config.scheduler_config.disable_hybrid_kv_cache_manager = False
+    aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = False
     return MooncakeConnectorScheduler(
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         engine_id="test-engine",
         kv_cache_config=make_hybrid_gdn_kv_cache_config(
-            vllm_config.cache_config.block_size
+            aphrodite_config.cache_config.block_size
         ),
     )
 
@@ -122,17 +122,17 @@ def test_hybrid_gdn_remote_decode_truncates_prefill_once():
 
 def test_register_kv_caches_emits_fa_and_gdn_regions(monkeypatch):
     monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MooncakeConnector",
         kv_role="kv_consumer",
     )
     kv_cache_config = make_hybrid_gdn_kv_cache_config(
-        vllm_config.cache_config.block_size
+        aphrodite_config.cache_config.block_size
     )
 
-    with set_current_vllm_config(vllm_config), patch_worker_dependencies():
+    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
         connector = MooncakeConnector(
-            vllm_config,
+            aphrodite_config,
             KVConnectorRole.WORKER,
             kv_cache_config,
         )
@@ -167,17 +167,17 @@ def test_register_kv_caches_emits_fa_and_gdn_regions(monkeypatch):
 
 def test_register_kv_caches_deduplicates_shared_backing_memory(monkeypatch):
     monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MooncakeConnector",
         kv_role="kv_consumer",
     )
     kv_cache_config = make_hybrid_gdn_kv_cache_config(
-        vllm_config.cache_config.block_size
+        aphrodite_config.cache_config.block_size
     )
 
-    with set_current_vllm_config(vllm_config), patch_worker_dependencies():
+    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
         connector = MooncakeConnector(
-            vllm_config,
+            aphrodite_config,
             KVConnectorRole.WORKER,
             kv_cache_config,
         )
@@ -214,17 +214,17 @@ def test_register_kv_caches_deduplicates_shared_backing_memory(monkeypatch):
 
 def test_hybrid_gdn_transfer_params_preserve_group_identity(monkeypatch):
     monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MooncakeConnector",
         kv_role="kv_producer",
     )
     kv_cache_config = make_hybrid_gdn_kv_cache_config(
-        vllm_config.cache_config.block_size
+        aphrodite_config.cache_config.block_size
     )
 
-    with set_current_vllm_config(vllm_config), patch_worker_dependencies():
+    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
         connector = MooncakeConnector(
-            vllm_config,
+            aphrodite_config,
             KVConnectorRole.WORKER,
             kv_cache_config,
         )
@@ -343,17 +343,17 @@ def test_hybrid_gdn_splits_fa_regions_but_keeps_gdn_state_whole(
     monkeypatch,
 ):
     monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MooncakeConnector",
         kv_role="kv_producer",
     )
     kv_cache_config = make_hybrid_gdn_kv_cache_config(
-        vllm_config.cache_config.block_size
+        aphrodite_config.cache_config.block_size
     )
 
-    with set_current_vllm_config(vllm_config), patch_worker_dependencies():
+    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
         connector = MooncakeConnector(
-            vllm_config,
+            aphrodite_config,
             KVConnectorRole.WORKER,
             kv_cache_config,
         )

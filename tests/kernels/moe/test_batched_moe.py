@@ -14,7 +14,7 @@ from tests.kernels.moe.utils import (
 )
 from tests.kernels.quant_utils import native_batched_masked_quant_matmul
 from tests.kernels.utils import torch_experts
-from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.fused_moe import fused_topk
 from aphrodite.model_executor.layers.fused_moe.experts.fused_batched_moe import (
     invoke_moe_batched_triton_kernel,
@@ -45,7 +45,7 @@ DTYPES = [torch.bfloat16]
 if not current_platform.is_fp8_fnuz():
     DTYPES.append(torch.float8_e4m3fn)
 
-vllm_config = AphroditeConfig()
+aphrodite_config = AphroditeConfig()
 
 
 @dataclass
@@ -300,7 +300,7 @@ def test_fused_moe_batched_experts(
         a1_scale = None
         a2_scale = None
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         topk_weight, topk_ids, _ = fused_topk(a, score, topk, False)
 
         baseline_output = torch_experts(

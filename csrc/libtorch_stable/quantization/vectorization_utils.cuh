@@ -1,7 +1,7 @@
 #pragma once
 #include "vectorization.cuh"
 
-namespace vllm {
+namespace aphrodite {
 
 template <int VEC_SIZE, typename InT, typename OutT, typename ScaOp>
 struct DefaultVecOp {
@@ -192,4 +192,4 @@ __device__ __forceinline__ void vectorize_read_with_alignment(
                                           std::forward<ScaOp>(scalar_op));
 }
 
-}  // namespace vllm
+}  // namespace aphrodite

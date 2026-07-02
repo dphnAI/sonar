@@ -47,7 +47,7 @@ class TestResponsesRequestSamplingParams:
             seed=42,
             stop=["END", "STOP"],
             ignore_eos=True,
-            vllm_xargs={"custom": "value"},
+            aphrodite_xargs={"custom": "value"},
         )
 
         sampling_params = request.to_sampling_params(default_max_tokens=1000)

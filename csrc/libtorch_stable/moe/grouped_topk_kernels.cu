@@ -33,7 +33,7 @@
 #include <cooperative_groups/reduce.h>
 namespace cg = cooperative_groups;
 
-namespace vllm {
+namespace aphrodite {
 namespace moe {
 
 constexpr unsigned FULL_WARP_MASK = 0xffffffff;
@@ -1004,7 +1004,7 @@ INSTANTIATE_NOAUX_TC(__nv_bfloat16, float, int32_t, SCORING_NONE);
 INSTANTIATE_NOAUX_TC(__nv_bfloat16, half, int32_t, SCORING_NONE);
 INSTANTIATE_NOAUX_TC(__nv_bfloat16, __nv_bfloat16, int32_t, SCORING_NONE);
 }  // end namespace moe
-}  // namespace vllm
+}  // namespace aphrodite
 
 std::tuple<torch::stable::Tensor, torch::stable::Tensor> grouped_topk(
     torch::stable::Tensor const& scores, int64_t n_group, int64_t topk_group,
@@ -1028,8 +1028,8 @@ std::tuple<torch::stable::Tensor, torch::stable::Tensor> grouped_topk(
   STD_TORCH_CHECK(topk <= topk_group * (num_experts / n_group),
                   "topk must be <= topk_group * (num_experts / n_group)");
   STD_TORCH_CHECK(
-      scoring_func == vllm::moe::SCORING_NONE ||
-          scoring_func == vllm::moe::SCORING_SIGMOID,
+      scoring_func == aphrodite::moe::SCORING_NONE ||
+          scoring_func == aphrodite::moe::SCORING_SIGMOID,
       "scoring_func must be SCORING_NONE (0) or SCORING_SIGMOID (1)");
 
   // Always output float32 for topk_values (eliminates Python-side conversion)
@@ -1040,13 +1040,13 @@ std::tuple<torch::stable::Tensor, torch::stable::Tensor> grouped_topk(
 
   const cudaStream_t stream =
       get_current_cuda_stream(scores.get_device_index());
-  auto const sf = static_cast<vllm::moe::ScoringFunc>(scoring_func);
+  auto const sf = static_cast<aphrodite::moe::ScoringFunc>(scoring_func);
 
 #define LAUNCH_KERNEL_SF(T, BiasT, IdxT)                                      \
   do {                                                                        \
     switch (sf) {                                                             \
-      case vllm::moe::SCORING_NONE:                                           \
-        vllm::moe::invokeNoAuxTc<T, BiasT, IdxT, vllm::moe::SCORING_NONE>(    \
+      case aphrodite::moe::SCORING_NONE:                                           \
+        aphrodite::moe::invokeNoAuxTc<T, BiasT, IdxT, aphrodite::moe::SCORING_NONE>(    \
             reinterpret_cast<T*>(scores.mutable_data_ptr()),                  \
             reinterpret_cast<float*>(topk_values.mutable_data_ptr()),         \
             reinterpret_cast<IdxT*>(topk_indices.mutable_data_ptr()),         \
@@ -1054,8 +1054,8 @@ std::tuple<torch::stable::Tensor, torch::stable::Tensor> grouped_topk(
             num_experts, n_group, topk_group, topk, renormalize,              \
             routed_scaling_factor, false, stream);                            \
         break;                                                                \
-      case vllm::moe::SCORING_SIGMOID:                                        \
-        vllm::moe::invokeNoAuxTc<T, BiasT, IdxT, vllm::moe::SCORING_SIGMOID>( \
+      case aphrodite::moe::SCORING_SIGMOID:                                        \
+        aphrodite::moe::invokeNoAuxTc<T, BiasT, IdxT, aphrodite::moe::SCORING_SIGMOID>( \
             reinterpret_cast<T*>(scores.mutable_data_ptr()),                  \
             reinterpret_cast<float*>(topk_values.mutable_data_ptr()),         \
             reinterpret_cast<IdxT*>(topk_indices.mutable_data_ptr()),         \

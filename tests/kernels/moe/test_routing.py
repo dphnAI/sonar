@@ -187,7 +187,7 @@ def baseline_fused_topk(
     3. Optionally renormalize the weights
     """
     scores = torch.softmax(router_logits, dim=-1, dtype=torch.float32)
-    # Use sorted=False to match aphrodite implementation (vllm_is_batch_invariant
+    # Use sorted=False to match aphrodite implementation (aphrodite_is_batch_invariant
     # defaults to False)
     topk_weights, topk_ids = torch.topk(scores, top_k, dim=-1, sorted=False)
 

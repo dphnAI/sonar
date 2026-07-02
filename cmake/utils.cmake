@@ -54,7 +54,7 @@ endmacro()
 function (hipify_sources_target OUT_SRCS NAME ORIG_SRCS)
   if (TARGET hipify_all)
     message(FATAL_ERROR
-      "hipify_sources_target(${NAME}) called after vllm_finalize_hipify_target. "
+      "hipify_sources_target(${NAME}) called after aphrodite_finalize_hipify_target. "
       "Add the new HIP extension before the finalizer call in CMakeLists.txt.")
   endif()
 
@@ -97,7 +97,7 @@ endfunction()
 # Define the single shared `hipify_all` custom target that runs hipify once
 # on the union of every HIP extension's sources. Call after the last HIP
 # `define_extension_target`.
-function (vllm_finalize_hipify_target)
+function (aphrodite_finalize_hipify_target)
   if (TARGET hipify_all)
     return()
   endif()
@@ -168,7 +168,7 @@ endfunction()
 #   libgomp.so    -> libgomp-<hash>.so...
 #   libgomp.so.1  -> libgomp-<hash>.so...
 # OUTPUT: TORCH_GOMP_SHIM_DIR  ("" if not found)
-function(vllm_prepare_torch_gomp_shim TORCH_GOMP_SHIM_DIR)
+function(aphrodite_prepare_torch_gomp_shim TORCH_GOMP_SHIM_DIR)
   set(${TORCH_GOMP_SHIM_DIR} "" PARENT_SCOPE)
 
   # Use run_python to locate vendored libgomp; never throw on failure.

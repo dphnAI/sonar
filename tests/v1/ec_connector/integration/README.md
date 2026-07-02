@@ -25,7 +25,7 @@ Please refer to [Disaggregated Encoder Feature](../../../../docs/features/disagg
 ### Multimodal Prompts (Default)
 
 ```bash
-cd vllm
+cd aphrodite
 ./tests/v1/ec_connector/integration/run_epd_correctness_test.sh
 ```
 
@@ -34,7 +34,7 @@ This runs the test with actual multimodal (image) prompts.
 ### Text-Only Prompts
 
 ```bash
-cd vllm
+cd aphrodite
 USE_MM_PROMPTS=0 ./tests/v1/ec_connector/integration/run_epd_correctness_test.sh
 ```
 
@@ -62,7 +62,7 @@ EC_SHARED_STORAGE_PATH="/tmp/my_ec_cache" bash ./tests/v1/ec_connector/integrati
 
 1. Start single vLLM instance on GPU
 2. Run test prompts (multimodal or text-only)
-3. Save outputs to `.vllm_epd_baseline.txt`
+3. Save outputs to `.aphrodite_epd_baseline.txt`
 4. Shutdown instance
 
 ### Step 2: EPD (1E + 1PD)
@@ -129,7 +129,7 @@ Quick sanity check:
 - Multiple GPUs (3 for 1E+1P+1D, 2 for 1E+1PD, 1 for baseline)
     - 1E+1P+1D is runnable with 2 GPU by assign E and P on the same GPU now.
 - Multimodal model (e.g., Qwen2.5-VL-3B-Instruct)
-- Internet access (for accessing vllm test images)
+- Internet access (for accessing aphrodite test images)
 
 ## Debugging
 

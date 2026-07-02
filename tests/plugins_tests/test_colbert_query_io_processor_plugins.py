@@ -142,7 +142,7 @@ def test_colbert_query_plugin_batch_online(server: RemoteOpenAIServer):
 
 
 @pytest.mark.parametrize("input_type", ["query", "document"])
-def test_colbert_query_plugin_offline(vllm_runner, input_type: str):
+def test_colbert_query_plugin_offline(aphrodite_runner, input_type: str):
     """Test the ColBERT query plugin in offline mode."""
     input_text = (
         model_config["query_input"]
@@ -156,7 +156,7 @@ def test_colbert_query_plugin_offline(vllm_runner, input_type: str):
         }
     }
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_config["model_name"],
         runner="pooling",
         enforce_eager=True,
@@ -182,7 +182,7 @@ def test_colbert_query_plugin_offline(vllm_runner, input_type: str):
     assert response.usage.total_tokens == response.usage.prompt_tokens
 
 
-def test_colbert_query_plugin_offline_multiple_inputs(vllm_runner):
+def test_colbert_query_plugin_offline_multiple_inputs(aphrodite_runner):
     """Test the ColBERT query plugin with multiple inputs in offline mode."""
     queries = [
         "What is machine learning?",
@@ -196,7 +196,7 @@ def test_colbert_query_plugin_offline_multiple_inputs(vllm_runner):
         }
     }
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_config["model_name"],
         runner="pooling",
         enforce_eager=True,

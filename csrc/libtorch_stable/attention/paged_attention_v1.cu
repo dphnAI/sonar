@@ -26,11 +26,11 @@
 
 #define LAUNCH_PAGED_ATTENTION_V1(HEAD_SIZE)                                \
   APHRODITE_DevFuncAttribute_SET_MaxDynamicSharedMemorySize(                     \
-      ((void*)vllm::paged_attention_v1_kernel<T, CACHE_T, HEAD_SIZE,        \
+      ((void*)aphrodite::paged_attention_v1_kernel<T, CACHE_T, HEAD_SIZE,        \
                                               BLOCK_SIZE, NUM_THREADS,      \
                                               KV_DTYPE, IS_BLOCK_SPARSE>),  \
       shared_mem_size);                                                     \
-  vllm::paged_attention_v1_kernel<T, CACHE_T, HEAD_SIZE, BLOCK_SIZE,        \
+  aphrodite::paged_attention_v1_kernel<T, CACHE_T, HEAD_SIZE, BLOCK_SIZE,        \
                                   NUM_THREADS, KV_DTYPE, IS_BLOCK_SPARSE>   \
       <<<grid, block, shared_mem_size, stream>>>(                           \
           out_ptr, query_ptr, key_cache_ptr, value_cache_ptr, num_kv_heads, \
@@ -42,7 +42,7 @@
 
 // TODO(woosuk): Tune NUM_THREADS.
 template <typename T, typename CACHE_T, int BLOCK_SIZE,
-          vllm::Fp8KVCacheDataType KV_DTYPE, bool IS_BLOCK_SPARSE,
+          aphrodite::Fp8KVCacheDataType KV_DTYPE, bool IS_BLOCK_SPARSE,
           int NUM_THREADS = 128>
 void paged_attention_v1_launcher(
     torch::stable::Tensor& out, torch::stable::Tensor& query,
@@ -82,7 +82,7 @@ void paged_attention_v1_launcher(
       DIVIDE_ROUND_UP(max_seq_len, BLOCK_SIZE) * BLOCK_SIZE;
   int logits_size = padded_max_seq_len * sizeof(float);
   int outputs_size = (NUM_WARPS / 2) * head_size * sizeof(float);
-  // Python-side check in vllm.worker.worker._check_if_can_support_max_seq_len
+  // Python-side check in aphrodite.worker.worker._check_if_can_support_max_seq_len
   // Keep that in sync with the logic here!
   int shared_mem_size = std::max(logits_size, outputs_size);
 

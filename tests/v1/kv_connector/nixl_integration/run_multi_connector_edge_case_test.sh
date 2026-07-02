@@ -19,7 +19,7 @@
 #   MODEL_NAMES              - model to test (default: Qwen/Qwen3-0.6B)
 #   KV_CACHE_MEMORY_BYTES    - GPU KV cache size in bytes (default: 268435456 = 256 MiB)
 #   BLOCK_SIZE               - KV cache block size (default: 128)
-#   APHRODITE_SERVE_EXTRA_ARGS    - comma-separated extra args for vllm serve
+#   APHRODITE_SERVE_EXTRA_ARGS    - comma-separated extra args for aphrodite serve
 set -xe
 
 # ── Configuration ────────────────────────────────────────────────────────
@@ -67,7 +67,7 @@ wait_for_server() {
 
 cleanup_instances() {
   echo "Cleaning up any running vLLM instances and proxy..."
-  pkill -f "vllm serve" || true
+  pkill -f "aphrodite serve" || true
   pkill -f "toy_proxy_server.py" || true
   sleep 2
 }
@@ -95,7 +95,7 @@ run_tests_for_model() {
     APHRODITE_KV_CACHE_LAYOUT='HND' \
     UCX_NET_DEVICES=all \
     APHRODITE_NIXL_SIDE_CHANNEL_PORT=$PREFILL_SIDE_CHANNEL_PORT \
-    vllm serve \"$model_name\" \
+    aphrodite serve \"$model_name\" \
     --port $PREFILL_PORT \
     --enforce-eager \
     --block-size ${BLOCK_SIZE} \
@@ -118,7 +118,7 @@ run_tests_for_model() {
     APHRODITE_KV_CACHE_LAYOUT='HND' \
     UCX_NET_DEVICES=all \
     APHRODITE_NIXL_SIDE_CHANNEL_PORT=$DECODE_SIDE_CHANNEL_PORT \
-    vllm serve \"$model_name\" \
+    aphrodite serve \"$model_name\" \
     --port $DECODE_PORT \
     --enforce-eager \
     --block-size ${BLOCK_SIZE} \

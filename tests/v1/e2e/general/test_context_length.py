@@ -30,7 +30,7 @@ from aphrodite.exceptions import APHRODITEValidationError
 def test_decoder_max_context_length_validation(
     model: str,
     max_model_len: int,
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     prompt_len: int,
     max_tokens: int,
 ) -> None:
@@ -39,16 +39,16 @@ def test_decoder_max_context_length_validation(
 
     prompt_ids = [[43] * prompt_len]
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_name=model,
         tokenizer_name=model,
         max_model_len=max_model_len,
         max_num_seqs=1,
         tensor_parallel_size=1,
-    ) as vllm_model:
+    ) as aphrodite_model:
         if prompt_len + max_tokens <= max_model_len:
             # Should succeed as constraints are met
-            vllm_model.generate_greedy(prompt_ids, max_tokens)
+            aphrodite_model.generate_greedy(prompt_ids, max_tokens)
         else:
             # Should raise the ValueError defined in
             # aphrodite/v1/engine/processor.Processor_validate_model_input()
@@ -60,7 +60,7 @@ def test_decoder_max_context_length_validation(
                 "text tokens (prompt + requested output tokens)."
             )
             with pytest.raises(ValueError) as excinfo:
-                vllm_model.generate_greedy(prompt_ids, max_tokens)
+                aphrodite_model.generate_greedy(prompt_ids, max_tokens)
             assert expected_msg in str(excinfo.value)
 
 
@@ -68,7 +68,7 @@ def test_decoder_max_context_length_validation(
 @pytest.mark.parametrize("model", ["JackFram/llama-160m"])
 def test_auto_fit_max_model_len_rejects_oversized_input(
     model: str,
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
 ) -> None:
     """When max_model_len='auto' and KV cache memory is very limited,
     the engine auto-fits max_model_len to a small value. The frontend
@@ -80,7 +80,7 @@ def test_auto_fit_max_model_len_rejects_oversized_input(
     # of the platform's default block size.
     kv_cache_bytes = 1_000_000  # 1 MB
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_name=model,
         max_model_len=-1,
         max_num_seqs=1,
@@ -88,9 +88,9 @@ def test_auto_fit_max_model_len_rejects_oversized_input(
         block_size=16,
         kv_cache_memory_bytes=kv_cache_bytes,
         load_format="dummy",
-    ) as vllm_model:
+    ) as aphrodite_model:
         auto_fitted_len = (
-            vllm_model.llm.llm_engine.vllm_config.model_config.max_model_len
+            aphrodite_model.llm.llm_engine.aphrodite_config.model_config.max_model_len
         )
         # Sanity check: auto-fit should have reduced it well below the
         # model's native context length.
@@ -102,4 +102,4 @@ def test_auto_fit_max_model_len_rejects_oversized_input(
         # A prompt longer than the auto-fitted length must be rejected.
         oversized_prompt = [[43] * (auto_fitted_len + 10)]
         with pytest.raises(APHRODITEValidationError, match="Please reduce the length"):
-            vllm_model.generate_greedy(oversized_prompt, max_tokens=4)
+            aphrodite_model.generate_greedy(oversized_prompt, max_tokens=4)

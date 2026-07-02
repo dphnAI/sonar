@@ -62,7 +62,7 @@ def _make_runner(**overrides: Any) -> Any:
         enable_elastic_ep=False,
         eplb_config=SimpleNamespace(log_balancedness=True),
     )
-    runner.vllm_config = SimpleNamespace(
+    runner.aphrodite_config = SimpleNamespace(
         load_config=runner.load_config,
         model_config=runner.model_config,
     )

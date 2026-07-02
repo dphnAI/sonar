@@ -272,7 +272,7 @@ class TestAllPool:
             ),
         )
         with patch(
-            "aphrodite.model_executor.layers.pooler.tokwise.methods.get_current_vllm_config",
+            "aphrodite.model_executor.layers.pooler.tokwise.methods.get_current_aphrodite_config",
             return_value=fake_config,
         ):
             return AllPool()
@@ -369,7 +369,7 @@ class TestStepPool:
             ),
         )
         with patch(
-            "aphrodite.model_executor.layers.pooler.tokwise.methods.get_current_vllm_config",
+            "aphrodite.model_executor.layers.pooler.tokwise.methods.get_current_aphrodite_config",
             return_value=fake_config,
         ):
             return StepPool()
@@ -477,7 +477,7 @@ class TestGetTokPoolingMethod:
             ),
         )
         with patch(
-            "aphrodite.model_executor.layers.pooler.tokwise.methods.get_current_vllm_config",
+            "aphrodite.model_executor.layers.pooler.tokwise.methods.get_current_aphrodite_config",
             return_value=fake_config,
         ):
             assert isinstance(get_tok_pooling_method("ALL"), AllPool)
@@ -489,7 +489,7 @@ class TestGetTokPoolingMethod:
             ),
         )
         with patch(
-            "aphrodite.model_executor.layers.pooler.tokwise.methods.get_current_vllm_config",
+            "aphrodite.model_executor.layers.pooler.tokwise.methods.get_current_aphrodite_config",
             return_value=fake_config,
         ):
             assert isinstance(get_tok_pooling_method("STEP"), StepPool)

@@ -49,16 +49,16 @@ def _get_prompt(audio_assets: AudioTestAssets, question: str) -> list[int]:
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_models_with_multiple_audios(
-    vllm_runner,
+    aphrodite_runner,
     audio_assets: AudioTestAssets,
     dtype: str,
     max_tokens: int,
     num_logprobs: int,
 ) -> None:
-    vllm_prompt = _get_prompt(audio_assets, MULTI_AUDIO_PROMPT)
+    aphrodite_prompt = _get_prompt(audio_assets, MULTI_AUDIO_PROMPT)
     run_multi_audio_test(
-        vllm_runner,
-        [(vllm_prompt, [a.audio_and_sample_rate for a in audio_assets])],  # type: ignore[list-item]
+        aphrodite_runner,
+        [(aphrodite_prompt, [a.audio_and_sample_rate for a in audio_assets])],  # type: ignore[list-item]
         MODEL_NAME,
         dtype=dtype,
         max_tokens=max_tokens,
@@ -67,7 +67,7 @@ def test_models_with_multiple_audios(
     )
 
 
-def test_online_serving(vllm_runner, audio_assets: AudioTestAssets):
+def test_online_serving(aphrodite_runner, audio_assets: AudioTestAssets):
     """Two-layer accuracy and serving validation using Mistral format.
 
     1. Offline Aphrodite greedy output (runs first to avoid CUDA fork issues
@@ -83,8 +83,8 @@ def test_online_serving(vllm_runner, audio_assets: AudioTestAssets):
     max_tokens = 10
     audio_data = [asset.audio_and_sample_rate for asset in audio_assets]
 
-    vllm_prompt = _get_prompt(audio_assets, question)
-    with vllm_runner(
+    aphrodite_prompt = _get_prompt(audio_assets, question)
+    with aphrodite_runner(
         MODEL_NAME,
         dtype="half",
         enforce_eager=True,
@@ -92,9 +92,9 @@ def test_online_serving(vllm_runner, audio_assets: AudioTestAssets):
         config_format="mistral",
         load_format="mistral",
         limit_mm_per_prompt={"audio": len(audio_assets)},
-    ) as vllm_model:
-        offline_outputs = vllm_model.generate_greedy(
-            [vllm_prompt],
+    ) as aphrodite_model:
+        offline_outputs = aphrodite_model.generate_greedy(
+            [aphrodite_prompt],
             max_tokens,
             audios=[audio_data],
         )
@@ -151,7 +151,7 @@ def test_online_serving(vllm_runner, audio_assets: AudioTestAssets):
     reason="VoxtralProcessor.apply_chat_template() in transformers v5 "
     "doesn't resolve chat_template=None to the default template"
 )
-def test_hf_reference(hf_runner, vllm_runner, audio_assets: AudioTestAssets):
+def test_hf_reference(hf_runner, aphrodite_runner, audio_assets: AudioTestAssets):
     """Compare Aphrodite Mistral-format output against HF Transformers reference.
 
     Instead of requiring an exact text match (which is brittle across
@@ -167,8 +167,8 @@ def test_hf_reference(hf_runner, vllm_runner, audio_assets: AudioTestAssets):
     num_logprobs = 5
     audio_data = [asset.audio_and_sample_rate for asset in audio_assets]
 
-    vllm_prompt = _get_prompt(audio_assets, question)
-    with vllm_runner(
+    aphrodite_prompt = _get_prompt(audio_assets, question)
+    with aphrodite_runner(
         MODEL_NAME,
         dtype="half",
         enforce_eager=True,
@@ -176,14 +176,14 @@ def test_hf_reference(hf_runner, vllm_runner, audio_assets: AudioTestAssets):
         config_format="mistral",
         load_format="mistral",
         limit_mm_per_prompt={"audio": len(audio_assets)},
-    ) as vllm_model:
-        vllm_outputs = vllm_model.generate_greedy_logprobs(
-            [vllm_prompt],
+    ) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
+            [aphrodite_prompt],
             max_tokens,
             num_logprobs,
             audios=[audio_data],
         )
-    assert vllm_outputs[0][1], "Aphrodite inference produced empty output"
+    assert aphrodite_outputs[0][1], "Aphrodite inference produced empty output"
 
     with hf_runner(
         MODEL_NAME,
@@ -201,11 +201,11 @@ def test_hf_reference(hf_runner, vllm_runner, audio_assets: AudioTestAssets):
 
     print(
         f"HF Reference Comparison\n"
-        f"  Aphrodite: {vllm_outputs[0][1]!r}\n"
+        f"  Aphrodite: {aphrodite_outputs[0][1]!r}\n"
         f"  HF:   {hf_outputs[0][1]!r}"
     )
     check_logprobs_close(
-        outputs_0_lst=vllm_outputs,
+        outputs_0_lst=aphrodite_outputs,
         outputs_1_lst=hf_outputs,
         name_0="aphrodite",
         name_1="hf",

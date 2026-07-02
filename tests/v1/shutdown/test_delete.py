@@ -122,9 +122,9 @@ def test_llm_delete_inprocess(
     with monkeypatch.context() as m:
         m.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
 
-        with AphroditeRunner(model) as vllm_model:
+        with AphroditeRunner(model) as aphrodite_model:
             if send_one_request:
-                vllm_model.generate(
+                aphrodite_model.generate(
                     ["Hello my name is"],
                     SamplingParams(max_tokens=1),
                 )

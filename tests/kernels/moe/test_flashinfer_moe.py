@@ -11,7 +11,7 @@ from tests.kernels.quantization.nvfp4_utils import (
 )
 from tests.kernels.utils import torch_moe
 from aphrodite import _custom_ops as ops
-from aphrodite.config import ParallelConfig, AphroditeConfig, set_current_vllm_config
+from aphrodite.config import ParallelConfig, AphroditeConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.fused_moe import fused_topk
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
@@ -69,7 +69,7 @@ def test_flashinfer_fp4_moe_no_graph(
     workspace_init,
 ):
     set_random_seed(7)
-    with set_current_vllm_config(
+    with set_current_aphrodite_config(
         AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))
     ):
         a = torch.randn((m, k), device="cuda", dtype=dtype) / 10

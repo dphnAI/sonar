@@ -51,7 +51,7 @@ async def test_check_serving_overall(servicer, request_msg, context, async_llm):
 
 
 @pytest.mark.asyncio
-async def test_check_serving_vllm_service(servicer, request_msg, context, async_llm):
+async def test_check_serving_aphrodite_service(servicer, request_msg, context, async_llm):
     request_msg.service = "aphrodite.grpc.engine.AphroditeEngine"
     response = await servicer.Check(request_msg, context)
     assert response.status == SERVING

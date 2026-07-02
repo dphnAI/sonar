@@ -21,8 +21,8 @@ def test_stat_logger_plugin_is_discovered(monkeypatch: pytest.MonkeyPatch):
         )
 
         # instantiate and confirm the right type
-        vllm_config = AphroditeConfig()
-        instance = factories[0](vllm_config)
+        aphrodite_config = AphroditeConfig()
+        instance = factories[0](aphrodite_config)
         assert isinstance(instance, DummyStatLogger)
 
 

@@ -359,7 +359,7 @@ class EngineCoreReadyResponse:
     block_size: int
     dp_stats_address: str | None
     dtype: str
-    vllm_version: str
+    aphrodite_version: str
     world_size: int
     data_parallel_size: int
     kv_cache_size_tokens: int | None = None
@@ -372,7 +372,7 @@ ready_response = EngineCoreReadyResponse(
     block_size=16,
     dp_stats_address=None,
     dtype="float32",
-    vllm_version="0.0.0",
+    aphrodite_version="0.0.0",
     data_parallel_size=1,
     world_size=1,
 )

@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite.v1.executor.vllm_net_devices import normalize_pci
+from aphrodite.v1.executor.aphrodite_net_devices import normalize_pci
 
 
 @pytest.mark.parametrize(

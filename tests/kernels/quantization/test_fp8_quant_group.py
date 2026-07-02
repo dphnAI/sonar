@@ -23,7 +23,7 @@ from aphrodite.utils.torch_utils import set_random_seed
 @pytest.mark.parametrize("use_ue8m0", [True, False])
 @torch.inference_mode()
 def test_quantfp8_group_functionality(
-    default_vllm_config,
+    default_aphrodite_config,
     batch_size: int,
     hidden_dim: int,
     group_size: int,
@@ -88,7 +88,7 @@ def test_quantfp8_group_functionality(
 @pytest.mark.parametrize("use_ue8m0", [True, False])
 @torch.inference_mode()
 def test_quantfp8_group_multidimensional(
-    default_vllm_config, seed: int, use_ue8m0: bool
+    default_aphrodite_config, seed: int, use_ue8m0: bool
 ) -> None:
     set_random_seed(seed)
 
@@ -142,7 +142,7 @@ def test_quantfp8_group_multidimensional(
 
 @pytest.mark.parametrize("seed", [42])
 @torch.inference_mode()
-def test_quantfp8_group_edge_cases(default_vllm_config, seed: int) -> None:
+def test_quantfp8_group_edge_cases(default_aphrodite_config, seed: int) -> None:
     set_random_seed(seed)
 
     batch_size = 16

@@ -1,5 +1,5 @@
 {
-    "abhigoyal/vllm-medusa-llama-68m-random": {
+    "abhigoyal/aphrodite-medusa-llama-68m-random": {
         "architectures": [
             "MedusaModel"
         ],

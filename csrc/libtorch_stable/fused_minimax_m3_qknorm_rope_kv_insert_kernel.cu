@@ -95,7 +95,7 @@ __device__ __forceinline__ uint8_t rocm_cvt_float_to_fp8_e4m3(float val) {
 }
 #endif
 
-namespace vllm {
+namespace aphrodite {
 namespace minimax_m3_fused_ops {
 
 namespace {
@@ -187,7 +187,7 @@ __device__ __forceinline__ void normAndRope(
 template <typename scalar_t>
 __device__ __forceinline__ void loadElems(scalar_t const* __restrict__ src,
                                           float (&elems)[kElemsPerLane]) {
-  using Converter = vllm::_typeConvert<scalar_t>;
+  using Converter = aphrodite::_typeConvert<scalar_t>;
   uint2 v = *reinterpret_cast<uint2 const*>(src);
   auto const* p =
       reinterpret_cast<typename Converter::packed_hip_type const*>(&v);
@@ -203,7 +203,7 @@ __device__ __forceinline__ void loadElems(scalar_t const* __restrict__ src,
 template <typename scalar_t>
 __device__ __forceinline__ void storeElems(
     scalar_t* __restrict__ dst, float const (&elems)[kElemsPerLane]) {
-  using Converter = vllm::_typeConvert<scalar_t>;
+  using Converter = aphrodite::_typeConvert<scalar_t>;
   uint2 v;
   auto* p = reinterpret_cast<typename Converter::packed_hip_type*>(&v);
 #pragma unroll
@@ -557,10 +557,10 @@ void launchFusedMiniMaxM3(
 }
 
 }  // namespace minimax_m3_fused_ops
-}  // namespace vllm
+}  // namespace aphrodite
 
 #define CALL_FUSED_MINIMAX_M3(_RAW_T, CACHE_T, KV_DTYPE)                       \
-  vllm::minimax_m3_fused_ops::launchFusedMiniMaxM3<st, CACHE_T, KV_DTYPE>(     \
+  aphrodite::minimax_m3_fused_ops::launchFusedMiniMaxM3<st, CACHE_T, KV_DTYPE>(     \
       reinterpret_cast<st*>(qkv.data_ptr()),                                   \
       q_out.has_value() ? reinterpret_cast<st*>(q_out->data_ptr()) : nullptr,  \
       index_q_out.has_value()                                                  \
@@ -631,11 +631,11 @@ void fused_minimax_m3_qknorm_rope_kv_insert(
                       k_norm_weight.scalar_type() == qkv.scalar_type(),
                   "q/k norm weight dtype must match qkv");
   STD_TORCH_CHECK(
-      q_norm_weight.numel() == vllm::minimax_m3_fused_ops::kHeadDim &&
-          k_norm_weight.numel() == vllm::minimax_m3_fused_ops::kHeadDim,
+      q_norm_weight.numel() == aphrodite::minimax_m3_fused_ops::kHeadDim &&
+          k_norm_weight.numel() == aphrodite::minimax_m3_fused_ops::kHeadDim,
       "q/k norm weight must have 128 elements");
   STD_TORCH_CHECK(rotary_dim > 0 && rotary_dim % 8 == 0 &&
-                      rotary_dim <= vllm::minimax_m3_fused_ops::kHeadDim,
+                      rotary_dim <= aphrodite::minimax_m3_fused_ops::kHeadDim,
                   "rotary_dim must be a positive multiple of 8 and <= 128");
 
   int const num_tokens = static_cast<int>(qkv.size(0));
@@ -647,9 +647,9 @@ void fused_minimax_m3_qknorm_rope_kv_insert(
   // (1 head)]) right after [q|k|v] in the same row; the dense layer does not.
   bool const has_index = niq > 0;
   bool const insert_kv = kv_cache.has_value();
-  vllm::Fp8KVCacheDataType const kv_dt =
-      vllm::get_fp8_kv_cache_data_type(kv_cache_dtype);
-  int const kHeadDim = vllm::minimax_m3_fused_ops::kHeadDim;
+  aphrodite::Fp8KVCacheDataType const kv_dt =
+      aphrodite::get_fp8_kv_cache_data_type(kv_cache_dtype);
+  int const kHeadDim = aphrodite::minimax_m3_fused_ops::kHeadDim;
   int const expected_row =
       (nq + 2 * nkv + (has_index ? niq + 1 : 0)) * kHeadDim;
   STD_TORCH_CHECK(qkv.size(1) == expected_row,
@@ -692,7 +692,7 @@ void fused_minimax_m3_qknorm_rope_kv_insert(
              index_slot_mapping->numel() == slot_mapping->numel()),
         "index_slot_mapping must be int64 CUDA with slot_mapping length");
     // Main attention KV cache: auto matches qkv, fp8 uses uint8 storage.
-    if (kv_dt == vllm::Fp8KVCacheDataType::kAuto) {
+    if (kv_dt == aphrodite::Fp8KVCacheDataType::kAuto) {
       STD_TORCH_CHECK(kv_cache->scalar_type() == qkv.scalar_type(),
                       "auto kv_cache dtype must match qkv");
     } else {

@@ -36,26 +36,26 @@ def server():
 def test_mteb_score(server):
     url = server.url_for("score")
     encoder = ScoreClientMtebEncoder(MODEL_NAME, url)
-    vllm_main_score = run_mteb_rerank(encoder, MTEB_RERANK_TASKS, MTEB_RERANK_LANGS)
+    aphrodite_main_score = run_mteb_rerank(encoder, MTEB_RERANK_TASKS, MTEB_RERANK_LANGS)
 
-    print("APHRODITE main score: ", vllm_main_score)
+    print("APHRODITE main score: ", aphrodite_main_score)
     print("SentenceTransformer main score: ", st_main_score)
-    print("Difference: ", st_main_score - vllm_main_score)
+    print("Difference: ", st_main_score - aphrodite_main_score)
 
     # We are not concerned that the aphrodite mteb results are better
     # than SentenceTransformers, so we only perform one-sided testing.
-    assert st_main_score - vllm_main_score < MTEB_RERANK_TOL
+    assert st_main_score - aphrodite_main_score < MTEB_RERANK_TOL
 
 
 def test_mteb_rerank(server):
     url = server.url_for("rerank")
     encoder = RerankClientMtebEncoder(MODEL_NAME, url)
-    vllm_main_score = run_mteb_rerank(encoder, MTEB_RERANK_TASKS, MTEB_RERANK_LANGS)
+    aphrodite_main_score = run_mteb_rerank(encoder, MTEB_RERANK_TASKS, MTEB_RERANK_LANGS)
 
-    print("APHRODITE main score: ", vllm_main_score)
+    print("APHRODITE main score: ", aphrodite_main_score)
     print("SentenceTransformer main score: ", st_main_score)
-    print("Difference: ", st_main_score - vllm_main_score)
+    print("Difference: ", st_main_score - aphrodite_main_score)
 
     # We are not concerned that the aphrodite mteb results are better
     # than SentenceTransformers, so we only perform one-sided testing.
-    assert st_main_score - vllm_main_score < MTEB_RERANK_TOL
+    assert st_main_score - aphrodite_main_score < MTEB_RERANK_TOL

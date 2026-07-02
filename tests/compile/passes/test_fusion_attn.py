@@ -26,7 +26,7 @@ from aphrodite.config import (
     PassConfig,
     SchedulerConfig,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.forward_context import get_forward_context, set_forward_context
 from aphrodite.model_executor.layers.attention import Attention
@@ -55,7 +55,7 @@ class AttentionQuantPatternModel(torch.nn.Module):
         num_kv_heads: int,
         head_size: int,
         device: torch.device,
-        vllm_config: AphroditeConfig,
+        aphrodite_config: AphroditeConfig,
         block_size: int,
         **kwargs,
     ):
@@ -64,15 +64,15 @@ class AttentionQuantPatternModel(torch.nn.Module):
         self.num_kv_heads = num_kv_heads
         self.head_size = head_size
         self.device = device
-        self.vllm_config = vllm_config
-        self.dtype = vllm_config.model_config.dtype
+        self.aphrodite_config = aphrodite_config
+        self.dtype = aphrodite_config.model_config.dtype
 
         self.attn = Attention(
             num_heads=self.num_qo_heads,
             head_size=self.head_size,
             scale=1.0 / (self.head_size**0.5),
             num_kv_heads=self.num_kv_heads,
-            cache_config=vllm_config.cache_config,
+            cache_config=aphrodite_config.cache_config,
             prefix="model.layers.0.self_attn.attn",
         )
         self.attn._k_scale = self.attn._k_scale.to(device)
@@ -90,7 +90,7 @@ class AttentionQuantPatternModel(torch.nn.Module):
                 kv_quant_mode=get_kv_quant_mode(self.attn.kv_cache_dtype),
             ),
             layer_names=[self.attn.layer_name],
-            vllm_config=self.vllm_config,
+            aphrodite_config=self.aphrodite_config,
             device=self.device,
         )
 
@@ -318,7 +318,7 @@ def test_attention_quant_pattern(
         max_model_len=2048,
         dtype=dtype,
     )
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=model_config,
         scheduler_config=SchedulerConfig(
             max_num_seqs=1024,
@@ -344,17 +344,17 @@ def test_attention_quant_pattern(
     torch._dynamo.mark_dynamic(v, 0)
 
     # Run model directly without compilation and fusion
-    vllm_config_unfused = copy.deepcopy(vllm_config)
+    aphrodite_config_unfused = copy.deepcopy(aphrodite_config)
     with (
-        set_current_vllm_config(vllm_config_unfused),
-        set_forward_context(attn_metadata=None, vllm_config=vllm_config_unfused),
+        set_current_aphrodite_config(aphrodite_config_unfused),
+        set_forward_context(attn_metadata=None, aphrodite_config=aphrodite_config_unfused),
     ):
         model_unfused = model_class(
             num_qo_heads=num_qo_heads,
             num_kv_heads=num_kv_heads,
             head_size=head_size,
             device=device,
-            vllm_config=vllm_config_unfused,
+            aphrodite_config=aphrodite_config_unfused,
             block_size=block_size,
         )
         model_unfused = model_unfused.to(device)
@@ -369,19 +369,19 @@ def test_attention_quant_pattern(
         result_unfused = compiled_unfused(q, k, v)
 
     # Run model with attn fusion enabled
-    vllm_config.compilation_config.pass_config = PassConfig(
+    aphrodite_config.compilation_config.pass_config = PassConfig(
         fuse_attn_quant=True, eliminate_noops=True
     )
     with (
-        set_current_vllm_config(vllm_config),
-        set_forward_context(attn_metadata=None, vllm_config=vllm_config),
+        set_current_aphrodite_config(aphrodite_config),
+        set_forward_context(attn_metadata=None, aphrodite_config=aphrodite_config),
     ):
         model_fused = model_class(
             num_qo_heads=num_qo_heads,
             num_kv_heads=num_kv_heads,
             head_size=head_size,
             device=device,
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             w=model_unfused.w,
             block_size=block_size,
         )
@@ -391,9 +391,9 @@ def test_attention_quant_pattern(
         forward_ctx.attn_metadata = model_fused.build_attn_metadata(batch_size)
 
         # Create test backend with fusion passes enabled
-        noop_pass = NoOpEliminationPass(vllm_config)
-        attn_pass = LazyInitPass(AttnQuantFusionPass, vllm_config)
-        cleanup_pass = PostCleanupPass(vllm_config)
+        noop_pass = NoOpEliminationPass(aphrodite_config)
+        attn_pass = LazyInitPass(AttnQuantFusionPass, aphrodite_config)
+        cleanup_pass = PostCleanupPass(aphrodite_config)
 
         test_backend = TestBackend(noop_pass, attn_pass, cleanup_pass)
         # HACK: See https://github.com/vllm-project/vllm/issues/31044
@@ -425,7 +425,7 @@ def test_attention_quant_pattern(
     quant_key: QuantKey = model_class.quant_key
     attn_fusion_supported = [
         layer.impl.fused_output_quant_supported(quant_key)
-        for key, layer in vllm_config.compilation_config.static_forward_context.items()
+        for key, layer in aphrodite_config.compilation_config.static_forward_context.items()
     ]
     assert sum(attn_fusion_supported) == len(attn_fusion_supported), (
         "All layers should support attention fusion"

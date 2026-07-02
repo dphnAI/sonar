@@ -10,7 +10,7 @@
  * Gemm shape.
  */
 
-namespace vllm {
+namespace aphrodite {
 
 using c3x::cutlass_gemm_caller;
 
@@ -162,4 +162,4 @@ void cutlass_scaled_mm_sm90_int8_epilogue(torch::stable::Tensor& out,
   }
 }
 
-}  // namespace vllm
+}  // namespace aphrodite

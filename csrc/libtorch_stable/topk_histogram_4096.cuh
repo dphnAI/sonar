@@ -9,7 +9,7 @@
 #include <cuda_runtime.h>
 #include <cstdint>
 
-namespace vllm {
+namespace aphrodite {
 namespace topk_histogram_4096 {
 
 constexpr uint32_t kBlockSize = 1024;
@@ -558,6 +558,6 @@ __device__ __noinline__ void histogram_4096_topk_predicated(
 }
 
 }  // namespace topk_histogram_4096
-}  // namespace vllm
+}  // namespace aphrodite
 
 #endif  // TOPK_HISTOGRAM_4096_CUH_

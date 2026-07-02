@@ -52,7 +52,7 @@ MODELS = ["TinyLlama/TinyLlama-1.1B-Chat-v1.0"]
 def test_beam_search_single_input(
     monkeypatch,
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model: str,
     dtype: str,
@@ -68,25 +68,25 @@ def test_beam_search_single_input(
             example_prompts, beam_width, max_tokens
         )
 
-    with vllm_runner(model, dtype=dtype, **EXTRA_ENGINE_KWARGS) as vllm_model:
-        vllm_outputs = vllm_model.generate_beam_search(
+    with aphrodite_runner(model, dtype=dtype, **EXTRA_ENGINE_KWARGS) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.generate_beam_search(
             example_prompts, beam_width, max_tokens
         )
 
     for i in range(len(example_prompts)):
         hf_output_ids, hf_output_texts = hf_outputs[i]
-        vllm_output_ids, vllm_output_texts = vllm_outputs[i]
-        for j, (hf_text, vllm_text) in enumerate(
-            zip(hf_output_texts, vllm_output_texts)
+        aphrodite_output_ids, aphrodite_output_texts = aphrodite_outputs[i]
+        for j, (hf_text, aphrodite_text) in enumerate(
+            zip(hf_output_texts, aphrodite_output_texts)
         ):
             print(f">>>{j}-th hf output:")
             print(hf_text)
             print(f">>>{j}-th aphrodite output:")
-            print(vllm_text)
-        assert len(hf_output_ids) == len(vllm_output_ids)
+            print(aphrodite_text)
+        assert len(hf_output_ids) == len(aphrodite_output_ids)
         for j in range(len(hf_output_ids)):
-            assert hf_output_ids[j] == vllm_output_ids[j], (
-                f"Test{i} output{j}:\nHF: {hf_output_ids}\nAphrodite: {vllm_output_ids}"
+            assert hf_output_ids[j] == aphrodite_output_ids[j], (
+                f"Test{i} output{j}:\nHF: {hf_output_ids}\nAphrodite: {aphrodite_output_ids}"
             )
 
 
@@ -97,7 +97,7 @@ def test_beam_search_single_input(
 def test_beam_search_with_concurrency_limit(
     monkeypatch,
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model: str,
     dtype: str,
@@ -112,8 +112,8 @@ def test_beam_search_with_concurrency_limit(
     example_prompts = example_prompts[:8]
     concurrency_limit = 2
     assert len(example_prompts) > concurrency_limit
-    with vllm_runner(model, dtype=dtype, **EXTRA_ENGINE_KWARGS) as vllm_model:
-        outputs_with_limit = vllm_model.generate_beam_search(
+    with aphrodite_runner(model, dtype=dtype, **EXTRA_ENGINE_KWARGS) as aphrodite_model:
+        outputs_with_limit = aphrodite_model.generate_beam_search(
             example_prompts,
             beam_width,
             max_tokens,
@@ -123,7 +123,7 @@ def test_beam_search_with_concurrency_limit(
 
         for i in range(0, len(example_prompts), concurrency_limit):
             outputs_without_limit.extend(
-                vllm_model.generate_beam_search(
+                aphrodite_model.generate_beam_search(
                     example_prompts[i : i + concurrency_limit],
                     beam_width,
                     max_tokens,
@@ -158,7 +158,7 @@ def test_beam_search_with_concurrency_limit(
 def test_beam_search_passes_multimodal_data(
     monkeypatch,
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     dtype: str,
     max_tokens: int,
     beam_width: int,
@@ -187,8 +187,8 @@ def test_beam_search_passes_multimodal_data(
             audios=audios,
         )
 
-    with vllm_runner(model, dtype=dtype, **EXTRA_ENGINE_KWARGS) as vllm_model:
-        vllm_outputs = vllm_model.generate_beam_search(
+    with aphrodite_runner(model, dtype=dtype, **EXTRA_ENGINE_KWARGS) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.generate_beam_search(
             prompts,
             beam_width=beam_width,
             max_tokens=max_tokens,
@@ -199,16 +199,16 @@ def test_beam_search_passes_multimodal_data(
 
     for i in range(len(prompts)):
         hf_output_ids, hf_output_texts = hf_outputs[i]
-        vllm_output_ids, vllm_output_texts = vllm_outputs[i]
+        aphrodite_output_ids, aphrodite_output_texts = aphrodite_outputs[i]
 
-        for j, (hf_text, vllm_text) in enumerate(
-            zip(hf_output_texts, vllm_output_texts)
+        for j, (hf_text, aphrodite_text) in enumerate(
+            zip(hf_output_texts, aphrodite_output_texts)
         ):
             print(f">>>{j}-th hf output [NOTE: special tokens are filtered]:")
             print(hf_text)
             print(f">>>{j}-th aphrodite output:")
-            print(vllm_text)
-        assert len(hf_output_ids) == len(vllm_output_ids)
+            print(aphrodite_text)
+        assert len(hf_output_ids) == len(aphrodite_output_ids)
 
         for j in range(len(hf_output_ids)):
             # Compare everything except for the audio tokens; we do this since
@@ -216,14 +216,14 @@ def test_beam_search_passes_multimodal_data(
             # token to match features, while the Aphrodite helper maintains the
             # single audio token in the input text
             filtered_hf_output_ids = seq_with_no_audio_toks(hf_output_ids[j])
-            filtered_vllm_output_ids = seq_with_no_audio_toks(vllm_output_ids[j])
+            filtered_aphrodite_output_ids = seq_with_no_audio_toks(aphrodite_output_ids[j])
 
             # HF output IDs may contain the end of sequence
-            if len(filtered_hf_output_ids) == len(filtered_vllm_output_ids) + 1:
+            if len(filtered_hf_output_ids) == len(filtered_aphrodite_output_ids) + 1:
                 assert filtered_hf_output_ids[-1] == eos_token_id
                 filtered_hf_output_ids = filtered_hf_output_ids[:-1]
 
-            assert filtered_hf_output_ids == filtered_vllm_output_ids
+            assert filtered_hf_output_ids == filtered_aphrodite_output_ids
 
 
 # NOTE: encoder/decoder tests are currently located under

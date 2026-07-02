@@ -19,7 +19,7 @@ class CustomError(Exception):
 
 
 @pytest.fixture
-def custom_add_op(fake_vllm_ir):
+def custom_add_op(fake_aphrodite_ir):
     """Register ``_custom_add`` plus impl_a, impl_b, impl_even for this test."""
 
     @aphrodite.ir.register_op(allow_inplace=True)
@@ -46,7 +46,7 @@ def custom_add_op(fake_vllm_ir):
     return _custom_add
 
 
-def test_registration_overloads(fake_vllm_ir):
+def test_registration_overloads(fake_aphrodite_ir):
     assert all(
         n not in IrOp.registry for n in ["_custom_sub", "_custom_mul", "_custom_div"]
     )
@@ -83,7 +83,7 @@ def test_registration_overloads(fake_vllm_ir):
             return x * y - 100
 
 
-def test_no_kw_only_args(fake_vllm_ir):
+def test_no_kw_only_args(fake_aphrodite_ir):
     # kw-only args not supported
     with pytest.raises(ValueError, match="keyword-only arguments"):
 
@@ -107,7 +107,7 @@ class TestIrOpCustomAdd:
 
     def test_torch_op_is_registered(self, custom_add_op):
         _custom_add = custom_add_op
-        torch_ops = getattr(torch.ops, aphrodite.ir.op.vllm_ir_torch_lib.ns)
+        torch_ops = getattr(torch.ops, aphrodite.ir.op.aphrodite_ir_torch_lib.ns)
         assert hasattr(torch_ops, "_custom_add")
         assert callable(torch_ops._custom_add.default)
         assert _custom_add.torch_op is torch_ops._custom_add.default
@@ -345,7 +345,7 @@ class TestIrOpImplDispatch:
         assert out.item() == 1 + 2 + 10
 
     def test_supports_args_runtime_dispatch_and_warning(
-        self, custom_add_op, caplog_vllm: pytest.LogCaptureFixture
+        self, custom_add_op, caplog_aphrodite: pytest.LogCaptureFixture
     ):
         _custom_add = custom_add_op
         x1 = torch.ones((2, 2), dtype=torch.int32)
@@ -355,12 +355,12 @@ class TestIrOpImplDispatch:
         y2 = torch.full((2, 3), 2, dtype=torch.int32)
 
         with (
-            caplog_vllm.at_level(logging.WARNING),
+            caplog_aphrodite.at_level(logging.WARNING),
             _custom_add.set_priority(["impl_even"]),
         ):
             # Test the warning about native fallback is logged (before even dispatching)
-            assert len(caplog_vllm.records) == 1
-            message = caplog_vllm.records[0].message
+            assert len(caplog_aphrodite.records) == 1
+            message = caplog_aphrodite.records[0].message
             assert "_custom_add" in message
             assert "fallback to native" in message
             assert "priority" in message
@@ -374,14 +374,14 @@ class TestIrOpImplDispatch:
             out2 = _custom_add(x2, y2)  # size(1) == 3 → native fallback
 
         # no other warnings
-        assert len(caplog_vllm.records) == 1
+        assert len(caplog_aphrodite.records) == 1
         assert torch.all(out1 == 1 + 2 + 50)
         assert torch.all(out2 == 1 + 2)
 
     def test_default_priority(
         self,
         custom_add_op,
-        caplog_vllm: pytest.LogCaptureFixture,
+        caplog_aphrodite: pytest.LogCaptureFixture,
         disable_log_dedup,
     ):
         _custom_add = custom_add_op
@@ -391,7 +391,7 @@ class TestIrOpImplDispatch:
 
         # No priority set → falls back to native
         assert _custom_add.get_priority() == []
-        with caplog_vllm.at_level(logging.WARNING):
+        with caplog_aphrodite.at_level(logging.WARNING):
             # Native by default
             assert _custom_add.dispatch(x, y) is _custom_add.impls["native"]
             out = _custom_add(x, y)
@@ -400,8 +400,8 @@ class TestIrOpImplDispatch:
         assert out.item() == 3 + 4
 
         # Check warning
-        assert len(caplog_vllm.records) == 2
-        message = caplog_vllm.records[0].message.lower()
+        assert len(caplog_aphrodite.records) == 2
+        message = caplog_aphrodite.records[0].message.lower()
         assert "_custom_add" in message
         assert "priority not set" in message
 
@@ -427,8 +427,8 @@ def test_set_default_torch_wrap(default: bool):
 
 
 @pytest.fixture
-def custom_mm_op(fake_vllm_ir):
-    """Fixture that registers ``_custom_mm`` (isolated by ``fake_vllm_ir``)."""
+def custom_mm_op(fake_aphrodite_ir):
+    """Fixture that registers ``_custom_mm`` (isolated by ``fake_aphrodite_ir``)."""
 
     @aphrodite.ir.register_op
     def _custom_mm(
@@ -663,7 +663,7 @@ class TestTolerance:
             op.get_tolerance(torch.complex64)
 
 
-def test_naming_validation(fake_vllm_ir):
+def test_naming_validation(fake_aphrodite_ir):
     """Test that op and provider names are validated ([a-z_][a-z_0-9]*)."""
 
     # Valid op and provider names
@@ -696,7 +696,7 @@ def test_naming_validation(fake_vllm_ir):
             return x + 1
 
 
-def test_registration_stack_traces(fake_vllm_ir):
+def test_registration_stack_traces(fake_aphrodite_ir):
     """Test that stack traces are captured for ops and impls."""
 
     @aphrodite.ir.register_op
@@ -726,7 +726,7 @@ def test_registration_stack_traces(fake_vllm_ir):
     assert '@_test_stack.register_impl("test_provider")' in impl._registration_stack[-1]
 
 
-def test_op_repr_uses_docstring(fake_vllm_ir):
+def test_op_repr_uses_docstring(fake_aphrodite_ir):
     """Test that __str__ uses the function's docstring and __repr__ is simple."""
 
     @aphrodite.ir.register_op
@@ -755,8 +755,8 @@ def test_op_repr_uses_docstring(fake_vllm_ir):
     assert repr(_test_repr_no_doc) == "IrOp('_test_repr_no_doc')"
 
 
-def test_vllm_ir_fixture(fake_vllm_ir):
-    """Test that the fake_vllm_ir fixture provides test isolation."""
+def test_aphrodite_ir_fixture(fake_aphrodite_ir):
+    """Test that the fake_aphrodite_ir fixture provides test isolation."""
 
     @aphrodite.ir.register_op
     def _test_fixture(x: torch.Tensor) -> torch.Tensor:

@@ -44,13 +44,13 @@ FP8_DTYPE = current_platform.fp8_dtype()
 
 
 def test_rope_kvcache_fusion_default_keeps_large_ranges_unfused():
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
             pass_config=PassConfig(fuse_rope_kvcache=True),
         ),
     )
-    fusion_pass = RopeKVCacheFusionPass(vllm_config)
+    fusion_pass = RopeKVCacheFusionPass(aphrodite_config)
 
     assert fusion_pass.is_applicable_for_range(Range(1, 256))
     assert not fusion_pass.is_applicable_for_range(Range(257, 11650))
@@ -60,7 +60,7 @@ def test_rope_kvcache_fusion_default_keeps_large_ranges_unfused():
 class QKRoPEKVCacheTestModel(torch.nn.Module):
     def __init__(
         self,
-        vllm_config: AphroditeConfig,
+        aphrodite_config: AphroditeConfig,
         attn_backend: AttentionBackendEnum,
         num_heads: int,
         num_kv_heads: int,
@@ -74,7 +74,7 @@ class QKRoPEKVCacheTestModel(torch.nn.Module):
         self.num_heads = num_heads
         self.num_kv_heads = num_kv_heads
         self.head_size = head_size
-        self.block_size = vllm_config.cache_config.block_size
+        self.block_size = aphrodite_config.cache_config.block_size
         self.q_size = num_heads * head_size
         self.kv_size = num_kv_heads * head_size
         self.is_neox = is_neox
@@ -100,8 +100,8 @@ class QKRoPEKVCacheTestModel(torch.nn.Module):
             head_size=head_size,
             scale=1.0 / head_size**0.5,
             num_kv_heads=num_kv_heads,
-            cache_config=vllm_config.cache_config,
-            quant_config=vllm_config.quant_config,
+            cache_config=aphrodite_config.cache_config,
+            quant_config=aphrodite_config.quant_config,
             prefix=prefix,
             attn_backend=attn_backend.get_class(),
         )
@@ -112,16 +112,16 @@ class QKRoPEKVCacheTestModel(torch.nn.Module):
         self.attn._k_scale = self.attn._k_scale.to(device)
         self.attn._v_scale = self.attn._v_scale.to(device)
 
-        kv_cache_dtype_str = vllm_config.cache_config.cache_dtype
+        kv_cache_dtype_str = aphrodite_config.cache_config.cache_dtype
         self.kv_cache_dtype = (
             FP8_DTYPE if kv_cache_dtype_str.startswith("fp8") else self.dtype
         )
 
         # Initialize attn MetadataBuilder
         self.builder = self.attn_backend.get_builder_cls()(
-            kv_cache_spec=self.attn.get_kv_cache_spec(vllm_config),
+            kv_cache_spec=self.attn.get_kv_cache_spec(aphrodite_config),
             layer_names=[self.attn.layer_name],
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             device=device,
         )
 
@@ -289,7 +289,7 @@ def test_rope_kvcache_fusion(
     if enable_rope_custom_op:
         custom_ops.append("+rotary_embedding")
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=ModelConfig(dtype=dtype),
         cache_config=CacheConfig(
             block_size=block_size,
@@ -305,7 +305,7 @@ def test_rope_kvcache_fusion(
         ),
     )
 
-    with aphrodite.config.set_current_vllm_config(vllm_config), monkeypatch.context() as m:
+    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
         m.setenv("APHRODITE_ROCM_USE_AITER", "1")
         m.setenv(
             "APHRODITE_ROCM_USE_AITER_TRITON_ROPE", "1" if enable_aiter_triton_rope else "0"
@@ -313,7 +313,7 @@ def test_rope_kvcache_fusion(
         rocm_aiter_ops.refresh_env_variables()
 
         model = QKRoPEKVCacheTestModel(
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             attn_backend=attn_backend,
             num_heads=num_heads,
             num_kv_heads=num_kv_heads,
@@ -323,13 +323,13 @@ def test_rope_kvcache_fusion(
             device=torch.get_default_device(),
         )
 
-        fusion_pass = RopeKVCacheFusionPass(vllm_config)
+        fusion_pass = RopeKVCacheFusionPass(aphrodite_config)
         passes = [
-            NoOpEliminationPass(vllm_config),
-            SplitCoalescingPass(vllm_config),
-            ScatterSplitReplacementPass(vllm_config),
+            NoOpEliminationPass(aphrodite_config),
+            SplitCoalescingPass(aphrodite_config),
+            ScatterSplitReplacementPass(aphrodite_config),
             fusion_pass,
-            PostCleanupPass(vllm_config),
+            PostCleanupPass(aphrodite_config),
         ]
         backend = TestBackend(*passes)
 
@@ -343,7 +343,7 @@ def test_rope_kvcache_fusion(
         qkv_unfused = qkv.clone()
         pos_unfused = pos.clone()
 
-        with set_forward_context(None, vllm_config):
+        with set_forward_context(None, aphrodite_config):
             forward_context = get_forward_context()
             attn_metadata = model.build_attn_metadata(T)
             forward_context.slot_mapping = {
@@ -356,7 +356,7 @@ def test_rope_kvcache_fusion(
 
         torch._dynamo.mark_dynamic(qkv, 0)
         torch._dynamo.mark_dynamic(pos, 0)
-        with set_forward_context(None, vllm_config):
+        with set_forward_context(None, aphrodite_config):
             model_fused = torch.compile(model, backend=backend)
             forward_context = get_forward_context()
             attn_metadata = model_fused.build_attn_metadata(T)
@@ -433,7 +433,7 @@ def test_rope_static_qquant_kvcache_fusion(
     if enable_rope_custom_op:
         custom_ops.append("+rotary_embedding")
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=ModelConfig(dtype=dtype),
         cache_config=CacheConfig(
             block_size=block_size,
@@ -449,7 +449,7 @@ def test_rope_static_qquant_kvcache_fusion(
         ),
     )
 
-    with aphrodite.config.set_current_vllm_config(vllm_config), monkeypatch.context() as m:
+    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
         m.setenv("APHRODITE_ROCM_USE_AITER", "1")
         m.setenv(
             "APHRODITE_ROCM_USE_AITER_TRITON_ROPE", "1" if enable_aiter_triton_rope else "0"
@@ -457,7 +457,7 @@ def test_rope_static_qquant_kvcache_fusion(
         rocm_aiter_ops.refresh_env_variables()
 
         model = QKRoPEStaticQKVCacheTestModel(
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             attn_backend=attn_backend,
             num_heads=num_heads,
             num_kv_heads=num_kv_heads,
@@ -467,13 +467,13 @@ def test_rope_static_qquant_kvcache_fusion(
             device=torch.get_default_device(),
         )
 
-        fusion_pass = RopeKVCacheFusionPass(vllm_config)
+        fusion_pass = RopeKVCacheFusionPass(aphrodite_config)
         passes = [
-            NoOpEliminationPass(vllm_config),
-            SplitCoalescingPass(vllm_config),
-            ScatterSplitReplacementPass(vllm_config),
+            NoOpEliminationPass(aphrodite_config),
+            SplitCoalescingPass(aphrodite_config),
+            ScatterSplitReplacementPass(aphrodite_config),
             fusion_pass,
-            PostCleanupPass(vllm_config),
+            PostCleanupPass(aphrodite_config),
         ]
         backend = TestBackend(*passes)
 
@@ -486,7 +486,7 @@ def test_rope_static_qquant_kvcache_fusion(
         qkv_unfused = qkv.clone()
         pos_unfused = pos.clone()
 
-        with set_forward_context(None, vllm_config):
+        with set_forward_context(None, aphrodite_config):
             forward_context = get_forward_context()
             attn_metadata = model.build_attn_metadata(T)
             forward_context.slot_mapping = {
@@ -499,7 +499,7 @@ def test_rope_static_qquant_kvcache_fusion(
 
         torch._dynamo.mark_dynamic(qkv, 0)
         torch._dynamo.mark_dynamic(pos, 0)
-        with set_forward_context(None, vllm_config):
+        with set_forward_context(None, aphrodite_config):
             model_fused = torch.compile(model, backend=backend)
             forward_context = get_forward_context()
             attn_metadata = model_fused.build_attn_metadata(T)
@@ -536,18 +536,18 @@ def test_rope_static_qquant_kvcache_fusion(
                 "_supports_static_q_fp8_quant_fusion",
                 lambda: False,
             )
-            generic_pass = RopeKVCacheFusionPass(vllm_config)
+            generic_pass = RopeKVCacheFusionPass(aphrodite_config)
             generic_backend = TestBackend(
-                NoOpEliminationPass(vllm_config),
-                SplitCoalescingPass(vllm_config),
-                ScatterSplitReplacementPass(vllm_config),
+                NoOpEliminationPass(aphrodite_config),
+                SplitCoalescingPass(aphrodite_config),
+                ScatterSplitReplacementPass(aphrodite_config),
                 generic_pass,
-                PostCleanupPass(vllm_config),
+                PostCleanupPass(aphrodite_config),
             )
             # Reset dynamo so the model is recompiled through generic_backend
             # instead of reusing the cached compilation from above.
             torch._dynamo.reset()
-            with set_forward_context(None, vllm_config):
+            with set_forward_context(None, aphrodite_config):
                 model_generic = torch.compile(model, backend=generic_backend)
                 forward_context = get_forward_context()
                 attn_metadata = model_generic.build_attn_metadata(T)

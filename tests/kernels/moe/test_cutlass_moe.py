@@ -10,7 +10,7 @@ import torch
 import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
 from tests.kernels.moe.utils import make_dummy_moe_config
 from aphrodite import _custom_ops as ops
-from aphrodite.config import ParallelConfig, AphroditeConfig, set_current_vllm_config
+from aphrodite.config import ParallelConfig, AphroditeConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.fused_moe import fused_experts, fused_topk
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
@@ -50,7 +50,7 @@ MNK_FACTORS = [
     # (40000, 2048, 5120),
 ]
 
-vllm_config = AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))
+aphrodite_config = AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))
 
 
 def test_cutlass_moe_supports_gelu_tanh_activation_metadata():
@@ -333,7 +333,7 @@ def test_cutlass_moe_8_bit_no_graph(
     ep_size: int | None = None,
 ):
     set_random_seed(7)
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         mt = MOETensors8Bit.make_moe_tensors_8bit(m, k, n, e, per_act_token, per_out_ch)
 
         score = torch.randn((m, e), device="cuda", dtype=torch.half)
@@ -387,7 +387,7 @@ def test_cutlass_moe_8_bit_cuda_graph(
     workspace_init,
 ):
     set_random_seed(7)
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         dtype = torch.half
 
         mt = MOETensors8Bit.make_moe_tensors_8bit(m, k, n, e, per_act_token, per_out_ch)
@@ -523,7 +523,7 @@ def test_run_cutlass_moe_fp8(
     workspace_init,
 ):
     set_random_seed(7)
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         mt = MOETensors8Bit.make_moe_tensors_8bit(
             m, k, n, e, per_act_token, per_out_channel
         )

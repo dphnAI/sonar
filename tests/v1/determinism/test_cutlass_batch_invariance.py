@@ -32,7 +32,7 @@ def setup_cuda():
 def test_cutlass_fp8_batch_invariant_fixed_config(
     weight_shape: tuple[int, int],
     batch_size: int,
-    default_vllm_config,
+    default_aphrodite_config,
     monkeypatch: pytest.MonkeyPatch,
 ):
     monkeypatch.setenv("APHRODITE_BATCH_INVARIANT", "1")

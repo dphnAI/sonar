@@ -11,14 +11,14 @@ import torch
 from tests.v1.kv_connector.unit.utils import (
     EOS_TOKEN_ID,
     create_model_runner_output,
-    create_vllm_config,
+    create_aphrodite_config,
 )
 from aphrodite import SamplingParams
 from aphrodite.config import (
     KVEventsConfig,
     KVTransferConfig,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.distributed.kv_transfer.kv_connector.v1 import KVConnectorRole
 from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.common import (
@@ -127,8 +127,8 @@ class MockOffloadingWorker(OffloadingWorker):
 
 
 class MockOffloadingSpec(OffloadingSpec):
-    def __init__(self, vllm_config: AphroditeConfig, kv_cache_config: KVCacheConfig):
-        super().__init__(vllm_config, kv_cache_config)
+    def __init__(self, aphrodite_config: AphroditeConfig, kv_cache_config: KVCacheConfig):
+        super().__init__(aphrodite_config, kv_cache_config)
 
         self.manager = MagicMock(spec=OffloadingManager)
         self.manager.prepare_load = lambda keys, req_context: MockLoadStoreSpec(keys)
@@ -195,12 +195,12 @@ class RequestRunner:
 
         self.req_id: int = -1
 
-        vllm_config = create_vllm_config(
+        aphrodite_config = create_aphrodite_config(
             block_size=block_size,
             max_num_batched_tokens=1000,
             disable_hybrid_kv_cache_manager=False,
         )
-        vllm_config.scheduler_config.async_scheduling = async_scheduling
+        aphrodite_config.scheduler_config.async_scheduling = async_scheduling
 
         extra_config: dict[str, Any] = {
             "spec_name": "MockOffloadingSpec",
@@ -216,12 +216,12 @@ class RequestRunner:
         if extra_config_overrides:
             extra_config.update(extra_config_overrides)
 
-        vllm_config.kv_transfer_config = KVTransferConfig(
+        aphrodite_config.kv_transfer_config = KVTransferConfig(
             kv_connector="OffloadingConnector",
             kv_role="kv_both",
             kv_connector_extra_config=extra_config,
         )
-        vllm_config.kv_events_config = KVEventsConfig(
+        aphrodite_config.kv_events_config = KVEventsConfig(
             # Enable so the offloading events tracker is active, but use the
             # null publisher: these tests drain take_events directly and a
             # real ZMQ publisher would bind a port per test.
@@ -256,29 +256,29 @@ class RequestRunner:
             kv_cache_tensors=kv_cache_tensors,
             kv_cache_groups=kv_cache_groups,
         )
-        vllm_config.cache_config.num_gpu_blocks = num_gpu_blocks
+        aphrodite_config.cache_config.num_gpu_blocks = num_gpu_blocks
         self.num_kv_groups = len(kv_cache_config.kv_cache_groups)
 
         scheduler_block_size, hash_block_size = resolve_kv_cache_block_sizes(
-            kv_cache_config, vllm_config
+            kv_cache_config, aphrodite_config
         )
 
         scheduler_cls = AsyncScheduler if async_scheduling else Scheduler
         self.scheduler = scheduler_cls(
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             kv_cache_config=kv_cache_config,
             log_stats=True,
-            structured_output_manager=StructuredOutputManager(vllm_config),
+            structured_output_manager=StructuredOutputManager(aphrodite_config),
             block_size=scheduler_block_size,
             hash_block_size=hash_block_size,
         )
 
         self.worker_connector = OffloadingConnector(
-            vllm_config, KVConnectorRole.WORKER, kv_cache_config
+            aphrodite_config, KVConnectorRole.WORKER, kv_cache_config
         )
 
         # register worker kv_caches to enable OffloadingWorker creations
-        # set_current_vllm_config is needed for get_kv_cache_layout() to work
+        # set_current_aphrodite_config is needed for get_kv_cache_layout() to work
         kv_caches: dict[str, torch.Tensor] = {}
         for group in kv_cache_groups:
             spec = group.kv_cache_spec
@@ -294,7 +294,7 @@ class RequestRunner:
                     dtype=spec.dtype,
                 )
 
-        with set_current_vllm_config(vllm_config):
+        with set_current_aphrodite_config(aphrodite_config):
             self.worker_connector.register_kv_caches(kv_caches)
 
         # extract connector of scheduler

@@ -48,7 +48,7 @@
   #define __HIP__RDNA3__
 #endif
 
-namespace vllm {
+namespace aphrodite {
 namespace gptq_rdna3 {
 
 // BLOCK_KN_SIZE = 256 (was 128 in exllama). Each block covers 256 K
@@ -690,7 +690,7 @@ void launch_gemm_q4(const T* a, const uint32_t* b_q_weight,
 }
 
 }  // namespace gptq_rdna3
-}  // namespace vllm
+}  // namespace aphrodite
 
 // ---------------------------------------------------------------------------
 // Public entry point.
@@ -761,18 +761,18 @@ torch::Tensor gptq_gemm_rdna3(torch::Tensor a, torch::Tensor b_q_weight,
   }
 
   if (a.scalar_type() == torch::kHalf) {
-    vllm::gptq_rdna3::launch_gemm_q4<half>(
+    aphrodite::gptq_rdna3::launch_gemm_q4<half>(
         (const half*)a.data_ptr(), (const uint32_t*)b_q_weight.data_ptr(),
         (const uint32_t*)b_qzeros.data_ptr(), (const half*)b_scales.data_ptr(),
         g_idx_ptr, (half*)c.data_ptr(), size_m, size_n, size_k, groups,
         use_v2_format, stream);
   } else {
-    vllm::gptq_rdna3::launch_gemm_q4<vllm::gptq_rdna3::bf16_t>(
-        (const vllm::gptq_rdna3::bf16_t*)a.data_ptr(),
+    aphrodite::gptq_rdna3::launch_gemm_q4<aphrodite::gptq_rdna3::bf16_t>(
+        (const aphrodite::gptq_rdna3::bf16_t*)a.data_ptr(),
         (const uint32_t*)b_q_weight.data_ptr(),
         (const uint32_t*)b_qzeros.data_ptr(),
-        (const vllm::gptq_rdna3::bf16_t*)b_scales.data_ptr(), g_idx_ptr,
-        (vllm::gptq_rdna3::bf16_t*)c.data_ptr(), size_m, size_n, size_k, groups,
+        (const aphrodite::gptq_rdna3::bf16_t*)b_scales.data_ptr(), g_idx_ptr,
+        (aphrodite::gptq_rdna3::bf16_t*)c.data_ptr(), size_m, size_n, size_k, groups,
         use_v2_format, stream);
   }
 

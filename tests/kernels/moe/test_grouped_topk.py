@@ -13,7 +13,7 @@ from aphrodite.config import (
     CompilationConfig,
     AphroditeConfig,
     get_cached_compilation_config,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.model_executor.layers.fused_moe.router.grouped_topk_router import (
     GroupedTopk,
@@ -57,7 +57,7 @@ def test_grouped_topk(
     input_dtype: torch.dtype,
     bias_dtype: torch.dtype,
 ):
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(custom_ops=["all", "+grouped_topk"])
     )
     get_cached_compilation_config.cache_clear()
@@ -67,7 +67,7 @@ def test_grouped_topk(
     gating_output = torch.randn((n_token, n_expert), dtype=input_dtype, device="cuda")
     e_score_correction_bias = torch.randn((n_expert,), dtype=bias_dtype, device="cuda")
 
-    with set_current_vllm_config(vllm_config), monkeypatch.context() as m:
+    with set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
         m.setenv("APHRODITE_USE_FUSED_MOE_GROUPED_TOPK", "0")
         m.setattr(envs, "APHRODITE_BATCH_INVARIANT", True)
         grouped_topk = GroupedTopk(

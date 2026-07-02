@@ -88,7 +88,7 @@ inline __device__ __host__ T divUp(T m, T n) {
 
 namespace tensorrt_llm::kernels {
 
-using namespace vllm::cuda_async;
+using namespace aphrodite::cuda_async;
 
 // NOTE(zhuhaoran): This kernel is adapted from TensorRT-LLM implementation,
 // with added support for passing the cos_sin_cache as an input.
@@ -121,14 +121,14 @@ __global__ void fusedQKNormRopeKernel(
   } else {
 #endif
 
-    using Converter = vllm::_typeConvert<scalar_t_in>;
+    using Converter = aphrodite::_typeConvert<scalar_t_in>;
     static_assert(Converter::exists,
                   "Input QKV data type is not supported for this CUDA "
                   "architecture or toolkit version.");
     using T_in = typename Converter::hip_type;
     using T2_in = typename Converter::packed_hip_type;
 
-    using CacheConverter = vllm::_typeConvert<scalar_t_cache>;
+    using CacheConverter = aphrodite::_typeConvert<scalar_t_cache>;
     static_assert(CacheConverter::exists,
                   "Cache data type is not supported for this CUDA architecture "
                   "or toolkit version.");
@@ -323,14 +323,14 @@ __global__ void fusedQKNormRopeKernelNTokenHeads(
   } else {
 #endif
 
-    using Converter = vllm::_typeConvert<scalar_t_in>;
+    using Converter = aphrodite::_typeConvert<scalar_t_in>;
     static_assert(Converter::exists,
                   "Input QKV data type is not supported for this CUDA "
                   "architecture or toolkit version.");
     using T_in = typename Converter::hip_type;
     using T2_in = typename Converter::packed_hip_type;
 
-    using CacheConverter = vllm::_typeConvert<scalar_t_cache>;
+    using CacheConverter = aphrodite::_typeConvert<scalar_t_cache>;
     static_assert(CacheConverter::exists,
                   "Cache data type is not supported for this CUDA architecture "
                   "or toolkit version.");

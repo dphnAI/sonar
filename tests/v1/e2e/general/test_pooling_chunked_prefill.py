@@ -69,7 +69,7 @@ def retrieve_chunks(self):
 
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA not available")
-def test_pooling_chunked_prefill(vllm_runner, monkeypatch):
+def test_pooling_chunked_prefill(aphrodite_runner, monkeypatch):
     """Test chunked prefill for pooling models with LastPool."""
 
     with monkeypatch.context() as m:
@@ -81,7 +81,7 @@ def test_pooling_chunked_prefill(vllm_runner, monkeypatch):
         # Set chunking parameters to force chunked prefill
         # Note: Chunked prefill is automatically handled by Aphrodite
         # internally based on the model size and prompt
-        with vllm_runner(
+        with aphrodite_runner(
             model_id,
             runner="pooling",
             long_prefill_token_threshold=chunk_size,
@@ -106,7 +106,7 @@ def test_pooling_chunked_prefill(vllm_runner, monkeypatch):
         assert chunks == expected_chunks
 
         # Disable chunked prefill
-        with vllm_runner(
+        with aphrodite_runner(
             model_id,
             runner="pooling",
             tensor_parallel_size=1,
@@ -122,7 +122,7 @@ def test_pooling_chunked_prefill(vllm_runner, monkeypatch):
 
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA not available")
-def test_pooling_prefix_cache(vllm_runner, monkeypatch):
+def test_pooling_prefix_cache(aphrodite_runner, monkeypatch):
     """Test chunked prefill for pooling models with LastPool."""
 
     verses = prompt.split("\n\n")
@@ -131,7 +131,7 @@ def test_pooling_prefix_cache(vllm_runner, monkeypatch):
         m.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
         model_id = "Qwen/Qwen3-Embedding-0.6B"
 
-        with vllm_runner(
+        with aphrodite_runner(
             model_id,
             runner="pooling",
             enable_prefix_caching=True,
@@ -161,8 +161,8 @@ def test_pooling_prefix_cache(vllm_runner, monkeypatch):
             assert chunks[0] <= prompt1_len
             assert chunks[0] < prompt2_len
 
-            vllm_config = llm.get_llm().llm_engine.vllm_config
-            cache_config = vllm_config.cache_config
+            aphrodite_config = llm.get_llm().llm_engine.aphrodite_config
+            cache_config = aphrodite_config.cache_config
             print(f"{cache_config=}")
             # Prefixes are cached in blocks
             assert (prompt2_len - chunks[0]) % cache_config.block_size == 0

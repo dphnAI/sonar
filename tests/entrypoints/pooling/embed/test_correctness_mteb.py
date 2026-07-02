@@ -34,13 +34,13 @@ def server():
 def test_mteb_embed(server):
     client = server.get_client()
     encoder = OpenAIClientMtebEncoder(MODEL_NAME, client)
-    vllm_main_score = run_mteb_embed_task(encoder, MTEB_EMBED_TASKS)
+    aphrodite_main_score = run_mteb_embed_task(encoder, MTEB_EMBED_TASKS)
     st_main_score = MAIN_SCORE
 
-    print("APHRODITE main score: ", vllm_main_score)
+    print("APHRODITE main score: ", aphrodite_main_score)
     print("SentenceTransformer main score: ", st_main_score)
-    print("Difference: ", st_main_score - vllm_main_score)
+    print("Difference: ", st_main_score - aphrodite_main_score)
 
     # We are not concerned that the aphrodite mteb results are better
     # than SentenceTransformers, so we only perform one-sided testing.
-    assert st_main_score - vllm_main_score < MTEB_EMBED_TOL
+    assert st_main_score - aphrodite_main_score < MTEB_EMBED_TOL

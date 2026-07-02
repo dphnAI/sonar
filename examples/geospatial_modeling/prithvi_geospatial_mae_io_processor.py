@@ -28,7 +28,7 @@ def main():
     )
 
     llm = LLM(
-        model="christian-pinto/Prithvi-EO-2.0-300M-TL-VLLM",
+        model="christian-pinto/Prithvi-EO-2.0-300M-TL-APHRODITE",
         skip_tokenizer_init=True,
         trust_remote_code=True,
         enforce_eager=True,

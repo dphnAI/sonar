@@ -29,7 +29,7 @@ def test_get_open_port(monkeypatch: pytest.MonkeyPatch):
                     s3.bind(("localhost", get_open_port()))
 
 
-def test_get_open_ports_list_with_vllm_port(monkeypatch: pytest.MonkeyPatch):
+def test_get_open_ports_list_with_aphrodite_port(monkeypatch: pytest.MonkeyPatch):
     with monkeypatch.context() as m:
         m.setenv("APHRODITE_PORT", "5678")
         ports = get_open_ports_list(5)

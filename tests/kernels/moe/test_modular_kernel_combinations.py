@@ -11,7 +11,7 @@ import pytest
 import torch
 
 import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.platforms import current_platform
 from aphrodite.utils.flashinfer import has_flashinfer_cutlass_fused_moe
 from aphrodite.utils.import_utils import has_deep_ep, has_deep_gemm
@@ -72,7 +72,7 @@ def format_result(verbose, msg, ex=None):
 
 def rank_worker(
     pgi: ProcessGroupInfo,
-    vllm_config: AphroditeConfig,
+    aphrodite_config: AphroditeConfig,
     cpu_group,
     base_config: Config,
     weights: WeightTensors,
@@ -126,9 +126,9 @@ def rank_worker(
                 continue
 
             # modular kernel out
-            mk_out = run_modular_kernel(pgi, vllm_config, config, weights, rank_tensors)
+            mk_out = run_modular_kernel(pgi, aphrodite_config, config, weights, rank_tensors)
 
-            with set_current_vllm_config(vllm_config):
+            with set_current_aphrodite_config(aphrodite_config):
                 ref_out = reference_moe_impl(config, weights, rank_tensors)
 
             if config.quant_dtype == "nvfp4":
@@ -200,9 +200,9 @@ def run(config: Config, verbose: bool):
 
     weights: WeightTensors = WeightTensors.make(config)
 
-    vllm_config, env_dict = config.make_env_data()
+    aphrodite_config, env_dict = config.make_env_data()
     parallel_launch_with_config(
-        config.world_size, rank_worker, vllm_config, env_dict, config, weights, verbose
+        config.world_size, rank_worker, aphrodite_config, env_dict, config, weights, verbose
     )
 
 

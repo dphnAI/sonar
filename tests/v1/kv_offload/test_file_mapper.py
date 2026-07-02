@@ -36,7 +36,7 @@ _MOCK_KV_CACHE_CONFIG = MagicMock()
 _MOCK_KV_CACHE_CONFIG.kv_cache_groups = []
 
 _MOCK_OFFLOADING_SPEC = MagicMock(spec=OffloadingSpec)
-_MOCK_OFFLOADING_SPEC.vllm_config = _MOCK_APHRODITE_CONFIG
+_MOCK_OFFLOADING_SPEC.aphrodite_config = _MOCK_APHRODITE_CONFIG
 _MOCK_OFFLOADING_SPEC.kv_cache_config = _MOCK_KV_CACHE_CONFIG
 _MOCK_OFFLOADING_SPEC.block_size_factor = 1
 
@@ -49,28 +49,28 @@ _MOCK_OFFLOADING_SPEC.block_size_factor = 1
 def make_mapper_from_offloading_spec(**kwargs) -> FileMapper:
     """Helper to create FileMapper with customizable mock config."""
     # Create a copy of the mock config to avoid modifying the global one
-    mock_vllm_config = MagicMock()
-    mock_vllm_config.model_config.model = kwargs.get("model_name", "test-model")
-    mock_vllm_config.cache_config.block_size = kwargs.get("hash_block_size", 16)
-    mock_vllm_config.cache_config.cache_dtype = (
+    mock_aphrodite_config = MagicMock()
+    mock_aphrodite_config.model_config.model = kwargs.get("model_name", "test-model")
+    mock_aphrodite_config.cache_config.block_size = kwargs.get("hash_block_size", 16)
+    mock_aphrodite_config.cache_config.cache_dtype = (
         f"torch.{kwargs.get('dtype', 'float16')}"
     )
-    mock_vllm_config.parallel_config.tensor_parallel_size = kwargs.get("tp_size", 1)
-    mock_vllm_config.parallel_config.pipeline_parallel_size = kwargs.get("pp_size", 1)
-    mock_vllm_config.parallel_config.prefill_context_parallel_size = kwargs.get(
+    mock_aphrodite_config.parallel_config.tensor_parallel_size = kwargs.get("tp_size", 1)
+    mock_aphrodite_config.parallel_config.pipeline_parallel_size = kwargs.get("pp_size", 1)
+    mock_aphrodite_config.parallel_config.prefill_context_parallel_size = kwargs.get(
         "pcp_size", 1
     )
-    mock_vllm_config.parallel_config.decode_context_parallel_size = kwargs.get(
+    mock_aphrodite_config.parallel_config.decode_context_parallel_size = kwargs.get(
         "dcp_size", 1
     )
-    mock_vllm_config.parallel_config.rank = kwargs.get("rank", 0)
-    mock_vllm_config.use_v2_model_runner = kwargs.get("use_v2_model_runner", False)
+    mock_aphrodite_config.parallel_config.rank = kwargs.get("rank", 0)
+    mock_aphrodite_config.use_v2_model_runner = kwargs.get("use_v2_model_runner", False)
 
     mock_kv_cache_config = MagicMock()
     mock_kv_cache_config.kv_cache_groups = kwargs.get("kv_cache_groups", [])
 
     mock_offloading_spec = MagicMock(spec=OffloadingSpec)
-    mock_offloading_spec.vllm_config = mock_vllm_config
+    mock_offloading_spec.aphrodite_config = mock_aphrodite_config
     mock_offloading_spec.kv_cache_config = mock_kv_cache_config
     mock_offloading_spec.block_size_factor = kwargs.get("block_size_factor", 1)
 

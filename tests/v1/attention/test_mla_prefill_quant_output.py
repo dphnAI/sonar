@@ -141,7 +141,7 @@ _FUSED_FP8_SKIP = _fused_fp8_skip_reason()
 
 
 @pytest.mark.skipif(_FUSED_FP8_SKIP is not None, reason=_FUSED_FP8_SKIP or "")
-def test_fa4_fused_fp8_output_matches_post_quant(default_vllm_config):
+def test_fa4_fused_fp8_output_matches_post_quant(default_aphrodite_config):
     """FA4's fused FP8 write (output_scale, flash-attention#135) must match the
     bf16-attention + standalone static-FP8-quant path it replaces, since
     production uses the same output_scale for both."""

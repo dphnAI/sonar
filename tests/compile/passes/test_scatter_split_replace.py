@@ -72,16 +72,16 @@ def test_scatter_split_replace(dtype):
     num_kv_heads = 4
     head_size = 64
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
             custom_ops=["+rotary_embedding"],
         ),
     )
-    with aphrodite.config.set_current_vllm_config(vllm_config):
+    with aphrodite.config.set_current_aphrodite_config(aphrodite_config):
         # ScatterSplitReplacementPass requires SplitCoalescingPass to be run before it
-        coalesce_pass = SplitCoalescingPass(vllm_config)
-        replace_pass = ScatterSplitReplacementPass(vllm_config)
+        coalesce_pass = SplitCoalescingPass(aphrodite_config)
+        replace_pass = ScatterSplitReplacementPass(aphrodite_config)
         passes = [coalesce_pass, replace_pass]
         backend = TestBackend(*passes)
 

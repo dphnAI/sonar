@@ -95,7 +95,7 @@ def load_reward_outputs(filename: "StrPath") -> list[list[float]]:
 @pytest.mark.parametrize("dtype", ["half"])
 def test_prm_models(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     math_step_prompts,
     model: str,
     dtype: str,
@@ -106,8 +106,8 @@ def test_prm_models(
     if current_platform.is_cpu():
         pytest.skip("CPU only supports V1")
 
-    with vllm_runner(model, max_model_len=1024, dtype=dtype) as vllm_model:
-        vllm_outputs = vllm_model.token_classify(math_step_prompts)
+    with aphrodite_runner(model, max_model_len=1024, dtype=dtype) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.token_classify(math_step_prompts)
 
     with hf_runner(model, dtype=dtype, auto_cls=AutoModel) as hf_model:
         hf_model = step_reward_patch_hf_model(hf_model)
@@ -119,11 +119,11 @@ def test_prm_models(
     )
 
     # check logits difference
-    for hf_output, vllm_output in zip(hf_outputs, vllm_outputs):
+    for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
         hf_output = torch.tensor(hf_output).float()
-        vllm_output = torch.tensor(vllm_output).float()
+        aphrodite_output = torch.tensor(aphrodite_output).float()
 
-        assert torch.allclose(hf_output, vllm_output, 1.5e-2)
+        assert torch.allclose(hf_output, aphrodite_output, 1.5e-2)
 
 
 @pytest.mark.parametrize(
@@ -137,7 +137,7 @@ def test_prm_models(
 )
 @pytest.mark.parametrize("dtype", ["half"])
 def test_prm_models_with_golden_outputs(
-    vllm_runner,
+    aphrodite_runner,
     math_step_prompts,
     model: str,
     dtype: str,
@@ -145,14 +145,14 @@ def test_prm_models_with_golden_outputs(
     if not FIXTURE_REWARD_RESULT.get(model):
         pytest.skip(f"No available golden outputs for {model}.")
 
-    with vllm_runner(model, max_model_len=1024, dtype=dtype) as vllm_model:
-        vllm_outputs = vllm_model.token_classify(math_step_prompts)
+    with aphrodite_runner(model, max_model_len=1024, dtype=dtype) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.token_classify(math_step_prompts)
 
     golden_outputs = load_reward_outputs(FIXTURE_REWARD_RESULT[model])
 
     # check logits difference
-    for golden_output, vllm_output in zip(golden_outputs, vllm_outputs):
+    for golden_output, aphrodite_output in zip(golden_outputs, aphrodite_outputs):
         golden_output = torch.tensor(golden_output).float()
-        vllm_output = torch.tensor(vllm_output).float()
+        aphrodite_output = torch.tensor(aphrodite_output).float()
 
-        assert torch.allclose(golden_output, vllm_output, 1.5e-2)
+        assert torch.allclose(golden_output, aphrodite_output, 1.5e-2)

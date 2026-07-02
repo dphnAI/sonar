@@ -63,7 +63,7 @@ def _allocate_and_reshape_kv_caches(
     from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
 
     # Some backends (e.g. FlashAttention) query the KV cache layout during
-    # reshape, which ultimately calls get_current_vllm_config(). Setting
+    # reshape, which ultimately calls get_current_aphrodite_config(). Setting
     # the layout override avoids needing a full AphroditeConfig context.
     set_kv_cache_layout("NHD")
     try:
@@ -97,7 +97,7 @@ def _make_worker(kv_cache_config: KVCacheConfig):
 
     spec = MagicMock(spec=OffloadingSpec)
     spec.kv_cache_config = kv_cache_config
-    spec.vllm_config = MagicMock()
+    spec.aphrodite_config = MagicMock()
     spec.get_worker.return_value = MagicMock()
 
     worker = OffloadingConnectorWorker(spec=spec)

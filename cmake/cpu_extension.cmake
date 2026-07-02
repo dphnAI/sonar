@@ -38,7 +38,7 @@ else()
     # and create a local shim dir with it. When PyTorch is built from source or packaged
     # by a distro (common on RISC-V, s390x, Fedora/RHEL aarch64), no vendored libgomp
     # exists and the shim dir is empty; fall back to the system libgomp in that case.
-    vllm_prepare_torch_gomp_shim(APHRODITE_TORCH_GOMP_SHIM_DIR)
+    aphrodite_prepare_torch_gomp_shim(APHRODITE_TORCH_GOMP_SHIM_DIR)
 
     if(APHRODITE_TORCH_GOMP_SHIM_DIR)
         find_library(OPEN_MP

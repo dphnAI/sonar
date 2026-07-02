@@ -94,7 +94,7 @@ class _MockModel(SupportsEncoderCudaGraph):
             out_hidden_size=32,
         )
 
-    def get_encoder_cudagraph_budget_range(self, vllm_config):
+    def get_encoder_cudagraph_budget_range(self, aphrodite_config):
         return (self._min_budget, self._max_budget)
 
 
@@ -288,7 +288,7 @@ class SimpleMockViTModel(torch.nn.Module, SupportsEncoderCudaGraph):
 
     def get_encoder_cudagraph_budget_range(
         self,
-        vllm_config,
+        aphrodite_config,
     ) -> tuple[int, int]:
         # For tests: min=4, max=128 (small values for fast capture)
         return (4, 128)
@@ -854,10 +854,10 @@ class TestInitInvariantValidation:
         min_budget=4,
         max_budget=128,
     ):
-        vllm_config = _MockAphroditeConfig(token_budgets, max_mm_items)
+        aphrodite_config = _MockAphroditeConfig(token_budgets, max_mm_items)
         model = _MockModel(min_budget, max_budget)
         return EncoderCudaGraphManager(
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             device=torch.device("cpu"),
             dtype=torch.float32,
             model=model,

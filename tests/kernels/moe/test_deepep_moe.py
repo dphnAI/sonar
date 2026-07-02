@@ -13,7 +13,7 @@ from torch.distributed import ProcessGroup
 import aphrodite.envs as envs
 from tests.kernels.moe.utils import check_accuracy, make_dummy_moe_config
 from aphrodite import _custom_ops as ops
-from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.model_executor.layers.fused_moe import TritonExperts
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
@@ -418,7 +418,7 @@ def _deep_ep_moe(
         pg = torch.distributed.new_group(list(range(pgi.world_size)))
     test_tensors = TestTensors.make(config, low_latency_mode)
 
-    with set_current_vllm_config(AphroditeConfig()):
+    with set_current_aphrodite_config(AphroditeConfig()):
         # Reference
         torch_combined = torch_moe_impl(
             test_tensors,

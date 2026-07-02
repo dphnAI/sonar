@@ -42,7 +42,7 @@ SEEDS = [0]
 @pytest.mark.parametrize("seed", SEEDS)
 @torch.inference_mode()
 def test_cpu_act_and_mul(
-    default_vllm_config,
+    default_aphrodite_config,
     activation_cls: type[torch.nn.Module],
     fn: object,
     num_tokens: int,
@@ -89,7 +89,7 @@ def test_cpu_act_and_mul(
 @pytest.mark.parametrize("seed", SEEDS)
 @torch.inference_mode()
 def test_cpu_unary_activation(
-    default_vllm_config,
+    default_aphrodite_config,
     activation_cls: type[torch.nn.Module],
     fn: object,
     op_args: tuple[str, ...],
@@ -115,7 +115,7 @@ def test_cpu_unary_activation(
 @pytest.mark.parametrize("dtype", DTYPES)
 @torch.inference_mode()
 def test_cpu_gelu_tanh_and_mul(
-    default_vllm_config,
+    default_aphrodite_config,
     dtype: torch.dtype,
 ) -> None:
     gate = torch.tensor(

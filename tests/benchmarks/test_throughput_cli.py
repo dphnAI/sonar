@@ -6,7 +6,7 @@ import pytest
 
 from aphrodite.benchmarks.datasets import SampleRequest
 from aphrodite.benchmarks.throughput import (
-    _run_vllm_chat_requests,
+    _run_aphrodite_chat_requests,
     add_cli_args,
 )
 from aphrodite.utils.argparse_utils import FlexibleArgumentParser
@@ -60,7 +60,7 @@ def test_bench_throughput_accepts_custom_audio_args():
     assert args.enable_multimodal_chat
 
 
-def test_vllm_chat_requests_include_multimodal_content():
+def test_aphrodite_chat_requests_include_multimodal_content():
     class FakeLLM:
         def __init__(self):
             self.prompts = None
@@ -82,7 +82,7 @@ def test_vllm_chat_requests_include_multimodal_content():
         multi_modal_data=audio_content,
     )
 
-    _run_vllm_chat_requests(
+    _run_aphrodite_chat_requests(
         llm,
         [request],
         n=1,

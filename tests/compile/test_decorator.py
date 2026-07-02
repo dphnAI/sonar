@@ -12,7 +12,7 @@ from aphrodite.config import (
     CompilationMode,
     CUDAGraphMode,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.forward_context import BatchDescriptor, set_forward_context
 from aphrodite.utils.torch_utils import is_torch_equal_or_newer
@@ -26,16 +26,16 @@ MLP_SIZE = 128
 
 @torch.inference_mode
 def run_model(
-    vllm_config: AphroditeConfig, model: nn.Module, cudagraph_runtime_mode: CUDAGraphMode
+    aphrodite_config: AphroditeConfig, model: nn.Module, cudagraph_runtime_mode: CUDAGraphMode
 ):
-    with set_forward_context({}, vllm_config=vllm_config):
+    with set_forward_context({}, aphrodite_config=aphrodite_config):
         # warmup for the model with cudagraph_mode NONE
         model(torch.randn(BATCH_SIZE, MLP_SIZE).cuda())
 
         # simulate cudagraphs capturing
         with set_forward_context(
             {},
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
             batch_descriptor=BatchDescriptor(
                 num_tokens=2,
@@ -44,7 +44,7 @@ def run_model(
             model(torch.randn(2, MLP_SIZE).cuda())
         with set_forward_context(
             {},
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
             batch_descriptor=BatchDescriptor(
                 num_tokens=1,
@@ -55,7 +55,7 @@ def run_model(
         # simulate cudagraphs replay
         with set_forward_context(
             {},
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
             batch_descriptor=BatchDescriptor(
                 num_tokens=2,
@@ -77,7 +77,7 @@ def test_ignore_torch_compile_decorator(use_inductor_graph_partition, monkeypatc
         pytest.skip("inductor graph partition is only available in PyTorch 2.9+")
 
     # piecewise
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
             splitting_ops=["silly::attention"],
@@ -103,7 +103,7 @@ def test_ignore_torch_compile_decorator(use_inductor_graph_partition, monkeypatc
     @support_torch_compile
     class A(nn.Module):
         def __init__(
-            self, *, vllm_config: AphroditeConfig, prefix: str = "", **kwargs
+            self, *, aphrodite_config: AphroditeConfig, prefix: str = "", **kwargs
         ) -> None:
             super().__init__()
 
@@ -121,8 +121,8 @@ def test_ignore_torch_compile_decorator(use_inductor_graph_partition, monkeypatc
     @support_torch_compile
     class C(B): ...
 
-    with set_current_vllm_config(vllm_config):
-        mod_A = A(vllm_config=vllm_config, prefix="").eval().cuda()
+    with set_current_aphrodite_config(aphrodite_config):
+        mod_A = A(aphrodite_config=aphrodite_config, prefix="").eval().cuda()
 
     # A has support_torch_compile
     with compilation_counter.expect(
@@ -132,10 +132,10 @@ def test_ignore_torch_compile_decorator(use_inductor_graph_partition, monkeypatc
         num_backend_compilations=expected_num_backend_compilations,
         num_cudagraph_captured=expected_num_cudagraph_captured,
     ):
-        run_model(vllm_config, mod_A, cudagraph_runtime_mode)
+        run_model(aphrodite_config, mod_A, cudagraph_runtime_mode)
 
-    with set_current_vllm_config(vllm_config):
-        mod_B = B(vllm_config=vllm_config, prefix="").eval().cuda()
+    with set_current_aphrodite_config(aphrodite_config):
+        mod_B = B(aphrodite_config=aphrodite_config, prefix="").eval().cuda()
 
     # B's ignore_torch_compile should override A's support_torch_compile
     with compilation_counter.expect(
@@ -145,10 +145,10 @@ def test_ignore_torch_compile_decorator(use_inductor_graph_partition, monkeypatc
         num_backend_compilations=0,
         num_cudagraph_captured=0,
     ):
-        run_model(vllm_config, mod_B, cudagraph_runtime_mode)
+        run_model(aphrodite_config, mod_B, cudagraph_runtime_mode)
 
-    with set_current_vllm_config(vllm_config):
-        mod_C = C(vllm_config=vllm_config, prefix="").eval().cuda()
+    with set_current_aphrodite_config(aphrodite_config):
+        mod_C = C(aphrodite_config=aphrodite_config, prefix="").eval().cuda()
 
     # C's support_torch_compile should override B's ignore_torch_compile
     with compilation_counter.expect(
@@ -158,16 +158,16 @@ def test_ignore_torch_compile_decorator(use_inductor_graph_partition, monkeypatc
         num_backend_compilations=expected_num_backend_compilations,
         num_cudagraph_captured=expected_num_cudagraph_captured,
     ):
-        run_model(vllm_config, mod_C, cudagraph_runtime_mode)
+        run_model(aphrodite_config, mod_C, cudagraph_runtime_mode)
 
 
 # Only enable torch.compile if
-# vllm_config.cache_config.kv_sharing_fast_prefill=True
+# aphrodite_config.cache_config.kv_sharing_fast_prefill=True
 @support_torch_compile(
-    enable_if=lambda vllm_config: vllm_config.cache_config.kv_sharing_fast_prefill
+    enable_if=lambda aphrodite_config: aphrodite_config.cache_config.kv_sharing_fast_prefill
 )
 class B(nn.Module):
-    def __init__(self, *, vllm_config: AphroditeConfig, prefix: str = "", **kwargs) -> None:
+    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", **kwargs) -> None:
         super().__init__()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -180,15 +180,15 @@ class B(nn.Module):
 
 
 # Only enable torch.compile if
-# vllm_config.cache_config.kv_sharing_fast_prefill=False
+# aphrodite_config.cache_config.kv_sharing_fast_prefill=False
 @support_torch_compile(
-    enable_if=lambda vllm_config: not vllm_config.cache_config.kv_sharing_fast_prefill
+    enable_if=lambda aphrodite_config: not aphrodite_config.cache_config.kv_sharing_fast_prefill
 )
 class A(nn.Module):
-    def __init__(self, *, vllm_config: AphroditeConfig, prefix: str = "", **kwargs) -> None:
+    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", **kwargs) -> None:
         super().__init__()
-        self.mod1 = B(vllm_config=vllm_config, prefix=prefix, **kwargs)
-        self.mod2 = B(vllm_config=vllm_config, prefix=prefix, **kwargs)
+        self.mod1 = B(aphrodite_config=aphrodite_config, prefix=prefix, **kwargs)
+        self.mod2 = B(aphrodite_config=aphrodite_config, prefix=prefix, **kwargs)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.mod1(x)
@@ -208,7 +208,7 @@ def test_conditional_compile_enable_if(use_inductor_graph_partition, monkeypatch
     if use_inductor_graph_partition and not is_torch_equal_or_newer("2.9.0.dev"):
         pytest.skip("inductor graph partition is only available in PyTorch 2.9+")
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         cache_config=CacheConfig(
             kv_sharing_fast_prefill=True,
         ),
@@ -221,8 +221,8 @@ def test_conditional_compile_enable_if(use_inductor_graph_partition, monkeypatch
     )
     cudagraph_runtime_mode = CUDAGraphMode.PIECEWISE
 
-    with set_current_vllm_config(vllm_config):
-        mod_A = A(vllm_config=vllm_config, prefix="").eval().cuda()
+    with set_current_aphrodite_config(aphrodite_config):
+        mod_A = A(aphrodite_config=aphrodite_config, prefix="").eval().cuda()
 
     if use_inductor_graph_partition:
         expected_num_piecewise_graphs_seen = 2
@@ -245,11 +245,11 @@ def test_conditional_compile_enable_if(use_inductor_graph_partition, monkeypatch
         num_cudagraph_captured=8,
         # num_cudagraph_sizes * num cudagraphable graphs to capture
     ):
-        run_model(vllm_config, mod_A, cudagraph_runtime_mode)
+        run_model(aphrodite_config, mod_A, cudagraph_runtime_mode)
 
     # Set kv_sharing_fast_prefill=False
     # which will cause A to be compiled and B to not be compiled
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         cache_config=CacheConfig(
             kv_sharing_fast_prefill=False,
         ),
@@ -261,8 +261,8 @@ def test_conditional_compile_enable_if(use_inductor_graph_partition, monkeypatch
         ),
     )
 
-    with set_current_vllm_config(vllm_config):
-        mod_A = A(vllm_config=vllm_config, prefix="").eval().cuda()
+    with set_current_aphrodite_config(aphrodite_config):
+        mod_A = A(aphrodite_config=aphrodite_config, prefix="").eval().cuda()
 
     if use_inductor_graph_partition:
         expected_num_piecewise_graphs_seen = 1
@@ -283,4 +283,4 @@ def test_conditional_compile_enable_if(use_inductor_graph_partition, monkeypatch
         num_cudagraph_captured=8,
         # num_cudagraph_sizes * num cudagraphable graphs to capture
     ):
-        run_model(vllm_config, mod_A, cudagraph_runtime_mode)
+        run_model(aphrodite_config, mod_A, cudagraph_runtime_mode)

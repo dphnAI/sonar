@@ -554,7 +554,7 @@ def test_gptq_marlin_moe_padded_round_trip(shape, group_size):
     padded region only stays out of the output via the zero-padded scales.
     """
     from tests.kernels.utils import torch_experts
-    from aphrodite.config import AphroditeConfig, set_current_vllm_config
+    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
     from aphrodite.model_executor.layers.fused_moe import fused_topk
     from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
         fused_marlin_moe,
@@ -651,7 +651,7 @@ def test_gptq_marlin_moe_padded_round_trip(shape, group_size):
         global_num_experts=e,
         is_k_full=True,
     )
-    with set_current_vllm_config(AphroditeConfig()):
+    with set_current_aphrodite_config(AphroditeConfig()):
         ref = torch_experts(
             a,
             w1_ref,
@@ -708,7 +708,7 @@ def test_fp8_marlin_moe_padded_round_trip(shape, quant):
     """FP8 weight-only MoE: pad a tile-misaligned intermediate and check the
     real prepare + fused_marlin_moe against the dequantized reference."""
     from tests.kernels.utils import torch_experts
-    from aphrodite.config import AphroditeConfig, set_current_vllm_config
+    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
     from aphrodite.model_executor.layers.fused_moe import fused_topk
     from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
         fused_marlin_moe,
@@ -773,7 +773,7 @@ def test_fp8_marlin_moe_padded_round_trip(shape, quant):
         is_k_full=True,
         workspace=layer.workspace,
     )
-    with set_current_vllm_config(AphroditeConfig()):
+    with set_current_aphrodite_config(AphroditeConfig()):
         ref = torch_experts(
             a,
             torch.stack(w1_ref),
@@ -794,7 +794,7 @@ def test_mxfp8_marlin_moe_padded_round_trip(shape):
     """MXFP8 weight-only MoE round-trip at a tile-misaligned intermediate, with
     unit e8m0 scales so the reference is the exact fp8 dequant."""
     from tests.kernels.utils import torch_experts
-    from aphrodite.config import AphroditeConfig, set_current_vllm_config
+    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
     from aphrodite.model_executor.layers.fused_moe import fused_topk
     from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
         fused_marlin_moe,
@@ -828,7 +828,7 @@ def test_mxfp8_marlin_moe_padded_round_trip(shape):
     layer = SimpleNamespace(
         num_experts=e, hidden_size=k, intermediate_size_per_partition=n
     )
-    with set_current_vllm_config(AphroditeConfig()):
+    with set_current_aphrodite_config(AphroditeConfig()):
         pw13, pw2, ps13, ps2 = prepare_mxfp8_moe_layer_for_marlin(
             layer, w13_weight, w2_weight, w13_scale, w2_scale
         )
@@ -851,7 +851,7 @@ def test_mxfp8_marlin_moe_padded_round_trip(shape):
         is_k_full=True,
         workspace=layer.workspace,
     )
-    with set_current_vllm_config(AphroditeConfig()):
+    with set_current_aphrodite_config(AphroditeConfig()):
         ref = torch_experts(
             a,
             w13_weight.to(dtype),

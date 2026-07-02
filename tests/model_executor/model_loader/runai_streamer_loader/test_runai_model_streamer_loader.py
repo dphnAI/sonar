@@ -37,8 +37,8 @@ def test_get_model_loader_with_runai_flag():
     assert model_loader.__class__.__name__ == "RunaiModelStreamerLoader"
 
 
-def test_runai_model_loader_download_files(vllm_runner):
-    with vllm_runner(test_model, load_format=load_format) as llm:
+def test_runai_model_loader_download_files(aphrodite_runner):
+    with aphrodite_runner(test_model, load_format=load_format) as llm:
         deserialized_outputs = llm.generate(prompts, sampling_params)
         assert deserialized_outputs
 
@@ -48,14 +48,14 @@ def test_runai_model_loader_download_files(vllm_runner):
     "TODO: Re-enable this test once the underlying issue is resolved."
 )
 def test_runai_model_loader_download_files_gcs(
-    vllm_runner, monkeypatch: pytest.MonkeyPatch
+    aphrodite_runner, monkeypatch: pytest.MonkeyPatch
 ):
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "fake-project")
     monkeypatch.setenv("RUNAI_STREAMER_GCS_USE_ANONYMOUS_CREDENTIALS", "true")
     monkeypatch.setenv(
         "CLOUD_STORAGE_EMULATOR_ENDPOINT", "https://storage.googleapis.com"
     )
-    with vllm_runner(test_gcs_model, load_format=load_format) as llm:
+    with aphrodite_runner(test_gcs_model, load_format=load_format) as llm:
         deserialized_outputs = llm.generate(prompts, sampling_params)
         assert deserialized_outputs
 

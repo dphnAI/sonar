@@ -24,7 +24,7 @@ from triton_kernels.tensor import FP4, convert_layout, wrap_torch_tensor
 from triton_kernels.tensor_details import layout
 from triton_kernels.testing import assert_close
 
-from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
 )
@@ -243,7 +243,7 @@ def test_oai_triton_moe(
     topk_weights, topk_ids = torch.topk(router_logits, k=topk, dim=-1, sorted=True)
     topk_weights = torch.nn.functional.softmax(topk_weights, dim=-1)
 
-    with set_current_vllm_config(AphroditeConfig()):
+    with set_current_aphrodite_config(AphroditeConfig()):
         out_ref = torch_moe_impl(x, w1, w2, w1_bias, w2_bias, topk_weights, topk_ids)
 
         out = oai_triton_moe_impl(

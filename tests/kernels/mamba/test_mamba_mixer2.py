@@ -6,7 +6,7 @@ import unittest
 import pytest
 import torch
 
-from tests.utils import ensure_current_vllm_config, multi_gpu_test
+from tests.utils import ensure_current_aphrodite_config, multi_gpu_test
 from aphrodite.distributed.parallel_state import (
     init_distributed_environment,
     initialize_model_parallel,
@@ -87,7 +87,7 @@ def mixer2_gated_norm_tensor_parallel(
 
     # initialize distributed
     init_distributed_environment()
-    with ensure_current_vllm_config():
+    with ensure_current_aphrodite_config():
         initialize_model_parallel(tensor_model_parallel_size=world_size)
 
     # create random weights an inputs

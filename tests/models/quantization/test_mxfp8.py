@@ -39,7 +39,7 @@ NUM_LOG_PROBS = 8
 @pytest.mark.quant_model
 @pytest.mark.parametrize("model", [DENSE_MODEL, MOE_MODEL], ids=["dense", "moe"])
 def test_mxfp8_logprobs(
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -54,22 +54,22 @@ def test_mxfp8_logprobs(
     with monkeypatch.context() as m:
         m.setenv("TOKENIZERS_PARALLELISM", "true")
 
-        with vllm_runner(
+        with aphrodite_runner(
             model,
             max_model_len=MAX_MODEL_LEN,
             enforce_eager=True,
-        ) as vllm_model:
-            baseline_outputs = vllm_model.generate_greedy_logprobs(
+        ) as aphrodite_model:
+            baseline_outputs = aphrodite_model.generate_greedy_logprobs(
                 example_prompts, MAX_TOKENS, NUM_LOG_PROBS
             )
 
-        with vllm_runner(
+        with aphrodite_runner(
             model,
             max_model_len=MAX_MODEL_LEN,
             enforce_eager=True,
             quantization="mxfp8",
-        ) as vllm_model:
-            test_outputs = vllm_model.generate_greedy_logprobs(
+        ) as aphrodite_model:
+            test_outputs = aphrodite_model.generate_greedy_logprobs(
                 example_prompts, MAX_TOKENS, NUM_LOG_PROBS
             )
 
@@ -87,16 +87,16 @@ def test_mxfp8_logprobs(
 )
 @pytest.mark.quant_model
 @pytest.mark.parametrize("model", [DENSE_MODEL, MOE_MODEL], ids=["dense", "moe"])
-def test_mxfp8_generation(vllm_runner, model: str) -> None:
+def test_mxfp8_generation(aphrodite_runner, model: str) -> None:
     """Smoke test: verify online MXFP8 model generates coherent text."""
     prompt = "1 2 3 4 5"
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         enforce_eager=True,
         quantization="mxfp8",
         max_model_len=MAX_MODEL_LEN,
-    ) as vllm_model:
-        output = vllm_model.generate_greedy([prompt], max_tokens=5)
+    ) as aphrodite_model:
+        output = aphrodite_model.generate_greedy([prompt], max_tokens=5)
 
     generated = output[0][1]
     assert len(generated) > len(prompt), (

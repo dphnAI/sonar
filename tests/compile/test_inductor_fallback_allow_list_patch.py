@@ -3,7 +3,7 @@
 """Tests for the Inductor FALLBACK_ALLOW_LIST patch in env_override.py.
 
 The patch wraps ``torch._inductor.lowering.FALLBACK_ALLOW_LIST`` in a thin
-proxy that auto-allows any custom op in the ``aphrodite::`` or ``vllm_aiter::``
+proxy that auto-allows any custom op in the ``aphrodite::`` or ``aphrodite_aiter::``
 namespaces. This routes those ops through Inductor's fast-path
 ``make_fallback(target, warn=False, override_decomp=True)`` and avoids the
 expensive ``error.operator_str(target, args, kwargs)`` formatting that
@@ -29,16 +29,16 @@ from aphrodite.env_override import (
 class TestAphroditeFallbackAllowListProxy:
     """Unit tests for the membership-proxy semantics."""
 
-    def test_vllm_namespace_auto_allowed(self):
+    def test_aphrodite_namespace_auto_allowed(self):
         proxy = _AphroditeFallbackAllowList(set())
         assert "aphrodite::all_reduce" in proxy
         assert "aphrodite::fused_add_rms_norm" in proxy
         assert "aphrodite::all_reduce.default" in proxy
 
-    def test_vllm_aiter_namespace_auto_allowed(self):
+    def test_aphrodite_aiter_namespace_auto_allowed(self):
         proxy = _AphroditeFallbackAllowList(set())
-        assert "vllm_aiter::fused_add_rms_norm" in proxy
-        assert "vllm_aiter::rocm_aiter_fused_moe" in proxy
+        assert "aphrodite_aiter::fused_add_rms_norm" in proxy
+        assert "aphrodite_aiter::rocm_aiter_fused_moe" in proxy
 
     def test_unknown_namespace_falls_through(self):
         proxy = _AphroditeFallbackAllowList({"torchvision::roi_align"})
@@ -54,7 +54,7 @@ class TestAphroditeFallbackAllowListProxy:
 
     def test_prefix_only_match_not_substring(self):
         proxy = _AphroditeFallbackAllowList(set())
-        assert "not_vllm::something" not in proxy
+        assert "not_aphrodite::something" not in proxy
         assert "  aphrodite::space_prefixed" not in proxy
 
     def test_standard_entries_preserved(self):
@@ -93,7 +93,7 @@ class TestAphroditeFallbackAllowListProxy:
 
     def test_sentinel_attribute(self):
         proxy = _AphroditeFallbackAllowList(set())
-        assert proxy._vllm_patched is True
+        assert proxy._aphrodite_patched is True
 
 
 class TestPatchApplication:
@@ -102,7 +102,7 @@ class TestPatchApplication:
     def test_patch_applied_to_lowering(self):
         import torch._inductor.lowering as _lowering
 
-        assert getattr(_lowering.FALLBACK_ALLOW_LIST, "_vllm_patched", False), (
+        assert getattr(_lowering.FALLBACK_ALLOW_LIST, "_aphrodite_patched", False), (
             "env_override._patch_inductor_fallback_allow_list did not run"
         )
 
@@ -131,14 +131,14 @@ class TestPatchApplication:
         _patch_inductor_fallback_allow_list()
         assert _lowering.FALLBACK_ALLOW_LIST is first
 
-    def test_real_vllm_ops_in_real_allow_list(self):
+    def test_real_aphrodite_ops_in_real_allow_list(self):
         # End-to-end membership check using the live (already-patched) object.
         import torch._inductor.lowering as _lowering
 
         allow_list = _lowering.FALLBACK_ALLOW_LIST
         assert "aphrodite::all_reduce" in allow_list
         assert "aphrodite::fused_add_rms_norm" in allow_list
-        assert "vllm_aiter::fused_add_rms_norm" in allow_list
+        assert "aphrodite_aiter::fused_add_rms_norm" in allow_list
 
 
 class TestInductorFallbackFastPath:
@@ -157,7 +157,7 @@ class TestInductorFallbackFastPath:
     On a deep MoE/TP graph (Kimi-K2.6 at TP=4/8) ``operator_str`` recurses
     through every input ``TensorBox.__str__`` and ends up taking many minutes
     of CPU per encountered op. The patch ensures the membership test
-    short-circuits for ``aphrodite::*``/``vllm_aiter::*`` ops so the slow path is
+    short-circuits for ``aphrodite::*``/``aphrodite_aiter::*`` ops so the slow path is
     never entered. These tests pin that behaviour without needing a real
     GPU compile.
     """
@@ -175,21 +175,21 @@ class TestInductorFallbackFastPath:
                 slow_path_hits.append(name)
         return slow_path_hits
 
-    def test_vllm_ops_skip_slow_path(self):
+    def test_aphrodite_ops_skip_slow_path(self):
         slow = self._simulate_graph_lowering(
             [
                 "aphrodite::all_reduce",
                 "aphrodite::fused_add_rms_norm",
-                "vllm_aiter::rocm_aiter_fused_moe",
-                "vllm_aiter::asm_moe",
+                "aphrodite_aiter::rocm_aiter_fused_moe",
+                "aphrodite_aiter::asm_moe",
             ]
         )
         assert slow == [], (
             "Patched FALLBACK_ALLOW_LIST must short-circuit for all "
-            f"aphrodite::*/vllm_aiter::* ops; got slow-path hits: {slow}"
+            f"aphrodite::*/aphrodite_aiter::* ops; got slow-path hits: {slow}"
         )
 
-    def test_non_vllm_ops_still_hit_slow_path(self):
+    def test_non_aphrodite_ops_still_hit_slow_path(self):
         # Without the patch this is also what would happen; with the patch
         # the behaviour for non-aphrodite namespaces must be unchanged.
         slow = self._simulate_graph_lowering(
@@ -202,7 +202,7 @@ class TestInductorFallbackFastPath:
         """Emulates one decoder layer's worth of fallback hits.
 
         Kimi-K2.6 at TP=4 lowers a stream of ``aphrodite::all_reduce`` +
-        ``vllm_aiter::fused_add_rms_norm`` calls (one per residual block)
+        ``aphrodite_aiter::fused_add_rms_norm`` calls (one per residual block)
         plus a handful of fused-MoE ops. Pre-patch every one of these would
         invoke ``operator_str`` and stringify a hundreds-deep IR provenance
         tree; post-patch they must all short-circuit.
@@ -213,8 +213,8 @@ class TestInductorFallbackFastPath:
             op_stream.extend(
                 [
                     "aphrodite::all_reduce",
-                    "vllm_aiter::fused_add_rms_norm",
-                    "vllm_aiter::rocm_aiter_fused_moe",
+                    "aphrodite_aiter::fused_add_rms_norm",
+                    "aphrodite_aiter::rocm_aiter_fused_moe",
                 ]
             )
 
@@ -223,7 +223,7 @@ class TestInductorFallbackFastPath:
         elapsed_s = time.perf_counter() - start
 
         assert slow == [], (
-            f"Expected all {len(op_stream)} aphrodite/vllm_aiter ops to take "
+            f"Expected all {len(op_stream)} aphrodite/aphrodite_aiter ops to take "
             f"the fast path; got {len(slow)} slow-path hits."
         )
         # ``__contains__`` is O(1) per call, so a Kimi-sized stream should

@@ -25,7 +25,7 @@ applied.
 The main optimization within Machete is prepacking the weight matrix to more closely match the tensor core layouts, allowing for wider shared memory loads when loading the weight matrix. This means that the weight matrix must be prepacked before calling `machete_gemm`. The flow looks something like:
 
 ```python
-from vllm import _custom_ops as ops
+from aphrodite import _custom_ops as ops
 
 ...
 W_q_packed = ops.machete_prepack_B(w_q, wtype)

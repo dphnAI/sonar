@@ -46,7 +46,7 @@ class TestMiddlewareIntegration:
             pytest.skip("model-hosting-container-standards not available")
 
     @pytest.mark.asyncio
-    async def test_customer_middleware_with_vllm_server(self):
+    async def test_customer_middleware_with_aphrodite_server(self):
         """Test that customer middlewares work with actual Aphrodite server.
 
         Tests decorator-based middlewares (@custom_middleware, @input_formatter,

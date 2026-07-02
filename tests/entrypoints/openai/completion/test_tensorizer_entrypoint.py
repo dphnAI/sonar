@@ -14,7 +14,7 @@ from aphrodite.engine.arg_utils import EngineArgs
 from aphrodite.model_executor.model_loader.tensorizer import (
     TensorizerConfig,
     tensorize_lora_adapter,
-    tensorize_vllm_model,
+    tensorize_aphrodite_model,
 )
 from aphrodite.platforms import current_platform
 
@@ -49,7 +49,7 @@ def tensorize_model_and_lora(tmp_dir, model_uri):
     args = EngineArgs(model=MODEL_NAME)
 
     tensorize_lora_adapter(LORA_PATH, tensorizer_config)
-    tensorize_vllm_model(args, tensorizer_config)
+    tensorize_aphrodite_model(args, tensorizer_config)
 
     # Manually invoke a _cleanup() here, as the cleanup()
     # fixture won't be guaranteed to be called after this

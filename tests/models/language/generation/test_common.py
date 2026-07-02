@@ -113,7 +113,7 @@ AITER_MODEL_LIST = [
 @pytest.mark.parametrize("use_prompt_embeds", [True, False])
 def test_models(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model: str,
     max_tokens: int,
@@ -188,7 +188,7 @@ def test_models(
 
                 prompt_embeds.append(embed.squeeze(0))
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         tokenizer_name=model_info.tokenizer or model,
         tokenizer_mode=model_info.tokenizer_mode,
@@ -200,27 +200,27 @@ def test_models(
         max_num_seqs=1 if current_platform.is_rocm() else 2,
         enable_prompt_embeds=use_prompt_embeds,
         compilation_config={"cudagraph_capture_sizes": [1, 2]},
-    ) as vllm_model:
-        vllm_outputs = vllm_model.generate_greedy_logprobs(
+    ) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
             example_prompts, max_tokens, num_logprobs
         )
         if prompt_embeds is not None:
-            vllm_outputs_from_embeds = vllm_model.generate_greedy_logprobs(
+            aphrodite_outputs_from_embeds = aphrodite_model.generate_greedy_logprobs(
                 prompt_embeds, max_tokens, num_logprobs
             )
 
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=vllm_outputs,
+        outputs_1_lst=aphrodite_outputs,
         name_0="hf",
         name_1="aphrodite",
     )
     if prompt_embeds is not None:
         check_logprobs_close(
-            outputs_0_lst=vllm_outputs,
-            outputs_1_lst=vllm_outputs_from_embeds,
+            outputs_0_lst=aphrodite_outputs,
+            outputs_1_lst=aphrodite_outputs_from_embeds,
             name_0="aphrodite",
-            name_1="vllm_from_embeds",
+            name_1="aphrodite_from_embeds",
         )
 
     if use_rocm_aiter:

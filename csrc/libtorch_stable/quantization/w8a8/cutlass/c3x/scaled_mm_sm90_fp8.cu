@@ -2,7 +2,7 @@
 #include "scaled_mm_sm90_fp8_dispatch.cuh"
 #include "core/batch_invariant.hpp"
 
-namespace vllm {
+namespace aphrodite {
 
 void cutlass_scaled_mm_sm90_fp8(
     torch::stable::Tensor& out, torch::stable::Tensor const& a,
@@ -14,14 +14,14 @@ void cutlass_scaled_mm_sm90_fp8(
     STD_TORCH_CHECK(bias->scalar_type() == out.scalar_type(),
                     "currently bias dtype must match output dtype ",
                     out.scalar_type());
-    if (vllm_is_batch_invariant()) {
+    if (aphrodite_is_batch_invariant()) {
       return cutlass_scaled_mm_sm90_fp8_batch_invariant_epilogue<true>(
           out, a, b, a_scales, b_scales, *bias);
     }
     return cutlass_scaled_mm_sm90_fp8_epilogue<true>(out, a, b, a_scales,
                                                      b_scales, *bias);
   } else {
-    if (vllm_is_batch_invariant()) {
+    if (aphrodite_is_batch_invariant()) {
       return cutlass_scaled_mm_sm90_fp8_batch_invariant_epilogue<false>(
           out, a, b, a_scales, b_scales);
     }
@@ -30,4 +30,4 @@ void cutlass_scaled_mm_sm90_fp8(
   }
 }
 
-}  // namespace vllm
+}  // namespace aphrodite

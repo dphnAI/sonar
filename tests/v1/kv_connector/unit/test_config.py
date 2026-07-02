@@ -63,7 +63,7 @@ def test_kv_connector(
         else None
     )
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         cache_config=CacheConfig(
             kv_offloading_backend=kv_offloading_backend,
             kv_offloading_size=kv_offloading_size,
@@ -76,10 +76,10 @@ def test_kv_connector(
 
     # No KV transfer config expected
     if expected_backend is None:
-        assert vllm_config.kv_transfer_config is expected_backend
+        assert aphrodite_config.kv_transfer_config is expected_backend
         return
 
-    kv_transfer_config = vllm_config.kv_transfer_config
+    kv_transfer_config = aphrodite_config.kv_transfer_config
     kv_connector_extra_config = kv_transfer_config.kv_connector_extra_config
 
     assert kv_transfer_config.kv_connector == expected_backend
@@ -169,14 +169,14 @@ def test_no_kv_connector_ignores_expandable_segments(monkeypatch):
 
 def test_kv_offloading_size_only_uses_native_default():
     """Test that setting only kv_offloading_size enables native offloading."""
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         cache_config=CacheConfig(
             kv_offloading_size=4.0,
             # kv_offloading_backend not set, should default to "native"
         ),
     )
 
-    kv_transfer_config = vllm_config.kv_transfer_config
+    kv_transfer_config = aphrodite_config.kv_transfer_config
     kv_connector_extra_config = kv_transfer_config.kv_connector_extra_config
     assert kv_transfer_config.kv_connector == "OffloadingConnector"
     assert kv_transfer_config.kv_role == "kv_both"

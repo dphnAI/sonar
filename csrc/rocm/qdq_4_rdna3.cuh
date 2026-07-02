@@ -23,7 +23,7 @@
 #include <hip/hip_bf16.h>
 #include <hip/hip_fp16.h>
 
-namespace vllm {
+namespace aphrodite {
 namespace gptq_rdna3 {
 
 using bf16_t = __hip_bfloat16;
@@ -234,6 +234,6 @@ __forceinline__ __device__ void dequant_4bit_8_bf16_f32(uint32_t qa,
 }
 
 }  // namespace gptq_rdna3
-}  // namespace vllm
+}  // namespace aphrodite
 
 #endif  // _qdq_4_rdna3_cuh

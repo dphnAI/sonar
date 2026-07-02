@@ -10,7 +10,7 @@
 #include "attention_utils.cuh"
 #include "../../quantization/w8a8/fp8/common.cuh"
 
-namespace vllm {
+namespace aphrodite {
 
 // Implements section 2.2 of https://www.arxiv.org/pdf/2501.01005
 // can be used to combine partial attention results (in the split-KV case)
@@ -71,9 +71,9 @@ __global__ void merge_attn_states_kernel(
 #pragma unroll
         for (uint i = 0; i < pack_size; ++i) {
           const float val =
-              vllm::to_float(reinterpret_cast<const scalar_t*>(&s_out_pack)[i]);
+              aphrodite::to_float(reinterpret_cast<const scalar_t*>(&s_out_pack)[i]);
           o_out_pack[i] =
-              vllm::scaled_fp8_conversion<true, output_t>(val, fp8_scale_inv);
+              aphrodite::scaled_fp8_conversion<true, output_t>(val, fp8_scale_inv);
         }
         reinterpret_cast<output_pack_t*>(
             output_head_ptr)[pack_offset / pack_size] =
@@ -118,9 +118,9 @@ __global__ void merge_attn_states_kernel(
 #pragma unroll
         for (uint i = 0; i < pack_size; ++i) {
           const float val =
-              vllm::to_float(reinterpret_cast<const scalar_t*>(&p_out_pack)[i]);
+              aphrodite::to_float(reinterpret_cast<const scalar_t*>(&p_out_pack)[i]);
           o_out_pack[i] =
-              vllm::scaled_fp8_conversion<true, output_t>(val, fp8_scale_inv);
+              aphrodite::scaled_fp8_conversion<true, output_t>(val, fp8_scale_inv);
         }
         reinterpret_cast<output_pack_t*>(
             output_head_ptr)[pack_offset / pack_size] =
@@ -156,9 +156,9 @@ __global__ void merge_attn_states_kernel(
 #pragma unroll
     for (uint i = 0; i < pack_size; ++i) {
       const float p_out_f =
-          vllm::to_float(reinterpret_cast<const scalar_t*>(&p_out_pack)[i]);
+          aphrodite::to_float(reinterpret_cast<const scalar_t*>(&p_out_pack)[i]);
       const float s_out_f =
-          vllm::to_float(reinterpret_cast<const scalar_t*>(&s_out_pack)[i]);
+          aphrodite::to_float(reinterpret_cast<const scalar_t*>(&s_out_pack)[i]);
       o_out_f[i] = p_out_f * p_scale + (s_out_f * s_scale);
     }
 
@@ -167,7 +167,7 @@ __global__ void merge_attn_states_kernel(
       output_t o_out_pack[pack_size];
 #pragma unroll
       for (uint i = 0; i < pack_size; ++i) {
-        o_out_pack[i] = vllm::scaled_fp8_conversion<true, output_t>(
+        o_out_pack[i] = aphrodite::scaled_fp8_conversion<true, output_t>(
             o_out_f[i], fp8_scale_inv);
       }
       reinterpret_cast<output_pack_t*>(
@@ -177,7 +177,7 @@ __global__ void merge_attn_states_kernel(
       output_pack_t o_out_pack;
 #pragma unroll
       for (uint i = 0; i < pack_size; ++i) {
-        vllm::from_float(reinterpret_cast<scalar_t*>(&o_out_pack)[i],
+        aphrodite::from_float(reinterpret_cast<scalar_t*>(&o_out_pack)[i],
                          o_out_f[i]);
       }
       reinterpret_cast<output_pack_t*>(
@@ -191,7 +191,7 @@ __global__ void merge_attn_states_kernel(
   }
 }
 
-}  // namespace vllm
+}  // namespace aphrodite
 
 // The following macro is used to dispatch the conversion function based on
 // the output data type. The FN is a macro that calls a function with
@@ -212,7 +212,7 @@ __global__ void merge_attn_states_kernel(
 #define LAUNCH_MERGE_ATTN_STATES(scalar_t, output_t, NUM_THREADS,           \
                                  USE_FP8_OUTPUT)                            \
   {                                                                         \
-    vllm::merge_attn_states_kernel<scalar_t, output_t, NUM_THREADS,         \
+    aphrodite::merge_attn_states_kernel<scalar_t, output_t, NUM_THREADS,         \
                                    USE_FP8_OUTPUT>                          \
         <<<grid, block, 0, stream>>>(                                       \
             reinterpret_cast<output_t*>(output.data_ptr()), output_lse_ptr, \

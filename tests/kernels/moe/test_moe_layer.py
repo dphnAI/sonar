@@ -20,7 +20,7 @@ import torch
 import aphrodite.model_executor.layers.quantization.utils.w8a8_utils
 from tests.kernels.moe.modular_kernel_tools.parallel_utils import (
     ProcessGroupInfo,
-    _set_vllm_config,
+    _set_aphrodite_config,
     parallel_launch_with_config,
 )
 from tests.kernels.moe.utils import TestMLP, make_test_weights, moe_quantize_weights
@@ -29,7 +29,7 @@ from aphrodite.config import (
     ParallelConfig,
     SchedulerConfig,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.distributed import (
     get_ep_group,
@@ -1187,7 +1187,7 @@ def _test_body_regular(
     moe_layer: MoERunner,
     hidden_states: torch.Tensor,
     router_logits: torch.Tensor,
-    vllm_config: AphroditeConfig,
+    aphrodite_config: AphroditeConfig,
     num_tokens: int,
     num_tokens_across_dp: torch.Tensor,
     **kwargs,
@@ -1197,7 +1197,7 @@ def _test_body_regular(
 
     with set_forward_context(
         None,
-        vllm_config,
+        aphrodite_config,
         num_tokens=num_tokens,
         num_tokens_across_dp=num_tokens_across_dp,
     ):
@@ -1210,7 +1210,7 @@ def _test_body_eplb(
     moe_layer: MoERunner,
     hidden_states: torch.Tensor,
     router_logits: torch.Tensor,
-    vllm_config: AphroditeConfig,
+    aphrodite_config: AphroditeConfig,
     num_tokens: int,
     num_tokens_across_dp: torch.Tensor,
     cpu_group,
@@ -1240,7 +1240,7 @@ def _test_body_eplb(
     # Get "before" output with original weight arrangement
     with set_forward_context(
         None,
-        vllm_config,
+        aphrodite_config,
         num_tokens=num_tokens,
         num_tokens_across_dp=num_tokens_across_dp,
     ):
@@ -1249,7 +1249,7 @@ def _test_body_eplb(
     # Create a fresh FusedMoE layer with enable_eplb=True
     # Delete the original layer's registration so the constructor can
     # re-use the same "from_forward_context" prefix
-    cc = vllm_config.compilation_config
+    cc = aphrodite_config.compilation_config
     del cc.static_forward_context["from_forward_context"]
     cc.static_all_moe_layers.remove("from_forward_context")
 
@@ -1285,12 +1285,12 @@ def _test_body_eplb(
     expert_weights = [list(eplb_moe_layer.get_expert_weights())]
 
     expert_buffer = [torch.empty_like(w) for w in expert_weights[0]]
-    assert vllm_config.parallel_config.eplb_config.communicator is not None, (
+    assert aphrodite_config.parallel_config.eplb_config.communicator is not None, (
         "EPLB communicator backend must be set by ParallelConfig"
     )
     communicator = create_eplb_communicator(
         group_coordinator=get_eplb_group(),
-        backend=vllm_config.parallel_config.eplb_config.communicator,
+        backend=aphrodite_config.parallel_config.eplb_config.communicator,
         expert_weights=expert_weights,
         expert_buffer=expert_buffer,
     )
@@ -1339,7 +1339,7 @@ def _test_body_eplb(
     # Get "after" output with rearranged weights and EPLB routing
     with set_forward_context(
         None,
-        vllm_config,
+        aphrodite_config,
         num_tokens=num_tokens,
         num_tokens_across_dp=num_tokens_across_dp,
     ):
@@ -1350,7 +1350,7 @@ def _test_body_eplb(
 
 # TODO: make this take a MoETestConfig
 def _run_one_config(
-    vllm_config: AphroditeConfig,
+    aphrodite_config: AphroditeConfig,
     ep_size: int,  # Expert parallel size (total across all ranks)
     dp_size: int,  # Data parallel size (number of DP groups)
     tp_size: int,  # Tensor parallel size OR sequence parallel size (when use_ep=True)
@@ -1389,7 +1389,7 @@ def _run_one_config(
 
         use_ep = ep_size > 1
 
-        assert vllm_config.parallel_config.enable_expert_parallel == use_ep
+        assert aphrodite_config.parallel_config.enable_expert_parallel == use_ep
 
         in_dtype = torch.bfloat16
         device = torch.accelerator.current_accelerator()
@@ -1444,7 +1444,7 @@ def _run_one_config(
             is_sequence_parallel=is_sequence_parallel,
         )
 
-        with set_current_vllm_config(vllm_config):
+        with set_current_aphrodite_config(aphrodite_config):
             # Compute baseline output with SP wrapper if needed
             # sp_wrapper handles sequence chunking/gathering for SP
             baseline_output = sp_wrapper(baseline_layer, is_sequence_parallel)(
@@ -1454,7 +1454,7 @@ def _run_one_config(
         del baseline_layer
         torch.accelerator.empty_cache()
 
-        with set_current_vllm_config(vllm_config):
+        with set_current_aphrodite_config(aphrodite_config):
             # Chunk weights for EP BEFORE creating FusedMoE
             # FusedMoE uses EP-chunked weights and handles reductions internally
             if ep_size > 1:
@@ -1524,7 +1524,7 @@ def _run_one_config(
                 moe_layer=moe_layer,
                 hidden_states=hidden_states,
                 router_logits=router_logits,
-                vllm_config=vllm_config,
+                aphrodite_config=aphrodite_config,
                 num_tokens=num_tokens,
                 num_tokens_across_dp=num_tokens_across_dp,
                 in_dtype=in_dtype,
@@ -1627,15 +1627,15 @@ def test_moe_layer_no_parallel(
     compilation_config = CompilationConfig()
     compilation_config.pass_config.fuse_allreduce_rms = False
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         parallel_config=parallel_config, compilation_config=compilation_config
     )
 
     # Initialize distributed environment for single GPU
-    _set_vllm_config(vllm_config, 1, rank=0, local_rank=0)
+    _set_aphrodite_config(aphrodite_config, 1, rank=0, local_rank=0)
 
     _run_one_config(
-        vllm_config,
+        aphrodite_config,
         test_config.ep_size,
         test_config.dp_size,
         test_config.tp_size,
@@ -1665,7 +1665,7 @@ def _test_body_config(test_config: MoETestConfig, cpu_group, **kwargs):
 
 def _parallel_worker(
     pgi: ProcessGroupInfo,
-    vllm_config: AphroditeConfig,
+    aphrodite_config: AphroditeConfig,
     cpu_group,
     test_configs: list[MoETestConfig],
     verbosity: int,
@@ -1678,13 +1678,13 @@ def _parallel_worker(
     failed = 0
     fail_ids = []
 
-    dp_rank = vllm_config.parallel_config.data_parallel_rank
+    dp_rank = aphrodite_config.parallel_config.data_parallel_rank
 
     if current_platform.is_fp8_fnuz():
         override_normalize_e4m3fn_to_e4m3fnuz()
 
     for test_config in test_configs:
-        cc = vllm_config.compilation_config
+        cc = aphrodite_config.compilation_config
         if "from_forward_context" in cc.static_forward_context:
             del cc.static_forward_context["from_forward_context"]
             cc.static_all_moe_layers.remove("from_forward_context")
@@ -1696,7 +1696,7 @@ def _parallel_worker(
 
         try:
             _run_one_config(
-                vllm_config,
+                aphrodite_config,
                 test_config.ep_size,
                 test_config.dp_size,
                 test_config.tp_size,
@@ -1824,7 +1824,7 @@ def test_moe_layer(
     # compilation_config.mode = CompilationMode.NONE  # for now
     compilation_config.pass_config.fuse_allreduce_rms = False  # for now
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         parallel_config=parallel_config,
         compilation_config=compilation_config,
         scheduler_config=SchedulerConfig.default_factory(
@@ -1856,7 +1856,7 @@ def test_moe_layer(
         parallel_launch_with_config(
             world_size,
             _parallel_worker,
-            vllm_config,
+            aphrodite_config,
             None,
             test_configs,
             verbosity,

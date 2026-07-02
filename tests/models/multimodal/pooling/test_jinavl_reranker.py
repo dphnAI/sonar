@@ -159,8 +159,8 @@ def create_score_multimodal_param(
     return [ScoreMultiModalParam(content=[content]) for content in formatted_content]
 
 
-def _run_vllm(
-    vllm_runner: type[AphroditeRunner],
+def _run_aphrodite(
+    aphrodite_runner: type[AphroditeRunner],
     model: str,
     dtype: str,
     query_strs: list[dict[str, str]],
@@ -170,7 +170,7 @@ def _run_vllm(
     query = create_score_multimodal_param(query_strs)
     documents = create_score_multimodal_param(document_strs)
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="pooling",
         dtype=dtype,
@@ -178,8 +178,8 @@ def _run_vllm(
         max_model_len=2048,
         mm_processor_kwargs=MM_PROCESSOR_KWARGS,
         limit_mm_per_prompt=LIMIT_MM_PER_PROMPT,
-    ) as vllm_model:
-        outputs = vllm_model.llm.score(query, documents)
+    ) as aphrodite_model:
+        outputs = aphrodite_model.llm.score(query, documents)
 
     return [output.outputs.score for output in outputs]
 
@@ -233,7 +233,7 @@ def _run_hf(
 
 def _run_test(
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     model: str,
     dtype: str,
     query_strs: list[dict[str, str]],
@@ -245,17 +245,17 @@ def _run_test(
     # if we run HF first, the cuda initialization will be done and it
     # will hurt multiprocessing backend with fork method (the default method).
 
-    vllm_outputs = _run_vllm(vllm_runner, model, dtype, query_strs, document_strs)
+    aphrodite_outputs = _run_aphrodite(aphrodite_runner, model, dtype, query_strs, document_strs)
     hf_outputs = _run_hf(hf_runner, model, dtype, query_strs, document_strs)
 
     # Compare outputs
-    assert len(hf_outputs) == len(vllm_outputs), (
-        f"Output length mismatch: HF={len(hf_outputs)}, Aphrodite={len(vllm_outputs)}"
+    assert len(hf_outputs) == len(aphrodite_outputs), (
+        f"Output length mismatch: HF={len(hf_outputs)}, Aphrodite={len(aphrodite_outputs)}"
     )
 
-    for i, (hf_score, vllm_score) in enumerate(zip(hf_outputs, vllm_outputs)):
-        assert hf_score == pytest.approx(vllm_score, rel=0.02), (
-            f"Score mismatch at index {i}: HF={hf_score}, Aphrodite={vllm_score}"
+    for i, (hf_score, aphrodite_score) in enumerate(zip(hf_outputs, aphrodite_outputs)):
+        assert hf_score == pytest.approx(aphrodite_score, rel=0.02), (
+            f"Score mismatch at index {i}: HF={hf_score}, Aphrodite={aphrodite_score}"
         )
 
 
@@ -267,14 +267,14 @@ def _run_test(
 )
 def test_model_text_image(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     dtype: str,
 ) -> None:
     """Visual Documents Reranking"""
     _run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         model,
         dtype,
         TEXT_IMAGE_TEST_DATA["query"],
@@ -290,14 +290,14 @@ def test_model_text_image(
 )
 def test_model_text_text(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     dtype: str,
 ) -> None:
     """Textual Documents Reranking"""
     _run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         model,
         dtype,
         TEXT_TEXT_TEST_DATA["query"],
@@ -313,14 +313,14 @@ def test_model_text_text(
 )
 def test_model_image_text(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     dtype: str,
 ) -> None:
     """Image Querying for Textual Documents"""
     _run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         model,
         dtype,
         IMAGE_TEXT_TEST_DATA["query"],
@@ -336,14 +336,14 @@ def test_model_image_text(
 )
 def test_model_image_image(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     dtype: str,
 ) -> None:
     """Image Querying for Image Documents"""
     _run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         model,
         dtype,
         IMAGE_IMAGE_TEST_DATA["query"],
@@ -359,14 +359,14 @@ def test_model_image_image(
 )
 def test_model_text_mixed_documents(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     dtype: str,
 ) -> None:
     """Text Query for Mixed Text and Image Documents"""
     _run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         model,
         dtype,
         TEXT_MIXED_DOCS_TEST_DATA["query"],

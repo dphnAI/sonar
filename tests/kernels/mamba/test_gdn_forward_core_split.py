@@ -50,9 +50,9 @@ if not (
 from tests.v1.attention.utils import (  # noqa: E402
     BatchSpec,
     create_common_attn_metadata,
-    create_vllm_config,
+    create_aphrodite_config,
 )
-from aphrodite.config import set_current_vllm_config  # noqa: E402
+from aphrodite.config import set_current_aphrodite_config  # noqa: E402
 from aphrodite.model_executor.layers.fla.ops.index import (  # noqa: E402
     prepare_chunk_indices,
     prepare_chunk_offsets,
@@ -84,14 +84,14 @@ BLOCK_SIZE = 16
 PREFIX = "model.layers.0.linear_attn"
 
 
-def _make_vllm_config():
+def _make_aphrodite_config():
     # A small, ungated GDN model whose config is cached locally; only the config
     # (scheduler/cache/compilation/hf) is used here, never the weights. Inject
     # linear_key_head_dim=128 and request the CuteDSL prefill backend -- the
     # supported GDN chunk kernel on Blackwell (the Triton/FLA chunk kernel is
     # unsupported on SM10x). CuteDSL consumes chunk_indices/chunk_offsets, so
     # this also exercises the prefill-only chunk-metadata wiring.
-    cfg = create_vllm_config(
+    cfg = create_aphrodite_config(
         model_name="Qwen/Qwen3.5-0.8B",
         block_size=BLOCK_SIZE,
         hf_config_override={"linear_key_head_dim": K},
@@ -101,7 +101,7 @@ def _make_vllm_config():
 
 
 def _build_layer(
-    vllm_config, conv_state, ssm_state, A_log, dt_bias, conv_weight, conv_bias
+    aphrodite_config, conv_state, ssm_state, A_log, dt_bias, conv_weight, conv_bias
 ):
     """A minimal object that runs the real ``_forward_core`` bound to it."""
     layer = types.SimpleNamespace()
@@ -119,7 +119,7 @@ def _build_layer(
     layer.dt_bias = dt_bias
     layer.conv1d = types.SimpleNamespace(weight=conv_weight, bias=conv_bias)
     layer.kv_cache = (conv_state, ssm_state)
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         layer.chunk_gated_delta_rule = ChunkGatedDeltaRule()
     for name in (
         "rearrange_mixed_qkv",
@@ -159,7 +159,7 @@ def test_forward_core_split_matches_unified(
 ) -> None:
     torch.manual_seed(0)
     device = torch.device("cuda")
-    vllm_config = _make_vllm_config()
+    aphrodite_config = _make_aphrodite_config()
 
     # Decode-first batch: D 1-token decodes (with context), then the prefills.
     decode_seq_lens = [64] * num_decodes
@@ -176,13 +176,13 @@ def test_forward_core_split_matches_unified(
             block_size=BLOCK_SIZE, shapes=((16, 64),), dtypes=(torch.float16,)
         ),
         layer_names=[PREFIX],
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         device=device,
     )
     common = create_common_attn_metadata(
         batch, BLOCK_SIZE, device, arange_block_indices=True
     )
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         meta_split = builder.build(common_prefix_len=0, common_attn_metadata=common)
 
     assert meta_split.spec_sequence_masks is None
@@ -257,7 +257,7 @@ def test_forward_core_split_matches_unified(
     conv_state_split = conv_state0.clone()
     ssm_state_split = ssm_state0.clone()
     layer_split = _build_layer(
-        vllm_config,
+        aphrodite_config,
         conv_state_split,
         ssm_state_split,
         A_log,
@@ -271,7 +271,7 @@ def test_forward_core_split_matches_unified(
     conv_state_unified = conv_state0.clone()
     ssm_state_unified = ssm_state0.clone()
     layer_unified = _build_layer(
-        vllm_config,
+        aphrodite_config,
         conv_state_unified,
         ssm_state_unified,
         A_log,

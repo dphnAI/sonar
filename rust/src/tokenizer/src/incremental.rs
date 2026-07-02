@@ -303,7 +303,7 @@ mod tests {
     /// Backend simulating non-monotonic decode where adding a token changes how
     /// earlier tokens decode (context-dependent normalization), causing
     /// prefix_len to land mid-UTF-8. Reproduces the class of bug from
-    /// vllm-project/vllm#17448.
+    /// vllm-project/aphrodite#17448.
     #[derive(Debug)]
     struct NonMonotonicBackend;
 

@@ -37,15 +37,15 @@ def _fp8_attention():
     from types import SimpleNamespace
     from unittest.mock import patch
 
-    from aphrodite.config import AphroditeConfig, set_current_vllm_config
+    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
     from aphrodite.config.multimodal import MultiModalConfig
 
     if not is_flashinfer_cudnn_fp8_prefill_attn_supported():
         pytest.skip("FlashInfer cuDNN FP8 prefill attention not supported")
 
     mm_config = MultiModalConfig(mm_encoder_attn_dtype="fp8")
-    vllm_config = AphroditeConfig()
-    vllm_config.model_config = SimpleNamespace(multimodal_config=mm_config)
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.model_config = SimpleNamespace(multimodal_config=mm_config)
 
     # MMEncoderAttention reads torch.get_default_dtype() during init
     # to determine the output dtype. In real model loading this is bf16.
@@ -53,7 +53,7 @@ def _fp8_attention():
     torch.set_default_dtype(torch.bfloat16)
 
     with (
-        set_current_vllm_config(vllm_config),
+        set_current_aphrodite_config(aphrodite_config),
         patch(
             "aphrodite.model_executor.layers.attention.mm_encoder_attention"
             ".get_vit_attn_backend",

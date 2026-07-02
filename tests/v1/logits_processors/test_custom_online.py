@@ -25,7 +25,7 @@ from tests.v1.logits_processors.utils import (
 def _server_with_logitproc_entrypoint(
     env_dict: dict[str, str] | None,
     model: str,
-    vllm_serve_args: list[str],
+    aphrodite_serve_args: list[str],
 ) -> None:
     """Start Aphrodite server with dummy logitproc entrypoint."""
     from aphrodite.entrypoints.cli import main
@@ -34,14 +34,14 @@ def _server_with_logitproc_entrypoint(
         os.environ.update(env_dict)
 
     # Emulate `aphrodite serve <model> <CLI args>`
-    sys.argv = ["aphrodite", "serve", model] + vllm_serve_args
+    sys.argv = ["aphrodite", "serve", model] + aphrodite_serve_args
     main.main()
 
 
 def _server_with_logitproc_fqcn(
     env_dict: dict[str, str] | None,
     model: str,
-    vllm_serve_args: list[str],
+    aphrodite_serve_args: list[str],
 ) -> None:
     """Start Aphrodite server with dummy logitproc specified by FQCN."""
     from aphrodite.entrypoints.cli import main
@@ -50,7 +50,7 @@ def _server_with_logitproc_fqcn(
         os.environ.update(env_dict)
 
     # Emulate `aphrodite serve <model> <CLI args>`
-    sys.argv = ["aphrodite", "serve", model] + vllm_serve_args
+    sys.argv = ["aphrodite", "serve", model] + aphrodite_serve_args
     main.main()
 
 
@@ -125,7 +125,7 @@ def test_custom_logitsprocs(server, model_name: str):
     `target_token`).
 
     Pass in requests, 50% of which pass a `target_token` value
-    in through `extra_body["vllm_xargs"]`, 50% of which do not.
+    in through `extra_body["aphrodite_xargs"]`, 50% of which do not.
 
     Validate that requests which activate the custom logitproc, repeat the same
     token
@@ -150,7 +150,7 @@ def test_custom_logitsprocs(server, model_name: str):
                 # For requests which activate the dummy logitproc, choose one of
                 # two `target_token` values which are known not to be EOS tokens
                 request_keyword_args["extra_body"] = {
-                    "vllm_xargs": {DUMMY_LOGITPROC_ARG: target_token}
+                    "aphrodite_xargs": {DUMMY_LOGITPROC_ARG: target_token}
                 }
             batch = await client.completions.create(
                 model=model_name,
@@ -187,7 +187,7 @@ async def test_invalid_custom_logitsproc_arg(
     request_keyword_args: dict[str, Any] = {
         **api_keyword_args,
         "extra_body": {
-            "vllm_xargs": {DUMMY_LOGITPROC_ARG: "invalid_target_token_value"}
+            "aphrodite_xargs": {DUMMY_LOGITPROC_ARG: "invalid_target_token_value"}
         },
     }
 

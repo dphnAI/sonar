@@ -11,7 +11,7 @@ from tests.v1.attention.utils import (
     BatchSpec,
     create_common_attn_metadata,
     create_standard_kv_cache_spec,
-    create_vllm_config,
+    create_aphrodite_config,
 )
 from aphrodite.model_executor.layers.attention import Attention
 from aphrodite.v1.attention.backends.flex_attention import (
@@ -31,7 +31,7 @@ DIRECT_BUILD_VERSION = version.parse("2.9.dev0")
     not torch.cuda.is_available() or TORCH_VERSION < MINIMUM_TORCH_VERSION,
     reason="CUDA not available or PyTorch version < 2.7",
 )
-def test_flex_attention_full_cudagraphs(vllm_runner):
+def test_flex_attention_full_cudagraphs(aphrodite_runner):
     """Test the numerics for flex attention full cudagraphs support."""
     model_name = "Qwen/Qwen2.5-1.5B-Instruct"
     seed = 42
@@ -45,7 +45,7 @@ def test_flex_attention_full_cudagraphs(vllm_runner):
 
     # Run with flex attention eager
     set_random_seed(seed)
-    with vllm_runner(
+    with aphrodite_runner(
         model_name,
         runner="generate",
         tensor_parallel_size=1,
@@ -59,7 +59,7 @@ def test_flex_attention_full_cudagraphs(vllm_runner):
 
     # Run with flex attention compiled
     set_random_seed(seed)
-    with vllm_runner(
+    with aphrodite_runner(
         model_name,
         runner="generate",
         tensor_parallel_size=1,
@@ -88,7 +88,7 @@ def windowed_causal_mask_mod(b, h, q_idx, kv_idx):
     not torch.cuda.is_available() or TORCH_VERSION < MINIMUM_TORCH_VERSION,
     reason="CUDA not available or PyTorch version < 2.7",
 )
-def test_flex_attention_custom_mask_full_cudagraphs(vllm_runner, monkeypatch):
+def test_flex_attention_custom_mask_full_cudagraphs(aphrodite_runner, monkeypatch):
     monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
     monkeypatch.setattr(
         Attention,
@@ -108,7 +108,7 @@ def test_flex_attention_custom_mask_full_cudagraphs(vllm_runner, monkeypatch):
     ]
 
     set_random_seed(seed)
-    with vllm_runner(
+    with aphrodite_runner(
         model_name,
         runner="generate",
         tensor_parallel_size=1,
@@ -121,7 +121,7 @@ def test_flex_attention_custom_mask_full_cudagraphs(vllm_runner, monkeypatch):
         )
 
     set_random_seed(seed)
-    with vllm_runner(
+    with aphrodite_runner(
         model_name,
         runner="generate",
         tensor_parallel_size=1,
@@ -150,7 +150,7 @@ def test_flex_attention_custom_mask_full_cudagraphs(vllm_runner, monkeypatch):
     not torch.cuda.is_available() or TORCH_VERSION < MINIMUM_TORCH_VERSION,
     reason="CUDA not available or PyTorch version < 2.7",
 )
-def test_flex_attention_vs_default_backend(vllm_runner):
+def test_flex_attention_vs_default_backend(aphrodite_runner):
     """Test that FlexAttention produces the same outputs as the default backend.
 
     This test compares the outputs from the FlexAttention backend with
@@ -168,7 +168,7 @@ def test_flex_attention_vs_default_backend(vllm_runner):
 
     # Run with flex attention
     set_random_seed(seed)
-    with vllm_runner(
+    with aphrodite_runner(
         model_name,
         runner="generate",
         tensor_parallel_size=1,
@@ -182,7 +182,7 @@ def test_flex_attention_vs_default_backend(vllm_runner):
 
     # Run with default backend
     set_random_seed(seed)
-    with vllm_runner(
+    with aphrodite_runner(
         model_name,
         runner="generate",
         tensor_parallel_size=1,
@@ -206,7 +206,7 @@ def test_flex_attention_vs_default_backend(vllm_runner):
     not torch.cuda.is_available() or TORCH_VERSION < MINIMUM_TORCH_VERSION,
     reason="CUDA not available or PyTorch version < 2.7",
 )
-def test_encoder_flex_attention_vs_default_backend(vllm_runner):
+def test_encoder_flex_attention_vs_default_backend(aphrodite_runner):
     """Test that FlexAttention produces the same outputs as the default backend.
 
     This test compares the outputs from the FlexAttention backend with
@@ -220,7 +220,7 @@ def test_encoder_flex_attention_vs_default_backend(vllm_runner):
     ]
 
     # Run with flex attention
-    with vllm_runner(
+    with aphrodite_runner(
         model_name,
         runner="pooling",
         dtype=torch.bfloat16,
@@ -232,7 +232,7 @@ def test_encoder_flex_attention_vs_default_backend(vllm_runner):
         flex_outputs = llm_flex.embed(prompts)
 
     # Run with default backend
-    with vllm_runner(
+    with aphrodite_runner(
         model_name,
         runner="pooling",
         dtype=torch.bfloat16,
@@ -263,10 +263,10 @@ def test_block_mask_direct_vs_slow_path():
     """
     device = torch.device("cuda")
 
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         model_name="meta-llama/Meta-Llama-3-8B", block_size=16, max_model_len=1024
     )
-    kv_cache_spec = create_standard_kv_cache_spec(vllm_config)
+    kv_cache_spec = create_standard_kv_cache_spec(aphrodite_config)
 
     # Use a mixed batch that will create groups spanning multiple sequences
     batch_spec = BatchSpec(
@@ -274,10 +274,10 @@ def test_block_mask_direct_vs_slow_path():
     )
 
     common_attn_metadata = create_common_attn_metadata(
-        batch_spec, vllm_config.cache_config.block_size, device
+        batch_spec, aphrodite_config.cache_config.block_size, device
     )
 
-    builder = FlexAttentionMetadataBuilder(kv_cache_spec, [], vllm_config, device)
+    builder = FlexAttentionMetadataBuilder(kv_cache_spec, [], aphrodite_config, device)
 
     metadata_direct = builder.build(
         common_prefix_len=0, common_attn_metadata=common_attn_metadata
@@ -356,12 +356,12 @@ def test_block_sparsity_hint_prunes_blocks():
     """
     device = torch.device("cuda")
 
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         model_name="facebook/opt-125m",
         block_size=16,
         max_model_len=1024,
     )
-    kv_cache_spec = create_standard_kv_cache_spec(vllm_config)
+    kv_cache_spec = create_standard_kv_cache_spec(aphrodite_config)
 
     batch_spec = BatchSpec(
         seq_lens=[256],
@@ -370,10 +370,10 @@ def test_block_sparsity_hint_prunes_blocks():
     )
 
     common_attn_metadata = create_common_attn_metadata(
-        batch_spec, vllm_config.cache_config.block_size, device
+        batch_spec, aphrodite_config.cache_config.block_size, device
     )
 
-    builder = FlexAttentionMetadataBuilder(kv_cache_spec, [], vllm_config, device)
+    builder = FlexAttentionMetadataBuilder(kv_cache_spec, [], aphrodite_config, device)
 
     metadata_no_hint = builder.build(
         common_prefix_len=0, common_attn_metadata=common_attn_metadata

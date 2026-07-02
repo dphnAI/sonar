@@ -20,7 +20,7 @@ from aphrodite.config import (
     CompilationConfig,
     AphroditeConfig,
     get_cached_compilation_config,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.platforms import current_platform
 
@@ -109,12 +109,12 @@ def run_dispatch_test(
     device: str,
 ):
     """Run a dispatch test for a RotaryEmbedding class."""
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(custom_ops=["all", "+apply_rotary_emb"])
     )
     get_cached_compilation_config.cache_clear()
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         rope = test_case.rope_class(**test_case.rope_kwargs).to(device=device)
 
         apply_rotary_emb = rope.apply_rotary_emb

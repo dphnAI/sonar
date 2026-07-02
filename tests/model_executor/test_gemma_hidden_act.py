@@ -25,7 +25,7 @@ from aphrodite.model_executor.models.gemma4 import Gemma4MLP
 def test_get_act_and_mul_fn_supports_gemma_hidden_act_aliases(
     activation_name: str,
     expected_type: type[torch.nn.Module],
-    default_vllm_config,
+    default_aphrodite_config,
 ) -> None:
     assert isinstance(get_act_and_mul_fn(activation_name), expected_type)
 
@@ -47,7 +47,7 @@ def test_gemma_mlp_supports_hidden_act_variants(
     mlp_cls: type[torch.nn.Module],
     activation_name: str,
     expected_type: type[torch.nn.Module],
-    default_vllm_config,
+    default_aphrodite_config,
     dist_init,
 ) -> None:
     mlp = mlp_cls(

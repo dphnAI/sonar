@@ -99,7 +99,7 @@ async def test_load(
         init_count: int = 0
         finished_req_count: int = 0
 
-        def __init__(self, vllm_config: AphroditeConfig, engine_index: int = 0):
+        def __init__(self, aphrodite_config: AphroditeConfig, engine_index: int = 0):
             stats_loggers[engine_index] = self
 
         def record(

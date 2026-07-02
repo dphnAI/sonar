@@ -120,7 +120,7 @@ def get_model_ids_to_test():
         for info in _TRANSFORMERS_BACKEND_MODELS.values()
         for model_id in (info.default, *info.extras.values())
     }
-    vllm_only_archs = {
+    aphrodite_only_archs = {
         arch
         for arch, info in _MULTIMODAL_EXAMPLE_MODELS.items()
         if not any(
@@ -129,7 +129,7 @@ def get_model_ids_to_test():
         )
     }
 
-    return _get_model_ids_to_test(vllm_only_archs)
+    return _get_model_ids_to_test(aphrodite_only_archs)
 
 
 def get_text_token_prompts(

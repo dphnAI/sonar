@@ -12,7 +12,7 @@ from tests.kernels.quantization.nvfp4_utils import (
 )
 from tests.kernels.utils import torch_moe
 from aphrodite import _custom_ops as ops
-from aphrodite.config import ParallelConfig, AphroditeConfig, set_current_vllm_config
+from aphrodite.config import ParallelConfig, AphroditeConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.fused_moe import fused_topk
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
@@ -54,7 +54,7 @@ def test_cutlass_fp4_moe_no_graph(
     m: int, n: int, k: int, e: int, topk: int, dtype: torch.dtype, workspace_init
 ):
     set_random_seed(7)
-    with set_current_vllm_config(
+    with set_current_aphrodite_config(
         AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))
     ):
         quant_blocksize = 16
@@ -180,7 +180,7 @@ def test_cutlass_fp4_moe_swiglustep(
     m: int, n: int, k: int, e: int, topk: int, dtype: torch.dtype, workspace_init
 ):
     set_random_seed(7)
-    with set_current_vllm_config(
+    with set_current_aphrodite_config(
         AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))
     ):
         quant_blocksize = 16

@@ -110,7 +110,7 @@ def ref_fused_moe(
 @pytest.mark.parametrize("act", ACT)
 @pytest.mark.parametrize("isa", ISA)
 def test_cpu_fused_moe(
-    default_vllm_config,
+    default_aphrodite_config,
     batch_size: int,
     expert_num: int,
     hidden_size: int,

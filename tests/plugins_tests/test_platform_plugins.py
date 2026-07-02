@@ -31,7 +31,7 @@ def test_platform_plugins():
     )
 
 
-def test_oot_custom_op(default_vllm_config, monkeypatch: pytest.MonkeyPatch):
+def test_oot_custom_op(default_aphrodite_config, monkeypatch: pytest.MonkeyPatch):
     # simulate workload by running an example
     load_general_plugins()
     from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding

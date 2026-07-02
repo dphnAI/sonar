@@ -177,7 +177,7 @@ skipif_no_triton = pytest.mark.skipif(not HAS_TRITON, reason="Requires Triton")
     ],
 )
 def test_inplace_functionalization(
-    default_vllm_config: AphroditeConfig,
+    default_aphrodite_config: AphroditeConfig,
     model_class,
     expected_functionalized: int,
     expected_clones: int,
@@ -186,17 +186,17 @@ def test_inplace_functionalization(
     """Test inplace functionalization, lowering, and clone cleanup."""
     torch.set_default_device(current_platform.device_type)
 
-    # Use vllm_c so inplace path is triggered
-    default_vllm_config.kernel_config.ir_op_priority.fused_add_rms_norm = [
-        "vllm_c",
+    # Use aphrodite_c so inplace path is triggered
+    default_aphrodite_config.kernel_config.ir_op_priority.fused_add_rms_norm = [
+        "aphrodite_c",
         "native",
     ]
 
     # Create passes in order they run during compilation
-    functionalization_pass = AphroditeIRInplaceFunctionalizationPass(default_vllm_config)
-    lowering_pass = AphroditeIRLoweringPass(default_vllm_config)
+    functionalization_pass = AphroditeIRInplaceFunctionalizationPass(default_aphrodite_config)
+    lowering_pass = AphroditeIRLoweringPass(default_aphrodite_config)
     donated_info_pass = StoreDonationInfoPass()
-    cleanup_pass = UnsafeCloneEliminationPass(default_vllm_config)
+    cleanup_pass = UnsafeCloneEliminationPass(default_aphrodite_config)
 
     # Set up backend with pre-grad pass
     backend = TestBackend(lowering_pass, donated_info_pass, cleanup_pass)
@@ -207,7 +207,7 @@ def test_inplace_functionalization(
     residual1 = torch.randn(8, 16, dtype=torch.bfloat16)
     residual2 = torch.randn(8, 16, dtype=torch.bfloat16)
 
-    with default_vllm_config.kernel_config.ir_op_priority.set_priority():
+    with default_aphrodite_config.kernel_config.ir_op_priority.set_priority():
         # Reference output without optimization
         ref_output = model(x.clone(), residual1.clone(), residual2.clone())
 
@@ -230,7 +230,7 @@ def test_inplace_functionalization(
     assert "fused_add_rms_norm" in lowering_pass.selected_impls
     assert len(lowering_pass.selected_impls["fused_add_rms_norm"]) == 2
     assert all(
-        provider == "vllm_c"
+        provider == "aphrodite_c"
         for node, provider in lowering_pass.selected_impls["fused_add_rms_norm"].items()
     ), lowering_pass.selected_impls
 
@@ -250,16 +250,16 @@ def test_inplace_functionalization(
     not current_platform.is_cuda_alike(),
     reason="Only test on cuda and rocm platform",
 )
-def test_donated_buffer_context_propagation(default_vllm_config):
+def test_donated_buffer_context_propagation(default_aphrodite_config):
     """Test that donated_input_ids propagates correctly through pass_context."""
     torch.set_default_device(current_platform.device_type)
 
     # Create a custom backend that inspects pass_context in cleanup pass
-    functionalization_pass = AphroditeIRInplaceFunctionalizationPass(default_vllm_config)
-    lowering_pass = AphroditeIRLoweringPass(default_vllm_config)
+    functionalization_pass = AphroditeIRInplaceFunctionalizationPass(default_aphrodite_config)
+    lowering_pass = AphroditeIRLoweringPass(default_aphrodite_config)
 
     donation_info_pass = StoreDonationInfoPass()
-    cleanup_pass = UnsafeCloneEliminationPass(default_vllm_config)
+    cleanup_pass = UnsafeCloneEliminationPass(default_aphrodite_config)
 
     backend = TestBackend(lowering_pass, donation_info_pass, cleanup_pass)
     backend.inductor_config["pre_grad_custom_pass"] = functionalization_pass
@@ -286,7 +286,7 @@ def test_donated_buffer_context_propagation(default_vllm_config):
     not current_platform.is_cuda_alike(),
     reason="Only test on cuda and rocm platform",
 )
-def test_maybe_inplace_reuse_error(default_vllm_config):
+def test_maybe_inplace_reuse_error(default_aphrodite_config):
     """Test that reusing a donated activation input raises ValueError."""
     torch.set_default_device(current_platform.device_type)
 
@@ -305,9 +305,9 @@ def test_maybe_inplace_reuse_error(default_vllm_config):
             # ERROR: x is used again after being donated
             return x_normed + x  # This should raise ValueError
 
-    functionalization_pass = AphroditeIRInplaceFunctionalizationPass(default_vllm_config)
-    lowering_pass = AphroditeIRLoweringPass(default_vllm_config)
-    cleanup_pass = UnsafeCloneEliminationPass(default_vllm_config)
+    functionalization_pass = AphroditeIRInplaceFunctionalizationPass(default_aphrodite_config)
+    lowering_pass = AphroditeIRLoweringPass(default_aphrodite_config)
+    cleanup_pass = UnsafeCloneEliminationPass(default_aphrodite_config)
 
     backend = TestBackend(lowering_pass, cleanup_pass)
     backend.inductor_config["pre_grad_custom_pass"] = functionalization_pass
@@ -409,7 +409,7 @@ def with_dyn_arg(fn: Callable, arg_index: int, dim_index: int):
     not current_platform.is_cuda_alike(),
     reason="Only test on cuda and rocm platform",
 )
-def test_piecewise_compilation_with_donated_buffers(monkeypatch, fresh_vllm_cache):
+def test_piecewise_compilation_with_donated_buffers(monkeypatch, fresh_aphrodite_cache):
     """
     Test piecewise compilation with donated buffers across graph splits.
     Utilizes a custom splitting op. Uses fresh cache to avoid compilation caching.
@@ -424,7 +424,7 @@ def test_piecewise_compilation_with_donated_buffers(monkeypatch, fresh_vllm_cach
 
     # Create config with custom splitting op
     store_donation_info = StoreDonationInfoPass()
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(
             custom_ops=["all"],
             splitting_ops=["aphrodite::test_split_marker"],
@@ -432,7 +432,7 @@ def test_piecewise_compilation_with_donated_buffers(monkeypatch, fresh_vllm_cach
         )
     )
 
-    backend = AphroditeBackend(vllm_config)
+    backend = AphroditeBackend(aphrodite_config)
 
     model = TransformerBlockWithSplits()
     x = torch.randn(8, 32, dtype=torch.bfloat16)

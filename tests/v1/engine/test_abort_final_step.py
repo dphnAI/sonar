@@ -64,13 +64,13 @@ class DummyKVConnector(KVConnectorBase_V1):
 
     def __init__(
         self,
-        vllm_config: AphroditeConfig,
+        aphrodite_config: AphroditeConfig,
         role: KVConnectorRole,
         kv_cache_config: KVCacheConfig,
     ):
-        super().__init__(vllm_config, role, kv_cache_config)
+        super().__init__(aphrodite_config, role, kv_cache_config)
         # Get the status file path from extra config
-        extra_config = vllm_config.kv_transfer_config.kv_connector_extra_config or {}
+        extra_config = aphrodite_config.kv_transfer_config.kv_connector_extra_config or {}
         self.status_file = extra_config.get("status_file")
         # Log that we were initialized
         if self.status_file:

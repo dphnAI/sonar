@@ -19,7 +19,7 @@ HF_IMAGE_PROMPTS = IMAGE_ASSETS.prompts(
 
 
 def run_awq_test(
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     image_assets: ImageTestAssets,
     source_model: str,
     quant_model: str,
@@ -47,7 +47,7 @@ def run_awq_test(
     # will hurt multiprocessing backend with fork method (the default method).
 
     # max_model_len should be greater than image_feature_size
-    with vllm_runner(
+    with aphrodite_runner(
         source_model,
         max_model_len=4096,
         dtype=dtype,
@@ -55,15 +55,15 @@ def run_awq_test(
         distributed_executor_backend=distributed_executor_backend,
         enforce_eager=True,
         default_torch_num_threads=1,
-    ) as vllm_model:
+    ) as aphrodite_model:
         source_outputs_per_image = [
-            vllm_model.generate_greedy_logprobs(
+            aphrodite_model.generate_greedy_logprobs(
                 prompts, max_tokens, num_logprobs=num_logprobs, images=images
             )
             for prompts, images in inputs_per_image
         ]
 
-    with vllm_runner(
+    with aphrodite_runner(
         quant_model,
         quantization="awq",
         max_model_len=4096,
@@ -72,9 +72,9 @@ def run_awq_test(
         distributed_executor_backend=distributed_executor_backend,
         enforce_eager=True,
         default_torch_num_threads=1,
-    ) as vllm_model:
+    ) as aphrodite_model:
         quant_outputs_per_image = [
-            vllm_model.generate_greedy_logprobs(
+            aphrodite_model.generate_greedy_logprobs(
                 prompts, max_tokens, num_logprobs=num_logprobs, images=images
             )
             for prompts, images in inputs_per_image
@@ -106,21 +106,21 @@ def run_awq_test(
 )
 @torch.inference_mode()
 def test_awq_load(
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     example_prompts: list[str],
     model: str,
     quantization: str,
     dtype: str,
 ) -> None:
     """Regression test: AWQ weight loading must not KeyError."""
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         quantization=quantization,
         dtype=dtype,
         max_model_len=128,
         enforce_eager=True,
-    ) as vllm_model:
-        outputs = vllm_model.generate_greedy(example_prompts[:2], max_tokens=32)
+    ) as aphrodite_model:
+        outputs = aphrodite_model.generate_greedy(example_prompts[:2], max_tokens=32)
     assert len(outputs) == 2
 
 
@@ -144,7 +144,7 @@ def test_awq_load(
 @pytest.mark.parametrize("num_logprobs", [5])
 @torch.inference_mode()
 def test_awq_models(
-    vllm_runner,
+    aphrodite_runner,
     image_assets,
     source_model,
     quant_model,
@@ -154,7 +154,7 @@ def test_awq_models(
     num_logprobs,
 ) -> None:
     run_awq_test(
-        vllm_runner,
+        aphrodite_runner,
         image_assets,
         source_model,
         quant_model,

@@ -10,7 +10,7 @@ import torch
 import torch.distributed
 
 import aphrodite.envs as envs
-from tests.utils import ensure_current_vllm_config
+from tests.utils import ensure_current_aphrodite_config
 from aphrodite.distributed.communication_op import tensor_model_parallel_all_reduce  # noqa
 from aphrodite.distributed.device_communicators.pynccl import PyNcclCommunicator
 from aphrodite.distributed.device_communicators.pynccl_wrapper import NCCLLibrary
@@ -119,9 +119,9 @@ def test_pynccl_multiple_allreduce():
 
 
 @worker_fn_wrapper
-def multiple_allreduce_with_vllm_worker_fn():
+def multiple_allreduce_with_aphrodite_worker_fn():
     device = torch.device(f"cuda:{torch.distributed.get_rank()}")
-    with ensure_current_vllm_config():
+    with ensure_current_aphrodite_config():
         ensure_model_parallel_initialized(2, 2)
     tensor = torch.ones(16, 1024, 1024, dtype=torch.float32, device=device)
     with graph_capture(device=device):
@@ -140,10 +140,10 @@ def multiple_allreduce_with_vllm_worker_fn():
 @pytest.mark.skipif(
     torch.accelerator.device_count() < 4, reason="Need at least 4 GPUs to run the test."
 )
-def test_pynccl_multiple_allreduce_with_vllm():
+def test_pynccl_multiple_allreduce_with_aphrodite():
     # this tests pynccl for multiple tp groups, together with aphrodite
     # i.e. call `tensor_model_parallel_all_reduce`
-    distributed_run(multiple_allreduce_with_vllm_worker_fn, 4)
+    distributed_run(multiple_allreduce_with_aphrodite_worker_fn, 4)
 
 
 @worker_fn_wrapper

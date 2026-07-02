@@ -43,7 +43,7 @@ MODELS = [
 
 
 def check_model_outputs(
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     prompts: list[str],
     model: GGUFTestConfig,
     dtype: str,
@@ -59,7 +59,7 @@ def check_model_outputs(
         )
 
     # Run gguf model.
-    with vllm_runner(
+    with aphrodite_runner(
         model_name=model.gguf_model_path,
         enforce_eager=True,
         tokenizer_name=model.original_model,
@@ -74,7 +74,7 @@ def check_model_outputs(
     # Run unquantized model.
     # Should run with tp=1, otherwise the test will stuck at
     # nccl initialization.
-    with vllm_runner(
+    with aphrodite_runner(
         model_name=model.original_model,
         enforce_eager=True,  # faster tests
         dtype=dtype,
@@ -99,7 +99,7 @@ def check_model_outputs(
 @pytest.mark.parametrize("num_logprobs", [8])
 @pytest.mark.parametrize("tp_size", [1])
 def test_models(
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     example_prompts: list[str],
     model: GGUFTestConfig,
     dtype: str,
@@ -108,7 +108,7 @@ def test_models(
     tp_size: int,
 ) -> None:
     check_model_outputs(
-        vllm_runner, example_prompts, model, dtype, max_tokens, num_logprobs, tp_size
+        aphrodite_runner, example_prompts, model, dtype, max_tokens, num_logprobs, tp_size
     )
 
 
@@ -119,7 +119,7 @@ def test_models(
 @pytest.mark.parametrize("tp_size", [2])
 @multi_gpu_test(num_gpus=2)
 def test_distributed(
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     example_prompts: list[str],
     model: GGUFTestConfig,
     dtype: str,
@@ -128,5 +128,5 @@ def test_distributed(
     tp_size: int,
 ) -> None:
     check_model_outputs(
-        vllm_runner, example_prompts, model, dtype, max_tokens, num_logprobs, tp_size
+        aphrodite_runner, example_prompts, model, dtype, max_tokens, num_logprobs, tp_size
     )

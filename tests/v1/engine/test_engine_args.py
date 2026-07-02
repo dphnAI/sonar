@@ -15,33 +15,33 @@ from aphrodite.utils.hashing import _xxhash
 def test_prefix_caching_from_cli():
     parser = EngineArgs.add_cli_args(FlexibleArgumentParser())
     args = parser.parse_args([])
-    vllm_config = EngineArgs.from_cli_args(args=args).create_engine_config()
-    assert vllm_config.cache_config.enable_prefix_caching, (
+    aphrodite_config = EngineArgs.from_cli_args(args=args).create_engine_config()
+    assert aphrodite_config.cache_config.enable_prefix_caching, (
         "V1 turns on prefix caching by default."
     )
 
     # Turn it off possible with flag.
     args = parser.parse_args(["--no-enable-prefix-caching"])
-    vllm_config = EngineArgs.from_cli_args(args=args).create_engine_config()
-    assert not vllm_config.cache_config.enable_prefix_caching
+    aphrodite_config = EngineArgs.from_cli_args(args=args).create_engine_config()
+    assert not aphrodite_config.cache_config.enable_prefix_caching
 
     # Turn it on with flag.
     args = parser.parse_args(["--enable-prefix-caching"])
-    vllm_config = EngineArgs.from_cli_args(args=args).create_engine_config()
-    assert vllm_config.cache_config.enable_prefix_caching
+    aphrodite_config = EngineArgs.from_cli_args(args=args).create_engine_config()
+    assert aphrodite_config.cache_config.enable_prefix_caching
 
     # default hash algorithm is "builtin"
-    assert vllm_config.cache_config.prefix_caching_hash_algo == "sha256"
+    assert aphrodite_config.cache_config.prefix_caching_hash_algo == "sha256"
 
     # set hash algorithm to sha256_cbor
     args = parser.parse_args(["--prefix-caching-hash-algo", "sha256_cbor"])
-    vllm_config = EngineArgs.from_cli_args(args=args).create_engine_config()
-    assert vllm_config.cache_config.prefix_caching_hash_algo == "sha256_cbor"
+    aphrodite_config = EngineArgs.from_cli_args(args=args).create_engine_config()
+    assert aphrodite_config.cache_config.prefix_caching_hash_algo == "sha256_cbor"
 
     # set hash algorithm to sha256
     args = parser.parse_args(["--prefix-caching-hash-algo", "sha256"])
-    vllm_config = EngineArgs.from_cli_args(args=args).create_engine_config()
-    assert vllm_config.cache_config.prefix_caching_hash_algo == "sha256"
+    aphrodite_config = EngineArgs.from_cli_args(args=args).create_engine_config()
+    assert aphrodite_config.cache_config.prefix_caching_hash_algo == "sha256"
 
     # an invalid hash algorithm raises an error
     parser.exit_on_error = False
@@ -55,18 +55,18 @@ def test_prefix_caching_xxhash_from_cli():
 
     # set hash algorithm to xxhash (pickle)
     args = parser.parse_args(["--prefix-caching-hash-algo", "xxhash"])
-    vllm_config = EngineArgs.from_cli_args(args=args).create_engine_config()
-    assert vllm_config.cache_config.prefix_caching_hash_algo == "xxhash"
+    aphrodite_config = EngineArgs.from_cli_args(args=args).create_engine_config()
+    assert aphrodite_config.cache_config.prefix_caching_hash_algo == "xxhash"
 
     # set hash algorithm to xxhash_cbor
     args = parser.parse_args(["--prefix-caching-hash-algo", "xxhash_cbor"])
-    vllm_config = EngineArgs.from_cli_args(args=args).create_engine_config()
-    assert vllm_config.cache_config.prefix_caching_hash_algo == "xxhash_cbor"
+    aphrodite_config = EngineArgs.from_cli_args(args=args).create_engine_config()
+    assert aphrodite_config.cache_config.prefix_caching_hash_algo == "xxhash_cbor"
 
 
 def test_defaults_with_usage_context():
     engine_args = EngineArgs(model="facebook/opt-125m")
-    vllm_config: AphroditeConfig = engine_args.create_engine_config(UsageContext.LLM_CLASS)
+    aphrodite_config: AphroditeConfig = engine_args.create_engine_config(UsageContext.LLM_CLASS)
 
     from aphrodite.platforms import current_platform
     from aphrodite.utils.mem_constants import GiB_bytes
@@ -83,13 +83,13 @@ def test_defaults_with_usage_context():
         default_server_tokens = 2048
         default_max_num_seqs = 256
 
-    assert vllm_config.scheduler_config.max_num_seqs == default_max_num_seqs
-    assert vllm_config.scheduler_config.max_num_batched_tokens == default_llm_tokens  # noqa: E501
+    assert aphrodite_config.scheduler_config.max_num_seqs == default_max_num_seqs
+    assert aphrodite_config.scheduler_config.max_num_batched_tokens == default_llm_tokens  # noqa: E501
 
     engine_args = EngineArgs(model="facebook/opt-125m")
-    vllm_config = engine_args.create_engine_config(UsageContext.OPENAI_API_SERVER)
-    assert vllm_config.scheduler_config.max_num_seqs == default_max_num_seqs
-    assert vllm_config.scheduler_config.max_num_batched_tokens == default_server_tokens  # noqa: E501
+    aphrodite_config = engine_args.create_engine_config(UsageContext.OPENAI_API_SERVER)
+    assert aphrodite_config.scheduler_config.max_num_seqs == default_max_num_seqs
+    assert aphrodite_config.scheduler_config.max_num_batched_tokens == default_server_tokens  # noqa: E501
 
 
 def test_mm_prefix_lm_raises_batched_tokens_floor():
@@ -125,6 +125,6 @@ def test_mm_prefix_lm_raises_batched_tokens_floor():
             new_callable=lambda: property(lambda self: True),
         ),
     ):
-        vllm_config = engine_args.create_engine_config(UsageContext.OPENAI_API_SERVER)
+        aphrodite_config = engine_args.create_engine_config(UsageContext.OPENAI_API_SERVER)
 
-    assert vllm_config.scheduler_config.max_num_batched_tokens >= 2496
+    assert aphrodite_config.scheduler_config.max_num_batched_tokens >= 2496

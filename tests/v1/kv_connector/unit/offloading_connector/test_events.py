@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from tests.v1.kv_connector.unit.utils import create_vllm_config
+from tests.v1.kv_connector.unit.utils import create_aphrodite_config
 from aphrodite.config import KVEventsConfig, KVTransferConfig
 from aphrodite.distributed.kv_events import BlockRemoved, BlockStored
 from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.events import (
@@ -316,12 +316,12 @@ def test_reset_cache_clears_side_table():
 
 
 def test_tiering_rejects_self_describing_kv_events():
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         block_size=4,
         max_num_batched_tokens=16,
         disable_hybrid_kv_cache_manager=False,
     )
-    vllm_config.kv_transfer_config = KVTransferConfig(
+    aphrodite_config.kv_transfer_config = KVTransferConfig(
         kv_connector="OffloadingConnector",
         kv_role="kv_both",
         kv_connector_extra_config={
@@ -331,7 +331,7 @@ def test_tiering_rejects_self_describing_kv_events():
             "secondary_tiers": [{"type": "example"}],
         },
     )
-    vllm_config.kv_events_config = KVEventsConfig(
+    aphrodite_config.kv_events_config = KVEventsConfig(
         enable_kv_cache_events=True,
         publisher="null",
     )
@@ -352,4 +352,4 @@ def test_tiering_rejects_self_describing_kv_events():
     )
 
     with pytest.raises(ValueError, match="TieringOffloadingSpec"):
-        TieringOffloadingSpec(vllm_config, kv_cache_config)
+        TieringOffloadingSpec(aphrodite_config, kv_cache_config)

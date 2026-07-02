@@ -15,7 +15,7 @@
 typedef __hip_bfloat16 __nv_bfloat16;
 #endif
 
-namespace vllm {
+namespace aphrodite {
 
 // NOTE Be EXTRA careful with raw_kv_scalar_t, for __half and __nv_bfloat16 it's
 // using u16 as the backing type.
@@ -160,7 +160,7 @@ __global__ void concat_and_cache_mla_rope_fused_kernel(
   }
 }
 
-}  // namespace vllm
+}  // namespace aphrodite
 
 #define CALL_CONCAT_AND_CACHE_MLA_ROPE_FUSED(RAW_KV_T, CACHE_T, KV_DTYPE)  \
   do {                                                                     \
@@ -172,7 +172,7 @@ __global__ void concat_and_cache_mla_rope_fused_kernel(
               "rope_cos_sin_cache_scalar_type", [&] {                      \
                 using cos_sin_t = scalar_t;                                \
                 if (rope_is_neox) {                                        \
-                  vllm::concat_and_cache_mla_rope_fused_kernel<            \
+                  aphrodite::concat_and_cache_mla_rope_fused_kernel<            \
                       qk_t, cos_sin_t, true, RAW_KV_T, CACHE_T, KV_DTYPE>  \
                       <<<grid, block, 0, stream>>>(                        \
                           positions.const_data_ptr<int64_t>(),             \
@@ -189,7 +189,7 @@ __global__ void concat_and_cache_mla_rope_fused_kernel(
                           block_size,                                      \
                           kv_cache_quant_scale.const_data_ptr<float>());   \
                 } else {                                                   \
-                  vllm::concat_and_cache_mla_rope_fused_kernel<            \
+                  aphrodite::concat_and_cache_mla_rope_fused_kernel<            \
                       qk_t, cos_sin_t, false, RAW_KV_T, CACHE_T, KV_DTYPE> \
                       <<<grid, block, 0, stream>>>(                        \
                           positions.const_data_ptr<int64_t>(),             \

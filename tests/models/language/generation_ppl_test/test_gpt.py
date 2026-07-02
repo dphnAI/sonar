@@ -10,5 +10,5 @@ MODELS = [GenerateModelInfo("openai-community/gpt2-large", hf_ppl=19.45705604553
 
 
 @pytest.mark.parametrize("model_info", MODELS)
-def test_ppl(hf_runner, vllm_runner, model_info: GenerateModelInfo):
-    wikitext_ppl_test(hf_runner, vllm_runner, model_info)
+def test_ppl(hf_runner, aphrodite_runner, model_info: GenerateModelInfo):
+    wikitext_ppl_test(hf_runner, aphrodite_runner, model_info)

@@ -400,9 +400,9 @@ def test_msa_indexer_impl_matches_triton(topk, monkeypatch):
     from tests.v1.attention.utils import (
         BatchSpec,
         create_common_attn_metadata,
-        create_vllm_config,
+        create_aphrodite_config,
     )
-    from aphrodite.config import set_current_vllm_config
+    from aphrodite.config import set_current_aphrodite_config
     from aphrodite.forward_context import set_forward_context
     from aphrodite.models.minimax_m3.common.indexer import (
         MiniMaxM3IndexerTritonImpl,
@@ -419,10 +419,10 @@ def test_msa_indexer_impl_matches_triton(topk, monkeypatch):
     # TP=1: avoid requiring an initialized distributed group in a unit test.
     monkeypatch.setattr(indexer_mod, "get_tensor_model_parallel_world_size", lambda: 1)
 
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         block_size=BLOCK_SIZE, max_model_len=8192, max_num_batched_tokens=8192
     )
-    vllm_config.model_config.hf_config.sparse_attention_config = {
+    aphrodite_config.model_config.hf_config.sparse_attention_config = {
         "sparse_num_index_heads": num_idx_heads
     }
 
@@ -462,14 +462,14 @@ def test_msa_indexer_impl_matches_triton(topk, monkeypatch):
         local_blocks=0,
     )
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         msa_impl = MiniMaxM3IndexerMSAImpl(prefix="idx_msa", **impl_kwargs)
         triton_impl = MiniMaxM3IndexerTritonImpl(prefix="idx_triton", **impl_kwargs)
         msa_builder = MiniMaxM3IndexerMSAMetadataBuilder(
-            spec, [msa_impl.index_cache.prefix], vllm_config, device
+            spec, [msa_impl.index_cache.prefix], aphrodite_config, device
         )
         triton_builder = MiniMaxM3IndexerTritonMetadataBuilder(
-            spec, [triton_impl.index_cache.prefix], vllm_config, device
+            spec, [triton_impl.index_cache.prefix], aphrodite_config, device
         )
 
     # Both impls score against the same index keys.
@@ -491,7 +491,7 @@ def test_msa_indexer_impl_matches_triton(topk, monkeypatch):
         msa_impl.index_cache.prefix: msa_builder.build(0, common),
         triton_impl.index_cache.prefix: triton_builder.build(0, common),
     }
-    with set_forward_context(attn_metadata, vllm_config):
+    with set_forward_context(attn_metadata, aphrodite_config):
         msa_decode, msa_prefill = msa_impl(index_q)
         tri_decode, tri_prefill = triton_impl(index_q)
 

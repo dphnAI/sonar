@@ -101,7 +101,7 @@ class CustomQuantConfig(QuantizationConfig):
         return None
 
 
-def test_register_quantization_config(caplog_vllm):
+def test_register_quantization_config(caplog_aphrodite):
     """Test register custom quantization config."""
 
     # The quantization method `custom_quant` should be registered.
@@ -109,12 +109,12 @@ def test_register_quantization_config(caplog_vllm):
 
     # The quantization method `custom_quant` is already exists,
     # should raise a debug message when re-registering it.
-    with caplog_vllm.at_level(logging.DEBUG, logger="aphrodite"):
+    with caplog_aphrodite.at_level(logging.DEBUG, logger="aphrodite"):
         register_quantization_config("custom_quant")(CustomQuantConfig)
 
     assert any(
         "The quantization method 'custom_quant' already exists" in message
-        for message in caplog_vllm.messages
+        for message in caplog_aphrodite.messages
     ), "Expected a debug message when re-registering custom_quant"
 
 
@@ -124,12 +124,12 @@ def test_register_quantization_config(caplog_vllm):
         "meta-llama/Llama-3.2-1B-Instruct",
     ],
 )
-def test_custom_quant(vllm_runner, model, monkeypatch):
+def test_custom_quant(aphrodite_runner, model, monkeypatch):
     """Test infer with the custom quantization method."""
     # `LLM.apply_model` requires pickling a function.
     monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_name=model, quantization="custom_quant", enforce_eager=True
     ) as llm:
 

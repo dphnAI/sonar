@@ -32,13 +32,13 @@ def seed_everything():
 @torch.inference_mode
 def test_bert_models(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model: str,
     dtype: str,
 ) -> None:
-    with vllm_runner(model, max_model_len=None, dtype=dtype) as vllm_model:
-        vllm_outputs = vllm_model.token_classify(example_prompts)
+    with aphrodite_runner(model, max_model_len=None, dtype=dtype) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.token_classify(example_prompts)
 
     # Use eager attention on ROCm to avoid HF Transformers flash attention
     # accuracy issues: https://github.com/vllm-project/vllm/issues/30167
@@ -61,10 +61,10 @@ def test_bert_models(
             hf_outputs.append(softmax(output.logits[0]))
 
     # check logits difference
-    for hf_output, vllm_output in zip(hf_outputs, vllm_outputs):
+    for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
         hf_output = hf_output.detach().clone().cpu().float()
-        vllm_output = vllm_output.detach().clone().cpu().float()
-        torch.testing.assert_close(hf_output, vllm_output, atol=3.2e-2, rtol=1e-3)
+        aphrodite_output = aphrodite_output.detach().clone().cpu().float()
+        torch.testing.assert_close(hf_output, aphrodite_output, atol=3.2e-2, rtol=1e-3)
 
 
 @pytest.mark.parametrize("model", ["disham993/electrical-ner-ModernBERT-base"])
@@ -73,7 +73,7 @@ def test_bert_models(
 @torch.inference_mode
 def test_modernbert_models(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model: str,
     dtype: str,
@@ -87,8 +87,8 @@ def test_modernbert_models(
         "flaky tolerance enabled due to numerical precision variance."
     )
 
-    with vllm_runner(model, max_model_len=None, dtype=dtype) as vllm_model:
-        vllm_outputs = vllm_model.token_classify(example_prompts)
+    with aphrodite_runner(model, max_model_len=None, dtype=dtype) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.token_classify(example_prompts)
 
     # Use eager attention on ROCm to avoid HF Transformers flash attention
     # accuracy issues: https://github.com/vllm-project/vllm/issues/30167
@@ -111,10 +111,10 @@ def test_modernbert_models(
             hf_outputs.append(softmax(output.logits[0]))
 
     # check logits difference
-    for hf_output, vllm_output in zip(hf_outputs, vllm_outputs):
+    for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
         hf_output = hf_output.detach().clone().cpu().float()
-        vllm_output = vllm_output.detach().clone().cpu().float()
-        torch.testing.assert_close(hf_output, vllm_output, atol=3.2e-2, rtol=1e-3)
+        aphrodite_output = aphrodite_output.detach().clone().cpu().float()
+        torch.testing.assert_close(hf_output, aphrodite_output, atol=3.2e-2, rtol=1e-3)
 
 
 PRIVACY_FILTER_PROMPTS = [
@@ -133,15 +133,15 @@ PRIVACY_FILTER_PROMPTS = [
 @torch.inference_mode
 def test_openai_privacy_filter(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     dtype: str,
 ) -> None:
     model_info = HF_EXAMPLE_MODELS.find_hf_info(model)
     model_info.check_transformers_version(on_fail="skip")
 
-    with vllm_runner(model, max_model_len=None, dtype=dtype) as vllm_model:
-        vllm_outputs = vllm_model.token_classify(PRIVACY_FILTER_PROMPTS)
+    with aphrodite_runner(model, max_model_len=None, dtype=dtype) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.token_classify(PRIVACY_FILTER_PROMPTS)
 
     hf_model_kwargs = {}
     if current_platform.is_rocm():
@@ -161,10 +161,10 @@ def test_openai_privacy_filter(
             output = hf_model.model(**inputs)
             hf_outputs.append(softmax(output.logits[0]))
 
-    for hf_output, vllm_output in zip(hf_outputs, vllm_outputs):
+    for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
         hf_output = hf_output.detach().clone().cpu().float()
-        vllm_output = vllm_output.detach().clone().cpu().float()
-        torch.testing.assert_close(hf_output, vllm_output, atol=0.1, rtol=1e-2)
+        aphrodite_output = aphrodite_output.detach().clone().cpu().float()
+        torch.testing.assert_close(hf_output, aphrodite_output, atol=0.1, rtol=1e-2)
 
 
 @pytest.mark.parametrize("model", ["bd2lcco/Qwen3-0.6B-finetuned"])
@@ -172,13 +172,13 @@ def test_openai_privacy_filter(
 @torch.inference_mode
 def test_auto_conversion(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model: str,
     dtype: str,
 ) -> None:
-    with vllm_runner(model, max_model_len=1024, dtype=dtype) as vllm_model:
-        vllm_outputs = vllm_model.token_classify(example_prompts)
+    with aphrodite_runner(model, max_model_len=1024, dtype=dtype) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.token_classify(example_prompts)
 
     with hf_runner(
         model, dtype=dtype, auto_cls=AutoModelForTokenClassification
@@ -192,7 +192,7 @@ def test_auto_conversion(
             hf_outputs.append(softmax(output.logits[0]))
 
     # check logits difference
-    for hf_output, vllm_output in zip(hf_outputs, vllm_outputs):
+    for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
         hf_output = hf_output.detach().clone().cpu().float()
-        vllm_output = vllm_output.detach().clone().cpu().float()
-        assert torch.allclose(hf_output, vllm_output, atol=1e-2)
+        aphrodite_output = aphrodite_output.detach().clone().cpu().float()
+        assert torch.allclose(hf_output, aphrodite_output, atol=1e-2)

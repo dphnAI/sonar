@@ -8,7 +8,7 @@ from itertools import product
 import torch
 from tqdm import tqdm
 
-from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.fused_moe.config import FUSED_MOE_UNQUANTIZED_CONFIG
 from aphrodite.utils.torch_utils import set_random_seed
 
@@ -35,7 +35,7 @@ class Result(Enum):
 
 def rank_worker(
     pgi: ProcessGroupInfo,
-    vllm_config: AphroditeConfig,
+    aphrodite_config: AphroditeConfig,
     cpu_group,
     config: Config,
     weights: WeightTensors,
@@ -61,9 +61,9 @@ def rank_worker(
         rank_tensors = RankTensors.make(cfgx, pgi)
 
         # modular kernel out
-        mk_out = run_modular_kernel(pgi, vllm_config, cfgx, weights, rank_tensors)
+        mk_out = run_modular_kernel(pgi, aphrodite_config, cfgx, weights, rank_tensors)
 
-        with set_current_vllm_config(vllm_config):
+        with set_current_aphrodite_config(aphrodite_config):
             ref_out = reference_moe_impl(cfgx, weights, rank_tensors)
 
         torch.testing.assert_close(ref_out, mk_out, atol=3e-2, rtol=3e-2)
@@ -136,11 +136,11 @@ def make_feature_matrix(csv_file_path: str):
             print(f"Running config : {config.describe()} ...")
             try:
                 weights: WeightTensors = WeightTensors.make(config)
-                vllm_config, env_dict = config.make_env_data()
+                aphrodite_config, env_dict = config.make_env_data()
                 parallel_launch_with_config(
                     config.world_size,
                     rank_worker,
-                    vllm_config,
+                    aphrodite_config,
                     env_dict,
                     config,
                     weights,

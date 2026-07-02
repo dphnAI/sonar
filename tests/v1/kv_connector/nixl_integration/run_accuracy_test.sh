@@ -3,7 +3,7 @@ set -xe
 
 # Parse command line arguments
 KV_BUFFER_DEVICE="cuda"  # Default to cuda
-ATTENTION_BACKEND=""  # Default to empty (use vllm default)
+ATTENTION_BACKEND=""  # Default to empty (use aphrodite default)
 CROSS_LAYERS_BLOCKS="False"
 
 while [[ $# -gt 0 ]]; do
@@ -76,11 +76,11 @@ DECODER_TP_SIZE=${DECODER_TP_SIZE:-1}
 GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.2}
 PREFILL_BLOCK_SIZE=${PREFILL_BLOCK_SIZE:-128}
 DECODE_BLOCK_SIZE=${DECODE_BLOCK_SIZE:-128}
-# Comma-separated extra args for vllm serve (e.g. --max-model-len,2048)
+# Comma-separated extra args for aphrodite serve (e.g. --max-model-len,2048)
 APHRODITE_SERVE_EXTRA_ARGS=${APHRODITE_SERVE_EXTRA_ARGS:-}
 
 # Resolve the repository root from the script location instead of `.git`.
-# The ROCm CI image copies `/vllm-workspace` without the Git metadata, so
+# The ROCm CI image copies `/aphrodite-workspace` without the Git metadata, so
 # `git rev-parse --show-toplevel` is not reliable at runtime.
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 GIT_ROOT="${GIT_ROOT:-$(cd -- "${SCRIPT_DIR}/../../../.." && pwd -P)}"
@@ -102,7 +102,7 @@ wait_for_server() {
 # Function to clean up previous instances
 cleanup_instances() {
   echo "Cleaning up any running vLLM instances..."
-  pkill -f "vllm serve" || true
+  pkill -f "aphrodite serve" || true
   sleep 2
 }
 
@@ -155,7 +155,7 @@ run_tests_for_model() {
     APHRODITE_KV_CACHE_LAYOUT='HND' \
     UCX_NET_DEVICES=all \
     APHRODITE_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
-    vllm serve $model_name \
+    aphrodite serve $model_name \
     --port $PORT \
     --enforce-eager \
     --block-size ${PREFILL_BLOCK_SIZE} \
@@ -204,7 +204,7 @@ run_tests_for_model() {
     APHRODITE_KV_CACHE_LAYOUT=$DECODER_KV_LAYOUT \
     UCX_NET_DEVICES=all \
     APHRODITE_NIXL_SIDE_CHANNEL_PORT=$SIDE_CHANNEL_PORT \
-    vllm serve $model_name \
+    aphrodite serve $model_name \
     --port $PORT \
     --enforce-eager \
     --block-size ${DECODE_BLOCK_SIZE} \

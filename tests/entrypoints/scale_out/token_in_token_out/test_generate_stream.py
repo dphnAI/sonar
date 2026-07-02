@@ -154,7 +154,7 @@ def _mock_engine() -> MagicMock:
     engine = MagicMock(spec=AsyncLLM)
     engine.errored = False
     engine.model_config = MockModelConfig()
-    engine.vllm_config = MockAphroditeConfig(
+    engine.aphrodite_config = MockAphroditeConfig(
         engine.model_config, parallel_config=MockParallelConfig()
     )
     engine.input_processor = MagicMock()

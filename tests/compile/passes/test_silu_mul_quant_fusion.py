@@ -25,7 +25,7 @@ from aphrodite.config import (
     CompilationMode,
     PassConfig,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.model_executor.kernels.linear import (
     CutlassFP8ScaledMMLinearKernel,
@@ -325,7 +325,7 @@ def test_fusion_silu_and_mul_quant(
         ),
     )
 
-    with set_current_vllm_config(config), monkeypatch.context() as m:
+    with set_current_aphrodite_config(config), monkeypatch.context() as m:
         fusion_passes = [ActivationQuantFusionPass(config)]
         if IS_AITER_FOUND and model_class is TestSiluMulGroupFp8QuantModel:
             from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (

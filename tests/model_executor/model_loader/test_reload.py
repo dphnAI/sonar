@@ -146,7 +146,7 @@ def test_materialize_layer_preserves_non_meta_tensors():
     assert torch.equal(layer.bias.data, bias_values)
 
 
-def test_model_cleanup(dist_init, default_vllm_config):
+def test_model_cleanup(dist_init, default_aphrodite_config):
     layer = QKVParallelLinear(2, 3, 4)
     assert layer.weight.weight_loader.__self__ is layer
     info = LayerReloadingInfo(
@@ -377,14 +377,14 @@ def test_layerwise_reload_skips_child_parameter_alias_buffers(monkeypatch):
         ),
     ],
 )
-def test_reload_weights(base_model, mul_model, add_model, tp_size, vllm_runner):
+def test_reload_weights(base_model, mul_model, add_model, tp_size, aphrodite_runner):
     if current_platform.device_count() < tp_size:
         pytest.skip(reason="Not enough CUDA devices")
 
     if "FP8" in base_model and _fp8_reload_unsupported():
         pytest.skip(reason="Requires FP8 support")
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_name=base_model,
         tensor_parallel_size=tp_size,
         enable_expert_parallel=(tp_size > 1 and "DeepSeek" in base_model),
@@ -403,7 +403,7 @@ def test_reload_weights(base_model, mul_model, add_model, tp_size, vllm_runner):
         assert add_perp < mul_perp
 
 
-def test_kv_scale_reload(vllm_runner):
+def test_kv_scale_reload(aphrodite_runner):
     """Test reloading a checkpoint that contains k_scale/v_scale weights."""
     if _fp8_reload_unsupported():
         pytest.skip(reason="Requires FP8 support")
@@ -411,7 +411,7 @@ def test_kv_scale_reload(vllm_runner):
     model = "nm-testing/Llama-3.2-1B-Instruct-FP8-KV"
 
     # Load dummy weights, then reload real checkpoint
-    with vllm_runner(
+    with aphrodite_runner(
         model_name=model,
         load_format="dummy",
         enable_prefix_caching=False,
@@ -470,7 +470,7 @@ def test_kv_scale_reload(vllm_runner):
     ],
 )
 def test_online_quantize_reload(
-    base_model, mul_model, add_model, quantization, tp_size, vllm_runner
+    base_model, mul_model, add_model, quantization, tp_size, aphrodite_runner
 ):
     if current_platform.device_count() < tp_size:
         pytest.skip(reason="Not enough GPU devices")
@@ -478,7 +478,7 @@ def test_online_quantize_reload(
     if quantization == "fp8" and _fp8_reload_unsupported():
         pytest.skip(reason="Requires FP8 support")
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_name=base_model,
         quantization=quantization,
         tensor_parallel_size=tp_size,

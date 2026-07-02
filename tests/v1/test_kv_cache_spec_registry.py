@@ -43,7 +43,7 @@ from aphrodite.v1.kv_cache_spec_registry import (
 )
 
 
-def make_vllm_config() -> AphroditeConfig:
+def make_aphrodite_config() -> AphroditeConfig:
     return AphroditeConfig(
         cache_config=CacheConfig(
             block_size=64,
@@ -53,8 +53,8 @@ def make_vllm_config() -> AphroditeConfig:
     )
 
 
-vllm_config = make_vllm_config()
-register_all_kvcache_specs(vllm_config)
+aphrodite_config = make_aphrodite_config()
+register_all_kvcache_specs(aphrodite_config)
 
 
 @pytest.fixture(autouse=True)

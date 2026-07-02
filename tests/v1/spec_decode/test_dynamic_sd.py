@@ -18,8 +18,8 @@ def _make_lookup(
 ) -> list[int]:
     return build_dynamic_sd_schedule_lookup(
         num_speculative_tokens_per_batch_size=num_speculative_tokens_per_batch_size,
-        vllm_max_batch_size=max_batch_size,
-        vllm_num_speculative_tokens=runtime_num_speculative_tokens,
+        aphrodite_max_batch_size=max_batch_size,
+        aphrodite_num_speculative_tokens=runtime_num_speculative_tokens,
     )
 
 
@@ -36,16 +36,16 @@ def _make_scheduler_with_dynamic_sd(
         num_speculative_tokens=runtime_num_speculative_tokens,
     )
 
-    speculative_config = base_scheduler.vllm_config.speculative_config
+    speculative_config = base_scheduler.aphrodite_config.speculative_config
     assert speculative_config is not None
     speculative_config.num_speculative_tokens_per_batch_size = schedule
 
     return Scheduler(
-        vllm_config=base_scheduler.vllm_config,
+        aphrodite_config=base_scheduler.aphrodite_config,
         kv_cache_config=base_scheduler.kv_cache_config,
         block_size=base_scheduler.block_size,
         log_stats=True,
-        structured_output_manager=StructuredOutputManager(base_scheduler.vllm_config),
+        structured_output_manager=StructuredOutputManager(base_scheduler.aphrodite_config),
     )
 
 
@@ -119,8 +119,8 @@ def test_dynamic_sd_requires_schedule_config():
     ):
         build_dynamic_sd_schedule_lookup(
             None,
-            vllm_max_batch_size=256,
-            vllm_num_speculative_tokens=3,
+            aphrodite_max_batch_size=256,
+            aphrodite_num_speculative_tokens=3,
         )
 
 

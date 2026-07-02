@@ -43,7 +43,7 @@ MODELS = [
 @pytest.mark.parametrize("max_tokens", [32])
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_models(
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model,
     dtype: str,
@@ -53,7 +53,7 @@ def test_models(
     model_name, revision = model
 
     # Run marlin.
-    with vllm_runner(
+    with aphrodite_runner(
         model_name=model_name,
         revision=revision,
         dtype=dtype,
@@ -70,7 +70,7 @@ def test_models(
     # The naive gptq kernel doesn't support bf16 yet.
     # Here we always compare fp16/bf16 gpt marlin kernel
     # to fp16 gptq kernel.
-    with vllm_runner(
+    with aphrodite_runner(
         model_name=model_name,
         revision=revision,
         dtype="half",

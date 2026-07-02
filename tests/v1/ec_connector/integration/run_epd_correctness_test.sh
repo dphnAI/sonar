@@ -49,8 +49,8 @@ TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-600}"
 
 # Output file for baseline comparison and logs
 LOG_PATH="${LOG_PATH:-/tmp}"
-BASELINE_FILE="${BASELINE_FILE:-/tmp/vllm_baseline.txt}"
-BASELINE_PD_FILE="${BASELINE_PD_FILE:-/tmp/vllm_epd_baseline.txt}"
+BASELINE_FILE="${BASELINE_FILE:-/tmp/aphrodite_baseline.txt}"
+BASELINE_PD_FILE="${BASELINE_PD_FILE:-/tmp/aphrodite_epd_baseline.txt}"
 
 mkdir -p "$LOG_PATH"
 
@@ -69,7 +69,7 @@ wait_for_server() {
 # Cleanup function
 cleanup_instances() {
     echo "Cleaning up any running vLLM instances..."
-    pkill -f "vllm serve" || true
+    pkill -f "aphrodite serve" || true
     pkill -f "disagg_epd_proxy.py" || true
     sleep 2
 }
@@ -87,7 +87,7 @@ run_baseline() {
     
     # Start baseline instance
     echo "Starting baseline instance on GPU $GPU_SINGLE, port $PORT"
-    CUDA_VISIBLE_DEVICES="$GPU_SINGLE" vllm serve "$MODEL" \
+    CUDA_VISIBLE_DEVICES="$GPU_SINGLE" aphrodite serve "$MODEL" \
         --port "$PORT" \
         --enforce-eager \
         --gpu-memory-utilization 0.7 \
@@ -139,7 +139,7 @@ run_epd_1e_1pd() {
     
     # Start encoder instance
     echo "Starting encoder instance on GPU $GPU_E, port $ENCODE_PORT"
-    CUDA_VISIBLE_DEVICES="$GPU_E" vllm serve "$MODEL" \
+    CUDA_VISIBLE_DEVICES="$GPU_E" aphrodite serve "$MODEL" \
         --port "$ENCODE_PORT" \
         --enforce-eager \
         --gpu-memory-utilization 0.01 \
@@ -160,7 +160,7 @@ run_epd_1e_1pd() {
     
     # Start prefill+decode instance
     echo "Starting PD instance on GPU $GPU_PD, port $PREFILL_DECODE_PORT"
-    CUDA_VISIBLE_DEVICES="$GPU_PD" vllm serve "$MODEL" \
+    CUDA_VISIBLE_DEVICES="$GPU_PD" aphrodite serve "$MODEL" \
         --port "$PREFILL_DECODE_PORT" \
         --enforce-eager \
         --gpu-memory-utilization 0.7 \
@@ -244,7 +244,7 @@ run_baseline_1p_1d() {
     echo "Starting prefill instance on GPU $GPU_P, port $PREFILL_PORT"
     CUDA_VISIBLE_DEVICES="$GPU_P" \
     APHRODITE_NIXL_SIDE_CHANNEL_PORT=5559 \
-    vllm serve "$MODEL" \
+    aphrodite serve "$MODEL" \
         --port "$PREFILL_PORT" \
         --enforce-eager \
         --gpu-memory-utilization 0.7 \
@@ -262,7 +262,7 @@ run_baseline_1p_1d() {
     echo "Starting decode instance on GPU $GPU_D, port $DECODE_PORT"
     CUDA_VISIBLE_DEVICES="$GPU_D" \
     APHRODITE_NIXL_SIDE_CHANNEL_PORT=6000 \
-    vllm serve "$MODEL" \
+    aphrodite serve "$MODEL" \
         --port "$DECODE_PORT" \
         --enforce-eager \
         --gpu-memory-utilization 0.7 \
@@ -339,7 +339,7 @@ run_epd_1e_1p_1d() {
     
     # Start encoder instance
     echo "Starting encoder instance on GPU $GPU_E, port $ENCODE_PORT"
-    CUDA_VISIBLE_DEVICES="$GPU_E" vllm serve "$MODEL" \
+    CUDA_VISIBLE_DEVICES="$GPU_E" aphrodite serve "$MODEL" \
         --port "$ENCODE_PORT" \
         --enforce-eager \
         --gpu-memory-utilization 0.01 \
@@ -362,7 +362,7 @@ run_epd_1e_1p_1d() {
     echo "Starting prefill instance on GPU $GPU_P, port $PREFILL_PORT"
     CUDA_VISIBLE_DEVICES="$GPU_P" \
     APHRODITE_NIXL_SIDE_CHANNEL_PORT=5559 \
-    vllm serve "$MODEL" \
+    aphrodite serve "$MODEL" \
         --port "$PREFILL_PORT" \
         --enforce-eager \
         --gpu-memory-utilization 0.7 \
@@ -387,7 +387,7 @@ run_epd_1e_1p_1d() {
     echo "Starting decode instance on GPU $GPU_D, port $DECODE_PORT"
     CUDA_VISIBLE_DEVICES="$GPU_D" \
     APHRODITE_NIXL_SIDE_CHANNEL_PORT=6000 \
-    vllm serve "$MODEL" \
+    aphrodite serve "$MODEL" \
         --port "$DECODE_PORT" \
         --enforce-eager \
         --gpu-memory-utilization 0.7 \

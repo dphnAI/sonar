@@ -27,9 +27,9 @@ class _FakeExecutor:
 
     def __init__(
         self,
-        vllm_config: Any,
+        aphrodite_config: Any,
     ) -> None:
-        del vllm_config
+        del aphrodite_config
         self.handshake_metadata = self.handshake_metadata_src
         self.handshake_calls = 0
         _FakeExecutor.last_instance = self
@@ -66,22 +66,22 @@ def _run_engine_core_handshake(
     monkeypatch.setattr(
         engine_core_module.EngineCore,
         "_initialize_kv_caches",
-        lambda self, vllm_config: SimpleNamespace(kv_cache_groups=[object()]),
+        lambda self, aphrodite_config: SimpleNamespace(kv_cache_groups=[object()]),
     )
     monkeypatch.setattr(
         engine_core_module,
         "StructuredOutputManager",
-        lambda vllm_config: object(),
+        lambda aphrodite_config: object(),
     )
     monkeypatch.setattr(
         engine_core_module,
         "resolve_kv_cache_block_sizes",
-        lambda kv_cache_config, vllm_config: (16, 16),
+        lambda kv_cache_config, aphrodite_config: (16, 16),
     )
     monkeypatch.setattr(
         engine_core_module,
         "MULTIMODAL_REGISTRY",
-        SimpleNamespace(engine_receiver_cache_from_config=lambda vllm_config: None),
+        SimpleNamespace(engine_receiver_cache_from_config=lambda aphrodite_config: None),
     )
     monkeypatch.setattr(engine_core_module, "freeze_gc_heap", lambda: None)
     monkeypatch.setattr(
@@ -94,7 +94,7 @@ def _run_engine_core_handshake(
         engine_core_module, "get_request_block_hasher", lambda *args: None
     )
 
-    vllm_config = SimpleNamespace(
+    aphrodite_config = SimpleNamespace(
         parallel_config=SimpleNamespace(data_parallel_rank_local=0),
         scheduler_config=SimpleNamespace(
             get_scheduler_cls=lambda: _FakeScheduler,
@@ -111,7 +111,7 @@ def _run_engine_core_handshake(
         ),
     )
 
-    engine_core_module.EngineCore(vllm_config, _FakeExecutor, log_stats=False)
+    engine_core_module.EngineCore(aphrodite_config, _FakeExecutor, log_stats=False)
     assert _FakeExecutor.last_instance is not None
     return _FakeExecutor.last_instance
 

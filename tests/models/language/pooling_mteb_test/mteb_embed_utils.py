@@ -12,7 +12,7 @@ import tests.ci_envs as ci_envs
 from tests.models.utils import (
     EmbedModelInfo,
     check_embeddings_close,
-    get_vllm_extra_kwargs,
+    get_aphrodite_extra_kwargs,
 )
 
 # Most embedding models on the STS12 task (See #17175):
@@ -89,8 +89,8 @@ class HfMtebEncoder(MtebEmbedMixin):
 
 
 class AphroditeMtebEncoder(MtebEmbedMixin):
-    def __init__(self, vllm_model, prompt_prefix: str | None = None):
-        self.llm = vllm_model
+    def __init__(self, aphrodite_model, prompt_prefix: str | None = None):
+        self.llm = aphrodite_model
         self.rng = np.random.default_rng(seed=42)
         self.prompt_prefix = prompt_prefix
 
@@ -157,26 +157,26 @@ def run_mteb_embed_task(encoder: mteb.EncoderProtocol, tasks):
 
 def mteb_test_embed_models(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     model_info: EmbedModelInfo,
-    vllm_extra_kwargs=None,
+    aphrodite_extra_kwargs=None,
     hf_model_callback=None,
     atol=MTEB_EMBED_TOL,
     prompt_prefix: str | None = None,
 ):
-    vllm_extra_kwargs = get_vllm_extra_kwargs(model_info, vllm_extra_kwargs)
+    aphrodite_extra_kwargs = get_aphrodite_extra_kwargs(model_info, aphrodite_extra_kwargs)
 
     # Test embed_dims, isnan and whether to use normalize
     example_prompts = ["The chef prepared a delicious meal." * 1000]
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_info.name,
         revision=model_info.revision,
         runner="pooling",
         max_model_len=model_info.max_model_len,
-        **vllm_extra_kwargs,
-    ) as vllm_model:
-        model_config = vllm_model.llm.llm_engine.model_config
+        **aphrodite_extra_kwargs,
+    ) as aphrodite_model:
+        model_config = aphrodite_model.llm.llm_engine.model_config
 
         # Confirm whether aphrodite is using the correct architecture
         if model_info.architecture:
@@ -201,21 +201,21 @@ def mteb_test_embed_models(
                 == model_info.is_chunked_prefill_supported
             )
 
-        vllm_main_score = run_mteb_embed_task(
-            AphroditeMtebEncoder(vllm_model, prompt_prefix=prompt_prefix), MTEB_EMBED_TASKS
+        aphrodite_main_score = run_mteb_embed_task(
+            AphroditeMtebEncoder(aphrodite_model, prompt_prefix=prompt_prefix), MTEB_EMBED_TASKS
         )
-        vllm_dtype = vllm_model.llm.llm_engine.model_config.dtype
+        aphrodite_dtype = aphrodite_model.llm.llm_engine.model_config.dtype
         head_dtype = model_config.head_dtype
 
         # Test embedding_size, isnan and whether to use normalize
-        vllm_outputs = vllm_model.embed(
+        aphrodite_outputs = aphrodite_model.embed(
             example_prompts,
             tokenization_kwargs=dict(truncate_prompt_tokens=-1),
         )
-        outputs_tensor = torch.tensor(vllm_outputs)
+        outputs_tensor = torch.tensor(aphrodite_outputs)
         assert not torch.any(torch.isnan(outputs_tensor))
         embedding_size = model_config.embedding_size
-        assert torch.tensor(vllm_outputs).shape[-1] == embedding_size
+        assert torch.tensor(aphrodite_outputs).shape[-1] == embedding_size
 
     # Accelerate mteb test by setting
     # SentenceTransformers mteb score to a constant
@@ -239,7 +239,7 @@ def mteb_test_embed_models(
             hf_outputs = hf_model.encode(example_prompts)
             check_embeddings_close(
                 embeddings_0_lst=hf_outputs,
-                embeddings_1_lst=vllm_outputs,
+                embeddings_1_lst=aphrodite_outputs,
                 name_0="hf",
                 name_1="aphrodite",
                 tol=1e-2,
@@ -249,10 +249,10 @@ def mteb_test_embed_models(
         st_dtype = "Constant"
 
     print("Model:", model_info.name)
-    print("APHRODITE:", f"dtype:{vllm_dtype}", f"head_dtype:{head_dtype}", vllm_main_score)
+    print("APHRODITE:", f"dtype:{aphrodite_dtype}", f"head_dtype:{head_dtype}", aphrodite_main_score)
     print("SentenceTransformers:", st_dtype, st_main_score)
-    print("Difference:", st_main_score - vllm_main_score)
+    print("Difference:", st_main_score - aphrodite_main_score)
 
     # We are not concerned that the aphrodite mteb results are better
     # than SentenceTransformers, so we only perform one-sided testing.
-    assert st_main_score - vllm_main_score < atol
+    assert st_main_score - aphrodite_main_score < atol

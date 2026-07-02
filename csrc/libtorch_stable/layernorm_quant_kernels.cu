@@ -16,7 +16,7 @@
 #include "dispatch_utils.h"
 #include "quantization/vectorization_utils.cuh"
 
-namespace vllm {
+namespace aphrodite {
 
 // TODO(woosuk): Further optimize this kernel.
 template <typename scalar_t, typename fp8_type, int VEC_SIZE>
@@ -43,7 +43,7 @@ __global__ void rms_norm_static_fp8_quant_kernel(
     float x = static_cast<float>(val);
     variance += x * x;
   };
-  vllm::vectorize_read_with_alignment<VEC_SIZE>(
+  aphrodite::vectorize_read_with_alignment<VEC_SIZE>(
       input_row, hidden_size, threadIdx.x, blockDim.x, vec_op, scalar_op);
 
   using BlockReduce = cub::BlockReduce<float, 1024>;
@@ -201,7 +201,7 @@ fused_add_rms_norm_static_fp8_quant_kernel(
   }
 }
 
-}  // namespace vllm
+}  // namespace aphrodite
 
 void rms_norm_static_fp8_quant(
     torch::stable::Tensor& out,     // [..., hidden_size]
@@ -230,7 +230,7 @@ void rms_norm_static_fp8_quant(
                   std::min(hidden_size / calculated_vec_size, max_block_size);
               dim3 block(block_size);
               APHRODITE_STABLE_DISPATCH_VEC_SIZE(calculated_vec_size, [&] {
-                vllm::rms_norm_static_fp8_quant_kernel<scalar_t, fp8_t,
+                aphrodite::rms_norm_static_fp8_quant_kernel<scalar_t, fp8_t,
                                                        vec_size>
                     <<<grid, block, 0, stream>>>(
                         out.mutable_data_ptr<fp8_t>(),
@@ -248,7 +248,7 @@ void rms_norm_static_fp8_quant(
       input.scalar_type(), "fused_add_rms_norm_kernel_scalar_type", [&] {    \
         APHRODITE_STABLE_DISPATCH_FP8_TYPES(                                      \
             out.scalar_type(), "fused_add_rms_norm_kernel_fp8_type", [&] {   \
-              vllm::fused_add_rms_norm_static_fp8_quant_kernel<scalar_t,     \
+              aphrodite::fused_add_rms_norm_static_fp8_quant_kernel<scalar_t,     \
                                                                width, fp8_t> \
                   <<<grid, block, 0, stream>>>(                              \
                       out.mutable_data_ptr<fp8_t>(),                         \
@@ -296,7 +296,7 @@ void fused_add_rms_norm_static_fp8_quant(
   auto wt_ptr = reinterpret_cast<std::uintptr_t>(weight.data_ptr());
   bool ptrs_are_aligned =
       inp_ptr % 16 == 0 && res_ptr % 16 == 0 && wt_ptr % 16 == 0;
-  bool batch_invariant_launch = vllm::vllm_is_batch_invariant();
+  bool batch_invariant_launch = aphrodite::aphrodite_is_batch_invariant();
   if (ptrs_are_aligned && hidden_size % 8 == 0 && input_stride % 8 == 0 &&
       !batch_invariant_launch) {
     LAUNCH_FUSED_ADD_RMS_NORM(8);

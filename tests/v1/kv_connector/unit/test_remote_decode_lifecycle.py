@@ -12,7 +12,7 @@ from .utils import (
     create_model_runner_output,
     create_request,
     create_scheduler,
-    create_vllm_config,
+    create_aphrodite_config,
 )
 
 pytestmark = pytest.mark.cpu_test
@@ -21,11 +21,11 @@ pytestmark = pytest.mark.cpu_test
 def test_basic_lifecycle():
     """Test lifecycle of a Remote Decode request."""
 
-    vllm_config = create_vllm_config()
-    scheduler = create_scheduler(vllm_config)
+    aphrodite_config = create_aphrodite_config()
+    scheduler = create_scheduler(aphrodite_config)
 
     # 2 Full Blocks and 1 Half Block.
-    BLOCK_SIZE = vllm_config.cache_config.block_size
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 
@@ -118,11 +118,11 @@ def test_basic_lifecycle():
 def test_short_prompt_lifecycle():
     """Test lifecycle of a Remote Decode request with short prompt."""
 
-    vllm_config = create_vllm_config()
-    scheduler = create_scheduler(vllm_config)
+    aphrodite_config = create_aphrodite_config()
+    scheduler = create_scheduler(aphrodite_config)
 
     # Not enough tokens for full block.
-    BLOCK_SIZE = vllm_config.cache_config.block_size
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
     NUM_TOKENS = BLOCK_SIZE // 2
     request = create_request(
         request_id=1,
@@ -165,11 +165,11 @@ def test_short_prompt_lifecycle():
 def test_prefix_cache_lifecycle():
     """Test that remote decode params still work with a prefix cache hit."""
 
-    vllm_config = create_vllm_config()
-    scheduler = create_scheduler(vllm_config)
+    aphrodite_config = create_aphrodite_config()
+    scheduler = create_scheduler(aphrodite_config)
 
     # Prime the KVCache.
-    BLOCK_SIZE = vllm_config.cache_config.block_size
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 3
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 
@@ -225,11 +225,11 @@ def test_prefix_cache_lifecycle():
 def test_abort_during_kv_transfer():
     """Test aborting request does not release blocks for remote decode."""
 
-    vllm_config = create_vllm_config()
-    scheduler = create_scheduler(vllm_config)
+    aphrodite_config = create_aphrodite_config()
+    scheduler = create_scheduler(aphrodite_config)
 
     # Prime the KVCache.
-    BLOCK_SIZE = vllm_config.cache_config.block_size
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 

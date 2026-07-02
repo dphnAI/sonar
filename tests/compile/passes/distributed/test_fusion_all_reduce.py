@@ -27,7 +27,7 @@ from aphrodite.config import (
     ModelConfig,
     PassConfig,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.distributed import tensor_model_parallel_all_reduce
 from aphrodite.distributed.parallel_state import (
@@ -515,33 +515,33 @@ def all_reduce_fusion_pass_on_test_model(
     if enable_quant_fp8_custom_op:
         custom_ops.append("+quant_fp8")
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE, custom_ops=custom_ops
         )
     )
-    vllm_config.compilation_config.pass_config = PassConfig(
+    aphrodite_config.compilation_config.pass_config = PassConfig(
         fuse_allreduce_rms=True, eliminate_noops=True
     )
-    vllm_config.device_config = DeviceConfig(device=torch.device(DEVICE_TYPE))
-    vllm_config.parallel_config.rank = local_rank  # Setup rank for debug path
+    aphrodite_config.device_config = DeviceConfig(device=torch.device(DEVICE_TYPE))
+    aphrodite_config.parallel_config.rank = local_rank  # Setup rank for debug path
 
     # this is a fake model name to construct the model config
-    # in the vllm_config, it's not really used.
+    # in the aphrodite_config, it's not really used.
     model_name = "RedHatAI/Llama-3.2-1B-Instruct-FP8"
-    vllm_config.model_config = ModelConfig(
+    aphrodite_config.model_config = ModelConfig(
         model=model_name, trust_remote_code=True, dtype=dtype, seed=42
     )
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         initialize_model_parallel(tensor_model_parallel_size=world_size)
         all_reduce_fusion_pass = (
-            RocmAiterAllReduceFusionPass(vllm_config)
+            RocmAiterAllReduceFusionPass(aphrodite_config)
             if use_aiter
-            else AllReduceFusionPass(vllm_config)
+            else AllReduceFusionPass(aphrodite_config)
         )
-        noop_pass = NoOpEliminationPass(vllm_config)
-        func_pass = FixFunctionalizationPass(vllm_config)
-        cleanup_pass = PostCleanupPass(vllm_config)
+        noop_pass = NoOpEliminationPass(aphrodite_config)
+        func_pass = FixFunctionalizationPass(aphrodite_config)
+        cleanup_pass = PostCleanupPass(aphrodite_config)
 
         backend = TestBackend(
             noop_pass, all_reduce_fusion_pass, func_pass, cleanup_pass
@@ -687,27 +687,27 @@ def rocm_aiter_group_quant_fusion_pass_on_test_model(
     # trace finds the same form the test model uses.
     custom_ops.append("+quant_fp8")
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE, custom_ops=custom_ops
         )
     )
-    vllm_config.compilation_config.pass_config = PassConfig(
+    aphrodite_config.compilation_config.pass_config = PassConfig(
         fuse_allreduce_rms=True, eliminate_noops=True
     )
-    vllm_config.device_config = DeviceConfig(device=torch.device(DEVICE_TYPE))
-    vllm_config.parallel_config.rank = local_rank
+    aphrodite_config.device_config = DeviceConfig(device=torch.device(DEVICE_TYPE))
+    aphrodite_config.parallel_config.rank = local_rank
 
     model_name = "RedHatAI/Llama-3.2-1B-Instruct-FP8"
-    vllm_config.model_config = ModelConfig(
+    aphrodite_config.model_config = ModelConfig(
         model=model_name, trust_remote_code=True, dtype=dtype, seed=42
     )
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         initialize_model_parallel(tensor_model_parallel_size=world_size)
-        all_reduce_fusion_pass = RocmAiterAllReduceFusionPass(vllm_config)
-        noop_pass = NoOpEliminationPass(vllm_config)
-        func_pass = FixFunctionalizationPass(vllm_config)
-        cleanup_pass = PostCleanupPass(vllm_config)
+        all_reduce_fusion_pass = RocmAiterAllReduceFusionPass(aphrodite_config)
+        noop_pass = NoOpEliminationPass(aphrodite_config)
+        func_pass = FixFunctionalizationPass(aphrodite_config)
+        cleanup_pass = PostCleanupPass(aphrodite_config)
 
         backend = TestBackend(
             noop_pass, all_reduce_fusion_pass, func_pass, cleanup_pass

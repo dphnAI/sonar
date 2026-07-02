@@ -161,7 +161,7 @@ def test_fast_decode_plan_importable() -> None:
 @torch.inference_mode
 def test_fast_plan_decode_warmup_uses_full_plan(dtype: torch.dtype) -> None:
     """On the first call fast_plan_decode must route through self.plan() and
-    flip vllm_first_call to False on the wrapper object."""
+    flip aphrodite_first_call to False on the wrapper object."""
     from unittest.mock import patch
 
     from aphrodite.v1.attention.backends.flashinfer import fast_plan_decode
@@ -182,7 +182,7 @@ def test_fast_plan_decode_warmup_uses_full_plan(dtype: torch.dtype) -> None:
     workspace = torch.empty(128 * 1024 * 1024, dtype=torch.int8)
     wrapper = _make_cg_decode_wrapper(num_seqs, kv_indices.clone(), workspace)
 
-    assert getattr(wrapper, "vllm_first_call", True) is True
+    assert getattr(wrapper, "aphrodite_first_call", True) is True
 
     with patch.object(wrapper, "plan", wraps=wrapper.plan) as mock_plan:
         fast_plan_decode(
@@ -199,8 +199,8 @@ def test_fast_plan_decode_warmup_uses_full_plan(dtype: torch.dtype) -> None:
         )
         mock_plan.assert_called_once()
 
-    assert wrapper.vllm_first_call is False, (
-        "vllm_first_call should be False after the first fast_plan_decode call"
+    assert wrapper.aphrodite_first_call is False, (
+        "aphrodite_first_call should be False after the first fast_plan_decode call"
     )
 
 

@@ -35,7 +35,7 @@ typedef __hip_bfloat16 __nv_bfloat16;
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define DIVIDE_ROUND_UP(a, b) (((a) + (b) - 1) / (b))
 
-namespace vllm {
+namespace aphrodite {
 
 // Utility function for attention softmax.
 template <int NUM_WARPS>
@@ -76,7 +76,7 @@ inline __device__ float block_sum(float* red_smem, float sum) {
 // TODO(woosuk): Merge the last two dimensions of the grid.
 // Grid: (num_heads, num_seqs, max_num_partitions).
 template <typename scalar_t, typename cache_t, int HEAD_SIZE, int BLOCK_SIZE,
-          int NUM_THREADS, vllm::Fp8KVCacheDataType KV_DTYPE,
+          int NUM_THREADS, aphrodite::Fp8KVCacheDataType KV_DTYPE,
           bool IS_BLOCK_SPARSE,
           int PARTITION_SIZE = 0>  // Zero means no partitioning.
 __device__ void paged_attention_kernel(
@@ -489,7 +489,7 @@ __device__ void paged_attention_kernel(
 
 // Grid: (num_heads, num_seqs, 1).
 template <typename scalar_t, typename cache_t, int HEAD_SIZE, int BLOCK_SIZE,
-          int NUM_THREADS, vllm::Fp8KVCacheDataType KV_DTYPE,
+          int NUM_THREADS, aphrodite::Fp8KVCacheDataType KV_DTYPE,
           bool IS_BLOCK_SPARSE>
 __global__ void paged_attention_v1_kernel(
     scalar_t* __restrict__ out,           // [num_seqs, num_heads, head_size]
@@ -520,7 +520,7 @@ __global__ void paged_attention_v1_kernel(
 
 // Grid: (num_heads, num_seqs, max_num_partitions).
 template <typename scalar_t, typename cache_t, int HEAD_SIZE, int BLOCK_SIZE,
-          int NUM_THREADS, vllm::Fp8KVCacheDataType KV_DTYPE,
+          int NUM_THREADS, aphrodite::Fp8KVCacheDataType KV_DTYPE,
           bool IS_BLOCK_SPARSE,
           int PARTITION_SIZE>
 __global__ void paged_attention_v2_kernel(
@@ -660,7 +660,7 @@ __global__ void paged_attention_v2_reduce_kernel(
   }
 }
 
-}  // namespace vllm
+}  // namespace aphrodite
 
 #undef MAX
 #undef MIN

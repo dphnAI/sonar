@@ -24,13 +24,13 @@ def _build_renderer(
         mm_processor_cache_gb=mm_cache_gb,
     )
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=model_config,
         cache_config=CacheConfig(enable_prefix_caching=enable_prefix_caching),
     )
 
     return HfRenderer(
-        vllm_config,
+        aphrodite_config,
         cached_tokenizer_from_config(model_config),
     )
 

@@ -11,7 +11,7 @@
  * Gemm shape.
  */
 
-namespace vllm {
+namespace aphrodite {
 
 using c3x::cutlass_gemm_caller;
 
@@ -372,4 +372,4 @@ void cutlass_scaled_mm_sm100_fp8_batch_invariant_epilogue(
   }
 }
 
-}  // namespace vllm
+}  // namespace aphrodite

@@ -12,7 +12,7 @@ import pytest
 import torch
 from torch.multiprocessing import spawn
 
-from tests.utils import ensure_current_vllm_config, init_test_distributed_environment
+from tests.utils import ensure_current_aphrodite_config, init_test_distributed_environment
 from aphrodite.distributed import cleanup_dist_env_and_memory
 from aphrodite.distributed.communication_op import tensor_model_parallel_all_reduce
 from aphrodite.model_executor.layers.fused_allreduce_gemma_rms_norm import (
@@ -24,7 +24,7 @@ from aphrodite.utils.network_utils import get_open_port
 from aphrodite.utils.torch_utils import set_random_seed
 
 
-@ensure_current_vllm_config()
+@ensure_current_aphrodite_config()
 def _worker_fused_ar_norm(
     local_rank,
     world_size,

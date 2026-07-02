@@ -77,7 +77,7 @@ class MockModelConfig:
         return attr
 
 
-def create_mock_vllm_config(
+def create_mock_aphrodite_config(
     hf_config,
     model_dtype="bfloat16",
     cache_dtype="auto",
@@ -87,21 +87,21 @@ def create_mock_vllm_config(
     pipeline_parallel_size=1,
     enable_expert_parallel=False,
 ) -> SimpleNamespace:
-    vllm_config = SimpleNamespace()
-    vllm_config.model_config = MockModelConfig(hf_config, model_dtype)
+    aphrodite_config = SimpleNamespace()
+    aphrodite_config.model_config = MockModelConfig(hf_config, model_dtype)
 
-    vllm_config.cache_config = SimpleNamespace()
-    vllm_config.cache_config.cache_dtype = cache_dtype
+    aphrodite_config.cache_config = SimpleNamespace()
+    aphrodite_config.cache_config.cache_dtype = cache_dtype
 
-    vllm_config.quant_config = quant_config
+    aphrodite_config.quant_config = quant_config
 
-    vllm_config.parallel_config = SimpleNamespace()
-    vllm_config.parallel_config.data_parallel_size = data_parallel_size
-    vllm_config.parallel_config.tensor_parallel_size = tensor_parallel_size
-    vllm_config.parallel_config.pipeline_parallel_size = pipeline_parallel_size
-    vllm_config.parallel_config.enable_expert_parallel = enable_expert_parallel
+    aphrodite_config.parallel_config = SimpleNamespace()
+    aphrodite_config.parallel_config.data_parallel_size = data_parallel_size
+    aphrodite_config.parallel_config.tensor_parallel_size = tensor_parallel_size
+    aphrodite_config.parallel_config.pipeline_parallel_size = pipeline_parallel_size
+    aphrodite_config.parallel_config.enable_expert_parallel = enable_expert_parallel
 
-    return vllm_config
+    return aphrodite_config
 
 
 #### Parser Tests ####
@@ -115,11 +115,11 @@ def test_base_config_parser():
         num_attention_heads=16,
         num_hidden_layers=24,
     )
-    vllm_config = create_mock_vllm_config(hf_config, model_dtype="float16")
+    aphrodite_config = create_mock_aphrodite_config(hf_config, model_dtype="float16")
 
     parser = BaseConfigParser()
     args = ParsedArgs()
-    result = parser.parse(args, vllm_config)
+    result = parser.parse(args, aphrodite_config)
 
     assert result.vocab_size == 50000
     assert result.hidden_size == 2048
@@ -137,10 +137,10 @@ def test_base_attention_config_parser_with_gqa():
         num_key_value_heads=8,  # GQA with 4:1 ratio
         head_dim=128,
     )
-    vllm_config = create_mock_vllm_config(hf_config)
+    aphrodite_config = create_mock_aphrodite_config(hf_config)
 
     parser_chain = AttentionMetrics.get_parser()
-    result = parser_chain.parse(vllm_config)
+    result = parser_chain.parse(aphrodite_config)
 
     assert result.num_key_value_heads == 8
     assert result.head_dim == 128
@@ -156,10 +156,10 @@ def test_base_attention_config_parser_without_gqa():
         num_attention_heads=32,
         # No num_key_value_heads specified
     )
-    vllm_config = create_mock_vllm_config(hf_config)
+    aphrodite_config = create_mock_aphrodite_config(hf_config)
 
     parser_chain = AttentionMetrics.get_parser()
-    result = parser_chain.parse(vllm_config)
+    result = parser_chain.parse(aphrodite_config)
 
     # Should default to MHA (num_key_value_heads = num_attention_heads)
     assert result.num_key_value_heads == 32
@@ -172,10 +172,10 @@ def test_base_ffn_config_parser_dense():
         intermediate_size=11008,
         num_hidden_layers=32,
     )
-    vllm_config = create_mock_vllm_config(hf_config)
+    aphrodite_config = create_mock_aphrodite_config(hf_config)
 
     parser_chain = FfnMetrics.get_parser()
-    result = parser_chain.parse(vllm_config)
+    result = parser_chain.parse(aphrodite_config)
 
     assert result.intermediate_size == 11008
     assert result.num_experts == 0
@@ -194,10 +194,10 @@ def test_base_ffn_config_parser_moe():
         moe_intermediate_size=14336,
         n_shared_experts=2,
     )
-    vllm_config = create_mock_vllm_config(hf_config)
+    aphrodite_config = create_mock_aphrodite_config(hf_config)
 
     parser_chain = FfnMetrics.get_parser()
-    result = parser_chain.parse(vllm_config)
+    result = parser_chain.parse(aphrodite_config)
 
     assert result.num_experts == 64
     assert result.num_experts_per_tok == 8
@@ -216,10 +216,10 @@ def test_interleave_moe_layer_step_parser():
         ),
     )
 
-    vllm_config = create_mock_vllm_config(hf_config)
+    aphrodite_config = create_mock_aphrodite_config(hf_config)
 
     parser_chain = FfnMetrics.get_parser()
-    result = parser_chain.parse(vllm_config)
+    result = parser_chain.parse(aphrodite_config)
 
     assert result.num_moe_layers == 8
 
@@ -232,10 +232,10 @@ def test_moe_layer_freq_parser():
         moe_layer_freq=3,  # Every 3rd layer after first_k_dense_replace
         first_k_dense_replace=6,  # First 6 layers are dense
     )
-    vllm_config = create_mock_vllm_config(hf_config)
+    aphrodite_config = create_mock_aphrodite_config(hf_config)
 
     parser_chain = FfnMetrics.get_parser()
-    result = parser_chain.parse(vllm_config)
+    result = parser_chain.parse(aphrodite_config)
 
     # Layers >= 6 and divisible by 3: 6, 9, 12, 15, 18, 21, 24, 27
     expected_moe_layers = len(
@@ -258,8 +258,8 @@ def test_attention_metrics_scaling():
         head_dim=128,
     )
 
-    base_vllm_config = create_mock_vllm_config(base_hf_config)
-    base_metrics = AttentionMetrics.from_vllm_config(base_vllm_config)
+    base_aphrodite_config = create_mock_aphrodite_config(base_hf_config)
+    base_metrics = AttentionMetrics.from_aphrodite_config(base_aphrodite_config)
 
     # Test scaling with number of layers
     double_layers_hf_config = Qwen3Config(
@@ -269,8 +269,8 @@ def test_attention_metrics_scaling():
         num_hidden_layers=24,  # Double the layers
         head_dim=128,
     )
-    double_layers_vllm_config = create_mock_vllm_config(double_layers_hf_config)
-    double_layers_metrics = AttentionMetrics.from_vllm_config(double_layers_vllm_config)
+    double_layers_aphrodite_config = create_mock_aphrodite_config(double_layers_hf_config)
+    double_layers_metrics = AttentionMetrics.from_aphrodite_config(double_layers_aphrodite_config)
 
     ctx = ExecutionContext.from_single_request(
         num_tokens=100, context_len=512, is_prefill=True
@@ -299,7 +299,7 @@ def test_attention_metrics_grouped_query():
         num_key_value_heads=32,  # MHA
         num_hidden_layers=1,
     )
-    mha_config = create_mock_vllm_config(mha_hf_config)
+    mha_config = create_mock_aphrodite_config(mha_hf_config)
 
     gqa_hf_config = Qwen3Config(
         hidden_size=4096,
@@ -307,10 +307,10 @@ def test_attention_metrics_grouped_query():
         num_key_value_heads=8,  # GQA with 4:1 ratio
         num_hidden_layers=1,
     )
-    gqa_config = create_mock_vllm_config(gqa_hf_config)
+    gqa_config = create_mock_aphrodite_config(gqa_hf_config)
 
-    mha_metrics = AttentionMetrics.from_vllm_config(mha_config)
-    gqa_metrics = AttentionMetrics.from_vllm_config(gqa_config)
+    mha_metrics = AttentionMetrics.from_aphrodite_config(mha_config)
+    gqa_metrics = AttentionMetrics.from_aphrodite_config(gqa_config)
 
     ctx = ExecutionContext.from_single_request(
         num_tokens=1, context_len=1024, is_prefill=False
@@ -329,8 +329,8 @@ def test_ffn_metrics_scaling():
         intermediate_size=8192,
         num_hidden_layers=12,
     )
-    base_vllm_config = create_mock_vllm_config(base_hf_config)
-    base_metrics = FfnMetrics.from_vllm_config(base_vllm_config)
+    base_aphrodite_config = create_mock_aphrodite_config(base_hf_config)
+    base_metrics = FfnMetrics.from_aphrodite_config(base_aphrodite_config)
 
     # Test scaling with intermediate size
     larger_ffn_hf_config = Qwen3Config(
@@ -338,8 +338,8 @@ def test_ffn_metrics_scaling():
         intermediate_size=16384,  # Double intermediate size
         num_hidden_layers=12,
     )
-    larger_ffn_vllm_config = create_mock_vllm_config(larger_ffn_hf_config)
-    larger_ffn_metrics = FfnMetrics.from_vllm_config(larger_ffn_vllm_config)
+    larger_ffn_aphrodite_config = create_mock_aphrodite_config(larger_ffn_hf_config)
+    larger_ffn_metrics = FfnMetrics.from_aphrodite_config(larger_ffn_aphrodite_config)
 
     ctx = ExecutionContext.from_single_request(
         num_tokens=100, context_len=512, is_prefill=True
@@ -358,7 +358,7 @@ def test_moe_metrics_vs_dense():
         intermediate_size=8192,
         num_hidden_layers=12,
     )
-    dense_config = create_mock_vllm_config(dense_hf_config)
+    dense_config = create_mock_aphrodite_config(dense_hf_config)
 
     moe_hf_config = Qwen3MoeConfig(
         hidden_size=2048,
@@ -369,10 +369,10 @@ def test_moe_metrics_vs_dense():
         moe_intermediate_size=8192,
         n_shared_experts=0,
     )
-    moe_config = create_mock_vllm_config(moe_hf_config)
+    moe_config = create_mock_aphrodite_config(moe_hf_config)
 
-    dense_metrics = FfnMetrics.from_vllm_config(dense_config)
-    moe_metrics = FfnMetrics.from_vllm_config(moe_config)
+    dense_metrics = FfnMetrics.from_aphrodite_config(dense_config)
+    moe_metrics = FfnMetrics.from_aphrodite_config(moe_config)
 
     ctx = ExecutionContext.from_single_request(
         num_tokens=100, context_len=512, is_prefill=True
@@ -392,16 +392,16 @@ def test_unembed_metrics_scaling():
         hidden_size=2048,
         vocab_size=32000,
     )
-    small_vocab_config = create_mock_vllm_config(small_vocab_hf_config)
+    small_vocab_config = create_mock_aphrodite_config(small_vocab_hf_config)
 
     large_vocab_hf_config = Qwen3Config(
         hidden_size=2048,
         vocab_size=64000,  # Double vocab size
     )
-    large_vocab_config = create_mock_vllm_config(large_vocab_hf_config)
+    large_vocab_config = create_mock_aphrodite_config(large_vocab_hf_config)
 
-    small_vocab_metrics = UnembedMetrics.from_vllm_config(small_vocab_config)
-    large_vocab_metrics = UnembedMetrics.from_vllm_config(large_vocab_config)
+    small_vocab_metrics = UnembedMetrics.from_aphrodite_config(small_vocab_config)
+    large_vocab_metrics = UnembedMetrics.from_aphrodite_config(large_vocab_config)
 
     ctx = ExecutionContext.from_single_request(
         num_tokens=100, context_len=512, is_prefill=True
@@ -421,9 +421,9 @@ def test_prefill_vs_decode_differences():
         num_key_value_heads=16,
         num_hidden_layers=1,
     )
-    config = create_mock_vllm_config(hf_config)
+    config = create_mock_aphrodite_config(hf_config)
 
-    metrics = AttentionMetrics.from_vllm_config(config)
+    metrics = AttentionMetrics.from_aphrodite_config(config)
 
     prefill_ctx = ExecutionContext.from_single_request(
         num_tokens=512, context_len=512, is_prefill=True
@@ -447,7 +447,7 @@ def test_model_metrics_aggregation():
         vocab_size=32000,
         intermediate_size=8192,
     )
-    config = create_mock_vllm_config(hf_config)
+    config = create_mock_aphrodite_config(hf_config)
 
     model_metrics = ModelMetrics(config)
     ctx = ExecutionContext.from_single_request(
@@ -494,13 +494,13 @@ def test_moe_expert_activation_proportional_scaling():
         n_shared_experts=2,  # Same shared experts
     )
 
-    base_vllm_config = create_mock_vllm_config(base_moe_config)
-    double_vllm_config = create_mock_vllm_config(double_experts_config)
-    triple_vllm_config = create_mock_vllm_config(triple_experts_config)
+    base_aphrodite_config = create_mock_aphrodite_config(base_moe_config)
+    double_aphrodite_config = create_mock_aphrodite_config(double_experts_config)
+    triple_aphrodite_config = create_mock_aphrodite_config(triple_experts_config)
 
-    base_metrics = FfnMetrics.from_vllm_config(base_vllm_config)
-    double_metrics = FfnMetrics.from_vllm_config(double_vllm_config)
-    triple_metrics = FfnMetrics.from_vllm_config(triple_vllm_config)
+    base_metrics = FfnMetrics.from_aphrodite_config(base_aphrodite_config)
+    double_metrics = FfnMetrics.from_aphrodite_config(double_aphrodite_config)
+    triple_metrics = FfnMetrics.from_aphrodite_config(triple_aphrodite_config)
 
     ctx = ExecutionContext.from_single_request(
         num_tokens=100, context_len=512, is_prefill=True
@@ -551,12 +551,12 @@ def test_quantization_config_parser_fp8():
     hf_config = Qwen3Config(
         hidden_size=2048, num_attention_heads=16, num_hidden_layers=1
     )
-    vllm_config = create_mock_vllm_config(hf_config, quant_config=MockQuantConfig())
+    aphrodite_config = create_mock_aphrodite_config(hf_config, quant_config=MockQuantConfig())
 
-    attn_result = AttentionMetrics.get_parser().parse(vllm_config)
+    attn_result = AttentionMetrics.get_parser().parse(aphrodite_config)
     assert attn_result.weight_byte_size == 1  # fp8
 
-    ffn_result = FfnMetrics.get_parser().parse(vllm_config)
+    ffn_result = FfnMetrics.get_parser().parse(aphrodite_config)
     assert ffn_result.weight_byte_size == 1  # fp8
 
 
@@ -570,9 +570,9 @@ def test_quantization_config_parser_mxfp4():
     hf_config = Qwen3Config(
         hidden_size=2048, intermediate_size=8192, num_hidden_layers=1
     )
-    vllm_config = create_mock_vllm_config(hf_config, quant_config=MockQuantConfig())
+    aphrodite_config = create_mock_aphrodite_config(hf_config, quant_config=MockQuantConfig())
 
-    ffn_result = FfnMetrics.get_parser().parse(vllm_config)
+    ffn_result = FfnMetrics.get_parser().parse(aphrodite_config)
     assert ffn_result.weight_byte_size == 0.5  # mxfp4
 
 
@@ -589,8 +589,8 @@ def test_attention_per_gpu_with_tensor_parallelism():
     )
 
     # Test with TP=4
-    vllm_config = create_mock_vllm_config(hf_config, tensor_parallel_size=4)
-    metrics = AttentionMetrics.from_vllm_config(vllm_config)
+    aphrodite_config = create_mock_aphrodite_config(hf_config, tensor_parallel_size=4)
+    metrics = AttentionMetrics.from_aphrodite_config(aphrodite_config)
 
     ctx = ExecutionContext.from_single_request(
         num_tokens=128, context_len=1024, is_prefill=True
@@ -623,8 +623,8 @@ def test_attention_per_gpu_with_pipeline_parallelism():
     )
 
     # Test with PP=4
-    vllm_config = create_mock_vllm_config(hf_config, pipeline_parallel_size=4)
-    metrics = AttentionMetrics.from_vllm_config(vllm_config)
+    aphrodite_config = create_mock_aphrodite_config(hf_config, pipeline_parallel_size=4)
+    metrics = AttentionMetrics.from_aphrodite_config(aphrodite_config)
 
     ctx = ExecutionContext.from_single_request(
         num_tokens=100, context_len=512, is_prefill=False
@@ -651,12 +651,12 @@ def test_ffn_per_gpu_with_tensor_parallelism():
     )
 
     # Test with DP=2, TP=4 (ffn_tp_size will be 8)
-    vllm_config = create_mock_vllm_config(
+    aphrodite_config = create_mock_aphrodite_config(
         hf_config,
         data_parallel_size=2,
         tensor_parallel_size=4,
     )
-    metrics = FfnMetrics.from_vllm_config(vllm_config)
+    metrics = FfnMetrics.from_aphrodite_config(aphrodite_config)
 
     # ffn_tp_size should be dp_size * tp_size = 8 (when EP not enabled)
     assert metrics.ffn_tp_size == 8
@@ -682,8 +682,8 @@ def test_ffn_per_gpu_with_pipeline_parallelism():
     )
 
     # Test with PP=6
-    vllm_config = create_mock_vllm_config(hf_config, pipeline_parallel_size=6)
-    metrics = FfnMetrics.from_vllm_config(vllm_config)
+    aphrodite_config = create_mock_aphrodite_config(hf_config, pipeline_parallel_size=6)
+    metrics = FfnMetrics.from_aphrodite_config(aphrodite_config)
 
     ctx = ExecutionContext.from_single_request(
         num_tokens=100, context_len=512, is_prefill=True
@@ -712,13 +712,13 @@ def test_moe_per_gpu_with_expert_parallelism():
     )
 
     # Test with DP=2, TP=4, EP enabled (ffn_ep_size will be 8)
-    vllm_config = create_mock_vllm_config(
+    aphrodite_config = create_mock_aphrodite_config(
         hf_config,
         data_parallel_size=2,
         tensor_parallel_size=4,
         enable_expert_parallel=True,
     )
-    metrics = FfnMetrics.from_vllm_config(vllm_config)
+    metrics = FfnMetrics.from_aphrodite_config(aphrodite_config)
 
     # When EP enabled, ffn_ep_size = dp_size * tp_size = 8
     assert metrics.ffn_ep_size == 8
@@ -770,12 +770,12 @@ def test_moe_per_gpu_expert_activation_accounting():
     )
 
     # Test with EP=8
-    vllm_config = create_mock_vllm_config(
+    aphrodite_config = create_mock_aphrodite_config(
         hf_config,
         data_parallel_size=8,
         enable_expert_parallel=True,
     )
-    metrics = FfnMetrics.from_vllm_config(vllm_config)
+    metrics = FfnMetrics.from_aphrodite_config(aphrodite_config)
 
     # Small batch: T=10, E_per_gpu=8/8=1
     # Each GPU: T*E = 10*1 = 10 activations
@@ -818,8 +818,8 @@ def test_unembed_per_gpu_with_tensor_parallelism():
     )
 
     # Test with TP=8
-    vllm_config = create_mock_vllm_config(hf_config, tensor_parallel_size=8)
-    metrics = UnembedMetrics.from_vllm_config(vllm_config)
+    aphrodite_config = create_mock_aphrodite_config(hf_config, tensor_parallel_size=8)
+    metrics = UnembedMetrics.from_aphrodite_config(aphrodite_config)
 
     ctx = ExecutionContext.from_single_request(
         num_tokens=100, context_len=512, is_prefill=True
@@ -854,13 +854,13 @@ def test_model_metrics_per_gpu_aggregation():
     )
 
     # Test with mixed parallelism: TP=2, PP=2
-    vllm_config = create_mock_vllm_config(
+    aphrodite_config = create_mock_aphrodite_config(
         hf_config,
         tensor_parallel_size=2,
         pipeline_parallel_size=2,
     )
 
-    model_metrics = ModelMetrics(vllm_config)
+    model_metrics = ModelMetrics(aphrodite_config)
     ctx = ExecutionContext.from_single_request(
         num_tokens=100, context_len=512, is_prefill=True
     )
@@ -894,8 +894,8 @@ def test_attention_per_gpu_heads_not_evenly_divisible():
         num_hidden_layers=8,
     )
 
-    vllm_config = create_mock_vllm_config(hf_config, tensor_parallel_size=4)
-    metrics = AttentionMetrics.from_vllm_config(vllm_config)
+    aphrodite_config = create_mock_aphrodite_config(hf_config, tensor_parallel_size=4)
+    metrics = AttentionMetrics.from_aphrodite_config(aphrodite_config)
 
     ctx = ExecutionContext.from_single_request(
         num_tokens=64, context_len=256, is_prefill=True
@@ -929,14 +929,14 @@ def test_quantization_config_parser_int4_methods(quant_method):
         intermediate_size=8192,
         num_hidden_layers=1,
     )
-    vllm_config = create_mock_vllm_config(hf_config, quant_config=MockQuantConfig())
+    aphrodite_config = create_mock_aphrodite_config(hf_config, quant_config=MockQuantConfig())
 
-    attn_result = AttentionMetrics.get_parser().parse(vllm_config)
+    attn_result = AttentionMetrics.get_parser().parse(aphrodite_config)
     assert attn_result.weight_byte_size == 0.5, (
         f"Expected 0.5 for {quant_method}, got {attn_result.weight_byte_size}"
     )
 
-    ffn_result = FfnMetrics.get_parser().parse(vllm_config)
+    ffn_result = FfnMetrics.get_parser().parse(aphrodite_config)
     assert ffn_result.weight_byte_size == 0.5, (
         f"Expected 0.5 for {quant_method}, got {ffn_result.weight_byte_size}"
     )
@@ -960,14 +960,14 @@ def test_quantization_config_parser_fp8_methods(quant_method):
         intermediate_size=8192,
         num_hidden_layers=1,
     )
-    vllm_config = create_mock_vllm_config(hf_config, quant_config=MockQuantConfig())
+    aphrodite_config = create_mock_aphrodite_config(hf_config, quant_config=MockQuantConfig())
 
-    attn_result = AttentionMetrics.get_parser().parse(vllm_config)
+    attn_result = AttentionMetrics.get_parser().parse(aphrodite_config)
     assert attn_result.weight_byte_size == 1, (
         f"Expected 1 for {quant_method}, got {attn_result.weight_byte_size}"
     )
 
-    ffn_result = FfnMetrics.get_parser().parse(vllm_config)
+    ffn_result = FfnMetrics.get_parser().parse(aphrodite_config)
     assert ffn_result.weight_byte_size == 1, (
         f"Expected 1 for {quant_method}, got {ffn_result.weight_byte_size}"
     )
@@ -986,13 +986,13 @@ def test_quantization_config_parser_unknown_method():
         intermediate_size=8192,
         num_hidden_layers=1,
     )
-    vllm_config = create_mock_vllm_config(hf_config, quant_config=MockQuantConfig())
+    aphrodite_config = create_mock_aphrodite_config(hf_config, quant_config=MockQuantConfig())
 
     with pytest.raises(InvalidComponent):
-        AttentionMetrics.get_parser().parse(vllm_config)
+        AttentionMetrics.get_parser().parse(aphrodite_config)
 
     with pytest.raises(InvalidComponent):
-        FfnMetrics.get_parser().parse(vllm_config)
+        FfnMetrics.get_parser().parse(aphrodite_config)
 
 
 def test_quantized_model_metrics_aggregation():
@@ -1009,9 +1009,9 @@ def test_quantized_model_metrics_aggregation():
         vocab_size=32000,
         intermediate_size=8192,
     )
-    vllm_config = create_mock_vllm_config(hf_config, quant_config=MockQuantConfig())
+    aphrodite_config = create_mock_aphrodite_config(hf_config, quant_config=MockQuantConfig())
 
-    model_metrics = ModelMetrics(vllm_config)
+    model_metrics = ModelMetrics(aphrodite_config)
     ctx = ExecutionContext.from_single_request(
         num_tokens=100, context_len=512, is_prefill=True
     )
@@ -1039,10 +1039,10 @@ def test_mla_config_parser():
         v_head_dim=128,
         q_lora_rank=1536,
     )
-    vllm_config = create_mock_vllm_config(hf_config)
+    aphrodite_config = create_mock_aphrodite_config(hf_config)
 
     parser_chain = MLAAttentionMetrics.get_parser()
-    result = parser_chain.parse(vllm_config)
+    result = parser_chain.parse(aphrodite_config)
 
     assert result.kv_lora_rank == 512
     assert result.qk_nope_head_dim == 128
@@ -1065,8 +1065,8 @@ def test_mla_attention_metrics_decode():
         v_head_dim=128,
         q_lora_rank=1536,
     )
-    vllm_config = create_mock_vllm_config(hf_config)
-    metrics = MLAAttentionMetrics.from_vllm_config(vllm_config)
+    aphrodite_config = create_mock_aphrodite_config(hf_config)
+    metrics = MLAAttentionMetrics.from_aphrodite_config(aphrodite_config)
 
     # Single decode token with 1024 context
     ctx = ExecutionContext.from_single_request(
@@ -1099,8 +1099,8 @@ def test_mla_attention_metrics_prefill():
         v_head_dim=128,
         q_lora_rank=1536,
     )
-    vllm_config = create_mock_vllm_config(hf_config)
-    metrics = MLAAttentionMetrics.from_vllm_config(vllm_config)
+    aphrodite_config = create_mock_aphrodite_config(hf_config)
+    metrics = MLAAttentionMetrics.from_aphrodite_config(aphrodite_config)
 
     ctx = ExecutionContext.from_single_request(
         num_tokens=2048, context_len=2048, is_prefill=True
@@ -1143,8 +1143,8 @@ def test_mla_kv_cache_vs_standard_attention():
         qk_rope_head_dim=64,
         v_head_dim=128,
     )
-    mla_vllm_config = create_mock_vllm_config(mla_config)
-    mla_metrics = MLAAttentionMetrics.from_vllm_config(mla_vllm_config)
+    mla_aphrodite_config = create_mock_aphrodite_config(mla_config)
+    mla_metrics = MLAAttentionMetrics.from_aphrodite_config(mla_aphrodite_config)
 
     # Standard MHA config with same num_heads and head_dim
     standard_config = Qwen3Config(
@@ -1154,8 +1154,8 @@ def test_mla_kv_cache_vs_standard_attention():
         num_hidden_layers=1,
         head_dim=128,
     )
-    standard_vllm_config = create_mock_vllm_config(standard_config)
-    standard_metrics = AttentionMetrics.from_vllm_config(standard_vllm_config)
+    standard_aphrodite_config = create_mock_aphrodite_config(standard_config)
+    standard_metrics = AttentionMetrics.from_aphrodite_config(standard_aphrodite_config)
 
     # Compare KV cache write for 100 tokens
     ctx = ExecutionContext.from_single_request(
@@ -1193,8 +1193,8 @@ def test_mla_per_gpu_with_tensor_parallelism():
     )
 
     # Test with TP=8
-    vllm_config = create_mock_vllm_config(hf_config, tensor_parallel_size=8)
-    metrics = MLAAttentionMetrics.from_vllm_config(vllm_config)
+    aphrodite_config = create_mock_aphrodite_config(hf_config, tensor_parallel_size=8)
+    metrics = MLAAttentionMetrics.from_aphrodite_config(aphrodite_config)
 
     ctx = ExecutionContext.from_single_request(
         num_tokens=64, context_len=1024, is_prefill=True
@@ -1223,8 +1223,8 @@ def test_mla_per_gpu_with_pipeline_parallelism():
         q_lora_rank=1536,
     )
 
-    vllm_config = create_mock_vllm_config(hf_config, pipeline_parallel_size=4)
-    metrics = MLAAttentionMetrics.from_vllm_config(vllm_config)
+    aphrodite_config = create_mock_aphrodite_config(hf_config, pipeline_parallel_size=4)
+    metrics = MLAAttentionMetrics.from_aphrodite_config(aphrodite_config)
 
     ctx = ExecutionContext.from_single_request(
         num_tokens=1, context_len=512, is_prefill=False
@@ -1250,8 +1250,8 @@ def test_mla_model_metrics_excludes_standard_attention():
         v_head_dim=128,
         q_lora_rank=1536,
     )
-    vllm_config = create_mock_vllm_config(hf_config)
-    model_metrics = ModelMetrics(vllm_config)
+    aphrodite_config = create_mock_aphrodite_config(hf_config)
+    model_metrics = ModelMetrics(aphrodite_config)
 
     # Should have MLAAttentionMetrics but NOT standard AttentionMetrics
     component_types = [m.component_type() for m in model_metrics.metrics]
@@ -1285,8 +1285,8 @@ def test_standard_attention_still_works_for_non_mla():
         vocab_size=32000,
         intermediate_size=8192,
     )
-    vllm_config = create_mock_vllm_config(hf_config)
-    model_metrics = ModelMetrics(vllm_config)
+    aphrodite_config = create_mock_aphrodite_config(hf_config)
+    model_metrics = ModelMetrics(aphrodite_config)
 
     component_types = [m.component_type() for m in model_metrics.metrics]
     assert "attn" in component_types
@@ -1322,11 +1322,11 @@ def test_mla_attention_scaling_with_layers():
         q_lora_rank=1536,
     )
 
-    base_vllm = create_mock_vllm_config(base_config)
-    double_vllm = create_mock_vllm_config(double_config)
+    base_aphrodite = create_mock_aphrodite_config(base_config)
+    double_aphrodite = create_mock_aphrodite_config(double_config)
 
-    base_metrics = MLAAttentionMetrics.from_vllm_config(base_vllm)
-    double_metrics = MLAAttentionMetrics.from_vllm_config(double_vllm)
+    base_metrics = MLAAttentionMetrics.from_aphrodite_config(base_aphrodite)
+    double_metrics = MLAAttentionMetrics.from_aphrodite_config(double_aphrodite)
 
     ctx = ExecutionContext.from_single_request(
         num_tokens=100, context_len=512, is_prefill=True

@@ -29,7 +29,7 @@
 
 #include <stdint.h>
 
-namespace vllm {
+namespace aphrodite {
 
 // FP16 vector types for Q, K, V.
 template <>
@@ -501,4 +501,4 @@ inline __device__ Float8_ to_float(uint4 u) {
 // Zero-out a variable.
 inline __device__ void zero(uint16_t& dst) { dst = uint16_t(0); }
 
-}  // namespace vllm
+}  // namespace aphrodite

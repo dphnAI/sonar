@@ -16,11 +16,11 @@ models = ["llava-hf/llava-1.5-7b-hf"]
 
 
 @pytest.mark.parametrize("model", models)
-def test_context_length_too_short(vllm_runner, image_assets, model):
+def test_context_length_too_short(aphrodite_runner, image_assets, model):
     images = [asset.pil_image for asset in image_assets]
 
     with pytest.raises(ValueError, match="longer than the maximum model length"):
-        vllm_model = vllm_runner(
+        aphrodite_model = aphrodite_runner(
             model,
             # LLaVA has a feature size of 576
             # For the HF processor to execute successfully but still
@@ -31,7 +31,7 @@ def test_context_length_too_short(vllm_runner, image_assets, model):
             load_format="dummy",
         )
 
-        with vllm_model:
-            vllm_model.generate_greedy(
+        with aphrodite_model:
+            aphrodite_model.generate_greedy(
                 [HF_IMAGE_PROMPTS[0]], max_tokens=1, images=[images[0]]
             )

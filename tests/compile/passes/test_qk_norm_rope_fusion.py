@@ -23,7 +23,7 @@ from aphrodite.config import (
     ModelConfig,
     PassConfig,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.model_executor.layers.attention import Attention
 from aphrodite.model_executor.layers.layernorm import RMSNorm
@@ -44,7 +44,7 @@ class QKNormRoPETestModel(torch.nn.Module):
         head_dim: int,
         eps: float,
         is_neox: bool,
-        vllm_config: AphroditeConfig,
+        aphrodite_config: AphroditeConfig,
         dtype: torch.dtype,
         test_scattered_split: bool = False,
         prefix: str = "model.layers.0.self_attn.attn",
@@ -65,7 +65,7 @@ class QKNormRoPETestModel(torch.nn.Module):
             head_size=self.head_dim,
             scale=1.0 / self.head_dim**0.5,
             num_kv_heads=self.num_kv_heads,
-            cache_config=vllm_config.cache_config,
+            cache_config=aphrodite_config.cache_config,
             prefix=prefix,
             attn_type=AttentionType.DECODER,
         )
@@ -101,7 +101,7 @@ class QKNormRoPETestModel(torch.nn.Module):
         return q, k, v
 
     def ops_in_model_before(self) -> list[OpOverload | OpOverloadPacket]:
-        ops: list[OpOverload | OpOverloadPacket] = [torch.ops.vllm_ir.rms_norm]
+        ops: list[OpOverload | OpOverloadPacket] = [torch.ops.aphrodite_ir.rms_norm]
         if self.enable_rope_custom_op:
             if self.rotary_emb.use_flashinfer:
                 ops.append(FLASHINFER_ROTARY_OP)
@@ -146,7 +146,7 @@ def test_qk_norm_rope_fusion(
     if enable_rope_custom_op:
         custom_ops.append("+rotary_embedding")
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
@@ -162,8 +162,8 @@ def test_qk_norm_rope_fusion(
     T = 5
 
     with (
-        set_current_vllm_config(vllm_config),
-        vllm_config.kernel_config.ir_op_priority.set_priority(),
+        set_current_aphrodite_config(aphrodite_config),
+        aphrodite_config.kernel_config.ir_op_priority.set_priority(),
     ):
         model = QKNormRoPETestModel(
             num_heads=num_heads,
@@ -171,15 +171,15 @@ def test_qk_norm_rope_fusion(
             head_dim=head_dim,
             eps=eps,
             is_neox=is_neox,
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             dtype=dtype,
             test_scattered_split=scattered_split,
         )
 
-        noop_pass = NoOpEliminationPass(vllm_config)
-        coalesce_pass = SplitCoalescingPass(vllm_config)
-        fusion_pass = QKNormRoPEFusionPass(vllm_config)
-        cleanup_pass = PostCleanupPass(vllm_config)
+        noop_pass = NoOpEliminationPass(aphrodite_config)
+        coalesce_pass = SplitCoalescingPass(aphrodite_config)
+        fusion_pass = QKNormRoPEFusionPass(aphrodite_config)
+        cleanup_pass = PostCleanupPass(aphrodite_config)
 
         backend = TestBackend(noop_pass, coalesce_pass, fusion_pass, cleanup_pass)
         backend_baseline = TestBackend(noop_pass, cleanup_pass)

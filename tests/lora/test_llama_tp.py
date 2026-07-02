@@ -188,7 +188,7 @@ def test_tp2_serialize_and_deserialize_lora(
         result = subprocess.run(
             [
                 sys.executable,
-                f"{APHRODITE_PATH}/examples/features/tensorize_vllm_model.py",
+                f"{APHRODITE_PATH}/examples/features/tensorize_aphrodite_model.py",
                 "--model",
                 MODEL_PATH,
                 "--lora-path",

@@ -41,8 +41,8 @@ REFERENCE_1_VS_N = [
 TOL = 0.01
 
 
-def test_offline(vllm_runner):
-    with vllm_runner(model_name, runner="pooling") as llm_runner:
+def test_offline(aphrodite_runner):
+    with aphrodite_runner(model_name, runner="pooling") as llm_runner:
         llm = llm_runner.get_llm()
         _test_offline_1_v_1(llm)
         _test_offline_1_v_n(llm)

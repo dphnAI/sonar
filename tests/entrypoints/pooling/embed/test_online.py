@@ -142,8 +142,8 @@ async def test_completion_request(
     assert embeddings.usage.prompt_tokens == len(input_tokens)
     assert embeddings.usage.total_tokens == len(input_tokens)
 
-    vllm_outputs = [d.embedding for d in embeddings.data]
-    run_embedding_correctness_test(hf_model, [input_text], vllm_outputs)
+    aphrodite_outputs = [d.embedding for d in embeddings.data]
+    run_embedding_correctness_test(hf_model, [input_text], aphrodite_outputs)
 
     # test input: list[int]
     embedding_response = await client.embeddings.create(
@@ -162,8 +162,8 @@ async def test_completion_request(
     assert embeddings.usage.prompt_tokens == len(input_tokens)
     assert embeddings.usage.total_tokens == len(input_tokens)
 
-    vllm_outputs = [d.embedding for d in embeddings.data]
-    run_embedding_correctness_test(hf_model, [input_text], vllm_outputs)
+    aphrodite_outputs = [d.embedding for d in embeddings.data]
+    run_embedding_correctness_test(hf_model, [input_text], aphrodite_outputs)
 
 
 @pytest.mark.asyncio
@@ -191,8 +191,8 @@ async def test_completion_request_batched(
     assert embeddings.usage.prompt_tokens == len(input_tokens) * N
     assert embeddings.usage.total_tokens == len(input_tokens) * N
 
-    vllm_outputs = [d.embedding for d in embeddings.data]
-    run_embedding_correctness_test(hf_model, input_texts, vllm_outputs)
+    aphrodite_outputs = [d.embedding for d in embeddings.data]
+    run_embedding_correctness_test(hf_model, input_texts, aphrodite_outputs)
 
     # test list[list[int]]
     embedding_response = await client.embeddings.create(
@@ -211,8 +211,8 @@ async def test_completion_request_batched(
     assert embeddings.usage.prompt_tokens == len(input_tokens) * N
     assert embeddings.usage.total_tokens == len(input_tokens) * N
 
-    vllm_outputs = [d.embedding for d in embeddings.data]
-    run_embedding_correctness_test(hf_model, input_texts, vllm_outputs)
+    aphrodite_outputs = [d.embedding for d in embeddings.data]
+    run_embedding_correctness_test(hf_model, input_texts, aphrodite_outputs)
 
 
 @pytest.mark.asyncio

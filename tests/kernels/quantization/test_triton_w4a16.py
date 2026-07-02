@@ -190,7 +190,7 @@ def test_triton_w4a16_process_weights_after_loading_repacks_layout():
     if not torch.cuda.is_available():
         pytest.skip("CUDA/HIP device not available")
 
-    from aphrodite.config import AphroditeConfig, set_current_vllm_config
+    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
     from aphrodite.distributed import (
         ensure_model_parallel_initialized,
         init_distributed_environment,
@@ -205,7 +205,7 @@ def test_triton_w4a16_process_weights_after_loading_repacks_layout():
     )
     from aphrodite.scalar_type import scalar_types
 
-    with set_current_vllm_config(AphroditeConfig()):
+    with set_current_aphrodite_config(AphroditeConfig()):
         init_distributed_environment(
             world_size=1,
             rank=0,

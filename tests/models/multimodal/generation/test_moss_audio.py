@@ -40,7 +40,7 @@ HF_ACCURACY_SKIP_REASON = (
 
 
 @pytest.mark.core_model
-def test_moss_audio_generation_smoke(vllm_runner) -> None:
+def test_moss_audio_generation_smoke(aphrodite_runner) -> None:
     model = "OpenMOSS-Team/MOSS-Audio-4B-Instruct"
     model_info = HF_EXAMPLE_MODELS.find_hf_info(model)
     model_info.check_available_online(on_fail="skip")
@@ -49,15 +49,15 @@ def test_moss_audio_generation_smoke(vllm_runner) -> None:
     prompts = [f"{MOSS_AUDIO_PLACEHOLDER}\nBriefly describe this audio."]
     audios = [[AudioAsset("mary_had_lamb").audio_and_sample_rate[0]]]
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         dtype="half",
         enforce_eager=True,
         max_model_len=1024,
         limit_mm_per_prompt={"audio": 1},
         trust_remote_code=True,
-    ) as vllm_model:
-        outputs = vllm_model.generate_greedy(
+    ) as aphrodite_model:
+        outputs = aphrodite_model.generate_greedy(
             prompts,
             max_tokens=4,
             audios=audios,
@@ -72,9 +72,9 @@ def test_moss_audio_generation_smoke(vllm_runner) -> None:
 @pytest.mark.parametrize("dtype", ["half"])
 @pytest.mark.parametrize("max_tokens", [8])
 @pytest.mark.parametrize("num_logprobs", [5])
-def test_moss_audio_hf_vllm_accuracy(
+def test_moss_audio_hf_aphrodite_accuracy(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     dtype: str,
     max_tokens: int,
@@ -87,15 +87,15 @@ def test_moss_audio_hf_vllm_accuracy(
     prompts = [f"{MOSS_AUDIO_PLACEHOLDER}\nTranscribe this audio."]
     audios = [[AudioAsset("mary_had_lamb").audio_and_sample_rate[0]]]
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         dtype=dtype,
         enforce_eager=True,
         max_model_len=1024,
         limit_mm_per_prompt={"audio": 1},
         trust_remote_code=True,
-    ) as vllm_model:
-        vllm_outputs = vllm_model.generate_greedy_logprobs(
+    ) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
             prompts,
             max_tokens,
             num_logprobs=num_logprobs,
@@ -112,7 +112,7 @@ def test_moss_audio_hf_vllm_accuracy(
 
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=vllm_outputs,
+        outputs_1_lst=aphrodite_outputs,
         name_0="hf",
         name_1="aphrodite",
     )
@@ -120,7 +120,7 @@ def test_moss_audio_hf_vllm_accuracy(
 
 @pytest.mark.core_model
 @pytest.mark.parametrize("parallel_kwargs", PARALLEL_SMOKE_CASES)
-def test_moss_audio_parallel_smoke(vllm_runner, parallel_kwargs) -> None:
+def test_moss_audio_parallel_smoke(aphrodite_runner, parallel_kwargs) -> None:
     model = "OpenMOSS-Team/MOSS-Audio-4B-Instruct"
     required_gpus = parallel_kwargs.get(
         "tensor_parallel_size", 1
@@ -136,7 +136,7 @@ def test_moss_audio_parallel_smoke(vllm_runner, parallel_kwargs) -> None:
     prompts = [f"{MOSS_AUDIO_PLACEHOLDER}\nBriefly describe this audio."]
     audios = [[AudioAsset("mary_had_lamb").audio_and_sample_rate[0]]]
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         dtype="half",
         enforce_eager=True,
@@ -144,8 +144,8 @@ def test_moss_audio_parallel_smoke(vllm_runner, parallel_kwargs) -> None:
         limit_mm_per_prompt={"audio": 1},
         trust_remote_code=True,
         **parallel_kwargs,
-    ) as vllm_model:
-        outputs = vllm_model.generate_greedy(
+    ) as aphrodite_model:
+        outputs = aphrodite_model.generate_greedy(
             prompts,
             max_tokens=4,
             audios=audios,

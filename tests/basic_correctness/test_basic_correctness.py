@@ -78,7 +78,7 @@ def _resolve_target_test_suite() -> str:
 TARGET_TEST_SUITE = _resolve_target_test_suite()
 
 
-def test_vllm_gc_ed():
+def test_aphrodite_gc_ed():
     """Verify aphrodite instance is GC'ed when it is deleted"""
     llm = LLM("hmellor/tiny-random-LlamaForCausalLM")
     weak_llm = weakref.ref(llm)
@@ -89,22 +89,22 @@ def test_vllm_gc_ed():
 
 
 def _fix_prompt_embed_outputs(
-    vllm_outputs: list[tuple[list[int], str]],
+    aphrodite_outputs: list[tuple[list[int], str]],
     hf_model: HfRunner,
     example_prompts: list[str],
 ) -> list[tuple[list[int], str]]:
-    fixed_vllm_outputs = []
-    for vllm_output, hf_input, prompt in zip(
-        vllm_outputs, hf_model.get_inputs(example_prompts), example_prompts
+    fixed_aphrodite_outputs = []
+    for aphrodite_output, hf_input, prompt in zip(
+        aphrodite_outputs, hf_model.get_inputs(example_prompts), example_prompts
     ):
         hf_input_ids = hf_input["input_ids"].tolist()[0]
-        fixed_vllm_outputs.append(
+        fixed_aphrodite_outputs.append(
             (
-                hf_input_ids + vllm_output[0][len(hf_input_ids) :],
-                prompt + vllm_output[1],
+                hf_input_ids + aphrodite_output[0][len(hf_input_ids) :],
+                prompt + aphrodite_output[1],
             )
         )
-    return fixed_vllm_outputs
+    return fixed_aphrodite_outputs
 
 
 @pytest.mark.parametrize("model", MODELS)
@@ -158,18 +158,18 @@ def test_models(
         async_scheduling=async_scheduling,
         distributed_executor_backend=model_executor,
         attention_config={"backend": backend},
-    ) as vllm_model:
+    ) as aphrodite_model:
         if enable_prompt_embeds:
-            vllm_outputs = vllm_model.generate_greedy(prompt_embeds, max_tokens)
-            vllm_outputs = _fix_prompt_embed_outputs(
-                vllm_outputs, hf_model, example_prompts
+            aphrodite_outputs = aphrodite_model.generate_greedy(prompt_embeds, max_tokens)
+            aphrodite_outputs = _fix_prompt_embed_outputs(
+                aphrodite_outputs, hf_model, example_prompts
             )
         else:
-            vllm_outputs = vllm_model.generate_greedy(example_prompts, max_tokens)
+            aphrodite_outputs = aphrodite_model.generate_greedy(example_prompts, max_tokens)
 
     check_outputs_equal(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=vllm_outputs,
+        outputs_1_lst=aphrodite_outputs,
         name_0="hf",
         name_1="aphrodite",
     )
@@ -204,7 +204,7 @@ def test_models(
 def test_models_distributed(
     monkeypatch: pytest.MonkeyPatch,
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model: str,
     distributed_executor_backend: str,
@@ -238,7 +238,7 @@ def test_models_distributed(
         # will hurt multiprocessing backend with fork method
         # (the default method).
         attention_config = {"backend": attention_backend} if attention_backend else None
-        with vllm_runner(
+        with aphrodite_runner(
             model,
             dtype=dtype,
             tensor_parallel_size=2,
@@ -246,40 +246,40 @@ def test_models_distributed(
             enable_prompt_embeds=enable_prompt_embeds,
             gpu_memory_utilization=0.7,
             attention_config=attention_config,
-        ) as vllm_model:
+        ) as aphrodite_model:
             if enable_prompt_embeds:
                 with hf_runner(model, dtype=dtype) as hf_model:
                     with torch.no_grad():
                         prompt_embeds = hf_model.get_prompt_embeddings(example_prompts)
-                    vllm_outputs = vllm_model.generate_greedy(prompt_embeds, max_tokens)
-                    vllm_outputs = _fix_prompt_embed_outputs(
-                        vllm_outputs, hf_model, example_prompts
+                    aphrodite_outputs = aphrodite_model.generate_greedy(prompt_embeds, max_tokens)
+                    aphrodite_outputs = _fix_prompt_embed_outputs(
+                        aphrodite_outputs, hf_model, example_prompts
                     )
                     hf_outputs = hf_model.generate_greedy(example_prompts, max_tokens)
             else:
-                vllm_outputs = vllm_model.generate_greedy(example_prompts, max_tokens)
+                aphrodite_outputs = aphrodite_model.generate_greedy(example_prompts, max_tokens)
                 with hf_runner(model, dtype=dtype) as hf_model:
                     hf_outputs = hf_model.generate_greedy(example_prompts, max_tokens)
 
     check_outputs_equal(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=vllm_outputs,
+        outputs_1_lst=aphrodite_outputs,
         name_0="hf",
         name_1="aphrodite",
     )
 
 
-def test_failed_model_execution(vllm_runner, monkeypatch) -> None:
+def test_failed_model_execution(aphrodite_runner, monkeypatch) -> None:
     # Needed to mock an error in the same process
     monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
 
-    with vllm_runner("facebook/opt-125m", enforce_eager=True) as vllm_model:
-        if isinstance(vllm_model.llm.llm_engine, LLMEngine):
-            v1_test_failed_model_execution(vllm_model)
+    with aphrodite_runner("facebook/opt-125m", enforce_eager=True) as aphrodite_model:
+        if isinstance(aphrodite_model.llm.llm_engine, LLMEngine):
+            v1_test_failed_model_execution(aphrodite_model)
 
 
-def v1_test_failed_model_execution(vllm_model):
-    engine = vllm_model.llm.llm_engine
+def v1_test_failed_model_execution(aphrodite_model):
+    engine = aphrodite_model.llm.llm_engine
     mocked_execute_model = Mock(side_effect=RuntimeError("Mocked Critical Error"))
     engine.engine_core.engine_core.model_executor.execute_model = mocked_execute_model
 
@@ -290,6 +290,6 @@ def v1_test_failed_model_execution(vllm_model):
             "The capital of France is",
             "The future of AI is",
         ]
-        vllm_model.generate_greedy(prompts, 200, use_tqdm=False)
+        aphrodite_model.generate_greedy(prompts, 200, use_tqdm=False)
     assert isinstance(exc_info.value, RuntimeError)
     assert "Mocked Critical Error" in str(exc_info.value)

@@ -56,7 +56,7 @@ trap 'kill $(jobs -pr)' SIGINT SIGTERM EXIT
 
 cleanup() {
   echo "Cleaning up any running vLLM instances..."
-  pkill -f "vllm serve" || true
+  pkill -f "aphrodite serve" || true
   sleep 2
 }
 
@@ -76,7 +76,7 @@ launch_baseline() {
   BASELINE_BASE_CMD="
   ZE_AFFINITY_MASK=$BASELINE_GPU_ID \
   APHRODITE_WORKER_MULTIPROC_METHOD=spawn \
-  APHRODITE_ENABLE_V1_MULTIPROCESSING=1 vllm serve $MODEL_NAME \
+  APHRODITE_ENABLE_V1_MULTIPROCESSING=1 aphrodite serve $MODEL_NAME \
       --host ${BASELINE_HOST} \
       --port ${BASELINE_PORT} \
       --max-model-len ${MAX_MODEL_LEN}\
@@ -104,7 +104,7 @@ launch_pd() {
   APHRODITE_NIXL_SIDE_CHANNEL_HOST=${PREFILL_HOST} \
   APHRODITE_NIXL_SIDE_CHANNEL_PORT=${PREFILL_NIXL_SIDE_PORT} \
   APHRODITE_WORKER_MULTIPROC_METHOD=spawn \
-  APHRODITE_ENABLE_V1_MULTIPROCESSING=1 vllm serve $MODEL_NAME \
+  APHRODITE_ENABLE_V1_MULTIPROCESSING=1 aphrodite serve $MODEL_NAME \
       --host ${PREFILL_HOST} \
       --port ${PREFILL_PORT} \
       --max-model-len ${MAX_MODEL_LEN}\
@@ -121,7 +121,7 @@ launch_pd() {
   ZE_AFFINITY_MASK=$DECODE_GPU_ID \
   APHRODITE_EXECUTE_MODEL_TIMEOUT_SECONDS=200 \
   APHRODITE_WORKER_MULTIPROC_METHOD=spawn \
-  APHRODITE_ENABLE_V1_MULTIPROCESSING=1 vllm serve $MODEL_NAME \
+  APHRODITE_ENABLE_V1_MULTIPROCESSING=1 aphrodite serve $MODEL_NAME \
       --host ${DECODE_HOST} \
       --port ${DECODE_PORT} \
       --max-model-len ${MAX_MODEL_LEN}\

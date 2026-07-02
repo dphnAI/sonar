@@ -37,14 +37,14 @@ def test_split_coalescing(dtype):
 
     q_size, kv_size = 2048, 512
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
             pass_config=PassConfig(),
         )
     )
-    with aphrodite.config.set_current_vllm_config(vllm_config):
-        coalesce_pass = SplitCoalescingPass(vllm_config)
+    with aphrodite.config.set_current_aphrodite_config(aphrodite_config):
+        coalesce_pass = SplitCoalescingPass(aphrodite_config)
         backend = TestBackend(coalesce_pass)
 
         model = SplitCoalescingModel(q_size, kv_size)

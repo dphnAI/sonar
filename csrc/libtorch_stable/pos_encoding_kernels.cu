@@ -3,7 +3,7 @@
 #include "../cuda_compat.h"
 #include "dispatch_utils.h"
 
-namespace vllm {
+namespace aphrodite {
 
 template <typename scalar_t, typename cache_t, bool IS_NEOX>
 inline __device__ void apply_token_rotary_embedding(
@@ -98,7 +98,7 @@ __global__ void rotary_embedding_kernel(
       inverse);
 }
 
-}  // namespace vllm
+}  // namespace aphrodite
 
 void rotary_embedding(
     torch::stable::Tensor& positions,  // [batch_size, seq_len] or [num_tokens]
@@ -176,7 +176,7 @@ void rotary_embedding(
             cos_sin_cache.scalar_type(), "rotary_embedding_cache", [&] {
               using cache_t = scalar_t;
               if (is_neox) {
-                vllm::rotary_embedding_kernel<query_t, cache_t, true>
+                aphrodite::rotary_embedding_kernel<query_t, cache_t, true>
                     <<<grid, block, 0, stream>>>(
                         positions.const_data_ptr<int64_t>(),
                         query.mutable_data_ptr<query_t>(),
@@ -186,7 +186,7 @@ void rotary_embedding(
                         query_stride, key_stride, head_stride, num_heads,
                         num_kv_heads, head_size, rope_dim_offset, inverse);
               } else {
-                vllm::rotary_embedding_kernel<query_t, cache_t, false>
+                aphrodite::rotary_embedding_kernel<query_t, cache_t, false>
                     <<<grid, block, 0, stream>>>(
                         positions.const_data_ptr<int64_t>(),
                         query.mutable_data_ptr<query_t>(),

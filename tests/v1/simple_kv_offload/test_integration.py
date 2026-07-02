@@ -50,7 +50,7 @@ def _flush_gpu_cache(llm: LLM, sampling_params: SamplingParams, seed: int = 0):
     This pushes all prior blocks through the free queue so that the lazy
     cursor offloads them to CPU before they are evicted.
     """
-    cache_config = llm.llm_engine.vllm_config.cache_config
+    cache_config = llm.llm_engine.aphrodite_config.cache_config
     num_gpu_blocks = cache_config.num_gpu_blocks
     block_size = cache_config.block_size
     # Use 1.2x GPU capacity to give the lazy cursor enough scheduling steps

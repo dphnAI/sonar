@@ -435,8 +435,8 @@ def test_attention_config():
     )
     assert args is not None
     engine_args = EngineArgs.from_cli_args(args)
-    vllm_config = engine_args.create_engine_config()
-    assert vllm_config.attention_config.backend == AttentionBackendEnum.FLASH_ATTN
+    aphrodite_config = engine_args.create_engine_config()
+    assert aphrodite_config.attention_config.backend == AttentionBackendEnum.FLASH_ATTN
 
     # test --attention-config.backend flows into AphroditeConfig.attention_config
     args = parser.parse_args(
@@ -449,8 +449,8 @@ def test_attention_config():
     )
     assert args is not None
     engine_args = EngineArgs.from_cli_args(args)
-    vllm_config = engine_args.create_engine_config()
-    assert vllm_config.attention_config.backend == AttentionBackendEnum.FLASHINFER
+    aphrodite_config = engine_args.create_engine_config()
+    assert aphrodite_config.attention_config.backend == AttentionBackendEnum.FLASHINFER
 
     # test --attention-backend and --attention-config.backend are mutually exclusive
     args = parser.parse_args(
@@ -591,7 +591,7 @@ def test_numa_bind_args():
 def test_ir_op_priority():
     from aphrodite.config.kernel import IrOpPriorityConfig, KernelConfig
 
-    ir_op_priority = IrOpPriorityConfig(rms_norm=["vllm_c"])
+    ir_op_priority = IrOpPriorityConfig(rms_norm=["aphrodite_c"])
     cfg1 = EngineArgs(ir_op_priority=ir_op_priority).create_engine_config()
     cfg2 = EngineArgs(
         kernel_config=KernelConfig(ir_op_priority=ir_op_priority)

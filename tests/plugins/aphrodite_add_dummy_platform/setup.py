@@ -4,15 +4,15 @@
 from setuptools import setup
 
 setup(
-    name="vllm_add_dummy_platform",
+    name="aphrodite_add_dummy_platform",
     version="0.1",
-    packages=["vllm_add_dummy_platform"],
+    packages=["aphrodite_add_dummy_platform"],
     entry_points={
         "aphrodite.platform_plugins": [
-            "dummy_platform_plugin = vllm_add_dummy_platform:dummy_platform_plugin"  # noqa
+            "dummy_platform_plugin = aphrodite_add_dummy_platform:dummy_platform_plugin"  # noqa
         ],
         "aphrodite.general_plugins": [
-            "dummy_custom_ops = vllm_add_dummy_platform:register_ops"
+            "dummy_custom_ops = aphrodite_add_dummy_platform:register_ops"
         ],
     },
 )

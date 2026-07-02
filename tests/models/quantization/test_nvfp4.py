@@ -109,7 +109,7 @@ SM_100_NVFP4_BACKENDS = [
         "flashinfer_cutlass",
     ],
 )
-def test_nvfp4(vllm_runner, model, eager, backend):
+def test_nvfp4(aphrodite_runner, model, eager, backend):
     if backend == "flashinfer_cutedsl" and not (
         current_platform.is_device_capability_family(100)
     ):
@@ -123,7 +123,7 @@ def test_nvfp4(vllm_runner, model, eager, backend):
             f"The backend {backend} is not supported with current_platform.has_device_capability(100) == False"
         )
 
-    with vllm_runner(model, enforce_eager=eager, linear_backend=backend) as llm:
+    with aphrodite_runner(model, enforce_eager=eager, linear_backend=backend) as llm:
         output = llm.generate_greedy(["1 2 3 4 5"], max_tokens=2)
     assert output[0][1] == "1 2 3 4 5 6"
 
@@ -140,8 +140,8 @@ def test_nvfp4(vllm_runner, model, eager, backend):
     not current_platform.is_rocm(),
     reason="NVFP4 MOE emulation is only useful on AMD Instinct MI3xx",
 )
-def test_nvfp4_moe(vllm_runner, model, backend):
-    with vllm_runner(
+def test_nvfp4_moe(aphrodite_runner, model, backend):
+    with aphrodite_runner(
         model,
         moe_backend=backend,
         linear_backend=backend,

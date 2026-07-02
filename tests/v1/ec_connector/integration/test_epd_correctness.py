@@ -12,14 +12,14 @@ Usage:
         --service_url http://localhost:8000 \
         --model_name Qwen/Qwen2.5-VL-3B-Instruct \
         --mode baseline \
-        --baseline_file .vllm_epd_baseline.txt
+        --baseline_file .aphrodite_epd_baseline.txt
 
     # Disagg mode (compares outputs):
     python test_epd_correctness.py \
         --service_url http://localhost:8000 \
         --model_name Qwen/Qwen2.5-VL-3B-Instruct \
         --mode disagg \
-        --baseline_file .vllm_epd_baseline.txt
+        --baseline_file .aphrodite_epd_baseline.txt
 """
 
 import argparse
@@ -93,7 +93,7 @@ SAMPLE_PROMPTS_TEXT: list[dict] = [
 ]
 
 
-def check_vllm_server(url: str, timeout=5, retries=10) -> bool:
+def check_aphrodite_server(url: str, timeout=5, retries=10) -> bool:
     """Check if the Aphrodite server is ready.
 
     Args:
@@ -182,7 +182,7 @@ def main():
     parser.add_argument(
         "--baseline_file",
         type=str,
-        default=".vllm_epd_baseline.txt",
+        default=".aphrodite_epd_baseline.txt",
         help="File to save/load baseline outputs",
     )
 
@@ -216,7 +216,7 @@ def main():
             )
 
     # Check if server is ready
-    if not check_vllm_server(health_check_url):
+    if not check_aphrodite_server(health_check_url):
         raise RuntimeError(f"Aphrodite server at {args.service_url} is not ready!")
 
     # Select prompts to use

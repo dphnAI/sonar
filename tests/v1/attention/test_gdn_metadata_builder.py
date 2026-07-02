@@ -13,7 +13,7 @@ import torch
 from tests.v1.attention.utils import (
     BatchSpec,
     create_common_attn_metadata,
-    create_vllm_config,
+    create_aphrodite_config,
 )
 from aphrodite.config import SpeculativeConfig
 from aphrodite.config.compilation import CUDAGraphMode
@@ -127,14 +127,14 @@ def _create_gdn_builder(
     full_cuda_graph: bool = False,
 ) -> GDNAttentionMetadataBuilder:
     """Create a GDNAttentionMetadataBuilder with minimal config."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         model_name="Qwen/Qwen3.5-0.8B",
         block_size=BLOCK_SIZE,
     )
     if full_cuda_graph:
-        vllm_config.compilation_config.cudagraph_mode = CUDAGraphMode.FULL_AND_PIECEWISE
+        aphrodite_config.compilation_config.cudagraph_mode = CUDAGraphMode.FULL_AND_PIECEWISE
     if num_speculative_tokens > 0:
-        vllm_config.speculative_config = SpeculativeConfig(
+        aphrodite_config.speculative_config = SpeculativeConfig(
             method="ngram",
             num_speculative_tokens=num_speculative_tokens,
         )
@@ -146,7 +146,7 @@ def _create_gdn_builder(
     return GDNAttentionMetadataBuilder(
         kv_cache_spec=mamba_spec,
         layer_names=["layer.0"],
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         device=DEVICE,
     )
 

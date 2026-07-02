@@ -16,7 +16,7 @@ from aphrodite.config import (
     ParallelConfig,
     SchedulerConfig,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.distributed.parallel_state import (
     init_distributed_environment,
@@ -92,7 +92,7 @@ def initialize_kv_cache(runner: GPUModelRunner):
     runner.initialize_attn_backend(kv_cache_config)
 
 
-def get_vllm_config():
+def get_aphrodite_config():
     model_config = ModelConfig(
         model="facebook/opt-125m",
         dtype="float16",
@@ -110,26 +110,26 @@ def get_vllm_config():
         cache_dtype="auto",
     )
     parallel_config = ParallelConfig()
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=model_config,
         cache_config=cache_config,
         scheduler_config=scheduler_config,
         parallel_config=parallel_config,
     )
-    return vllm_config
+    return aphrodite_config
 
 
 @pytest.fixture
 def model_runner():
-    vllm_config = get_vllm_config()
-    with set_current_vllm_config(vllm_config):
-        model_config = vllm_config.model_config
-        num_heads = model_config.get_num_kv_heads(vllm_config.parallel_config)
+    aphrodite_config = get_aphrodite_config()
+    with set_current_aphrodite_config(aphrodite_config):
+        model_config = aphrodite_config.model_config
+        num_heads = model_config.get_num_kv_heads(aphrodite_config.parallel_config)
         head_size = model_config.get_head_size()
-        vllm_config.compilation_config.static_forward_context["layer.0"] = Attention(
+        aphrodite_config.compilation_config.static_forward_context["layer.0"] = Attention(
             num_heads, head_size, 0.1
         )
-        runner = GPUModelRunner(vllm_config, DEVICE_TYPE)
+        runner = GPUModelRunner(aphrodite_config, DEVICE_TYPE)
         initialize_kv_cache(runner)
         yield runner
 
@@ -862,7 +862,7 @@ def test_sample_passes_reordered_draft_probs_to_rejection_sampler():
     assert torch.equal(passed_draft_probs, expected_draft_probs)
 
 
-def test_init_kv_cache_with_kv_sharing_invalid_target_layer_order(default_vllm_config):
+def test_init_kv_cache_with_kv_sharing_invalid_target_layer_order(default_aphrodite_config):
     torch.set_default_dtype(torch.float16)
     layer_0 = "model.layers.0.self_attn.attn"
     layer_1 = "model.layers.1.self_attn.attn"
@@ -889,7 +889,7 @@ def test_init_kv_cache_with_kv_sharing_invalid_target_layer_order(default_vllm_c
         assert fwd_context is not None
 
 
-def test_init_kv_cache_with_kv_sharing_target_layer_not_exist(default_vllm_config):
+def test_init_kv_cache_with_kv_sharing_target_layer_not_exist(default_aphrodite_config):
     torch.set_default_dtype(torch.float16)
     layer_0 = "model.layers.0.self_attn.attn"
     layer_1 = "model.layers.1.self_attn.attn"
@@ -916,7 +916,7 @@ def test_init_kv_cache_with_kv_sharing_target_layer_not_exist(default_vllm_confi
         assert fwd_context is not None
 
 
-def test_init_kv_cache_with_kv_sharing_target_same_as_current(default_vllm_config):
+def test_init_kv_cache_with_kv_sharing_target_same_as_current(default_aphrodite_config):
     torch.set_default_dtype(torch.float16)
     layer_0 = "model.layers.0.self_attn.attn"
     layer_1 = "model.layers.1.self_attn.attn"
@@ -943,12 +943,12 @@ def test_init_kv_cache_with_kv_sharing_target_same_as_current(default_vllm_confi
         assert fwd_context is not None
 
 
-def test_init_kv_cache_without_kv_sharing(default_vllm_config):
+def test_init_kv_cache_without_kv_sharing(default_aphrodite_config):
     torch.set_default_dtype(torch.float16)
     layer_0 = "model.layers.0.self_attn.attn"
     layer_1 = "model.layers.1.self_attn.attn"
-    vllm_config = get_vllm_config()
-    with set_current_vllm_config(vllm_config):
+    aphrodite_config = get_aphrodite_config()
+    with set_current_aphrodite_config(aphrodite_config):
         fwd_context = {
             layer_0: Attention(
                 num_heads=8,
@@ -966,9 +966,9 @@ def test_init_kv_cache_without_kv_sharing(default_vllm_config):
         # suppress var not used error
         assert fwd_context is not None
     # Set high context length to test max context length estimation
-    vllm_config.model_config.max_model_len = 3_000_000
-    vllm_ctx = vllm_config.compilation_config.static_forward_context
-    runner = GPUModelRunner(vllm_config, DEVICE_TYPE)
+    aphrodite_config.model_config.max_model_len = 3_000_000
+    aphrodite_ctx = aphrodite_config.compilation_config.static_forward_context
+    runner = GPUModelRunner(aphrodite_config, DEVICE_TYPE)
     kv_cache_spec = runner.get_kv_cache_spec()
     assert len(kv_cache_spec) == 2
     assert len(runner.shared_kv_cache_layers) == 0
@@ -977,14 +977,14 @@ def test_init_kv_cache_without_kv_sharing(default_vllm_config):
     # page size for layer 0's kv_cache_spec is 32KB
     num_expected_blocks = 327680  # 20GB / 32KB / 2 (num layers)
     kv_cache_config = get_kv_cache_configs(
-        vllm_config, [kv_cache_spec], [available_memory]
+        aphrodite_config, [kv_cache_spec], [available_memory]
     )[0]
     assert kv_cache_config.num_blocks == num_expected_blocks
     assert len(kv_cache_config.kv_cache_tensors) == 2
     assert kv_cache_config.kv_cache_tensors[0].size == available_memory // 2
     assert kv_cache_config.kv_cache_tensors[1].size == available_memory // 2
 
-    max_context_len = estimate_max_model_len(vllm_config, kv_cache_spec, 5 * GiB_bytes)
+    max_context_len = estimate_max_model_len(aphrodite_config, kv_cache_spec, 5 * GiB_bytes)
     # max context len with KV sharing should be 2x as large as without
     assert max_context_len == 1310720
 
@@ -998,8 +998,8 @@ def test_init_kv_cache_without_kv_sharing(default_vllm_config):
 
     runner.initialize_kv_cache(kv_cache_config)
 
-    layer_0_kv = vllm_ctx[layer_0].kv_cache
-    layer_1_kv = vllm_ctx[layer_1].kv_cache
+    layer_0_kv = aphrodite_ctx[layer_0].kv_cache
+    layer_1_kv = aphrodite_ctx[layer_1].kv_cache
     # check layer 1 kv cache does NOT share memory with layer 0
     assert id(layer_1_kv) != id(layer_0_kv)
 
@@ -1010,12 +1010,12 @@ def test_init_kv_cache_without_kv_sharing(default_vllm_config):
     assert kv_cache_config.kv_cache_groups[0].layer_names[1] == layer_1
 
 
-def test_init_kv_cache_with_kv_sharing_valid(default_vllm_config):
+def test_init_kv_cache_with_kv_sharing_valid(default_aphrodite_config):
     torch.set_default_dtype(torch.float16)
     layer_0 = "model.layers.0.self_attn.attn"
     layer_1 = "model.layers.1.self_attn.attn"
-    vllm_config = get_vllm_config()
-    with set_current_vllm_config(vllm_config):
+    aphrodite_config = get_aphrodite_config()
+    with set_current_aphrodite_config(aphrodite_config):
         fwd_context = {
             layer_0: Attention(
                 num_heads=8,
@@ -1034,9 +1034,9 @@ def test_init_kv_cache_with_kv_sharing_valid(default_vllm_config):
         # suppress var not used error
         assert fwd_context is not None
     # Set high context length to test max context length estimation
-    vllm_config.model_config.max_model_len = 3_000_000
-    vllm_ctx = vllm_config.compilation_config.static_forward_context
-    runner = GPUModelRunner(vllm_config, DEVICE_TYPE)
+    aphrodite_config.model_config.max_model_len = 3_000_000
+    aphrodite_ctx = aphrodite_config.compilation_config.static_forward_context
+    runner = GPUModelRunner(aphrodite_config, DEVICE_TYPE)
     kv_cache_spec = runner.get_kv_cache_spec()
     assert len(kv_cache_spec) == 1
     assert layer_0 in kv_cache_spec
@@ -1048,7 +1048,7 @@ def test_init_kv_cache_with_kv_sharing_valid(default_vllm_config):
     # which is twice as many as without KV sharing
     num_expected_blocks = 655360  # 20GB / 32KB
     kv_cache_config = get_kv_cache_configs(
-        vllm_config, [kv_cache_spec], [available_memory]
+        aphrodite_config, [kv_cache_spec], [available_memory]
     )[0]
     assert kv_cache_config.num_blocks == num_expected_blocks
     assert len(kv_cache_config.kv_cache_tensors) == 1
@@ -1056,7 +1056,7 @@ def test_init_kv_cache_with_kv_sharing_valid(default_vllm_config):
     # compared to no KV sharing
     assert kv_cache_config.kv_cache_tensors[0].size == available_memory
 
-    max_context_len = estimate_max_model_len(vllm_config, kv_cache_spec, 5 * GiB_bytes)
+    max_context_len = estimate_max_model_len(aphrodite_config, kv_cache_spec, 5 * GiB_bytes)
     # max context len with KV sharing should be 2x as large as without
     assert max_context_len == 2 * 1310720
 
@@ -1068,8 +1068,8 @@ def test_init_kv_cache_with_kv_sharing_valid(default_vllm_config):
     runner.initialize_kv_cache(kv_cache_config)
     kv_cache_config_after_init = runner.kv_cache_config
 
-    layer_0_kv = vllm_ctx[layer_0].kv_cache
-    layer_1_kv = vllm_ctx[layer_1].kv_cache
+    layer_0_kv = aphrodite_ctx[layer_0].kv_cache
+    layer_1_kv = aphrodite_ctx[layer_1].kv_cache
     # check layer 1 kv cache shares memory with layer 0
     assert id(layer_1_kv) == id(layer_0_kv)
 
@@ -1104,9 +1104,9 @@ def test_hybrid_attention_mamba_tensor_shapes():
             "MASTER_PORT": "12345",
         }
     )
-    from tests.utils import ensure_current_vllm_config
+    from tests.utils import ensure_current_aphrodite_config
 
-    with ensure_current_vllm_config():
+    with ensure_current_aphrodite_config():
         init_distributed_environment()
         initialize_model_parallel(tensor_model_parallel_size=1)
     torch.set_default_dtype(torch.float16)
@@ -1128,7 +1128,7 @@ def test_hybrid_attention_mamba_tensor_shapes():
     )
     parallel_config = ParallelConfig()
     attention_config = AttentionConfig(backend=AttentionBackendEnum.FLASHINFER)
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=model_config,
         cache_config=cache_config,
         scheduler_config=scheduler_config,
@@ -1143,8 +1143,8 @@ def test_hybrid_attention_mamba_tensor_shapes():
     layer_4 = "model.layers.4.mixer"
     layer_5 = "model.layers.5.mixer"
 
-    with set_current_vllm_config(vllm_config):
-        hf_config = vllm_config.model_config.hf_config
+    with set_current_aphrodite_config(aphrodite_config):
+        hf_config = aphrodite_config.model_config.hf_config
         fwd_context = {}
         for key in [layer_0, layer_1]:
             fwd_context[key] = Attention(
@@ -1173,15 +1173,15 @@ def test_hybrid_attention_mamba_tensor_shapes():
             )
         # suppress var not used error
         assert fwd_context is not None
-        vllm_ctx = vllm_config.compilation_config.static_forward_context
+        aphrodite_ctx = aphrodite_config.compilation_config.static_forward_context
 
-        runner = GPUModelRunner(vllm_config, DEVICE_TYPE)
-        current_platform.update_block_size_for_backend(vllm_config)
+        runner = GPUModelRunner(aphrodite_config, DEVICE_TYPE)
+        current_platform.update_block_size_for_backend(aphrodite_config)
         kv_cache_spec = runner.get_kv_cache_spec()
 
         available_memory = 5 * GiB_bytes
         kv_cache_config = get_kv_cache_configs(
-            vllm_config, [kv_cache_spec], [available_memory]
+            aphrodite_config, [kv_cache_spec], [available_memory]
         )[0]
         runner.initialize_kv_cache(kv_cache_config)
 
@@ -1193,9 +1193,9 @@ def test_hybrid_attention_mamba_tensor_shapes():
     np.random.shuffle(ind)
     blocks0, blocks1 = ind[: (num_blocks // 2)], ind[(num_blocks // 2) :]
 
-    attn_shape = vllm_ctx[layer_0].kv_cache.shape
-    conv_shape = vllm_ctx[layer_2].kv_cache[0].shape
-    ssm_shape = vllm_ctx[layer_2].kv_cache[1].shape
+    attn_shape = aphrodite_ctx[layer_0].kv_cache.shape
+    conv_shape = aphrodite_ctx[layer_2].kv_cache[0].shape
+    ssm_shape = aphrodite_ctx[layer_2].kv_cache[1].shape
 
     # assert we are using FlashInfer
     assert attn_shape[0] % num_blocks == 0
@@ -1236,19 +1236,19 @@ def test_hybrid_attention_mamba_tensor_shapes():
     for layer in [layer_0, layer_1]:
         # attention: kv_cache[kernel_block_idx, kv_idx, ...]
         for i, kernel_block in enumerate(kernel_blocks_for_attention):
-            vllm_ctx[layer].kv_cache[kernel_block, :] = attn_blocks_constant[i]
+            aphrodite_ctx[layer].kv_cache[kernel_block, :] = attn_blocks_constant[i]
 
     # fill mamba blocks with constants using kernel block indices
     for layer in [layer_2, layer_3, layer_4, layer_5]:
         # mamba: kv_cache[component][kernel_block_idx, ...]
         for i, kv_block in enumerate(kv_blocks_for_mamba):
-            vllm_ctx[layer].kv_cache[0][kv_block, :] = conv_blocks_constant[i]
-            vllm_ctx[layer].kv_cache[1][kv_block, :] = ssm_blocks_constant[i]
+            aphrodite_ctx[layer].kv_cache[0][kv_block, :] = conv_blocks_constant[i]
+            aphrodite_ctx[layer].kv_cache[1][kv_block, :] = ssm_blocks_constant[i]
 
     # verify attention and mamba contents are correct
     for layer in [layer_0, layer_1]:
         for i, kernel_block in enumerate(kernel_blocks_for_attention):
-            actual_kv = vllm_ctx[layer].kv_cache[kernel_block, :]
+            actual_kv = aphrodite_ctx[layer].kv_cache[kernel_block, :]
             expected = attn_blocks_constant[i]
 
             # Check K and V separately
@@ -1257,8 +1257,8 @@ def test_hybrid_attention_mamba_tensor_shapes():
 
     for layer in [layer_2, layer_3, layer_4, layer_5]:
         for i, kv_block in enumerate(kv_blocks_for_mamba):
-            actual_conv = vllm_ctx[layer].kv_cache[0][kv_block, :]
-            actual_ssm = vllm_ctx[layer].kv_cache[1][kv_block, :]
+            actual_conv = aphrodite_ctx[layer].kv_cache[0][kv_block, :]
+            actual_ssm = aphrodite_ctx[layer].kv_cache[1][kv_block, :]
             expected_conv = conv_blocks_constant[i]
             expected_ssm = ssm_blocks_constant[i]
 
@@ -1267,8 +1267,8 @@ def test_hybrid_attention_mamba_tensor_shapes():
 
     for layer in [layer_2, layer_3, layer_4, layer_5]:
         for i, kv_block in enumerate(kv_blocks_for_mamba):
-            actual_conv = vllm_ctx[layer].kv_cache[0][kv_block, :]
-            actual_ssm = vllm_ctx[layer].kv_cache[1][kv_block, :]
+            actual_conv = aphrodite_ctx[layer].kv_cache[0][kv_block, :]
+            actual_ssm = aphrodite_ctx[layer].kv_cache[1][kv_block, :]
             expected_conv = conv_blocks_constant[i]
             expected_ssm = ssm_blocks_constant[i]
             assert torch.equal(actual_conv, expected_conv)
@@ -1364,22 +1364,22 @@ def test_input_batch_with_kernel_block_sizes():
             assert block_table.block_size == kernel_size
 
 
-def test_hybrid_cache_integration(default_vllm_config, dist_init):
+def test_hybrid_cache_integration(default_aphrodite_config, dist_init):
     """Test hybrid cache architecture integration with GPUModelRunner."""
     # Create a new model runner with hybrid cache configuration
-    vllm_config = get_vllm_config()
+    aphrodite_config = get_aphrodite_config()
 
     # Configure hybrid cache with different kvcache_manager block size
-    vllm_config.cache_config.block_size = 32
+    aphrodite_config.cache_config.block_size = 32
 
-    model_config = vllm_config.model_config
-    num_heads = model_config.get_num_kv_heads(vllm_config.parallel_config)
+    model_config = aphrodite_config.model_config
+    num_heads = model_config.get_num_kv_heads(aphrodite_config.parallel_config)
     head_size = model_config.get_head_size()
-    vllm_config.compilation_config.static_forward_context["layer.0"] = Attention(
+    aphrodite_config.compilation_config.static_forward_context["layer.0"] = Attention(
         num_heads, head_size, 0.1
     )
 
-    runner = GPUModelRunner(vllm_config, DEVICE_TYPE)
+    runner = GPUModelRunner(aphrodite_config, DEVICE_TYPE)
 
     # Initialize KV cache with configuration
     attn_spec = FullAttentionSpec(
@@ -1534,9 +1534,9 @@ def test_mamba_cache_raises_when_max_num_seqs_exceeds_blocks():
             "MASTER_PORT": "12345",
         }
     )
-    from tests.utils import ensure_current_vllm_config
+    from tests.utils import ensure_current_aphrodite_config
 
-    with ensure_current_vllm_config():
+    with ensure_current_aphrodite_config():
         init_distributed_environment()
         initialize_model_parallel(tensor_model_parallel_size=1)
     torch.set_default_dtype(torch.float16)
@@ -1558,7 +1558,7 @@ def test_mamba_cache_raises_when_max_num_seqs_exceeds_blocks():
     )
     parallel_config = ParallelConfig()
     attention_config = AttentionConfig(backend=AttentionBackendEnum.FLASHINFER)
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=model_config,
         cache_config=cache_config,
         scheduler_config=scheduler_config,
@@ -1566,8 +1566,8 @@ def test_mamba_cache_raises_when_max_num_seqs_exceeds_blocks():
         attention_config=attention_config,
     )
 
-    with set_current_vllm_config(vllm_config):
-        hf_config = vllm_config.model_config.hf_config
+    with set_current_aphrodite_config(aphrodite_config):
+        hf_config = aphrodite_config.model_config.hf_config
         fwd_context = {}
         for key in ["model.layers.0.self_attn.attn", "model.layers.1.self_attn.attn"]:
             fwd_context[key] = Attention(
@@ -1601,13 +1601,13 @@ def test_mamba_cache_raises_when_max_num_seqs_exceeds_blocks():
             )
         assert fwd_context is not None
 
-        runner = GPUModelRunner(vllm_config, DEVICE_TYPE)
-        current_platform.update_block_size_for_backend(vllm_config)
+        runner = GPUModelRunner(aphrodite_config, DEVICE_TYPE)
+        current_platform.update_block_size_for_backend(aphrodite_config)
         kv_cache_spec = runner.get_kv_cache_spec()
 
         available_memory = 5 * GiB_bytes
         kv_cache_config = get_kv_cache_configs(
-            vllm_config, [kv_cache_spec], [available_memory]
+            aphrodite_config, [kv_cache_spec], [available_memory]
         )[0]
         num_blocks = kv_cache_config.num_blocks
 

@@ -49,7 +49,7 @@ from .utils import (
     create_model_runner_output,
     create_request,
     create_scheduler,
-    create_vllm_config,
+    create_aphrodite_config,
     make_kv_cache_config,
 )
 
@@ -87,11 +87,11 @@ def _make_connector_with_fake_worker(
     hand_shake_latency=0, cycles_before_done=0, do_handshake=True
 ):
     """Create a NixlConnector with FakeNixlConnectorWorker."""
-    vllm_config = create_vllm_config()
+    aphrodite_config = create_aphrodite_config()
     kv_cache_config = make_kv_cache_config(block_size=16, num_blocks=2)
-    connector = NixlConnector(vllm_config, KVConnectorRole.WORKER, kv_cache_config)
+    connector = NixlConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
     connector.connector_worker = FakeNixlConnectorWorker(
-        vllm_config,
+        aphrodite_config,
         connector.engine_id,
         hand_shake_latency=hand_shake_latency,
         kv_cache_config=kv_cache_config,
@@ -147,11 +147,11 @@ def test_multiturn_lifecycle():
     Turn 2: P receives remote_block_ids from D. P pulls KV from D because
     remote_block_ids is not None and external tokens > 0. Computes only
     new tokens, finishes LENGTH_CAPPED."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
 
     t1 = create_request(
         request_id=100, block_size=BS, num_tokens=int(BS * 2.5), do_remote_decode=True
@@ -193,11 +193,11 @@ def test_multiturn_lifecycle():
 def test_first_turn_no_remote_blocks():
     """First turn: P has no remote_block_ids from D yet.
     Standard local prefill, returns kv_transfer_params for future turns."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
     req = create_request(
         request_id=3, block_size=BS, num_tokens=int(BS * 2.5), do_remote_decode=True
     )
@@ -220,11 +220,11 @@ def test_first_turn_no_remote_blocks():
 
 def test_abort_p_side_during_send():
     """P-side do_remote_decode=True: blocks held until finished_sending."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
     req = create_request(
         request_id=42, block_size=BS, num_tokens=int(BS * 2.5), do_remote_decode=True
     )
@@ -246,11 +246,11 @@ def test_abort_p_side_during_send():
 
 def test_abort_p_side_non_length_capped():
     """P-side abort with non-LENGTH_CAPPED → immediate block free."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
     req = create_request(
         request_id=44, block_size=BS, num_tokens=int(BS * 2.5), do_remote_decode=True
     )
@@ -273,11 +273,11 @@ def test_abort_p_side_non_length_capped():
 def test_remote_blocks_exceed_prompt_tokens():
     """D provides more remote tokens than P's prompt needs.
     P caps external tokens to prompt length."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
     NUM_TOKENS = int(BS * 2.5)
     req = _make_p_node_turn2_request(
         300, BS, NUM_TOKENS, num_remote_blocks=5, remote_num_tokens=5 * BS
@@ -309,11 +309,11 @@ def test_p_node_pulls_partial_last_block_from_d():
     """D sends remote_block_ids with partially filled last block.
     remote_num_tokens < len(remote_block_ids) * block_size.
     P pulls only remote_num_tokens worth of external tokens."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
     num_remote_blocks = 3
     remote_num_tokens = int(BS * 2.5)
     assert remote_num_tokens < num_remote_blocks * BS
@@ -382,11 +382,11 @@ def test_add_new_req_to_recv_populates_remote_meta():
 def test_build_connector_meta_recv_entries():
     """P-node scheduler: do_remote_decode=True + remote_block_ids →
     _reqs_need_recv populated, build_connector_meta produces reqs_to_recv."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
     req = _make_p_node_turn2_request(1, BS, int(BS * 2.5))
     scheduler.add_request(req)
     req_id = req.request_id
@@ -402,11 +402,11 @@ def test_build_connector_meta_recv_entries():
 
 def test_build_connector_meta_clears_reqs_need_recv():
     """After build_connector_meta, _reqs_need_recv is cleared."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
     req = _make_p_node_turn2_request(2, BS, int(BS * 2.5))
     scheduler.add_request(req)
     conn = scheduler.connector.connector_scheduler
@@ -416,11 +416,11 @@ def test_build_connector_meta_clears_reqs_need_recv():
 
 def test_build_connector_meta_multiple_requests():
     """Multiple P-node requests all included in reqs_to_recv."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
     reqs = [_make_p_node_turn2_request(10 + i, BS, int(BS * 2.5)) for i in range(3)]
     for r in reqs:
         scheduler.add_request(r)
@@ -503,11 +503,11 @@ def test_d_node_request_finished_returns_kv_params():
     """D-node request_finished returns kv_transfer_params with
     do_remote_decode=True, remote_block_ids, remote_num_tokens
     for P to pull. These params go directly to P node."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
     req = create_request(
         request_id=1, block_size=BS, num_tokens=int(BS * 2.5), do_remote_prefill=True
     )
@@ -533,11 +533,11 @@ def test_d_node_request_finished_returns_kv_params():
 
 def test_d_node_request_finished_delays_block_free():
     """D-node holds blocks (delay_free=True) until P reads them."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
     req = create_request(
         request_id=2, block_size=BS, num_tokens=int(BS * 2.5), do_remote_prefill=True
     )
@@ -558,11 +558,11 @@ def test_d_node_request_finished_delays_block_free():
 
 def test_d_node_request_finished_remote_num_tokens():
     """D-node kv_transfer_params includes correct remote_num_tokens."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
     req = create_request(
         request_id=3, block_size=BS, num_tokens=int(BS * 2.5), do_remote_prefill=True
     )
@@ -584,11 +584,11 @@ def test_d_node_request_finished_remote_num_tokens():
 def test_d_node_partial_last_block_remote_num_tokens():
     """D-node: remote_num_tokens < len(remote_block_ids) * block_size
     when last block is partially filled."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
     req = create_request(
         request_id=5, block_size=BS, num_tokens=int(BS * 2.5), do_remote_prefill=True
     )
@@ -618,11 +618,11 @@ def test_no_double_read_blocks_after_reschedule():
     WAITING_FOR_REMOTE_KVS → reschedule). The _remote_blocks_processed
     flag must prevent the request from being added to _reqs_need_recv
     twice, which would cause P to read D's blocks twice."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
     req = _make_p_node_turn2_request(500, BS, int(BS * 2.5))
     scheduler.add_request(req)
     req_id = req.request_id
@@ -671,11 +671,11 @@ def test_remote_num_tokens_bounded_by_blocks():
     remote_num_tokens <= len(remote_block_ids) * block_size.
     request.num_tokens includes the last sampled token which has no KV
     in the cache, so remote_num_tokens must use num_computed_tokens."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
     req = create_request(
         request_id=501,
         block_size=BS,
@@ -708,14 +708,14 @@ def test_kv_recompute_threshold_skips_small_transfer():
     P should skip the remote pull and compute locally instead of
     entering WAITING_FOR_REMOTE_KVS."""
     threshold = 256
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config={
             "bidirectional_kv_xfer": True,
             "kv_recompute_threshold": threshold,
         },
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
 
     # Create request where remote tokens (48) < threshold (256)
     req = _make_p_node_turn2_request(
@@ -749,11 +749,11 @@ def test_p_node_finished_holds_blocks_for_d():
     do_remote_decode=True. P must hold blocks (delay_free=True) and
     return kv_transfer_params with do_remote_prefill=True so D can
     read P's blocks."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
     req = create_request(
         request_id=503,
         block_size=BS,
@@ -790,11 +790,11 @@ def test_cache_miss_first_turn_no_remote_pull():
     """Edge case 5: First turn with do_remote_decode=True but no
     remote_block_ids (cache MISS). P should prefill locally with
     num_external_tokens=0 and not enter WAITING_FOR_REMOTE_KVS."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
     req = create_request(
         request_id=504,
         block_size=BS,
@@ -825,11 +825,11 @@ def test_partial_remote_tokens_less_than_prompt():
     """Edge case 6: D's remote_num_tokens covers only part of P's
     prompt. P should pull remote_num_tokens worth of external tokens
     and compute the rest locally."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
     NUM_TOKENS = int(BS * 4.5)  # 72 tokens
     # D provides only 2 blocks (32 tokens) out of 72
     req = _make_p_node_turn2_request(
@@ -870,11 +870,11 @@ def test_remote_blocks_processed_flag_persists():
     """Edge case 7: After recv completes and request is rescheduled,
     the _remote_blocks_processed flag in kv_transfer_params prevents
     the bidirectional path from re-entering _reqs_need_recv."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config=BIDIR_KV_EXTRA_CONFIG,
     )
-    scheduler = create_scheduler(vllm_config)
-    BS = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config)
+    BS = aphrodite_config.cache_config.block_size
     req = _make_p_node_turn2_request(506, BS, int(BS * 2.5))
     scheduler.add_request(req)
     req_id = req.request_id

@@ -85,7 +85,7 @@ def test_phimoe_routing_function():
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_models(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model: str,
     dtype: str,
@@ -97,13 +97,13 @@ def test_models(
             example_prompts, max_tokens, num_logprobs
         )
 
-    with vllm_runner(model, dtype=dtype) as vllm_model:
-        vllm_outputs = vllm_model.generate_greedy_logprobs(
+    with aphrodite_runner(model, dtype=dtype) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
             example_prompts, max_tokens, num_logprobs
         )
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=vllm_outputs,
+        outputs_1_lst=aphrodite_outputs,
         name_0="hf",
         name_1="aphrodite",
     )

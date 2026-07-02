@@ -10,7 +10,7 @@ import tests.ci_envs as ci_envs
 from tests.models.utils import (
     GenerateModelInfo,
     TokensTextLogprobsPromptLogprobs,
-    get_vllm_extra_kwargs,
+    get_aphrodite_extra_kwargs,
 )
 from aphrodite.logprobs import Logprob
 
@@ -22,27 +22,27 @@ MAX_LENGTH = 1024
 @torch.inference_mode
 def wikitext_ppl_test(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     model_info: GenerateModelInfo,
     max_length=MAX_LENGTH,
-    vllm_extra_kwargs=None,
+    aphrodite_extra_kwargs=None,
     atol=PPL_TOL,
 ):
-    vllm_extra_kwargs = get_vllm_extra_kwargs(model_info, vllm_extra_kwargs)
+    aphrodite_extra_kwargs = get_aphrodite_extra_kwargs(model_info, aphrodite_extra_kwargs)
 
     dataset = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="test")
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_info.name,
         gpu_memory_utilization=0.7,
         max_model_len=max_length,
         max_num_seqs=1,
-        **vllm_extra_kwargs,
-    ) as vllm_model:
+        **aphrodite_extra_kwargs,
+    ) as aphrodite_model:
         # Use max_num_seqs=1 to avoid OOM,
         # and avoid batch different requests together.
 
-        model_config = vllm_model.llm.llm_engine.model_config
+        model_config = aphrodite_model.llm.llm_engine.model_config
 
         # Confirm whether aphrodite is using the correct architecture
         if model_info.architecture:
@@ -51,7 +51,7 @@ def wikitext_ppl_test(
         max_length = min(model_config.max_model_len - 1, max_length)
         stride = max_length
 
-        tokenizer = vllm_model.llm.get_tokenizer()
+        tokenizer = aphrodite_model.llm.get_tokenizer()
         tokens = tokenizer.encode("\n\n".join(dataset["text"]))
         n_tokens = len(tokens)
 
@@ -60,7 +60,7 @@ def wikitext_ppl_test(
             end_loc = min(begin_loc + max_length, n_tokens)
             chunks.append(tokens[begin_loc:end_loc])
 
-        outputs = vllm_model.generate_greedy_logprobs(
+        outputs = aphrodite_model.generate_greedy_logprobs(
             prompts=chunks,
             max_tokens=1,
             num_logprobs=None,
@@ -86,8 +86,8 @@ def wikitext_ppl_test(
             ).sum()
             nll_sum += neg_log_likelihood
             n_tokens += len(token_log_probs)
-        vllm_ppl = float(torch.exp(nll_sum / n_tokens))
-        vllm_dtype = model_config.dtype
+        aphrodite_ppl = float(torch.exp(nll_sum / n_tokens))
+        aphrodite_dtype = model_config.dtype
         head_dtype = model_config.head_dtype
 
     # Accelerate ppl test by setting Transformers ppl score to a constant
@@ -116,9 +116,9 @@ def wikitext_ppl_test(
         hf_ppl = model_info.hf_ppl
         hf_dtype = "Constant"
 
-    differ = (vllm_ppl - hf_ppl) / hf_ppl
+    differ = (aphrodite_ppl - hf_ppl) / hf_ppl
     print("Model:", model_info.name)
-    print("APHRODITE:", f"dtype:{vllm_dtype}", f"head_dtype:{head_dtype}", vllm_ppl)
+    print("APHRODITE:", f"dtype:{aphrodite_dtype}", f"head_dtype:{head_dtype}", aphrodite_ppl)
     print("Transformers:", hf_dtype, hf_ppl)
     print("Difference (%):", differ * 100)
 

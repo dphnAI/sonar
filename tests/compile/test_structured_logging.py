@@ -9,7 +9,7 @@ from torch import nn
 
 import tests.compile.silly_attention  # noqa
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.config.compilation import (
     CompilationConfig,
     CompilationMode,
@@ -27,7 +27,7 @@ DEVICE_TYPE = current_platform.device_type
 class SimpleModel(nn.Module):
     """A simple model with a splitting op for piecewise compilation."""
 
-    def __init__(self, *, vllm_config: AphroditeConfig, prefix: str = "", **kwargs):
+    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", **kwargs):
         super().__init__()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -71,13 +71,13 @@ class TraceStructuredCapture:
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
-def test_vllm_structured_logging_artifacts(use_fresh_inductor_cache):
+def test_aphrodite_structured_logging_artifacts(use_fresh_inductor_cache):
     """Test that all expected Aphrodite artifacts are logged during compilation."""
     torch.set_default_device(DEVICE_TYPE)
 
     capture = TraceStructuredCapture()
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
             cudagraph_mode=CUDAGraphMode.PIECEWISE,
@@ -95,28 +95,28 @@ def test_vllm_structured_logging_artifacts(use_fresh_inductor_cache):
     with (
         patch("aphrodite.compilation.backends.trace_structured", capture),
         patch("aphrodite.compilation.piecewise_backend.trace_structured", capture),
-        set_current_vllm_config(vllm_config),
+        set_current_aphrodite_config(aphrodite_config),
     ):
-        model = SimpleModel(vllm_config=vllm_config, prefix="test")
-        with set_forward_context({}, vllm_config=vllm_config):
+        model = SimpleModel(aphrodite_config=aphrodite_config, prefix="test")
+        with set_forward_context({}, aphrodite_config=aphrodite_config):
             model(torch.randn(8, MLP_SIZE))
 
-    config_artifacts = capture.get("artifact", "vllm_compilation_config")
+    config_artifacts = capture.get("artifact", "aphrodite_compilation_config")
     assert len(config_artifacts) == 1, (
-        f"Expected 1 vllm_compilation_config, got {len(config_artifacts)}"
+        f"Expected 1 aphrodite_compilation_config, got {len(config_artifacts)}"
     )
-    vllm_piecewise_split_graph = capture.get("graph_dump", "vllm_piecewise_split_graph")
-    assert len(vllm_piecewise_split_graph) == 1, (
+    aphrodite_piecewise_split_graph = capture.get("graph_dump", "aphrodite_piecewise_split_graph")
+    assert len(aphrodite_piecewise_split_graph) == 1, (
         "Expected 1 toplevel piecewise split graph, "
-        f"got {len(vllm_piecewise_split_graph)}"
+        f"got {len(aphrodite_piecewise_split_graph)}"
     )
-    compile_start_artifacts = capture.get("artifact", "vllm_piecewise_compile_start")
+    compile_start_artifacts = capture.get("artifact", "aphrodite_piecewise_compile_start")
     assert len(compile_start_artifacts) == 4, (
-        "Expected 4 vllm_piecewise_compile_start "
+        "Expected 4 aphrodite_piecewise_compile_start "
         "(2 subgraphs x 2 ranges each: dynamic + compile size), "
         f"got {len(compile_start_artifacts)}"
     )
-    submod_dumps = capture.get("graph_dump", r"vllm_submod_.*")
+    submod_dumps = capture.get("graph_dump", r"aphrodite_submod_.*")
     assert len(submod_dumps) == 2, (
         "Expected 2 submods (one before attention, one after attention), "
         f"got {len(submod_dumps)}"

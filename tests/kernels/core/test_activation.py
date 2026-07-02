@@ -51,7 +51,7 @@ CUDA_DEVICES = [
 @pytest.mark.parametrize("device", CUDA_DEVICES)
 @torch.inference_mode()
 def test_act_and_mul(
-    default_vllm_config,
+    default_aphrodite_config,
     activation: str,
     num_tokens: int,
     d: int,
@@ -128,7 +128,7 @@ SWIGLU_LIMITS = [3.0, 7.0, 15.0]
 @pytest.mark.parametrize("device", CUDA_DEVICES)
 @torch.inference_mode()
 def test_silu_and_mul_with_clamp(
-    default_vllm_config,
+    default_aphrodite_config,
     swiglu_limit: float,
     num_tokens: int,
     d: int,
@@ -211,7 +211,7 @@ def test_silu_and_mul_with_clamp(
 @pytest.mark.parametrize("device", CUDA_DEVICES)
 @torch.inference_mode()
 def test_activation(
-    default_vllm_config,
+    default_aphrodite_config,
     activation: type[torch.nn.Module],
     num_tokens: int,
     d: int,

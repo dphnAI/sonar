@@ -26,11 +26,11 @@ N_SEQ = 5
 
 @pytest.mark.skip(reason="2-bit GPTQ is no longer supported after Marlin consolidation")
 @pytest.mark.parametrize("model_id", MODELS)
-def test_model_load(vllm_runner, model_id, monkeypatch):
+def test_model_load(aphrodite_runner, model_id, monkeypatch):
     # `LLM.apply_model` requires pickling a function.
     monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
 
-    with vllm_runner(model_id, dtype=torch.float16, max_model_len=512) as llm:
+    with aphrodite_runner(model_id, dtype=torch.float16, max_model_len=512) as llm:
 
         def check_model(model_id):
             for name, submodule in model_id.named_modules():
@@ -46,7 +46,7 @@ def test_model_load(vllm_runner, model_id, monkeypatch):
 
 @pytest.mark.skip(reason="2-bit GPTQ is no longer supported after Marlin consolidation")
 @pytest.mark.parametrize("model_id", MODELS)
-def test_model_inference(vllm_runner, model_id):
+def test_model_inference(aphrodite_runner, model_id):
     # Prepare prompt to test the model's generation result.
     prompt = "What is the meaning of life?"
     messages = [
@@ -70,7 +70,7 @@ def test_model_inference(vllm_runner, model_id):
         presence_penalty=2,
     )
 
-    with vllm_runner(model_id, dtype=torch.float16, max_model_len=512) as llm:
+    with aphrodite_runner(model_id, dtype=torch.float16, max_model_len=512) as llm:
         # Generate a response to verify inference correctness
         output = llm.generate(text, sampling_params)
 

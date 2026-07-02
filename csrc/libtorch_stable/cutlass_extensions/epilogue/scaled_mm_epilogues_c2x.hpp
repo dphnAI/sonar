@@ -14,7 +14,7 @@
    EVTCompute::Arguments struct.
 */
 
-namespace vllm::c2x {
+namespace aphrodite::c2x {
 
 using namespace cute;
 
@@ -322,4 +322,4 @@ struct ScaledEpilogueBiasAzpToken
   }
 };
 
-};  // namespace vllm::c2x
+};  // namespace aphrodite::c2x

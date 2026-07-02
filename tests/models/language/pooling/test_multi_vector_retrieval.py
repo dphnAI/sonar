@@ -14,14 +14,14 @@ from aphrodite.config import PoolerConfig
 )
 @pytest.mark.parametrize("dtype", ["half"])
 @torch.inference_mode
-def test_embed_models(hf_runner, vllm_runner, example_prompts, model: str, dtype: str):
-    with vllm_runner(
+def test_embed_models(hf_runner, aphrodite_runner, example_prompts, model: str, dtype: str):
+    with aphrodite_runner(
         model,
         runner="pooling",
         pooler_config=PoolerConfig(task="token_embed"),
         max_model_len=None,
-    ) as vllm_model:
-        vllm_outputs = vllm_model.token_embed(example_prompts)
+    ) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.token_embed(example_prompts)
 
     with hf_runner(
         model,
@@ -37,10 +37,10 @@ def test_embed_models(hf_runner, vllm_runner, example_prompts, model: str, dtype
             # normal
             hf_outputs.append(embedding.cpu())
 
-    for hf_output, vllm_output in zip(hf_outputs, vllm_outputs):
+    for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
         check_embeddings_close(
             embeddings_0_lst=hf_output,
-            embeddings_1_lst=vllm_output,
+            embeddings_1_lst=aphrodite_output,
             name_0="hf",
             name_1="aphrodite",
             tol=1e-2,

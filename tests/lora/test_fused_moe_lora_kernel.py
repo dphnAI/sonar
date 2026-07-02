@@ -6,7 +6,7 @@ import random
 import pytest
 import torch
 
-from tests.utils import ensure_current_vllm_config, multi_gpu_test
+from tests.utils import ensure_current_aphrodite_config, multi_gpu_test
 from aphrodite import _custom_ops as ops
 from aphrodite.distributed import (
     init_distributed_environment,
@@ -653,7 +653,7 @@ def use_fused_moe_lora_kernel_tensor_parallel(
         distributed_init_method=init_method,
         backend=current_platform.dist_backend,
     )
-    with ensure_current_vllm_config():
+    with ensure_current_aphrodite_config():
         initialize_model_parallel(world_size, 1)
     tp_size = get_tensor_model_parallel_world_size()
 

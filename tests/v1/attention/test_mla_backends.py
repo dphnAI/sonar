@@ -14,11 +14,11 @@ import torch
 from tests.v1.attention.utils import (
     BatchSpec,
     create_common_attn_metadata,
-    create_vllm_config,
+    create_aphrodite_config,
     try_get_attention_backend,
 )
 from aphrodite import _custom_ops as ops
-from aphrodite.config.aphrodite import set_current_vllm_config
+from aphrodite.config.aphrodite import set_current_aphrodite_config
 from aphrodite.model_executor.layers.attention import mla_attention as mla_attention_module
 from aphrodite.model_executor.layers.attention.mla_attention import (
     MLAAttention,
@@ -479,7 +479,7 @@ class MockMLAAttentionLayer(MLAAttention):
     def get_attn_backend(self):
         raise NotImplementedError
 
-    def get_kv_cache_spec(self, vllm_config):
+    def get_kv_cache_spec(self, aphrodite_config):
         raise NotImplementedError
 
     def forward_impl(
@@ -576,7 +576,7 @@ class MockMLAAttentionLayer(MLAAttention):
 
 
 def test_mock_mla_dcp_fp8_decode_gathers_quantized_query(
-    monkeypatch, default_vllm_config
+    monkeypatch, default_aphrodite_config
 ):
     if not torch.cuda.is_available():
         pytest.skip("CUDA is required for FP8 decode query quantization path.")
@@ -640,7 +640,7 @@ def test_mock_mla_dcp_fp8_decode_gathers_quantized_query(
     monkeypatch.setattr(mla_attention_module, "get_dcp_group", lambda: fake_group)
 
     impl = _FakeImpl()
-    with set_current_vllm_config(default_vllm_config):
+    with set_current_aphrodite_config(default_aphrodite_config):
         layer = MockMLAAttentionLayer(
             impl=impl,
             num_heads=num_heads,
@@ -788,7 +788,7 @@ def run_attention_backend(
     backend: AttentionBackendEnum,
     kv_cache_spec: MLAAttentionSpec,
     layer_names: list[str],
-    vllm_config,
+    aphrodite_config,
     device: torch.device,
     common_attn_metadata: CommonAttentionMetadata,
     query: torch.Tensor,
@@ -810,19 +810,19 @@ def run_attention_backend(
     builder_cls, impl_cls = try_get_attention_backend(backend)
 
     # Force the prefill backend selection (None means auto-select).
-    vllm_config.attention_config.mla_prefill_backend = prefill_backend
+    aphrodite_config.attention_config.mla_prefill_backend = prefill_backend
 
-    # Set the current aphrodite config so that get_current_vllm_config() works
+    # Set the current aphrodite config so that get_current_aphrodite_config() works
     # in the backend implementations
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         # Instantiate MLA implementation
-        num_heads = vllm_config.model_config.get_num_attention_heads(
-            vllm_config.parallel_config
+        num_heads = aphrodite_config.model_config.get_num_attention_heads(
+            aphrodite_config.parallel_config
         )
-        num_kv_heads = vllm_config.model_config.get_num_kv_heads(
-            vllm_config.parallel_config
+        num_kv_heads = aphrodite_config.model_config.get_num_kv_heads(
+            aphrodite_config.parallel_config
         )
-        head_size = vllm_config.model_config.get_head_size()
+        head_size = aphrodite_config.model_config.get_head_size()
         # Production MLA passes 1/sqrt(qk_head_dim) (the prefill scale) to the
         # impl and forwards the same value to the prefill backend. FLASHINFER
         # prefill reads sm_scale back from impl.scale via global_hyperparameters
@@ -849,7 +849,7 @@ def run_attention_backend(
         )
 
         # Process weights on the impl
-        act_dtype = _convert_dtype_to_torch(vllm_config.model_config.dtype)
+        act_dtype = _convert_dtype_to_torch(aphrodite_config.model_config.dtype)
         impl.process_weights_after_loading(act_dtype)
 
         # Initialize DCP attributes (normally set by MLAAttention.forward
@@ -873,7 +873,7 @@ def run_attention_backend(
 
         # Attach prefill backend (normally created by MLAAttention.__init__)
         prefill_scale = (qk_nope_head_dim + qk_rope_head_dim) ** -0.5
-        prefill_backend_cls = get_mla_prefill_backend(vllm_config)
+        prefill_backend_cls = get_mla_prefill_backend(aphrodite_config)
         mock_layer.prefill_backend = prefill_backend_cls(
             num_heads=num_heads,
             scale=prefill_scale,
@@ -881,17 +881,17 @@ def run_attention_backend(
             qk_nope_head_dim=qk_nope_head_dim,
             qk_rope_head_dim=qk_rope_head_dim,
             v_head_dim=v_head_dim,
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
         )
 
         # Populate static_forward_context with mock attention layers
         for layer_name in layer_names:
-            vllm_config.compilation_config.static_forward_context[layer_name] = (
+            aphrodite_config.compilation_config.static_forward_context[layer_name] = (
                 mock_layer
             )
 
         # Build metadata
-        builder = builder_cls(kv_cache_spec, layer_names, vllm_config, device)
+        builder = builder_cls(kv_cache_spec, layer_names, aphrodite_config, device)
         attn_metadata = builder.build(
             common_prefix_len=0,
             common_attn_metadata=common_attn_metadata,
@@ -934,7 +934,7 @@ def run_attention_backend(
 @pytest.mark.parametrize(("q_scale", "k_scale"), [(1.0, 1.0), (2.0, 3.0)])
 @pytest.mark.parametrize("prefill_backend", PREFILL_BACKENDS_TO_TEST)
 def test_backend_correctness(
-    default_vllm_config,
+    default_aphrodite_config,
     dist_init,
     workspace_init,
     batch_spec_name: str,
@@ -1034,7 +1034,7 @@ def test_backend_correctness(
                 1, original_num_kv_heads // tensor_parallel_size
             )
 
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         model_name=model,
         tensor_parallel_size=1,  # Always use TP=1 to avoid multi-GPU requirements
         max_model_len=max(batch_spec.seq_lens),
@@ -1042,7 +1042,7 @@ def test_backend_correctness(
         block_size=default_block_size,
         hf_config_override=hf_config_override,
     )
-    vllm_config.cache_config.cache_dtype = kv_cache_dtype
+    aphrodite_config.cache_config.cache_dtype = kv_cache_dtype
 
     # For spec decode tests, add a speculative_config to set the reorder_batch_threshold
     if is_spec_decode_test:
@@ -1053,7 +1053,7 @@ def test_backend_correctness(
         # Set num_speculative_tokens to query_len - 1
         # (since threshold is 1 + num_spec_tokens)
         # Use ngram method which doesn't require a draft model
-        vllm_config.speculative_config = SpeculativeConfig(
+        aphrodite_config.speculative_config = SpeculativeConfig(
             method="ngram", num_speculative_tokens=query_len - 1
         )
 
@@ -1063,11 +1063,11 @@ def test_backend_correctness(
     batch_size = batch_spec.batch_size
     seq_lens = batch_spec.seq_lens
     query_lens = batch_spec.query_lens
-    num_q_heads = vllm_config.model_config.get_num_attention_heads(
-        vllm_config.parallel_config
+    num_q_heads = aphrodite_config.model_config.get_num_attention_heads(
+        aphrodite_config.parallel_config
     )
-    head_size = vllm_config.model_config.get_head_size()
-    dtype = _convert_dtype_to_torch(vllm_config.model_config.dtype)
+    head_size = aphrodite_config.model_config.get_head_size()
+    dtype = _convert_dtype_to_torch(aphrodite_config.model_config.dtype)
     kv_lora_rank = 512
     qk_rope_head_dim = 64
     qk_nope_head_dim = 128
@@ -1085,7 +1085,7 @@ def test_backend_correctness(
     decode_scale = prefill_scale
 
     # 2. Generate data and compute SDPA reference output for MLA
-    all_q_vllm, all_kv_c_vllm, all_k_pe_vllm = [], [], []
+    all_q_aphrodite, all_kv_c_aphrodite, all_k_pe_aphrodite = [], [], []
     all_sdpa_outputs: list[list[torch.Tensor]] = []
     kv_c_contexts, k_pe_contexts = [], []
 
@@ -1247,18 +1247,18 @@ def test_backend_correctness(
                 all_sdpa_outputs[backend_idx].append(sdpa_out_i_prefill)
 
         # Inputs for Aphrodite MLA backends are just the new tokens
-        all_q_vllm.append(q_c)
-        all_kv_c_vllm.append(kv_c_full[context_len:])  # New kv_c tokens
-        all_k_pe_vllm.append(k_pe_full[context_len:])  # New k_pe tokens
+        all_q_aphrodite.append(q_c)
+        all_kv_c_aphrodite.append(kv_c_full[context_len:])  # New kv_c tokens
+        all_k_pe_aphrodite.append(k_pe_full[context_len:])  # New k_pe tokens
 
         # Contextual K/V data used to populate the paged cache (MLA format)
         kv_c_contexts.append(kv_c_full[:context_len])
         k_pe_contexts.append(k_pe_full[:context_len])
 
     # Concatenate all sequences (no reordering needed)
-    query_vllm = torch.cat(all_q_vllm, dim=0)
-    kv_c_vllm = torch.cat(all_kv_c_vllm, dim=0)
-    k_pe_vllm = torch.cat(all_k_pe_vllm, dim=0)
+    query_aphrodite = torch.cat(all_q_aphrodite, dim=0)
+    kv_c_aphrodite = torch.cat(all_kv_c_aphrodite, dim=0)
+    k_pe_aphrodite = torch.cat(all_k_pe_aphrodite, dim=0)
     sdpa_outputs = {}
     for backend_idx, backend in enumerate(backends_to_test):
         sdpa_outputs[backend] = torch.cat(all_sdpa_outputs[backend_idx], dim=0)
@@ -1348,12 +1348,12 @@ def test_backend_correctness(
         # Create kv_cache_spec with the correct block_size for this backend
         backend_kv_cache_spec = MLAAttentionSpec(
             block_size=block_size,
-            num_kv_heads=vllm_config.model_config.get_num_kv_heads(
-                vllm_config.parallel_config
+            num_kv_heads=aphrodite_config.model_config.get_num_kv_heads(
+                aphrodite_config.parallel_config
             ),
-            head_size=vllm_config.model_config.get_head_size(),
-            dtype=vllm_config.model_config.dtype,
-            sliding_window=vllm_config.model_config.get_sliding_window(),
+            head_size=aphrodite_config.model_config.get_head_size(),
+            dtype=aphrodite_config.model_config.dtype,
+            sliding_window=aphrodite_config.model_config.get_sliding_window(),
             cache_dtype_str=kv_cache_dtype,
         )
 
@@ -1361,12 +1361,12 @@ def test_backend_correctness(
             backend_name,
             backend_kv_cache_spec,
             ["placeholder"],
-            vllm_config,
+            aphrodite_config,
             device,
             common_attn_metadata,
-            query_vllm,
-            kv_c_vllm,
-            k_pe_vllm,
+            query_aphrodite,
+            kv_c_aphrodite,
+            k_pe_aphrodite,
             kv_cache,
             kv_lora_rank,
             qk_nope_head_dim,

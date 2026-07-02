@@ -15,7 +15,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def _run_test(
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     model: str,
 ) -> None:
     prompt = [
@@ -32,7 +32,7 @@ def _run_test(
         for _ in range(10)
     ]
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="pooling",
         dtype="half",
@@ -43,8 +43,8 @@ def _run_test(
         # test going OOM during the warmup run
         max_num_seqs=32,
         default_torch_num_threads=1,
-    ) as vllm_model:
-        vllm_model.llm.encode(prompt, pooling_task="plugin")
+    ) as aphrodite_model:
+        aphrodite_model.llm.encode(prompt, pooling_task="plugin")
 
 
 MODELS = ["ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL-Sen1Floods11"]
@@ -54,11 +54,11 @@ MODELS = ["ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL-Sen1Floods11"]
 @pytest.mark.parametrize("model", MODELS)
 def test_models_image(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     image_assets,
     model: str,
 ) -> None:
     _run_test(
-        vllm_runner,
+        aphrodite_runner,
         model,
     )

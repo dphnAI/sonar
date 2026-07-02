@@ -24,12 +24,12 @@ from aphrodite.platforms import current_platform
 @pytest.mark.parametrize("max_tokens", [32])
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="Should only run on ROCm")
 def test_rocm_compressed_tensors_w4a16_e2e(
-    vllm_runner, example_prompts, model_path, max_tokens
+    aphrodite_runner, example_prompts, model_path, max_tokens
 ):
     # Use fp16 activations for maximum compatibility.
     # gpu_memory_utilization lowered to work on shared nodes.
-    with vllm_runner(
+    with aphrodite_runner(
         model_path, dtype="float16", gpu_memory_utilization=0.3
-    ) as vllm_model:
+    ) as aphrodite_model:
         # If the W4A16 kernel is broken, this will typically throw.
-        vllm_model.generate_greedy(example_prompts, max_tokens=max_tokens)
+        aphrodite_model.generate_greedy(example_prompts, max_tokens=max_tokens)

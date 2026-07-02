@@ -20,8 +20,8 @@ from aphrodite.compilation.passes.ir.inplace_functionalization import (
     AphroditeIRInplaceFunctionalizationPass,
 )
 from aphrodite.compilation.passes.pass_manager import with_pattern_match_debug
-from aphrodite.compilation.passes.vllm_inductor_pass import AphroditeInductorPass
-from aphrodite.config import AphroditeConfig, get_current_vllm_config
+from aphrodite.compilation.passes.aphrodite_inductor_pass import AphroditeInductorPass
+from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
 from aphrodite.config.utils import Range
 from aphrodite.logger import init_logger
 
@@ -35,12 +35,12 @@ class LazyInitPass(InductorPass):
     and then immediately invoke it.
     """
 
-    def __init__(self, pass_cls: type[AphroditeInductorPass], vllm_config: AphroditeConfig):
+    def __init__(self, pass_cls: type[AphroditeInductorPass], aphrodite_config: AphroditeConfig):
         self.pass_cls = pass_cls
-        self.vllm_config = weakref.proxy(vllm_config)  # avoid cycle
+        self.aphrodite_config = weakref.proxy(aphrodite_config)  # avoid cycle
 
     def __call__(self, graph: fx.Graph) -> None:
-        self.pass_ = self.pass_cls(self.vllm_config)
+        self.pass_ = self.pass_cls(self.aphrodite_config)
         self.pass_(graph)
 
 
@@ -58,9 +58,9 @@ class TestBackend:
 
     def __init__(self, *passes: InductorPass | Callable[[fx.Graph], None]):
         self.custom_passes = list(passes)
-        vllm_config = get_current_vllm_config()
-        compile_config = vllm_config.compilation_config
-        self.range = Range(1, vllm_config.scheduler_config.max_num_batched_tokens)
+        aphrodite_config = get_current_aphrodite_config()
+        compile_config = aphrodite_config.compilation_config
+        self.range = Range(1, aphrodite_config.scheduler_config.max_num_batched_tokens)
         # Deepcopy to allow multiple TestBackend instances to use the same AphroditeConfig
         self.inductor_config = deepcopy(compile_config.inductor_compile_config)
         self.inductor_config["force_disable_caches"] = True
@@ -68,10 +68,10 @@ class TestBackend:
 
         # Add AphroditeIRInplaceFunctionalizationPass as pre-grad pass by default
         self.inductor_config["pre_grad_custom_pass"] = (
-            AphroditeIRInplaceFunctionalizationPass(vllm_config)
+            AphroditeIRInplaceFunctionalizationPass(aphrodite_config)
         )
 
-        if debug_dump_path := vllm_config.compile_debug_dump_path():
+        if debug_dump_path := aphrodite_config.compile_debug_dump_path():
             logger.debug("Dumping depyf output to %s", debug_dump_path)
             self.debug_ctx = depyf.prepare_debug(debug_dump_path.as_posix())
         else:

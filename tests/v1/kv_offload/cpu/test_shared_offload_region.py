@@ -486,7 +486,7 @@ def test_multiprocess_race_construct_and_write(iid):
         assert r["error"] is None, f"rank {rank}: {r['error']}"
 
     # Read the raw file while all workers still hold it open.
-    mmap_path = f"/dev/shm/vllm_offload_{iid}.mmap"
+    mmap_path = f"/dev/shm/aphrodite_offload_{iid}.mmap"
     with open(mmap_path, "rb") as f:
         raw = f.read()
 

@@ -156,7 +156,7 @@ SAMPLE_JSON_SCHEMA = {
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_models(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model: str,
     dtype: str,
@@ -169,14 +169,14 @@ def test_models(
             example_prompts, max_tokens, num_logprobs
         )
 
-    with vllm_runner(model, dtype=dtype, tokenizer_mode="mistral") as vllm_model:
-        vllm_outputs = vllm_model.generate_greedy_logprobs(
+    with aphrodite_runner(model, dtype=dtype, tokenizer_mode="mistral") as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
             example_prompts, max_tokens, num_logprobs
         )
 
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=vllm_outputs,
+        outputs_1_lst=aphrodite_outputs,
         name_0="hf",
         name_1="aphrodite",
     )
@@ -187,14 +187,14 @@ def test_models(
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_mistral_format(
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model: str,
     dtype: str,
     max_tokens: int,
     num_logprobs: int,
 ) -> None:
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         dtype=dtype,
         tokenizer_mode="mistral",
@@ -205,7 +205,7 @@ def test_mistral_format(
             example_prompts, max_tokens, num_logprobs
         )
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         dtype=dtype,
         tokenizer_mode="hf",
@@ -226,37 +226,37 @@ def test_mistral_format(
 
 @pytest.mark.parametrize("model", MISTRAL_FORMAT_MODELS)
 @pytest.mark.parametrize("dtype", ["bfloat16"])
-def test_mistral_symbolic_languages(vllm_runner, model: str, dtype: str) -> None:
-    with vllm_runner(
+def test_mistral_symbolic_languages(aphrodite_runner, model: str, dtype: str) -> None:
+    with aphrodite_runner(
         model,
         dtype=dtype,
         max_model_len=8192,
         tokenizer_mode="mistral",
         config_format="mistral",
         load_format="mistral",
-    ) as vllm_model:
+    ) as aphrodite_model:
         for prompt in SYMBOLIC_LANG_PROMPTS:
             msg = {"role": "user", "content": prompt}
-            outputs = vllm_model.llm.chat([msg], sampling_params=SAMPLING_PARAMS)
+            outputs = aphrodite_model.llm.chat([msg], sampling_params=SAMPLING_PARAMS)
             assert "�" not in outputs[0].outputs[0].text.strip()
 
 
 @pytest.mark.parametrize("model", MISTRAL_FORMAT_MODELS)
 @pytest.mark.parametrize("dtype", ["bfloat16"])
-def test_mistral_function_calling(vllm_runner, model: str, dtype: str) -> None:
-    with vllm_runner(
+def test_mistral_function_calling(aphrodite_runner, model: str, dtype: str) -> None:
+    with aphrodite_runner(
         model,
         dtype=dtype,
         tokenizer_mode="mistral",
         config_format="mistral",
         load_format="mistral",
-    ) as vllm_model:
+    ) as aphrodite_model:
         msgs = copy.deepcopy(MSGS)
-        outputs = vllm_model.llm.chat(
+        outputs = aphrodite_model.llm.chat(
             msgs, tools=TOOLS, sampling_params=SAMPLING_PARAMS
         )
 
-        tokenizer = vllm_model.llm.get_tokenizer()
+        tokenizer = aphrodite_model.llm.get_tokenizer()
         tool_parser = MistralToolParser(tokenizer)
 
         model_output = outputs[0].outputs[0].text.strip()

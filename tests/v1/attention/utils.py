@@ -153,7 +153,7 @@ def try_backend_includes_kv_cache_update(
 
 
 def create_standard_kv_cache_spec(
-    vllm_config: AphroditeConfig,
+    aphrodite_config: AphroditeConfig,
     attn_type: AttentionType = AttentionType.DECODER,
 ) -> FullAttentionSpec | EncoderOnlyAttentionSpec:
     """Create an AttentionSpec from AphroditeConfig.
@@ -163,25 +163,25 @@ def create_standard_kv_cache_spec(
     """
     if attn_type == AttentionType.ENCODER_ONLY:
         return EncoderOnlyAttentionSpec(
-            block_size=vllm_config.cache_config.block_size,
-            num_kv_heads=vllm_config.model_config.get_num_kv_heads(
-                vllm_config.parallel_config
+            block_size=aphrodite_config.cache_config.block_size,
+            num_kv_heads=aphrodite_config.model_config.get_num_kv_heads(
+                aphrodite_config.parallel_config
             ),
-            head_size=vllm_config.model_config.get_head_size(),
-            dtype=vllm_config.model_config.dtype,
+            head_size=aphrodite_config.model_config.get_head_size(),
+            dtype=aphrodite_config.model_config.dtype,
         )
     return FullAttentionSpec(
-        block_size=vllm_config.cache_config.block_size,
-        num_kv_heads=vllm_config.model_config.get_num_kv_heads(
-            vllm_config.parallel_config
+        block_size=aphrodite_config.cache_config.block_size,
+        num_kv_heads=aphrodite_config.model_config.get_num_kv_heads(
+            aphrodite_config.parallel_config
         ),
-        head_size=vllm_config.model_config.get_head_size(),
-        dtype=vllm_config.model_config.dtype,
-        sliding_window=vllm_config.model_config.get_sliding_window(),
+        head_size=aphrodite_config.model_config.get_head_size(),
+        dtype=aphrodite_config.model_config.dtype,
+        sliding_window=aphrodite_config.model_config.get_sliding_window(),
     )
 
 
-def create_vllm_config(
+def create_aphrodite_config(
     model_name: str = "meta-llama/Meta-Llama-3-8B",
     tensor_parallel_size: int = 1,
     max_model_len: int = 1024,
@@ -394,19 +394,19 @@ class MockMambaBuilder(BaseMambaAttentionMetadataBuilder[BaseMambaAttentionMetad
     @classmethod
     def build_mamba_metadata(
         cls,
-        vllm_config: AphroditeConfig,
+        aphrodite_config: AphroditeConfig,
         seq_lens: list[int],
         query_lens: list[int],
         is_prefilling: list[bool],
         *,
         device: torch.device | None = None,
     ) -> BaseMambaAttentionMetadata:
-        block_size = vllm_config.cache_config.block_size
+        block_size = aphrodite_config.cache_config.block_size
         device = device or torch.device("cpu")
         mamba_spec = MambaSpec(
             block_size=block_size, shapes=((1,), (1,)), dtypes=(torch.float32,)
         )
-        builder = cls(mamba_spec, ["layer0"], vllm_config, device)
+        builder = cls(mamba_spec, ["layer0"], aphrodite_config, device)
         batch_spec = BatchSpec(seq_lens=seq_lens, query_lens=query_lens)
         common_metadata = create_common_attn_metadata(
             batch_spec, block_size=block_size, device=device, arange_block_indices=True

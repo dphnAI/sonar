@@ -48,7 +48,7 @@ FP8_DTYPE = current_platform.fp8_dtype()
 class MLARoPEKVCacheCatTestModel(torch.nn.Module):
     def __init__(
         self,
-        vllm_config: AphroditeConfig,
+        aphrodite_config: AphroditeConfig,
         attn_backend: AttentionBackendEnum,
         use_deepseek_scaling_rope: bool,
         num_heads: int,
@@ -76,7 +76,7 @@ class MLARoPEKVCacheCatTestModel(torch.nn.Module):
 
         self.num_kv_heads = 1
         self.head_size = kv_lora_rank + qk_rope_head_dim
-        self.block_size = vllm_config.cache_config.block_size
+        self.block_size = aphrodite_config.cache_config.block_size
         self.scale = self.qk_head_dim**-0.5
 
         if use_deepseek_scaling_rope:
@@ -131,8 +131,8 @@ class MLARoPEKVCacheCatTestModel(torch.nn.Module):
             q_lora_rank=self.q_lora_rank,
             kv_lora_rank=self.kv_lora_rank,
             kv_b_proj=self.kv_b_proj,
-            cache_config=vllm_config.cache_config,
-            quant_config=vllm_config.quant_config,
+            cache_config=aphrodite_config.cache_config,
+            quant_config=aphrodite_config.quant_config,
             prefix=prefix,
             attn_backend=attn_backend.get_class(),
         )
@@ -141,16 +141,16 @@ class MLARoPEKVCacheCatTestModel(torch.nn.Module):
         self.mla_attn._v_scale = self.mla_attn._v_scale.to(device)
 
         # Keep both the string dtype (for ops) and torch dtype (for tensors)
-        self.kv_cache_dtype_str = vllm_config.cache_config.cache_dtype
+        self.kv_cache_dtype_str = aphrodite_config.cache_config.cache_dtype
         self.kv_cache_dtype = (
             FP8_DTYPE if self.kv_cache_dtype_str.startswith("fp8") else self.dtype
         )
 
         # Initialize attn MetadataBuilder
         self.builder = self.attn_backend.get_builder_cls()(
-            kv_cache_spec=self.mla_attn.get_kv_cache_spec(vllm_config),
+            kv_cache_spec=self.mla_attn.get_kv_cache_spec(aphrodite_config),
             layer_names=[self.mla_attn.layer_name],
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             device=device,
         )
 
@@ -276,7 +276,7 @@ def test_mla_rope_kvcache_cat_fusion(
     torch.set_default_dtype(dtype)
     torch.manual_seed(0)
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=ModelConfig(
             model="deepseek-ai/DeepSeek-V2-Lite",
             dtype=dtype,
@@ -294,7 +294,7 @@ def test_mla_rope_kvcache_cat_fusion(
         ),
     )
 
-    with aphrodite.config.set_current_vllm_config(vllm_config), monkeypatch.context() as m:
+    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
         if not torch.distributed.is_initialized():
             from aphrodite.distributed.parallel_state import (
                 init_distributed_environment,
@@ -319,7 +319,7 @@ def test_mla_rope_kvcache_cat_fusion(
             rocm_aiter_ops.refresh_env_variables()
 
         model = MLARoPEKVCacheCatTestModel(
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             attn_backend=attn_backend,
             use_deepseek_scaling_rope=use_deepseek_scaling_rope,
             num_heads=num_heads,
@@ -333,7 +333,7 @@ def test_mla_rope_kvcache_cat_fusion(
             device=torch.get_default_device(),
         )
 
-        fusion_pass = MLARoPEKVCacheCatFusionPass(vllm_config)
+        fusion_pass = MLARoPEKVCacheCatFusionPass(aphrodite_config)
         # note: FixFunctionalizationPass is required to correctly lower
         # the fused op to its inplace version with auto-functionalization v1.
         # Without it, decompose_auto_functionalized calls clone_preserve_strides
@@ -343,10 +343,10 @@ def test_mla_rope_kvcache_cat_fusion(
         # tensor (_all_bases) and reconstructs the slice as a view, so the
         # offset is never passed through as_strided lowering.
         passes = [
-            NoOpEliminationPass(vllm_config),
+            NoOpEliminationPass(aphrodite_config),
             fusion_pass,
-            PostCleanupPass(vllm_config),
-            FixFunctionalizationPass(vllm_config),
+            PostCleanupPass(aphrodite_config),
+            FixFunctionalizationPass(aphrodite_config),
         ]
         backend = TestBackend(*passes)
 
@@ -363,7 +363,7 @@ def test_mla_rope_kvcache_cat_fusion(
         pos_unfused = pos.clone()
 
         # Run unfused version
-        with set_forward_context(None, vllm_config):
+        with set_forward_context(None, aphrodite_config):
             forward_context = get_forward_context()
             attn_metadata = model.build_attn_metadata(T)
             forward_context.slot_mapping = {
@@ -379,7 +379,7 @@ def test_mla_rope_kvcache_cat_fusion(
         # Run fused version (compiled)
         torch._dynamo.mark_dynamic(qkv_lora, 0)
         torch._dynamo.mark_dynamic(pos, 0)
-        with set_forward_context(None, vllm_config):
+        with set_forward_context(None, aphrodite_config):
             model_fused = torch.compile(model, backend=backend)
             forward_context = get_forward_context()
             attn_metadata = model.build_attn_metadata(T)

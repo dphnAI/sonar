@@ -6,7 +6,7 @@ import torch
 
 import aphrodite.config
 from tests.compile.backend import TestBackend
-from aphrodite.compilation.passes.vllm_inductor_pass import (
+from aphrodite.compilation.passes.aphrodite_inductor_pass import (
     AphroditeFusionPatternMatcherPass,
     AphroditePatternMatcherPass,
     AphroditePatternReplacement,
@@ -71,30 +71,30 @@ class TwoPatternFusionPass(AphroditeFusionPatternMatcherPass):
 
 
 @pytest.fixture
-def vllm_config():
+def aphrodite_config():
     return AphroditeConfig(
         compilation_config=CompilationConfig(mode=CompilationMode.APHRODITE_COMPILE),
     )
 
 
 @pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="Requires CUDA")
-def test_register_tracks_patterns(vllm_config):
+def test_register_tracks_patterns(aphrodite_config):
     """register() appends each AphroditePatternReplacement to _pattern_replacements."""
-    with aphrodite.config.set_current_vllm_config(vllm_config):
-        single = ReluFusionPass(vllm_config)
-        two = TwoPatternFusionPass(vllm_config)
+    with aphrodite.config.set_current_aphrodite_config(aphrodite_config):
+        single = ReluFusionPass(aphrodite_config)
+        two = TwoPatternFusionPass(aphrodite_config)
 
     assert len(single._pattern_replacements) == 1
     assert len(two._pattern_replacements) == 2
 
 
 @pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="Requires CUDA")
-def test_uuid_stable(vllm_config):
+def test_uuid_stable(aphrodite_config):
     """Two instances of the same pass class produce identical uuids."""
-    with aphrodite.config.set_current_vllm_config(vllm_config):
-        p1 = ReluFusionPass(vllm_config)
-        p2 = ReluFusionPass(vllm_config)
-        p3 = TwoPatternFusionPass(vllm_config)
+    with aphrodite.config.set_current_aphrodite_config(aphrodite_config):
+        p1 = ReluFusionPass(aphrodite_config)
+        p2 = ReluFusionPass(aphrodite_config)
+        p3 = TwoPatternFusionPass(aphrodite_config)
 
     assert p1.uuid() == p2.uuid()
     assert p1.uuid() != p3.uuid()
@@ -103,7 +103,7 @@ def test_uuid_stable(vllm_config):
 
 @pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="Requires CUDA")
 @pytest.mark.parametrize("N", [1, 2, 4])
-def test_matched_count_and_match_table(vllm_config, N):
+def test_matched_count_and_match_table(aphrodite_config, N):
     """matched_count and match_table reflect the number of matched patterns."""
 
     class Model(torch.nn.Module):
@@ -111,11 +111,11 @@ def test_matched_count_and_match_table(vllm_config, N):
             # N independent relus
             return sum(torch.relu(x) for x in inputs)
 
-    with aphrodite.config.set_current_vllm_config(vllm_config):
+    with aphrodite.config.set_current_aphrodite_config(aphrodite_config):
         torch.set_default_device("cuda")
         torch.set_default_dtype(torch.float32)
 
-        fusion_pass = ReluFusionPass(vllm_config)
+        fusion_pass = ReluFusionPass(aphrodite_config)
         backend = TestBackend(fusion_pass)
         model = torch.compile(Model(), backend=backend)
 

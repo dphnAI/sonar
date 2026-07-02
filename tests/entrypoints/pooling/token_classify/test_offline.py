@@ -65,7 +65,7 @@ def test_score_api(llm: LLM):
 
 
 @pytest.mark.parametrize("task", ["classify", "embed", "token_embed", "plugin"])
-def test_unsupported_tasks(llm: LLM, task: PoolingTask, caplog_vllm):
+def test_unsupported_tasks(llm: LLM, task: PoolingTask, caplog_aphrodite):
     if task == "plugin":
         err_msg = "No IOProcessor plugin installed."
     elif task == "classify":

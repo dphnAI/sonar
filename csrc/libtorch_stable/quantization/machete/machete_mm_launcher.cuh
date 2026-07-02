@@ -17,7 +17,7 @@ namespace machete {
 struct MMArgs {
   torch::stable::Tensor const& A;
   torch::stable::Tensor const& B;
-  vllm::ScalarType const& b_type;
+  aphrodite::ScalarType const& b_type;
   std::optional<torch::headeronly::ScalarType> const& maybe_out_type;
   std::optional<torch::stable::Tensor> const& maybe_group_scales;
   std::optional<torch::stable::Tensor> const& maybe_group_zeros;
@@ -29,7 +29,7 @@ struct MMArgs {
 
 struct SupportedSchedulesArgs {
   torch::headeronly::ScalarType a_type;
-  vllm::ScalarType b_type;
+  aphrodite::ScalarType b_type;
   std::optional<torch::headeronly::ScalarType> maybe_group_scales_type;
   std::optional<torch::headeronly::ScalarType> maybe_group_zeros_type;
   std::optional<torch::headeronly::ScalarType> maybe_channel_scales_type;

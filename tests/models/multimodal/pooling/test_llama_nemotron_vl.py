@@ -53,7 +53,7 @@ MODELS = ["nvidia/llama-nemotron-embed-vl-1b-v2"]
 
 def _run_test(
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     input_texts: list[str],
     input_images: PromptImageInput,
     model: str,
@@ -65,7 +65,7 @@ def _run_test(
     NOTE: Run Aphrodite first to avoid CUDA initialization issues with multiprocessing.
     """
     # Run Aphrodite inference first
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="pooling",
         dtype=dtype,
@@ -73,8 +73,8 @@ def _run_test(
         enforce_eager=True,
         trust_remote_code=True,
         **ROCM_ENGINE_KWARGS,
-    ) as vllm_model:
-        vllm_outputs = vllm_model.embed(input_texts, images=input_images)
+    ) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.embed(input_texts, images=input_images)
 
     # Run HF inference using the model's encode_queries/encode_documents API
     with hf_runner(model, dtype=dtype, auto_cls=AutoModel) as hf_model:
@@ -108,7 +108,7 @@ def _run_test(
 
     check_embeddings_close(
         embeddings_0_lst=hf_outputs,
-        embeddings_1_lst=vllm_outputs,
+        embeddings_1_lst=aphrodite_outputs,
         name_0="hf",
         name_1="aphrodite",
     )
@@ -118,7 +118,7 @@ def _run_test(
 @pytest.mark.parametrize("dtype", ["half"])
 def test_models_text(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     image_assets,
     model: str,
     dtype: str,
@@ -130,7 +130,7 @@ def test_models_text(
 
     _run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         input_texts,
         input_images,  # type: ignore
         model,
@@ -142,7 +142,7 @@ def test_models_text(
 @pytest.mark.parametrize("dtype", ["half"])
 def test_models_image(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     image_assets,
     model: str,
     dtype: str,
@@ -156,7 +156,7 @@ def test_models_image(
 
     _run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         input_texts,
         input_images,
         model,
@@ -238,15 +238,15 @@ def _run_hf_reranker(
         return scores.detach().cpu().tolist()
 
 
-def _run_vllm_reranker(
-    vllm_runner: type[AphroditeRunner],
+def _run_aphrodite_reranker(
+    aphrodite_runner: type[AphroditeRunner],
     model: str,
     dtype: str,
     query: str,
     docs: list,
 ) -> list[float]:
     """Run Aphrodite reranker inference; docs is a list of (doc_text, doc_image|None)."""
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="pooling",
         dtype=dtype,
@@ -254,14 +254,14 @@ def _run_vllm_reranker(
         enforce_eager=True,
         trust_remote_code=True,
         **ROCM_ENGINE_KWARGS,
-    ) as vllm_model:
+    ) as aphrodite_model:
         has_images = any(img is not None for _, img in docs)
 
         if not has_images:
             # Text-only path: use the simple string score API.
             queries = [query] * len(docs)
             doc_texts = [doc_text for doc_text, _ in docs]
-            outputs = vllm_model.score(
+            outputs = aphrodite_model.score(
                 queries,
                 doc_texts,
                 chat_template=_RERANKER_SCORE_TEMPLATE,
@@ -298,7 +298,7 @@ def _run_vllm_reranker(
                     )
                 doc_params.append(ScoreMultiModalParam(content=content))
 
-            raw_outputs = vllm_model.llm.score(
+            raw_outputs = aphrodite_model.llm.score(
                 query_params,
                 doc_params,
                 chat_template=_RERANKER_SCORE_TEMPLATE,
@@ -310,7 +310,7 @@ def _run_vllm_reranker(
 
 def _run_reranker_test(
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     model: str,
     dtype: str,
     query: str,
@@ -320,18 +320,18 @@ def _run_reranker_test(
 
     NOTE: Run Aphrodite first to avoid CUDA initialization issues with multiprocessing.
     """
-    vllm_scores = _run_vllm_reranker(vllm_runner, model, dtype, query, docs)
+    aphrodite_scores = _run_aphrodite_reranker(aphrodite_runner, model, dtype, query, docs)
     hf_scores = _run_hf_reranker(hf_runner, model, dtype, query, docs)
 
-    assert len(hf_scores) == len(vllm_scores), (
-        f"Output length mismatch: HF={len(hf_scores)}, Aphrodite={len(vllm_scores)}"
+    assert len(hf_scores) == len(aphrodite_scores), (
+        f"Output length mismatch: HF={len(hf_scores)}, Aphrodite={len(aphrodite_scores)}"
     )
     # NOTE: ROCm shows slightly higher numerical variance dues to different attention
     # backend between Aphrodite and HF; use a marginally looser tolerance
     rel_tol = 0.022 if current_platform.is_rocm() else 0.02
-    for i, (hf_score, vllm_score) in enumerate(zip(hf_scores, vllm_scores)):
-        assert hf_score == pytest.approx(vllm_score, rel=rel_tol), (
-            f"Score mismatch at index {i}: HF={hf_score:.4f}, Aphrodite={vllm_score:.4f}"
+    for i, (hf_score, aphrodite_score) in enumerate(zip(hf_scores, aphrodite_scores)):
+        assert hf_score == pytest.approx(aphrodite_score, rel=rel_tol), (
+            f"Score mismatch at index {i}: HF={hf_score:.4f}, Aphrodite={aphrodite_score:.4f}"
         )
 
 
@@ -339,24 +339,24 @@ def _run_reranker_test(
 @pytest.mark.parametrize("dtype", ["half"])
 def test_reranker_text(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     dtype: str,
 ) -> None:
     """Test reranking with text-only query and text documents."""
     docs = [(text, None) for text in RERANKER_TEXT_DOCS]
-    _run_reranker_test(hf_runner, vllm_runner, model, dtype, RERANKER_TEXT_QUERY, docs)
+    _run_reranker_test(hf_runner, aphrodite_runner, model, dtype, RERANKER_TEXT_QUERY, docs)
 
 
 @pytest.mark.parametrize("model", RERANKER_MODELS)
 @pytest.mark.parametrize("dtype", ["half"])
 def test_reranker_image_doc(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     image_assets,
     model: str,
     dtype: str,
 ) -> None:
     """Test reranking with text query against image documents."""
     docs = [(None, asset.pil_image) for asset in image_assets]
-    _run_reranker_test(hf_runner, vllm_runner, model, dtype, RERANKER_IMAGE_QUERY, docs)
+    _run_reranker_test(hf_runner, aphrodite_runner, model, dtype, RERANKER_IMAGE_QUERY, docs)

@@ -24,7 +24,7 @@ MODELS = ["ai21labs/Jamba-tiny-random", "pfnet/plamo-2-1b"]
 @pytest.mark.parametrize("max_tokens", [4])
 def test_model_experts_int8_startup(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model: str,
     dtype: str,
@@ -33,10 +33,10 @@ def test_model_experts_int8_startup(
     model_info = HF_EXAMPLE_MODELS.find_hf_info(model)
     model_info.check_transformers_version(on_fail="skip")
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         dtype=dtype,
         enforce_eager=True,
         quantization="experts_int8",
-    ) as vllm_model:
-        vllm_model.generate_greedy(example_prompts, max_tokens)
+    ) as aphrodite_model:
+        aphrodite_model.generate_greedy(example_prompts, max_tokens)

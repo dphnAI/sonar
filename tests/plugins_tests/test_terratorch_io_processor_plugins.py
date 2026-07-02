@@ -116,7 +116,7 @@ async def test_prithvi_mae_plugin_online(
     ],
 )
 def test_prithvi_mae_plugin_offline(
-    vllm_runner, model_name: str, image_url: str | dict, plugin: str, expected_hash: str
+    aphrodite_runner, model_name: str, image_url: str | dict, plugin: str, expected_hash: str
 ):
     img_data = dict(
         data=image_url,
@@ -127,7 +127,7 @@ def test_prithvi_mae_plugin_offline(
 
     prompt = dict(data=img_data)
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_name,
         runner="pooling",
         skip_tokenizer_init=True,

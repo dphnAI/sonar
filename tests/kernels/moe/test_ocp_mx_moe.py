@@ -98,7 +98,7 @@ def enable_pickle(monkeypatch):
     not QUARK_MXFP4_TORCH_COMPATIBLE,
     reason="MXFP4 via quark requires amd-quark >= 0.12 on torch >= 2.11.",
 )
-def test_mxfp4_loading_and_execution_moe(vllm_runner, model_case: ModelCase):
+def test_mxfp4_loading_and_execution_moe(aphrodite_runner, model_case: ModelCase):
     if torch.accelerator.device_count() < model_case.tp:
         pytest.skip(
             f"This test requires >={model_case.tp} gpus, got only "
@@ -106,7 +106,7 @@ def test_mxfp4_loading_and_execution_moe(vllm_runner, model_case: ModelCase):
         )
 
     # `cudagraph_capture_sizes=[16]` to reduce load time.
-    with vllm_runner(
+    with aphrodite_runner(
         model_case.model_id,
         tensor_parallel_size=model_case.tp,
         load_format="dummy",
@@ -1268,7 +1268,7 @@ def test_rocm_mxfp4_moe_oracle(
     if config["requires_gfx950"] and not ROCM_GFX950:
         pytest.skip(f"Backend {backend_name} requires GFX950")
 
-    from aphrodite.config import AphroditeConfig, set_current_vllm_config
+    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
     from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
     from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
         Mxfp4MoeBackend,
@@ -1402,7 +1402,7 @@ def test_rocm_mxfp4_moe_oracle(
 
     # Build kernel using oracle
     assert quant_config is not None, "Failed to create quant config"
-    with set_current_vllm_config(AphroditeConfig()):
+    with set_current_aphrodite_config(AphroditeConfig()):
         kernel = make_mxfp4_moe_kernel(
             moe_quant_config=quant_config,
             moe_config=moe_config,

@@ -127,7 +127,7 @@ def test_deepseek_fp8_block_moe_deep_gemm(monkeypatch: pytest.MonkeyPatch):
     )
 
 
-def test_deepseek_fp8_block_moe_vllm_triton(monkeypatch: pytest.MonkeyPatch):
+def test_deepseek_fp8_block_moe_aphrodite_triton(monkeypatch: pytest.MonkeyPatch):
     can_initialize(
         "deepseek-ai/DeepSeek-V3.1",
         hf_overrides=HF_OVERRIDE_TEXT,
@@ -157,7 +157,7 @@ def test_deepseek_fp8_block_moe_flashinfer_trtllm(monkeypatch: pytest.MonkeyPatc
     )
 
 
-def test_deepseek_nvfp4_moe_flashinfer_vllm(monkeypatch: pytest.MonkeyPatch):
+def test_deepseek_nvfp4_moe_flashinfer_aphrodite(monkeypatch: pytest.MonkeyPatch):
     can_initialize(
         "nvidia/DeepSeek-R1-0528-FP4-v2",
         hf_overrides=HF_OVERRIDE_TEXT,
@@ -275,7 +275,7 @@ def test_nemotron_fp8_moe_flashinfer_latency(monkeypatch: pytest.MonkeyPatch):
         "no act_and_mul MLP layer."
     )
 )
-def test_nemotron_fp8_moe_vllm_triton(monkeypatch: pytest.MonkeyPatch):
+def test_nemotron_fp8_moe_aphrodite_triton(monkeypatch: pytest.MonkeyPatch):
     can_initialize(
         "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8",
         hf_overrides=HF_OVERRIDE_TEXT,

@@ -807,7 +807,7 @@ def test_metrics_empty_stats():
 
 def test_get_kv_cache_configs_multiple_workers():
     model_config = ModelConfig(max_model_len=16)
-    vllm_config = AphroditeConfig(model_config=model_config)
+    aphrodite_config = AphroditeConfig(model_config=model_config)
 
     ref_kv_cache_spec = new_kv_cache_spec()
     same_kv_cache_specs = [
@@ -823,7 +823,7 @@ def test_get_kv_cache_configs_multiple_workers():
 
     # Basic case. All things are the same.
     kv_cache_configs = get_kv_cache_configs(
-        vllm_config,
+        aphrodite_config,
         same_kv_cache_specs,
         [
             ref_kv_cache_spec.page_size_bytes * 2 * 10,
@@ -864,7 +864,7 @@ def test_get_kv_cache_configs_multiple_workers():
     # Different available memory. This is the case for TP.
     # Use the smallest memory available.
     kv_cache_configs = get_kv_cache_configs(
-        vllm_config,
+        aphrodite_config,
         same_kv_cache_specs,
         [
             ref_kv_cache_spec.page_size_bytes * 2 * 10,
@@ -915,7 +915,7 @@ def test_get_kv_cache_configs_multiple_workers():
 
     # Different workers have different layers.
     kv_cache_configs = get_kv_cache_configs(
-        vllm_config,
+        aphrodite_config,
         different_layer_specs,
         [
             ref_kv_cache_spec.page_size_bytes * 2 * 10,
@@ -969,7 +969,7 @@ def test_get_kv_cache_configs_multiple_workers():
     ]
 
     kv_cache_configs = get_kv_cache_configs(
-        vllm_config,
+        aphrodite_config,
         tp_pp_kv_cache_specs,
         [
             ref_kv_cache_spec.page_size_bytes * 2 * 10,
@@ -1044,7 +1044,7 @@ def test_get_kv_cache_configs_multiple_workers():
         },
     ]
     kv_cache_configs = get_kv_cache_configs(
-        vllm_config,
+        aphrodite_config,
         different_type_layer_specs,
         [
             ref_kv_cache_spec.page_size_bytes * 2 * 10,
@@ -1099,7 +1099,7 @@ def test_get_kv_cache_configs_multiple_workers():
         },
     ]
     kv_cache_configs = get_kv_cache_configs(
-        vllm_config,
+        aphrodite_config,
         different_type_layer_specs,
         [
             ref_kv_cache_spec.page_size_bytes * 10,
@@ -1148,7 +1148,7 @@ def test_get_kv_cache_configs_multiple_workers():
     ]
     with pytest.raises(AssertionError):
         get_kv_cache_configs(
-            vllm_config,
+            aphrodite_config,
             conflicting_layer_specs,
             [
                 ref_kv_cache_spec.page_size_bytes * 2 * 10,
@@ -1164,7 +1164,7 @@ def test_get_kv_cache_configs_multiple_workers():
 )
 def test_get_kv_cache_configs_pp_sharding(asymmetric_memory):
     model_config = ModelConfig(max_model_len=512)
-    vllm_config = AphroditeConfig(model_config=model_config)
+    aphrodite_config = AphroditeConfig(model_config=model_config)
 
     ref_kv_cache_spec = new_kv_cache_spec()
     pp_kv_cache_specs = [
@@ -1182,7 +1182,7 @@ def test_get_kv_cache_configs_pp_sharding(asymmetric_memory):
     )
 
     kv_cache_configs = get_kv_cache_configs(
-        vllm_config,
+        aphrodite_config,
         pp_kv_cache_specs,
         available_memory,
     )
@@ -1367,7 +1367,7 @@ def test_estimate_max_model_len(model_id, max_model_len, want_estimated_max_len)
         is_encoder_decoder=model_config.is_encoder_decoder,
     )
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=model_config,
         scheduler_config=scheduler_config,
     )
@@ -1384,7 +1384,7 @@ def test_estimate_max_model_len(model_id, max_model_len, want_estimated_max_len)
         )
     # Estimate the maximum model length, 16384 model_len need 8GB
     estimated_max_len = estimate_max_model_len(
-        vllm_config, kv_cache_spec, 8 * GiB_bytes
+        aphrodite_config, kv_cache_spec, 8 * GiB_bytes
     )
     assert estimated_max_len == want_estimated_max_len
 
@@ -1406,7 +1406,7 @@ def test_get_max_concurrency_for_kv_cache_config():
         is_encoder_decoder=model_config.is_encoder_decoder,
     )
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=model_config,
         scheduler_config=scheduler_config,
     )
@@ -1434,7 +1434,7 @@ def test_get_max_concurrency_for_kv_cache_config():
         ],
     )
     max_concurrency_full_attention = get_max_concurrency_for_kv_cache_config(
-        vllm_config, kv_cache_config_full_attention
+        aphrodite_config, kv_cache_config_full_attention
     )
     assert max_concurrency_full_attention == 1.5
 
@@ -1446,7 +1446,7 @@ def test_get_max_concurrency_for_kv_cache_config():
         ],
     )
     max_concurrency_sliding_window = get_max_concurrency_for_kv_cache_config(
-        vllm_config, kv_cache_config_sliding_window
+        aphrodite_config, kv_cache_config_sliding_window
     )
     assert max_concurrency_sliding_window == 3
 
@@ -1461,11 +1461,11 @@ def test_get_max_concurrency_for_kv_cache_config():
         ],
     )
     max_concurrency_hybrid_model = get_max_concurrency_for_kv_cache_config(
-        vllm_config, kv_cache_config_hybrid_model
+        aphrodite_config, kv_cache_config_hybrid_model
     )
     assert max_concurrency_hybrid_model == 3
     num_tokens, max_concurrency = get_kv_cache_capacity(
-        vllm_config, kv_cache_config_hybrid_model
+        aphrodite_config, kv_cache_config_hybrid_model
     )
     assert num_tokens == max_concurrency_hybrid_model * max_model_len
     assert max_concurrency == max_concurrency_hybrid_model
@@ -1540,7 +1540,7 @@ def test_allocate_with_lookahead():
 def test_get_kv_cache_config_one_worker():
     # pass max_model_len to pass check_enough_kv_cache_memory
     model_config = ModelConfig(max_model_len=16)
-    vllm_config = AphroditeConfig(model_config=model_config)
+    aphrodite_config = AphroditeConfig(model_config=model_config)
 
     mem_per_block_per_layer = 16 * 2 * 64 * 4 * 2
     # all layers are full attention -> single group
@@ -1549,7 +1549,7 @@ def test_get_kv_cache_config_one_worker():
         "layer_2": new_kv_cache_spec(),
     }
     kv_cache_config_full = get_kv_cache_configs(
-        vllm_config, [kv_cache_specs_full], [mem_per_block_per_layer * 2 * 32]
+        aphrodite_config, [kv_cache_specs_full], [mem_per_block_per_layer * 2 * 32]
     )[0]
     print(kv_cache_config_full)
     assert kv_cache_config_full == KVCacheConfig(
@@ -1567,7 +1567,7 @@ def test_get_kv_cache_config_one_worker():
         "layer_2": new_sliding_window_spec(),
     }
     kv_cache_config_sliding = get_kv_cache_configs(
-        vllm_config, [kv_cache_specs_sliding], [mem_per_block_per_layer * 2 * 32]
+        aphrodite_config, [kv_cache_specs_sliding], [mem_per_block_per_layer * 2 * 32]
     )[0]
     assert kv_cache_config_sliding == KVCacheConfig(
         num_blocks=32,
@@ -1581,13 +1581,13 @@ def test_get_kv_cache_config_one_worker():
     )
 
     # full + sliding, but disable_hybrid_kv_cache_manager
-    vllm_config.scheduler_config.disable_hybrid_kv_cache_manager = True
+    aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = True
     kv_cache_specs_hybrid = {
         "layer_1": new_kv_cache_spec(),
         "layer_2": new_sliding_window_spec(),
     }
     kv_cache_config_hybrid = get_kv_cache_configs(
-        vllm_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 2 * 32]
+        aphrodite_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 2 * 32]
     )[0]
     assert kv_cache_config_hybrid == KVCacheConfig(
         num_blocks=32,
@@ -1601,7 +1601,7 @@ def test_get_kv_cache_config_one_worker():
             ),
         ],
     )
-    vllm_config.scheduler_config.disable_hybrid_kv_cache_manager = False
+    aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = False
 
     # full + sliding, with hybrid_kv_cache_manager
     kv_cache_specs_hybrid = {
@@ -1609,7 +1609,7 @@ def test_get_kv_cache_config_one_worker():
         "layer_2": new_sliding_window_spec(),
     }
     kv_cache_config_hybrid = get_kv_cache_configs(
-        vllm_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 2 * 32]
+        aphrodite_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 2 * 32]
     )[0]
     assert kv_cache_config_hybrid == KVCacheConfig(
         num_blocks=64,
@@ -1634,7 +1634,7 @@ def test_get_kv_cache_config_one_worker():
         "layer_6": new_sliding_window_spec(),
     }
     kv_cache_config_hybrid = get_kv_cache_configs(
-        vllm_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 2 * 32]
+        aphrodite_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 2 * 32]
     )[0]
     assert kv_cache_config_hybrid == KVCacheConfig(
         num_blocks=32,
@@ -1669,7 +1669,7 @@ def test_get_kv_cache_config_one_worker():
         "layer_10": new_sliding_window_spec(),
     }
     kv_cache_config_hybrid = get_kv_cache_configs(
-        vllm_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 3 * 32]
+        aphrodite_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 3 * 32]
     )[0]
     assert kv_cache_config_hybrid == KVCacheConfig(
         num_blocks=32,
@@ -1713,7 +1713,7 @@ def test_get_kv_cache_config_one_worker():
     }
 
     kv_cache_config_hybrid = get_kv_cache_configs(
-        vllm_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 6 * 32]
+        aphrodite_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 6 * 32]
     )[0]
     print(kv_cache_config_hybrid)
     assert kv_cache_config_hybrid == KVCacheConfig(
@@ -1762,7 +1762,7 @@ def test_get_kv_cache_config_one_worker():
         "layer_2": new_kv_cache_spec(head_size=64),
     }
     kv_cache_config_hybrid = get_kv_cache_configs(
-        vllm_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 3 * 32]
+        aphrodite_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 3 * 32]
     )[0]
     assert kv_cache_config_hybrid == KVCacheConfig(
         num_blocks=32,
@@ -1786,7 +1786,7 @@ def test_get_kv_cache_config_one_worker():
         "layer_2": new_sliding_window_spec(head_size=32),
     }
     kv_cache_config_hybrid = get_kv_cache_configs(
-        vllm_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 32]
+        aphrodite_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 32]
     )[0]
     assert kv_cache_config_hybrid == KVCacheConfig(
         num_blocks=32,
@@ -1812,7 +1812,7 @@ def test_get_kv_cache_config_one_worker():
     }
 
     kv_cache_config_hybrid = get_kv_cache_configs(
-        vllm_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 2 * 32]
+        aphrodite_config, [kv_cache_specs_hybrid], [mem_per_block_per_layer * 2 * 32]
     )[0]
     padded_page_size = swa_spec.page_size_bytes
     assert kv_cache_config_hybrid == KVCacheConfig(
@@ -1837,9 +1837,9 @@ def test_get_kv_cache_config_one_worker():
     )
 
     # Test num_gpu_blocks_override
-    vllm_config.cache_config.num_gpu_blocks_override = 16
+    aphrodite_config.cache_config.num_gpu_blocks_override = 16
     kv_cache_config_override_blocks = get_kv_cache_configs(
-        vllm_config, [kv_cache_specs_full], [mem_per_block_per_layer * 2 * 32]
+        aphrodite_config, [kv_cache_specs_full], [mem_per_block_per_layer * 2 * 32]
     )[0]
     assert kv_cache_config_override_blocks == KVCacheConfig(
         num_blocks=16,
@@ -1853,8 +1853,8 @@ def test_get_kv_cache_config_one_worker():
 
 def test_get_kv_cache_configs_attention_free():
     kv_cache_specs: dict[str, KVCacheSpec] = {}
-    vllm_config = AphroditeConfig(model_config=ModelConfig(max_model_len=16))
-    kv_cache_configs = get_kv_cache_configs(vllm_config, [kv_cache_specs], [0])
+    aphrodite_config = AphroditeConfig(model_config=ModelConfig(max_model_len=16))
+    kv_cache_configs = get_kv_cache_configs(aphrodite_config, [kv_cache_specs], [0])
     assert kv_cache_configs == [
         KVCacheConfig(
             num_blocks=1,
@@ -2227,7 +2227,7 @@ def test_auto_fit_max_model_len():
     model_config = ModelConfig(max_model_len=1024)
     # Simulate the user passing -1 by setting original_max_model_len
     model_config.original_max_model_len = -1
-    vllm_config = AphroditeConfig(model_config=model_config)
+    aphrodite_config = AphroditeConfig(model_config=model_config)
 
     mem_per_block_per_layer = 16 * 2 * 64 * 4 * 2  # 16KB per block per layer
     kv_cache_specs = {
@@ -2238,25 +2238,25 @@ def test_auto_fit_max_model_len():
     # With enough memory, max_model_len stays at the derived max
     large_available_memory = mem_per_block_per_layer * 2 * 1024  # plenty of memory
     _kv_cache_configs = get_kv_cache_configs(
-        vllm_config, [kv_cache_specs], [large_available_memory]
+        aphrodite_config, [kv_cache_specs], [large_available_memory]
     )
-    assert vllm_config.model_config.max_model_len == 1024
+    assert aphrodite_config.model_config.max_model_len == 1024
 
     # Reset for next test
     model_config = ModelConfig(max_model_len=1024)
     model_config.original_max_model_len = -1
-    vllm_config = AphroditeConfig(model_config=model_config)
+    aphrodite_config = AphroditeConfig(model_config=model_config)
 
     # With limited memory, max_model_len should be reduced
     # Need memory for at least max_model_len tokens
     # 32 blocks worth of memory for 2 layers = can fit 32*16=512 tokens
     limited_memory = mem_per_block_per_layer * 2 * 32
     _kv_cache_configs = get_kv_cache_configs(
-        vllm_config, [kv_cache_specs], [limited_memory]
+        aphrodite_config, [kv_cache_specs], [limited_memory]
     )
     # Should be reduced to fit in memory
-    assert vllm_config.model_config.max_model_len < 1024
-    assert vllm_config.model_config.max_model_len > 0
+    assert aphrodite_config.model_config.max_model_len < 1024
+    assert aphrodite_config.model_config.max_model_len > 0
 
 
 def test_auto_fit_max_model_len_with_hybrid():
@@ -2265,7 +2265,7 @@ def test_auto_fit_max_model_len_with_hybrid():
     model_config = ModelConfig(max_model_len=8192)
     # Simulate the user passing -1 by setting original_max_model_len
     model_config.original_max_model_len = -1
-    vllm_config = AphroditeConfig(model_config=model_config)
+    aphrodite_config = AphroditeConfig(model_config=model_config)
 
     mem_per_block_per_layer = 16 * 2 * 64 * 4 * 2  # 16KB per block per layer
     gamma = 2
@@ -2276,16 +2276,16 @@ def test_auto_fit_max_model_len_with_hybrid():
 
     available_memory = mem_per_block_per_layer * (1024 // 16 + 1 + gamma)
     _kv_cache_configs = get_kv_cache_configs(
-        vllm_config, [kv_cache_specs], [available_memory]
+        aphrodite_config, [kv_cache_specs], [available_memory]
     )
-    assert vllm_config.model_config.max_model_len == 1024
+    assert aphrodite_config.model_config.max_model_len == 1024
 
 
 def test_auto_fit_max_model_len_not_triggered():
     """Test that auto-fit is not triggered when original_max_model_len is not -1."""
     model_config = ModelConfig(max_model_len=16)
     # original_max_model_len should be None by default, not -1
-    vllm_config = AphroditeConfig(model_config=model_config)
+    aphrodite_config = AphroditeConfig(model_config=model_config)
 
     mem_per_block_per_layer = 16 * 2 * 64 * 4 * 2
     kv_cache_specs = {
@@ -2295,9 +2295,9 @@ def test_auto_fit_max_model_len_not_triggered():
 
     # This should work normally without auto-fit
     _kv_cache_configs = get_kv_cache_configs(
-        vllm_config, [kv_cache_specs], [mem_per_block_per_layer * 2 * 32]
+        aphrodite_config, [kv_cache_specs], [mem_per_block_per_layer * 2 * 32]
     )
-    assert vllm_config.model_config.max_model_len == 16
+    assert aphrodite_config.model_config.max_model_len == 16
 
 
 def test_auto_fit_max_model_len_respects_num_gpu_blocks_override():
@@ -2307,9 +2307,9 @@ def test_auto_fit_max_model_len_respects_num_gpu_blocks_override():
     """
     model_config = ModelConfig(max_model_len=16384)
     model_config.original_max_model_len = -1  # request auto-fit
-    vllm_config = AphroditeConfig(model_config=model_config)
+    aphrodite_config = AphroditeConfig(model_config=model_config)
     # Cap the cache to 32 blocks regardless of available memory.
-    vllm_config.cache_config.num_gpu_blocks_override = 32
+    aphrodite_config.cache_config.num_gpu_blocks_override = 32
 
     mem_per_block_per_layer = 16 * 2 * 64 * 4 * 2
     kv_cache_specs = {
@@ -2319,11 +2319,11 @@ def test_auto_fit_max_model_len_respects_num_gpu_blocks_override():
     # Plenty of raw memory (1024 blocks per layer would fit max_model_len=16384).
     large_available_memory = mem_per_block_per_layer * 2 * 1024
 
-    get_kv_cache_configs(vllm_config, [kv_cache_specs], [large_available_memory])
+    get_kv_cache_configs(aphrodite_config, [kv_cache_specs], [large_available_memory])
 
     # 32 blocks * block_size 16 = 512 token slots, so max_model_len must
     # auto-fit at or below that.
-    assert 0 < vllm_config.model_config.max_model_len <= 32 * 16
+    assert 0 < aphrodite_config.model_config.max_model_len <= 32 * 16
 
 
 def test_check_enough_kv_cache_memory_respects_num_gpu_blocks_override():
@@ -2332,9 +2332,9 @@ def test_check_enough_kv_cache_memory_respects_num_gpu_blocks_override():
     that does not actually fit in `num_gpu_blocks_override` blocks.
     """
     model_config = ModelConfig(max_model_len=16384)
-    vllm_config = AphroditeConfig(model_config=model_config)
+    aphrodite_config = AphroditeConfig(model_config=model_config)
     # 32 blocks is far too small for max_model_len=16384 (would need 1024).
-    vllm_config.cache_config.num_gpu_blocks_override = 32
+    aphrodite_config.cache_config.num_gpu_blocks_override = 32
 
     mem_per_block_per_layer = 16 * 2 * 64 * 4 * 2
     kv_cache_specs = {
@@ -2345,7 +2345,7 @@ def test_check_enough_kv_cache_memory_respects_num_gpu_blocks_override():
     large_available_memory = mem_per_block_per_layer * 2 * 1024
 
     with pytest.raises(ValueError, match="max seq len"):
-        get_kv_cache_configs(vllm_config, [kv_cache_specs], [large_available_memory])
+        get_kv_cache_configs(aphrodite_config, [kv_cache_specs], [large_available_memory])
 
 
 def test_unify_kv_cache_page_size_uses_padding_for_non_divisible_sizes():
@@ -2501,11 +2501,11 @@ def test_hma_not_disabled_when_kv_events_enabled():
 
     # Leave disable_hybrid_kv_cache_manager as None (the default) so that
     # AphroditeConfig.__post_init__ resolves it automatically.
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=model_config,
         kv_events_config=kv_events_config,
     )
 
-    assert vllm_config.scheduler_config.disable_hybrid_kv_cache_manager is False, (
+    assert aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager is False, (
         "kv_events_config must not force-disable the hybrid KV cache manager."
     )

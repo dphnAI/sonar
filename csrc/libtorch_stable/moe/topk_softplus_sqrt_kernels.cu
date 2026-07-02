@@ -41,7 +41,7 @@ typedef __hip_bfloat162 __nv_bfloat162;
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-namespace vllm {
+namespace aphrodite {
 namespace moe {
 
 /// Aligned array type
@@ -629,7 +629,7 @@ void topkGatingSoftplusSqrtKernelLauncher(
 }
 
 }  // namespace moe
-}  // namespace vllm
+}  // namespace aphrodite
 
 template <typename ComputeType>
 void dispatch_topk_softplus_sqrt_launch(
@@ -658,7 +658,7 @@ void dispatch_topk_softplus_sqrt_launch(
       tid2eid_ptr = tid2eid.value().const_data_ptr<int>();
     }
 
-    vllm::moe::topkGatingSoftplusSqrtKernelLauncher<int, ComputeType>(
+    aphrodite::moe::topkGatingSoftplusSqrtKernelLauncher<int, ComputeType>(
         gating_output, topk_weights.mutable_data_ptr<float>(),
         topk_indices.mutable_data_ptr<int>(),
         token_expert_indices.mutable_data_ptr<int>(), num_tokens, num_experts,
@@ -672,7 +672,7 @@ void dispatch_topk_softplus_sqrt_launch(
       input_ids_ptr = input_ids.value().const_data_ptr<uint32_t>();
       tid2eid_ptr = tid2eid.value().const_data_ptr<uint32_t>();
     }
-    vllm::moe::topkGatingSoftplusSqrtKernelLauncher<uint32_t, ComputeType>(
+    aphrodite::moe::topkGatingSoftplusSqrtKernelLauncher<uint32_t, ComputeType>(
         gating_output, topk_weights.mutable_data_ptr<float>(),
         topk_indices.mutable_data_ptr<uint32_t>(),
         token_expert_indices.mutable_data_ptr<int>(), num_tokens, num_experts,
@@ -689,7 +689,7 @@ void dispatch_topk_softplus_sqrt_launch(
       tid2eid_ptr = tid2eid.value().const_data_ptr<int64_t>();
     }
 
-    vllm::moe::topkGatingSoftplusSqrtKernelLauncher<int64_t, ComputeType>(
+    aphrodite::moe::topkGatingSoftplusSqrtKernelLauncher<int64_t, ComputeType>(
         gating_output, topk_weights.mutable_data_ptr<float>(),
         topk_indices.mutable_data_ptr<int64_t>(),
         token_expert_indices.mutable_data_ptr<int>(), num_tokens, num_experts,

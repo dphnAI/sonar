@@ -29,11 +29,11 @@ class TestInplaceOp:
         # Test that the inplace op is registered correctly.
         assert "_custom_mm2" in IrOp.registry
         assert IrOp.registry["_custom_mm2"] is _custom_mm2
-        assert _custom_mm2.torch_op is torch.ops.vllm_ir._custom_mm2.default
+        assert _custom_mm2.torch_op is torch.ops.aphrodite_ir._custom_mm2.default
         assert isinstance(_custom_mm2.maybe_inplace, IrOpInplaceOverload)
         assert (
             _custom_mm2.maybe_inplace.torch_op
-            is torch.ops.vllm_ir._custom_mm2.maybe_inplace
+            is torch.ops.aphrodite_ir._custom_mm2.maybe_inplace
         )
 
     def test_inplace_dispatching(self):
@@ -86,6 +86,6 @@ class TestInplaceOp:
         y = torch.randn(3, 4)
         graph = make_fx(func)(x, y)
         assert any(
-            node.target == torch.ops.vllm_ir._custom_mm2.maybe_inplace
+            node.target == torch.ops.aphrodite_ir._custom_mm2.maybe_inplace
             for node in graph.graph.nodes
         )

@@ -41,7 +41,7 @@ def _rms_norm_tolerance(dtype: torch.dtype) -> dict[str, float]:
 @pytest.mark.parametrize("strided_input", [False, True])
 @torch.inference_mode()
 def test_rms_norm(
-    default_vllm_config,
+    default_aphrodite_config,
     num_tokens: int,
     hidden_size: int,
     add_residual: bool,
@@ -94,7 +94,7 @@ def test_rms_norm(
 @pytest.mark.parametrize("device", CUDA_DEVICES)
 @torch.inference_mode()
 def test_rms_norm_weightless(
-    default_vllm_config,
+    default_aphrodite_config,
     num_tokens: int,
     hidden_size: int,
     add_residual: bool,
@@ -223,7 +223,7 @@ def test_fused_rms_norm_quant(
 
 
 @torch.inference_mode()
-def test_gemma_rms_norm_mixed_input_weight_dtype(default_vllm_config) -> None:
+def test_gemma_rms_norm_mixed_input_weight_dtype(default_aphrodite_config) -> None:
     if not torch.cuda.is_available():
         pytest.skip("CUDA required")
 

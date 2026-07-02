@@ -59,7 +59,7 @@ def _create_proposer(
     )
 
     device = DEVICE_TYPE
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=model_config,
         cache_config=CacheConfig(),
         speculative_config=speculative_config,
@@ -73,7 +73,7 @@ def _create_proposer(
         attention_config=AttentionConfig(),
     )
 
-    return ExtractHiddenStatesProposer(vllm_config=vllm_config, device=device)
+    return ExtractHiddenStatesProposer(aphrodite_config=aphrodite_config, device=device)
 
 
 def test_proposer_initialization():
@@ -82,8 +82,8 @@ def test_proposer_initialization():
     proposer = _create_proposer(num_speculative_tokens=1, layer_ids=layer_ids)
 
     assert proposer.num_hidden_states == len(layer_ids)
-    assert proposer.vllm_config.speculative_config is not None
-    assert proposer.vllm_config.speculative_config.num_speculative_tokens == 1
+    assert proposer.aphrodite_config.speculative_config is not None
+    assert proposer.aphrodite_config.speculative_config.num_speculative_tokens == 1
 
     # Verify the hidden states buffer is correctly shaped
     expected_shape = (
@@ -109,7 +109,7 @@ def test_proposer_initialization_missing_layer_ids():
     )
 
     device = DEVICE_TYPE
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=model_config,
         cache_config=CacheConfig(),
         speculative_config=speculative_config,
@@ -126,7 +126,7 @@ def test_proposer_initialization_missing_layer_ids():
     with pytest.raises(
         ValueError, match="eagle_aux_hidden_state_layer_ids must be set"
     ):
-        ExtractHiddenStatesProposer(vllm_config=vllm_config, device=device)
+        ExtractHiddenStatesProposer(aphrodite_config=aphrodite_config, device=device)
 
 
 def test_prepare_next_token_ids_padded():

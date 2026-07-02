@@ -596,12 +596,6 @@ ENV HF_HUB_DOWNLOAD_TIMEOUT 60
 
 # Copy in the v1 package for testing (it isn't distributed yet)
 COPY aphrodite/v1 /usr/local/lib/python${PYTHON_VERSION}/dist-packages/aphrodite/v1
-
-# Source code is used in the `python_only_compile.sh` test
-# We hide it inside `src/` so that this source code
-# will not be imported by other tests
-RUN mkdir src
-RUN mv aphrodite src/aphrodite
 #################### TEST IMAGE ####################
 
 #################### OPENAI API SERVER ####################

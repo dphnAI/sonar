@@ -10,7 +10,7 @@ from aphrodite.config import (
     AttentionConfig,
     CacheConfig,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.platforms import current_platform
 from aphrodite.platforms.cpu import CpuPlatform
@@ -99,11 +99,11 @@ def test_backend_selection(
     # Create AttentionConfig with the specified backend
     attention_config = AttentionConfig(backend=AttentionBackendEnum[name])
     cache_config = CacheConfig(block_size=block_size)
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         attention_config=attention_config, cache_config=cache_config
     )
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         if device == "cpu":
             with patch("aphrodite.platforms.current_platform", CpuPlatform()):
                 backend = get_attn_backend(16, torch.float16, None)
@@ -231,9 +231,9 @@ def test_backend_selection(
 def test_fp32_fallback(device: str):
     """Test attention backend selection with fp32."""
     # Use default config (no backend specified)
-    vllm_config = AphroditeConfig()
+    aphrodite_config = AphroditeConfig()
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         if device == "cpu":
             with patch("aphrodite.platforms.current_platform", CpuPlatform()):
                 backend = get_attn_backend(16, torch.float32, None)
@@ -269,11 +269,11 @@ def test_flash_attn(monkeypatch: pytest.MonkeyPatch):
 
     attention_config = AttentionConfig(backend=AttentionBackendEnum.FLASH_ATTN)
     cache_config = CacheConfig(block_size=16)
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         attention_config=attention_config, cache_config=cache_config
     )
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         # Unsupported CUDA arch
         monkeypatch.setattr(torch.cuda, "get_device_capability", lambda _=None: (7, 5))
         backend = get_attn_backend(16, torch.float16, None)
@@ -291,14 +291,14 @@ def test_flash_attn(monkeypatch: pytest.MonkeyPatch):
         assert backend.get_name() != "FLASH_ATTN"
 
         # Unsupported block size
-        vllm_config.cache_config.block_size = 8
+        aphrodite_config.cache_config.block_size = 8
         backend = get_attn_backend(16, torch.float16, None)
         assert backend.get_name() != "FLASH_ATTN"
 
         # flash-attn is not installed
         import sys
 
-        vllm_config.cache_config.block_size = 16
+        aphrodite_config.cache_config.block_size = 16
         original_module = sys.modules.get("vllm_flash_attn")
         monkeypatch.setitem(sys.modules, "vllm_flash_attn", None)
         backend = get_attn_backend(16, torch.float16, None)
@@ -345,11 +345,11 @@ def test_auto_backend_selection_behavior():
     assert none_config.backend is None
 
     # Both configs should result in the same automatic backend selection
-    vllm_config_auto = AphroditeConfig(attention_config=auto_config)
-    vllm_config_none = AphroditeConfig(attention_config=none_config)
+    aphrodite_config_auto = AphroditeConfig(attention_config=auto_config)
+    aphrodite_config_none = AphroditeConfig(attention_config=none_config)
 
     with (
-        set_current_vllm_config(vllm_config_auto),
+        set_current_aphrodite_config(aphrodite_config_auto),
         patch("aphrodite.platforms.current_platform", CpuPlatform()),
     ):
         backend_auto = get_attn_backend(16, torch.float16, None)
@@ -357,7 +357,7 @@ def test_auto_backend_selection_behavior():
     _cached_get_attn_backend.cache_clear()
 
     with (
-        set_current_vllm_config(vllm_config_none),
+        set_current_aphrodite_config(aphrodite_config_none),
         patch("aphrodite.platforms.current_platform", CpuPlatform()),
     ):
         backend_none = get_attn_backend(16, torch.float16, None)
@@ -391,14 +391,14 @@ def test_per_head_quant_scales_backend_selection(
         flash_attn_version=flash_attn_version,
     )
     cache_config = CacheConfig(block_size=64)
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         attention_config=attention_config, cache_config=cache_config
     )
 
     if CudaPlatform is None:
         pytest.skip("CudaPlatform not available")
     with (
-        set_current_vllm_config(vllm_config),
+        set_current_aphrodite_config(aphrodite_config),
         patch("aphrodite.platforms.current_platform", CudaPlatform()),
     ):
         if backend_name == "FLASH_ATTN" and flash_attn_version == 3:
@@ -459,7 +459,7 @@ def test_non_causal_backend_selection(
         use_non_causal=use_non_causal,
     )
     cache_config = CacheConfig(block_size=16)
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         attention_config=attention_config, cache_config=cache_config
     )
 
@@ -467,7 +467,7 @@ def test_non_causal_backend_selection(
     if platform is None:
         pytest.skip("CudaPlatform and RocmPlatform are not available")
     with (
-        set_current_vllm_config(vllm_config),
+        set_current_aphrodite_config(aphrodite_config),
         patch("aphrodite.platforms.current_platform", platform()),
     ):
         if should_succeed:
@@ -503,14 +503,14 @@ def test_non_causal_autoselect_backend():
         use_non_causal=True,
     )
     cache_config = CacheConfig(block_size=16)
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         attention_config=attention_config, cache_config=cache_config
     )
 
     if CudaPlatform is None:
         pytest.skip("CudaPlatform not available")
     with (
-        set_current_vllm_config(vllm_config),
+        set_current_aphrodite_config(aphrodite_config),
         patch("aphrodite.platforms.current_platform", CudaPlatform()),
     ):
         backend = get_attn_backend(

@@ -147,7 +147,7 @@ def test_vocab_parallel_embedding_weight_loader_accepts_scalar_scale():
     not is_quant_method_supported("modelopt"),
     reason="ModelOpt FP8 is not supported on this GPU type.",
 )
-def test_modelopt_fp8_checkpoint_setup(default_vllm_config, vllm_runner):
+def test_modelopt_fp8_checkpoint_setup(default_aphrodite_config, aphrodite_runner):
     """Test ModelOpt FP8 checkpoint loading and structure validation."""
     # TODO: provide a small publicly available test checkpoint
     model_path = (
@@ -163,8 +163,8 @@ def test_modelopt_fp8_checkpoint_setup(default_vllm_config, vllm_runner):
         )
 
     # Set model config as model_config.dtype is required in ModelOptFp8LinearMethod.
-    default_vllm_config.model_config = ModelConfig()
-    with vllm_runner(model_path, quantization="modelopt", enforce_eager=True) as llm:
+    default_aphrodite_config.model_config = ModelConfig()
+    with aphrodite_runner(model_path, quantization="modelopt", enforce_eager=True) as llm:
 
         def check_model(model):
             layer = model.model.layers[0]
@@ -223,14 +223,14 @@ def test_modelopt_fp8_checkpoint_setup(default_vllm_config, vllm_runner):
     not is_quant_method_supported("modelopt"),
     reason="ModelOpt FP8 is not supported on this GPU type.",
 )
-def test_modelopt_fp8_pc_pt_checkpoint_setup(default_vllm_config, vllm_runner):
+def test_modelopt_fp8_pc_pt_checkpoint_setup(default_aphrodite_config, aphrodite_runner):
     """Test ModelOpt FP8_PER_CHANNEL_PER_TOKEN checkpoint setup."""
     model_id = "CedricHwang/qwen2.5-0.5b-modelopt-fp8-pc-pt"
     model_path = _snapshot_download_or_skip(model_id)
 
     # Set model config as model_config.dtype is required in ModelOptFp8LinearMethod.
-    default_vllm_config.model_config = ModelConfig()
-    with vllm_runner(model_path, quantization="modelopt", enforce_eager=True) as llm:
+    default_aphrodite_config.model_config = ModelConfig()
+    with aphrodite_runner(model_path, quantization="modelopt", enforce_eager=True) as llm:
 
         def check_model(model):
             layer = model.model.layers[0]
@@ -286,14 +286,14 @@ def test_modelopt_fp8_pc_pt_checkpoint_setup(default_vllm_config, vllm_runner):
     not is_quant_method_supported("modelopt"),
     reason="ModelOpt FP8 is not supported on this GPU type.",
 )
-def test_modelopt_fp8_pb_wo_checkpoint_setup(default_vllm_config, vllm_runner):
+def test_modelopt_fp8_pb_wo_checkpoint_setup(default_aphrodite_config, aphrodite_runner):
     """Test ModelOpt FP8_PB_WO checkpoint setup."""
     model_id = "CedricHwang/qwen2.5-0.5b-modelopt-fp8-pb-wo"
     model_path = _snapshot_download_or_skip(model_id)
 
     # Set model config as model_config.dtype is required in ModelOptFp8LinearMethod.
-    default_vllm_config.model_config = ModelConfig()
-    with vllm_runner(model_path, quantization="modelopt", enforce_eager=True) as llm:
+    default_aphrodite_config.model_config = ModelConfig()
+    with aphrodite_runner(model_path, quantization="modelopt", enforce_eager=True) as llm:
 
         def check_model(model):
             layer = model.model.layers[0]
@@ -464,10 +464,10 @@ def test_modelopt_mixed_precision_dispatches_w4a16_layer(
 
     NOTE: FP8 dispatch (the third branch of get_quant_method) is not
     covered here because ``ModelOptFp8LinearMethod.__init__`` reads
-    ``get_current_vllm_config().model_config.dtype``, which requires a
+    ``get_current_aphrodite_config().model_config.dtype``, which requires a
     fully constructed ``ModelConfig`` (real model path). FP8 routing in
     mixed-precision is exercised by the existing integration tests
-    above that use the ``vllm_runner`` fixture (e.g.
+    above that use the ``aphrodite_runner`` fixture (e.g.
     ``test_modelopt_fp8_checkpoint_setup``). Our PR doesn't change the
     FP8 branch, so this isn't a coverage gap.
     """

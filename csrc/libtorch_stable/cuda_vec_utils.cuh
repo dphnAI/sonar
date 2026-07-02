@@ -27,7 +27,7 @@
   #define APHRODITE_256B_PTX_ENABLED 0
 #endif
 
-namespace vllm {
+namespace aphrodite {
 
 // ============================================================
 // Types and traits
@@ -361,4 +361,4 @@ __device__ __forceinline__ packed_t packed_mul(const packed_t& x,
   }
 }
 
-}  // namespace vllm
+}  // namespace aphrodite

@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config import get_current_vllm_config
+from aphrodite.config import get_current_aphrodite_config
 from aphrodite.config.multimodal import MultiModalConfig
 from aphrodite.model_executor.layers.attention import MMEncoderAttention
 from aphrodite.platforms import current_platform
@@ -40,7 +40,7 @@ if current_platform.is_rocm():
 
 
 @pytest.mark.parametrize("device", devices)
-def test_mha_attn_platform(default_vllm_config, device: str):
+def test_mha_attn_platform(default_aphrodite_config, device: str):
     """
     Test the attention selector between different platform and device.
     """
@@ -143,7 +143,7 @@ CUDA_DEVICES = ["cuda"]
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("device", CUDA_DEVICES)
 def test_mha_attn_forward(
-    default_vllm_config,
+    default_aphrodite_config,
     batch_size: int,
     seq_len: int,
     num_heads: int,
@@ -195,7 +195,7 @@ def test_mha_attn_forward(
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("device", CUDA_DEVICES)
 def test_mha_attn_varlen_forward(
-    default_vllm_config,
+    default_aphrodite_config,
     var_seq_len: list[int],
     num_heads: int,
     num_kv_heads: int,
@@ -251,7 +251,7 @@ def test_mha_attn_varlen_forward(
 )
 @pytest.mark.parametrize("device", CUDA_DEVICES)
 def test_mha_attn_varlen_forward_flashinfer(
-    default_vllm_config,
+    default_aphrodite_config,
     var_seq_len: list[int],
     dtype: torch.dtype,
     device: str,
@@ -272,8 +272,8 @@ def test_mha_attn_varlen_forward_flashinfer(
 
     # Override aphrodite config so get_vit_attn_backend returns FLASHINFER (simulates
     # --mm-encoder-attn-backend=FLASHINFER).
-    vllm_config = get_current_vllm_config()
-    old_model_config = getattr(vllm_config, "model_config", None)
+    aphrodite_config = get_current_aphrodite_config()
+    old_model_config = getattr(aphrodite_config, "model_config", None)
     minimal_model_config = type(
         "MinimalModelConfig",
         (),
@@ -283,7 +283,7 @@ def test_mha_attn_varlen_forward_flashinfer(
             ),
         },
     )()
-    vllm_config.model_config = minimal_model_config
+    aphrodite_config.model_config = minimal_model_config
     try:
         total_len = sum(var_seq_len)
         # Stride of second dim = 3 * num_heads * head_size (same as qwen2_5_vl
@@ -345,4 +345,4 @@ def test_mha_attn_varlen_forward_flashinfer(
         ref_output = torch.cat(ref_output, dim=1)
         torch.testing.assert_close(output, ref_output, atol=1e-2, rtol=1e-2)
     finally:
-        vllm_config.model_config = old_model_config
+        aphrodite_config.model_config = old_model_config

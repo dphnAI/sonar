@@ -113,7 +113,7 @@ def create_packed_lora(
     return LoRAModel(lora_id, 8, loras)
 
 
-def test_replace_submodules(default_vllm_config, dist_init, dummy_model):
+def test_replace_submodules(default_aphrodite_config, dist_init, dummy_model):
     model = dummy_model
     manager = LoRAModelManager(
         model,
@@ -124,7 +124,7 @@ def test_replace_submodules(default_vllm_config, dist_init, dummy_model):
             max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE
         ),
         torch.device(DEVICES[0]),
-        default_vllm_config,
+        default_aphrodite_config,
     )
     model = manager.model
     assert isinstance(model.get_submodule("dense1"), ColumnParallelLinearWithLoRA)
@@ -135,7 +135,7 @@ def test_replace_submodules(default_vllm_config, dist_init, dummy_model):
     assert isinstance(model.get_submodule("layer1.dense2"), RowParallelLinearWithLoRA)
 
 
-def test_wrap_replicated_linear_subclasses(default_vllm_config, dist_init, dummy_model):
+def test_wrap_replicated_linear_subclasses(default_aphrodite_config, dist_init, dummy_model):
     from aphrodite.model_executor.layers.linear import ReplicatedLinear
 
     class CustomReplicatedLinear(ReplicatedLinear):
@@ -153,7 +153,7 @@ def test_wrap_replicated_linear_subclasses(default_vllm_config, dist_init, dummy
             max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE
         ),
         torch.device(DEVICES[0]),
-        default_vllm_config,
+        default_aphrodite_config,
     )
 
     assert isinstance(
@@ -161,7 +161,7 @@ def test_wrap_replicated_linear_subclasses(default_vllm_config, dist_init, dummy
     )
 
 
-def test_wrap_gate_linear(default_vllm_config, dist_init, dummy_model):
+def test_wrap_gate_linear(default_aphrodite_config, dist_init, dummy_model):
     model = dummy_model
     model.add_module("router_gate", GateLinear(10, 4, bias=False))
 
@@ -174,7 +174,7 @@ def test_wrap_gate_linear(default_vllm_config, dist_init, dummy_model):
             max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE
         ),
         torch.device(DEVICES[0]),
-        default_vllm_config,
+        default_aphrodite_config,
     )
 
     assert isinstance(
@@ -182,7 +182,7 @@ def test_wrap_gate_linear(default_vllm_config, dist_init, dummy_model):
     )
 
 
-def test_dedup_shared_module_across_paths(default_vllm_config, dist_init, dummy_model):
+def test_dedup_shared_module_across_paths(default_aphrodite_config, dist_init, dummy_model):
     """A module reachable from two attribute paths (e.g. a MoE gate held
     both directly on the block and inside its inner runner) must produce a
     single LoRA wrapper. Both paths must end up pointing to that same
@@ -222,7 +222,7 @@ def test_dedup_shared_module_across_paths(default_vllm_config, dist_init, dummy_
             max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE
         ),
         torch.device(DEVICES[0]),
-        default_vllm_config,
+        default_aphrodite_config,
     )
 
     canonical = manager.model.get_submodule("moe.gate")
@@ -240,7 +240,7 @@ def test_dedup_shared_module_across_paths(default_vllm_config, dist_init, dummy_
     assert "moe.runner.gate" not in manager.modules
 
 
-def test_lm_head_exempt_from_dedup(default_vllm_config, dist_init, dummy_model):
+def test_lm_head_exempt_from_dedup(default_aphrodite_config, dist_init, dummy_model):
     """The dedup logic must NOT collapse `lm_head` even when it is reachable
     from another attribute path (tied-embedding models do
     `self.lm_head = self.model.embed_tokens`, sharing the same nn.Module
@@ -267,7 +267,7 @@ def test_lm_head_exempt_from_dedup(default_vllm_config, dist_init, dummy_model):
             max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE
         ),
         torch.device(DEVICES[0]),
-        default_vllm_config,
+        default_aphrodite_config,
     )
 
     # lm_head's special handling still ran: logits_processor got wrapped
@@ -278,7 +278,7 @@ def test_lm_head_exempt_from_dedup(default_vllm_config, dist_init, dummy_model):
     assert "lm_head" in manager.modules
 
 
-def test_skip_unsupported_matched_modules(default_vllm_config, dist_init, dummy_model):
+def test_skip_unsupported_matched_modules(default_aphrodite_config, dist_init, dummy_model):
     class UnsupportedContainer(nn.Module):
         def __init__(self):
             super().__init__()
@@ -298,7 +298,7 @@ def test_skip_unsupported_matched_modules(default_vllm_config, dist_init, dummy_
             max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE
         ),
         torch.device(DEVICES[0]),
-        default_vllm_config,
+        default_aphrodite_config,
     )
 
     # Should not crash and should keep unsupported matched modules unchanged.
@@ -307,7 +307,7 @@ def test_skip_unsupported_matched_modules(default_vllm_config, dist_init, dummy_
 
 
 def test_target_modules_fail_closed_on_unsupported_matched_modules(
-    default_vllm_config, dist_init, dummy_model
+    default_aphrodite_config, dist_init, dummy_model
 ):
     class UnsupportedContainer(nn.Module):
         def __init__(self):
@@ -331,7 +331,7 @@ def test_target_modules_fail_closed_on_unsupported_matched_modules(
                 target_modules=["dense1"],
             ),
             torch.device(DEVICES[0]),
-            default_vllm_config,
+            default_aphrodite_config,
         )
 
 
@@ -365,7 +365,7 @@ def test_get_dummy_lora_warmup_rank_for_fully_sharded_moe():
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_lora_model_manager(default_vllm_config, dist_init, dummy_model, device):
+def test_lora_model_manager(default_aphrodite_config, dist_init, dummy_model, device):
     model = dummy_model
     model_lora1 = create_lora(
         1, model, ["layer1.dense1", "dense2", "lm_head"], device=device
@@ -381,7 +381,7 @@ def test_lora_model_manager(default_vllm_config, dist_init, dummy_model, device)
             max_lora_rank=8, max_cpu_loras=3, max_loras=2, lora_dtype=DEFAULT_DTYPE
         ),
         device=device,
-        vllm_config=default_vllm_config,
+        aphrodite_config=default_aphrodite_config,
     )
     assert all(x is None for x in manager.lora_index_to_id)
     assert manager.add_adapter(model_lora1)
@@ -433,7 +433,7 @@ def test_lora_model_manager(default_vllm_config, dist_init, dummy_model, device)
 
 @pytest.mark.parametrize("device", DEVICES)
 def test_lora_lru_cache_model_manager(
-    default_vllm_config, dist_init, dummy_model, device
+    default_aphrodite_config, dist_init, dummy_model, device
 ):
     model = dummy_model
     model_lora1 = create_lora(
@@ -450,7 +450,7 @@ def test_lora_lru_cache_model_manager(
             max_lora_rank=8, max_cpu_loras=3, max_loras=2, lora_dtype=DEFAULT_DTYPE
         ),
         device=device,
-        vllm_config=default_vllm_config,
+        aphrodite_config=default_aphrodite_config,
     )
     assert all(x is None for x in manager.lora_index_to_id)
     assert manager.add_adapter(model_lora1)
@@ -525,7 +525,7 @@ def test_lora_lru_cache_model_manager(
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_lru_lora_model_manager(default_vllm_config, dist_init, dummy_model, device):
+def test_lru_lora_model_manager(default_aphrodite_config, dist_init, dummy_model, device):
     # This tests just the LRU cache functionality, everything else is
     # tested in test_lora_model_manager
     model = dummy_model
@@ -544,7 +544,7 @@ def test_lru_lora_model_manager(default_vllm_config, dist_init, dummy_model, dev
             max_lora_rank=8, max_cpu_loras=2, max_loras=2, lora_dtype=DEFAULT_DTYPE
         ),
         device=device,
-        vllm_config=default_vllm_config,
+        aphrodite_config=default_aphrodite_config,
     )
     assert all(x is None for x in manager.lora_index_to_id)
 
@@ -667,18 +667,18 @@ def test_lru_cache_worker_adapter_manager(dist_init, dummy_model, device, tmp_pa
     )
 
     model_config = ModelConfig(max_model_len=16)
-    vllm_config = AphroditeConfig(model_config=model_config, lora_config=lora_config)
+    aphrodite_config = AphroditeConfig(model_config=model_config, lora_config=lora_config)
 
-    vllm_config.scheduler_config.max_num_seqs = 4
-    vllm_config.scheduler_config.max_num_batched_tokens = 2
+    aphrodite_config.scheduler_config.max_num_seqs = 4
+    aphrodite_config.scheduler_config.max_num_batched_tokens = 2
     worker_adapter_manager = LRUCacheWorkerLoRAManager(
-        vllm_config, device, EMBEDDING_MODULES
+        aphrodite_config, device, EMBEDDING_MODULES
     )
 
     worker_adapter_manager.max_num_seqs = 4
     worker_adapter_manager.max_num_batched_tokens = 2
 
-    worker_adapter_manager.create_lora_manager(dummy_model, vllm_config)
+    worker_adapter_manager.create_lora_manager(dummy_model, aphrodite_config)
 
     mapping = LoRAMapping([], [])
     worker_adapter_manager.set_active_adapters(
@@ -773,14 +773,14 @@ def test_worker_adapter_manager(dist_init, dummy_model_gate_up, device, tmp_path
     )
 
     model_config = ModelConfig(max_model_len=16)
-    vllm_config = AphroditeConfig(model_config=model_config, lora_config=lora_config)
+    aphrodite_config = AphroditeConfig(model_config=model_config, lora_config=lora_config)
 
-    vllm_config.scheduler_config.max_num_seqs = 4
-    vllm_config.scheduler_config.max_num_batched_tokens = 2
+    aphrodite_config.scheduler_config.max_num_seqs = 4
+    aphrodite_config.scheduler_config.max_num_batched_tokens = 2
 
-    worker_adapter_manager = WorkerLoRAManager(vllm_config, device, EMBEDDING_MODULES)
+    worker_adapter_manager = WorkerLoRAManager(aphrodite_config, device, EMBEDDING_MODULES)
     worker_adapter_manager.vocab_size = dummy_model_gate_up.unpadded_vocab_size
-    worker_adapter_manager.create_lora_manager(dummy_model_gate_up, vllm_config)
+    worker_adapter_manager.create_lora_manager(dummy_model_gate_up, aphrodite_config)
 
     dummy_lora_files = f"{tmp_path}/lora_adapter"
     os.makedirs(dummy_lora_files, exist_ok=True)
@@ -873,7 +873,7 @@ def test_worker_adapter_manager(dist_init, dummy_model_gate_up, device, tmp_path
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_packed_loras(default_vllm_config, dist_init, dummy_model_gate_up, device):
+def test_packed_loras(default_aphrodite_config, dist_init, dummy_model_gate_up, device):
     model = dummy_model_gate_up
     model_lora = create_packed_lora(
         1,
@@ -900,7 +900,7 @@ def test_packed_loras(default_vllm_config, dist_init, dummy_model_gate_up, devic
             max_lora_rank=8, max_cpu_loras=2, max_loras=2, lora_dtype=DEFAULT_DTYPE
         ),
         device=device,
-        vllm_config=default_vllm_config,
+        aphrodite_config=default_aphrodite_config,
     )
     model = manager.model
 
@@ -951,7 +951,7 @@ def _test_target_modules(
     device: str,
     expected_lora: list[tuple[str, type]],
     expected_no_lora: list[tuple[str, type]],
-    vllm_config,
+    aphrodite_config,
 ):
     """Create a LoRAModelManager and assert which modules have LoRA applied."""
     LoRAModelManager(
@@ -967,7 +967,7 @@ def _test_target_modules(
             target_modules=target_modules,
         ),
         device=device,
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
     )
     for module_path, lora_cls in expected_lora:
         assert isinstance(model.get_submodule(module_path), lora_cls)
@@ -976,7 +976,7 @@ def _test_target_modules(
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_target_modules_config(default_vllm_config, dist_init, dummy_model, device):
+def test_target_modules_config(default_aphrodite_config, dist_init, dummy_model, device):
     """Test that target_modules config restricts which modules get LoRA applied."""
     _test_target_modules(
         dummy_model,
@@ -990,12 +990,12 @@ def test_target_modules_config(default_vllm_config, dist_init, dummy_model, devi
             ("dense2", RowParallelLinearWithLoRA),
             ("layer1.dense2", RowParallelLinearWithLoRA),
         ],
-        vllm_config=default_vllm_config,
+        aphrodite_config=default_aphrodite_config,
     )
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_target_modules_multiple(default_vllm_config, dist_init, dummy_model, device):
+def test_target_modules_multiple(default_aphrodite_config, dist_init, dummy_model, device):
     """Test that multiple target_modules work correctly."""
     _test_target_modules(
         dummy_model,
@@ -1008,13 +1008,13 @@ def test_target_modules_multiple(default_vllm_config, dist_init, dummy_model, de
             ("layer1.dense2", RowParallelLinearWithLoRA),
         ],
         expected_no_lora=[],
-        vllm_config=default_vllm_config,
+        aphrodite_config=default_aphrodite_config,
     )
 
 
 @pytest.mark.parametrize("device", DEVICES)
 def test_target_modules_none_uses_all(
-    default_vllm_config, dist_init, dummy_model, device
+    default_aphrodite_config, dist_init, dummy_model, device
 ):
     """Test that target_modules=None uses all supported modules."""
     _test_target_modules(
@@ -1028,13 +1028,13 @@ def test_target_modules_none_uses_all(
             ("layer1.dense2", RowParallelLinearWithLoRA),
         ],
         expected_no_lora=[],
-        vllm_config=default_vllm_config,
+        aphrodite_config=default_aphrodite_config,
     )
 
 
 @pytest.mark.parametrize("device", DEVICES)
 def test_target_modules_match_packed_runtime_modules(
-    default_vllm_config, dist_init, dummy_model_gate_up, device
+    default_aphrodite_config, dist_init, dummy_model_gate_up, device
 ):
     """Packed runtime modules should be selected by their adapter-visible names."""
     _test_target_modules(
@@ -1048,5 +1048,5 @@ def test_target_modules_match_packed_runtime_modules(
             ("layer1.dense1", ColumnParallelLinearWithLoRA),
             ("layer1.dense2", RowParallelLinearWithLoRA),
         ],
-        vllm_config=default_vllm_config,
+        aphrodite_config=default_aphrodite_config,
     )

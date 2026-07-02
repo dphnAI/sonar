@@ -50,7 +50,7 @@ def run_model(compile_config: int | CompilationConfig, model: str, **model_kwarg
     # Get the compile ranges endpoints after aphrodite config post init
     # in order to compute compile ranges correctly
     compilation_config.compile_ranges_endpoints = (
-        llm.llm_engine.vllm_config.compilation_config.compile_ranges_endpoints
+        llm.llm_engine.aphrodite_config.compilation_config.compile_ranges_endpoints
     )
 
     # Fetch match table from each worker via RPC and sum across workers.

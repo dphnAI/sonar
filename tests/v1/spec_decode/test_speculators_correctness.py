@@ -133,7 +133,7 @@ def print_spec_decode_stats(stats: dict) -> None:
 
 
 @pytest.mark.parametrize("config", SPECULATOR_CONFIGS)
-def test_speculators_model(vllm_runner, example_prompts, monkeypatch, config):
+def test_speculators_model(aphrodite_runner, example_prompts, monkeypatch, config):
     """
     Test speculators model properly initializes speculative decoding.
 
@@ -151,14 +151,14 @@ def test_speculators_model(vllm_runner, example_prompts, monkeypatch, config):
     if config.quantization:
         runner_kwargs["quantization"] = config.quantization
 
-    with vllm_runner(config.model_path, **runner_kwargs) as vllm_model:
-        vllm_config = vllm_model.llm.llm_engine.vllm_config
+    with aphrodite_runner(config.model_path, **runner_kwargs) as aphrodite_model:
+        aphrodite_config = aphrodite_model.llm.llm_engine.aphrodite_config
 
-        assert isinstance(vllm_config.speculative_config, SpeculativeConfig), (
+        assert isinstance(aphrodite_config.speculative_config, SpeculativeConfig), (
             "Speculative config should be initialized for speculators model"
         )
 
-        spec_config = vllm_config.speculative_config
+        spec_config = aphrodite_config.speculative_config
         assert spec_config.method == config.method, (
             f"Expected method='{config.method}', got '{spec_config.method}'"
         )
@@ -175,8 +175,8 @@ def test_speculators_model(vllm_runner, example_prompts, monkeypatch, config):
             f"Draft model should be {config.model_path}, got {spec_config.model}"
         )
 
-        vllm_outputs = vllm_model.generate_greedy(example_prompts, max_tokens=20)
-        assert vllm_outputs, (
+        aphrodite_outputs = aphrodite_model.generate_greedy(example_prompts, max_tokens=20)
+        assert aphrodite_outputs, (
             f"No outputs generated for speculators model {config.model_path}"
         )
 

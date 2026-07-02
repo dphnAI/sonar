@@ -39,7 +39,7 @@ def _make_speculator(
 
     speculator = object.__new__(_TestSpeculator)
     speculator.supports_mm_inputs = False
-    speculator.vllm_config = None
+    speculator.aphrodite_config = None
     speculator.input_buffers = SimpleNamespace(
         input_ids=torch.arange(4),
         positions=torch.arange(4),

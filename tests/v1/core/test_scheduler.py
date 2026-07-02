@@ -2234,7 +2234,7 @@ def create_scheduler_with_priority(
         else None
     )
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         scheduler_config=scheduler_config,
         model_config=model_config,
         cache_config=cache_config,
@@ -2259,10 +2259,10 @@ def create_scheduler_with_priority(
     )
     cache_config.num_gpu_blocks = num_blocks
     scheduler = Scheduler(
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         kv_cache_config=kv_cache_config,
         log_stats=True,
-        structured_output_manager=StructuredOutputManager(vllm_config),
+        structured_output_manager=StructuredOutputManager(aphrodite_config),
         block_size=block_size,
         hash_block_size=block_size,
     )
@@ -2919,8 +2919,8 @@ def test_abort_request_when_structured_output_fsm_cannot_advance():
     scheduler.kv_event_publisher = Mock()
     scheduler.finished_req_ids = set()
     scheduler.finished_req_ids_dict = None
-    scheduler.vllm_config = Mock()
-    scheduler.vllm_config.model_config.enable_return_routed_experts = False
+    scheduler.aphrodite_config = Mock()
+    scheduler.aphrodite_config.model_config.enable_return_routed_experts = False
     scheduler.enable_return_routed_experts = False
     scheduler.recompute_kv_load_failures = False
     scheduler.defer_block_free = False
@@ -3143,9 +3143,9 @@ def test_chunked_prefill_disabled_for_encoder_decoder(
     )
 
     # Ensure it is retained in AphroditeConfig, even after its post-init.
-    vllm_config = AphroditeConfig(scheduler_config=scheduler_config)
+    aphrodite_config = AphroditeConfig(scheduler_config=scheduler_config)
     _validate_chunked_prefill_settings_for_encoder_decoder(
-        vllm_config.scheduler_config, is_encoder_decoder, expect_enabled
+        aphrodite_config.scheduler_config, is_encoder_decoder, expect_enabled
     )
 
 
@@ -4480,7 +4480,7 @@ def _create_encoder_decoder_scheduler(
     )
     cache_config.num_gpu_blocks = num_blocks
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         scheduler_config=scheduler_config,
         model_config=model_config,
         cache_config=cache_config,
@@ -4517,11 +4517,11 @@ def _create_encoder_decoder_scheduler(
     # the __init__ won't set up encoder-decoder internals. We patch them
     # after construction.
     scheduler = Scheduler(
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         kv_cache_config=kv_cache_config,
         block_size=block_size,
         hash_block_size=block_size,
-        structured_output_manager=StructuredOutputManager(vllm_config),
+        structured_output_manager=StructuredOutputManager(aphrodite_config),
     )
 
     # Patch to enable encoder-decoder behavior in the scheduling loop.

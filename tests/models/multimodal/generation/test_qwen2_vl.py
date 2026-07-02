@@ -253,7 +253,7 @@ def batch_make_video_embeddings(
 
 
 def run_embedding_input_test(
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     inputs: list[tuple[list[str], PromptImageInput, PromptVideoInput]],
     model: str,
     *,
@@ -272,7 +272,7 @@ def run_embedding_input_test(
     processor = AutoProcessor.from_pretrained(model)
 
     # max_model_len should be greater than image_feature_size
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="generate",
         max_model_len=4000,
@@ -283,9 +283,9 @@ def run_embedding_input_test(
         distributed_executor_backend=distributed_executor_backend,
         default_torch_num_threads=1,
         enable_mm_embeds=True,
-    ) as vllm_model:
+    ) as aphrodite_model:
         outputs_per_case_for_original_input = [
-            vllm_model.generate_greedy_logprobs(
+            aphrodite_model.generate_greedy_logprobs(
                 prompts,
                 max_tokens,
                 num_logprobs=num_logprobs,
@@ -296,14 +296,14 @@ def run_embedding_input_test(
         ]
 
         outputs_per_case_for_embeddings_input = [
-            vllm_model.generate_greedy_logprobs(
+            aphrodite_model.generate_greedy_logprobs(
                 prompts,
                 max_tokens,
                 num_logprobs=num_logprobs,
-                images=batch_make_image_embeddings(images, processor, vllm_model)
+                images=batch_make_image_embeddings(images, processor, aphrodite_model)
                 if images
                 else None,
-                videos=batch_make_video_embeddings(videos, processor, vllm_model)
+                videos=batch_make_video_embeddings(videos, processor, aphrodite_model)
                 if videos
                 else None,
             )
@@ -338,7 +338,7 @@ def run_embedding_input_test(
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("num_logprobs", [10])
 def test_qwen2_vl_image_embeddings_input(
-    vllm_runner,
+    aphrodite_runner,
     image_assets,
     model,
     size_factors,
@@ -359,7 +359,7 @@ def test_qwen2_vl_image_embeddings_input(
     ]
 
     run_embedding_input_test(
-        vllm_runner,
+        aphrodite_runner,
         inputs_per_case,
         model,
         dtype=dtype,
@@ -387,7 +387,7 @@ def test_qwen2_vl_image_embeddings_input(
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("num_logprobs", [10])
 def test_qwen2_vl_multiple_image_embeddings_input(
-    vllm_runner,
+    aphrodite_runner,
     image_assets,
     model,
     size_factors,
@@ -409,7 +409,7 @@ def test_qwen2_vl_multiple_image_embeddings_input(
     ]
 
     run_embedding_input_test(
-        vllm_runner,
+        aphrodite_runner,
         inputs_per_case,
         model,
         dtype=dtype,
@@ -437,7 +437,7 @@ def test_qwen2_vl_multiple_image_embeddings_input(
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("num_logprobs", [10])
 def test_qwen2_vl_video_embeddings_input(
-    vllm_runner,
+    aphrodite_runner,
     video_assets,
     model,
     size_factors,
@@ -461,7 +461,7 @@ def test_qwen2_vl_video_embeddings_input(
     ]
 
     run_embedding_input_test(
-        vllm_runner,
+        aphrodite_runner,
         inputs_per_case,
         model,
         dtype=dtype,

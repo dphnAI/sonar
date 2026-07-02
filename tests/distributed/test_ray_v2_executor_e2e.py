@@ -61,14 +61,14 @@ class _AsyncLLMActor:
             max_model_len=256,
             gpu_memory_utilization=0.8,
         )
-        vllm_config = engine_args.create_engine_config()
-        vllm_config.parallel_config.placement_group = pg
+        aphrodite_config = engine_args.create_engine_config()
+        aphrodite_config.parallel_config.placement_group = pg
         if ray_runtime_env is not None:
-            vllm_config.parallel_config.ray_runtime_env = ray_runtime_env
+            aphrodite_config.parallel_config.ray_runtime_env = ray_runtime_env
 
-        executor_class = Executor.get_class(vllm_config)
+        executor_class = Executor.get_class(aphrodite_config)
         self.engine = AsyncLLM(
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             executor_class=executor_class,
             log_stats=False,
             log_requests=False,

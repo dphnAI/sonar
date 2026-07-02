@@ -391,7 +391,7 @@ class TestStreamingExtraction:
         assert tc[2]["name"] == "t3"
         assert json.loads(tc[2]["arguments"]) == {"c": 3}
 
-    def test_vllm_streaming_character_by_character(self, parser, mock_request):
+    def test_aphrodite_streaming_character_by_character(self, parser, mock_request):
         """Simulates worst-case Aphrodite fragmentation where
         chunks arrive character-by-character."""
         text = (
@@ -409,7 +409,7 @@ class TestStreamingExtraction:
         assert tc[0]["name"] == "get_weather"
         assert json.loads(tc[0]["arguments"]) == {"location": "London"}
 
-    def test_vllm_streaming_empty_deltas(self, parser, mock_request):
+    def test_aphrodite_streaming_empty_deltas(self, parser, mock_request):
         """Simulates Aphrodite stream producing empty string chunks
         (e.g., hidden tokens or artifacts)."""
         chunks = [

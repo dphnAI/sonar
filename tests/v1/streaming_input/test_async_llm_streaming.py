@@ -21,8 +21,8 @@ def mock_async_llm():
     llm = MagicMock(spec=AsyncLLM)
 
     # Mock the essential attributes
-    llm.vllm_config = MagicMock()
-    llm.vllm_config.cache_config.kv_sharing_fast_prefill = False
+    llm.aphrodite_config = MagicMock()
+    llm.aphrodite_config.cache_config.kv_sharing_fast_prefill = False
     llm.model_config = MagicMock()
     llm.model_config.max_model_len = 2048
     llm.log_requests = False
@@ -118,8 +118,8 @@ async def test_generate_with_async_generator():
     sampling_params = SamplingParams(max_tokens=10)
 
     llm = MagicMock(spec=AsyncLLM)
-    llm.vllm_config = MagicMock()
-    llm.vllm_config.cache_config.kv_sharing_fast_prefill = False
+    llm.aphrodite_config = MagicMock()
+    llm.aphrodite_config.cache_config.kv_sharing_fast_prefill = False
     llm.model_config = MagicMock()
     llm.model_config.max_model_len = 2048
     llm.log_requests = False

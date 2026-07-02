@@ -60,7 +60,7 @@ class DummyDecoderLayer(nn.Module):
         return hidden_states, residual
 
 
-def make_vllm_config(
+def make_aphrodite_config(
     *, model_type="mistral3", qk_nope_head_dim=128, qk_rope_head_dim=64
 ):
     hf_config = SimpleNamespace(
@@ -115,13 +115,13 @@ def test_eagle_mistral_large3_initializes_deepseek_runtime_attrs(
     qk_rope_head_dim,
     expected_use_mha,
 ):
-    vllm_config = make_vllm_config(
+    aphrodite_config = make_aphrodite_config(
         model_type=model_type,
         qk_nope_head_dim=qk_nope_head_dim,
         qk_rope_head_dim=qk_rope_head_dim,
     )
 
-    model = eagle_mod.EagleMistralLarge3Model(vllm_config=vllm_config)
+    model = eagle_mod.EagleMistralLarge3Model(aphrodite_config=aphrodite_config)
 
     assert model.aux_hidden_state_layers == ()
     assert model.use_mha is expected_use_mha
@@ -133,8 +133,8 @@ def test_eagle_mistral_large3_initializes_deepseek_runtime_attrs(
 
 @pytest.mark.cpu_test
 def test_eagle_mistral_large3_forward_reuses_deepseek_parent_forward():
-    vllm_config = make_vllm_config()
-    model = eagle_mod.EagleMistralLarge3Model(vllm_config=vllm_config)
+    aphrodite_config = make_aphrodite_config()
+    model = eagle_mod.EagleMistralLarge3Model(aphrodite_config=aphrodite_config)
 
     input_ids = torch.tensor([[1, 2, 3]])
     positions = torch.tensor([[0, 1, 2]])

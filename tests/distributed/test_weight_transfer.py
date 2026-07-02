@@ -79,16 +79,16 @@ def create_mock_parallel_config(
     return config
 
 
-def create_mock_vllm_config(
+def create_mock_aphrodite_config(
     rank: int = 0,
     world_size: int = 1,
     dp_rank: int = 0,
 ) -> MagicMock:
     """Create a mock AphroditeConfig exposing parallel_config and model_config."""
-    vllm_config = MagicMock()
-    vllm_config.parallel_config = create_mock_parallel_config(rank, world_size, dp_rank)
-    vllm_config.model_config = MagicMock()
-    return vllm_config
+    aphrodite_config = MagicMock()
+    aphrodite_config.parallel_config = create_mock_parallel_config(rank, world_size, dp_rank)
+    aphrodite_config.model_config = MagicMock()
+    return aphrodite_config
 
 
 # --- Unit Tests: NCCLWeightTransferUpdateInfo Validation ---
@@ -190,7 +190,7 @@ class TestNCCLEngineParsing:
         config = WeightTransferConfig(backend="nccl")
         return NCCLWeightTransferEngine(
             config,
-            create_mock_vllm_config(),
+            create_mock_aphrodite_config(),
             "cuda",
             MagicMock(spec=torch.nn.Module),
         )
@@ -240,21 +240,21 @@ class TestEngineRegistry:
     def test_create_engine_nccl(self):
         config = WeightTransferConfig(backend="nccl")
         engine = WeightTransferEngineFactory.create_engine(
-            config, create_mock_vllm_config(), "cuda", MagicMock(spec=torch.nn.Module)
+            config, create_mock_aphrodite_config(), "cuda", MagicMock(spec=torch.nn.Module)
         )
         assert isinstance(engine, NCCLWeightTransferEngine)
 
     def test_create_engine_ipc(self):
         config = WeightTransferConfig(backend="ipc")
         engine = WeightTransferEngineFactory.create_engine(
-            config, create_mock_vllm_config(), "cuda", MagicMock(spec=torch.nn.Module)
+            config, create_mock_aphrodite_config(), "cuda", MagicMock(spec=torch.nn.Module)
         )
         assert isinstance(engine, IPCWeightTransferEngine)
 
     def test_create_engine_sparse_nccl(self):
         config = WeightTransferConfig(backend="sparse_nccl")
         engine = WeightTransferEngineFactory.create_engine(
-            config, create_mock_vllm_config(), "cuda", MagicMock(spec=torch.nn.Module)
+            config, create_mock_aphrodite_config(), "cuda", MagicMock(spec=torch.nn.Module)
         )
         assert isinstance(engine, SparseNCCLWeightTransferEngine)
 
@@ -263,7 +263,7 @@ class TestEngineRegistry:
         with pytest.raises(ValueError, match="Invalid weight transfer backend"):
             WeightTransferEngineFactory.create_engine(
                 config,
-                create_mock_vllm_config(),
+                create_mock_aphrodite_config(),
                 "cuda",
                 MagicMock(spec=torch.nn.Module),
             )
@@ -284,7 +284,7 @@ class TestSparseNCCLPatchApplication:
     def _make_engine(self, model):
         config = WeightTransferConfig(backend="sparse_nccl")
         return SparseNCCLWeightTransferEngine(
-            config, create_mock_vllm_config(), "cpu", model
+            config, create_mock_aphrodite_config(), "cpu", model
         )
 
     def _make_model(self, numel: int = 8):
@@ -382,7 +382,7 @@ def test_nccl_receive_weights_without_init_raises():
 
     config = WeightTransferConfig(backend="nccl")
     engine = NCCLWeightTransferEngine(
-        config, create_mock_vllm_config(), "cuda", MagicMock(spec=torch.nn.Module)
+        config, create_mock_aphrodite_config(), "cuda", MagicMock(spec=torch.nn.Module)
     )
 
     update_info = NCCLWeightTransferUpdateInfo(
@@ -400,7 +400,7 @@ def test_sparse_nccl_receive_weights_without_init_raises():
 
     config = WeightTransferConfig(backend="sparse_nccl")
     engine = SparseNCCLWeightTransferEngine(
-        config, create_mock_vllm_config(), "cuda", MagicMock(spec=torch.nn.Module)
+        config, create_mock_aphrodite_config(), "cuda", MagicMock(spec=torch.nn.Module)
     )
 
     update_info = SparseNCCLWeightTransferUpdateInfo(
@@ -485,22 +485,22 @@ def inference_receive_tensor(
                 self.received.append((name, tensor.clone()))
 
     config = WeightTransferConfig(backend="nccl")
-    vllm_config = MagicMock()
+    aphrodite_config = MagicMock()
     parallel_config = MagicMock(spec=ParallelConfig)
     parallel_config.rank = 0
     parallel_config.world_size = 1
     parallel_config.data_parallel_rank = 0
     parallel_config.data_parallel_index = 0
-    vllm_config.parallel_config = parallel_config
-    vllm_config.model_config = MagicMock()
+    aphrodite_config.parallel_config = parallel_config
+    aphrodite_config.model_config = MagicMock()
 
     recorder = Recorder()
-    engine = NCCLWeightTransferEngine(config, vllm_config, "cuda", recorder)
-    # Transport-only test: bypass the set_current_vllm_config context that
-    # receive_weights enters, since vllm_config here is a mock.
-    import aphrodite.config as _vllm_config_mod
+    engine = NCCLWeightTransferEngine(config, aphrodite_config, "cuda", recorder)
+    # Transport-only test: bypass the set_current_aphrodite_config context that
+    # receive_weights enters, since aphrodite_config here is a mock.
+    import aphrodite.config as _aphrodite_config_mod
 
-    _vllm_config_mod.set_current_vllm_config = lambda cfg: contextlib.nullcontext()
+    _aphrodite_config_mod.set_current_aphrodite_config = lambda cfg: contextlib.nullcontext()
 
     # Initialize the engine (joins as rank 1)
     init_info = NCCLWeightTransferInitInfo(
@@ -641,14 +641,14 @@ def inference_receive_sparse_tensor(
     )
 
     config = WeightTransferConfig(backend="sparse_nccl")
-    vllm_config = MagicMock()
+    aphrodite_config = MagicMock()
     parallel_config = MagicMock(spec=ParallelConfig)
     parallel_config.rank = 0
     parallel_config.world_size = 1
     parallel_config.data_parallel_rank = 0
     parallel_config.data_parallel_index = 0
-    vllm_config.parallel_config = parallel_config
-    vllm_config.model_config = MagicMock()
+    aphrodite_config.parallel_config = parallel_config
+    aphrodite_config.model_config = MagicMock()
 
     # Real module holding the target parameter the patch will modify.
     model = torch.nn.Module()
@@ -664,7 +664,7 @@ def inference_receive_sparse_tensor(
         num_updates_list=[3],
     )
 
-    engine = SparseNCCLWeightTransferEngine(config, vllm_config, "cuda", model)
+    engine = SparseNCCLWeightTransferEngine(config, aphrodite_config, "cuda", model)
     from aphrodite.distributed.weight_transfer.nccl_common import (
         NCCLWeightTransferInitInfo,
     )
@@ -878,7 +878,7 @@ class TestIPCEngineParsing:
         config = WeightTransferConfig(backend="ipc")
         return IPCWeightTransferEngine(
             config,
-            create_mock_vllm_config(),
+            create_mock_aphrodite_config(),
             "cuda",
             MagicMock(spec=torch.nn.Module),
         )
@@ -1058,22 +1058,22 @@ def inference_receive_ipc_tensor(
                 self.received.append((name, tensor.clone()))
 
     config = WeightTransferConfig(backend="ipc")
-    vllm_config = MagicMock()
+    aphrodite_config = MagicMock()
     parallel_config = MagicMock(spec=ParallelConfig)
     parallel_config.rank = 0
     parallel_config.world_size = 1
     parallel_config.data_parallel_rank = 0
     parallel_config.data_parallel_index = 0
-    vllm_config.parallel_config = parallel_config
-    vllm_config.model_config = MagicMock()
+    aphrodite_config.parallel_config = parallel_config
+    aphrodite_config.model_config = MagicMock()
 
     recorder = Recorder()
-    engine = IPCWeightTransferEngine(config, vllm_config, "cuda", recorder)
-    # Transport-only test: bypass the set_current_vllm_config context that
-    # receive_weights enters, since vllm_config here is a mock.
-    import aphrodite.config as _vllm_config_mod
+    engine = IPCWeightTransferEngine(config, aphrodite_config, "cuda", recorder)
+    # Transport-only test: bypass the set_current_aphrodite_config context that
+    # receive_weights enters, since aphrodite_config here is a mock.
+    import aphrodite.config as _aphrodite_config_mod
 
-    _vllm_config_mod.set_current_vllm_config = lambda cfg: contextlib.nullcontext()
+    _aphrodite_config_mod.set_current_aphrodite_config = lambda cfg: contextlib.nullcontext()
 
     init_info = IPCWeightTransferInitInfo()
     engine.init_transfer_engine(init_info)
@@ -1173,7 +1173,7 @@ def test_ipc_receive_weights_missing_gpu_uuid_raises():
 
     config = WeightTransferConfig(backend="ipc")
     engine = IPCWeightTransferEngine(
-        config, create_mock_vllm_config(), "cuda", MagicMock(spec=torch.nn.Module)
+        config, create_mock_aphrodite_config(), "cuda", MagicMock(spec=torch.nn.Module)
     )
 
     dummy_tensor = torch.ones(10, 10, device="cuda:0")

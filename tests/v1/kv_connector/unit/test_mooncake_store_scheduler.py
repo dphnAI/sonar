@@ -158,7 +158,7 @@ def test_preemption_clears_stale_load_state():
         block_ids=([10, 11, 12],),
     )
     scheduler.load_specs["req-0"] = LoadSpec(
-        vllm_cached_tokens=0,
+        aphrodite_cached_tokens=0,
         kvpool_cached_tokens=48,
         can_load=True,
     )
@@ -216,7 +216,7 @@ def test_pending_load_does_not_co_queue_save():
         block_hashes=[b"h0", b"h1", b"h2"],
     )
     scheduler.load_specs["req-0"] = LoadSpec(
-        vllm_cached_tokens=0,
+        aphrodite_cached_tokens=0,
         kvpool_cached_tokens=48,
         can_load=True,
     )
@@ -285,7 +285,7 @@ def test_resumed_from_preemption_with_load_skips_save():
         num_computed_tokens=0,
     )
     scheduler.load_specs["req-0"] = LoadSpec(
-        vllm_cached_tokens=0,
+        aphrodite_cached_tokens=0,
         kvpool_cached_tokens=48,
         can_load=True,
     )
@@ -406,7 +406,7 @@ def test_from_request_tracker_load_overrides_caller_skip_save():
         allocated_block_ids=([0, 1, 2],),
         num_saved_tokens=0,
     )
-    load_spec = LoadSpec(vllm_cached_tokens=0, kvpool_cached_tokens=48, can_load=True)
+    load_spec = LoadSpec(aphrodite_cached_tokens=0, kvpool_cached_tokens=48, can_load=True)
 
     req_meta = ReqMeta.from_request_tracker(
         tracker,
@@ -431,7 +431,7 @@ def test_from_request_tracker_load_with_can_load_false_still_saves():
         allocated_block_ids=([0, 1, 2],),
         num_saved_tokens=0,
     )
-    load_spec = LoadSpec(vllm_cached_tokens=0, kvpool_cached_tokens=48, can_load=False)
+    load_spec = LoadSpec(aphrodite_cached_tokens=0, kvpool_cached_tokens=48, can_load=False)
 
     req_meta = ReqMeta.from_request_tracker(
         tracker,
@@ -510,7 +510,7 @@ def test_full_external_hit_keeps_kvpool_cached_tokens_block_aligned():
     assert need_to_allocate == 16
     assert load_async is True
     load_spec = scheduler.load_specs["req-0"]
-    assert load_spec.vllm_cached_tokens == 16
+    assert load_spec.aphrodite_cached_tokens == 16
     assert load_spec.kvpool_cached_tokens == 32
     assert load_spec.kvpool_cached_tokens % 16 == 0
 

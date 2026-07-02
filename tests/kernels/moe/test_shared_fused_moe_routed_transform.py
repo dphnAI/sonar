@@ -11,7 +11,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.forward_context import set_forward_context
 from aphrodite.model_executor.layers.fused_moe import FusedMoE
 from aphrodite.platforms import current_platform
@@ -150,13 +150,13 @@ def test_routed_input_transform_inside_vs_outside(
     top_k = 2
     intermediate_size = hidden_size * 2
 
-    vllm_config = AphroditeConfig()
-    vllm_config.compilation_config.static_forward_context = dict()
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.compilation_config.static_forward_context = dict()
 
     shared_experts = SimpleSharedExperts(hidden_size, intermediate_size, dtype)
     routed_transform = SimpleLinear(hidden_size, latent_size, dtype)
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         # Method A: FusedMoE WITH routed_input_transform
         moe_with_transform = FusedMoE(
             shared_experts=shared_experts,
@@ -210,7 +210,7 @@ def test_routed_input_transform_inside_vs_outside(
         hidden_states = torch.randn(num_tokens, hidden_size, device="cuda", dtype=dtype)
         router_logits = torch.randn(num_tokens, num_experts, device="cuda", dtype=dtype)
 
-        with set_forward_context(None, vllm_config, num_tokens=num_tokens):
+        with set_forward_context(None, aphrodite_config, num_tokens=num_tokens):
             # Method A: combined output (shared + routed)
             combined_A = moe_with_transform(hidden_states, router_logits)
 

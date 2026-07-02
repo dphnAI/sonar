@@ -166,7 +166,7 @@ def load_outputs_w_logprobs(filename: "StrPath") -> OutputsLogprobs:
 @pytest.mark.parametrize("max_model_len", MAX_MODEL_LEN)
 @pytest.mark.parametrize("dtype", ["bfloat16"])
 def test_chat(
-    vllm_runner, max_model_len: int, model: str, dtype: str, local_asset_server
+    aphrodite_runner, max_model_len: int, model: str, dtype: str, local_asset_server
 ) -> None:
     if (
         model == MISTRAL_SMALL_3_1_ID
@@ -178,7 +178,7 @@ def test_chat(
         )
 
     EXPECTED_CHAT_LOGPROBS = load_outputs_w_logprobs(FIXTURE_LOGPROBS_CHAT[model])
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         dtype=dtype,
         tokenizer_mode="mistral",
@@ -186,7 +186,7 @@ def test_chat(
         config_format="mistral",
         max_model_len=max_model_len,
         limit_mm_per_prompt=LIMIT_MM_PER_PROMPT,
-    ) as vllm_model:
+    ) as aphrodite_model:
         outputs = []
 
         urls_all = [local_asset_server.url_for(u) for u in IMG_URLS]
@@ -196,11 +196,11 @@ def test_chat(
             _create_msg_format(urls_all),
         ]
         for msg in msgs:
-            output = vllm_model.llm.chat(msg, sampling_params=SAMPLING_PARAMS)
+            output = aphrodite_model.llm.chat(msg, sampling_params=SAMPLING_PARAMS)
 
             outputs.extend(output)
 
-    logprobs = vllm_runner._final_steps_generate_w_logprobs(outputs)
+    logprobs = aphrodite_runner._final_steps_generate_w_logprobs(outputs)
     # Remove last `None` prompt_logprobs to compare with fixture
     for i in range(len(logprobs)):
         assert logprobs[i][-1] is None
@@ -215,11 +215,11 @@ def test_chat(
 
 @large_gpu_test(min_gb=16)
 @pytest.mark.parametrize("dtype", ["bfloat16"])
-def test_chat_consolidated(vllm_runner, dtype: str, local_asset_server) -> None:
+def test_chat_consolidated(aphrodite_runner, dtype: str, local_asset_server) -> None:
     EXPECTED_CHAT_LOGPROBS = load_outputs_w_logprobs(
         FIXTURE_LOGPROBS_CHAT[MINISTRAL_3B_ID]
     )
-    with vllm_runner(
+    with aphrodite_runner(
         MINISTRAL_3B_ID,
         dtype=dtype,
         tokenizer_mode="mistral",
@@ -227,7 +227,7 @@ def test_chat_consolidated(vllm_runner, dtype: str, local_asset_server) -> None:
         config_format="mistral",
         max_model_len=8192,
         limit_mm_per_prompt=LIMIT_MM_PER_PROMPT,
-    ) as vllm_model:
+    ) as aphrodite_model:
         outputs = []
         urls_all = [local_asset_server.url_for(u) for u in IMG_URLS]
         msgs = [
@@ -236,10 +236,10 @@ def test_chat_consolidated(vllm_runner, dtype: str, local_asset_server) -> None:
             _create_msg_format(urls_all),
         ]
         for msg in msgs:
-            output = vllm_model.llm.chat(msg, sampling_params=SAMPLING_PARAMS)
+            output = aphrodite_model.llm.chat(msg, sampling_params=SAMPLING_PARAMS)
             outputs.extend(output)
 
-    logprobs = vllm_runner._final_steps_generate_w_logprobs(outputs)
+    logprobs = aphrodite_runner._final_steps_generate_w_logprobs(outputs)
     for i in range(len(logprobs)):
         assert logprobs[i][-1] is None
         logprobs[i] = logprobs[i][:-1]

@@ -149,7 +149,7 @@ def _latency_test(llm: LLM, subscriber: MockSubscriber | None):
     total_cold_time = 0.0
     total_gpu_hit_time = 0.0
     total_cpu_hit_time = 0.0
-    max_model_len = llm.llm_engine.vllm_config.model_config.max_model_len
+    max_model_len = llm.llm_engine.aphrodite_config.model_config.max_model_len
     # Use a long prompt that fits within the model's context window.
     prompt_len = min(10001, max_model_len - 1)
     prompt_token_ids = [0] * prompt_len
@@ -201,13 +201,13 @@ def _latency_test(llm: LLM, subscriber: MockSubscriber | None):
 def _accuracy_test(llm: LLM, subscriber: MockSubscriber | None):
     sampling_params = SamplingParams(max_tokens=1)
     extra_config = (
-        llm.llm_engine.vllm_config.kv_transfer_config.kv_connector_extra_config
+        llm.llm_engine.aphrodite_config.kv_transfer_config.kv_connector_extra_config
     )
     cpu_block_size = extra_config.get("block_size")
     if cpu_block_size is None:
         # No custom offloaded block_size: offloaded blocks match GPU blocks.
         # Use the hash block_size (cache_config.block_size) for alignment.
-        cpu_block_size = llm.llm_engine.vllm_config.cache_config.block_size
+        cpu_block_size = llm.llm_engine.aphrodite_config.cache_config.block_size
 
     if subscriber is not None:
         subscriber.get_new_cpu_stored_events()

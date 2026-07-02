@@ -32,7 +32,7 @@
 #define NVFP4_ENABLE_ELTS16 1
 #include "nvfp4_utils.cuh"
 
-namespace vllm {
+namespace aphrodite {
 
 // Use UE4M3 by default.
 template <class Type, bool UE8M0_SF = false>
@@ -43,7 +43,7 @@ __global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
                              float const* __restrict__ SFScale,
                              uint32_t* __restrict__ out,
                              uint32_t* __restrict__ SFout) {
-  using PackedVec = vllm::PackedVec<Type, CVT_FP4_PACK16>;
+  using PackedVec = aphrodite::PackedVec<Type, CVT_FP4_PACK16>;
   static constexpr int CVT_FP4_NUM_THREADS_PER_SF =
       (CVT_FP4_SF_VEC_SIZE / CVT_FP4_ELTS_PER_THREAD);
   static_assert(sizeof(PackedVec) == sizeof(Type) * CVT_FP4_ELTS_PER_THREAD,
@@ -115,7 +115,7 @@ __global__ void __launch_bounds__(512, APHRODITE_BLOCKS_PER_SM(512))
   }
 }
 
-}  // namespace vllm
+}  // namespace aphrodite
 
 void silu_and_mul_nvfp4_quant_sm1xxa(
     torch::stable::Tensor& output,  // [..., d]
@@ -142,20 +142,20 @@ void silu_and_mul_nvfp4_quant_sm1xxa(
   auto stream = get_current_cuda_stream(input.get_device_index());
   dim3 block(std::min(int(n / ELTS_PER_THREAD), 512));
   int const numBlocksPerSM =
-      vllm_runtime_blocks_per_sm(static_cast<int>(block.x));
+      aphrodite_runtime_blocks_per_sm(static_cast<int>(block.x));
 
   int num_packed_cols = int(n / CVT_FP4_ELTS_PER_THREAD);
 
-  int grid_y = vllm::div_round_up(num_packed_cols, static_cast<int>(block.x));
+  int grid_y = aphrodite::div_round_up(num_packed_cols, static_cast<int>(block.x));
   int grid_x = std::min(
       int(m), std::max(1, (multiProcessorCount * numBlocksPerSM) / grid_y));
   dim3 grid(grid_x, grid_y);
 
   APHRODITE_STABLE_DISPATCH_HALF_TYPES(
       input.scalar_type(), "silu_and_mul_nvfp4_quant_kernel", [&] {
-        using cuda_type = vllm::CUDATypeConverter<scalar_t>::Type;
+        using cuda_type = aphrodite::CUDATypeConverter<scalar_t>::Type;
         auto input_ptr = static_cast<cuda_type const*>(input.data_ptr());
-        vllm::silu_mul_cvt_fp16_to_fp4<cuda_type><<<grid, block, 0, stream>>>(
+        aphrodite::silu_mul_cvt_fp16_to_fp4<cuda_type><<<grid, block, 0, stream>>>(
             m, n, num_packed_cols, input_ptr, input_sf_ptr,
             reinterpret_cast<uint32_t*>(output_ptr),
             reinterpret_cast<uint32_t*>(sf_out));

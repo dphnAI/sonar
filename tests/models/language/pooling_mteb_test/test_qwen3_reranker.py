@@ -109,22 +109,22 @@ class Qwen3RerankerHfRunner(MtebCrossEncoderMixin, HfRunner):
 
 
 @pytest.mark.parametrize("model_info", RERANK_MODELS)
-def test_rerank_models_mteb(vllm_runner, model_info: RerankModelInfo) -> None:
-    mteb_test_rerank_models(vllm_runner, model_info, hf_runner=Qwen3RerankerHfRunner)
+def test_rerank_models_mteb(aphrodite_runner, model_info: RerankModelInfo) -> None:
+    mteb_test_rerank_models(aphrodite_runner, model_info, hf_runner=Qwen3RerankerHfRunner)
 
 
 @pytest.mark.parametrize("model_info", RERANK_MODELS)
 @multi_gpu_test(num_gpus=2)
-def test_rerank_models_mteb_tp(vllm_runner, model_info: RerankModelInfo) -> None:
+def test_rerank_models_mteb_tp(aphrodite_runner, model_info: RerankModelInfo) -> None:
     assert model_info.architecture == "Qwen3ForSequenceClassification"
 
-    vllm_extra_kwargs: dict[str, Any] = {
+    aphrodite_extra_kwargs: dict[str, Any] = {
         "tensor_parallel_size": 2,
     }
 
     mteb_test_rerank_models(
-        vllm_runner,
+        aphrodite_runner,
         model_info,
-        vllm_extra_kwargs=vllm_extra_kwargs,
+        aphrodite_extra_kwargs=aphrodite_extra_kwargs,
         hf_runner=Qwen3RerankerHfRunner,
     )

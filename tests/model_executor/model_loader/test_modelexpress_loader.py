@@ -62,13 +62,13 @@ def test_modelexpress_loader_delegates_to_modelexpress(monkeypatch):
     loader = ModelExpressModelLoader(LoadConfig(load_format="modelexpress"))
     model = nn.Module()
     model_config = SimpleNamespace()
-    vllm_config = SimpleNamespace()
+    aphrodite_config = SimpleNamespace()
 
     loader.download_model(model_config)
     loader.load_weights(model, model_config)
     FakeModelexpressLoader.loaded_model.train()
     result = loader.load_model(
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         model_config=model_config,
         prefix="model",
     )
@@ -82,7 +82,7 @@ def test_modelexpress_loader_delegates_to_modelexpress(monkeypatch):
             "load_model",
             (),
             {
-                "vllm_config": vllm_config,
+                "aphrodite_config": aphrodite_config,
                 "model_config": model_config,
                 "prefix": "model",
             },
@@ -124,10 +124,10 @@ def test_modelexpress_load_format_allows_object_storage_model_weights():
         model="test-model",
         model_weights="s3://bucket/model",
     )
-    vllm_config = object.__new__(AphroditeConfig)
-    vllm_config.model_config = model_config
-    vllm_config.load_config = LoadConfig(load_format="modelexpress")
+    aphrodite_config = object.__new__(AphroditeConfig)
+    aphrodite_config.model_config = model_config
+    aphrodite_config.load_config = LoadConfig(load_format="modelexpress")
 
-    vllm_config.try_verify_and_update_config()
+    aphrodite_config.try_verify_and_update_config()
 
-    assert vllm_config.load_config.load_format == "modelexpress"
+    assert aphrodite_config.load_config.load_format == "modelexpress"

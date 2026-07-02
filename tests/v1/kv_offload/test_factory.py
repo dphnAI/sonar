@@ -39,7 +39,7 @@ def restore_registry():
     OffloadingSpecFactory._registry = original
 
 
-def _make_vllm_config(
+def _make_aphrodite_config(
     spec_name: str | None = "CPUOffloadingSpec",
     cpu_bytes_to_use: int | None = None,
     store_threshold: int = 0,
@@ -153,14 +153,14 @@ def test_tiering_spec_registered():
 
 def test_get_spec_cls_returns_registered_class():
     """Registered spec_name returns correct class."""
-    config = _make_vllm_config(spec_name="CPUOffloadingSpec")
+    config = _make_aphrodite_config(spec_name="CPUOffloadingSpec")
     spec_cls = OffloadingSpecFactory.get_spec_cls(config)
     assert spec_cls is CPUOffloadingSpec
 
 
 def test_get_spec_cls_default_to_cpu():
     """Default spec_name (absent from config) resolves to CPUOffloadingSpec."""
-    config = _make_vllm_config(spec_name=None)
+    config = _make_aphrodite_config(spec_name=None)
     config.kv_transfer_config.kv_connector_extra_config.pop("spec_name", None)
     spec_cls = OffloadingSpecFactory.get_spec_cls(config)
     assert spec_cls is CPUOffloadingSpec
@@ -179,7 +179,7 @@ def test_create_cpu_offloading_spec_end_to_end():
     - block_size % hash_block_size assertion
     - spec instance is CPUOffloadingSpec
     """
-    config = _make_vllm_config(cpu_bytes_to_use=65536)
+    config = _make_aphrodite_config(cpu_bytes_to_use=65536)
     kv_cache_config = _make_kv_cache_config()
     spec = OffloadingSpecFactory.create_spec(config, kv_cache_config)
     assert isinstance(spec, CPUOffloadingSpec)
@@ -198,7 +198,7 @@ def test_dynamic_load_via_spec_module_path():
     integrate with Aphrodite without being pre-registered in the factory.
     The fallback path: registry miss → spec_module_path → importlib.import_module.
     """
-    config = _make_vllm_config(spec_name="CPUOffloadingSpec")
+    config = _make_aphrodite_config(spec_name="CPUOffloadingSpec")
     # Delete from registry to force the dynamic import path
     del OffloadingSpecFactory._registry["CPUOffloadingSpec"]
     # spec_name not in registry → falls through to spec_module_path
@@ -216,7 +216,7 @@ def test_dynamic_load_via_spec_module_path():
 
 def test_unregistered_spec_without_module_path_raises():
     """spec_name not in registry + no spec_module_path → ValueError."""
-    config = _make_vllm_config(spec_name="NonexistentSpec")
+    config = _make_aphrodite_config(spec_name="NonexistentSpec")
     with pytest.raises(ValueError, match="Unsupported spec type"):
         OffloadingSpecFactory.get_spec_cls(config)
 
@@ -228,7 +228,7 @@ def test_unregistered_spec_without_module_path_raises():
 
 def test_cpu_spec_missing_cpu_bytes_to_use_raises():
     """CPUOffloadingSpec requires cpu_bytes_to_use → Exception."""
-    config = _make_vllm_config(cpu_bytes_to_use=None)
+    config = _make_aphrodite_config(cpu_bytes_to_use=None)
     config.kv_transfer_config.kv_connector_extra_config.pop("cpu_bytes_to_use", None)
     kv_cache_config = _make_kv_cache_config()
     with pytest.raises(Exception, match="cpu_bytes_to_use must be specified"):
@@ -252,7 +252,7 @@ def test_build_metric_definitions_empty_below_threshold():
     """store_threshold < 2 → only base metric (no stores_skipped)."""
     from aphrodite.v1.kv_offload.cpu.common import CPUOffloadingMetrics
 
-    config = _make_vllm_config(store_threshold=1)
+    config = _make_aphrodite_config(store_threshold=1)
     spec_cls = OffloadingSpecFactory.get_spec_cls(config)
     metrics = spec_cls.build_metric_definitions(
         config.kv_transfer_config.kv_connector_extra_config
@@ -264,7 +264,7 @@ def test_build_metric_definitions_returns_counter_at_threshold():
     """store_threshold >= 2 → returns stores_skipped counter definition."""
     from aphrodite.v1.kv_offload.cpu.common import CPUOffloadingMetrics
 
-    config = _make_vllm_config(store_threshold=2)
+    config = _make_aphrodite_config(store_threshold=2)
     spec_cls = OffloadingSpecFactory.get_spec_cls(config)
     metrics = spec_cls.build_metric_definitions(
         config.kv_transfer_config.kv_connector_extra_config

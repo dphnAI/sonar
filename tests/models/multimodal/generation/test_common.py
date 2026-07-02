@@ -87,13 +87,13 @@ COMMON_BROADCAST_SETTINGS = {
 # this is a good idea for checking your command first, since tests are slow.
 
 
-def _granite4_vision_vllm_to_hf_output(vllm_output, model):
+def _granite4_vision_aphrodite_to_hf_output(aphrodite_output, model):
     """Post-processor for granite4_vision Aphrodite output.
 
     Self-contained to avoid calling AutoConfig/AutoTokenizer without
     trust_remote_code (needed while the model is not in upstream HF).
     """
-    output_ids, output_str, out_logprobs = vllm_output
+    output_ids, output_str, out_logprobs = aphrodite_output
     mm_token_id = 100352
     hf_output_ids = [
         token_id
@@ -118,7 +118,7 @@ VLM_TEST_SETTINGS = {
         convert_assets_to_embeddings=model_utils.get_llava_embeddings,
         max_model_len=4096,
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=model_utils.llava_image_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.llava_image_aphrodite_to_hf_output,
         custom_test_opts=[
             CustomTestOptions(
                 inputs=custom_inputs.multi_image_multi_aspect_ratio_inputs(
@@ -127,7 +127,7 @@ VLM_TEST_SETTINGS = {
                 limit_mm_per_prompt={"image": 4},
             )
         ],
-        vllm_runner_kwargs={"enable_mm_embeds": True},
+        aphrodite_runner_kwargs={"enable_mm_embeds": True},
         marks=[pytest.mark.core_model, pytest.mark.cpu_model],
     ),
     "paligemma": VLMTestInfo(
@@ -143,7 +143,7 @@ VLM_TEST_SETTINGS = {
             }
         ),
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=model_utils.paligemma_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.paligemma_aphrodite_to_hf_output,
     ),
     "qwen2_5_vl": VLMTestInfo(
         models=["Qwen/Qwen2.5-VL-3B-Instruct"],
@@ -155,7 +155,7 @@ VLM_TEST_SETTINGS = {
         max_model_len=4096,
         max_num_seqs=2,
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=model_utils.qwen2_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.qwen2_aphrodite_to_hf_output,
         image_size_factors=[(0.25,), (0.25, 0.25, 0.25), (0.25, 0.2, 0.15)],
         marks=[pytest.mark.core_model, pytest.mark.cpu_model],
     ),
@@ -169,7 +169,7 @@ VLM_TEST_SETTINGS = {
         max_num_seqs=2,
         num_logprobs=6 if current_platform.is_cpu() else 5,
         auto_cls=AutoModelForTextToWaveform,
-        vllm_output_post_proc=model_utils.qwen2_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.qwen2_aphrodite_to_hf_output,
         patch_hf_runner=model_utils.qwen2_5_omni_patch_hf_runner,
         image_size_factors=[(0.25,), (0.25, 0.25, 0.25), (0.25, 0.2, 0.15)],
         marks=[pytest.mark.core_model, pytest.mark.cpu_model],
@@ -190,13 +190,13 @@ VLM_TEST_SETTINGS = {
         max_num_seqs=2,
         num_logprobs=20,
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=model_utils.qwen2_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.qwen2_aphrodite_to_hf_output,
         patch_hf_runner=model_utils.qwen3_vl_patch_hf_runner,
         image_size_factors=[(0.25,), (0.25, 0.25, 0.25), (0.25, 0.2, 0.15)],
         marks=[
             pytest.mark.core_model,
         ],
-        vllm_runner_kwargs={"attention_backend": "TRITON_ATTN"}
+        aphrodite_runner_kwargs={"attention_backend": "TRITON_ATTN"}
         if current_platform.is_rocm()
         else {},
     ),
@@ -230,9 +230,9 @@ VLM_TEST_SETTINGS = {
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
         ),
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=model_utils.llava_onevision_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.llava_onevision_aphrodite_to_hf_output,
         image_size_factors=[(0.25, 0.5, 1.0)],
-        vllm_runner_kwargs={
+        aphrodite_runner_kwargs={
             "model_impl": "transformers",
             "default_torch_num_threads": 1,
         },
@@ -245,9 +245,9 @@ VLM_TEST_SETTINGS = {
         prompt_formatter=lambda vid_prompt: f"<'<bos><start_of_turn>user\n{vid_prompt}<start_of_image><end_of_turn>\n<start_of_turn>model\n",  # noqa: E501
         max_model_len=4096,
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=model_utils.gemma3_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.gemma3_aphrodite_to_hf_output,
         image_size_factors=[(0.25, 0.5, 1.0)],
-        vllm_runner_kwargs={
+        aphrodite_runner_kwargs={
             "model_impl": "transformers",
         },
         marks=[
@@ -265,7 +265,7 @@ VLM_TEST_SETTINGS = {
         auto_cls=AutoModelForImageTextToText,
         hf_output_post_proc=model_utils.idefics3_trunc_hf_output,
         image_size_factors=[(0.25, 0.5, 1.0)],
-        vllm_runner_kwargs={
+        aphrodite_runner_kwargs={
             "model_impl": "transformers",
         },
         marks=[pytest.mark.core_model],
@@ -279,9 +279,9 @@ VLM_TEST_SETTINGS = {
         max_model_len=4096,
         max_num_seqs=2,
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=model_utils.qwen2_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.qwen2_aphrodite_to_hf_output,
         image_size_factors=[(0.25, 0.2, 0.15)],
-        vllm_runner_kwargs={
+        aphrodite_runner_kwargs={
             "model_impl": "transformers",
             # TODO: [ROCm] Revert this once issue #30167 is resolved
             **(
@@ -332,7 +332,7 @@ VLM_TEST_SETTINGS = {
         prompt_formatter=lambda img_prompt: f"Question: {img_prompt} Answer:",
         img_idx_to_prompt=lambda idx: "",
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=model_utils.blip2_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.blip2_aphrodite_to_hf_output,
         # FIXME: https://github.com/huggingface/transformers/pull/38510
         marks=[pytest.mark.skip("Model is broken")],
     ),
@@ -344,7 +344,7 @@ VLM_TEST_SETTINGS = {
         max_num_seqs=2,
         auto_cls=AutoModelForImageTextToText,
         # For chameleon, we only compare the sequences
-        vllm_output_post_proc=lambda vllm_output, model: vllm_output[:2],
+        aphrodite_output_post_proc=lambda aphrodite_output, model: aphrodite_output[:2],
         hf_output_post_proc=lambda hf_output, model: hf_output[:2],
         comparator=check_outputs_equal,
         max_tokens=8,
@@ -366,7 +366,7 @@ VLM_TEST_SETTINGS = {
         max_num_seqs=2,
         num_logprobs=20,
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=model_utils.qwen2_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.qwen2_aphrodite_to_hf_output,
         patch_hf_runner=model_utils.qwen3_vl_patch_hf_runner,
         image_size_factors=[(0.25,), (0.25, 0.25, 0.25), (0.25, 0.2, 0.15)],
     ),
@@ -397,7 +397,7 @@ VLM_TEST_SETTINGS = {
         max_num_seqs=2,
         auto_cls=AutoModelForImageTextToText,
         use_tokenizer_eos=True,
-        vllm_output_post_proc=model_utils.fuyu_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.fuyu_aphrodite_to_hf_output,
         num_logprobs=10,
         image_size_factors=[(0.25,), (0.25, 0.25, 0.25), (0.25, 0.2, 0.15)],
         marks=[large_gpu_mark(min_gb=32)],
@@ -416,7 +416,7 @@ VLM_TEST_SETTINGS = {
         max_model_len=4096,
         max_num_seqs=2,
         auto_cls=AutoModelForImageTextToText,
-        vllm_runner_kwargs={"mm_processor_kwargs": {"do_pan_and_scan": True}},
+        aphrodite_runner_kwargs={"mm_processor_kwargs": {"do_pan_and_scan": True}},
         patch_hf_runner=model_utils.gemma3_patch_hf_runner,
     ),
     "gemma4": VLMTestInfo(
@@ -433,7 +433,7 @@ VLM_TEST_SETTINGS = {
         max_model_len=4096,
         max_num_seqs=2,
         auto_cls=AutoModelForImageTextToText,
-        vllm_runner_kwargs={"limit_mm_per_prompt": {"image": 4}},
+        aphrodite_runner_kwargs={"limit_mm_per_prompt": {"image": 4}},
     ),
     "granite_vision": VLMTestInfo(
         models=["ibm-granite/granite-vision-3.3-2b"],
@@ -441,7 +441,7 @@ VLM_TEST_SETTINGS = {
         prompt_formatter=lambda img_prompt: f"<|user|>\n{img_prompt}\n<|assistant|>\n",
         max_model_len=8192,
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=model_utils.llava_image_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.llava_image_aphrodite_to_hf_output,
     ),
     "glm4v": VLMTestInfo(
         models=["zai-org/glm-4v-9b"],
@@ -530,9 +530,9 @@ VLM_TEST_SETTINGS = {
         prompt_formatter=lambda img_prompt: f"<|user|>\n{img_prompt}\n<|assistant|>\n",
         max_model_len=8192,
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=_granite4_vision_vllm_to_hf_output,
+        aphrodite_output_post_proc=_granite4_vision_aphrodite_to_hf_output,
         image_size_factors=[(1.0,)],
-        vllm_runner_kwargs={
+        aphrodite_runner_kwargs={
             "enable_lora": True,
             "max_lora_rank": 256,
             "default_mm_loras": {"image": "ibm-granite/granite-vision-4.1-4b"},
@@ -666,7 +666,7 @@ VLM_TEST_SETTINGS = {
         max_num_seqs=2,
         dtype="bfloat16",
         tensor_parallel_size=1,
-        vllm_output_post_proc=model_utils.kimiv_vl_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.kimiv_vl_aphrodite_to_hf_output,
         marks=[large_gpu_mark(min_gb=48)],
     ),
     "llama4": VLMTestInfo(
@@ -690,7 +690,7 @@ VLM_TEST_SETTINGS = {
         prompt_formatter=lambda img_prompt: f"[INST] {img_prompt} [/INST]",
         max_model_len=10240,
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=model_utils.llava_image_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.llava_image_aphrodite_to_hf_output,
         custom_test_opts=[
             CustomTestOptions(
                 inputs=custom_inputs.multi_image_multi_aspect_ratio_inputs(
@@ -710,7 +710,7 @@ VLM_TEST_SETTINGS = {
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
         ),
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=model_utils.llava_onevision_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.llava_onevision_aphrodite_to_hf_output,
         custom_test_opts=[
             CustomTestOptions(
                 inputs=custom_inputs.multi_video_multi_aspect_ratio_inputs(
@@ -728,7 +728,7 @@ VLM_TEST_SETTINGS = {
         max_model_len=4096,
         max_num_seqs=2,
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=model_utils.llava_video_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.llava_video_aphrodite_to_hf_output,
     ),
     "minicpmv_25": VLMTestInfo(
         models=["openbmb/MiniCPM-Llama3-V-2_5"],
@@ -879,7 +879,7 @@ VLM_TEST_SETTINGS = {
         # use sdpa mode for hf runner since phi3v didn't work with flash_attn
         hf_model_kwargs={"_attn_implementation": "sdpa"},
         use_tokenizer_eos=True,
-        vllm_output_post_proc=model_utils.phi3v_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.phi3v_aphrodite_to_hf_output,
         num_logprobs=10,
     ),
     "pixtral_hf": VLMTestInfo(
@@ -919,7 +919,7 @@ VLM_TEST_SETTINGS = {
         max_num_seqs=2,
         num_logprobs=10,
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=model_utils.qwen2_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.qwen2_aphrodite_to_hf_output,
         image_size_factors=[(0.25,), (0.25, 0.25, 0.25), (0.25, 0.2, 0.15)],
         marks=[pytest.mark.cpu_model],
     ),
@@ -956,7 +956,7 @@ VLM_TEST_SETTINGS = {
         prompt_formatter=lambda img_prompt: f"USER: {img_prompt}\nASSISTANT:",
         max_model_len=4096,
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=lambda vllm_output, model: vllm_output[:2],
+        aphrodite_output_post_proc=lambda aphrodite_output, model: aphrodite_output[:2],
         hf_output_post_proc=lambda hf_output, model: hf_output[:2],
         comparator=check_outputs_equal,
         marks=multi_gpu_marks(num_gpus=2),
@@ -967,7 +967,7 @@ VLM_TEST_SETTINGS = {
         prompt_formatter=lambda img_prompt: f"USER: {img_prompt}\nASSISTANT:",
         max_model_len=4096,
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=model_utils.llava_image_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.llava_image_aphrodite_to_hf_output,
         marks=multi_gpu_marks(num_gpus=2),
         **COMMON_BROADCAST_SETTINGS,  # type: ignore
     ),
@@ -976,7 +976,7 @@ VLM_TEST_SETTINGS = {
         prompt_formatter=lambda img_prompt: f"[INST] {img_prompt} [/INST]",
         max_model_len=10240,
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=model_utils.llava_image_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.llava_image_aphrodite_to_hf_output,
         marks=multi_gpu_marks(num_gpus=2),
         **COMMON_BROADCAST_SETTINGS,  # type: ignore
     ),
@@ -1011,7 +1011,7 @@ VLM_TEST_SETTINGS = {
         hf_model_kwargs=model_utils.llava_onevision_hf_model_kwargs(
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
         ),
-        vllm_output_post_proc=model_utils.llava_onevision_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.llava_onevision_aphrodite_to_hf_output,
         custom_test_opts=[
             CustomTestOptions(
                 inputs=custom_inputs.multi_image_multi_aspect_ratio_inputs(
@@ -1028,7 +1028,7 @@ VLM_TEST_SETTINGS = {
         max_model_len=4096,
         max_num_seqs=2,
         auto_cls=AutoModelForImageTextToText,
-        vllm_output_post_proc=model_utils.qwen2_vllm_to_hf_output,
+        aphrodite_output_post_proc=model_utils.qwen2_aphrodite_to_hf_output,
         custom_test_opts=[
             CustomTestOptions(
                 inputs=custom_inputs.windows_attention_image_qwen2_5_vl(),
@@ -1095,7 +1095,7 @@ def test_single_image_models(
     model_type: str,
     test_case: ExpandableVLMTestArgs,
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     image_assets: ImageTestAssets,
 ):
     model_test_info = VLM_TEST_SETTINGS[model_type]
@@ -1104,7 +1104,7 @@ def test_single_image_models(
         model_test_info=model_test_info,
         test_case=test_case,
         hf_runner=hf_runner,
-        vllm_runner=vllm_runner,
+        aphrodite_runner=aphrodite_runner,
         image_assets=image_assets,
     )
 
@@ -1122,7 +1122,7 @@ def test_multi_image_models(
     model_type: str,
     test_case: ExpandableVLMTestArgs,
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     image_assets: ImageTestAssets,
 ):
     model_test_info = VLM_TEST_SETTINGS[model_type]
@@ -1131,7 +1131,7 @@ def test_multi_image_models(
         model_test_info=model_test_info,
         test_case=test_case,
         hf_runner=hf_runner,
-        vllm_runner=vllm_runner,
+        aphrodite_runner=aphrodite_runner,
         image_assets=image_assets,
     )
 
@@ -1148,7 +1148,7 @@ def test_image_embedding_models(
     model_type: str,
     test_case: ExpandableVLMTestArgs,
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     image_assets: ImageTestAssets,
 ):
     model_test_info = VLM_TEST_SETTINGS[model_type]
@@ -1156,7 +1156,7 @@ def test_image_embedding_models(
         model_test_info=model_test_info,
         test_case=test_case,
         hf_runner=hf_runner,
-        vllm_runner=vllm_runner,
+        aphrodite_runner=aphrodite_runner,
         image_assets=image_assets,
     )
 
@@ -1173,7 +1173,7 @@ def test_video_models(
     model_type: str,
     test_case: ExpandableVLMTestArgs,
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     video_assets: VideoTestAssets,
 ):
     model_test_info = VLM_TEST_SETTINGS[model_type]
@@ -1181,7 +1181,7 @@ def test_video_models(
         model_test_info=model_test_info,
         test_case=test_case,
         hf_runner=hf_runner,
-        vllm_runner=vllm_runner,
+        aphrodite_runner=aphrodite_runner,
         video_assets=video_assets,
     )
 
@@ -1198,7 +1198,7 @@ def test_audio_models(
     model_type: str,
     test_case: ExpandableVLMTestArgs,
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     audio_assets: AudioTestAssets,
 ):
     model_test_info = VLM_TEST_SETTINGS[model_type]
@@ -1206,7 +1206,7 @@ def test_audio_models(
         model_test_info=model_test_info,
         test_case=test_case,
         hf_runner=hf_runner,
-        vllm_runner=vllm_runner,
+        aphrodite_runner=aphrodite_runner,
         audio_assets=audio_assets,
     )
 
@@ -1223,14 +1223,14 @@ def test_custom_inputs_models(
     model_type: str,
     test_case: ExpandableVLMTestArgs,
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
 ):
     model_test_info = VLM_TEST_SETTINGS[model_type]
     runners.run_custom_inputs_test(
         model_test_info=model_test_info,
         test_case=test_case,
         hf_runner=hf_runner,
-        vllm_runner=vllm_runner,
+        aphrodite_runner=aphrodite_runner,
     )
 
 
@@ -1249,7 +1249,7 @@ def test_single_image_models_heavy(
     model_type: str,
     test_case: ExpandableVLMTestArgs,
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     image_assets: ImageTestAssets,
 ):
     model_test_info = VLM_TEST_SETTINGS[model_type]
@@ -1258,7 +1258,7 @@ def test_single_image_models_heavy(
         model_test_info=model_test_info,
         test_case=test_case,
         hf_runner=hf_runner,
-        vllm_runner=vllm_runner,
+        aphrodite_runner=aphrodite_runner,
         image_assets=image_assets,
     )
 
@@ -1277,7 +1277,7 @@ def test_multi_image_models_heavy(
     model_type: str,
     test_case: ExpandableVLMTestArgs,
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     image_assets: ImageTestAssets,
 ):
     model_test_info = VLM_TEST_SETTINGS[model_type]
@@ -1286,7 +1286,7 @@ def test_multi_image_models_heavy(
         model_test_info=model_test_info,
         test_case=test_case,
         hf_runner=hf_runner,
-        vllm_runner=vllm_runner,
+        aphrodite_runner=aphrodite_runner,
         image_assets=image_assets,
     )
 
@@ -1304,7 +1304,7 @@ def test_image_embedding_models_heavy(
     model_type: str,
     test_case: ExpandableVLMTestArgs,
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     image_assets: ImageTestAssets,
 ):
     model_test_info = VLM_TEST_SETTINGS[model_type]
@@ -1312,7 +1312,7 @@ def test_image_embedding_models_heavy(
         model_test_info=model_test_info,
         test_case=test_case,
         hf_runner=hf_runner,
-        vllm_runner=vllm_runner,
+        aphrodite_runner=aphrodite_runner,
         image_assets=image_assets,
     )
 
@@ -1329,7 +1329,7 @@ def test_video_models_heavy(
     model_type: str,
     test_case: ExpandableVLMTestArgs,
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     video_assets: VideoTestAssets,
 ):
     model_test_info = VLM_TEST_SETTINGS[model_type]
@@ -1337,7 +1337,7 @@ def test_video_models_heavy(
         model_test_info=model_test_info,
         test_case=test_case,
         hf_runner=hf_runner,
-        vllm_runner=vllm_runner,
+        aphrodite_runner=aphrodite_runner,
         video_assets=video_assets,
     )
 
@@ -1354,7 +1354,7 @@ def test_audio_models_heavy(
     model_type: str,
     test_case: ExpandableVLMTestArgs,
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     audio_assets: AudioTestAssets,
 ):
     model_test_info = VLM_TEST_SETTINGS[model_type]
@@ -1362,7 +1362,7 @@ def test_audio_models_heavy(
         model_test_info=model_test_info,
         test_case=test_case,
         hf_runner=hf_runner,
-        vllm_runner=vllm_runner,
+        aphrodite_runner=aphrodite_runner,
         audio_assets=audio_assets,
     )
 
@@ -1380,12 +1380,12 @@ def test_custom_inputs_models_heavy(
     model_type: str,
     test_case: ExpandableVLMTestArgs,
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
 ):
     model_test_info = VLM_TEST_SETTINGS[model_type]
     runners.run_custom_inputs_test(
         model_test_info=model_test_info,
         test_case=test_case,
         hf_runner=hf_runner,
-        vllm_runner=vllm_runner,
+        aphrodite_runner=aphrodite_runner,
     )

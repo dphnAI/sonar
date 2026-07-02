@@ -19,7 +19,7 @@ void launch_persistent_topk(const torch::stable::Tensor& logits,
                             torch::stable::Tensor& output,
                             torch::stable::Tensor& workspace,
                             int64_t max_seq_len) {
-  namespace P = vllm::persistent;
+  namespace P = aphrodite::persistent;
 
   const int64_t num_rows = logits.size(0);
   const int64_t stride = logits.stride(0);
@@ -35,7 +35,7 @@ void launch_persistent_topk(const torch::stable::Tensor& logits,
 
   if (num_rows > 32 && max_smem_per_block >= 128 * 1024) {
     cudaError_t status =
-        vllm::FilteredTopKRaggedTransform<float, int32_t, TopK>(
+        aphrodite::FilteredTopKRaggedTransform<float, int32_t, TopK>(
             logits.const_data_ptr<float>(), output.mutable_data_ptr<int32_t>(),
             lengths.const_data_ptr<int32_t>(), static_cast<uint32_t>(num_rows),
             static_cast<uint32_t>(TopK), static_cast<uint32_t>(stride), stream);
@@ -142,7 +142,7 @@ void launch_persistent_topk(const torch::stable::Tensor& logits,
           ", vec_size=", vec_size, ", ctas_per_group=", ctas_per_group,
           ", smem=", smem_size, ").");
       cudaError_t status =
-          vllm::FilteredTopKRaggedTransform<float, int32_t, TopK>(
+          aphrodite::FilteredTopKRaggedTransform<float, int32_t, TopK>(
               logits.const_data_ptr<float>(),
               output.mutable_data_ptr<int32_t>(),
               lengths.const_data_ptr<int32_t>(),

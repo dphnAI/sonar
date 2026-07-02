@@ -4,7 +4,7 @@
 #include <cuda_runtime.h>
 #include <cstdio>
 
-namespace vllm::cutlass_w4a8_utils {
+namespace aphrodite::cutlass_w4a8_utils {
 
 /*
   GPU-accelerated implementation of cutlass::unified_encode_int4b.
@@ -87,4 +87,4 @@ bool unified_encode_int4b(cutlass::int4b_t const* in, cutlass::int4b_t* out,
   return true;
 }
 
-}  // namespace vllm::cutlass_w4a8_utils
+}  // namespace aphrodite::cutlass_w4a8_utils

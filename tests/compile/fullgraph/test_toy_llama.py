@@ -23,7 +23,7 @@ from aphrodite.config import (
     CompilationMode,
     CUDAGraphMode,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.forward_context import BatchDescriptor, set_forward_context
 from aphrodite.utils.torch_utils import is_torch_equal_or_newer
@@ -201,7 +201,7 @@ class LlamaModel(nn.Module):
     def __init__(
         self,
         *,
-        vllm_config: AphroditeConfig,
+        aphrodite_config: AphroditeConfig,
         config: LlamaConfig,
         prefix: str = "",
         **kwargs,
@@ -265,17 +265,17 @@ def run_model(llama_config, compile_config: CompilationConfig) -> torch.Tensor:
     compile_config = deepcopy(compile_config)
     cudagraph_runtime_mode = compile_config.cudagraph_mode
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=compile_config, additional_config=llama_config
     )
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         model = (
-            LlamaModel(config=llama_config, vllm_config=vllm_config, prefix="")
+            LlamaModel(config=llama_config, aphrodite_config=aphrodite_config, prefix="")
             .eval()
             .cuda()
         )
 
-    with set_forward_context({}, vllm_config=vllm_config):  # background context
+    with set_forward_context({}, aphrodite_config=aphrodite_config):  # background context
         B = 16  # max batch size
         input_ids = torch.randint(0, llama_config.vocab_size, (B,)).cuda()
         positions = torch.arange(B).cuda()
@@ -286,7 +286,7 @@ def run_model(llama_config, compile_config: CompilationConfig) -> torch.Tensor:
         # simulate cudagraphs capturing
         with set_forward_context(
             {},
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
             batch_descriptor=BatchDescriptor(
                 num_tokens=2,
@@ -295,7 +295,7 @@ def run_model(llama_config, compile_config: CompilationConfig) -> torch.Tensor:
             model(input_ids[:2], positions[:2])
         with set_forward_context(
             {},
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
             batch_descriptor=BatchDescriptor(
                 num_tokens=1,
@@ -307,7 +307,7 @@ def run_model(llama_config, compile_config: CompilationConfig) -> torch.Tensor:
         # simulate cudagraphs replay
         with set_forward_context(
             {},
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
             batch_descriptor=BatchDescriptor(
                 num_tokens=2,
@@ -462,10 +462,10 @@ def benchmark():
                 cudagraph_capture_sizes=cudagraph_sizes,
             )
 
-        vllm_config = AphroditeConfig(compilation_config=compilation_config)
-        with set_current_vllm_config(vllm_config):
+        aphrodite_config = AphroditeConfig(compilation_config=compilation_config)
+        with set_current_aphrodite_config(aphrodite_config):
             model = (
-                LlamaModel(config=llama_config, vllm_config=vllm_config, prefix="")
+                LlamaModel(config=llama_config, aphrodite_config=aphrodite_config, prefix="")
                 .eval()
                 .cuda()
                 .to(torch.bfloat16)

@@ -15,7 +15,7 @@ pytest -s -v tests/evals/gsm8k/test_gsm8k_correctness.py \
 
 ```bash
 # Start vLLM server first
-vllm serve Qwen/Qwen2.5-1.5B-Instruct --port 8000
+aphrodite serve Qwen/Qwen2.5-1.5B-Instruct --port 8000
 
 # Run evaluation
 python tests/evals/gsm8k/gsm8k_eval.py --port 8000
@@ -35,6 +35,6 @@ env:                      # Environment variables (optional)
   APHRODITE_LOGGING_LEVEL: "DEBUG"
 ```
 
-The `server_args` field accepts any arguments that can be passed to `vllm serve`.
+The `server_args` field accepts any arguments that can be passed to `aphrodite serve`.
 
 The `env` field accepts a dictionary of environment variables to set for the server process.

@@ -18,7 +18,7 @@ from aphrodite.v1.core.single_type_kv_cache_manager import (
 
 from .utils import (
     create_request,
-    create_vllm_config,
+    create_aphrodite_config,
     make_kv_cache_config,
     make_nixl_scheduler,
 )
@@ -46,14 +46,14 @@ def test_sw_sizes(mock_platform, swa_enabled, expected_sw_sizes):
     mock_platform.device_type = "cpu"
 
     block_size = 16
-    vllm_config = create_vllm_config(block_size=block_size)
+    aphrodite_config = create_aphrodite_config(block_size=block_size)
     # SW 2048 tokens=>128 blocks
     kv_cache_config = make_kv_cache_config(
         block_size=block_size, swa_enabled=swa_enabled, sw_size=2048
     )
 
     scheduler = NixlConnectorScheduler(
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         engine_id="test-engine",
         kv_cache_config=kv_cache_config,
     )
@@ -784,9 +784,9 @@ def test_mamba_n1_d_side_builds_decode_metadata():
     assert num_computed_tokens == req.num_prompt_tokens - 1
     assert is_async is True
 
-    vllm_config = create_vllm_config()
+    aphrodite_config = create_aphrodite_config()
     metadata = MockMambaBuilder.build_mamba_metadata(
-        vllm_config,
+        aphrodite_config,
         seq_lens=[req.num_prompt_tokens],
         query_lens=[1],
         is_prefilling=[True],
@@ -859,9 +859,9 @@ def test_has_mamba_init(
     mock_platform.device_type = "cpu"
 
     block_size = 16
-    vllm_config = create_vllm_config(block_size=block_size)
+    aphrodite_config = create_aphrodite_config(block_size=block_size)
     # Explicitly enable HMA so we can test the scheduler's own derivation.
-    vllm_config.scheduler_config.disable_hybrid_kv_cache_manager = False
+    aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = False
     kv_cache_config = make_kv_cache_config(
         block_size=block_size,
         swa_enabled=swa_enabled,
@@ -869,7 +869,7 @@ def test_has_mamba_init(
     )
 
     scheduler = NixlConnectorScheduler(
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         engine_id="test-engine",
         kv_cache_config=kv_cache_config,
     )

@@ -35,7 +35,7 @@ constexpr int CVT_FP4_ELTS_PER_THREAD = 8;
 
 constexpr int CVT_FP4_SF_VEC_SIZE = 16;
 
-namespace vllm {
+namespace aphrodite {
 
 template <typename Int>
 __host__ __device__ inline Int round_up(Int x, Int y) {
@@ -328,4 +328,4 @@ __inline__ __device__ PackedVec<Type, CVT_FP4_PACK16> compute_silu_mul(
   return result;
 }
 
-}  // namespace vllm
+}  // namespace aphrodite

@@ -18,7 +18,7 @@ import ray
 import torch
 
 from aphrodite import LLM
-from aphrodite.config import KVTransferConfig, set_current_vllm_config
+from aphrodite.config import KVTransferConfig, set_current_aphrodite_config
 from aphrodite.distributed.kv_transfer.kv_connector.utils import (
     EngineTransferInfo,
     KVOutputAggregator,
@@ -71,7 +71,7 @@ from aphrodite.v1.worker.utils import AttentionGroup
 from .utils import (
     create_request,
     create_scheduler,
-    create_vllm_config,
+    create_aphrodite_config,
     make_kv_cache_config,
 )
 
@@ -244,11 +244,11 @@ nixl_agent = FakeNixlWrapper
 def test_basic_interface():
     """Unit test for basic NixlConnector interface functionality."""
 
-    vllm_config = create_vllm_config()
-    scheduler = create_scheduler(vllm_config)
+    aphrodite_config = create_aphrodite_config()
+    scheduler = create_scheduler(aphrodite_config)
 
     # 2 Full Blocks and 1 Half Block.
-    BLOCK_SIZE = vllm_config.cache_config.block_size
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 
@@ -289,11 +289,11 @@ def test_prompt_less_than_block_size():
     partial block. The D worker should schedule an async read
     in this case.
     """
-    vllm_config = create_vllm_config()
-    scheduler = create_scheduler(vllm_config)
+    aphrodite_config = create_aphrodite_config()
+    scheduler = create_scheduler(aphrodite_config)
 
     # Half of a block.
-    BLOCK_SIZE = vllm_config.cache_config.block_size
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
     NUM_TOKENS = int(BLOCK_SIZE * 0.5)
 
     # Request will have 1 partial remote block.
@@ -322,7 +322,7 @@ def test_abort_immediately_remote_prefill_enqueues_empty_recv():
     the prefill instance to free its blocks."""
     from aphrodite.v1.request import RequestStatus
 
-    scheduler = create_scheduler(create_vllm_config())
+    scheduler = create_scheduler(create_aphrodite_config())
 
     request = create_request(request_id=42, num_tokens=10, do_remote_prefill=True)
     assert request.kv_transfer_params is not None
@@ -349,17 +349,17 @@ def test_abort_immediately_remote_prefill_enqueues_empty_recv():
 )
 def test_kv_transfer_handshake(dist_init):
     """Unit test for basic NixlConnector interface functionality."""
-    from aphrodite.config import set_current_vllm_config
+    from aphrodite.config import set_current_aphrodite_config
 
     # Test setup, we creates a scheduler that contains a NixlConnector
     # of role SCHEDULER, and expect it to be serving NixlAgentMetadata from
     # all workers of the instance.
-    vllm_config = create_vllm_config()
+    aphrodite_config = create_aphrodite_config()
     # in case the test runs on non-GPU machine
-    vllm_config.kv_transfer_config.kv_buffer_device = "cpu"
-    scheduler = create_scheduler(vllm_config)
+    aphrodite_config.kv_transfer_config.kv_buffer_device = "cpu"
+    scheduler = create_scheduler(aphrodite_config)
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         # Create two NixlConnector of role WORKER, one is the worker of
         # the scheduler (prefill), the other is a worker of decode instance.
 
@@ -380,7 +380,7 @@ def test_kv_transfer_handshake(dist_init):
             num_blocks=2, kv_cache_tensors=[], kv_cache_groups=kv_cache_groups
         )
         prefill_connector = NixlConnector(
-            vllm_config, KVConnectorRole.WORKER, kv_cache_config
+            aphrodite_config, KVConnectorRole.WORKER, kv_cache_config
         )
         kv_cache_spec = cast(
             AttentionSpec, kv_cache_config.kv_cache_groups[0].kv_cache_spec
@@ -416,7 +416,7 @@ def test_kv_transfer_handshake(dist_init):
 
         # Simulate a request that finishes prefill, which returns
         # corresponding NixlConnectorMetadata for decode instance.
-        BLOCK_SIZE = vllm_config.cache_config.block_size
+        BLOCK_SIZE = aphrodite_config.cache_config.block_size
         NUM_EXTERNAL_FULL_BLOCKS = 2
         NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 
@@ -436,7 +436,7 @@ def test_kv_transfer_handshake(dist_init):
 
         # Decode connector will be able to create handshake with the prefill connector.
         decode_connector = NixlConnector(
-            vllm_config, KVConnectorRole.WORKER, kv_cache_config
+            aphrodite_config, KVConnectorRole.WORKER, kv_cache_config
         )
         decode_connector.register_kv_caches(kv_caches)
 
@@ -498,7 +498,7 @@ class FakeNixlConnectorWorker(NixlConnectorWorker):
         )
 
         self.compat_hash = compute_nixl_compatibility_hash(
-            self.vllm_config, self.backend_name, self.transfer_topo.cross_layers_blocks
+            self.aphrodite_config, self.backend_name, self.transfer_topo.cross_layers_blocks
         )
 
     def _nixl_handshake(
@@ -565,7 +565,7 @@ class TestNixlHandshake:
     )
     def test_multi_xfer_one_engine(
         self,
-        default_vllm_config,
+        default_aphrodite_config,
         # dist_init is a fixture that initializes the distributed environment.
         dist_init,
     ):
@@ -574,15 +574,15 @@ class TestNixlHandshake:
         This test triggers the connector to load remote KV for the same
         `request_id`.
         """
-        vllm_config = create_vllm_config()
+        aphrodite_config = create_aphrodite_config()
 
         request_id = "req_id"
 
         # Test worker role in decode server.
         kv_cache_config = make_kv_cache_config(block_size=16, num_blocks=2)
-        connector = NixlConnector(vllm_config, KVConnectorRole.WORKER, kv_cache_config)
+        connector = NixlConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
         connector.connector_worker = FakeNixlConnectorWorker(
-            vllm_config,
+            aphrodite_config,
             connector.engine_id,
             hand_shake_latency=0,
             kv_cache_config=kv_cache_config,
@@ -657,7 +657,7 @@ class TestNixlHandshake:
     )
     def test_async_load_kv(
         self,
-        default_vllm_config,
+        default_aphrodite_config,
         # Fixture that initializes the distributed environment.
         dist_init,
         # Simulate consumer-producer TP sizes.
@@ -666,15 +666,15 @@ class TestNixlHandshake:
     ):
         """Test that NixlConnector's start_load_kv should be non-blocking."""
 
-        vllm_config = create_vllm_config()
-        vllm_config.parallel_config.tensor_parallel_size = decode_tp_size
+        aphrodite_config = create_aphrodite_config()
+        aphrodite_config.parallel_config.tensor_parallel_size = decode_tp_size
 
         # Test worker role in decode server.
         connector = NixlConnector(
-            vllm_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
+            aphrodite_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
         )
         connector.connector_worker = FakeNixlConnectorWorker(
-            vllm_config, connector.engine_id
+            aphrodite_config, connector.engine_id
         )
         metadata = NixlConnectorMetadata()
         metadata.add_new_req_to_recv(
@@ -718,7 +718,7 @@ class TestNixlHandshake:
     )
     @pytest.mark.parametrize("local_tp_size", [1, 2])
     def test_prefill_tp_size_greater_than_decode_tp_size(
-        self, local_tp_size: int, default_vllm_config, dist_init, monkeypatch
+        self, local_tp_size: int, default_aphrodite_config, dist_init, monkeypatch
     ):
         """
         Verify remote TP > local TP handshake succeeds with different
@@ -729,13 +729,13 @@ class TestNixlHandshake:
             lambda: local_tp_size,
         )
 
-        vllm_config = create_vllm_config()
+        aphrodite_config = create_aphrodite_config()
 
         connector = NixlConnector(
-            vllm_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
+            aphrodite_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
         )
         connector.connector_worker = FakeNixlConnectorWorker(
-            vllm_config, connector.engine_id, hand_shake_latency=0
+            aphrodite_config, connector.engine_id, hand_shake_latency=0
         )
         worker = connector.connector_worker
 
@@ -788,28 +788,28 @@ class TestNixlHandshake:
         FakeNixlWrapper,
     )
     def test_prefill_tp_size_greater_than_decode_tp_size_mla(
-        self, default_vllm_config, dist_init
+        self, default_aphrodite_config, dist_init
     ):
         """
         Verify remote TP > local TP handshake succeeds with different
         remote configurations for an MLA model.
         """
-        vllm_config = create_vllm_config()
+        aphrodite_config = create_aphrodite_config()
         d_tp_size = 1
         p_tp_size = 2
 
         # Build two separate connectors/workers to emulate P TP=2 ranks.
         conn_p0 = NixlConnector(
-            vllm_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
+            aphrodite_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
         )
         conn_p1 = NixlConnector(
-            vllm_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
+            aphrodite_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
         )
         conn_p0.connector_worker = FakeNixlConnectorWorker(
-            vllm_config, conn_p0.engine_id, hand_shake_latency=0
+            aphrodite_config, conn_p0.engine_id, hand_shake_latency=0
         )
         conn_p1.connector_worker = FakeNixlConnectorWorker(
-            vllm_config, conn_p1.engine_id, hand_shake_latency=0
+            aphrodite_config, conn_p1.engine_id, hand_shake_latency=0
         )
 
         # Force P world size to 2 for both workers and emulate distinct tp_ranks.
@@ -892,20 +892,20 @@ class TestNixlHandshake:
     )
     def test_concurrent_load_kv(
         self,
-        default_vllm_config,
+        default_aphrodite_config,
         # dist_init is a fixture that initializes the distributed environment.
         dist_init,
     ):
         """Test that multiple start_load_kv calls should occur concurrently."""
 
-        vllm_config = create_vllm_config()
+        aphrodite_config = create_aphrodite_config()
 
         # Test worker role in decode server.
         connector = NixlConnector(
-            vllm_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
+            aphrodite_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
         )
         connector.connector_worker = FakeNixlConnectorWorker(
-            vllm_config, connector.engine_id
+            aphrodite_config, connector.engine_id
         )
         # Register (mocked) local xfer handler
         # worker = connector.connector_worker
@@ -956,13 +956,13 @@ class TestNixlHandshake:
         FakeNixlWrapper,
     )
     def test_handshake_fails_on_kv_cache_layout_mismatch(
-        self, default_vllm_config, dist_init
+        self, default_aphrodite_config, dist_init
     ):
         """
         Verify that adding a remote agent fails if kv_cache_layout differs.
         This test is only relevant for heterogeneous TP.
         """
-        vllm_config = create_vllm_config()
+        aphrodite_config = create_aphrodite_config()
 
         # Mock TP world size to 2 to force heterogeneous TP when
         # remote_tp_size=1
@@ -972,10 +972,10 @@ class TestNixlHandshake:
         ):
             # Initialize connector and worker (with fake NIXL wrapper)
             connector = NixlConnector(
-                vllm_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
+                aphrodite_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
             )
             connector.connector_worker = FakeNixlConnectorWorker(
-                vllm_config, connector.engine_id, hand_shake_latency=0
+                aphrodite_config, connector.engine_id, hand_shake_latency=0
             )
             worker = connector.connector_worker
 
@@ -1011,13 +1011,13 @@ class TestNixlHandshake:
         FakeNixlWrapper,
     )
     def test_handshake_succeed_on_kv_cache_layout_mismatch_with_experimental(
-        self, default_vllm_config, dist_init
+        self, default_aphrodite_config, dist_init
     ):
         """
         Verify that adding a remote agent fails if kv_cache_layout differs.
         This test is only relevant for heterogeneous TP.
         """
-        vllm_config = create_vllm_config(enable_permute_local_kv=True)
+        aphrodite_config = create_aphrodite_config(enable_permute_local_kv=True)
 
         # Mock TP world size to 2 to force heterogeneous TP when
         # remote_tp_size=1
@@ -1027,10 +1027,10 @@ class TestNixlHandshake:
         ):
             # Initialize connector and worker (with fake NIXL wrapper)
             connector = NixlConnector(
-                vllm_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
+                aphrodite_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
             )
             connector.connector_worker = FakeNixlConnectorWorker(
-                vllm_config,
+                aphrodite_config,
                 connector.engine_id,
                 hand_shake_latency=0,
                 kv_cache_layout="NHD",
@@ -1067,21 +1067,21 @@ class TestNixlHandshake:
         "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
         FakeNixlWrapper,
     )
-    def test_handshake_mixed_fa_mla_hetero_tp(self, default_vllm_config, dist_init):
+    def test_handshake_mixed_fa_mla_hetero_tp(self, default_aphrodite_config, dist_init):
         """Mixed full-attn (SPLIT) + MLA (REPLICATE) single KV group under
         heterogeneous TP must NOT raise (previously a NotImplementedError),
         and the per-region gate must still reject a wrong block_len.
         """
-        vllm_config = create_vllm_config()
+        aphrodite_config = create_aphrodite_config()
         with patch(
             "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_tensor_model_parallel_world_size",  # noqa: E501
             return_value=2,
         ):
             connector = NixlConnector(
-                vllm_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
+                aphrodite_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
             )
             connector.connector_worker = FakeNixlConnectorWorker(
-                vllm_config, connector.engine_id, hand_shake_latency=0
+                aphrodite_config, connector.engine_id, hand_shake_latency=0
             )
             worker = connector.connector_worker
 
@@ -1121,7 +1121,7 @@ class TestNixlHandshake:
             )
             # Gate rejects an MLA region wrongly scaled by tp_ratio.
             worker2 = FakeNixlConnectorWorker(
-                vllm_config, connector.engine_id, hand_shake_latency=0
+                aphrodite_config, connector.engine_id, hand_shake_latency=0
             )
             worker2.block_len_per_layer = [fa_len, idx_len]
             worker2._region_is_mla = [False, True]
@@ -1149,7 +1149,7 @@ class TestNixlHandshake:
         FakeNixlWrapper,
     )
     def test_handshake_validates_gqa_replicated_block_len(
-        self, default_vllm_config, dist_init
+        self, default_aphrodite_config, dist_init
     ):
         """Regression test for #45330.
 
@@ -1160,19 +1160,19 @@ class TestNixlHandshake:
         expected local_block_len * tp_ratio and rejected the valid
         handshake.
         """
-        vllm_config = create_vllm_config()
+        aphrodite_config = create_aphrodite_config()
 
         with patch(
             "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_tensor_model_parallel_world_size",  # noqa: E501
             return_value=16,
         ):
             connector = NixlConnector(
-                vllm_config,
+                aphrodite_config,
                 KVConnectorRole.WORKER,
                 make_kv_cache_config(block_size=16),
             )
             connector.connector_worker = FakeNixlConnectorWorker(
-                vllm_config, connector.engine_id, hand_shake_latency=0
+                aphrodite_config, connector.engine_id, hand_shake_latency=0
             )
             worker = connector.connector_worker
 
@@ -1209,25 +1209,25 @@ class TestNixlHandshake:
         FakeNixlWrapper,
     )
     def test_handshake_rejects_wrong_block_len_without_gqa_replication(
-        self, default_vllm_config, dist_init
+        self, default_aphrodite_config, dist_init
     ):
         """Ensure the head-ratio validation still rejects genuinely wrong
         block_lens when GQA replication is NOT in effect (32 KV heads,
         D_TP=4, P_TP=2: head_ratio=4, both sides have >1 head/rank).
         """
-        vllm_config = create_vllm_config()
+        aphrodite_config = create_aphrodite_config()
 
         with patch(
             "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.get_tensor_model_parallel_world_size",  # noqa: E501
             return_value=4,
         ):
             connector = NixlConnector(
-                vllm_config,
+                aphrodite_config,
                 KVConnectorRole.WORKER,
                 make_kv_cache_config(block_size=16),
             )
             connector.connector_worker = FakeNixlConnectorWorker(
-                vllm_config, connector.engine_id, hand_shake_latency=0
+                aphrodite_config, connector.engine_id, hand_shake_latency=0
             )
             worker = connector.connector_worker
 
@@ -1269,16 +1269,16 @@ class TestNixlHandshake:
     "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_kv_connector_stats(default_vllm_config, dist_init):
+def test_kv_connector_stats(default_aphrodite_config, dist_init):
     """Test that KV transfer stats are properly recorded and retrieved."""
-    vllm_config = create_vllm_config()
+    aphrodite_config = create_aphrodite_config()
 
     # Test worker role in decode server.
     connector = NixlConnector(
-        vllm_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
+        aphrodite_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
     )
     connector.connector_worker = FakeNixlConnectorWorker(
-        vllm_config, connector.engine_id, hand_shake_latency=0
+        aphrodite_config, connector.engine_id, hand_shake_latency=0
     )
 
     # Verify that xfer_stats starts empty
@@ -1487,7 +1487,7 @@ def test_scheduler_kv_connector_stats_aggregation():
     """Test scheduler and worker KV connector stats aggregation."""
     from aphrodite.v1.core.sched.output import SchedulerOutput
 
-    scheduler = create_scheduler(create_vllm_config())
+    scheduler = create_scheduler(create_aphrodite_config())
 
     # Worker stats with transfer metrics
     worker_stats = NixlKVConnectorStats()
@@ -1697,7 +1697,7 @@ def _run_abort_timeout_test(llm: LLM, timeout: int):
     ],
 )
 def test_register_kv_caches(
-    default_vllm_config, dist_init, attn_backend, enable_cross_layers
+    default_aphrodite_config, dist_init, attn_backend, enable_cross_layers
 ):
     """
     Test that register_kv_caches() properly calls nixl_wrapper methods with
@@ -1710,10 +1710,10 @@ def test_register_kv_caches(
        block layout info
     """
 
-    vllm_config = create_vllm_config(attention_backend=attn_backend)
+    aphrodite_config = create_aphrodite_config(attention_backend=attn_backend)
 
     # Enable cross layers blocks
-    vllm_config.kv_transfer_config.kv_connector_extra_config[
+    aphrodite_config.kv_transfer_config.kv_connector_extra_config[
         "enable_cross_layers_blocks"
     ] = enable_cross_layers
     set_kv_cache_layout("HND")
@@ -1756,7 +1756,7 @@ def test_register_kv_caches(
         # but cross-layer preference cant be inferred prior to creating kv_cache_config
         # is a bit awkward.
         dummy_connector = NixlConnector(
-            vllm_config,
+            aphrodite_config,
             KVConnectorRole.WORKER,
             make_kv_cache_config(block_size=block_size),
         )
@@ -1787,9 +1787,9 @@ def test_register_kv_caches(
                 ],
             )
         # Create connector
-        connector = NixlConnector(vllm_config, KVConnectorRole.WORKER, kv_cache_config)
+        connector = NixlConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
         connector.connector_worker = FakeNixlConnectorWorker(
-            vllm_config,
+            aphrodite_config,
             connector.engine_id,
             hand_shake_latency=0,
             kv_cache_config=kv_cache_config,
@@ -1823,7 +1823,7 @@ def test_register_kv_caches(
         virtually_split = is_blocks_first and not connector.prefer_cross_layer_blocks
 
         if connector.prefer_cross_layer_blocks:
-            with set_current_vllm_config(vllm_config):
+            with set_current_aphrodite_config(aphrodite_config):
                 _, cross_layers_kv_cache, _ = (
                     KVConnectorModelRunnerMixin.allocate_uniform_kv_caches(
                         kv_cache_config=kv_cache_config,
@@ -1966,15 +1966,15 @@ class FakePlatform(Platform):
     ],
 )
 def test_kv_buffer_to_nixl_memory_types(
-    default_vllm_config, dist_init, kv_buffer_device, nixl_memory_type
+    default_aphrodite_config, dist_init, kv_buffer_device, nixl_memory_type
 ):
     """
     Test that register_kv_caches() passes the correct memory types from the
     config to the nixl_wrapper.
     """
-    vllm_config = create_vllm_config()
+    aphrodite_config = create_aphrodite_config()
     # Override the default memory types in the config
-    vllm_config.kv_transfer_config.kv_buffer_device = kv_buffer_device
+    aphrodite_config.kv_transfer_config.kv_buffer_device = kv_buffer_device
     from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.utils import (
         _NIXL_SUPPORTED_DEVICE,
     )
@@ -2002,7 +2002,7 @@ def test_kv_buffer_to_nixl_memory_types(
     ):  # noqa: E501
         # Create connector and replace its worker with a fake one for isolation
         connector = NixlConnector(
-            vllm_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
+            aphrodite_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
         )
 
         # Verify get_reg_descs was called with the correct memory_type
@@ -2014,18 +2014,18 @@ def test_kv_buffer_to_nixl_memory_types(
     "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_shutdown_cleans_up_resources(default_vllm_config, dist_init):
+def test_shutdown_cleans_up_resources(default_aphrodite_config, dist_init):
     """Test that shutdown() properly cleans up all resources."""
-    vllm_config = create_vllm_config()
+    aphrodite_config = create_aphrodite_config()
 
     scheduler = NixlConnectorScheduler(
-        vllm_config,
-        vllm_config.kv_transfer_config.engine_id,
+        aphrodite_config,
+        aphrodite_config.kv_transfer_config.engine_id,
         make_kv_cache_config(block_size=16),
     )
     worker = NixlConnectorWorker(
-        vllm_config,
-        vllm_config.kv_transfer_config.engine_id,
+        aphrodite_config,
+        aphrodite_config.kv_transfer_config.engine_id,
         make_kv_cache_config(block_size=16),
     )
     nixl_wrapper = worker.nixl_wrapper
@@ -2087,12 +2087,12 @@ def _setup_worker_with_remote_engine(
     engine_ttl: float = 10.0,
 ) -> tuple[Any, str]:
     """Create a worker with one remote engine registered."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector_extra_config={"engine_ttl": engine_ttl},
     )
     worker = NixlConnectorWorker(
-        vllm_config,
-        vllm_config.kv_transfer_config.engine_id,
+        aphrodite_config,
+        aphrodite_config.kv_transfer_config.engine_id,
         make_kv_cache_config(block_size=16),
     )
 
@@ -2113,7 +2113,7 @@ def _setup_worker_with_remote_engine(
     "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_engine_ttl_eviction(default_vllm_config, dist_init):
+def test_engine_ttl_eviction(default_aphrodite_config, dist_init):
     """Stale engines are evicted when TTL expires."""
     worker, engine_id = _setup_worker_with_remote_engine(engine_ttl=10.0)
     nixl_wrapper = worker.nixl_wrapper
@@ -2148,7 +2148,7 @@ def test_engine_ttl_eviction(default_vllm_config, dist_init):
     "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_engine_ttl_disabled(default_vllm_config, dist_init):
+def test_engine_ttl_disabled(default_aphrodite_config, dist_init):
     """Eviction is disabled when engine_ttl <= 0."""
     worker, engine_id = _setup_worker_with_remote_engine(engine_ttl=0.0)
 
@@ -2196,21 +2196,21 @@ def test_transfer_topology_unregister():
     "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_aborted_request_removed_from_worker_in_batch(default_vllm_config, dist_init):
+def test_aborted_request_removed_from_worker_in_batch(default_aphrodite_config, dist_init):
     """
     Create and schedule a request so that P adds it to in-batch tracking via
     the real scheduler, then simulate an abort (request not in next scheduler
     iteration) and verify the worker no longer tracks it as in-batch.
     """
-    vllm_config = create_vllm_config()
+    aphrodite_config = create_aphrodite_config()
 
-    scheduler = create_scheduler(vllm_config)
+    scheduler = create_scheduler(aphrodite_config)
     # KVConnector Worker in P
     connector = NixlConnector(
-        vllm_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
+        aphrodite_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
     )
     connector.connector_worker = FakeNixlConnectorWorker(
-        vllm_config, connector.engine_id, hand_shake_latency=0
+        aphrodite_config, connector.engine_id, hand_shake_latency=0
     )
 
     # Create a request that triggers do_remote_decode so that
@@ -2328,7 +2328,7 @@ class FailingNixlWrapper(FakeNixlWrapper):
 )
 @pytest.mark.parametrize("enable_hma", [False, True])
 def test_transfer_failure_logging(
-    default_vllm_config,
+    default_aphrodite_config,
     dist_init,
     failure_type,
     wrapper_config,
@@ -2348,15 +2348,15 @@ def test_transfer_failure_logging(
     """
     import logging
 
-    vllm_config = create_vllm_config()
+    aphrodite_config = create_aphrodite_config()
 
     connector = NixlConnector(
-        vllm_config,
+        aphrodite_config,
         KVConnectorRole.WORKER,
         make_kv_cache_config(block_size=16, swa_enabled=enable_hma),
     )
     connector.connector_worker = FakeNixlConnectorWorker(
-        vllm_config,
+        aphrodite_config,
         connector.engine_id,
         hand_shake_latency=0.0,
         kv_cache_config=connector._kv_cache_config,
@@ -2476,15 +2476,15 @@ def test_transfer_failure_logging(
     "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FailingNixlWrapper,
 )
-def test_handshake_failure_returns_finished(default_vllm_config, dist_init):
+def test_handshake_failure_returns_finished(default_aphrodite_config, dist_init):
     """Test that handshake failures mark blocks invalid and return via get_finished."""
-    vllm_config = create_vllm_config()
+    aphrodite_config = create_aphrodite_config()
 
     connector = NixlConnector(
-        vllm_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
+        aphrodite_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
     )
     connector.connector_worker = FakeNixlConnectorWorker(
-        vllm_config, connector.engine_id, hand_shake_latency=0.1
+        aphrodite_config, connector.engine_id, hand_shake_latency=0.1
     )
     connector.connector_worker.nixl_wrapper.fail_handshake = True
 
@@ -2527,16 +2527,16 @@ def test_handshake_failure_returns_finished(default_vllm_config, dist_init):
     "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FailingNixlWrapper,
 )
-def test_transfer_setup_failure_returns_finished(default_vllm_config, dist_init):
+def test_transfer_setup_failure_returns_finished(default_aphrodite_config, dist_init):
     """Test that transfer setup failures mark blocks invalid
     and return via get_finished."""
-    vllm_config = create_vllm_config()
+    aphrodite_config = create_aphrodite_config()
 
     connector = NixlConnector(
-        vllm_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
+        aphrodite_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
     )
     connector.connector_worker = FakeNixlConnectorWorker(
-        vllm_config, connector.engine_id, hand_shake_latency=0
+        aphrodite_config, connector.engine_id, hand_shake_latency=0
     )
     connector.connector_worker.nixl_wrapper.fail_transfer_setup = True
 
@@ -2591,7 +2591,7 @@ def test_transfer_setup_failure_returns_finished(default_vllm_config, dist_init)
     ],
 )
 def test_failed_request_skips_kv_postprocessing(
-    default_vllm_config, dist_init, failure_mode
+    default_aphrodite_config, dist_init, failure_mode
 ):
     """Test that failed requests skip KV sync and post-processing in
     get_finished().
@@ -2625,13 +2625,13 @@ def test_failed_request_skips_kv_postprocessing(
     # Use enable_permute_local_kv=True so that
     # post_process_device_kv_on_receive would be called on the success path,
     # making the assertion meaningful (not trivially true).
-    vllm_config = create_vllm_config(enable_permute_local_kv=True)
+    aphrodite_config = create_aphrodite_config(enable_permute_local_kv=True)
 
     connector = NixlConnector(
-        vllm_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
+        aphrodite_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
     )
     connector.connector_worker = FakeNixlConnectorWorker(
-        vllm_config,
+        aphrodite_config,
         connector.engine_id,
         hand_shake_latency=0.1 if failure_mode == "handshake" else 0,
     )
@@ -2701,7 +2701,7 @@ def test_failed_request_skips_kv_postprocessing(
 @pytest.mark.parametrize(
     "mismatch_type,config_overrides,version_override,should_fail,enforce_handshake_compat",
     [
-        ("vllm_version", {}, {"vllm_version": "0.6.1"}, True, True),
+        ("aphrodite_version", {}, {"aphrodite_version": "0.6.1"}, True, True),
         ("nixl_connector_version", {}, {"connector_version": 37}, True, True),
         ("model_name", {"model": "facebook/opt-350m"}, {}, True, True),
         ("dtype", {"dtype": "bfloat16"}, {}, True, True),
@@ -2725,7 +2725,7 @@ def test_failed_request_skips_kv_postprocessing(
     FakeNixlWrapper,
 )
 def test_compatibility_hash_validation(
-    default_vllm_config,
+    default_aphrodite_config,
     dist_init,
     mismatch_type,
     config_overrides,
@@ -2739,11 +2739,11 @@ def test_compatibility_hash_validation(
     Parameters:
         mismatch_type: description of what is being tested
         config_overrides: dict of config to override for the remote instance
-        version_override: version dict e.g. {"vllm_version": "0.6.1"}
+        version_override: version dict e.g. {"aphrodite_version": "0.6.1"}
         should_fail: whether the handshake should fail
         enforce_handshake_compat: whether to enforce compatibility checking
     """
-    local_vllm_config = create_vllm_config(
+    local_aphrodite_config = create_aphrodite_config(
         model="facebook/opt-125m",
         block_size=16,
         kv_connector_extra_config={
@@ -2752,7 +2752,7 @@ def test_compatibility_hash_validation(
     )
     kv_cache_config = make_kv_cache_config(block_size=16, num_blocks=2)
     decode_connector = NixlConnector(
-        local_vllm_config, KVConnectorRole.WORKER, kv_cache_config
+        local_aphrodite_config, KVConnectorRole.WORKER, kv_cache_config
     )
     decode_worker = decode_connector.connector_worker
     kv_cache_spec = cast(
@@ -2782,12 +2782,12 @@ def test_compatibility_hash_validation(
         "block_size": 16,
         **config_overrides,
     }
-    remote_vllm_config = create_vllm_config(**remote_config_params)
+    remote_aphrodite_config = create_aphrodite_config(**remote_config_params)
 
     with contextlib.ExitStack() as stack:
-        if "vllm_version" in version_override:
+        if "aphrodite_version" in version_override:
             stack.enter_context(
-                patch("aphrodite.__version__", version_override["vllm_version"])
+                patch("aphrodite.__version__", version_override["aphrodite_version"])
             )
         elif "connector_version" in version_override:
             stack.enter_context(
@@ -2798,7 +2798,7 @@ def test_compatibility_hash_validation(
                 )
             )
         remote_hash = compute_nixl_compatibility_hash(
-            remote_vllm_config,
+            remote_aphrodite_config,
             decode_worker.backend_name,
             decode_worker.transfer_topo.cross_layers_blocks,
         )
@@ -2867,7 +2867,7 @@ def test_compatibility_hash_validation(
     "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper",
     FakeNixlWrapper,
 )
-def test_handshake_decode_errors(default_vllm_config, dist_init, error_scenario):
+def test_handshake_decode_errors(default_aphrodite_config, dist_init, error_scenario):
     """
     Test that msgspec decode errors are properly handled during handshake.
 
@@ -2875,16 +2875,16 @@ def test_handshake_decode_errors(default_vllm_config, dist_init, error_scenario)
     - NixlHandshakePayload decoder
     - NixlAgentMetadata decoder
     """
-    local_vllm_config = create_vllm_config(
+    local_aphrodite_config = create_aphrodite_config(
         model="facebook/opt-125m",
         block_size=16,
     )
     decode_connector = NixlConnector(
-        local_vllm_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
+        local_aphrodite_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
     )
     decode_worker = decode_connector.connector_worker
 
-    backend = get_current_attn_backend(local_vllm_config)
+    backend = get_current_attn_backend(local_aphrodite_config)
     test_shape = backend.get_kv_cache_shape(
         num_blocks=1, block_size=16, num_kv_heads=1, head_size=1
     )
@@ -2901,7 +2901,7 @@ def test_handshake_decode_errors(default_vllm_config, dist_init, error_scenario)
     )
 
     decode_worker.compat_hash = compute_nixl_compatibility_hash(
-        decode_worker.vllm_config,
+        decode_worker.aphrodite_config,
         decode_worker.backend_name,
         decode_worker.transfer_topo.cross_layers_blocks,
     )
@@ -2947,7 +2947,7 @@ def test_handshake_decode_errors(default_vllm_config, dist_init, error_scenario)
         FakeNixlWrapper,
     )
     def test_mla_broadcast_notif_uses_remote_request_id(
-        self, default_vllm_config, dist_init
+        self, default_aphrodite_config, dist_init
     ):
         """MLA + remote TP > local TP: the broadcast notification sent to
         non-read prefill ranks must be keyed by the prefill-side request
@@ -2963,14 +2963,14 @@ def test_handshake_decode_errors(default_vllm_config, dist_init, error_scenario)
         decode_tp_size = 1
         prefill_tp_size = 4
 
-        vllm_config = create_vllm_config()
-        vllm_config.parallel_config.tensor_parallel_size = decode_tp_size
+        aphrodite_config = create_aphrodite_config()
+        aphrodite_config.parallel_config.tensor_parallel_size = decode_tp_size
 
         connector = NixlConnector(
-            vllm_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
+            aphrodite_config, KVConnectorRole.WORKER, make_kv_cache_config(block_size=16)
         )
         connector.connector_worker = FakeNixlConnectorWorker(
-            vllm_config, connector.engine_id, hand_shake_latency=0
+            aphrodite_config, connector.engine_id, hand_shake_latency=0
         )
         worker = connector.connector_worker
 
@@ -3062,7 +3062,7 @@ def test_handshake_decode_errors(default_vllm_config, dist_init, error_scenario)
             )
 
 
-def test_kv_both_deprecation_warning(default_vllm_config, dist_init):
+def test_kv_both_deprecation_warning(default_aphrodite_config, dist_init):
     """kv_role='kv_both' should emit a deprecation log warning."""
     from unittest.mock import patch
 
@@ -3070,14 +3070,14 @@ def test_kv_both_deprecation_warning(default_vllm_config, dist_init):
 
     _print_warning_once.cache_clear()
 
-    vllm_config = create_vllm_config(kv_role="kv_both")
+    aphrodite_config = create_aphrodite_config(kv_role="kv_both")
 
     with patch(
         "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.connector.logger"
     ) as mock_logger:
         mock_logger.warning_once = mock_logger.warning_once
         NixlConnector(
-            vllm_config,
+            aphrodite_config,
             KVConnectorRole.WORKER,
             make_kv_cache_config(block_size=16),
         )
@@ -3088,17 +3088,17 @@ def test_kv_both_deprecation_warning(default_vllm_config, dist_init):
     assert "deprecated" in msg
 
 
-def test_explicit_kv_role_no_deprecation_warning(default_vllm_config, dist_init):
+def test_explicit_kv_role_no_deprecation_warning(default_aphrodite_config, dist_init):
     """kv_role='kv_consumer' or 'kv_producer' should NOT emit a warning."""
     from unittest.mock import patch
 
     for role in ("kv_consumer", "kv_producer"):
-        vllm_config = create_vllm_config(kv_role=role)
+        aphrodite_config = create_aphrodite_config(kv_role=role)
         with patch(
             "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.connector.logger"
         ) as mock_logger:
             NixlConnector(
-                vllm_config,
+                aphrodite_config,
                 KVConnectorRole.WORKER,
                 make_kv_cache_config(block_size=16),
             )

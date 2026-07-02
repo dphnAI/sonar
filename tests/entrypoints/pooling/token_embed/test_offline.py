@@ -62,7 +62,7 @@ def test_token_ids_prompts(llm: LLM):
 
 
 @pytest.mark.parametrize("task", ["embed", "classify", "token_classify", "plugin"])
-def test_unsupported_tasks(llm: LLM, task: PoolingTask, caplog_vllm):
+def test_unsupported_tasks(llm: LLM, task: PoolingTask, caplog_aphrodite):
     if task == "plugin":
         err_msg = "No IOProcessor plugin installed."
     elif task == "embed":

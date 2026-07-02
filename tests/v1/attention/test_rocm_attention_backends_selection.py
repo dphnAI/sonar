@@ -18,7 +18,7 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture
-def mock_vllm_config():
+def mock_aphrodite_config():
     """Create a mock AphroditeConfig for testing."""
     config = MagicMock()
     config.model_config.dtype = torch.float16
@@ -110,7 +110,7 @@ def test_standard_attention_backend_selection(
     env_vars,
     selected_backend,
     expected_backend_path,
-    mock_vllm_config,
+    mock_aphrodite_config,
     mock_on_gfx9,
     mock_on_mi3xx,
     monkeypatch,
@@ -237,7 +237,7 @@ def test_mla_backend_selection(
     block_size,
     expected_backend_path,
     should_raise,
-    mock_vllm_config,
+    mock_aphrodite_config,
     monkeypatch,
 ):
     """Test MLA backend selection with various configurations."""
@@ -312,7 +312,7 @@ def test_mla_backend_selection(
             assert backend_path == expected_backend_path
 
 
-def test_aiter_fa_requires_mi3xx(mock_vllm_config):
+def test_aiter_fa_requires_mi3xx(mock_aphrodite_config):
     """Test that ROCM_AITER_FA requires mi3xx architecture."""
     from aphrodite.platforms.rocm import RocmPlatform
 
@@ -340,7 +340,7 @@ def test_aiter_fa_requires_mi3xx(mock_vllm_config):
         )
 
 
-def test_sparse_not_supported(mock_vllm_config):
+def test_sparse_not_supported(mock_aphrodite_config):
     """Test that sparse MLA without use_mla flag raises an error."""
     from aphrodite.platforms.rocm import RocmPlatform
 

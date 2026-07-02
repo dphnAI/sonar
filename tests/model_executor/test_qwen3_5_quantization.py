@@ -14,12 +14,12 @@ def test_qwen3_5_lm_head_receives_quant_config():
     mock_hf_config.vocab_size = 128
     mock_hf_config.hidden_size = 64
 
-    mock_vllm_config = Mock()
-    mock_vllm_config.model_config.hf_text_config = mock_hf_config
-    mock_vllm_config.cache_config.mamba_cache_mode = "align"
-    mock_vllm_config.scheduler_config = Mock()
-    mock_vllm_config.quant_config = mock_quant_config
-    mock_vllm_config.lora_config = None
+    mock_aphrodite_config = Mock()
+    mock_aphrodite_config.model_config.hf_text_config = mock_hf_config
+    mock_aphrodite_config.cache_config.mamba_cache_mode = "align"
+    mock_aphrodite_config.scheduler_config = Mock()
+    mock_aphrodite_config.quant_config = mock_quant_config
+    mock_aphrodite_config.lora_config = None
 
     mock_pp_group = Mock()
     mock_pp_group.is_last_rank = True
@@ -35,7 +35,7 @@ def test_qwen3_5_lm_head_receives_quant_config():
     ):
         MockModel.return_value.make_empty_intermediate_tensors = Mock()
 
-        Qwen3_5ForCausalLMBase(vllm_config=mock_vllm_config)
+        Qwen3_5ForCausalLMBase(aphrodite_config=mock_aphrodite_config)
 
         MockLMHead.assert_called_once()
         call_kwargs = MockLMHead.call_args.kwargs
@@ -53,11 +53,11 @@ def test_qwen3_5_mtp_lm_head_receives_quant_config():
     mock_hf_config.vocab_size = 128
     mock_hf_config.hidden_size = 64
 
-    mock_vllm_config = Mock()
-    mock_vllm_config.model_config.hf_text_config = mock_hf_config
-    mock_vllm_config.cache_config.mamba_cache_mode = "align"
-    mock_vllm_config.compilation_config.mode = CompilationMode.NONE
-    mock_vllm_config.quant_config = mock_quant_config
+    mock_aphrodite_config = Mock()
+    mock_aphrodite_config.model_config.hf_text_config = mock_hf_config
+    mock_aphrodite_config.cache_config.mamba_cache_mode = "align"
+    mock_aphrodite_config.compilation_config.mode = CompilationMode.NONE
+    mock_aphrodite_config.quant_config = mock_quant_config
 
     mock_pp_group = Mock()
     mock_pp_group.is_last_rank = True
@@ -71,7 +71,7 @@ def test_qwen3_5_mtp_lm_head_receives_quant_config():
             return_value=mock_pp_group,
         ),
     ):
-        Qwen3_5MTP(vllm_config=mock_vllm_config)
+        Qwen3_5MTP(aphrodite_config=mock_aphrodite_config)
 
         MockLMHead.assert_called_once()
         call_kwargs = MockLMHead.call_args.kwargs

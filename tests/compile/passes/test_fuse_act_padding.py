@@ -59,7 +59,7 @@ class TestModel(torch.nn.Module):
 
     def ops_in_model_before(self):
         return [
-            torch.ops.vllm_ir.fused_add_rms_norm,
+            torch.ops.aphrodite_ir.fused_add_rms_norm,
             torch.ops.aten.constant_pad_nd,
         ]
 
@@ -83,7 +83,7 @@ def test_fuse_act_padding(
     x_pad_to_multiple: int,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
@@ -92,7 +92,7 @@ def test_fuse_act_padding(
         ),
     )
 
-    with aphrodite.config.set_current_vllm_config(vllm_config), monkeypatch.context() as m:
+    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
         from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
             RocmAiterTritonAddRMSNormPadFusionPass,
         )
@@ -104,11 +104,11 @@ def test_fuse_act_padding(
         m.setenv("APHRODITE_ROCM_USE_AITER", "1")
         rocm_aiter_ops.refresh_env_variables()
 
-        fusion_pass = RocmAiterTritonAddRMSNormPadFusionPass(vllm_config)
+        fusion_pass = RocmAiterTritonAddRMSNormPadFusionPass(aphrodite_config)
         passes = [
-            NoOpEliminationPass(vllm_config),
+            NoOpEliminationPass(aphrodite_config),
             fusion_pass,
-            PostCleanupPass(vllm_config),
+            PostCleanupPass(aphrodite_config),
         ]
         backend = TestBackend(*passes)
         model = TestModel(num_layers, hidden_size, num_local_experts, x_pad_to_multiple)

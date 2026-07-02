@@ -3,7 +3,7 @@
 #include "scaled_mm_blockwise_sm90_fp8_dispatch.cuh"
 #include "cutlass_extensions/epilogue/scaled_mm_epilogues_c3x.hpp"
 
-namespace vllm {
+namespace aphrodite {
 
 void cutlass_scaled_mm_blockwise_sm90_fp8(
     torch::stable::Tensor& out, torch::stable::Tensor const& a,
@@ -20,4 +20,4 @@ void cutlass_scaled_mm_blockwise_sm90_fp8(
   }
 }
 
-}  // namespace vllm
+}  // namespace aphrodite

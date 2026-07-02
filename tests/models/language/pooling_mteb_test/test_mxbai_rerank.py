@@ -105,5 +105,5 @@ class MxbaiRerankerHfRunner(MtebCrossEncoderMixin, HfRunner):
 
 
 @pytest.mark.parametrize("model_info", RERANK_MODELS)
-def test_rerank_models_mteb(vllm_runner, model_info: RerankModelInfo) -> None:
-    mteb_test_rerank_models(vllm_runner, model_info, hf_runner=MxbaiRerankerHfRunner)
+def test_rerank_models_mteb(aphrodite_runner, model_info: RerankModelInfo) -> None:
+    mteb_test_rerank_models(aphrodite_runner, model_info, hf_runner=MxbaiRerankerHfRunner)

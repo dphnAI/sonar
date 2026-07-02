@@ -15,7 +15,7 @@ Shang and Dang, Xingyu and Han, Song}, journal={arXiv}, year={2023}
 
 #include <cuda_fp16.h>
 
-namespace vllm {
+namespace aphrodite {
 namespace awq {
 
 template <int N>
@@ -409,7 +409,7 @@ __global__ void __launch_bounds__(64)
 }
 
 }  // namespace awq
-}  // namespace vllm
+}  // namespace aphrodite
 
 torch::stable::Tensor awq_dequantize(torch::stable::Tensor _kernel,
                                      torch::stable::Tensor _scaling_factors,
@@ -457,7 +457,7 @@ torch::stable::Tensor awq_dequantize(torch::stable::Tensor _kernel,
   dim3 threads_per_block(x_thread, y_thread);
 
   const cudaStream_t stream = get_current_cuda_stream();
-  vllm::awq::dequantize_weights<<<num_blocks, threads_per_block, 0, stream>>>(
+  aphrodite::awq::dequantize_weights<<<num_blocks, threads_per_block, 0, stream>>>(
       kernel, scaling_factors, zeros, de_kernel, G);
 
   return _de_kernel;
@@ -511,7 +511,7 @@ torch::stable::Tensor awq_gemm(torch::stable::Tensor _in_feats,
     // threadIdx.x: 32
     // threadIdx.y: i_factors[2] * j_factors[2]
     dim3 threads_per_block(32, 2);
-    vllm::awq::gemm_forward_4bit_cuda_m16nXk32<128>
+    aphrodite::awq::gemm_forward_4bit_cuda_m16nXk32<128>
         <<<num_blocks, threads_per_block, 0, stream>>>(
             group_size, split_k_iters, in_feats, kernel, scaling_factors, zeros,
             num_in_feats, num_in_channels, num_out_channels, out_feats);
@@ -523,7 +523,7 @@ torch::stable::Tensor awq_gemm(torch::stable::Tensor _in_feats,
     // threadIdx.x: 32
     // threadIdx.y: i_factors[2] * j_factors[2]
     dim3 threads_per_block(32, 2);
-    vllm::awq::gemm_forward_4bit_cuda_m16nXk32<64>
+    aphrodite::awq::gemm_forward_4bit_cuda_m16nXk32<64>
         <<<num_blocks, threads_per_block, 0, stream>>>(
             group_size, split_k_iters, in_feats, kernel, scaling_factors, zeros,
             num_in_feats, num_in_channels, num_out_channels, out_feats);

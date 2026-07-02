@@ -28,7 +28,7 @@ from .utils import (
     EOS_TOKEN_ID,
     create_model_runner_output,
     create_scheduler,
-    create_vllm_config,
+    create_aphrodite_config,
 )
 
 
@@ -42,20 +42,20 @@ class DecodeBenchTestRunner:
         self.req_id = -1
 
         # Create aphrodite config with DecodeBenchConnector
-        vllm_config = create_vllm_config(
+        aphrodite_config = create_aphrodite_config(
             block_size=block_size,
             max_num_batched_tokens=1000,
             kv_connector="DecodeBenchConnector",
         )
 
-        self.vllm_config = vllm_config
+        self.aphrodite_config = aphrodite_config
         self.scheduler: Scheduler = create_scheduler(
-            vllm_config, num_blocks=num_gpu_blocks
+            aphrodite_config, num_blocks=num_gpu_blocks
         )
 
         # Create worker-side connector
         self.worker_connector = DecodeBenchConnector(
-            vllm_config,
+            aphrodite_config,
             KVConnectorRole.WORKER,
             self.scheduler.kv_cache_config,
         )

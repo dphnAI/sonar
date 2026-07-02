@@ -5,7 +5,7 @@ namespace MARLIN_NAMESPACE_NAME {
 
 // m16n8k16 tensor core mma instruction with fp16 inputs and fp32
 // output/accumulation.
-template <vllm::ScalarTypeId type_id, bool use_fp16_accum, int k_size = 16>
+template <aphrodite::ScalarTypeId type_id, bool use_fp16_accum, int k_size = 16>
 __device__ inline void mma(
     const typename MarlinScalarType<type_id>::FragA& a_frag,
     const typename MarlinScalarType<type_id>::FragB& frag_b,
@@ -134,7 +134,7 @@ __device__ inline void mma(
   }
 }
 
-template <vllm::ScalarTypeId type_id, bool use_fp16_accum, int k_size = 16>
+template <aphrodite::ScalarTypeId type_id, bool use_fp16_accum, int k_size = 16>
 __device__ inline void mma_trans(
     const typename MarlinScalarType<type_id>::FragA& a_frag,
     const typename MarlinScalarType<type_id>::FragB& frag_b,

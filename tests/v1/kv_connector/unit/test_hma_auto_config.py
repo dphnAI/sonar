@@ -76,17 +76,17 @@ def mock_hybrid_kv_cache_supported(monkeypatch):
     ids=["hma_connector", "non_hma_connector", "multi_all_hma", "multi_mixed"],
 )
 def test_hma_auto_config(kv_transfer_config, expect_disabled):
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         device_config=DeviceConfig("cpu"),
         kv_transfer_config=kv_transfer_config,
     )
     assert (
-        vllm_config.scheduler_config.disable_hybrid_kv_cache_manager is expect_disabled
+        aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager is expect_disabled
     )
 
 
 def test_explicit_hma_with_non_hma_connector_errors_at_factory():
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         device_config=DeviceConfig("cpu"),
         scheduler_config=SchedulerConfig(
             max_model_len=16,
@@ -103,5 +103,5 @@ def test_explicit_hma_with_non_hma_connector_errors_at_factory():
     )
     with pytest.raises(ValueError, match="does not support HMA but HMA is enabled"):
         KVConnectorFactory.create_connector(
-            vllm_config, KVConnectorRole.SCHEDULER, kv_cache_config
+            aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config
         )

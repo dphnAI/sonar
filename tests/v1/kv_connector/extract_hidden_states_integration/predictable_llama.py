@@ -19,9 +19,9 @@ from aphrodite.sequence import IntermediateTensors
 
 
 class PredictableLlamaModel(nn.Module, EagleModelMixin):
-    def __init__(self, *, vllm_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
-        self.config = vllm_config.model_config.hf_config
+        self.config = aphrodite_config.model_config.hf_config
 
         # Create minimal embed_tokens for embedding
         from aphrodite.model_executor.layers.vocab_parallel_embedding import (
@@ -108,12 +108,12 @@ class PredictableLlamaForCausalLM(LlamaForCausalLM):
 
     def _init_model(
         self,
-        vllm_config: AphroditeConfig,
+        aphrodite_config: AphroditeConfig,
         prefix: str = "",
         layer_type: type[nn.Module] | None = None,
     ):
         """Initialize with predictable model."""
-        return PredictableLlamaModel(vllm_config=vllm_config, prefix=prefix)
+        return PredictableLlamaModel(aphrodite_config=aphrodite_config, prefix=prefix)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         """Skip weight loading for dummy model."""

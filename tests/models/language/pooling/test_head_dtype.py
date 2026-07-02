@@ -12,7 +12,7 @@ from transformers import AutoModelForSequenceClassification
 @pytest.mark.parametrize("dtype", ["half"])
 def test_classify_models(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model: str,
     dtype: str,
@@ -23,13 +23,13 @@ def test_classify_models(
         hf_outputs = hf_model.classify(example_prompts)
 
     for head_dtype_str in ["float32", "model"]:
-        with vllm_runner(
+        with aphrodite_runner(
             model,
             max_model_len=512,
             dtype=dtype,
             hf_overrides={"head_dtype": head_dtype_str},
-        ) as vllm_model:
-            model_config = vllm_model.llm.llm_engine.model_config
+        ) as aphrodite_model:
+            model_config = aphrodite_model.llm.llm_engine.model_config
             model_dtype = model_config.dtype
             head_dtype = model_config.head_dtype
 
@@ -38,10 +38,10 @@ def test_classify_models(
             elif head_dtype_str == "model":
                 assert head_dtype == model_dtype
 
-            vllm_outputs = vllm_model.classify(example_prompts)
+            aphrodite_outputs = aphrodite_model.classify(example_prompts)
 
-        for hf_output, vllm_output in zip(hf_outputs, vllm_outputs):
+        for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
             hf_output = torch.tensor(hf_output).float()
-            vllm_output = torch.tensor(vllm_output).float()
+            aphrodite_output = torch.tensor(aphrodite_output).float()
 
-            assert torch.allclose(hf_output, vllm_output, atol=1e-2)
+            assert torch.allclose(hf_output, aphrodite_output, atol=1e-2)

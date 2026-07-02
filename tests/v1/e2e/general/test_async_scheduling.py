@@ -366,20 +366,20 @@ def run_test(
         attention_config=attention_config,
         enable_prefix_caching=False if current_platform.is_rocm() else None,
         **cache_arg,
-    ) as vllm_model:
+    ) as aphrodite_model:
         results = []
         acceptance_rates: list[float] | None = [] if spec_decoding else None
         for override_params in sampling_param_tests:
-            metrics_before = vllm_model.llm.get_metrics()
+            metrics_before = aphrodite_model.llm.get_metrics()
             print(f"----------- RUNNING PARAMS: {override_params}")
             results.append(
-                vllm_model.generate(
+                aphrodite_model.generate(
                     example_prompts,
                     sampling_params=SamplingParams(**default_params, **override_params),
                     return_logprobs=True,
                 )
             )
-            metrics_after = vllm_model.llm.get_metrics()
+            metrics_after = aphrodite_model.llm.get_metrics()
             if acceptance_rates is not None:
                 acceptance_rate = _get_acceptance_rate(metrics_before, metrics_after)
                 acceptance_rates.append(acceptance_rate)

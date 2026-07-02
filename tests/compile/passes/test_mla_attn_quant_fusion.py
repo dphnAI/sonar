@@ -26,7 +26,7 @@ from aphrodite.config import (
     PassConfig,
     SchedulerConfig,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.forward_context import get_forward_context, set_forward_context
 from aphrodite.model_executor.kernels.linear.scaled_mm.cutlass import (
@@ -66,7 +66,7 @@ class MLAAttentionQuantPatternModel(torch.nn.Module):
         kv_lora_rank: int,
         kv_cache_dtype: torch.dtype,
         device: torch.device,
-        vllm_config: AphroditeConfig,
+        aphrodite_config: AphroditeConfig,
         **kwargs,
     ):
         super().__init__()
@@ -80,8 +80,8 @@ class MLAAttentionQuantPatternModel(torch.nn.Module):
         self.head_size = kv_lora_rank + qk_rope_head_dim
         self.kv_cache_dtype = kv_cache_dtype
         self.device = device
-        self.vllm_config = vllm_config
-        self.dtype = vllm_config.model_config.dtype
+        self.aphrodite_config = aphrodite_config
+        self.dtype = aphrodite_config.model_config.dtype
 
         kv_b_proj = ColumnParallelLinear(
             input_size=kv_lora_rank,
@@ -105,7 +105,7 @@ class MLAAttentionQuantPatternModel(torch.nn.Module):
             q_lora_rank=None,
             kv_lora_rank=kv_lora_rank,
             kv_b_proj=kv_b_proj,
-            cache_config=vllm_config.cache_config,
+            cache_config=aphrodite_config.cache_config,
             quant_config=self.quant_config,
             prefix="model.layers.0.self_attn.attn",
         )
@@ -127,7 +127,7 @@ class MLAAttentionQuantPatternModel(torch.nn.Module):
                 dtype=self.kv_cache_dtype,
             ),
             layer_names=[self.mla_attn.layer_name],
-            vllm_config=self.vllm_config,
+            aphrodite_config=self.aphrodite_config,
             device=self.device,
         )
 
@@ -442,7 +442,7 @@ def test_mla_attention_quant_pattern(
         max_model_len=2048,
         dtype=dtype,
     )
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=model_config,
         scheduler_config=SchedulerConfig(
             max_num_seqs=1024,
@@ -469,10 +469,10 @@ def test_mla_attention_quant_pattern(
     torch._dynamo.mark_dynamic(k_pe, 0)
 
     # Run model without fusion
-    vllm_config_unfused = copy.deepcopy(vllm_config)
+    aphrodite_config_unfused = copy.deepcopy(aphrodite_config)
     with (
-        set_current_vllm_config(vllm_config_unfused),
-        set_forward_context(attn_metadata=None, vllm_config=vllm_config_unfused),
+        set_current_aphrodite_config(aphrodite_config_unfused),
+        set_forward_context(attn_metadata=None, aphrodite_config=aphrodite_config_unfused),
     ):
         model_unfused = model_class(
             num_heads=num_heads,
@@ -482,7 +482,7 @@ def test_mla_attention_quant_pattern(
             kv_lora_rank=kv_lora_rank,
             kv_cache_dtype=dtype,
             device=device,
-            vllm_config=vllm_config_unfused,
+            aphrodite_config=aphrodite_config_unfused,
         )
         model_unfused = model_unfused.to(device)
         # HACK: See #131044
@@ -495,12 +495,12 @@ def test_mla_attention_quant_pattern(
         result_unfused = compiled_unfused(q, kv_c_normed, k_pe)
 
     # Run model with attn fusion enabled
-    vllm_config.compilation_config.pass_config = PassConfig(
+    aphrodite_config.compilation_config.pass_config = PassConfig(
         fuse_attn_quant=True, eliminate_noops=True
     )
     with (
-        set_current_vllm_config(vllm_config),
-        set_forward_context(attn_metadata=None, vllm_config=vllm_config),
+        set_current_aphrodite_config(aphrodite_config),
+        set_forward_context(attn_metadata=None, aphrodite_config=aphrodite_config),
     ):
         model_fused = model_class(
             num_heads=num_heads,
@@ -510,7 +510,7 @@ def test_mla_attention_quant_pattern(
             kv_lora_rank=kv_lora_rank,
             kv_cache_dtype=dtype,
             device=device,
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             w=model_unfused.w,
             kv_b_proj_weight=model_unfused.kv_b_proj_weight,
         )
@@ -520,9 +520,9 @@ def test_mla_attention_quant_pattern(
         forward_ctx.attn_metadata = model_fused.build_attn_metadata(batch_size)
 
         # Create test backend with fusion passes
-        noop_pass = NoOpEliminationPass(vllm_config)
-        attn_pass = LazyInitPass(MLAAttnQuantFusionPass, vllm_config)
-        cleanup_pass = PostCleanupPass(vllm_config)
+        noop_pass = NoOpEliminationPass(aphrodite_config)
+        attn_pass = LazyInitPass(MLAAttnQuantFusionPass, aphrodite_config)
+        cleanup_pass = PostCleanupPass(aphrodite_config)
 
         test_backend = TestBackend(noop_pass, attn_pass, cleanup_pass)
         # HACK: See https://github.com/vllm-project/vllm/issues/31044
@@ -538,7 +538,7 @@ def test_mla_attention_quant_pattern(
     quant_key: QuantKey = model_class.quant_key
     attn_fusion_supported = [
         layer.impl.fused_output_quant_supported(quant_key)
-        for key, layer in vllm_config.compilation_config.static_forward_context.items()
+        for key, layer in aphrodite_config.compilation_config.static_forward_context.items()
         if isinstance(layer, MLAAttention)
     ]
     assert sum(attn_fusion_supported) == len(attn_fusion_supported), (

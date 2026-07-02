@@ -10,8 +10,8 @@ class DummyStatLogger(StatLoggerBase):
     Implements the minimal interface expected by StatLoggerManager.
     """
 
-    def __init__(self, vllm_config, engine_idx=0):
-        self.vllm_config = vllm_config
+    def __init__(self, aphrodite_config, engine_idx=0):
+        self.aphrodite_config = aphrodite_config
         self.engine_idx = engine_idx
         self.recorded = []
         self.logged = False

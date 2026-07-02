@@ -50,7 +50,7 @@ class _NoViewDoubleQuantModel(torch.nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # avoid graph input being a direct arg to a matched pattern node
         x = torch.relu(x)
-        rms = torch.ops.vllm_ir.rms_norm(x, self.weight, EPS)
+        rms = torch.ops.aphrodite_ir.rms_norm(x, self.weight, EPS)
         q1, s1 = torch.ops.aphrodite.rocm_aiter_group_fp8_quant.default(rms, GROUP_SIZE)
         q2, s2 = torch.ops.aphrodite.rocm_aiter_group_fp8_quant.default(rms, GROUP_SIZE)
         return q1, s1, q2, s2
@@ -71,7 +71,7 @@ class _ViewDoubleQuantModel(torch.nn.Module):
         self, x: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         x = torch.relu(x)
-        rms = torch.ops.vllm_ir.rms_norm(x, self.weight, EPS)
+        rms = torch.ops.aphrodite_ir.rms_norm(x, self.weight, EPS)
         view = rms.view(-1, rms.shape[-1])
         q1, s1 = torch.ops.aphrodite.rocm_aiter_group_fp8_quant.default(view, GROUP_SIZE)
         q2, s2 = torch.ops.aphrodite.rocm_aiter_group_fp8_quant.default(view, GROUP_SIZE)
@@ -102,7 +102,7 @@ def test_double_aiter_rms_fp8_group_quant_fusion(
     """
     torch._dynamo.reset()
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=ModelConfig(dtype=torch.bfloat16),
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
@@ -114,7 +114,7 @@ def test_double_aiter_rms_fp8_group_quant_fusion(
         ),
     )
 
-    with aphrodite.config.set_current_vllm_config(vllm_config), monkeypatch.context() as m:
+    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
         from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
             RocmAiterRMSNormQuantFusionPass,
         )
@@ -126,11 +126,11 @@ def test_double_aiter_rms_fp8_group_quant_fusion(
         m.setenv("APHRODITE_ROCM_USE_AITER", "1")
         rocm_aiter_ops.refresh_env_variables()
 
-        fusion_pass = RocmAiterRMSNormQuantFusionPass(vllm_config)
+        fusion_pass = RocmAiterRMSNormQuantFusionPass(aphrodite_config)
         passes = [
-            NoOpEliminationPass(vllm_config),
+            NoOpEliminationPass(aphrodite_config),
             fusion_pass,
-            PostCleanupPass(vllm_config),
+            PostCleanupPass(aphrodite_config),
         ]
         backend = TestBackend(*passes)
         model = model_cls()

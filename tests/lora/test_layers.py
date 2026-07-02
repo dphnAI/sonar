@@ -267,7 +267,7 @@ def check_punica_wrapper(punica_wrapper) -> bool:
 @pytest.mark.parametrize("vocab_size", [512, 32000, 64000, 128000])
 @pytest.mark.parametrize("stage", STAGES)
 def test_embeddings(
-    default_vllm_config, dist_init, num_loras, device, vocab_size, stage
+    default_aphrodite_config, dist_init, num_loras, device, vocab_size, stage
 ) -> None:
     # For multi-GPU testing of Triton kernel, we must explicitly set the CUDA
     # device, see: https://github.com/triton-lang/triton/issues/2925
@@ -369,7 +369,7 @@ def test_embeddings(
 @pytest.mark.parametrize("vocab_size", [64000, 256512, 258048])
 @pytest.mark.parametrize("stage", STAGES)
 def test_lm_head_logits_processor(
-    default_vllm_config, dist_init, num_loras, device, vocab_size, stage
+    default_aphrodite_config, dist_init, num_loras, device, vocab_size, stage
 ) -> None:
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
         torch.accelerator.set_device_index(device)
@@ -485,7 +485,7 @@ def test_lm_head_logits_processor(
 @pytest.mark.parametrize("vocab_size", [258049, 300000])
 @pytest.mark.parametrize("device", DEVICES)
 def test_lm_head_logits_processor_invalid_vocab_size(
-    default_vllm_config, dist_init, vocab_size, device
+    default_aphrodite_config, dist_init, vocab_size, device
 ) -> None:
     """Test that LogitsProcessorWithLoRA raises ValueError for invalid vocab sizes."""
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
@@ -511,7 +511,7 @@ def test_lm_head_logits_processor_invalid_vocab_size(
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("stage", STAGES)
 def test_linear_replicated(
-    default_vllm_config,
+    default_aphrodite_config,
     dist_init,
     num_loras,
     device,
@@ -624,7 +624,7 @@ def test_linear_replicated(
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("stage", STAGES)
 def test_linear_parallel(
-    default_vllm_config, dist_init, num_loras, orientation, fully_shard, device, stage
+    default_aphrodite_config, dist_init, num_loras, orientation, fully_shard, device, stage
 ) -> None:
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
         torch.accelerator.set_device_index(device)
@@ -757,7 +757,7 @@ def test_linear_parallel(
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("stage", STAGES)
 def test_column_parallel_packed(
-    default_vllm_config, dist_init, num_loras, repeats, fully_shard, device, stage
+    default_aphrodite_config, dist_init, num_loras, repeats, fully_shard, device, stage
 ) -> None:
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
         torch.accelerator.set_device_index(device)
@@ -919,7 +919,7 @@ def test_column_parallel_packed(
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("stage", STAGES)
 def test_merged_column_parallel_variable_slice(
-    default_vllm_config, dist_init, num_loras, num_slices, device, stage
+    default_aphrodite_config, dist_init, num_loras, num_slices, device, stage
 ) -> None:
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
         torch.accelerator.set_device_index(device)
@@ -1031,7 +1031,7 @@ def test_merged_column_parallel_variable_slice(
 @pytest.mark.parametrize(
     "seed", list(range(VOCAB_PARALLEL_EMBEDDING_TEST_NUM_RANDOM_SEEDS))
 )
-def test_vocab_parallel_embedding_indices(tp_size, seed, default_vllm_config):
+def test_vocab_parallel_embedding_indices(tp_size, seed, default_aphrodite_config):
     random.seed(seed)
     vocab_size = random.randint(4000, 64000)
     added_vocab_size = random.randint(0, 1024)
@@ -1298,7 +1298,7 @@ def test_get_masked_input_and_mask():
     )
 
 
-def test_variable_slice_lora_class_selection(default_vllm_config, dist_init):
+def test_variable_slice_lora_class_selection(default_aphrodite_config, dist_init):
     """Test that MergedColumnParallelLinearVariableSliceWithLoRA is selected
     only for nemotron-h style models (checkpoint has single weight but layer
     has 3+ output slices).
@@ -1606,7 +1606,7 @@ def test_get_and_maybe_dequant_weights_accepts_lora_wrappers(dist_init, wrapper_
 @pytest.mark.parametrize("stage", STAGES)
 @pytest.mark.parametrize("fully_sharded", [False, True])
 def test_deepseek_fused_qkv_a_proj_lora_preserves_base_forward(
-    default_vllm_config, dist_init, device, stage, fully_sharded
+    default_aphrodite_config, dist_init, device, stage, fully_sharded
 ):
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
         torch.accelerator.set_device_index(device)
@@ -1693,7 +1693,7 @@ def test_deepseek_fused_qkv_a_proj_lora_preserves_base_forward(
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("stage", STAGES)
 def test_replicated_lora_preserves_base_forward_for_subclasses(
-    default_vllm_config, dist_init, device, stage
+    default_aphrodite_config, dist_init, device, stage
 ):
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
         torch.accelerator.set_device_index(device)

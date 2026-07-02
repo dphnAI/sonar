@@ -30,7 +30,7 @@ wait_for_server() {
 
 cleanup_instances() {
   echo "Cleaning up any running vLLM instances..."
-  pkill -f "vllm serve" || true
+  pkill -f "aphrodite serve" || true
   sleep 2
 }
 
@@ -42,7 +42,7 @@ CUDA_VISIBLE_DEVICES=$PREFILL_GPU_ID \
 APHRODITE_SSM_CONV_STATE_LAYOUT=DS \
 APHRODITE_KV_CACHE_LAYOUT=HND \
 APHRODITE_NIXL_SIDE_CHANNEL_PORT=5559 \
-vllm serve $MODEL \
+aphrodite serve $MODEL \
   --port $PREFILL_PORT \
   --enforce-eager \
   --gpu-memory-utilization $GPU_MEMORY_UTILIZATION \
@@ -60,7 +60,7 @@ CUDA_VISIBLE_DEVICES=$DECODE_GPU_ID \
 APHRODITE_SSM_CONV_STATE_LAYOUT=DS \
 APHRODITE_KV_CACHE_LAYOUT=HND \
 APHRODITE_NIXL_SIDE_CHANNEL_PORT=6000 \
-vllm serve $MODEL \
+aphrodite serve $MODEL \
   --port $DECODE_PORT \
   --enforce-eager \
   --gpu-memory-utilization $GPU_MEMORY_UTILIZATION \

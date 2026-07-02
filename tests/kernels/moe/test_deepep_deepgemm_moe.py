@@ -15,7 +15,7 @@ from torch.distributed import ProcessGroup
 from typing_extensions import ParamSpec
 
 import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.forward_context import set_forward_context
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.model_executor.layers.fused_moe.config import (
@@ -73,13 +73,13 @@ P = ParamSpec("P")
 def with_dp_metadata(M: int, world_size: int):
     num_tokens_across_dp = torch.tensor([M] * world_size, device="cpu", dtype=torch.int)
 
-    vllm_config = AphroditeConfig()
-    vllm_config.parallel_config.data_parallel_size = world_size
-    vllm_config.parallel_config.enable_expert_parallel = True
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.parallel_config.data_parallel_size = world_size
+    aphrodite_config.parallel_config.enable_expert_parallel = True
 
     with set_forward_context(
         None,
-        vllm_config,
+        aphrodite_config,
         num_tokens=M,
         num_tokens_across_dp=num_tokens_across_dp,
     ):
@@ -386,7 +386,7 @@ def _test_deepep_deepgemm_moe(
     test_tensors = TestTensors.make(config, pgi.rank)
     block_shape = [w1.size(1) // w1_scale.size(1), w1.size(2) // w1_scale.size(2)]
 
-    with set_current_vllm_config(AphroditeConfig()):
+    with set_current_aphrodite_config(AphroditeConfig()):
         # Reference
         triton_moe = triton_impl(
             a=test_tensors.rank_tokens,

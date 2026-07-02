@@ -36,11 +36,11 @@ def test_backend_guidance_rollback_terminated():
     # it should be reverted in case EOS is not accepted by the target
     # model.
     structured_outputs_config = StructuredOutputsConfig(backend="guidance")
-    vllm_config = AphroditeConfig(structured_outputs_config=structured_outputs_config)
+    aphrodite_config = AphroditeConfig(structured_outputs_config=structured_outputs_config)
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER)
 
     backend = GuidanceBackend(
-        vllm_config,
+        aphrodite_config,
         tokenizer=tokenizer,
         vocab_size=50257,
     )
@@ -78,12 +78,12 @@ def test_backend_guidance_rollback_terminated():
 def test_grammar_bitmask_with_specdec():
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER)
     prompt = tokenizer.encode('{"a": "b"}')
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=ModelConfig(tokenizer=TOKENIZER),
         structured_outputs_config=StructuredOutputsConfig(backend="guidance"),
         speculative_config=SpeculativeConfig(model="[ngram]", num_speculative_tokens=3),
     )
-    structured_output_manager = StructuredOutputManager(vllm_config)
+    structured_output_manager = StructuredOutputManager(aphrodite_config)
 
     for i in range(1, 2):
         sampling_params = SamplingParams(
@@ -143,12 +143,12 @@ def test_grammar_init_async_and_sync(async_grammar):
 
     # Use "external_launcher" for sync mode, None for async mode
     executor_backend = None if async_grammar else "external_launcher"
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=ModelConfig(tokenizer=TOKENIZER),
         structured_outputs_config=StructuredOutputsConfig(backend="guidance"),
         parallel_config=ParallelConfig(distributed_executor_backend=executor_backend),
     )
-    structured_output_manager = StructuredOutputManager(vllm_config)
+    structured_output_manager = StructuredOutputManager(aphrodite_config)
 
     sampling_params = SamplingParams(
         structured_outputs=StructuredOutputsParams(
@@ -218,11 +218,11 @@ def test_mistral_tokenizer_compile_grammar(
     request_type: StructuredOutputOptions,
     grammar_spec: str,
 ) -> None:
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         structured_outputs_config=StructuredOutputsConfig(backend="guidance"),
     )
     backend = GuidanceBackend(
-        vllm_config,
+        aphrodite_config,
         tokenizer=mistral_tokenizer,
         vocab_size=mistral_tokenizer.vocab_size,
     )

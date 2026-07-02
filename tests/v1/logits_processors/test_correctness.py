@@ -126,23 +126,23 @@ def _generate_fake_sampling_metadata(
             ).tolist()
         )
 
-    vllm_config = AphroditeConfig()
-    vllm_config.reasoning_config = MockReasoningConfig()
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.reasoning_config = MockReasoningConfig()
 
     logitsprocs = build_logitsprocs(
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         device=device,
         is_pin_memory=PIN_MEMORY_AVAILABLE,
         is_pooling_model=False,
     )
     num_spec = (
-        vllm_config.speculative_config.num_speculative_tokens
-        if vllm_config.speculative_config
+        aphrodite_config.speculative_config.num_speculative_tokens
+        if aphrodite_config.speculative_config
         else 0
     )
     thinking_holder = maybe_create_thinking_budget_state_holder(
-        vllm_config.reasoning_config,
-        vllm_config.scheduler_config.max_num_seqs,
+        aphrodite_config.reasoning_config,
+        aphrodite_config.scheduler_config.max_num_seqs,
         num_spec,
         device,
     )

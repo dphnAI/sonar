@@ -15,9 +15,9 @@ void cutlass_scaled_mm_sm90(torch::stable::Tensor& c,
                             torch::stable::Tensor const& b_scales,
                             std::optional<torch::stable::Tensor> const& bias) {
   dispatch_scaled_mm(c, a, b, a_scales, b_scales, bias,
-                     vllm::cutlass_scaled_mm_sm90_fp8,
-                     vllm::cutlass_scaled_mm_sm90_int8,
-                     vllm::cutlass_scaled_mm_blockwise_sm90_fp8);
+                     aphrodite::cutlass_scaled_mm_sm90_fp8,
+                     aphrodite::cutlass_scaled_mm_sm90_int8,
+                     aphrodite::cutlass_scaled_mm_blockwise_sm90_fp8);
 }
 
 void cutlass_scaled_mm_azp_sm90(
@@ -31,7 +31,7 @@ void cutlass_scaled_mm_azp_sm90(
   STD_TORCH_CHECK(b_scales.scalar_type() ==
                   torch::headeronly::ScalarType::Float);
 
-  vllm::cutlass_scaled_mm_azp_sm90_int8(out, a, b, a_scales, b_scales, azp_adj,
+  aphrodite::cutlass_scaled_mm_azp_sm90_int8(out, a, b, a_scales, b_scales, azp_adj,
                                         azp, bias);
 }
 

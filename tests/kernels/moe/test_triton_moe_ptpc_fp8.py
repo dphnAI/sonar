@@ -9,7 +9,7 @@ import torch
 
 from tests.kernels.moe.utils import fused_moe
 from aphrodite import _custom_ops as ops
-from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.model_executor.layers.fused_moe.config import fp8_w8a8_moe_quant_config
 from aphrodite.platforms import current_platform
@@ -17,7 +17,7 @@ from aphrodite.platforms import current_platform
 if current_platform.get_device_capability() < (9, 0):
     pytest.skip("FP8 Triton requires CUDA 9.0 or higher", allow_module_level=True)
 
-vllm_config = AphroditeConfig()
+aphrodite_config = AphroditeConfig()
 
 if current_platform.is_fp8_fnuz():
     pytest.skip(
@@ -146,7 +146,7 @@ def test_w8a8_fp8_fused_moe(M, N, K, E, topk, dtype, seed):
     w2_s = torch.rand(E, K, device=w2_fp32.device) * factor_for_scale
     score = torch.randn((M, E), dtype=dtype)
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         ref_out = torch_w8a8_per_column_moe(a, w1, w2, w1_s, w2_s, score, topk)
         out = fused_moe(
             a,

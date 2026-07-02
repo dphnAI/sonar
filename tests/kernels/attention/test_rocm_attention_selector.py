@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from aphrodite.config import AttentionConfig, AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AttentionConfig, AphroditeConfig, set_current_aphrodite_config
 from aphrodite.platforms.rocm import RocmPlatform
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 from aphrodite.v1.attention.selector import _cached_get_attn_backend, get_attn_backend
@@ -23,18 +23,18 @@ def test_selector(monkeypatch: pytest.MonkeyPatch):
 
     # Test standard ROCm attention
     attention_config = AttentionConfig(backend=AttentionBackendEnum.ROCM_ATTN)
-    vllm_config = AphroditeConfig(attention_config=attention_config)
+    aphrodite_config = AphroditeConfig(attention_config=attention_config)
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         backend = get_attn_backend(16, torch.float16, torch.float16, 16, False)
         assert backend.get_name() == "ROCM_FLASH" or backend.get_name() == "TRITON_ATTN"
 
     # MLA test for deepseek related
     # Change the attention backend to triton MLA
     attention_config = AttentionConfig(backend=AttentionBackendEnum.TRITON_MLA)
-    vllm_config = AphroditeConfig(attention_config=attention_config)
+    aphrodite_config = AphroditeConfig(attention_config=attention_config)
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         backend = get_attn_backend(576, torch.bfloat16, "auto", 16, False, use_mla=True)
         assert backend.get_name() == "TRITON_MLA"
 
@@ -42,17 +42,17 @@ def test_selector(monkeypatch: pytest.MonkeyPatch):
     # If use_mla is true
     # The selected backend is triton MLA
     attention_config = AttentionConfig(backend=None)
-    vllm_config = AphroditeConfig(attention_config=attention_config)
+    aphrodite_config = AphroditeConfig(attention_config=attention_config)
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         backend = get_attn_backend(576, torch.bfloat16, "auto", 16, False, use_mla=True)
         assert backend.get_name() == "TRITON_MLA"
 
     # Change the attention backend to AITER MLA
     attention_config = AttentionConfig(backend=AttentionBackendEnum.ROCM_AITER_MLA)
-    vllm_config = AphroditeConfig(attention_config=attention_config)
+    aphrodite_config = AphroditeConfig(attention_config=attention_config)
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         backend = get_attn_backend(576, torch.bfloat16, "auto", 1, False, use_mla=True)
         assert backend.get_name() == "ROCM_AITER_MLA"
 
@@ -64,9 +64,9 @@ def test_selector(monkeypatch: pytest.MonkeyPatch):
         m.setenv("APHRODITE_ROCM_USE_AITER", "1")
 
         attention_config = AttentionConfig(backend=None)
-        vllm_config = AphroditeConfig(attention_config=attention_config)
+        aphrodite_config = AphroditeConfig(attention_config=attention_config)
 
-        with set_current_vllm_config(vllm_config):
+        with set_current_aphrodite_config(aphrodite_config):
             backend = get_attn_backend(
                 576, torch.bfloat16, "auto", 1, False, use_mla=True
             )

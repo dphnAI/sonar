@@ -164,7 +164,7 @@ class TestKvCacheScaleMapper:
     """The `WeightsMapper` returned by `get_cache_scale_mapper` replaces the
     per-model `maybe_remap_kv_scale_name` calls. It must remap the same set of
     checkpoint formats (the non-`params_dict`-dependent ones) and be idempotent
-    so it composes safely with a model's own qkv/gate_up `hf_to_vllm_mapper`."""
+    so it composes safely with a model's own qkv/gate_up `hf_to_aphrodite_mapper`."""
 
     def _mapper(self):
         # `get_cache_scale_mapper` does not use `self`; call it on the base

@@ -13,7 +13,7 @@ from .utils import (
     create_model_runner_output,
     create_request,
     create_scheduler,
-    create_vllm_config,
+    create_aphrodite_config,
 )
 
 
@@ -30,8 +30,8 @@ def _make_get_num_new_matched_tokens(
 
 @pytest.fixture
 def scheduler():
-    vllm_config = create_vllm_config(kv_load_failure_policy="recompute")
-    return create_scheduler(vllm_config)
+    aphrodite_config = create_aphrodite_config(kv_load_failure_policy="recompute")
+    return create_scheduler(aphrodite_config)
 
 
 @pytest.mark.parametrize(

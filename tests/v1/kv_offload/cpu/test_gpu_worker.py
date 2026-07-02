@@ -44,7 +44,7 @@ NUM_MAPPINGS_PER_GROUP = [2]
 @pytest.mark.parametrize("use_shared_memory", [False, True])
 @torch.inference_mode()
 def test_transfer(
-    default_vllm_config,
+    default_aphrodite_config,
     gpu_to_cpu: bool,
     num_mappings: int,
     gpu_page_size_bytes: int,
@@ -221,7 +221,7 @@ def test_transfer(
 @pytest.mark.parametrize("device", DEVICES)
 @torch.inference_mode()
 def test_transfer_multi_group(
-    default_vllm_config,
+    default_aphrodite_config,
     gpu_to_cpu: bool,
     num_mappings_per_group: int,
     gpu_page_size_bytes: int,

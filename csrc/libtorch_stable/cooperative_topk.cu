@@ -7,8 +7,8 @@
 
 #ifndef USE_ROCM
   #include "cooperative_topk.cuh"
-namespace ct = vllm::cooperative;
-namespace hist4096 = vllm::topk_histogram_4096;
+namespace ct = aphrodite::cooperative;
+namespace hist4096 = aphrodite::topk_histogram_4096;
 #endif
 
 #ifndef USE_ROCM

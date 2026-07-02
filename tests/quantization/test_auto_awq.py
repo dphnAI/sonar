@@ -186,11 +186,11 @@ AWQ_MODELS = [
     reason="auto_awq is not supported on this GPU type.",
 )
 @pytest.mark.parametrize("model_id", AWQ_MODELS)
-def test_auto_awq_quantization_method(vllm_runner, model_id: str, monkeypatch):
+def test_auto_awq_quantization_method(aphrodite_runner, model_id: str, monkeypatch):
     """Test that quantization='auto_awq' loads and runs correctly."""
     monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_id,
         dtype=torch.float16,
         quantization="auto_awq",

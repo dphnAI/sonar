@@ -395,14 +395,14 @@ async def test_mid_stream_cancellation(
 
 
 class MockLoggingStatLogger(LoggingStatLogger):
-    def __init__(self, vllm_config: AphroditeConfig, engine_index: int = 0):
-        super().__init__(vllm_config, engine_index)
+    def __init__(self, aphrodite_config: AphroditeConfig, engine_index: int = 0):
+        super().__init__(aphrodite_config, engine_index)
         self.log = MagicMock()
 
 
 class MockAggregatedStatLogger(AggregatedLoggingStatLogger):
-    def __init__(self, vllm_config: AphroditeConfig, engine_indexes: list[int]):
-        super().__init__(vllm_config, engine_indexes)
+    def __init__(self, aphrodite_config: AphroditeConfig, engine_indexes: list[int]):
+        super().__init__(aphrodite_config, engine_indexes)
         self.log = MagicMock()
 
 

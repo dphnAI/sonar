@@ -30,7 +30,7 @@ from flashinfer.fp4_quantization import fp4_quantize
 import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
 from tests.kernels.moe.utils import make_dummy_moe_config
 from tests.kernels.utils import torch_moe
-from aphrodite.config import ParallelConfig, AphroditeConfig, set_current_vllm_config
+from aphrodite.config import ParallelConfig, AphroditeConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.fused_moe import fused_topk
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
@@ -103,7 +103,7 @@ def test_flashinfer_b12x_moe(
     ``g1_alphas = 1/w_gs`` — is incompatible with this kernel.
     """
     set_random_seed(7)
-    with set_current_vllm_config(
+    with set_current_aphrodite_config(
         AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))
     ):
         a = torch.randn((m, k), device="cuda", dtype=dtype) / 10

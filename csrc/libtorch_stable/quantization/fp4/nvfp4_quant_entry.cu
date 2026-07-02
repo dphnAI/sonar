@@ -103,7 +103,7 @@ std::tuple<torch::stable::Tensor, torch::stable::Tensor> scaled_fp4_quant_func(
 
   torch::stable::Tensor output_sf;
   if (is_sf_swizzled_layout) {
-    auto [sf_m, sf_n] = vllm::computeSwizzledSFShape(m, n);
+    auto [sf_m, sf_n] = aphrodite::computeSwizzledSFShape(m, n);
     output_sf = torch::stable::empty(
         {sf_m, sf_n}, torch::headeronly::ScalarType::Int, std::nullopt, device);
   } else {

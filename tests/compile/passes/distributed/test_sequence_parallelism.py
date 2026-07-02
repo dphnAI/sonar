@@ -11,7 +11,7 @@ from aphrodite.compilation.passes.fusion.rms_quant_fusion import RMSNormQuantFus
 from aphrodite.compilation.passes.fusion.sequence_parallelism import SequenceParallelismPass
 from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
 from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
-from aphrodite.compilation.passes.vllm_inductor_pass import AphroditeInductorPass
+from aphrodite.compilation.passes.aphrodite_inductor_pass import AphroditeInductorPass
 from aphrodite.config import (
     CompilationConfig,
     CUDAGraphMode,
@@ -19,8 +19,8 @@ from aphrodite.config import (
     ModelConfig,
     PassConfig,
     AphroditeConfig,
-    get_current_vllm_config,
-    set_current_vllm_config,
+    get_current_aphrodite_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.config.utils import Range
 from aphrodite.distributed import tensor_model_parallel_all_reduce
@@ -89,8 +89,8 @@ class TestAllReduceRMSNormModel(torch.nn.Module):
 
     def ops_in_model(self):
         return [
-            torch.ops.vllm_ir.rms_norm,
-            torch.ops.vllm_ir.fused_add_rms_norm,
+            torch.ops.aphrodite_ir.rms_norm,
+            torch.ops.aphrodite_ir.fused_add_rms_norm,
         ]
 
 
@@ -99,7 +99,7 @@ class TestAllReduceRMSNormStaticQuantFP8Model(torch.nn.Module):
 
     def __init__(self, hidden_size=16, eps=1e-6):
         super().__init__()
-        self.vllm_config = get_current_vllm_config()
+        self.aphrodite_config = get_current_aphrodite_config()
         self.hidden_size = hidden_size
         self.eps = eps
         self.norm = [RMSNorm(hidden_size, eps) for i in range(4)]
@@ -108,7 +108,7 @@ class TestAllReduceRMSNormStaticQuantFP8Model(torch.nn.Module):
                 weight_shape=(hidden_size, hidden_size),
                 activation_quant_key=self.quant_key,
                 weight_quant_key=self.quant_key,
-                input_dtype=self.vllm_config.model_config.dtype,
+                input_dtype=self.aphrodite_config.model_config.dtype,
             )
             for i in range(3)
         ]
@@ -146,7 +146,7 @@ class TestAllReduceRMSNormStaticQuantFP8Model(torch.nn.Module):
         ]
 
     def ops_in_model(self):
-        if self.vllm_config.compilation_config.pass_config.fuse_norm_quant:
+        if self.aphrodite_config.compilation_config.pass_config.fuse_norm_quant:
             return [torch.ops._C.fused_add_rms_norm_static_fp8_quant.default]
         else:
             quant_ops = (
@@ -155,8 +155,8 @@ class TestAllReduceRMSNormStaticQuantFP8Model(torch.nn.Module):
                 else [torch.ops.aten.reciprocal]
             )
             return [
-                torch.ops.vllm_ir.rms_norm,
-                torch.ops.vllm_ir.fused_add_rms_norm,
+                torch.ops.aphrodite_ir.rms_norm,
+                torch.ops.aphrodite_ir.fused_add_rms_norm,
                 *quant_ops,
             ]
 
@@ -215,14 +215,14 @@ def test_sequence_parallelism_pass(
 
 
 def test_sequence_parallelism_pass_requires_full_graph_compilation():
-    vllm_config = AphroditeConfig()
-    vllm_config.compilation_config.use_inductor_graph_partition = False
-    vllm_config.compilation_config.splitting_ops = [
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.compilation_config.use_inductor_graph_partition = False
+    aphrodite_config.compilation_config.splitting_ops = [
         "aphrodite::unified_attention_with_output"
     ]
 
     sequence_parallelism_pass = object.__new__(SequenceParallelismPass)
-    sequence_parallelism_pass.compilation_config = vllm_config.compilation_config
+    sequence_parallelism_pass.compilation_config = aphrodite_config.compilation_config
     sequence_parallelism_pass.min_token_num = 1
 
     with pytest.raises(
@@ -279,30 +279,30 @@ def sequence_parallelism_pass_on_test_model(
     device_config = DeviceConfig(device=torch.device(DEVICE_TYPE))
 
     # this is a fake model name to construct the model config
-    # in the vllm_config, it's not really used.
+    # in the aphrodite_config, it's not really used.
     model_name = "RedHatAI/Llama-3.2-1B-Instruct-FP8"
     model_config = ModelConfig(
         model=model_name, trust_remote_code=True, dtype=dtype, seed=42
     )
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=model_config,
         device_config=device_config,
         compilation_config=compilation_config,
     )
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         initialize_model_parallel(tensor_model_parallel_size=world_size)
-        noop_pass = NoOpEliminationPass(vllm_config)
-        sequence_parallelism_pass = SequenceParallelismPass(vllm_config)
-        cleanup_pass = PostCleanupPass(vllm_config)
+        noop_pass = NoOpEliminationPass(aphrodite_config)
+        sequence_parallelism_pass = SequenceParallelismPass(aphrodite_config)
+        cleanup_pass = PostCleanupPass(aphrodite_config)
         assert (
             sequence_parallelism_pass.compilation_config.splitting_ops
-            == vllm_config.compilation_config.splitting_ops
+            == aphrodite_config.compilation_config.splitting_ops
         )
         assert (
             sequence_parallelism_pass.compilation_config.use_inductor_graph_partition
-            == vllm_config.compilation_config.use_inductor_graph_partition
+            == aphrodite_config.compilation_config.use_inductor_graph_partition
         )
         passes_for_backend: list[AphroditeInductorPass] = [
             noop_pass,
@@ -310,7 +310,7 @@ def sequence_parallelism_pass_on_test_model(
         ]
 
         if fuse_norm_quant:
-            fusion_pass = RMSNormQuantFusionPass(vllm_config)
+            fusion_pass = RMSNormQuantFusionPass(aphrodite_config)
             passes_for_backend.append(fusion_pass)
 
         passes_for_backend.append(cleanup_pass)

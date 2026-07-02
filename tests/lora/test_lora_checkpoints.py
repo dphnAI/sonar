@@ -110,7 +110,7 @@ def test_lora_weights_mapping(baichuan_lora_files):
         else:
             expected_lora_lst.append(module)
     expected_lora_modules = set(expected_lora_lst)
-    hf_to_vllm_mapper = WeightsMapper(
+    hf_to_aphrodite_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.": "language_model.model.",
         },
@@ -128,15 +128,15 @@ def test_lora_weights_mapping(baichuan_lora_files):
         lora_model_id=1,
         device="cpu",
         model_vocab_size=64000,
-        weights_mapper=hf_to_vllm_mapper,
+        weights_mapper=hf_to_aphrodite_mapper,
     )
     for name in lora_model.loras:
-        assert name.startswith(hf_to_vllm_mapper.orig_to_new_prefix["model."])
+        assert name.startswith(hf_to_aphrodite_mapper.orig_to_new_prefix["model."])
         assert ".baichuan_layers." in name
 
 
 def test_gemma4_lora_weights_mapping():
-    mapper = Gemma4ForCausalLM.hf_to_vllm_mapper
+    mapper = Gemma4ForCausalLM.hf_to_aphrodite_mapper
     name = "base_model.model.model.language_model.layers.9.mlp.down_proj.lora_A.weight"
     assert parse_fine_tuned_lora_name(name, mapper) == (
         "model.layers.9.mlp.down_proj",
@@ -145,7 +145,7 @@ def test_gemma4_lora_weights_mapping():
 
 
 def test_gemma4_moe_lora_weights_mapping():
-    mapper = Gemma4ForCausalLM.hf_to_vllm_mapper
+    mapper = Gemma4ForCausalLM.hf_to_aphrodite_mapper
     name = (
         "base_model.model.model.language_model.layers.9.moe.experts."
         "gate_up_proj.lora_B.weight"

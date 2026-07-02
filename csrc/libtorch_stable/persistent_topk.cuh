@@ -13,7 +13,7 @@
 
 #include "topk_histogram_4096.cuh"
 
-namespace vllm {
+namespace aphrodite {
 namespace persistent {
 
 // ============================================================================
@@ -1337,6 +1337,6 @@ cudaError_t FilteredTopKRaggedTransform(const DType* input,
       input, output_indices, lengths, num_rows, top_k_val, max_len, stream);
 }
 
-}  // namespace vllm
+}  // namespace aphrodite
 
 #endif  // PERSISTENT_TOPK_CUH_

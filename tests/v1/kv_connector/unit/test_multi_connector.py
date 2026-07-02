@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from tests.v1.kv_connector.unit.utils import create_vllm_config
+from tests.v1.kv_connector.unit.utils import create_aphrodite_config
 from aphrodite import LLM, SamplingParams
 from aphrodite.config import KVTransferConfig
 from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
@@ -138,7 +138,7 @@ def mc() -> MultiConnector:
         "kv_connector_module_path": "tests.v1.kv_connector.unit.test_multi_connector",
     }
 
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MultiConnector",
         kv_connector_extra_config={
             "connectors": [mock_connector_config, mock_connector_config],
@@ -150,7 +150,7 @@ def mc() -> MultiConnector:
     )
 
     mc = MultiConnector(
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         role=KVConnectorRole.WORKER,
         kv_cache_config=kv_cache_config,
     )
@@ -412,7 +412,7 @@ def test_multi_connector_handle_preemptions_integration():
     """
     from tests.v1.kv_connector.unit.utils import (
         create_scheduler,
-        create_vllm_config,
+        create_aphrodite_config,
     )
 
     storage_path = Path(tempfile.mkdtemp())
@@ -442,7 +442,7 @@ def test_multi_connector_handle_preemptions_integration():
             ]
         }
 
-        vllm_config = create_vllm_config(
+        aphrodite_config = create_aphrodite_config(
             block_size=16,
             max_num_batched_tokens=100,
             kv_connector="MultiConnector",
@@ -450,7 +450,7 @@ def test_multi_connector_handle_preemptions_integration():
         )
 
         # Create scheduler - this initializes the MultiConnector with SCHEDULER role
-        scheduler = create_scheduler(vllm_config, num_blocks=10)
+        scheduler = create_scheduler(aphrodite_config, num_blocks=10)
 
         # Clear any events from initialization
         get_connector_events()
@@ -991,7 +991,7 @@ def _make_multi_connector(connector_names: list[str]) -> MultiConnector:
         }
         for name in connector_names
     ]
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MultiConnector",
         kv_connector_extra_config={"connectors": connectors},
     )
@@ -1001,7 +1001,7 @@ def _make_multi_connector(connector_names: list[str]) -> MultiConnector:
         kv_cache_groups=[],
     )
     return MultiConnector(
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         role=KVConnectorRole.WORKER,
         kv_cache_config=kv_cache_config,
     )
@@ -1093,7 +1093,7 @@ def test_multi_connector_mixed_hma_disables_hybrid_kv_cache(monkeypatch):
         try:
             # HMA should be auto-disabled when user has not expressed a preference.
             assert (
-                llm.llm_engine.vllm_config.scheduler_config.disable_hybrid_kv_cache_manager
+                llm.llm_engine.aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager
                 is True
             )
             # The scheduler-side MultiConnector should detect the mixed

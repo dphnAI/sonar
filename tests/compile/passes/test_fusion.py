@@ -241,25 +241,25 @@ class TestModel(torch.nn.Module):
 
     def ops_in_model_before_partial(self):
         return [
-            torch.ops.vllm_ir.rms_norm,
-            torch.ops.vllm_ir.fused_add_rms_norm.default,
+            torch.ops.aphrodite_ir.rms_norm,
+            torch.ops.aphrodite_ir.fused_add_rms_norm.default,
         ]
 
 
 def _run_fusion_test(
     model,
     fusion_pass,
-    vllm_config,
+    aphrodite_config,
     dtype,
     hidden_size,
     num_tokens,
 ):
     """Helper function for common fusion test logic.
 
-    Must be called within vllm_config context.
+    Must be called within aphrodite_config context.
     """
-    noop_pass = NoOpEliminationPass(vllm_config)
-    cleanup_pass = PostCleanupPass(vllm_config)
+    noop_pass = NoOpEliminationPass(aphrodite_config)
+    cleanup_pass = PostCleanupPass(aphrodite_config)
 
     backend = TestBackend(noop_pass, fusion_pass, cleanup_pass)
     backend2 = TestBackend(noop_pass, cleanup_pass)
@@ -342,7 +342,7 @@ def test_fusion_rmsnorm_quant(
     if enable_quant_fp8_custom_op:
         custom_ops.append("+quant_fp8")
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
@@ -354,15 +354,15 @@ def test_fusion_rmsnorm_quant(
     )
 
     with (
-        aphrodite.config.set_current_vllm_config(vllm_config),
-        vllm_config.kernel_config.ir_op_priority.set_priority(),
+        aphrodite.config.set_current_aphrodite_config(aphrodite_config),
+        aphrodite_config.kernel_config.ir_op_priority.set_priority(),
     ):
         # Setup device before model creation
         torch.set_default_device("cuda")
         torch.set_default_dtype(dtype)
         torch.manual_seed(1)
 
-        fusion_pass = RMSNormQuantFusionPass(vllm_config)
+        fusion_pass = RMSNormQuantFusionPass(aphrodite_config)
 
         model = TestModel(
             hidden_size=hidden_size,
@@ -375,7 +375,7 @@ def test_fusion_rmsnorm_quant(
         )
 
         backend, _ = _run_fusion_test(
-            model, fusion_pass, vllm_config, dtype, hidden_size, num_tokens
+            model, fusion_pass, aphrodite_config, dtype, hidden_size, num_tokens
         )
         backend.check_before_ops(
             model.ops_in_model_before_partial(), fully_replaced=False
@@ -402,7 +402,7 @@ def test_aiter_fusion_rmsnorm_quant(
     monkeypatch: pytest.MonkeyPatch,
 ):
     force_kernel, group_shape, use_aiter_quant_op = kernel_groupshape_quant
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
@@ -411,7 +411,7 @@ def test_aiter_fusion_rmsnorm_quant(
         ),
     )
 
-    with aphrodite.config.set_current_vllm_config(vllm_config), monkeypatch.context() as m:
+    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
         from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
             RocmAiterRMSNormQuantFusionPass,
         )
@@ -424,7 +424,7 @@ def test_aiter_fusion_rmsnorm_quant(
         torch.set_default_dtype(dtype)
         torch.manual_seed(1)
 
-        fusion_pass = RocmAiterRMSNormQuantFusionPass(vllm_config)
+        fusion_pass = RocmAiterRMSNormQuantFusionPass(aphrodite_config)
 
         model = TestModel(
             hidden_size=hidden_size,
@@ -437,7 +437,7 @@ def test_aiter_fusion_rmsnorm_quant(
         )
 
         _run_fusion_test(
-            model, fusion_pass, vllm_config, dtype, hidden_size, num_tokens
+            model, fusion_pass, aphrodite_config, dtype, hidden_size, num_tokens
         )
 
 
@@ -546,7 +546,7 @@ def test_aiter_fusion_rmsnorm_gated_quant(
     monkeypatch: pytest.MonkeyPatch,
 ):
     group_shape = GroupShape(1, 128)
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
@@ -555,7 +555,7 @@ def test_aiter_fusion_rmsnorm_gated_quant(
         ),
     )
 
-    with aphrodite.config.set_current_vllm_config(vllm_config), monkeypatch.context() as m:
+    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
         from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
             RocmAiterRMSNormQuantFusionPass,
         )
@@ -565,7 +565,7 @@ def test_aiter_fusion_rmsnorm_gated_quant(
 
         # Register a mock GDN layer so the pass discovers num_heads/head_dim
         mock_gdn = _MockGDNLayer(num_v_heads=num_heads, head_v_dim=head_dim, tp_size=1)
-        vllm_config.compilation_config.static_forward_context["mock_gdn_layer"] = (
+        aphrodite_config.compilation_config.static_forward_context["mock_gdn_layer"] = (
             mock_gdn
         )
 
@@ -573,7 +573,7 @@ def test_aiter_fusion_rmsnorm_gated_quant(
         torch.set_default_dtype(dtype)
         torch.manual_seed(1)
 
-        fusion_pass = RocmAiterRMSNormQuantFusionPass(vllm_config)
+        fusion_pass = RocmAiterRMSNormQuantFusionPass(aphrodite_config)
 
         model = TestGatedModel(
             num_heads=num_heads,
@@ -585,8 +585,8 @@ def test_aiter_fusion_rmsnorm_gated_quant(
             use_aiter_quant=True,
         )
 
-        noop_pass = NoOpEliminationPass(vllm_config)
-        cleanup_pass = PostCleanupPass(vllm_config)
+        noop_pass = NoOpEliminationPass(aphrodite_config)
+        cleanup_pass = PostCleanupPass(aphrodite_config)
 
         backend = TestBackend(noop_pass, fusion_pass, cleanup_pass)
         backend2 = TestBackend(noop_pass, cleanup_pass)
@@ -629,7 +629,7 @@ def test_aiter_fusion_rmsnorm_gated_quant_no_gdn_layers(
     """Verify that without GDN layers in static_forward_context,
     the gated pattern is not registered and no matches occur."""
     group_shape = GroupShape(1, 128)
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
@@ -638,7 +638,7 @@ def test_aiter_fusion_rmsnorm_gated_quant_no_gdn_layers(
         ),
     )
 
-    with aphrodite.config.set_current_vllm_config(vllm_config), monkeypatch.context() as m:
+    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
         from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
             RocmAiterRMSNormQuantFusionPass,
         )
@@ -651,7 +651,7 @@ def test_aiter_fusion_rmsnorm_gated_quant_no_gdn_layers(
         torch.manual_seed(1)
 
         # No mock GDN layer registered -- pass should not register gated pattern
-        fusion_pass = RocmAiterRMSNormQuantFusionPass(vllm_config)
+        fusion_pass = RocmAiterRMSNormQuantFusionPass(aphrodite_config)
 
         model = TestGatedModel(
             num_heads=num_heads,
@@ -663,8 +663,8 @@ def test_aiter_fusion_rmsnorm_gated_quant_no_gdn_layers(
             use_aiter_quant=True,
         )
 
-        noop_pass = NoOpEliminationPass(vllm_config)
-        cleanup_pass = PostCleanupPass(vllm_config)
+        noop_pass = NoOpEliminationPass(aphrodite_config)
+        cleanup_pass = PostCleanupPass(aphrodite_config)
 
         backend = TestBackend(noop_pass, fusion_pass, cleanup_pass)
 

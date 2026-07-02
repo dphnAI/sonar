@@ -19,7 +19,7 @@ def build_prompt(words: list[str]) -> str:
 @pytest.mark.parametrize("dtype", ["bfloat16"])
 @torch.inference_mode()
 def test_qwen3_forced_aligner(
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     dtype: str,
 ) -> None:
@@ -29,7 +29,7 @@ def test_qwen3_forced_aligner(
     # 5-second silent audio at 16kHz
     audio = np.zeros(16000 * 5, dtype=np.float32)
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="pooling",
         dtype=dtype,
@@ -40,8 +40,8 @@ def test_qwen3_forced_aligner(
                 "Qwen3ASRForcedAlignerForTokenClassification",
             ],
         },
-    ) as vllm_model:
-        outputs = vllm_model.llm.encode(
+    ) as aphrodite_model:
+        outputs = aphrodite_model.llm.encode(
             [{"prompt": prompt, "multi_modal_data": {"audio": audio}}],
             pooling_task="token_classify",
         )

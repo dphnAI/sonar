@@ -2,7 +2,7 @@
 
 #include <torch/csrc/stable/tensor.h>
 
-namespace vllm {
+namespace aphrodite {
 
 void cutlass_scaled_mm_sm90_fp8(
     torch::stable::Tensor& out, torch::stable::Tensor const& a,
@@ -49,4 +49,4 @@ void cutlass_scaled_mm_blockwise_sm120_fp8(
     torch::stable::Tensor& out, torch::stable::Tensor const& a,
     torch::stable::Tensor const& b, torch::stable::Tensor const& a_scales,
     torch::stable::Tensor const& b_scales);
-}  // namespace vllm
+}  // namespace aphrodite

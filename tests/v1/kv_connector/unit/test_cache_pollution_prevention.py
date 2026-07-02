@@ -20,7 +20,7 @@ from .utils import (
     create_model_runner_output,
     create_request,
     create_scheduler,
-    create_vllm_config,
+    create_aphrodite_config,
 )
 
 pytestmark = pytest.mark.cpu_test
@@ -40,9 +40,9 @@ def _make_get_num_new_matched_tokens(
 @pytest.fixture
 def fail_scheduler():
     """scheduler with kv_load_failure_policy='fail'"""
-    vllm_config = create_vllm_config()
-    vllm_config.kv_transfer_config.kv_load_failure_policy = "fail"
-    return create_scheduler(vllm_config)
+    aphrodite_config = create_aphrodite_config()
+    aphrodite_config.kv_transfer_config.kv_load_failure_policy = "fail"
+    return create_scheduler(aphrodite_config)
 
 
 def test_invalid_blocks_evicted_prevents_cache_pollution(

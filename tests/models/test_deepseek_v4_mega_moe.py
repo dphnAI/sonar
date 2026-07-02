@@ -45,12 +45,12 @@ def test_deepseek_v4_mega_moe_ue8m0_uint8_to_float():
 
 
 def test_deepseek_v4_mega_moe_weight_loader_uses_ep_expert_ownership():
-    vllm_config = SimpleNamespace(
+    aphrodite_config = SimpleNamespace(
         scheduler_config=SimpleNamespace(max_num_batched_tokens=4),
         compilation_config=SimpleNamespace(static_forward_context={}),
     )
     experts = DeepseekV4MegaMoEExperts(
-        vllm_config,
+        aphrodite_config,
         num_experts=4,
         num_local_experts=2,
         experts_start_idx=2,

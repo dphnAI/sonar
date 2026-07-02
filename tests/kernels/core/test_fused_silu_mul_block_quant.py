@@ -61,7 +61,7 @@ def ref_silu_and_mul_per_block_quant(
 @pytest.mark.parametrize("device_idx", CUDA_DEVICES)
 @torch.inference_mode()
 def test_silu_and_mul_per_block_quant(
-    default_vllm_config,
+    default_aphrodite_config,
     num_tokens: int,
     hidden_size: int,
     has_scale_ub: bool,
@@ -133,7 +133,7 @@ def test_silu_and_mul_per_block_quant(
 @pytest.mark.parametrize("num_tokens", [128])
 @pytest.mark.parametrize("group_size", [128])
 def test_silu_block_quant_shapes(
-    default_vllm_config,
+    default_aphrodite_config,
     dtype: torch.dtype,
     hidden_size: int,
     num_tokens: int,
@@ -168,7 +168,7 @@ def test_silu_block_quant_shapes(
 @pytest.mark.parametrize("batch_size", [1, 16, 256])
 @pytest.mark.parametrize("hidden_size", [1024, 5120, 14336])
 def test_silu_block_quant_edge_cases(
-    default_vllm_config, dtype: torch.dtype, batch_size: int, hidden_size: int
+    default_aphrodite_config, dtype: torch.dtype, batch_size: int, hidden_size: int
 ):
     """Test edge cases: single token, large batch, large hidden size."""
     torch.set_default_device("cuda")

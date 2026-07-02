@@ -17,7 +17,7 @@ from .utils import (
     create_model_runner_output,
     create_request,
     create_scheduler,
-    create_vllm_config,
+    create_aphrodite_config,
     make_kv_cache_config,
 )
 
@@ -31,11 +31,11 @@ def _num_waiting_requests(scheduler) -> int:
 def test_basic_lifecycle():
     """Test lifecycle of a remote prefill."""
 
-    vllm_config = create_vllm_config()
-    scheduler = create_scheduler(vllm_config)
+    aphrodite_config = create_aphrodite_config()
+    scheduler = create_scheduler(aphrodite_config)
 
     # 2 Full Blocks and 1 Half Block.
-    BLOCK_SIZE = vllm_config.cache_config.block_size
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
     START_FREE_BLOCK_QUEUE_SIZE = (
@@ -152,11 +152,11 @@ def test_basic_lifecycle():
 def test_interleaved_lifecycle():
     """Test Remote Prefills Work Well With Other Requests."""
 
-    vllm_config = create_vllm_config()
-    scheduler = create_scheduler(vllm_config)
+    aphrodite_config = create_aphrodite_config()
+    scheduler = create_scheduler(aphrodite_config)
 
     # 2 Full Blocks and 1 Half Block.
-    BLOCK_SIZE = vllm_config.cache_config.block_size
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 
@@ -256,14 +256,14 @@ def test_no_spurious_prefix_caching():
     blocks.
     """
 
-    vllm_config = create_vllm_config()
-    scheduler = create_scheduler(vllm_config)
+    aphrodite_config = create_aphrodite_config()
+    scheduler = create_scheduler(aphrodite_config)
 
-    vllm_config = create_vllm_config()
-    scheduler = create_scheduler(vllm_config)
+    aphrodite_config = create_aphrodite_config()
+    scheduler = create_scheduler(aphrodite_config)
 
     # 2 and a half full external blocks.
-    BLOCK_SIZE = vllm_config.cache_config.block_size
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 
@@ -321,11 +321,11 @@ def test_no_spurious_prefix_caching():
 def test_full_block_prompt():
     """Test that we handle a prompt that is the full block size."""
 
-    vllm_config = create_vllm_config()
-    scheduler = create_scheduler(vllm_config)
+    aphrodite_config = create_aphrodite_config()
+    scheduler = create_scheduler(aphrodite_config)
 
     # 2 Full Blocks and 1 Half Block.
-    BLOCK_SIZE = vllm_config.cache_config.block_size
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * NUM_EXTERNAL_FULL_BLOCKS)
 
@@ -402,12 +402,12 @@ def test_cannot_schedule_after_recv():
     # NOTE: the KVCacheManager will use 1 null block.
     # So there are 5 total working blocks.
     TOTAL_NUM_BLOCKS = 6
-    vllm_config = create_vllm_config()
-    scheduler = create_scheduler(vllm_config, num_blocks=TOTAL_NUM_BLOCKS)
+    aphrodite_config = create_aphrodite_config()
+    scheduler = create_scheduler(aphrodite_config, num_blocks=TOTAL_NUM_BLOCKS)
 
     # Prime the KVCache.
     NUM_PROMPT_BLOCKS = 2
-    BLOCK_SIZE = vllm_config.cache_config.block_size
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
     # Prompt will use 2 blocks + 1 block after we schedule.
     NUM_TOKENS_LOCAL = int(BLOCK_SIZE * NUM_PROMPT_BLOCKS)
     NUM_TOKENS_REMOTE = int(BLOCK_SIZE * NUM_PROMPT_BLOCKS)
@@ -505,12 +505,12 @@ def test_cannot_recv():
     # NOTE: the KVCacheManager will use 1 null block.
     # So there are 5 total working blocks.
     TOTAL_NUM_BLOCKS = 6
-    vllm_config = create_vllm_config()
-    scheduler = create_scheduler(vllm_config, num_blocks=TOTAL_NUM_BLOCKS)
+    aphrodite_config = create_aphrodite_config()
+    scheduler = create_scheduler(aphrodite_config, num_blocks=TOTAL_NUM_BLOCKS)
 
     # Prime the KVCache.
     NUM_PROMPT_BLOCKS = 2
-    BLOCK_SIZE = vllm_config.cache_config.block_size
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
     # Prompt will use 2 blocks + 1 block after we schedule.
     NUM_TOKENS_LOCAL = int(BLOCK_SIZE * NUM_PROMPT_BLOCKS)
     NUM_TOKENS_REMOTE = int(BLOCK_SIZE * (NUM_PROMPT_BLOCKS + 0.5))
@@ -603,11 +603,11 @@ def test_p_side_chunked_prefill_mamba(mock_platform):
     NUM_TOKENS = 64
     BLOCK_SIZE = 16
 
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         max_num_batched_tokens=BATCH_SIZE,
         block_size=BLOCK_SIZE,
     )
-    vllm_config.scheduler_config.disable_hybrid_kv_cache_manager = False
+    aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = False
 
     kv_cache_config = make_kv_cache_config(
         block_size=BLOCK_SIZE,
@@ -615,7 +615,7 @@ def test_p_side_chunked_prefill_mamba(mock_platform):
         num_blocks=10000,
     )
 
-    scheduler = create_scheduler(vllm_config, kv_cache_config=kv_cache_config)
+    scheduler = create_scheduler(aphrodite_config, kv_cache_config=kv_cache_config)
 
     request = create_request(
         num_tokens=NUM_TOKENS,
@@ -668,9 +668,9 @@ def test_async_load_reserves_blocks_for_inflight():
     (free - req_a's 3-block reservation) = 3 blocks are available to it, so it is
     held back in WAITING (holding no blocks) rather than wedging req_a.
     """
-    vllm_config = create_vllm_config()
-    BLOCK_SIZE = vllm_config.cache_config.block_size
-    scheduler = create_scheduler(vllm_config, num_blocks=8)  # usable = 7
+    aphrodite_config = create_aphrodite_config()
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config, num_blocks=8)  # usable = 7
 
     req_a = create_request(
         request_id=1,
@@ -710,9 +710,9 @@ def test_async_load_reserves_blocks_for_inflight():
 def test_async_loads_both_admitted_when_pool_fits():
     """Sanity: with a pool large enough, the reservation gate admits both async
     loads (it is not over-conservative)."""
-    vllm_config = create_vllm_config()
-    BLOCK_SIZE = vllm_config.cache_config.block_size
-    scheduler = create_scheduler(vllm_config, num_blocks=64)
+    aphrodite_config = create_aphrodite_config()
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
+    scheduler = create_scheduler(aphrodite_config, num_blocks=64)
 
     reqs = [
         create_request(

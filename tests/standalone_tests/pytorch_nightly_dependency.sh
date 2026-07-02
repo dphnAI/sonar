@@ -9,7 +9,7 @@ if command -v rocminfo >/dev/null 2>&1; then
   exit 0
 fi
 
-cd /vllm-workspace/
+cd /aphrodite-workspace/
 
 rm -rf .venv
 

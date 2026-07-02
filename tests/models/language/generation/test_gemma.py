@@ -7,10 +7,10 @@ MODELS = ["google/gemma-2b", "google/gemma-2-2b", "google/gemma-3-4b-it"]
 
 
 @pytest.mark.parametrize("model", MODELS)
-def test_dummy_loader(vllm_runner, monkeypatch, model: str) -> None:
+def test_dummy_loader(aphrodite_runner, monkeypatch, model: str) -> None:
     with monkeypatch.context() as m:
         m.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
-        with vllm_runner(
+        with aphrodite_runner(
             model,
             load_format="dummy",
         ) as llm:

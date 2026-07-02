@@ -12,19 +12,19 @@ from aphrodite.config import PoolerConfig
     ["Qwen/Qwen3-0.6B"],
 )
 @torch.inference_mode
-def test_extract_hidden_states(hf_runner, vllm_runner, model: str):
+def test_extract_hidden_states(hf_runner, aphrodite_runner, model: str):
     n_prompt_tokens = [55, 56, 57]
     token_prompts = [[1024 + i for i in range(n)] for n in n_prompt_tokens]
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         max_model_len=128,
         enforce_eager=True,
         runner="pooling",
         pooler_config=PoolerConfig(task="token_embed"),
         enable_prefix_caching=True,
-    ) as vllm_model:
-        pooling_outputs = vllm_model.llm.encode(
+    ) as aphrodite_model:
+        pooling_outputs = aphrodite_model.llm.encode(
             [TokensPrompt(prompt_token_ids=t) for t in token_prompts],
             pooling_task="token_embed",
         )
@@ -37,7 +37,7 @@ def test_extract_hidden_states(hf_runner, vllm_runner, model: str):
         # test enable_prefix_caching plus all pooling
         # we need to skip reading cache at this request by
         # request.skip_reading_prefix_cache
-        pooling_outputs = vllm_model.llm.encode(
+        pooling_outputs = aphrodite_model.llm.encode(
             [TokensPrompt(prompt_token_ids=t) for t in token_prompts],
             pooling_task="token_embed",
         )

@@ -49,15 +49,15 @@ class DummyRequest(Request):
 
 
 def create_scheduler() -> Scheduler:
-    vllm_config = AphroditeConfig(device_config=DeviceConfig("cpu"))
-    vllm_config.model_config = MagicMock()
-    vllm_config.model_config.skip_tokenizer_init = True
-    vllm_config.model_config.is_multimodal_model = False
-    vllm_config.model_config.max_model_len = 1024
-    vllm_config.model_config.enable_return_routed_experts = False
-    vllm_config.cache_config = MagicMock()
-    vllm_config.cache_config.num_gpu_blocks = 1000
-    vllm_config.cache_config.enable_prefix_caching = False
+    aphrodite_config = AphroditeConfig(device_config=DeviceConfig("cpu"))
+    aphrodite_config.model_config = MagicMock()
+    aphrodite_config.model_config.skip_tokenizer_init = True
+    aphrodite_config.model_config.is_multimodal_model = False
+    aphrodite_config.model_config.max_model_len = 1024
+    aphrodite_config.model_config.enable_return_routed_experts = False
+    aphrodite_config.cache_config = MagicMock()
+    aphrodite_config.cache_config.num_gpu_blocks = 1000
+    aphrodite_config.cache_config.enable_prefix_caching = False
     kv_cache_config = KVCacheConfig(
         num_blocks=1000,
         kv_cache_tensors=[],
@@ -71,10 +71,10 @@ def create_scheduler() -> Scheduler:
         ],
     )
     return Scheduler(
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         kv_cache_config=kv_cache_config,
         log_stats=True,
-        structured_output_manager=StructuredOutputManager(vllm_config),
+        structured_output_manager=StructuredOutputManager(aphrodite_config),
         block_size=16,
         hash_block_size=16,
     )

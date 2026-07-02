@@ -30,7 +30,7 @@ env:                             # Environment variables (optional)
   SOME_VAR: "value"
 ```
 
-The `server_args` field accepts any arguments that can be passed to `vllm serve`.
+The `server_args` field accepts any arguments that can be passed to `aphrodite serve`.
 
 The `env` field accepts a dictionary of environment variables to set for the server process.
 

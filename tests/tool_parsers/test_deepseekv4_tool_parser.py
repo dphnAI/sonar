@@ -233,7 +233,7 @@ def _with_strict(
     ]
 
 
-def test_get_vllm_registry_structural_tag_returns_structural_tag(
+def test_get_aphrodite_registry_structural_tag_returns_structural_tag(
     sample_tools: list[ChatCompletionToolsParam],
 ) -> None:
     parser = make_parser()

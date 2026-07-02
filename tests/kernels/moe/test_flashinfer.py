@@ -6,7 +6,7 @@ import pytest
 import torch
 
 import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.config import ParallelConfig, AphroditeConfig, set_current_vllm_config
+from aphrodite.config import ParallelConfig, AphroditeConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
@@ -63,7 +63,7 @@ MNK_FACTORS = [
     (1, 4096, 5120),
 ]
 
-vllm_config = AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))
+aphrodite_config = AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))
 
 
 def quant_fp8_per_tensor_batches(a):
@@ -205,7 +205,7 @@ def test_flashinfer_per_tensor_moe_fp8_no_graph(
     if not current_platform.has_device_capability(100):
         pytest.skip("Test is only supported for sm >= 100")
     set_random_seed(7)
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         td = TestData.make_moe_tensors_8bit(
             m, k, n, e, is_trtllm=True, activation=activation
         )
@@ -288,7 +288,7 @@ def test_flashinfer_cutlass_moe_fp8_no_graph(
     workspace_init,
 ):
     set_random_seed(7)
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         td = TestData.make_moe_tensors_8bit(
             m, k, n, e, is_trtllm=False, activation=activation
         )

@@ -18,7 +18,7 @@
 // clang-format on
 
 #include "cutlass_extensions/cute_utils.cuh"
-#include "cutlass_extensions/vllm_numeric_conversion.cuh"
+#include "cutlass_extensions/aphrodite_numeric_conversion.cuh"
 #include "cutlass_extensions/epilogue/scaled_mm_epilogues_c3x.hpp"
 #include "cutlass_extensions/torch_utils.hpp"
 #include "machete_collective_builder.cuh"
@@ -126,7 +126,7 @@ struct MacheteKernelTemplate {
 
   // Currently only supports float scales
   using ChTokScalesEpilogue =
-      typename vllm::c3x::ScaledEpilogue<ElementAccumulator, ElementD,
+      typename aphrodite::c3x::ScaledEpilogue<ElementAccumulator, ElementD,
                                          TileShape>;
   static_assert((with_channel_scales || with_token_scales) ||
                     (std::is_same_v<ElementSChannel, float> &&

@@ -13,11 +13,11 @@ def test_nemotron_h_lm_head_receives_quant_config():
     mock_hf_config.vocab_size = 128
     mock_hf_config.hidden_size = 64
 
-    mock_vllm_config = Mock()
-    mock_vllm_config.model_config.hf_config = mock_hf_config
-    mock_vllm_config.model_config.dtype = None
-    mock_vllm_config.scheduler_config = Mock()
-    mock_vllm_config.quant_config = mock_quant_config
+    mock_aphrodite_config = Mock()
+    mock_aphrodite_config.model_config.hf_config = mock_hf_config
+    mock_aphrodite_config.model_config.dtype = None
+    mock_aphrodite_config.scheduler_config = Mock()
+    mock_aphrodite_config.quant_config = mock_quant_config
 
     with (
         patch("aphrodite.model_executor.models.nemotron_h.NemotronHModel") as MockModel,
@@ -27,7 +27,7 @@ def test_nemotron_h_lm_head_receives_quant_config():
         MockModel.return_value.make_empty_intermediate_tensors = Mock()
         MockModel.return_value.has_moe = False
 
-        NemotronHForCausalLM(vllm_config=mock_vllm_config)
+        NemotronHForCausalLM(aphrodite_config=mock_aphrodite_config)
 
         MockLMHead.assert_called_once()
         call_kwargs = MockLMHead.call_args.kwargs

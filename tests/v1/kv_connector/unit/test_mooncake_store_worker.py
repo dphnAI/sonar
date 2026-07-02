@@ -136,7 +136,7 @@ def _make_load_req(
     block_hashes: list[bytes],
     *,
     token_len: int,
-    vllm_cached_tokens: int = 0,
+    aphrodite_cached_tokens: int = 0,
 ) -> ReqMeta:
     return ReqMeta(
         req_id=req_id,
@@ -144,7 +144,7 @@ def _make_load_req(
         block_ids=(list(range(len(block_hashes))),),
         block_hashes=block_hashes,
         load_spec=LoadSpec(
-            vllm_cached_tokens=vllm_cached_tokens,
+            aphrodite_cached_tokens=aphrodite_cached_tokens,
             kvpool_cached_tokens=token_len,
             can_load=True,
             token_len=token_len,
@@ -198,7 +198,7 @@ class _FakeModelConfig:
         return 1
 
 
-def _make_vllm_config(
+def _make_aphrodite_config(
     *,
     extra_config: dict[str, object] | None = None,
     rank: int = 0,
@@ -831,9 +831,9 @@ def test_recv_thread_uses_single_batch_when_no_disk_offload_budget(monkeypatch):
     store.batch_get_replica_desc.assert_not_called()
 
 
-def test_recv_thread_logs_tier_summary_when_enabled(monkeypatch, caplog_vllm):
+def test_recv_thread_logs_tier_summary_when_enabled(monkeypatch, caplog_aphrodite):
     monkeypatch.setenv("APHRODITE_MOONCAKE_STORE_TIER_LOG", "1")
-    caplog_vllm.set_level(logging.INFO, logger=worker.logger.name)
+    caplog_aphrodite.set_level(logging.INFO, logger=worker.logger.name)
 
     store = MagicMock()
     store.batch_get_into_multi_buffers.return_value = [256, 256, -10]
@@ -861,7 +861,7 @@ def test_recv_thread_logs_tier_summary_when_enabled(monkeypatch, caplog_vllm):
     assert store.method_calls[0][0] == "batch_get_replica_desc"
     assert store.method_calls[1][0] == "batch_get_into_multi_buffers"
 
-    messages = [record.getMessage() for record in caplog_vllm.records]
+    messages = [record.getMessage() for record in caplog_aphrodite.records]
     assert any(
         "Mooncake load tier summary" in message
         and "req_id=req-a" in message
@@ -1061,7 +1061,7 @@ def test_requester_worker_init_uses_positional_setup(tmp_path, monkeypatch):
             },
         ),
     )
-    w = worker.MooncakeStoreWorker(_make_vllm_config(), _make_kv_cache_config())
+    w = worker.MooncakeStoreWorker(_make_aphrodite_config(), _make_kv_cache_config())
 
     assert not hasattr(w, "_isolate_offload_resources")
     assert store.setup.call_args.args == (
@@ -1097,7 +1097,7 @@ def test_requester_worker_init_prefers_local_hostname_override(
             },
         ),
     )
-    worker.MooncakeStoreWorker(_make_vllm_config(), _make_kv_cache_config())
+    worker.MooncakeStoreWorker(_make_aphrodite_config(), _make_kv_cache_config())
 
     assert store.setup.call_args.args[0] == "worker-a:50053"
 
@@ -1125,7 +1125,7 @@ def test_requester_worker_init_skips_disk_budget_when_offload_disabled(
             },
         ),
     )
-    w = worker.MooncakeStoreWorker(_make_vllm_config(), _make_kv_cache_config())
+    w = worker.MooncakeStoreWorker(_make_aphrodite_config(), _make_kv_cache_config())
 
     assert w.disk_offload_buffer_budget_bytes is None
 
@@ -1151,7 +1151,7 @@ def test_requester_worker_init_builds_replicate_config_for_preferred_segment(
         ),
     )
     w = worker.MooncakeStoreWorker(
-        _make_vllm_config(
+        _make_aphrodite_config(
             extra_config={
                 "preferred_segment": "10.0.0.7:50053",
             }
@@ -1201,7 +1201,7 @@ def test_worker_put_striding_covers_every_rank_get_namespace(
             monkeypatch, tp_rank=tp_rank, tp_size=tp_size, dcp_size=dcp_size
         )
         w = worker.MooncakeStoreWorker(
-            _make_vllm_config(rank=tp_rank, decode_context_parallel_size=dcp_size),
+            _make_aphrodite_config(rank=tp_rank, decode_context_parallel_size=dcp_size),
             _make_kv_cache_config(),
         )
         db = w.token_dbs[0]
@@ -1988,7 +1988,7 @@ def test_topology_standalone_store_with_disk_offload(tmp_path, monkeypatch):
     )
 
     w = worker.MooncakeStoreWorker(
-        _make_vllm_config(extra_config={"preferred_segment": "10.0.0.7:50053"}),
+        _make_aphrodite_config(extra_config={"preferred_segment": "10.0.0.7:50053"}),
         _make_kv_cache_config(),
     )
 
@@ -2033,7 +2033,7 @@ def test_topology_embedded_cpu_only(tmp_path, monkeypatch):
         ),
     )
 
-    w = worker.MooncakeStoreWorker(_make_vllm_config(), _make_kv_cache_config())
+    w = worker.MooncakeStoreWorker(_make_aphrodite_config(), _make_kv_cache_config())
 
     # setup() receives global_segment_size=4 GiB (rank contributes a segment).
     assert store.setup.call_args.args == (

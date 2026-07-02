@@ -55,7 +55,7 @@ def do_profile(
 
 def profile_modular_kernel(
     pgi: ProcessGroupInfo,
-    vllm_config: AphroditeConfig,
+    aphrodite_config: AphroditeConfig,
     config: Config,
     weights: WeightTensors,
     rank_tensors: RankTensors,
@@ -86,7 +86,7 @@ def profile_modular_kernel(
     )
 
     # make modular kernel
-    mk = make_modular_kernel(config, vllm_config, quant_config)
+    mk = make_modular_kernel(config, aphrodite_config, quant_config)
 
     topk_ids = rank_tensors.topk_ids.to(
         mk.prepare_finalize.topk_indices_dtype() or rank_tensors.topk_ids.dtype
@@ -115,7 +115,7 @@ def profile_modular_kernel(
 
     with set_forward_context(
         None,
-        vllm_config,
+        aphrodite_config,
         num_tokens=num_tokens,
         num_tokens_across_dp=num_tokens_across_dp,
     ):
@@ -124,7 +124,7 @@ def profile_modular_kernel(
 
 def rank_worker(
     pgi: ProcessGroupInfo,
-    vllm_config: AphroditeConfig,
+    aphrodite_config: AphroditeConfig,
     cpu_group,
     config: Config,
     weights: WeightTensors,
@@ -152,14 +152,14 @@ def rank_worker(
 
         # inputs for rank
         rank_tensors = RankTensors.make(cfgx, pgi)
-        profile_modular_kernel(pgi, vllm_config, cfgx, weights, rank_tensors)
+        profile_modular_kernel(pgi, aphrodite_config, cfgx, weights, rank_tensors)
 
 
 def run(config: Config):
     weights: WeightTensors = WeightTensors.make(config)
-    vllm_config, env_dict = config.make_env_data()
+    aphrodite_config, env_dict = config.make_env_data()
     parallel_launch_with_config(
-        config.world_size, rank_worker, vllm_config, env_dict, config, weights
+        config.world_size, rank_worker, aphrodite_config, env_dict, config, weights
     )
 
 

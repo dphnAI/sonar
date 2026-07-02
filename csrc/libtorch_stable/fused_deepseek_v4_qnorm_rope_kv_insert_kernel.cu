@@ -10,7 +10,7 @@
  * Structured after `applyMLARopeAndAssignQKVKernelGeneration` in
  * TensorRT-LLM's mlaKernels.cu: one kernel, one grid, with head-slot
  * dispatch choosing Q vs KV work per warp.  The per-warp RMSNorm/RoPE
- * skeleton is adapted from vllm-deepseek_v4's existing
+ * skeleton is adapted from aphrodite-deepseek_v4's existing
  * `fusedQKNormRopeKernel` (csrc/fused_qknorm_rope_kernel.cu).
  *
  * Assumptions (hard-coded for DeepseekV4 attention):
@@ -71,7 +71,7 @@ __device__ __forceinline__ uint8_t rocm_cvt_float_to_fp8_e4m3(float val) {
 }
 #endif
 
-namespace vllm {
+namespace aphrodite {
 namespace deepseek_v4_fused_ops {
 
 namespace {
@@ -184,7 +184,7 @@ __device__ __forceinline__ void processDeepseekV4Slot(
     int64_t const* __restrict__ position_ids,
     float const* __restrict__ cos_sin_cache, int const cache_block_size,
     int const kv_block_stride) {
-  using Converter = vllm::_typeConvert<scalar_t_in>;
+  using Converter = aphrodite::_typeConvert<scalar_t_in>;
   bool const isKV = (slotIdx == kNumHeadsQPadded);
   bool const isPadQ = !isKV && (slotIdx >= num_heads_q);
 
@@ -725,7 +725,7 @@ __global__ void fusedDeepseekV4FullCacheKernel(
     return;
   } else {
 #endif
-    using Converter = vllm::_typeConvert<scalar_t_in>;
+    using Converter = aphrodite::_typeConvert<scalar_t_in>;
     int const warpsPerBlock = blockDim.x / 32;
     int const warpId = threadIdx.x / 32;
     int const laneId = threadIdx.x % 32;
@@ -937,7 +937,7 @@ static void launchFullCacheKernel(
 }
 
 }  // namespace deepseek_v4_fused_ops
-}  // namespace vllm
+}  // namespace aphrodite
 
 // ────────────────────────────────────────────────────────────────────────────
 // Torch op wrapper
@@ -1007,7 +1007,7 @@ torch::stable::Tensor fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert(
   APHRODITE_STABLE_DISPATCH_HALF_TYPES(
       q_in.scalar_type(), "fused_deepseek_v4_qnorm_rope_kv_insert", [&] {
         using qkv_scalar_t = scalar_t;
-        vllm::deepseek_v4_fused_ops::
+        aphrodite::deepseek_v4_fused_ops::
             launchFusedDeepseekV4QNormRopeKVRopeQuantInsert<qkv_scalar_t>(
                 reinterpret_cast<qkv_scalar_t const*>(q_in.const_data_ptr()),
                 reinterpret_cast<qkv_scalar_t*>(q_out.mutable_data_ptr()),
@@ -1081,7 +1081,7 @@ void fused_deepseek_v4_qnorm_rope_kv_rope_full_cache_bf16_insert(
   APHRODITE_STABLE_DISPATCH_HALF_TYPES(
       q.scalar_type(),
       "fused_deepseek_v4_qnorm_rope_kv_rope_full_cache_bf16_insert", [&] {
-        vllm::deepseek_v4_fused_ops::launchFullCacheKernel<scalar_t, false,
+        aphrodite::deepseek_v4_fused_ops::launchFullCacheKernel<scalar_t, false,
                                                            false>(
             reinterpret_cast<scalar_t*>(q.mutable_data_ptr()), nullptr, 0, 0,
             reinterpret_cast<scalar_t const*>(kv.const_data_ptr()),
@@ -1163,7 +1163,7 @@ void fused_deepseek_v4_qnorm_rope_kv_rope_full_cache_fp8_insert(
   APHRODITE_STABLE_DISPATCH_HALF_TYPES(
       q.scalar_type(),
       "fused_deepseek_v4_qnorm_rope_kv_rope_full_cache_fp8_insert", [&] {
-        vllm::deepseek_v4_fused_ops::launchFullCacheKernel<scalar_t, true,
+        aphrodite::deepseek_v4_fused_ops::launchFullCacheKernel<scalar_t, true,
                                                            true>(
             // q is read-only in the fp8 path (the kernel writes q_fp8); the
             // launcher signature is non-const, so cast away const on the ptr.

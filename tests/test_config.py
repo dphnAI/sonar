@@ -11,7 +11,7 @@ import pydantic
 import pytest
 from pydantic import ValidationError
 
-import aphrodite.config.aphrodite as vllm_config_module
+import aphrodite.config.aphrodite as aphrodite_config_module
 import aphrodite.envs as envs
 from aphrodite.compilation.backends import AphroditeBackend
 from aphrodite.config import (
@@ -223,7 +223,7 @@ def test_with_hf_config_populates_missing_architectures_from_causal_lm_mapping(
     monkeypatch,
 ):
     monkeypatch.setattr(
-        vllm_config_module,
+        aphrodite_config_module,
         "replace",
         lambda self, **kwargs: SimpleNamespace(**kwargs),
     )
@@ -245,7 +245,7 @@ def test_with_hf_config_populates_missing_architectures_from_causal_lm_mapping(
 @pytest.mark.skip_global_cleanup
 def test_with_hf_config_preserves_explicit_architectures_override(monkeypatch):
     monkeypatch.setattr(
-        vllm_config_module,
+        aphrodite_config_module,
         "replace",
         lambda self, **kwargs: SimpleNamespace(**kwargs),
     )
@@ -272,7 +272,7 @@ def test_with_hf_config_leaves_unknown_model_type_without_architectures(
     monkeypatch,
 ):
     monkeypatch.setattr(
-        vllm_config_module,
+        aphrodite_config_module,
         "replace",
         lambda self, **kwargs: SimpleNamespace(**kwargs),
     )
@@ -954,13 +954,13 @@ def test_is_chunked_prefill_supported(
     expected_attn_type: str,
     expected_result: bool,
     reason: str,
-    caplog_vllm,
+    caplog_aphrodite,
 ):
     model_config = ModelConfig(model_id, trust_remote_code=True)
     assert model_config.attn_type == expected_attn_type
-    with caplog_vllm.at_level(level=logging.DEBUG, logger="aphrodite"):
+    with caplog_aphrodite.at_level(level=logging.DEBUG, logger="aphrodite"):
         assert model_config.is_chunked_prefill_supported == expected_result
-    assert reason in caplog_vllm.text
+    assert reason in caplog_aphrodite.text
 
 
 @pytest.mark.parametrize(
@@ -1073,13 +1073,13 @@ def test_is_prefix_caching_supported(
     expected_attn_type: str,
     expected_result: bool,
     reason: str,
-    caplog_vllm,
+    caplog_aphrodite,
 ):
     model_config = ModelConfig(model_id, trust_remote_code=True)
     assert model_config.attn_type == expected_attn_type
-    with caplog_vllm.at_level(level=logging.DEBUG, logger="aphrodite"):
+    with caplog_aphrodite.at_level(level=logging.DEBUG, logger="aphrodite"):
         assert model_config.is_prefix_caching_supported == expected_result
-    assert reason in caplog_vllm.text
+    assert reason in caplog_aphrodite.text
 
 
 @pytest.mark.parametrize(
@@ -1101,7 +1101,7 @@ def test_is_custom_op_enabled(backend: str, custom_ops: list[str], expected: boo
     assert config.compilation_config.is_custom_op_enabled("fused_layernorm") is expected
 
 
-def test_vllm_config_defaults_are_none():
+def test_aphrodite_config_defaults_are_none():
     """Verify that optimization-level defaults are None when not set by user."""
     # Test all optimization levels to ensure defaults work correctly
     for opt_level in OptimizationLevel:
@@ -1166,19 +1166,19 @@ def test_vllm_config_defaults_are_none():
         ("RedHatAI/DeepSeek-V2.5-1210-FP8", CompilationConfig(), OptimizationLevel.O3),
     ],
 )
-def test_vllm_config_defaults(model_id, compilation_config, optimization_level):
+def test_aphrodite_config_defaults(model_id, compilation_config, optimization_level):
     """Test that optimization-level defaults are correctly applied."""
 
     model_config = None
     if model_id is not None:
         model_config = ModelConfig(model_id)
-        vllm_config = AphroditeConfig(
+        aphrodite_config = AphroditeConfig(
             model_config=model_config,
             compilation_config=compilation_config,
             optimization_level=optimization_level,
         )
     else:
-        vllm_config = AphroditeConfig(
+        aphrodite_config = AphroditeConfig(
             compilation_config=compilation_config,
             optimization_level=optimization_level,
         )
@@ -1188,8 +1188,8 @@ def test_vllm_config_defaults(model_id, compilation_config, optimization_level):
     # Verify pass_config defaults (nested under compilation_config)
     pass_config_dict = default_config["compilation_config"]["pass_config"]
     for pass_k, pass_v in pass_config_dict.items():
-        actual = getattr(vllm_config.compilation_config.pass_config, pass_k)
-        expected = pass_v(vllm_config) if callable(pass_v) else pass_v
+        actual = getattr(aphrodite_config.compilation_config.pass_config, pass_k)
+        expected = pass_v(aphrodite_config) if callable(pass_v) else pass_v
         assert actual == expected, (
             f"pass_config.{pass_k}: expected {expected}, got {actual}"
         )
@@ -1199,8 +1199,8 @@ def test_vllm_config_defaults(model_id, compilation_config, optimization_level):
     for k, v in compilation_config_dict.items():
         if k == "pass_config":
             continue
-        actual = getattr(vllm_config.compilation_config, k)
-        expected = v(vllm_config) if callable(v) else v
+        actual = getattr(aphrodite_config.compilation_config, k)
+        expected = v(aphrodite_config) if callable(v) else v
         # On platforms without static graph support, __post_init__ forces
         # cudagraph_mode to NONE; expect that instead of the level default.
         if k == "cudagraph_mode" and not current_platform.support_static_graph_mode():
@@ -1210,7 +1210,7 @@ def test_vllm_config_defaults(model_id, compilation_config, optimization_level):
         )
 
 
-def test_vllm_config_callable_defaults():
+def test_aphrodite_config_callable_defaults():
     """Test that callable defaults work in the config system.
 
     Verifies that lambdas in default configs can inspect AphroditeConfig properties
@@ -1249,7 +1249,7 @@ def test_vllm_config_callable_defaults():
     not current_platform.support_static_graph_mode(),
     reason="Explicit overrides may be force-overwritten without static graph support.",
 )
-def test_vllm_config_explicit_overrides():
+def test_aphrodite_config_explicit_overrides():
     """Test that explicit property overrides work correctly with callable defaults.
 
     When users explicitly set configuration properties, those values
@@ -1372,7 +1372,7 @@ def test_fusion_pass_op_priority():
     # soon this will be resolved.
     cfg3 = AphroditeConfig(
         kernel_config=KernelConfig(
-            ir_op_priority=IrOpPriorityConfig(rms_norm=["vllm_c"])
+            ir_op_priority=IrOpPriorityConfig(rms_norm=["aphrodite_c"])
         )
     )
     assert cfg3.compilation_config.pass_config.fuse_norm_quant
@@ -1430,9 +1430,9 @@ def test_needs_dp_coordination(
         data_parallel_size=data_parallel_size,
         data_parallel_external_lb=external_lb,
     )
-    vllm_config = AphroditeConfig(model_config=model_config, parallel_config=parallel_config)
+    aphrodite_config = AphroditeConfig(model_config=model_config, parallel_config=parallel_config)
 
-    assert vllm_config.needs_dp_coordinator == expected_needs_coordinator
+    assert aphrodite_config.needs_dp_coordinator == expected_needs_coordinator
 
 
 def test_renderer_num_workers_with_mm_cache():
@@ -1500,9 +1500,9 @@ def test_ir_op_priority_default():
     from aphrodite.config.kernel import IrOpPriorityConfig
 
     # Assert default is applied to ops
-    priority_config = IrOpPriorityConfig.with_default(["vllm_c", "native"])
-    assert priority_config.rms_norm == ["vllm_c", "native"]
-    assert priority_config.fused_add_rms_norm == ["vllm_c", "native"]
+    priority_config = IrOpPriorityConfig.with_default(["aphrodite_c", "native"])
+    assert priority_config.rms_norm == ["aphrodite_c", "native"]
+    assert priority_config.fused_add_rms_norm == ["aphrodite_c", "native"]
 
     # Assert single ops override the default
     priority_config = IrOpPriorityConfig.with_default(
@@ -1516,18 +1516,18 @@ def test_ir_op_priority_str():
     """Test that passing a comma-delimited string works"""
     from aphrodite.config.kernel import IrOpPriorityConfig
 
-    priority_config = IrOpPriorityConfig(rms_norm="vllm_c")
-    assert priority_config.rms_norm == ["vllm_c"]
+    priority_config = IrOpPriorityConfig(rms_norm="aphrodite_c")
+    assert priority_config.rms_norm == ["aphrodite_c"]
 
-    priority_config = IrOpPriorityConfig(rms_norm="vllm_c,native")
-    assert priority_config.rms_norm == ["vllm_c", "native"]
+    priority_config = IrOpPriorityConfig(rms_norm="aphrodite_c,native")
+    assert priority_config.rms_norm == ["aphrodite_c", "native"]
 
-    priority_config = IrOpPriorityConfig(rms_norm=" native, vllm_c ")
-    assert priority_config.rms_norm == ["native", "vllm_c"]
+    priority_config = IrOpPriorityConfig(rms_norm=" native, aphrodite_c ")
+    assert priority_config.rms_norm == ["native", "aphrodite_c"]
 
     with pytest.raises(pydantic.ValidationError):
         # must be list of only strings
-        priority_config = IrOpPriorityConfig(rms_norm=["vllm_c", 4, "native"])
+        priority_config = IrOpPriorityConfig(rms_norm=["aphrodite_c", 4, "native"])
 
 
 def test_ir_op_priority_ctx():
@@ -1535,29 +1535,29 @@ def test_ir_op_priority_ctx():
     from aphrodite import ir
     from aphrodite.config.kernel import IrOpPriorityConfig
 
-    priority = IrOpPriorityConfig.with_default(["native"], rms_norm=["vllm_c"])
+    priority = IrOpPriorityConfig.with_default(["native"], rms_norm=["aphrodite_c"])
     priority2 = IrOpPriorityConfig.with_default(
-        ["native"], fused_add_rms_norm=["vllm_c"]
+        ["native"], fused_add_rms_norm=["aphrodite_c"]
     )
     with priority.set_priority():
-        assert ir.ops.rms_norm.get_priority() == ["vllm_c", "native"]
+        assert ir.ops.rms_norm.get_priority() == ["aphrodite_c", "native"]
         assert ir.ops.fused_add_rms_norm.get_priority() == ["native"]
         with priority2.set_priority():
             assert ir.ops.rms_norm.get_priority() == ["native"]
-            assert ir.ops.fused_add_rms_norm.get_priority() == ["vllm_c", "native"]
+            assert ir.ops.fused_add_rms_norm.get_priority() == ["aphrodite_c", "native"]
 
         # context restored
-        assert ir.ops.rms_norm.get_priority() == ["vllm_c", "native"]
+        assert ir.ops.rms_norm.get_priority() == ["aphrodite_c", "native"]
         assert ir.ops.fused_add_rms_norm.get_priority() == ["native"]
 
         with pytest.raises(ValueError), priority2.set_priority():
             assert ir.ops.rms_norm.get_priority() == ["native"]
-            assert ir.ops.fused_add_rms_norm.get_priority() == ["vllm_c", "native"]
+            assert ir.ops.fused_add_rms_norm.get_priority() == ["aphrodite_c", "native"]
 
             raise ValueError
 
         # context restored even after exception
-        assert ir.ops.rms_norm.get_priority() == ["vllm_c", "native"]
+        assert ir.ops.rms_norm.get_priority() == ["aphrodite_c", "native"]
         assert ir.ops.fused_add_rms_norm.get_priority() == ["native"]
 
 

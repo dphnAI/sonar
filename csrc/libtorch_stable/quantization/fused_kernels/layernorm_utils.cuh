@@ -11,7 +11,7 @@
 #include "../../../cub_helpers.h"
 #include "../../../cuda_compat.h"
 
-namespace vllm {
+namespace aphrodite {
 
 // has_residual must be true, if residual is not a nullptr
 template <typename scalar_t, bool has_residual = false>
@@ -292,7 +292,7 @@ __device__ void compute_rms(float* rms, scalar_t const* __restrict__ input,
   *rms = s_rms;
 }
 
-// Vectorized version of vllm::compute_dynamic_per_token_scales
+// Vectorized version of aphrodite::compute_dynamic_per_token_scales
 // hidden_size must be a multiple of 4
 template <typename scalar_t, typename scalar_out_t, bool has_residual = false,
           bool is_scale_transposed = false, int32_t group_size = 0>
@@ -560,4 +560,4 @@ __device__ void norm_and_quant(
 
 }  // namespace vectorized
 
-}  // namespace vllm
+}  // namespace aphrodite

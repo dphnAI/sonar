@@ -9,7 +9,7 @@ import pybase64
 import pytest
 from PIL import Image
 
-from aphrodite.assets.base import get_vllm_public_assets
+from aphrodite.assets.base import get_aphrodite_public_assets
 from aphrodite.assets.video import (
     video_get_metadata,
     video_to_ndarrays,
@@ -71,7 +71,7 @@ def test_opencv_video_io_colorspace(tmp_path, is_color: bool, fourcc: str, ext: 
     Test all functions that use OpenCV for video I/O return RGB format.
     Both RGB and grayscale videos are tested.
     """
-    image_path = get_vllm_public_assets(
+    image_path = get_aphrodite_public_assets(
         filename="stop_sign.jpg", s3_prefix="vision_model_images"
     )
     image = Image.open(image_path)

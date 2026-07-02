@@ -91,7 +91,7 @@ def _ref_qk_rmsnorm_rope_gate(
 @pytest.mark.parametrize("num_tokens", NUM_TOKENS)
 @torch.inference_mode()
 def test_fused_qk_norm_rope_gate_matches_reference(
-    default_vllm_config,
+    default_aphrodite_config,
     dtype: torch.dtype,
     seed: int,
     num_tokens: int,

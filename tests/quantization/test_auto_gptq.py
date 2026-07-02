@@ -26,11 +26,11 @@ MODELS = [
     reason="auto_gptq is not supported on this GPU type.",
 )
 @pytest.mark.parametrize("model_id", MODELS)
-def test_auto_gptq_quantization_method(vllm_runner, model_id: str, monkeypatch):
+def test_auto_gptq_quantization_method(aphrodite_runner, model_id: str, monkeypatch):
     """Test that quantization='auto_gptq' loads and runs correctly."""
     monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_id,
         dtype=torch.float16,
         quantization="auto_gptq",

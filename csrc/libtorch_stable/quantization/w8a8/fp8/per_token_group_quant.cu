@@ -55,7 +55,7 @@ __device__ __forceinline__ float ComputeGroupScale(
     dst = src;
   };
 
-  vllm::vectorize_with_alignment<vec_size>(
+  aphrodite::vectorize_with_alignment<vec_size>(
       group_input,        // in
       smem_group,         // out (shared)
       group_size,         // elements per group
@@ -86,7 +86,7 @@ __device__ __forceinline__ void QuantizeGroup(
     dst = DST_DTYPE(q);
   };
 
-  vllm::vectorize_with_alignment<vec_size>(
+  aphrodite::vectorize_with_alignment<vec_size>(
       smem_group,         // in (shared)
       group_output,       // out (global quant tensor)
       group_size,         // elements

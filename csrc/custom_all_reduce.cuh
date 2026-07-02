@@ -18,7 +18,7 @@ typedef __hip_bfloat16 nv_bfloat16;
 #include <cstdlib>
 #include <cstring>
 
-namespace vllm {
+namespace aphrodite {
 #define CUDACHECK(cmd)                                              \
   do {                                                              \
     cudaError_t e = cmd;                                            \
@@ -626,7 +626,7 @@ class CustomAllreduce {
 /**
  * To inspect PTX/SASS, copy paste this header file to compiler explorer and
  add a template instantiation:
- * template void vllm::CustomAllreduce::allreduce<half>(cudaStream_t, half *,
+ * template void aphrodite::CustomAllreduce::allreduce<half>(cudaStream_t, half *,
  half *, int, int, int);
 */
-}  // namespace vllm
+}  // namespace aphrodite

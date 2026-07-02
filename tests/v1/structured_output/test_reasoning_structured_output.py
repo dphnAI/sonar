@@ -45,7 +45,7 @@ class TestReasoningStructuredOutput:
         return config
 
     @pytest.fixture
-    def mock_vllm_config(self, mock_model_config, mock_scheduler_config):
+    def mock_aphrodite_config(self, mock_model_config, mock_scheduler_config):
         """Create a mock AphroditeConfig."""
         config = Mock(spec=AphroditeConfig)
         config.model_config = mock_model_config
@@ -76,20 +76,20 @@ class TestReasoningStructuredOutput:
         return request
 
     @pytest.fixture
-    def manager_with_reasoner(self, mock_vllm_config):
-        manager = StructuredOutputManager(mock_vllm_config)
+    def manager_with_reasoner(self, mock_aphrodite_config):
+        manager = StructuredOutputManager(mock_aphrodite_config)
         manager.reasoner_cls = MockReasoner
         manager.tokenizer = Mock()
         return manager
 
     def test_should_fill_bitmask_with_enable_in_reasoning(
-        self, mock_vllm_config, mock_request_with_structured_output
+        self, mock_aphrodite_config, mock_request_with_structured_output
     ):
         """Test should_fill_bitmask when enable_in_reasoning is True."""
         # Enable enable_in_reasoning
-        mock_vllm_config.structured_outputs_config.enable_in_reasoning = True
+        mock_aphrodite_config.structured_outputs_config.enable_in_reasoning = True
 
-        manager = StructuredOutputManager(mock_vllm_config)
+        manager = StructuredOutputManager(mock_aphrodite_config)
 
         # Should always return True when enable_in_reasoning is enabled
         result = manager.should_fill_bitmask(mock_request_with_structured_output)
@@ -102,7 +102,7 @@ class TestReasoningStructuredOutput:
     ):
         """Test should_fill_bitmask when enable_in_reasoning is False."""
         # Keep enable_in_reasoning as False (default)
-        config = manager_with_reasoner.vllm_config.structured_outputs_config
+        config = manager_with_reasoner.aphrodite_config.structured_outputs_config
         assert config.enable_in_reasoning is False
 
         result = manager_with_reasoner.should_fill_bitmask(
@@ -117,10 +117,10 @@ class TestReasoningStructuredOutput:
         assert result is False
 
     def test_should_fill_bitmask_no_reasoner(
-        self, mock_vllm_config, mock_request_with_structured_output
+        self, mock_aphrodite_config, mock_request_with_structured_output
     ):
         """Test should_fill_bitmask when no reasoner is configured."""
-        manager = StructuredOutputManager(mock_vllm_config)
+        manager = StructuredOutputManager(mock_aphrodite_config)
 
         result = manager.should_fill_bitmask(mock_request_with_structured_output)
 
@@ -128,7 +128,7 @@ class TestReasoningStructuredOutput:
         assert result is True
 
     def test_should_fill_bitmask_uses_request_reasoning_parser_kwargs(
-        self, mock_vllm_config, mock_request_with_structured_output
+        self, mock_aphrodite_config, mock_request_with_structured_output
     ):
         """Test request-level parser kwargs override the default reasoner."""
 
@@ -139,7 +139,7 @@ class TestReasoningStructuredOutput:
             def is_reasoning_end(self, input_ids):
                 return not self.chat_template_kwargs.get("enable_thinking", False)
 
-        manager = StructuredOutputManager(mock_vllm_config)
+        manager = StructuredOutputManager(mock_aphrodite_config)
         manager.reasoner_cls = KwargReasoner
         manager.tokenizer = Mock()
 
@@ -232,7 +232,7 @@ class TestReasoningStructuredOutput:
         reasoner.is_reasoning_end_streaming.return_value = True
         structured_req.reasoner = reasoner
 
-        manager_with_reasoner.vllm_config.speculative_config = Mock()
+        manager_with_reasoner.aphrodite_config.speculative_config = Mock()
 
         result = manager_with_reasoner.should_advance(
             mock_request_with_structured_output

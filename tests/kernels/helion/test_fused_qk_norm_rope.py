@@ -12,7 +12,7 @@ import torch
 from torch._subclasses.fake_tensor import FakeTensorMode
 
 from tests.kernels.helion.utils import skip_if_platform_unsupported
-from aphrodite.benchmarks.lib.utils import default_vllm_config
+from aphrodite.benchmarks.lib.utils import default_aphrodite_config
 from aphrodite.kernels.helion.case_key import CaseKey
 from aphrodite.kernels.helion.config_manager import ConfigManager
 from aphrodite.kernels.helion.ops.fused_qk_norm_rope import (
@@ -31,7 +31,7 @@ if not has_helion():
     )
 
 
-@default_vllm_config()
+@default_aphrodite_config()
 def _generate_fake_input(
     num_tokens: int, num_q_heads: int, num_kv_heads: int
 ) -> tuple[Any, ...]:
@@ -160,7 +160,7 @@ class TestFusedQkNormRopeCorrectness:
     @pytest.mark.parametrize("is_neox", [False, True])
     @pytest.mark.parametrize("rotary_ratio", [1.0, 0.5, 0.25])
     @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
-    @default_vllm_config()
+    @default_aphrodite_config()
     def test_fused_qk_norm_rope(
         self,
         num_heads: int,

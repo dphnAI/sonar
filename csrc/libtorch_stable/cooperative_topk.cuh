@@ -15,7 +15,7 @@
 
 #include "topk_histogram_4096.cuh"
 
-namespace vllm {
+namespace aphrodite {
 namespace cooperative {
 
 namespace hist4096 = topk_histogram_4096;
@@ -588,6 +588,6 @@ constexpr size_t kSmemSize8 =
 
 }  // namespace cooperative
 
-}  // namespace vllm
+}  // namespace aphrodite
 
 #endif  // COOPERATIVE_TOPK_CUH_

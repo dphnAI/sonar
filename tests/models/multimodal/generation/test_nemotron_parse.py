@@ -52,7 +52,7 @@ def mask_bbox_tokens(
 
 def run_test(
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     inputs: Sequence[tuple[list[str], PromptImageInput]],
     model: str,
     *,
@@ -61,15 +61,15 @@ def run_test(
     num_logprobs: int,
 ) -> None:
     """Verify that the inference result is the same between hf and aphrodite."""
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         dtype=dtype,
         max_num_seqs=64,
         limit_mm_per_prompt={"image": 1},
         trust_remote_code=True,
-    ) as vllm_model:
-        vllm_outputs_per_case = [
-            vllm_model.generate_greedy_logprobs(
+    ) as aphrodite_model:
+        aphrodite_outputs_per_case = [
+            aphrodite_model.generate_greedy_logprobs(
                 prompts,
                 max_tokens,
                 num_logprobs=num_logprobs,
@@ -78,7 +78,7 @@ def run_test(
             for prompts, images in inputs
         ]
 
-        tokenizer = vllm_model.llm.get_tokenizer()
+        tokenizer = aphrodite_model.llm.get_tokenizer()
 
     with hf_runner(model, dtype=dtype, auto_cls=AutoModel) as hf_model:
         hf_outputs_per_case = [
@@ -92,13 +92,13 @@ def run_test(
             for prompts, images in inputs
         ]
 
-    for hf_outputs, vllm_outputs in zip(hf_outputs_per_case, vllm_outputs_per_case):
+    for hf_outputs, aphrodite_outputs in zip(hf_outputs_per_case, aphrodite_outputs_per_case):
         check_logprobs_close(
             outputs_0_lst=[
                 mask_bbox_tokens(output, tokenizer) for output in hf_outputs
             ],
             outputs_1_lst=[
-                mask_bbox_tokens(output, tokenizer) for output in vllm_outputs
+                mask_bbox_tokens(output, tokenizer) for output in aphrodite_outputs
             ],
             name_0="hf",
             name_1="aphrodite",
@@ -109,11 +109,11 @@ def run_test(
 @pytest.mark.parametrize("dtype", ["bfloat16"])
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_models(
-    hf_runner, vllm_runner, model: str, dtype: str, num_logprobs: int
+    hf_runner, aphrodite_runner, model: str, dtype: str, num_logprobs: int
 ) -> None:
     run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         inputs=[
             ([PROMPT] * 10, [IMAGE] * 10),
         ],

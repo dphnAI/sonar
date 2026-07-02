@@ -131,22 +131,22 @@ RERANK_MODELS = [
 
 
 @pytest.mark.parametrize("model_info", MODELS)
-def test_embed_models_mteb(hf_runner, vllm_runner, model_info: EmbedModelInfo) -> None:
-    mteb_test_embed_models(hf_runner, vllm_runner, model_info)
+def test_embed_models_mteb(hf_runner, aphrodite_runner, model_info: EmbedModelInfo) -> None:
+    mteb_test_embed_models(hf_runner, aphrodite_runner, model_info)
 
 
 @pytest.mark.parametrize("model_info", MODELS)
 def test_embed_models_correctness(
-    hf_runner, vllm_runner, model_info: EmbedModelInfo, example_prompts
+    hf_runner, aphrodite_runner, model_info: EmbedModelInfo, example_prompts
 ) -> None:
-    correctness_test_embed_models(hf_runner, vllm_runner, model_info, example_prompts)
+    correctness_test_embed_models(hf_runner, aphrodite_runner, model_info, example_prompts)
 
 
 @pytest.mark.parametrize("model_info", RERANK_MODELS)
-def test_rerank_models_mteb(vllm_runner, model_info: RerankModelInfo) -> None:
-    vllm_extra_kwargs = {}
+def test_rerank_models_mteb(aphrodite_runner, model_info: RerankModelInfo) -> None:
+    aphrodite_extra_kwargs = {}
     if current_platform.is_rocm():
-        vllm_extra_kwargs["attention_backend"] = "TRITON_ATTN"
+        aphrodite_extra_kwargs["attention_backend"] = "TRITON_ATTN"
     mteb_test_rerank_models(
-        vllm_runner, model_info, vllm_extra_kwargs=vllm_extra_kwargs
+        aphrodite_runner, model_info, aphrodite_extra_kwargs=aphrodite_extra_kwargs
     )

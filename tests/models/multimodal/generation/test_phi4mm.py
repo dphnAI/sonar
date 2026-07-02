@@ -45,11 +45,11 @@ speech_question = os.path.join(
 models = [model_path]
 
 
-def vllm_to_hf_output(
-    vllm_output: tuple[list[int], str, SampleLogprobs | None], model: str
+def aphrodite_to_hf_output(
+    aphrodite_output: tuple[list[int], str, SampleLogprobs | None], model: str
 ):
     """Sanitize aphrodite output to be comparable with hf output."""
-    _, output_str, out_logprobs = vllm_output
+    _, output_str, out_logprobs = aphrodite_output
 
     output_str_without_image = re.sub(r"(<\|image_\d+\|>)+", "", output_str)
     assert output_str_without_image[0] == " "
@@ -70,7 +70,7 @@ target_dtype = "half"
 
 def run_test(
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     inputs: Sequence[tuple[list[str], PromptImageInput, PromptAudioInput | None]],
     model: str,
     *,
@@ -96,7 +96,7 @@ def run_test(
     # if we run HF first, the cuda initialization will be done and it
     # will hurt multiprocessing backend with fork method (the default method).
     # max_model_len should be greater than image_feature_size
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="generate",
         max_model_len=max_model_len,
@@ -109,10 +109,10 @@ def run_test(
         max_lora_rank=320,
         gpu_memory_utilization=0.8,  # set to 0.8 to avoid OOM in CI
         enforce_eager=True,
-    ) as vllm_model:
+    ) as aphrodite_model:
         lora_request = LoRARequest("vision", 1, vision_lora_path)
-        vllm_outputs_per_case = [
-            vllm_model.generate_greedy_logprobs(
+        aphrodite_outputs_per_case = [
+            aphrodite_model.generate_greedy_logprobs(
                 prompts,
                 max_tokens,
                 num_logprobs=num_logprobs,
@@ -157,10 +157,10 @@ def run_test(
             for prompts, images, audios in inputs
         ]
 
-    for hf_outputs, vllm_outputs in zip(hf_outputs_per_case, vllm_outputs_per_case):
+    for hf_outputs, aphrodite_outputs in zip(hf_outputs_per_case, aphrodite_outputs_per_case):
         check_logprobs_close(
             outputs_0_lst=hf_outputs,
-            outputs_1_lst=vllm_outputs,
+            outputs_1_lst=aphrodite_outputs,
             name_0="hf",
             name_1="aphrodite",
         )
@@ -184,7 +184,7 @@ def run_test(
 @pytest.mark.parametrize("num_logprobs", [10])
 def test_models(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     image_assets,
     model,
     size_factors,
@@ -206,7 +206,7 @@ def test_models(
 
     run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         inputs_per_image,
         model,
         dtype=dtype,
@@ -239,7 +239,7 @@ def test_models(
 @pytest.mark.parametrize("num_logprobs", [10])
 def test_multi_images_models(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     image_assets,
     model,
     size_factors,
@@ -263,7 +263,7 @@ def test_multi_images_models(
 
     run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         inputs_per_case,
         model,
         dtype=dtype,
@@ -282,7 +282,7 @@ def test_multi_images_models(
 @pytest.mark.parametrize("num_logprobs", [10])
 def test_vision_speech_models(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     model,
     dtype: str,
     max_model_len: int,
@@ -303,7 +303,7 @@ def test_vision_speech_models(
 
     run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         inputs_vision_speech,
         model,
         dtype=dtype,

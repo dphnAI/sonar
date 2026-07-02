@@ -22,7 +22,7 @@ from aphrodite.v1.attention.backends.mamba_attn import BaseMambaAttentionMetadat
 from aphrodite.v1.kv_cache_interface import MambaSpec
 
 
-def _make_vllm_config(
+def _make_aphrodite_config(
     max_model_len: int,
     max_num_seqs: int,
     num_speculative_tokens: int = 0,
@@ -57,7 +57,7 @@ def _make_vllm_config(
 
 def test_mamba_single_token_prompt_runs_as_prefill():
     seq_lens = [8, 9, 1]
-    config = _make_vllm_config(256, len(seq_lens), block_size=16)
+    config = _make_aphrodite_config(256, len(seq_lens), block_size=16)
     metadata = MockMambaBuilder.build_mamba_metadata(
         config,
         seq_lens=seq_lens,
@@ -80,7 +80,7 @@ def test_update_block_table_copies_block_idx_to_persistent_buffers():
     num_reqs = 4
     device = torch.device("cpu")
 
-    vllm_config = _make_vllm_config(max_model_len, num_reqs)
+    aphrodite_config = _make_aphrodite_config(max_model_len, num_reqs)
 
     spec = MambaSpec(
         block_size=block_size,
@@ -90,8 +90,8 @@ def test_update_block_table_copies_block_idx_to_persistent_buffers():
     )
 
     # Two builders simulating two KV cache groups with the same MambaSpec.
-    builder_a = MockMambaBuilder(spec, ["layer0"], vllm_config, device)
-    builder_b = MockMambaBuilder(spec, ["layer1"], vllm_config, device)
+    builder_a = MockMambaBuilder(spec, ["layer0"], aphrodite_config, device)
+    builder_b = MockMambaBuilder(spec, ["layer1"], aphrodite_config, device)
 
     # Sanity: each builder has its own persistent buffer.
     assert (
@@ -187,7 +187,7 @@ def test_state_indices_tensor_d_includes_num_speculative_blocks():
     num_speculative_blocks = 2
     device = torch.device("cpu")
 
-    vllm_config = _make_vllm_config(
+    aphrodite_config = _make_aphrodite_config(
         max_model_len,
         max_num_seqs,
         num_speculative_tokens=num_speculative_tokens,
@@ -201,7 +201,7 @@ def test_state_indices_tensor_d_includes_num_speculative_blocks():
         num_speculative_blocks=num_speculative_blocks,
     )
 
-    builder = MockMambaBuilder(spec, ["layer0"], vllm_config, device)
+    builder = MockMambaBuilder(spec, ["layer0"], aphrodite_config, device)
 
     expected_cols = (max_model_len // block_size) + num_speculative_blocks
     assert builder.state_indices_tensor_d.shape == (max_num_seqs, expected_cols)
@@ -220,7 +220,7 @@ def test_block_idx_cudagraph_capture_padded_by_num_reqs():
     num_speculative_tokens = 1
     device = torch.device("cpu")
 
-    vllm_config = _make_vllm_config(
+    aphrodite_config = _make_aphrodite_config(
         max_model_len,
         max_num_seqs,
         num_speculative_tokens=num_speculative_tokens,
@@ -234,7 +234,7 @@ def test_block_idx_cudagraph_capture_padded_by_num_reqs():
         num_speculative_blocks=2,
     )
 
-    builder = MockMambaBuilder(spec, ["layer0"], vllm_config, device)
+    builder = MockMambaBuilder(spec, ["layer0"], aphrodite_config, device)
 
     builder.block_idx_last_scheduled_token.fill_(-1)
     builder.block_idx_last_computed_token.fill_(-1)
@@ -300,7 +300,7 @@ def test_block_idx_prev_step_persistent_buffer_allocated():
     num_speculative_tokens = 1
     device = torch.device("cpu")
 
-    vllm_config = _make_vllm_config(
+    aphrodite_config = _make_aphrodite_config(
         max_model_len,
         max_num_seqs,
         num_speculative_tokens=num_speculative_tokens,
@@ -312,7 +312,7 @@ def test_block_idx_prev_step_persistent_buffer_allocated():
         mamba_cache_mode="all",
         num_speculative_blocks=2,
     )
-    builder = MockMambaBuilder(spec, ["layer0"], vllm_config, device)
+    builder = MockMambaBuilder(spec, ["layer0"], aphrodite_config, device)
 
     assert hasattr(builder, "block_idx_last_scheduled_token_prev_step")
     assert builder.block_idx_last_scheduled_token_prev_step.shape == (max_num_seqs,)
@@ -327,7 +327,7 @@ def test_block_idx_prev_step_persistent_buffer_skipped_without_spec_decode():
     max_num_seqs = 8
     device = torch.device("cpu")
 
-    vllm_config = _make_vllm_config(
+    aphrodite_config = _make_aphrodite_config(
         max_model_len, max_num_seqs, num_speculative_tokens=0
     )
     spec = MambaSpec(
@@ -336,7 +336,7 @@ def test_block_idx_prev_step_persistent_buffer_skipped_without_spec_decode():
         dtypes=(torch.float32,),
         mamba_cache_mode="all",
     )
-    builder = MockMambaBuilder(spec, ["layer0"], vllm_config, device)
+    builder = MockMambaBuilder(spec, ["layer0"], aphrodite_config, device)
 
     assert not hasattr(builder, "block_idx_last_scheduled_token_prev_step")
 
@@ -352,7 +352,7 @@ def test_block_idx_prev_step_cudagraph_capture_uses_persistent_buffer():
     num_speculative_tokens = 1
     device = torch.device("cpu")
 
-    vllm_config = _make_vllm_config(
+    aphrodite_config = _make_aphrodite_config(
         max_model_len,
         max_num_seqs,
         num_speculative_tokens=num_speculative_tokens,
@@ -364,7 +364,7 @@ def test_block_idx_prev_step_cudagraph_capture_uses_persistent_buffer():
         mamba_cache_mode="all",
         num_speculative_blocks=2,
     )
-    builder = MockMambaBuilder(spec, ["layer0"], vllm_config, device)
+    builder = MockMambaBuilder(spec, ["layer0"], aphrodite_config, device)
     builder.block_idx_last_scheduled_token.fill_(-1)
     builder.block_idx_last_computed_token.fill_(-1)
     builder.block_idx_last_scheduled_token_prev_step.fill_(-1)

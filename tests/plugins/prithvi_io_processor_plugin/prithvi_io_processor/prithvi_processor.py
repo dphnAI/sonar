@@ -219,8 +219,8 @@ def load_image(
 class PrithviMultimodalDataProcessor(IOProcessor[ImagePrompt, ImageRequestOutput]):
     indices = [0, 1, 2, 3, 4, 5]
 
-    def __init__(self, vllm_config: AphroditeConfig, renderer: BaseRenderer):
-        super().__init__(vllm_config, renderer)
+    def __init__(self, aphrodite_config: AphroditeConfig, renderer: BaseRenderer):
+        super().__init__(aphrodite_config, renderer)
 
         self.datamodule = Sen1Floods11NonGeoDataModule(
             data_root=datamodule_config["data_root"],

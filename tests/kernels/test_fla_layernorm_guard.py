@@ -388,7 +388,7 @@ def test_multidimensional_input(
 @pytest.mark.parametrize("norm_before_gate", [True, False])
 @torch.inference_mode()
 def test_rmsnorm_gated_forward_native_dtype(
-    default_vllm_config,
+    default_aphrodite_config,
     num_tokens: int,
     hidden_size: int,
     dtype: torch.dtype,

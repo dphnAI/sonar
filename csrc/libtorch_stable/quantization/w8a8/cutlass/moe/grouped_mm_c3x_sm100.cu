@@ -86,11 +86,11 @@ void run_cutlass_moe_mm_sm100(torch::stable::Tensor& out_tensors,
       "B tensors must be of type float8_e4m3fn.");
 
   using Cutlass3xGemmDefault = typename sm100_fp8_config_default<
-      InType, OutType, vllm::c3x::ScaledEpilogueArray>::Cutlass3xGemm;
+      InType, OutType, aphrodite::c3x::ScaledEpilogueArray>::Cutlass3xGemm;
   using Cutlass3xGemmN8192 = typename sm100_fp8_config_N8192<
-      InType, OutType, vllm::c3x::ScaledEpilogueArray>::Cutlass3xGemm;
+      InType, OutType, aphrodite::c3x::ScaledEpilogueArray>::Cutlass3xGemm;
   using Cutlass3xGemmM64 = typename sm100_fp8_config_M64<
-      InType, OutType, vllm::c3x::ScaledEpilogueArray>::Cutlass3xGemm;
+      InType, OutType, aphrodite::c3x::ScaledEpilogueArray>::Cutlass3xGemm;
 
   uint32_t const m = a_tensors.size(0);
   uint32_t const n = out_tensors.size(1);

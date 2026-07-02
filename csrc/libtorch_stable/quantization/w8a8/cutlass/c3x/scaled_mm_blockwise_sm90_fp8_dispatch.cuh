@@ -17,7 +17,7 @@
 
 #include "cutlass_gemm_caller.cuh"
 
-namespace vllm {
+namespace aphrodite {
 
 using namespace cute;
 
@@ -224,4 +224,4 @@ void cutlass_gemm_blockwise_sm90_fp8_dispatch(torch::stable::Tensor& out,
       true>>(out, a, b, a_scales, b_scales);
 }
 
-}  // namespace vllm
+}  // namespace aphrodite

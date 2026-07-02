@@ -36,7 +36,7 @@ import aphrodite.entrypoints.openai.dp_supervisor as dp_sup
 from aphrodite.entrypoints.openai.dp_supervisor import (
     CHILD_EXIT_GRACE_S,
     DPSupervisor,
-    _build_vllm_dp_server_args,
+    _build_aphrodite_dp_server_args,
     infer_multi_port_external_lb_start_rank,
     validate_multi_port_external_lb_args,
 )
@@ -165,7 +165,7 @@ def test_infer_multi_port_external_lb_start_rank_uses_node_rank():
 
 def test_build_multi_port_external_lb_child_args_sets_external_rank_server():
     args = _make_unit_args(data_parallel_start_rank=8, api_server_count=None)
-    child_args = _build_vllm_dp_server_args(args, local_rank=2)
+    child_args = _build_aphrodite_dp_server_args(args, local_rank=2)
 
     assert child_args.port == 8002
     assert child_args.data_parallel_rank == 10
@@ -176,7 +176,7 @@ def test_build_multi_port_external_lb_child_args_sets_external_rank_server():
     assert child_args.api_server_count == 1
 
 
-def test_run_vllm_dp_server_uses_python_server_by_default(monkeypatch):
+def test_run_aphrodite_dp_server_uses_python_server_by_default(monkeypatch):
     calls: list[str] = []
 
     monkeypatch.setattr(dp_sup.os, "setpgrp", lambda: None)
@@ -184,18 +184,18 @@ def test_run_vllm_dp_server_uses_python_server_by_default(monkeypatch):
     monkeypatch.setattr(dp_sup, "decorate_logs", lambda *_args: None)
     monkeypatch.setattr(dp_sup.envs, "APHRODITE_RUST_FRONTEND_PATH", None, raising=False)
     monkeypatch.setattr(
-        dp_sup, "_run_python_vllm_dp_server", lambda _args: calls.append("python")
+        dp_sup, "_run_python_aphrodite_dp_server", lambda _args: calls.append("python")
     )
     monkeypatch.setattr(
-        dp_sup, "_run_rust_vllm_dp_server", lambda _args: calls.append("rust")
+        dp_sup, "_run_rust_aphrodite_dp_server", lambda _args: calls.append("rust")
     )
 
-    dp_sup._run_vllm_dp_server(_make_unit_args(data_parallel_rank=4))
+    dp_sup._run_aphrodite_dp_server(_make_unit_args(data_parallel_rank=4))
 
     assert calls == ["python"]
 
 
-def test_run_vllm_dp_server_uses_rust_frontend_when_enabled(monkeypatch):
+def test_run_aphrodite_dp_server_uses_rust_frontend_when_enabled(monkeypatch):
     calls: list[str] = []
 
     monkeypatch.setattr(dp_sup.os, "setpgrp", lambda: None)
@@ -208,13 +208,13 @@ def test_run_vllm_dp_server_uses_rust_frontend_when_enabled(monkeypatch):
         raising=False,
     )
     monkeypatch.setattr(
-        dp_sup, "_run_python_vllm_dp_server", lambda _args: calls.append("python")
+        dp_sup, "_run_python_aphrodite_dp_server", lambda _args: calls.append("python")
     )
     monkeypatch.setattr(
-        dp_sup, "_run_rust_vllm_dp_server", lambda _args: calls.append("rust")
+        dp_sup, "_run_rust_aphrodite_dp_server", lambda _args: calls.append("rust")
     )
 
-    dp_sup._run_vllm_dp_server(_make_unit_args(data_parallel_rank=4))
+    dp_sup._run_aphrodite_dp_server(_make_unit_args(data_parallel_rank=4))
 
     assert calls == ["rust"]
 
@@ -407,27 +407,27 @@ class MockAPHRODITEServer:
         await self._serve_task
 
 
-def launch_mock_vllm(child_args: argparse.Namespace):
+def launch_mock_aphrodite(child_args: argparse.Namespace):
     logger.info("Launching mock Aphrodite on port %s", child_args.port)
-    mock_vllm = MockAPHRODITEServer(
+    mock_aphrodite = MockAPHRODITEServer(
         port=child_args.port,
         ssl_keyfile=child_args.ssl_keyfile,
         ssl_certfile=child_args.ssl_certfile,
     )
-    asyncio.run(mock_vllm.start())
+    asyncio.run(mock_aphrodite.start())
 
 
-def launch_mock_vllm_with_drain(
+def launch_mock_aphrodite_with_drain(
     child_args: argparse.Namespace,
 ):
     logger.info("Launching mock Aphrodite with 15s drain on port %s", child_args.port)
-    mock_vllm = MockAPHRODITEServer(
+    mock_aphrodite = MockAPHRODITEServer(
         port=child_args.port,
         drain_seconds=10.0,
         ssl_keyfile=child_args.ssl_keyfile,
         ssl_certfile=child_args.ssl_certfile,
     )
-    asyncio.run(mock_vllm.start())
+    asyncio.run(mock_aphrodite.start())
 
 
 # ---------------------------------------------------------------------------
@@ -513,8 +513,8 @@ async def _run_supervisor(
     launch_fn=None,
 ):
     if launch_fn is None:
-        launch_fn = launch_mock_vllm
-    monkeypatch.setattr(dp_sup, "_run_vllm_dp_server", launch_fn)
+        launch_fn = launch_mock_aphrodite
+    monkeypatch.setattr(dp_sup, "_run_aphrodite_dp_server", launch_fn)
     supervisor = DPSupervisor(args)
     task = asyncio.create_task(supervisor.run())
     await asyncio.sleep(1.0)
@@ -540,24 +540,24 @@ async def test_basic_lifecycle(monkeypatch):
     """
     args = _make_args()
 
-    vllm_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
+    aphrodite_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
 
     async with _run_supervisor(args, monkeypatch) as (supervisor, _task):
         assert await _poll_supervisor_health(503)
         assert not supervisor.is_ready
 
-        for port in vllm_server_ports:
+        for port in aphrodite_server_ports:
             assert await _poll_supervisor_health(503)
             assert not supervisor.is_ready
             await _poll_until_api_server_running(port)
 
-        await _set_healthy(vllm_server_ports[0])
+        await _set_healthy(aphrodite_server_ports[0])
         await asyncio.sleep(1.0)
         assert await _poll_supervisor_health(503)
         assert not supervisor.is_ready
         print("/health is 503 --- expected!")
 
-        for port in vllm_server_ports:
+        for port in aphrodite_server_ports:
             await _set_healthy(port)
         await asyncio.sleep(1.0)
         assert await _poll_supervisor_health(200)
@@ -586,18 +586,18 @@ async def test_basic_lifecycle_with_ssl(monkeypatch):
             ssl_certfile=str(cert_file),
         )
 
-        vllm_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
+        aphrodite_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
 
         async with _run_supervisor(args, monkeypatch) as (supervisor, _task):
             assert await _poll_supervisor_health(503, use_ssl=True)
             assert not supervisor.is_ready
 
-            for port in vllm_server_ports:
+            for port in aphrodite_server_ports:
                 assert await _poll_supervisor_health(503, use_ssl=True)
                 assert not supervisor.is_ready
                 await _poll_until_api_server_running(port, use_ssl=True)
 
-            for port in vllm_server_ports:
+            for port in aphrodite_server_ports:
                 await _set_healthy(port, use_ssl=True)
             await asyncio.sleep(1.0)
 
@@ -613,13 +613,13 @@ async def test_failed_startup(monkeypatch):
     """
     args = _make_args()
 
-    vllm_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
+    aphrodite_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
 
     async with _run_supervisor(args, monkeypatch) as (supervisor, _task):
         assert await _poll_supervisor_health(503)
         assert not supervisor.is_ready
 
-        for port in vllm_server_ports:
+        for port in aphrodite_server_ports:
             await _poll_until_api_server_running(port)
 
         await _kill_server(port)
@@ -639,24 +639,24 @@ async def test_becomes_unhealthy(monkeypatch):
     """
     args = _make_args()
 
-    vllm_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
+    aphrodite_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
 
     async with _run_supervisor(args, monkeypatch) as (supervisor, _task):
         assert await _poll_supervisor_health(503)
         assert not supervisor.is_ready
 
-        for port in vllm_server_ports:
+        for port in aphrodite_server_ports:
             assert await _poll_supervisor_health(503)
             assert not supervisor.is_ready
             await _poll_until_api_server_running(port)
 
-        await _set_healthy(vllm_server_ports[0])
+        await _set_healthy(aphrodite_server_ports[0])
         await asyncio.sleep(1.0)
         assert await _poll_supervisor_health(503)
         assert not supervisor.is_ready
         print("/health is 503 --- expected!")
 
-        for port in vllm_server_ports:
+        for port in aphrodite_server_ports:
             await _set_healthy(port)
         await asyncio.sleep(1.0)
         assert await _poll_supervisor_health(200)
@@ -681,24 +681,24 @@ async def test_dp_server_fails(monkeypatch):
     """
     args = _make_args()
 
-    vllm_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
+    aphrodite_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
 
     async with _run_supervisor(args, monkeypatch) as (supervisor, _task):
         assert await _poll_supervisor_health(503)
         assert not supervisor.is_ready
 
-        for port in vllm_server_ports:
+        for port in aphrodite_server_ports:
             assert await _poll_supervisor_health(503)
             assert not supervisor.is_ready
             await _poll_until_api_server_running(port)
 
-        await _set_healthy(vllm_server_ports[0])
+        await _set_healthy(aphrodite_server_ports[0])
         await asyncio.sleep(1.0)
         assert await _poll_supervisor_health(503)
         assert not supervisor.is_ready
         print("/health is 503 --- expected!")
 
-        for port in vllm_server_ports:
+        for port in aphrodite_server_ports:
             await _set_healthy(port)
         await asyncio.sleep(1.0)
         assert await _poll_supervisor_health(200)
@@ -729,15 +729,15 @@ async def test_shutdown_timeout(monkeypatch: pytest.MonkeyPatch):
     _SHUTDOWN_TIMEOUT = 10.0
 
     args = _make_args(shutdown_timeout=_SHUTDOWN_TIMEOUT)
-    vllm_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
+    aphrodite_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
 
     async with _run_supervisor(
-        args, monkeypatch, launch_fn=launch_mock_vllm_with_drain
+        args, monkeypatch, launch_fn=launch_mock_aphrodite_with_drain
     ) as (supervisor, _task):
-        for port in vllm_server_ports:
+        for port in aphrodite_server_ports:
             await _poll_until_api_server_running(port)
 
-        for port in vllm_server_ports:
+        for port in aphrodite_server_ports:
             await _set_healthy(port)
         await asyncio.sleep(1.0)
         assert await _poll_supervisor_health(200)

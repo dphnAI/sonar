@@ -27,14 +27,14 @@ max_model_len = int(original_max_position_embeddings * factor)
 
 
 @pytest.mark.parametrize("model_info", MODELS)
-def test_default(model_info, vllm_runner):
-    with vllm_runner(
+def test_default(model_info, aphrodite_runner):
+    with aphrodite_runner(
         model_info.name,
         revision=model_info.revision,
         runner="pooling",
         max_model_len=None,
-    ) as vllm_model:
-        model_config = vllm_model.llm.llm_engine.model_config
+    ) as aphrodite_model:
+        model_config = aphrodite_model.llm.llm_engine.model_config
         if model_info.name == "nomic-ai/nomic-embed-text-v2-moe":
             # For nomic-embed-text-v2-moe the length is set to 512
             # by sentence_bert_config.json.
@@ -44,22 +44,22 @@ def test_default(model_info, vllm_runner):
 
 
 @pytest.mark.parametrize("model_info", MODELS)
-def test_set_max_model_len_legal(model_info, vllm_runner):
+def test_set_max_model_len_legal(model_info, aphrodite_runner):
     # set max_model_len <= 512
-    with vllm_runner(
+    with aphrodite_runner(
         model_info.name,
         revision=model_info.revision,
         runner="pooling",
         max_model_len=256,
-    ) as vllm_model:
-        model_config = vllm_model.llm.llm_engine.model_config
+    ) as aphrodite_model:
+        model_config = aphrodite_model.llm.llm_engine.model_config
         assert model_config.max_model_len == 256
 
     # For nomic-embed-text-v2-moe the length is set to 512
     # by sentence_bert_config.json.
     if model_info.name == "nomic-ai/nomic-embed-text-v2-moe":
         with pytest.raises(ValueError):
-            with vllm_runner(
+            with aphrodite_runner(
                 model_info.name,
                 revision=model_info.revision,
                 runner="pooling",
@@ -69,28 +69,28 @@ def test_set_max_model_len_legal(model_info, vllm_runner):
         return
 
     # set 512 < max_model_len <= 2048
-    with vllm_runner(
+    with aphrodite_runner(
         model_info.name,
         revision=model_info.revision,
         runner="pooling",
         max_model_len=1024,
-    ) as vllm_model:
-        model_config = vllm_model.llm.llm_engine.model_config
+    ) as aphrodite_model:
+        model_config = aphrodite_model.llm.llm_engine.model_config
         assert model_config.max_model_len == 1024
 
     # set max_model_len > 2048
-    with vllm_runner(
+    with aphrodite_runner(
         model_info.name,
         revision=model_info.revision,
         runner="pooling",
         max_model_len=4096,
-    ) as vllm_model:
-        model_config = vllm_model.llm.llm_engine.model_config
+    ) as aphrodite_model:
+        model_config = aphrodite_model.llm.llm_engine.model_config
         assert model_config.max_model_len == 4096
 
 
 @pytest.mark.parametrize("model_info", MODELS)
-def test_use_rope_scaling_legal(model_info, vllm_runner):
+def test_use_rope_scaling_legal(model_info, aphrodite_runner):
     hf_overrides = {
         "rope_parameters": {
             "rope_theta": rope_theta,
@@ -101,7 +101,7 @@ def test_use_rope_scaling_legal(model_info, vllm_runner):
         "max_model_len": max_model_len,
     }
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_info.name,
         revision=model_info.revision,
         runner="pooling",

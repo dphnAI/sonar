@@ -24,7 +24,7 @@ pytestmark = pytest.mark.skipif(
     ],
 )
 def test_inference(
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     model: str,
 ) -> None:
     pixel_values = torch.full((6, 512, 512), 1.0, dtype=torch.float16)
@@ -39,7 +39,7 @@ def test_inference(
         },
     )
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="pooling",
         dtype="half",
@@ -50,8 +50,8 @@ def test_inference(
         # test going OOM during the warmup run
         max_num_seqs=32,
         default_torch_num_threads=1,
-    ) as vllm_model:
-        vllm_output = vllm_model.llm.encode(prompt, pooling_task="plugin")
+    ) as aphrodite_model:
+        aphrodite_output = aphrodite_model.llm.encode(prompt, pooling_task="plugin")
         assert torch.equal(
-            torch.isnan(vllm_output[0].outputs.data).any(), torch.tensor(False)
+            torch.isnan(aphrodite_output[0].outputs.data).any(), torch.tensor(False)
         )

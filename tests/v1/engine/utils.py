@@ -309,7 +309,7 @@ class DummyOutputProcessorTestVectors:
     """Dummy test vectors for output processor tests"""
 
     tokenizer: GeneralTokenizerType
-    vllm_config: EngineArgs
+    aphrodite_config: EngineArgs
     full_tokens: list[list[int]]  # Prompt + generated tokens
     prompt_tokens: list[list[int]]
     generation_tokens: list[list[int]]

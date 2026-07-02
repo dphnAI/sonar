@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from tests.v1.attention.utils import create_vllm_config
+from tests.v1.attention.utils import create_aphrodite_config
 from aphrodite.v1.attention.backend import CommonAttentionMetadata
 from aphrodite.v1.attention.backends.mla.indexer import DeepseekV32IndexerMetadataBuilder
 from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
@@ -25,11 +25,11 @@ def test_indexer_builder_deepseek_v4_compressed_slot_mapping_uses_storage_block_
         dtype=torch.bfloat16,
         compress_ratio=4,
     )
-    vllm_config = create_vllm_config(max_model_len=1024)
+    aphrodite_config = create_aphrodite_config(max_model_len=1024)
     builder = DeepseekV32IndexerMetadataBuilder(
         kv_cache_spec=kv_cache_spec,
         layer_names=["dummy"],
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         device=device,
     )
 

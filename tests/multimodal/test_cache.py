@@ -102,7 +102,7 @@ def test_cache_item_size(item, expected_size):
     assert cache.currsize == expected_size
 
 
-def _create_vllm_config(
+def _create_aphrodite_config(
     *,
     mm_processor_cache_gb: float,
     enable_ipc: bool,
@@ -201,32 +201,32 @@ def _compare_caches(
 def test_ipc_enable_disable_consistency(is_cached_calls_per_iter):
     cache_size_gb = 1 / (1 << 20)
 
-    vllm_config_ipc_enabled = _create_vllm_config(
+    aphrodite_config_ipc_enabled = _create_aphrodite_config(
         mm_processor_cache_gb=cache_size_gb,
         enable_ipc=True,
     )
-    vllm_config_ipc_disabled = _create_vllm_config(
+    aphrodite_config_ipc_disabled = _create_aphrodite_config(
         mm_processor_cache_gb=0,
         enable_ipc=False,
     )
-    vllm_config_cache_disabled = _create_vllm_config(
+    aphrodite_config_cache_disabled = _create_aphrodite_config(
         mm_processor_cache_gb=cache_size_gb,
         enable_ipc=True,
     )
 
     _compare_caches(
-        vllm_config_ipc_enabled,
-        vllm_config_ipc_disabled,
+        aphrodite_config_ipc_enabled,
+        aphrodite_config_ipc_disabled,
         is_cached_calls_per_iter=is_cached_calls_per_iter,
     )
     _compare_caches(
-        vllm_config_ipc_disabled,
-        vllm_config_cache_disabled,
+        aphrodite_config_ipc_disabled,
+        aphrodite_config_cache_disabled,
         is_cached_calls_per_iter=is_cached_calls_per_iter,
     )
     _compare_caches(
-        vllm_config_cache_disabled,
-        vllm_config_ipc_enabled,
+        aphrodite_config_cache_disabled,
+        aphrodite_config_ipc_enabled,
         is_cached_calls_per_iter=is_cached_calls_per_iter,
     )
 
@@ -502,7 +502,7 @@ def _run_test_cache_eviction_shm(
 
 
 def test_cache_eviction_shm_cache():
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=ModelConfig(
             model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
             mm_processor_cache_type="shm",
@@ -510,8 +510,8 @@ def test_cache_eviction_shm_cache():
             mm_processor_cache_gb=15.2 * MiB_bytes / GiB_bytes,
         ),
     )
-    sender_cache = ShmObjectStoreSenderCache(vllm_config)
-    receiver_cache = ShmObjectStoreReceiverCache(vllm_config, mp.Lock())
+    sender_cache = ShmObjectStoreSenderCache(aphrodite_config)
+    receiver_cache = ShmObjectStoreReceiverCache(aphrodite_config, mp.Lock())
 
     _run_test_cache_eviction_shm(sender_cache, receiver_cache, base_item_size=MiB_bytes)
 
@@ -567,7 +567,7 @@ _SLEEP_VISION_PROMPT = (
     reason="sleep mode regression requires a CUDA GPU",
 )
 def test_sleep_wake_preserves_mm_cache_consistency():
-    """Regression for vllm-project/vllm#42995."""
+    """Regression for vllm-project/aphrodite#42995."""
     from aphrodite import LLM, SamplingParams
     from aphrodite.assets.image import ImageAsset
 

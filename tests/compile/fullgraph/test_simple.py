@@ -16,7 +16,7 @@ from aphrodite.config import (
     CompilationMode,
     CUDAGraphMode,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.forward_context import BatchDescriptor, set_forward_context
 from aphrodite.utils.torch_utils import is_torch_equal_or_newer
@@ -43,7 +43,7 @@ class SillyModel(nn.Module):
     def __init__(
         self,
         *,
-        vllm_config: AphroditeConfig,
+        aphrodite_config: AphroditeConfig,
         prefix: str = "",
         intermediate_unbacked=False,
         **kwargs,
@@ -90,7 +90,7 @@ def _run_simple_model(
     *,
     intermediate_unbacked=False,
 ):
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
             backend=backend,
@@ -100,9 +100,9 @@ def _run_simple_model(
             cudagraph_capture_sizes=[1, 2],
         )
     )
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         model = SillyModel(
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             prefix="",
             intermediate_unbacked=intermediate_unbacked,
         )
@@ -117,7 +117,7 @@ def _run_simple_model(
             num_backend_compilations=expected_num_backend_compilations,
             num_cudagraph_captured=expected_num_cudagraph_captured,
         ),
-        set_forward_context(None, vllm_config=vllm_config),
+        set_forward_context(None, aphrodite_config=aphrodite_config),
     ):  # background context
         # warm up with background context
         model(inputs)
@@ -125,7 +125,7 @@ def _run_simple_model(
         # capturing/replaying should under context of cudagraph dispatching
         with set_forward_context(
             None,
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             cudagraph_runtime_mode=CUDAGraphMode.PIECEWISE,
             batch_descriptor=BatchDescriptor(
                 num_tokens=2,
@@ -134,7 +134,7 @@ def _run_simple_model(
             model(torch.randn(2).cuda())
         with set_forward_context(
             None,
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             cudagraph_runtime_mode=CUDAGraphMode.PIECEWISE,
             batch_descriptor=BatchDescriptor(
                 num_tokens=1,
@@ -146,7 +146,7 @@ def _run_simple_model(
         reset_global_counter()
         with set_forward_context(
             None,
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             cudagraph_runtime_mode=CUDAGraphMode.PIECEWISE,
             batch_descriptor=BatchDescriptor(
                 num_tokens=2,

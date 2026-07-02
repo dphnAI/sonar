@@ -88,7 +88,7 @@ def assert_scheduler_empty(scheduler: Scheduler):
         assert block.ref_cnt == 0
 
 
-def create_vllm_config(
+def create_aphrodite_config(
     model: str = "facebook/opt-125m",
     max_num_seqs: int = 16,
     max_num_batched_tokens: int = 64,
@@ -150,12 +150,12 @@ def create_vllm_config(
 
 
 def create_scheduler(
-    vllm_config: AphroditeConfig,
+    aphrodite_config: AphroditeConfig,
     num_blocks: int = 10000,
     kv_cache_config: KVCacheConfig | None = None,
 ) -> Scheduler | AsyncScheduler:
     """Initialize Scheduler For Testing."""
-    block_size = vllm_config.cache_config.block_size
+    block_size = aphrodite_config.cache_config.block_size
     if kv_cache_config is None:
         kv_cache_config = KVCacheConfig(
             num_blocks=num_blocks,  # A large number of blocks to hold all requests
@@ -172,16 +172,16 @@ def create_scheduler(
                 )
             ],
         )
-    vllm_config.cache_config.num_gpu_blocks = num_blocks
+    aphrodite_config.cache_config.num_gpu_blocks = num_blocks
 
     scheduler_cls = (
-        AsyncScheduler if vllm_config.scheduler_config.async_scheduling else Scheduler
+        AsyncScheduler if aphrodite_config.scheduler_config.async_scheduling else Scheduler
     )
     return scheduler_cls(
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         kv_cache_config=kv_cache_config,
         log_stats=True,
-        structured_output_manager=StructuredOutputManager(vllm_config),
+        structured_output_manager=StructuredOutputManager(aphrodite_config),
         block_size=block_size,
     )
 
@@ -375,11 +375,11 @@ class MockKVConnector(KVConnectorBase_V1):
 
     def __init__(
         self,
-        vllm_config: AphroditeConfig,
+        aphrodite_config: AphroditeConfig,
         role: KVConnectorRole,
         kv_cache_config: KVCacheConfig,
     ):
-        super().__init__(vllm_config, role, kv_cache_config)
+        super().__init__(aphrodite_config, role, kv_cache_config)
         extra_config = self._kv_transfer_config.kv_connector_extra_config
         self.config = MockKVConfig(
             matched_tokens=extra_config["matched_tokens"],
@@ -563,10 +563,10 @@ def make_nixl_push_scheduler(
     sched.is_bidirectional_kv_xfer_enabled = is_bidirectional_kv_xfer_enabled
     sched._has_mamba = has_mamba
 
-    # vllm_config is consulted for parallel_config.tensor_parallel_size.
-    vllm_config = MagicMock()
-    vllm_config.parallel_config.tensor_parallel_size = 1
-    sched.vllm_config = vllm_config
+    # aphrodite_config is consulted for parallel_config.tensor_parallel_size.
+    aphrodite_config = MagicMock()
+    aphrodite_config.parallel_config.tensor_parallel_size = 1
+    sched.aphrodite_config = aphrodite_config
 
     # Push-specific state.
     sched._push_pending_registrations = {}

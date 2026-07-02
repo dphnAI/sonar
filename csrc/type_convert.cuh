@@ -15,7 +15,7 @@ using __nv_bfloat16 = __hip_bfloat16;
 using __nv_bfloat162 = __hip_bfloat162;
 #endif
 
-namespace vllm {
+namespace aphrodite {
 /* Converter structs for the conversion from torch types to HIP/CUDA types,
    and the associated type conversions within HIP/CUDA. These helpers need
    to be implemented for now because the relevant type conversion
@@ -193,4 +193,4 @@ struct alignas(16) _f16Vec {
     return result;
   }
 };
-}  // namespace vllm
+}  // namespace aphrodite

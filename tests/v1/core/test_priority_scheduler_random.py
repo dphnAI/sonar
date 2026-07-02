@@ -30,7 +30,7 @@ def _create_random_request(
     arrival_time_range: tuple[float, float],
     priority_range: tuple[int, int],
     num_mm_item_range: tuple[int, int],
-    vllm_config: AphroditeConfig,
+    aphrodite_config: AphroditeConfig,
 ):
     max_tokens = random.randint(*max_tokens_range)
     num_tokens = random.randint(*num_tokens_range)
@@ -65,11 +65,11 @@ def _create_random_request(
     prompt_token_ids = random.choices(range(100), k=num_tokens)
 
     caching_hash_fn = get_hash_fn_by_name(
-        vllm_config.cache_config.prefix_caching_hash_algo
+        aphrodite_config.cache_config.prefix_caching_hash_algo
     )
     init_none_hash(caching_hash_fn)
     block_hasher = get_request_block_hasher(
-        vllm_config.cache_config.block_size, caching_hash_fn
+        aphrodite_config.cache_config.block_size, caching_hash_fn
     )
 
     request = Request(
@@ -214,7 +214,7 @@ def test_priority_scheduling_blast(
             arrival_time_range=(0, 1),
             priority_range=(-3, 3),
             num_mm_item_range=(0, 2),
-            vllm_config=scheduler.vllm_config,
+            aphrodite_config=scheduler.aphrodite_config,
         )
         scheduler.add_request(req)
     num_initial_requests = 2
@@ -225,7 +225,7 @@ def test_priority_scheduling_blast(
             arrival_time_range=(0, 0),
             priority_range=(4, 4),
             num_mm_item_range=(0, 2),
-            vllm_config=scheduler.vllm_config,
+            aphrodite_config=scheduler.aphrodite_config,
         )
         scheduler.add_request(req)
     for _ in range(20000):
@@ -238,7 +238,7 @@ def test_priority_scheduling_blast(
                     arrival_time_range=(0, 1),
                     priority_range=(-3, 3),
                     num_mm_item_range=(0, 2),
-                    vllm_config=scheduler.vllm_config,
+                    aphrodite_config=scheduler.aphrodite_config,
                 )
                 scheduler.add_request(req)
         scheduler_output = scheduler.schedule()

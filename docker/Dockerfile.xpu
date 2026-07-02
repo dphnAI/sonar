@@ -1,4 +1,4 @@
-FROM intel/deep-learning-essentials:2025.3.2-0-devel-ubuntu24.04 AS vllm-base
+FROM intel/deep-learning-essentials:2025.3.2-0-devel-ubuntu24.04 AS aphrodite-base
 
 WORKDIR /workspace/
 
@@ -63,7 +63,7 @@ RUN rm -f /opt/intel/oneapi/ccl/latest && \
 SHELL ["bash", "-c"]
 CMD ["bash", "-c", "source /root/.bashrc && exec bash"]
 
-WORKDIR /workspace/vllm
+WORKDIR /workspace/aphrodite
 
 ENV UV_HTTP_TIMEOUT=500
 
@@ -74,16 +74,16 @@ ENV UV_INDEX_STRATEGY="unsafe-best-match"
 ENV UV_LINK_MODE="copy"
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,src=requirements/common.txt,target=/workspace/vllm/requirements/common.txt \
-    --mount=type=bind,src=requirements/xpu.txt,target=/workspace/vllm/requirements/xpu.txt \
-    --mount=type=bind,src=requirements/test/xpu.txt,target=/workspace/vllm/requirements/test/xpu.txt \
+    --mount=type=bind,src=requirements/common.txt,target=/workspace/aphrodite/requirements/common.txt \
+    --mount=type=bind,src=requirements/xpu.txt,target=/workspace/aphrodite/requirements/xpu.txt \
+    --mount=type=bind,src=requirements/test/xpu.txt,target=/workspace/aphrodite/requirements/test/xpu.txt \
     uv pip install --upgrade pip && \
     uv pip install -r requirements/xpu.txt && \
     uv pip install grpcio-tools protobuf nanobind && \
     source /opt/intel/oneapi/setvars.sh --force && \
     source /opt/intel/oneapi/ccl/2021.15/env/vars.sh --force && \
     export CMAKE_PREFIX_PATH="$(python3 -c 'import site; print(site.getsitepackages()[0])'):${CMAKE_PREFIX_PATH}" && \
-    uv pip install --no-build-isolation -r /workspace/vllm/requirements/test/xpu.txt
+    uv pip install --no-build-isolation -r /workspace/aphrodite/requirements/test/xpu.txt
 
 
 
@@ -103,11 +103,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 CMD ["/bin/bash"]
 
-FROM vllm-base AS vllm-openai
+FROM aphrodite-base AS aphrodite-openai
 
 # install development dependencies (for testing)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install -e tests/vllm_test_utils
+    uv pip install -e tests/aphrodite_test_utils
 
 # install NIXL and UCX from source code
 ARG UCX_VERSION=e5d98879705239d254ede40b4a52891850cb5349
@@ -170,4 +170,4 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip uninstall oneccl oneccl-devel
 
-ENTRYPOINT ["vllm", "serve"]
+ENTRYPOINT ["aphrodite", "serve"]

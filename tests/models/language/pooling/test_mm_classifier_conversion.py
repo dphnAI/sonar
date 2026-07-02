@@ -5,7 +5,7 @@ from aphrodite.config.pooler import PoolerConfig
 
 
 def test_idefics_multimodal(
-    vllm_runner,
+    aphrodite_runner,
 ) -> None:
     prompts = [
         "Hello, my name is",
@@ -14,7 +14,7 @@ def test_idefics_multimodal(
         "The future of AI is",
     ]
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_name="HuggingFaceM4/Idefics3-8B-Llama3",
         runner="pooling",
         convert="classify",
@@ -24,8 +24,8 @@ def test_idefics_multimodal(
         tensor_parallel_size=1,
         disable_log_stats=True,
         dtype="bfloat16",
-    ) as vllm_model:
-        llm = vllm_model.get_llm()
+    ) as aphrodite_model:
+        llm = aphrodite_model.get_llm()
         outputs = llm.classify(prompts)
         for output in outputs:
             assert len(output.outputs.probs) == 2
@@ -51,7 +51,7 @@ def update_config(config):
 
 
 def test_gemma_multimodal(
-    vllm_runner,
+    aphrodite_runner,
 ) -> None:
     messages = [
         {
@@ -83,7 +83,7 @@ def test_gemma_multimodal(
         },
     ]
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_name="google/gemma-3-4b-it",
         runner="pooling",
         convert="classify",
@@ -95,8 +95,8 @@ def test_gemma_multimodal(
         tensor_parallel_size=1,
         disable_log_stats=True,
         dtype="bfloat16",
-    ) as vllm_model:
-        llm = vllm_model.get_llm()
+    ) as aphrodite_model:
+        llm = aphrodite_model.get_llm()
         prompts = llm._preprocess_chat([messages])
 
         result = llm.classify(prompts)

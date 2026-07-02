@@ -86,7 +86,7 @@ def enable_pickle(monkeypatch):
         ),
     ],
 )
-def test_compressed_tensors_w8a8_static_setup(vllm_runner, model_args):
+def test_compressed_tensors_w8a8_static_setup(aphrodite_runner, model_args):
     model_path, strategy, quant_type, shape_0, is_symmetric = model_args
 
     if (
@@ -95,7 +95,7 @@ def test_compressed_tensors_w8a8_static_setup(vllm_runner, model_args):
     ):
         pytest.skip(f"Skip model {model_path} as it is not supported on ROCm.")
 
-    with vllm_runner(model_path, enforce_eager=True) as llm:
+    with aphrodite_runner(model_path, enforce_eager=True) as llm:
 
         def check_model(model):
             layer = model.model.layers[0]
@@ -159,7 +159,7 @@ def test_compressed_tensors_w8a8_static_setup(vllm_runner, model_args):
 )
 def test_compressed_tensors_w8a8_logprobs(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model_path,
     max_tokens,
@@ -193,14 +193,14 @@ def test_compressed_tensors_w8a8_logprobs(
             example_prompts, max_tokens, num_logprobs
         )
 
-    with vllm_runner(model_path, dtype=dtype, enforce_eager=True) as vllm_model:
-        vllm_outputs = vllm_model.generate_greedy_logprobs(
+    with aphrodite_runner(model_path, dtype=dtype, enforce_eager=True) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
             example_prompts, max_tokens, num_logprobs
         )
 
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
-        outputs_1_lst=vllm_outputs,
+        outputs_1_lst=aphrodite_outputs,
         name_0="hf",
         name_1="aphrodite",
     )
@@ -209,9 +209,9 @@ def test_compressed_tensors_w8a8_logprobs(
         torch.accelerator.synchronize()
 
 
-def test_compressed_tensors_no_enforce_eager(vllm_runner):
+def test_compressed_tensors_no_enforce_eager(aphrodite_runner):
     model_path = "nm-testing/tinyllama-oneshot-w8w8-test-static-shape-change"
-    with vllm_runner(model_path) as llm:
+    with aphrodite_runner(model_path) as llm:
         output = llm.generate_greedy("Hello my name is", max_tokens=4)
         assert output
 
@@ -230,7 +230,7 @@ def test_compressed_tensors_no_enforce_eager(vllm_runner):
     "use_aiter", [True, False] if current_platform.is_rocm() else [False]
 )
 def test_compressed_tensors_w8a8_dynamic_per_token(
-    vllm_runner,
+    aphrodite_runner,
     model_args,
     use_aiter,
     monkeypatch,
@@ -249,7 +249,7 @@ def test_compressed_tensors_w8a8_dynamic_per_token(
         # this will enable APHRODITE_ROCM_USE_AITER_LINEAR
         monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
 
-    with vllm_runner(model_path, enforce_eager=True, dtype=torch.float16) as llm:
+    with aphrodite_runner(model_path, enforce_eager=True, dtype=torch.float16) as llm:
 
         def check_model(model):
             layer = model.model.layers[0]
@@ -292,9 +292,9 @@ def test_compressed_tensors_w8a8_dynamic_per_token(
 @pytest.mark.skipif(
     not current_platform.is_cuda(), reason="The tests are skipped on non-CUDA platform."
 )
-def test_compressed_tensors_wNa16(vllm_runner, wNa16_args):
+def test_compressed_tensors_wNa16(aphrodite_runner, wNa16_args):
     model, strategy, group, pack_factor, symmetric, has_g_idx = wNa16_args
-    with vllm_runner(model, enforce_eager=True) as llm:
+    with aphrodite_runner(model, enforce_eager=True) as llm:
 
         def check_model(model):
             layer = model.model.layers[0]
@@ -316,9 +316,9 @@ def test_compressed_tensors_wNa16(vllm_runner, wNa16_args):
         assert output
 
 
-def test_compressed_tensors_fp8(vllm_runner):
+def test_compressed_tensors_fp8(aphrodite_runner):
     model_path = "nm-testing/Meta-Llama-3-8B-FP8-compressed-tensors-test"
-    with vllm_runner(model_path, enforce_eager=True) as llm:
+    with aphrodite_runner(model_path, enforce_eager=True) as llm:
 
         def check_model(model):
             layer = model.model.layers[0]
@@ -348,9 +348,9 @@ def test_compressed_tensors_fp8(vllm_runner):
 @pytest.mark.skipif(
     not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform."
 )
-def test_compressed_tensors_kv_cache_fp8_per_tensor(vllm_runner):
+def test_compressed_tensors_kv_cache_fp8_per_tensor(aphrodite_runner):
     model_path = "nm-testing/TinyLlama-1.1B-Chat-v1.0-kvcache-fp8-tensor"
-    with vllm_runner(model_path) as llm:
+    with aphrodite_runner(model_path) as llm:
         output = llm.generate_greedy("Hello world!", max_tokens=4)
         assert output
 
@@ -358,7 +358,7 @@ def test_compressed_tensors_kv_cache_fp8_per_tensor(vllm_runner):
 @pytest.mark.skipif(
     not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform."
 )
-def test_compressed_tensors_kv_cache_fp8_per_attn_head(vllm_runner):
+def test_compressed_tensors_kv_cache_fp8_per_attn_head(aphrodite_runner):
     model_path = "nm-testing/TinyLlama-1.1B-Chat-v1.0-kvcache-fp8-attn_head"
     try:
         fa_version = get_flash_attn_version()
@@ -367,7 +367,7 @@ def test_compressed_tensors_kv_cache_fp8_per_attn_head(vllm_runner):
     if fa_version is None or fa_version < 3:
         pytest.skip("This test requires FlashAttention version >= 3.")
 
-    with vllm_runner(model_path, attention_config={"backend": "FLASH_ATTN"}) as llm:
+    with aphrodite_runner(model_path, attention_config={"backend": "FLASH_ATTN"}) as llm:
         output = llm.generate_greedy("Hello world!", max_tokens=4)
         assert output
 
@@ -400,11 +400,11 @@ def _nvfp4_marlin_error_context(model, capfd):
         ("nm-testing/TinyLlama-1.1B-Chat-v1.0-NVFP4", False),
     ],
 )
-def test_compressed_tensors_nvfp4(vllm_runner, args, capfd):
+def test_compressed_tensors_nvfp4(aphrodite_runner, args, capfd):
     model, use_a16 = args
     with (
         _nvfp4_marlin_error_context(model, capfd),
-        vllm_runner(model, enforce_eager=True) as llm,
+        aphrodite_runner(model, enforce_eager=True) as llm,
     ):
 
         def check_model(model):
@@ -430,9 +430,9 @@ def test_compressed_tensors_nvfp4(vllm_runner, args, capfd):
     "args",
     [("czhu-cohere/TinyLlama-1.1B-Chat-v1.0-W4A8-e2e", CompressedTensorsW4A8Fp8)],
 )
-def test_compressed_tensors_w4a8_fp8(vllm_runner, args):
+def test_compressed_tensors_w4a8_fp8(aphrodite_runner, args):
     model, scheme = args
-    with vllm_runner(model, enforce_eager=True) as llm:
+    with aphrodite_runner(model, enforce_eager=True) as llm:
 
         def check_model(model):
             layer = model.model.layers[0]
@@ -476,17 +476,17 @@ def test_compressed_tensors_w4a8_fp8(vllm_runner, args):
     ],
 )
 def test_compressed_tensors_transforms_perplexity(
-    vllm_runner, model, prompt, exp_perplexity
+    aphrodite_runner, model, prompt, exp_perplexity
 ):
-    with vllm_runner(model, enforce_eager=True) as llm:
+    with aphrodite_runner(model, enforce_eager=True) as llm:
         perplexity = llm.generate_prompt_perplexity([prompt])[0]
         print(perplexity)
         assert perplexity <= exp_perplexity
 
 
-def test_compressed_tensors_fp8_block_enabled(vllm_runner):
+def test_compressed_tensors_fp8_block_enabled(aphrodite_runner):
     model_path = "RedHatAI/Qwen3-0.6B-FP8-BLOCK"
-    with vllm_runner(model_path, enforce_eager=True) as llm:
+    with aphrodite_runner(model_path, enforce_eager=True) as llm:
         fp8_dtype = current_platform.fp8_dtype()
 
         def check_model(model):
@@ -520,7 +520,7 @@ def test_compressed_tensors_fp8_block_enabled(vllm_runner):
     not current_platform.is_cuda(),
     reason="This test is not for non-CUDA platforms",
 )
-def test_compressed_tensors_moe_ignore_with_model(vllm_runner):
+def test_compressed_tensors_moe_ignore_with_model(aphrodite_runner):
     """
     Integration test for MoE layer ignore functionality with a real model.
 
@@ -538,7 +538,7 @@ def test_compressed_tensors_moe_ignore_with_model(vllm_runner):
     # model_path = "nm-testing/tinysmokeqwen3moe-W4A16-first-only" # CT 12.3
     model_path = "nm-testing/tinysmokeqwen3moe-W4A16-first-only-CTstable"  # CT 12.2
 
-    with vllm_runner(model_path, enforce_eager=True) as llm:
+    with aphrodite_runner(model_path, enforce_eager=True) as llm:
 
         def check_model(model):
             from aphrodite.model_executor.layers.fused_moe import MoERunner
@@ -565,7 +565,7 @@ def test_compressed_tensors_moe_ignore_with_model(vllm_runner):
         assert output
 
 
-def test_w4a16_moe_torch_compile(vllm_runner):
+def test_w4a16_moe_torch_compile(aphrodite_runner):
     """Regression test: MoE quant_config must be initialized inside the
     moe_forward custom op, not just in forward_native which is compiled by
     Dynamo (attribute mutations are not replayed at runtime).
@@ -576,7 +576,7 @@ def test_w4a16_moe_torch_compile(vllm_runner):
     """
     model_path = "nm-testing/tinysmokeqwen3moe-W4A16-first-only-CTstable"
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_path,
         enforce_eager=False,
         max_model_len=256,
@@ -872,10 +872,10 @@ def test_scheme_selection(
     not current_platform.is_cuda() or not current_platform.has_device_capability(75),
     reason="MXFP8 requires Turing (sm_75+) or newer.",
 )
-def test_compressed_tensors_mxfp8_moe_setup(vllm_runner):
+def test_compressed_tensors_mxfp8_moe_setup(aphrodite_runner):
     """Verify MXFP8 scheme, dtypes, and generation for a MoE model."""
     model_path = "AliEdalati97/Qwen3-30B-A3B-MXFP8"
-    with vllm_runner(
+    with aphrodite_runner(
         model_path,
         enforce_eager=True,
         load_format="dummy",
@@ -938,9 +938,9 @@ def test_wna16_marlin_moe_w2_scale_sharding(actorder, group_size, part, full, ex
     not current_platform.is_cuda() or not current_platform.has_device_capability(80),
     reason="MXFP4 requires ampere or newer",
 )
-def test_compressed_tensors_mxfp4(vllm_runner):
+def test_compressed_tensors_mxfp4(aphrodite_runner):
     model_path = "nm-testing/TinyLlama-1.1B-Chat-v1.0-MXFP4"
-    with vllm_runner(model_path, enforce_eager=True) as llm:
+    with aphrodite_runner(model_path, enforce_eager=True) as llm:
 
         def check_model(model):
             layer = model.model.layers[0]

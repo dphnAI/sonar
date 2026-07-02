@@ -11,7 +11,7 @@ from torch.multiprocessing import spawn  # pyright: ignore[reportPrivateImportUs
 from typing_extensions import ParamSpec
 
 import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.distributed import (
     cleanup_dist_env_and_memory,
     init_distributed_environment,
@@ -34,8 +34,8 @@ class ProcessGroupInfo:
     device: torch.device
 
 
-def _set_vllm_config(
-    vllm_config: AphroditeConfig, world_size: int, rank: int, local_rank: int
+def _set_aphrodite_config(
+    aphrodite_config: AphroditeConfig, world_size: int, rank: int, local_rank: int
 ):
     import tempfile
 
@@ -43,12 +43,12 @@ def _set_vllm_config(
 
     # When DP is enabled, processes are organized as:
     #  rank = dp_rank * tp_pp_world_size + tp_pp_rank
-    tp_pp_world_size = vllm_config.parallel_config.world_size
-    vllm_config.parallel_config.data_parallel_rank = rank // tp_pp_world_size
+    tp_pp_world_size = aphrodite_config.parallel_config.world_size
+    aphrodite_config.parallel_config.data_parallel_rank = rank // tp_pp_world_size
     tp_pp_rank = rank % tp_pp_world_size
-    vllm_config.parallel_config.rank = tp_pp_rank
+    aphrodite_config.parallel_config.rank = tp_pp_rank
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         init_distributed_environment(
             world_size=tp_pp_world_size,
             rank=tp_pp_rank,
@@ -58,8 +58,8 @@ def _set_vllm_config(
         )
 
         initialize_model_parallel(
-            tensor_model_parallel_size=vllm_config.parallel_config.tensor_parallel_size,
-            pipeline_model_parallel_size=vllm_config.parallel_config.pipeline_parallel_size,
+            tensor_model_parallel_size=aphrodite_config.parallel_config.tensor_parallel_size,
+            pipeline_model_parallel_size=aphrodite_config.parallel_config.pipeline_parallel_size,
         )
         if envs.APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP:
             cpu_group = torch.distributed.split_group(
@@ -80,7 +80,7 @@ def _worker_parallel_launch(
     node_rank: int,
     init_method: str,
     worker: Callable[..., None],
-    vllm_config: AphroditeConfig | None,
+    aphrodite_config: AphroditeConfig | None,
     env_dict: dict | None,
     worker_kwargs: dict[str, Any],
     *args: Any,
@@ -103,8 +103,8 @@ def _worker_parallel_launch(
         os.environ.update(env_dict)
 
     cpu_group = None
-    if vllm_config is not None:
-        cpu_group = _set_vllm_config(vllm_config, world_size, rank, local_rank)
+    if aphrodite_config is not None:
+        cpu_group = _set_aphrodite_config(aphrodite_config, world_size, rank, local_rank)
 
     def _run_worker():
         worker(
@@ -116,15 +116,15 @@ def _worker_parallel_launch(
                 local_rank=local_rank,
                 device=device,
             ),
-            vllm_config,
+            aphrodite_config,
             cpu_group,
             *args,
             **worker_kwargs,
         )
 
     try:
-        if vllm_config is not None:
-            with set_current_vllm_config(vllm_config):
+        if aphrodite_config is not None:
+            with set_current_aphrodite_config(aphrodite_config):
                 _run_worker()
         else:
             _run_worker()
@@ -134,7 +134,7 @@ def _worker_parallel_launch(
         raise
     finally:
         torch.accelerator.synchronize()
-        if vllm_config is not None:
+        if aphrodite_config is not None:
             cleanup_dist_env_and_memory()
         else:
             torch.distributed.destroy_process_group()
@@ -143,7 +143,7 @@ def _worker_parallel_launch(
 def parallel_launch_with_config(
     world_size: int,
     worker: Callable[Concatenate[ProcessGroupInfo, AphroditeConfig, Any, P], None],
-    vllm_config: AphroditeConfig,
+    aphrodite_config: AphroditeConfig,
     env_dict: dict[Any, Any] | None,
     *args: P.args,
     **kwargs: P.kwargs,
@@ -156,7 +156,7 @@ def parallel_launch_with_config(
             0,
             f"tcp://{os.getenv('LOCALHOST', 'localhost')}:{get_open_port()}",
             worker,
-            vllm_config,
+            aphrodite_config,
             env_dict,
             kwargs,
         )

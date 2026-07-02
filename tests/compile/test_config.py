@@ -67,16 +67,16 @@ def test_get_raw_stream_patch():
 
 
 def test_copy_pass():
-    vllm_config = AphroditeConfig()
-    inductor_pass = FixFunctionalizationPass(vllm_config)
+    aphrodite_config = AphroditeConfig()
+    inductor_pass = FixFunctionalizationPass(aphrodite_config)
     copied_inductor_pass = copy.deepcopy(inductor_pass)
     assert (
         copied_inductor_pass.compilation_config.use_inductor_graph_partition
-        == vllm_config.compilation_config.use_inductor_graph_partition
+        == aphrodite_config.compilation_config.use_inductor_graph_partition
     )
     assert (
         copied_inductor_pass.compilation_config.splitting_ops
-        == vllm_config.compilation_config.splitting_ops
+        == aphrodite_config.compilation_config.splitting_ops
     )
 
 
@@ -94,7 +94,7 @@ def test_custom_op():
 # on the state of the cache directory on the current machine, which
 # may be influenced by other tests.
 @pytest.mark.parametrize("val", ["1"])
-def test_APHRODITE_DISABLE_COMPILE_CACHE(vllm_runner, monkeypatch, val):
+def test_APHRODITE_DISABLE_COMPILE_CACHE(aphrodite_runner, monkeypatch, val):
     # Disable multiprocessing so that the counter is in the same process
     monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
     monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", val)
@@ -107,7 +107,7 @@ def test_APHRODITE_DISABLE_COMPILE_CACHE(vllm_runner, monkeypatch, val):
             num_cache_entries_updated=0, num_compiled_artifacts_saved=0
         ),
         # loading the model causes compilation (if enabled) to happen
-        vllm_runner(
+        aphrodite_runner(
             "facebook/opt-125m",
             compilation_config=compilation_config,
             gpu_memory_utilization=0.4,
@@ -128,7 +128,7 @@ def test_APHRODITE_DISABLE_COMPILE_CACHE(vllm_runner, monkeypatch, val):
     ],
 )
 def test_use_cudagraphs(
-    vllm_runner, monkeypatch, cudagraph_mode, num_cudagraph_captured
+    aphrodite_runner, monkeypatch, cudagraph_mode, num_cudagraph_captured
 ):
     # Disable multiprocessing so that the counter is in the same process
     monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
@@ -145,7 +145,7 @@ def test_use_cudagraphs(
             num_cudagraph_captured=num_cudagraph_captured,
         ),
         # loading the model causes compilation (if enabled) to happen
-        vllm_runner(
+        aphrodite_runner(
             "facebook/opt-125m",
             compilation_config=compilation_config,
             gpu_memory_utilization=0.4,
@@ -156,14 +156,14 @@ def test_use_cudagraphs(
 
 # forked needed to workaround https://github.com/vllm-project/vllm/issues/21073
 @pytest.mark.forked
-def test_stock_torch_compile(vllm_runner, monkeypatch):
+def test_stock_torch_compile(aphrodite_runner, monkeypatch):
     # Disable multiprocessing so that the counter is in the same process
     monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
 
     with (
         compilation_counter.expect(stock_torch_compile_count=1),
         # loading the model causes compilation (if enabled) to happen
-        vllm_runner(
+        aphrodite_runner(
             "facebook/opt-125m",
             compilation_config={"mode": CompilationMode.STOCK_TORCH_COMPILE},
             gpu_memory_utilization=0.4,
@@ -174,13 +174,13 @@ def test_stock_torch_compile(vllm_runner, monkeypatch):
 
 # forked needed to workaround https://github.com/vllm-project/vllm/issues/21073
 @pytest.mark.forked
-def test_no_compilation(vllm_runner, monkeypatch):
+def test_no_compilation(aphrodite_runner, monkeypatch):
     # Disable multiprocessing so that the counter is in the same process
     monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
     with (
         compilation_counter.expect(num_graphs_seen=0, stock_torch_compile_count=0),
         # loading the model causes compilation (if enabled) to happen
-        vllm_runner(
+        aphrodite_runner(
             "facebook/opt-125m",
             compilation_config={"mode": CompilationMode.NONE},
             gpu_memory_utilization=0.4,
@@ -191,14 +191,14 @@ def test_no_compilation(vllm_runner, monkeypatch):
 
 # forked needed to workaround https://github.com/vllm-project/vllm/issues/21073
 @pytest.mark.forked
-def test_enforce_eager(vllm_runner, monkeypatch):
+def test_enforce_eager(aphrodite_runner, monkeypatch):
     # Disable multiprocessing so that the counter is in the same process
     monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
 
     with (
         compilation_counter.expect(num_graphs_seen=0, stock_torch_compile_count=0),
         # loading the model causes compilation (if enabled) to happen
-        vllm_runner(
+        aphrodite_runner(
             "facebook/opt-125m", enforce_eager=True, gpu_memory_utilization=0.4
         ) as _,
     ):
@@ -206,14 +206,14 @@ def test_enforce_eager(vllm_runner, monkeypatch):
 
 
 @pytest.mark.forked
-def test_torch_compile_disable(vllm_runner, monkeypatch):
+def test_torch_compile_disable(aphrodite_runner, monkeypatch):
     monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
     monkeypatch.setenv("TORCH_COMPILE_DISABLE", "1")
     monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", "1")
 
     with (
         compilation_counter.expect(num_graphs_seen=0, stock_torch_compile_count=0),
-        vllm_runner(
+        aphrodite_runner(
             "facebook/opt-125m",
             gpu_memory_utilization=0.4,
         ) as _,
@@ -460,10 +460,10 @@ def test_cudagraph_sizes_post_init(
             max_num_batched_tokens=max_num_batched_tokens,
             compilation_config=compilation_config,
         )
-        vllm_config = engine_args.create_engine_config()
+        aphrodite_config = engine_args.create_engine_config()
 
         assert (
-            vllm_config.compilation_config.max_cudagraph_capture_size
+            aphrodite_config.compilation_config.max_cudagraph_capture_size
             == expected_max_size
         )
 
@@ -523,7 +523,7 @@ def test_sequence_parallelism_requires_full_graph_compilation(
     expected_max_size: int,
 ):
     with patch.object(current_platform, "device_count", return_value=2):
-        vllm_config = AphroditeConfig(
+        aphrodite_config = AphroditeConfig(
             parallel_config=ParallelConfig(tensor_parallel_size=2),
             scheduler_config=SchedulerConfig(
                 max_num_seqs=128,
@@ -532,14 +532,14 @@ def test_sequence_parallelism_requires_full_graph_compilation(
                 is_encoder_decoder=False,
             ),
         )
-        vllm_config.model_config = MagicMock(
+        aphrodite_config.model_config = MagicMock(
             dtype=torch.float16,
             enforce_eager=False,
             is_moe=False,
             disable_cascade_attn=False,
             get_hidden_size=MagicMock(return_value=4096),
         )
-        vllm_config.compilation_config = CompilationConfig(
+        aphrodite_config.compilation_config = CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
             cudagraph_capture_sizes=[1, 2, 4, 15],
             max_cudagraph_capture_size=None,
@@ -555,41 +555,41 @@ def test_sequence_parallelism_requires_full_graph_compilation(
             ),
             cudagraph_mode=cudagraph_mode,
         )
-        vllm_config.compilation_config.set_splitting_ops_for_v1(
-            all2all_backend=vllm_config.parallel_config.all2all_backend,
+        aphrodite_config.compilation_config.set_splitting_ops_for_v1(
+            all2all_backend=aphrodite_config.parallel_config.all2all_backend,
             data_parallel_size=1,
         )
-        vllm_config._set_compile_ranges()
-        vllm_config._set_cudagraph_sizes()
+        aphrodite_config._set_compile_ranges()
+        aphrodite_config._set_cudagraph_sizes()
 
     assert (
-        vllm_config.compilation_config.use_inductor_graph_partition
+        aphrodite_config.compilation_config.use_inductor_graph_partition
         == use_inductor_graph_partition
     )
     assert (
-        bool(vllm_config.compilation_config.splitting_ops) == expected_piecewise_compile
+        bool(aphrodite_config.compilation_config.splitting_ops) == expected_piecewise_compile
     )
-    assert vllm_config.compilation_config.pass_config.enable_sp == expected_enable_sp
+    assert aphrodite_config.compilation_config.pass_config.enable_sp == expected_enable_sp
     assert (
-        vllm_config.compilation_config.pass_config.fuse_gemm_comms == expected_enable_sp
+        aphrodite_config.compilation_config.pass_config.fuse_gemm_comms == expected_enable_sp
     )
-    assert vllm_config.compilation_config.cudagraph_mode == expected_cudagraph_mode
+    assert aphrodite_config.compilation_config.cudagraph_mode == expected_cudagraph_mode
     assert (
-        vllm_config.compilation_config.cudagraph_capture_sizes == expected_capture_sizes
-    )
-    assert (
-        vllm_config.compilation_config.max_cudagraph_capture_size == expected_max_size
+        aphrodite_config.compilation_config.cudagraph_capture_sizes == expected_capture_sizes
     )
     assert (
-        511 in vllm_config.compilation_config.compile_ranges_endpoints
+        aphrodite_config.compilation_config.max_cudagraph_capture_size == expected_max_size
+    )
+    assert (
+        511 in aphrodite_config.compilation_config.compile_ranges_endpoints
     ) == expected_enable_sp
 
 
-def test_cached_compilation_config(default_vllm_config):
+def test_cached_compilation_config(default_aphrodite_config):
     import torch
     from torch._inductor.utils import run_and_get_code
 
-    from aphrodite.config import get_cached_compilation_config, set_current_vllm_config
+    from aphrodite.config import get_cached_compilation_config, set_current_aphrodite_config
     from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
     from aphrodite.model_executor.layers.quantization.utils.quant_utils import GroupShape
 
@@ -603,16 +603,16 @@ def test_cached_compilation_config(default_vllm_config):
     # of the custom op `torch.ops._C.static_scaled_fp8_quant`.
     get_cached_compilation_config()
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
             custom_ops=["+quant_fp8"],
         )
     )
 
-    # set_current_vllm_config should clear cached compilation config and
-    # use the new compilation_config in vllm_config
-    with set_current_vllm_config(vllm_config):
+    # set_current_aphrodite_config should clear cached compilation config and
+    # use the new compilation_config in aphrodite_config
+    with set_current_aphrodite_config(aphrodite_config):
         query_quant = QuantFP8(static=True, group_shape=GroupShape.PER_TENSOR)
         query_quant = torch.compile(query_quant)
 
@@ -627,7 +627,7 @@ def test_cached_compilation_config(default_vllm_config):
     assert "torch.ops._C.static_scaled_fp8_quant.default(" in code
 
 
-def _create_vllm_config_for_validation(
+def _create_aphrodite_config_for_validation(
     compilation_config: CompilationConfig,
 ) -> MagicMock:
     """Helper to create a mock AphroditeConfig for padding validation testing."""
@@ -659,7 +659,7 @@ def test_compile_sizes_padding_validation():
             cudagraph_mode=CUDAGraphMode.FULL,
         )
         config.post_init_cudagraph_sizes()
-        dispatcher = CudagraphDispatcher(_create_vllm_config_for_validation(config))
+        dispatcher = CudagraphDispatcher(_create_aphrodite_config_for_validation(config))
         dispatcher.initialize_cudagraph_keys(CUDAGraphMode.FULL)
 
     with pytest.raises(ValueError, match="would be padded to"):
@@ -670,7 +670,7 @@ def test_compile_sizes_padding_validation():
             cudagraph_mode=CUDAGraphMode.FULL,
         )
         config.post_init_cudagraph_sizes()
-        dispatcher = CudagraphDispatcher(_create_vllm_config_for_validation(config))
+        dispatcher = CudagraphDispatcher(_create_aphrodite_config_for_validation(config))
         dispatcher.initialize_cudagraph_keys(CUDAGraphMode.FULL)
 
     config = CompilationConfig(
@@ -681,7 +681,7 @@ def test_compile_sizes_padding_validation():
     )
     config.post_init_cudagraph_sizes()
     assert sorted(config.compile_sizes) == [1, 2, 4, 8]
-    dispatcher = CudagraphDispatcher(_create_vllm_config_for_validation(config))
+    dispatcher = CudagraphDispatcher(_create_aphrodite_config_for_validation(config))
     dispatcher.initialize_cudagraph_keys(CUDAGraphMode.FULL)  # Should not raise
 
     config = CompilationConfig(
@@ -713,7 +713,7 @@ def test_compile_sizes_padding_validation():
     )
     config.post_init_cudagraph_sizes()
     assert sorted(config.compile_sizes) == [3, 5, 7]
-    dispatcher = CudagraphDispatcher(_create_vllm_config_for_validation(config))
+    dispatcher = CudagraphDispatcher(_create_aphrodite_config_for_validation(config))
     dispatcher.initialize_cudagraph_keys(CUDAGraphMode.NONE)  # Should not raise
 
 

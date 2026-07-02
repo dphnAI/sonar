@@ -24,16 +24,16 @@ class DummyDraftProposer:
     This demonstrates the class-based custom proposer interface.
     """
 
-    def __init__(self, vllm_config: AphroditeConfig):
+    def __init__(self, aphrodite_config: AphroditeConfig):
         """Initialize the custom proposer.
 
         Args:
-            vllm_config: Aphrodite configuration containing model and speculative settings.
+            aphrodite_config: Aphrodite configuration containing model and speculative settings.
         """
         self.num_speculative_tokens = (
-            vllm_config.speculative_config.num_speculative_tokens
+            aphrodite_config.speculative_config.num_speculative_tokens
         )
-        self.max_model_len = vllm_config.model_config.max_model_len
+        self.max_model_len = aphrodite_config.model_config.max_model_len
         print(
             f"[DummyDraftProposer.__init__] num_speculative_tokens="
             f"{self.num_speculative_tokens}, max_model_len={self.max_model_len}"

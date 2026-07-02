@@ -102,17 +102,17 @@ RERANK_MODELS = [
 
 
 @pytest.mark.parametrize("model_info", MODELS)
-def test_embed_models_mteb(hf_runner, vllm_runner, model_info: EmbedModelInfo) -> None:
-    mteb_test_embed_models(hf_runner, vllm_runner, model_info)
+def test_embed_models_mteb(hf_runner, aphrodite_runner, model_info: EmbedModelInfo) -> None:
+    mteb_test_embed_models(hf_runner, aphrodite_runner, model_info)
 
 
 @pytest.mark.parametrize("model_info", MODELS)
 def test_embed_models_correctness(
-    hf_runner, vllm_runner, model_info: EmbedModelInfo, example_prompts
+    hf_runner, aphrodite_runner, model_info: EmbedModelInfo, example_prompts
 ) -> None:
-    correctness_test_embed_models(hf_runner, vllm_runner, model_info, example_prompts)
+    correctness_test_embed_models(hf_runner, aphrodite_runner, model_info, example_prompts)
 
 
 @pytest.mark.parametrize("model_info", RERANK_MODELS)
-def test_rerank_models_mteb(vllm_runner, model_info: RerankModelInfo) -> None:
-    mteb_test_rerank_models(vllm_runner, model_info)
+def test_rerank_models_mteb(aphrodite_runner, model_info: RerankModelInfo) -> None:
+    mteb_test_rerank_models(aphrodite_runner, model_info)

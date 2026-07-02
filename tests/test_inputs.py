@@ -20,8 +20,8 @@ pytestmark = pytest.mark.cpu_test
 )
 def test_preprocessor_always_mm_code_path(model_id, prompt):
     model_config = ModelConfig(model=model_id)
-    vllm_config = AphroditeConfig(model_config=model_config)
-    input_preprocessor = InputPreprocessor(vllm_config)
+    aphrodite_config = AphroditeConfig(model_config=model_config)
+    input_preprocessor = InputPreprocessor(aphrodite_config)
 
     # HF processor adds sep token
     tokenizer = input_preprocessor.get_tokenizer()

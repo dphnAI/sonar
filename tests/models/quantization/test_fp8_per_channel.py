@@ -36,7 +36,7 @@ NUM_LOG_PROBS = 8
 @pytest.mark.quant_model
 @pytest.mark.parametrize("model", [DENSE_MODEL, MOE_MODEL], ids=["dense", "moe"])
 def test_fp8_per_channel_logprobs(
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -52,22 +52,22 @@ def test_fp8_per_channel_logprobs(
     with monkeypatch.context() as m:
         m.setenv("TOKENIZERS_PARALLELISM", "true")
 
-        with vllm_runner(
+        with aphrodite_runner(
             model,
             max_model_len=MAX_MODEL_LEN,
             enforce_eager=True,
-        ) as vllm_model:
-            baseline_outputs = vllm_model.generate_greedy_logprobs(
+        ) as aphrodite_model:
+            baseline_outputs = aphrodite_model.generate_greedy_logprobs(
                 example_prompts, MAX_TOKENS, NUM_LOG_PROBS
             )
 
-        with vllm_runner(
+        with aphrodite_runner(
             model,
             max_model_len=MAX_MODEL_LEN,
             enforce_eager=True,
             quantization="fp8_per_channel",
-        ) as vllm_model:
-            test_outputs = vllm_model.generate_greedy_logprobs(
+        ) as aphrodite_model:
+            test_outputs = aphrodite_model.generate_greedy_logprobs(
                 example_prompts, MAX_TOKENS, NUM_LOG_PROBS
             )
 

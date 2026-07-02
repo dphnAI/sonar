@@ -60,7 +60,7 @@ class _DictStore:
         return [0 if k in self._data else -1 for k in keys]
 
 
-def _minimal_vllm_config(cache_block_size=16):
+def _minimal_aphrodite_config(cache_block_size=16):
     cfg = MagicMock()
     cfg.cache_config.block_size = cache_block_size
     cfg.cache_config.num_gpu_blocks = 4
@@ -88,7 +88,7 @@ def _minimal_vllm_config(cache_block_size=16):
     return cfg
 
 
-def _build_worker_with_dict_store(vllm_config, kv_cache_config, store):
+def _build_worker_with_dict_store(aphrodite_config, kv_cache_config, store):
     """Build a MooncakeStoreWorker patching all distributed dependencies."""
     fake_mooncake_store = types.ModuleType("mooncake.store")
     fake_mooncake_store.MooncakeDistributedStore = lambda: store  # type: ignore[attr-defined]
@@ -133,7 +133,7 @@ def _build_worker_with_dict_store(vllm_config, kv_cache_config, store):
             mock_pcp.return_value.world_size = 1
             mock_dcp.return_value.world_size = 1
             worker = mooncake_store_worker.MooncakeStoreWorker(
-                vllm_config, kv_cache_config=kv_cache_config
+                aphrodite_config, kv_cache_config=kv_cache_config
             )
     return worker
 
@@ -164,10 +164,10 @@ def test_e2e_swa_plus_full_save_then_lookup_hits():
             KVCacheGroupSpec(["L1"], swa),
         ],
     )
-    vllm_config = _minimal_vllm_config(cache_block_size=16)
+    aphrodite_config = _minimal_aphrodite_config(cache_block_size=16)
     store = _DictStore()
 
-    worker = _build_worker_with_dict_store(vllm_config, cfg, store)
+    worker = _build_worker_with_dict_store(aphrodite_config, cfg, store)
     worker.tp_size = 1
     worker.pp_size = 1
     worker.put_step = 1
@@ -305,7 +305,7 @@ def test_recv_skips_swa_blocks_before_window():
         block_ids=([0, 1, 2, 3], [0, 1, 2, 3]),
         block_hashes=hs,
         load_spec=LoadSpec(
-            vllm_cached_tokens=0, kvpool_cached_tokens=64, can_load=True, token_len=64
+            aphrodite_cached_tokens=0, kvpool_cached_tokens=64, can_load=True, token_len=64
         ),
     )
     recv.request_queue.put(req)

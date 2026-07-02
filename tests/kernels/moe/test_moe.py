@@ -22,7 +22,7 @@ from tests.kernels.moe.utils import (
     modular_triton_fused_moe,
 )
 from tests.kernels.utils import opcheck, stack_and_dev, torch_experts, torch_moe
-from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.fused_moe import (
     MoEActivation,
     fused_topk,
@@ -208,7 +208,7 @@ FUSED_MOE_WN16_MNK_FACTORS = [
     (222, 2048, 1024),
 ]
 
-vllm_config = AphroditeConfig()
+aphrodite_config = AphroditeConfig()
 
 
 def run_moe_test(
@@ -380,7 +380,7 @@ def test_fused_moe(
 
     use_cudagraph = n >= 1024 and k >= 1024 and current_platform.is_cuda_alike()
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         baseline_output = runner(torch_moe, iterative_moe)
         runner(
             baseline_output,
@@ -429,7 +429,7 @@ def test_fused_moe_int64_overflow(workspace_init):
 
     fused_moe_fn = functools.partial(fused_moe, renormalize=False)
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         run_moe_test(
             torch_moe,
             fused_moe_fn,
@@ -529,7 +529,7 @@ def test_naive_block_assignment_moe(
 
     use_cudagraph = n >= 1024 and k >= 1024 and current_platform.is_cuda_alike()
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         baseline_output = runner(torch_moe, iterative_moe)
         runner(
             baseline_output,
@@ -659,7 +659,7 @@ def test_fused_moe_wn16(
         block_shape=[0, group_size],
     )
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         triton_output = fused_moe(
             a,
             w1_qweight,
@@ -898,7 +898,7 @@ class MarlinMoEWeightData:
     marlin_moe_generate_valid_test_cases(),
 )
 @pytest.mark.skipif(current_platform.is_rocm(), reason="Skip for rocm")
-@pytest.mark.usefixtures("default_vllm_config")
+@pytest.mark.usefixtures("default_aphrodite_config")
 def test_fused_marlin_moe(
     a_type: ScalarType,
     b_type: ScalarType,
@@ -964,7 +964,7 @@ def test_fused_marlin_moe(
 
     topk_weights, topk_ids, _ = fused_topk(a, score, topk, False)
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         score = torch.softmax(score, dim=-1, dtype=torch.float32)
         topk_weight, topk_ids = torch.topk(score, topk)
         torch_output = torch_experts(
@@ -1011,7 +1011,7 @@ def test_fused_marlin_moe(
 
 @pytest.mark.flaky(reruns=2)
 @pytest.mark.skipif(current_platform.is_rocm(), reason="Skip for rocm")
-@pytest.mark.usefixtures("default_vllm_config")
+@pytest.mark.usefixtures("default_aphrodite_config")
 @pytest.mark.parametrize("m", [1, 256])
 def test_fused_marlin_moe_with_bias(m):
     set_random_seed(0)
@@ -1050,7 +1050,7 @@ def test_fused_marlin_moe_with_bias(m):
 
     topk_weights, topk_ids, _ = fused_topk(a, score, topk, False)
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         torch_output = torch_moe(
             a, w1_data.w_ref, w2_data.w_ref, score, topk, b_bias1, b_bias2
         )
@@ -1084,7 +1084,7 @@ def test_fused_marlin_moe_with_bias(m):
 
 @pytest.mark.flaky(reruns=2)
 @pytest.mark.skipif(current_platform.is_rocm(), reason="Skip for rocm")
-@pytest.mark.usefixtures("default_vllm_config")
+@pytest.mark.usefixtures("default_aphrodite_config")
 @pytest.mark.parametrize("m", [1, 64, 256])
 @pytest.mark.parametrize("n,k", [(1024, 1024), (2048, 2048)])
 @pytest.mark.parametrize("e,topk", [(8, 2), (64, 4)])
@@ -1127,7 +1127,7 @@ def test_fused_marlin_moe_non_gated(
 
     topk_weights, topk_ids, _ = fused_topk(a, score, topk, False)
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         torch_output = torch_moe(
             a,
             w1_data.w_ref,
@@ -1271,7 +1271,7 @@ def test_moe_sum(m: int, topk: int, k: int, dtype: torch.dtype, layout: str):
     opcheck(torch.ops._moe_C.moe_sum, (input, actual))
 
 
-@pytest.mark.usefixtures("default_vllm_config")
+@pytest.mark.usefixtures("default_aphrodite_config")
 @pytest.mark.parametrize("m", [1, 33])
 @pytest.mark.parametrize("n,k", [(128, 128)])
 @pytest.mark.parametrize("e", [8])
@@ -1638,7 +1638,7 @@ def test_unquantized_bf16_flashinfer_trtllm_backend(
         moe_backend="flashinfer_trtllm",
     )
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         quant_method = UnquantizedFusedMoEMethod(moe_config)
 
         # Verify TRTLLM backend was selected

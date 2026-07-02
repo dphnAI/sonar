@@ -4,7 +4,7 @@ import copy
 
 import pytest
 
-from tests.plugins.vllm_add_dummy_stat_logger.dummy_stat_logger.dummy_stat_logger import (  # noqa E501
+from tests.plugins.aphrodite_add_dummy_stat_logger.dummy_stat_logger.dummy_stat_logger import (  # noqa E501
     DummyStatLogger,
 )
 from aphrodite.v1.engine.async_llm import AsyncEngineArgs, AsyncLLM

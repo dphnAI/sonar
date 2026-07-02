@@ -22,24 +22,24 @@ from aphrodite.config import KVTransferConfig, AphroditeConfig
 from aphrodite.distributed.kv_transfer.kv_connector.v1 import KVConnectorRole
 from aphrodite.v1.kv_cache_interface import KVCacheConfig
 
-from .utils import create_vllm_config
+from .utils import create_aphrodite_config
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _make_vllm_config(
+def _make_aphrodite_config(
     kv_connector: str = "FlexKVConnectorV1",
     kv_role: str = "kv_both",
 ) -> AphroditeConfig:
     """Return a minimal AphroditeConfig with a KVTransferConfig attached."""
-    vllm_config = create_vllm_config(block_size=16, max_num_batched_tokens=512)
-    vllm_config.kv_transfer_config = KVTransferConfig(
+    aphrodite_config = create_aphrodite_config(block_size=16, max_num_batched_tokens=512)
+    aphrodite_config.kv_transfer_config = KVTransferConfig(
         kv_connector=kv_connector,
         kv_role=kv_role,
     )
-    return vllm_config
+    return aphrodite_config
 
 
 def _make_kv_cache_config() -> KVCacheConfig:
@@ -53,8 +53,8 @@ def _make_flexkv_module(
     when ``FlexKVConnectorV1Impl`` is instantiated."""
     flexkv_mod = types.ModuleType("flexkv")
     integration_mod = types.ModuleType("flexkv.integration")
-    vllm_mod = types.ModuleType("flexkv.integration.aphrodite")
-    adapter_mod = types.ModuleType("flexkv.integration.aphrodite.vllm_v1_adapter")
+    aphrodite_mod = types.ModuleType("flexkv.integration.aphrodite")
+    adapter_mod = types.ModuleType("flexkv.integration.aphrodite.aphrodite_v1_adapter")
 
     # Make FlexKVConnectorV1Impl() return our mock instance.
     # The "# type: ignore" markers below are needed because ModuleType does
@@ -63,8 +63,8 @@ def _make_flexkv_module(
     adapter_mod.FlexKVConnectorV1Impl = FlexKVConnectorV1ImplCls  # type: ignore
 
     flexkv_mod.integration = integration_mod  # type: ignore
-    integration_mod.aphrodite = vllm_mod  # type: ignore
-    vllm_mod.vllm_v1_adapter = adapter_mod  # type: ignore
+    integration_mod.aphrodite = aphrodite_mod  # type: ignore
+    aphrodite_mod.aphrodite_v1_adapter = adapter_mod  # type: ignore
 
     return flexkv_mod, adapter_mod
 
@@ -77,12 +77,12 @@ def _install_flexkv_mock(impl_mock: MagicMock):
         "flexkv": flexkv_mod,
         "flexkv.integration": flexkv_mod.integration,
         "flexkv.integration.aphrodite": flexkv_mod.integration.aphrodite,
-        "flexkv.integration.aphrodite.vllm_v1_adapter": adapter_mod,
+        "flexkv.integration.aphrodite.aphrodite_v1_adapter": adapter_mod,
     }
     return patch.dict(sys.modules, mods)
 
 
-def _build_connector(vllm_config: AphroditeConfig, impl_mock: MagicMock):
+def _build_connector(aphrodite_config: AphroditeConfig, impl_mock: MagicMock):
     """Instantiate FlexKVConnectorV1 with faked flexkv modules."""
     from aphrodite.distributed.kv_transfer.kv_connector.v1.flexkv_connector import (
         FlexKVConnectorV1,
@@ -90,7 +90,7 @@ def _build_connector(vllm_config: AphroditeConfig, impl_mock: MagicMock):
 
     with _install_flexkv_mock(impl_mock):
         connector = FlexKVConnectorV1(
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             role=KVConnectorRole.WORKER,
             kv_cache_config=_make_kv_cache_config(),
         )
@@ -118,7 +118,7 @@ class TestFlexKVConnectorImportError:
 
         with pytest.raises(ImportError, match="(?i)flexkv") as exc_info:
             FlexKVConnectorV1(
-                vllm_config=_make_vllm_config(),
+                aphrodite_config=_make_aphrodite_config(),
                 role=KVConnectorRole.WORKER,
                 kv_cache_config=_make_kv_cache_config(),
             )
@@ -132,7 +132,7 @@ class TestFlexKVConnectorDelegation:
     @pytest.fixture()
     def connector_and_impl(self):
         impl = MagicMock()
-        cfg = _make_vllm_config()
+        cfg = _make_aphrodite_config()
         connector = _build_connector(cfg, impl)
         return connector, impl
 

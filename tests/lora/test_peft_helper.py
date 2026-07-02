@@ -46,7 +46,7 @@ def test_peft_helper_pass(llama32_lora_files, tmp_path):
         "up_proj",
         "v_proj",
     ]
-    assert peft_helper.vllm_max_position_embeddings == 4096
+    assert peft_helper.aphrodite_max_position_embeddings == 4096
 
     # test RSLoRA
     rslora_config = dict(use_rslora=True)
@@ -67,7 +67,7 @@ def test_peft_helper_pass(llama32_lora_files, tmp_path):
     peft_helper = PEFTHelper.from_local_dir(test_dir, max_position_embeddings=4096)
     peft_helper.validate_legal(lora_config)
     scaling = peft_helper.lora_alpha / math.sqrt(peft_helper.r)
-    assert abs(peft_helper.vllm_lora_scaling_factor - scaling) < 1e-3
+    assert abs(peft_helper.aphrodite_lora_scaling_factor - scaling) < 1e-3
 
 
 @pytest.mark.parametrize("test_name,config_change,expected_error", ERROR_CASES)

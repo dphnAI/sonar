@@ -17,7 +17,7 @@ from aphrodite.platforms import current_platform
 if current_platform.get_device_capability() < (7, 0):
     pytest.skip("INT8 Triton requires CUDA 7.0 or higher", allow_module_level=True)
 
-vllm_config = AphroditeConfig()
+aphrodite_config = AphroditeConfig()
 
 DTYPES = [torch.half, torch.bfloat16]
 M = [1, 33, 64, 222]

@@ -56,7 +56,7 @@ MODELS = ["royokong/e5-v"]
 
 def _run_test(
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     input_texts: list[str],
     input_images: PromptImageInput,
     model: str,
@@ -67,10 +67,10 @@ def _run_test(
     # Aphrodite needs a fresh new process without cuda initialization.
     # if we run HF first, the cuda initialization will be done and it
     # will hurt multiprocessing backend with fork method (the default method).
-    with vllm_runner(
+    with aphrodite_runner(
         model, runner="pooling", dtype=dtype, max_model_len=4096, enforce_eager=True
-    ) as vllm_model:
-        vllm_outputs = vllm_model.embed(input_texts, images=input_images)
+    ) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.embed(input_texts, images=input_images)
 
     with hf_runner(
         model, dtype=dtype, auto_cls=AutoModelForImageTextToText
@@ -102,7 +102,7 @@ def _run_test(
 
     check_embeddings_close(
         embeddings_0_lst=hf_outputs,
-        embeddings_1_lst=vllm_outputs,
+        embeddings_1_lst=aphrodite_outputs,
         name_0="hf",
         name_1="aphrodite",
     )
@@ -113,7 +113,7 @@ def _run_test(
 @pytest.mark.parametrize("dtype", ["half"])
 def test_models_text(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     image_assets,
     model: str,
     dtype: str,
@@ -124,7 +124,7 @@ def test_models_text(
 
     _run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         input_texts,
         input_images,  # type: ignore
         model,
@@ -138,7 +138,7 @@ def test_models_text(
 @pytest.mark.parametrize("dtype", ["half"])
 def test_models_image(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     image_assets,
     model: str,
     dtype: str,
@@ -151,7 +151,7 @@ def test_models_image(
 
     _run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         input_texts,
         input_images,
         model,

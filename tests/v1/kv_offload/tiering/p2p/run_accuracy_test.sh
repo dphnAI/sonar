@@ -21,7 +21,7 @@
 #   PREFILL_BLOCK_SIZE          default 128
 #   DECODE_BLOCK_SIZE           default 128
 #   CPU_BYTES                   default 209715200 (200 MB)
-#   APHRODITE_SERVE_EXTRA_ARGS       comma-separated extra args for vllm serve
+#   APHRODITE_SERVE_EXTRA_ARGS       comma-separated extra args for aphrodite serve
 #   --decoder-first             toggle decoder-first proxy mode
 #
 # Examples:
@@ -93,12 +93,12 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 GIT_ROOT="${GIT_ROOT:-$(cd -- "${SCRIPT_DIR}/../../../../.." && pwd -P)}"
 
 if [[ -z "${APHRODITE_BIN:-}" ]]; then
-    if [[ -x "${GIT_ROOT}/.venv/bin/vllm" ]]; then
-        APHRODITE_BIN="${GIT_ROOT}/.venv/bin/vllm"
-    elif [[ -x "/workspace/venv/bin/vllm" ]]; then
-        APHRODITE_BIN="/workspace/venv/bin/vllm"
+    if [[ -x "${GIT_ROOT}/.venv/bin/aphrodite" ]]; then
+        APHRODITE_BIN="${GIT_ROOT}/.venv/bin/aphrodite"
+    elif [[ -x "/workspace/venv/bin/aphrodite" ]]; then
+        APHRODITE_BIN="/workspace/venv/bin/aphrodite"
     else
-        APHRODITE_BIN="$(command -v vllm)"
+        APHRODITE_BIN="$(command -v aphrodite)"
     fi
 fi
 if [[ -z "${PYTHON_BIN:-}" ]]; then
@@ -110,7 +110,7 @@ if [[ -z "${PYTHON_BIN:-}" ]]; then
         PYTHON_BIN="$(command -v python3 || command -v python)"
     fi
 fi
-echo "Using vllm: ${APHRODITE_BIN}"
+echo "Using aphrodite: ${APHRODITE_BIN}"
 echo "Using python: ${PYTHON_BIN}"
 
 SMI_BIN=$(command -v nvidia-smi || command -v rocm-smi || echo "")
@@ -131,7 +131,7 @@ wait_for_server() {
 
 cleanup_instances() {
   echo "Cleaning up any running vLLM / proxy instances..."
-  pkill -f "vllm serve" || true
+  pkill -f "aphrodite serve" || true
   pkill -f "p2p_connector_proxy.py" || true
   sleep 2
 }

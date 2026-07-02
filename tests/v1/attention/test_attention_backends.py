@@ -12,7 +12,7 @@ from tests.v1.attention.utils import (
     BatchSpec,
     create_common_attn_metadata,
     create_standard_kv_cache_spec,
-    create_vllm_config,
+    create_aphrodite_config,
     try_backend_includes_kv_cache_update,
     try_get_attention_backend,
 )
@@ -215,7 +215,7 @@ def run_attention_backend(
     backend: AttentionBackendEnum,
     kv_cache_spec: FullAttentionSpec,
     layer_names: list[str],
-    vllm_config,
+    aphrodite_config,
     device: torch.device,
     common_attn_metadata: CommonAttentionMetadata,
     query: torch.Tensor,
@@ -243,9 +243,9 @@ def run_attention_backend(
 
         from aphrodite.v1.attention.backends.utils import PerLayerParameters
 
-        def mock_get_per_layer_parameters(vllm_config, layer_names, impl_cls):
+        def mock_get_per_layer_parameters(aphrodite_config, layer_names, impl_cls):
             # Return mock parameters for a single layer
-            head_size = vllm_config.model_config.get_head_size()
+            head_size = aphrodite_config.model_config.get_head_size()
             return {
                 layer_name: PerLayerParameters(
                     window_left=-1,  # No sliding window
@@ -259,14 +259,14 @@ def run_attention_backend(
             "aphrodite.v1.attention.backends.flashinfer.get_per_layer_parameters",
             mock_get_per_layer_parameters,
         ):
-            builder = builder_cls(kv_cache_spec, layer_names, vllm_config, device)
+            builder = builder_cls(kv_cache_spec, layer_names, aphrodite_config, device)
             attn_metadata = builder.build(
                 common_prefix_len=0,
                 common_attn_metadata=common_attn_metadata,
             )
     else:
         # Build metadata
-        builder = builder_cls(kv_cache_spec, layer_names, vllm_config, device)
+        builder = builder_cls(kv_cache_spec, layer_names, aphrodite_config, device)
         if actual_backend == AttentionBackendEnum.FLEX_ATTENTION:
             builder.direct_build = use_direct_block_mask
         attn_metadata = builder.build(
@@ -275,13 +275,13 @@ def run_attention_backend(
         )
 
     # Instantiate implementation
-    num_heads = vllm_config.model_config.get_num_attention_heads(
-        vllm_config.parallel_config
+    num_heads = aphrodite_config.model_config.get_num_attention_heads(
+        aphrodite_config.parallel_config
     )
-    num_kv_heads = vllm_config.model_config.get_num_kv_heads(
-        vllm_config.parallel_config
+    num_kv_heads = aphrodite_config.model_config.get_num_kv_heads(
+        aphrodite_config.parallel_config
     )
-    head_size = vllm_config.model_config.get_head_size()
+    head_size = aphrodite_config.model_config.get_head_size()
     scale = 1.0 / (head_size**0.5)
     impl = impl_cls(
         num_heads=num_heads,
@@ -364,7 +364,7 @@ def _test_backend_correctness(
                 1, original_num_kv_heads // tensor_parallel_size
             )
 
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         model_name=model,
         tensor_parallel_size=1,  # Always use TP=1 to avoid multi-GPU requirements
         max_model_len=max(batch_spec.seq_lens),
@@ -374,26 +374,26 @@ def _test_backend_correctness(
     )
     device = torch.device(f"{DEVICE_TYPE}:0")
 
-    kv_cache_spec = create_standard_kv_cache_spec(vllm_config, attn_type)
+    kv_cache_spec = create_standard_kv_cache_spec(aphrodite_config, attn_type)
 
     # 1. Setup
     batch_size = batch_spec.batch_size
     seq_lens = batch_spec.seq_lens
     query_lens = batch_spec.query_lens
-    num_q_heads = vllm_config.model_config.get_num_attention_heads(
-        vllm_config.parallel_config
+    num_q_heads = aphrodite_config.model_config.get_num_attention_heads(
+        aphrodite_config.parallel_config
     )
-    num_kv_heads = vllm_config.model_config.get_num_kv_heads(
-        vllm_config.parallel_config
+    num_kv_heads = aphrodite_config.model_config.get_num_kv_heads(
+        aphrodite_config.parallel_config
     )
-    head_size = vllm_config.model_config.get_head_size()
-    sliding_window = vllm_config.model_config.get_sliding_window()
-    dtype = _convert_dtype_to_torch(vllm_config.model_config.dtype)
-    block_size = vllm_config.cache_config.block_size
+    head_size = aphrodite_config.model_config.get_head_size()
+    sliding_window = aphrodite_config.model_config.get_sliding_window()
+    dtype = _convert_dtype_to_torch(aphrodite_config.model_config.dtype)
+    block_size = aphrodite_config.cache_config.block_size
     scale = 1.0 / (head_size**0.5)
 
     # 2. Generate data and compute SDPA reference output
-    all_q_vllm, all_k_vllm, all_v_vllm = [], [], []
+    all_q_aphrodite, all_k_aphrodite, all_v_aphrodite = [], [], []
     all_sdpa_outputs = []
     k_contexts, v_contexts = [], []
 
@@ -441,21 +441,21 @@ def _test_backend_correctness(
         all_sdpa_outputs.append(sdpa_out_i.transpose(1, 2).squeeze(0))
 
         # Inputs for Aphrodite backends are just the new tokens
-        all_q_vllm.append(q)
-        all_k_vllm.append(k_full[context_len:])
-        all_v_vllm.append(v_full[context_len:])
+        all_q_aphrodite.append(q)
+        all_k_aphrodite.append(k_full[context_len:])
+        all_v_aphrodite.append(v_full[context_len:])
 
         # Contextual K/V data used to populate the paged cache
         k_contexts.append(k_full[:context_len])
         v_contexts.append(v_full[:context_len])
 
-    query_vllm = torch.cat(all_q_vllm, dim=0)
-    key_vllm = torch.cat(all_k_vllm, dim=0)
-    value_vllm = torch.cat(all_v_vllm, dim=0)
+    query_aphrodite = torch.cat(all_q_aphrodite, dim=0)
+    key_aphrodite = torch.cat(all_k_aphrodite, dim=0)
+    value_aphrodite = torch.cat(all_v_aphrodite, dim=0)
     sdpa_output = torch.cat(all_sdpa_outputs, dim=0)
 
     common_attn_metadata = create_common_attn_metadata(
-        batch_spec, vllm_config.cache_config.block_size, device
+        batch_spec, aphrodite_config.cache_config.block_size, device
     )
     common_attn_metadata.causal = causal
 
@@ -468,7 +468,7 @@ def _test_backend_correctness(
         head_size=head_size,
         dtype=dtype,
         device=device,
-        num_blocks=vllm_config.cache_config.num_gpu_blocks or 1000,
+        num_blocks=aphrodite_config.cache_config.num_gpu_blocks or 1000,
         common_attn_metadata=common_attn_metadata,
         randomize_blocks=True,
     )
@@ -512,12 +512,12 @@ def _test_backend_correctness(
                 backend_name,
                 kv_cache_spec,
                 ["placeholder"],
-                vllm_config,
+                aphrodite_config,
                 device,
                 common_attn_metadata,
-                query_vllm,
-                key_vllm,
-                value_vllm,
+                query_aphrodite,
+                key_aphrodite,
+                value_aphrodite,
                 kv_cache_for_backend,
                 sliding_window=sliding_window,
                 attn_type=attn_type,
@@ -571,7 +571,7 @@ def _test_backend_correctness(
 @pytest.mark.parametrize("model", ["meta-llama/Meta-Llama-3-8B"])
 @pytest.mark.parametrize("tensor_parallel_size", [1, 2, 4])
 def test_causal_backend_correctness(
-    default_vllm_config, batch_spec_name: str, model: str, tensor_parallel_size: int
+    default_aphrodite_config, batch_spec_name: str, model: str, tensor_parallel_size: int
 ):
     """Test backend's correctness with causal attention."""
 
@@ -775,7 +775,7 @@ if current_platform.is_rocm():
 )
 @pytest.mark.parametrize("model", ["meta-llama/Meta-Llama-3-8B"])
 def test_non_causal_backend_correctness(
-    default_vllm_config, batch_spec_name: str, model: str
+    default_aphrodite_config, batch_spec_name: str, model: str
 ):
     """Test backend's correctness with non-causal (bidirectional) decoder
     attention, as used by DFlash speculative decoding."""

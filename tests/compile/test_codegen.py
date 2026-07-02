@@ -75,7 +75,7 @@ def test_non_primitive_kwargs_lifted_to_consts(
 
     which fails at call time — only ``torch`` and ``operator`` are imported
     into the namespace, so ``device`` is unbound. The fix collects such
-    objects into ``__vllm_consts__`` and references them by index. The
+    objects into ``__aphrodite_consts__`` and references them by index. The
     unqualified ``device(type=...)`` form must never appear in the
     generated source."""
     split_gm = _trace_and_split(model_fn, (x,), split_ops)
@@ -83,7 +83,7 @@ def test_non_primitive_kwargs_lifted_to_consts(
 
     assert "device(type=" not in code, (
         "Generated code contains unqualified `device(type=...)` from repr(); "
-        "torch.device should be lifted into __vllm_consts__"
+        "torch.device should be lifted into __aphrodite_consts__"
     )
     assert torch.device("cpu") in consts, "torch.device kwarg not lifted to consts"
     assert torch.float16 in consts, "torch.dtype kwarg not lifted to consts"
@@ -122,7 +122,7 @@ def test_dtype_singleton_deduped(x: torch.Tensor) -> None:
     assert consts.count(torch.float16) == 1, (
         f"torch.float16 should occupy exactly one slot, got consts={consts}"
     )
-    assert code.count("__vllm_consts__[0]") >= 2, (
+    assert code.count("__aphrodite_consts__[0]") >= 2, (
         "Deduped const slot should be referenced from both _to_copy nodes"
     )
 
@@ -211,11 +211,11 @@ def test_consts_shared_across_split_submods(x: torch.Tensor) -> None:
     # one submod references it twice and the other not at all.
     fp16_idx = consts.index(torch.float16)
     submod_bodies = re.findall(
-        r"def __vllm_inlined_submods__(\d+)\([^)]*\):\n((?:    .*\n)+)", code
+        r"def __aphrodite_inlined_submods__(\d+)\([^)]*\):\n((?:    .*\n)+)", code
     )
     assert len(submod_bodies) >= 2
     referencing_submods = [
-        name for name, body in submod_bodies if f"__vllm_consts__[{fp16_idx}]" in body
+        name for name, body in submod_bodies if f"__aphrodite_consts__[{fp16_idx}]" in body
     ]
     assert len(referencing_submods) >= 2, (
         f"fp16 slot should be referenced from ≥2 inlined submods, "
@@ -229,7 +229,7 @@ def test_consts_shared_across_split_submods(x: torch.Tensor) -> None:
 def test_non_graphmodule_submod_uses_indexed_callable(x: torch.Tensor) -> None:
     """When a child of split_gm is *not* a ``torch.fx.GraphModule`` — as
     happens in production once ``PiecewiseBackend`` replaces submods —
-    codegen emits ``__vllm_submods__[idx](...)`` instead of inlining, and
+    codegen emits ``__aphrodite_submods__[idx](...)`` instead of inlining, and
     the runtime callable is bound from ``submod_callables``."""
 
     def model_fn(x: torch.Tensor) -> torch.Tensor:
@@ -257,7 +257,7 @@ def test_non_graphmodule_submod_uses_indexed_callable(x: torch.Tensor) -> None:
 
     code, submod_names, consts = generate_execution_code(split_gm)
 
-    assert "__vllm_submods__[" in code, (
+    assert "__aphrodite_submods__[" in code, (
         "Non-GraphModule submod should produce an indexed callable reference"
     )
     assert target_name in submod_names
@@ -341,30 +341,30 @@ def test_node_ref_recurses_through_containers() -> None:
     cpu = torch.device("cpu")
 
     # Non-primitive in a list, primitive alongside.
-    assert _node_ref([cpu, 1], consts, const_index) == "[__vllm_consts__[0], 1]"
+    assert _node_ref([cpu, 1], consts, const_index) == "[__aphrodite_consts__[0], 1]"
     assert consts == [cpu]
 
     # Same object in a tuple — id-based dedup reuses the existing slot.
-    assert _node_ref((cpu, 2), consts, const_index) == "(__vllm_consts__[0], 2)"
+    assert _node_ref((cpu, 2), consts, const_index) == "(__aphrodite_consts__[0], 2)"
     assert consts == [cpu]
 
     # Single-element tuple uses the trailing-comma form.
-    assert _node_ref((cpu,), consts, const_index) == "(__vllm_consts__[0],)"
+    assert _node_ref((cpu,), consts, const_index) == "(__aphrodite_consts__[0],)"
 
     # Dict value lifts the same way.
     ref = _node_ref({"k": cpu}, consts, const_index)
-    assert ref == "{'k': __vllm_consts__[0]}"
+    assert ref == "{'k': __aphrodite_consts__[0]}"
 
 
 def test_legacy_code_without_consts() -> None:
     """``compile_execution_fn(consts=None)`` must still load code that has
-    no ``__vllm_consts__`` reference, so older serialized cache artifacts
+    no ``__aphrodite_consts__`` reference, so older serialized cache artifacts
     keep working."""
-    # Pre-consts codegen: no __vllm_consts__ reference, only torch/operator.
+    # Pre-consts codegen: no __aphrodite_consts__ reference, only torch/operator.
     legacy_code = (
         "import torch\n"
-        "def execution_fn(x, *, __vllm_submods__):\n"
-        "    return __vllm_submods__[0](x) + 1\n"
+        "def execution_fn(x, *, __aphrodite_submods__):\n"
+        "    return __aphrodite_submods__[0](x) + 1\n"
     )
 
     class AddOne(torch.nn.Module):

@@ -55,23 +55,23 @@ def run_intern_vit_test(
 
     from aphrodite.model_executor.models.intern_vit import InternVisionModel
 
-    vllm_model = InternVisionModel(config)
-    vllm_model.load_weights(hf_model.state_dict().items())
+    aphrodite_model = InternVisionModel(config)
+    aphrodite_model.load_weights(hf_model.state_dict().items())
 
     del hf_model
     cleanup_dist_env_and_memory()
 
-    vllm_model = vllm_model.to(DEVICE_TYPE, torch_dtype)
-    vllm_outputs_per_image = [
-        vllm_model(pixel_values=pixel_value.to(DEVICE_TYPE))
+    aphrodite_model = aphrodite_model.to(DEVICE_TYPE, torch_dtype)
+    aphrodite_outputs_per_image = [
+        aphrodite_model(pixel_values=pixel_value.to(DEVICE_TYPE))
         for pixel_value in pixel_values
     ]
-    del vllm_model
+    del aphrodite_model
     cleanup_dist_env_and_memory()
 
     cos_similar = nn.CosineSimilarity(dim=-1)
-    for vllm_output, hf_output in zip(vllm_outputs_per_image, hf_outputs_per_image):
-        assert cos_similar(vllm_output, hf_output).mean() > 0.99
+    for aphrodite_output, hf_output in zip(aphrodite_outputs_per_image, hf_outputs_per_image):
+        assert cos_similar(aphrodite_output, hf_output).mean() > 0.99
 
 
 @pytest.mark.parametrize(
@@ -83,7 +83,7 @@ def run_intern_vit_test(
 )
 @pytest.mark.parametrize("dtype", ["half"])
 def test_models(
-    default_vllm_config, dist_init, image_assets, model_id, dtype: str
+    default_aphrodite_config, dist_init, image_assets, model_id, dtype: str
 ) -> None:
     run_intern_vit_test(
         image_assets,

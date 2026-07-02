@@ -20,7 +20,7 @@
 #include "libtorch_stable/dispatch_utils.h"
 #include "libtorch_stable/torch_utils.h"
 
-namespace vllm {
+namespace aphrodite {
 
 // Compute swizzled scale offset for SM100 trtllm-gen MHA kernel.
 // The swizzle pattern for HND layout is:
@@ -175,7 +175,7 @@ __global__ void reshape_and_cache_nvfp4_kernel(
   }
 }
 
-}  // namespace vllm
+}  // namespace aphrodite
 
 // Non-template entry point callable from cache_kernels.cu.
 // Receives key_cache/value_cache as kv_cache[:, 0] and kv_cache[:, 1].
@@ -262,7 +262,7 @@ void reshape_and_cache_nvfp4_dispatch(torch::stable::Tensor& key,
 
   APHRODITE_STABLE_DISPATCH_HALF_TYPES(
       key.scalar_type(), "reshape_and_cache_nvfp4", [&] {
-        vllm::reshape_and_cache_nvfp4_kernel<scalar_t>
+        aphrodite::reshape_and_cache_nvfp4_kernel<scalar_t>
             <<<grid, block, 0, stream>>>(
                 key.const_data_ptr<scalar_t>(),
                 value.const_data_ptr<scalar_t>(),

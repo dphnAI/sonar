@@ -74,7 +74,7 @@ def test_scaled_fp8_quant_per_channel_shape() -> None:
     reason="FP8 is not supported on this GPU type.",
 )
 def test_fp8_per_channel_online_quantization(
-    vllm_runner,
+    aphrodite_runner,
     monkeypatch,
 ) -> None:
     """End-to-end smoke: load `facebook/opt-125m` bf16 with
@@ -84,7 +84,7 @@ def test_fp8_per_channel_online_quantization(
     """
     monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
 
-    with vllm_runner(
+    with aphrodite_runner(
         "facebook/opt-125m",
         quantization="fp8_per_channel",
         enforce_eager=True,

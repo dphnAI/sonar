@@ -94,7 +94,7 @@ static inline __device__ int8_t int32_to_int8(int32_t x) {
 #endif
 }
 
-namespace vllm {
+namespace aphrodite {
 
 template <typename scalar_t, typename scale_t>
 __global__ void static_scaled_int8_quant_kernel(
@@ -260,7 +260,7 @@ __global__ void dynamic_scaled_int8_azp_quant_kernel(
       });
 }
 
-}  // namespace vllm
+}  // namespace aphrodite
 
 void static_scaled_int8_quant(
     torch::stable::Tensor& out,          // [..., hidden_size]
@@ -282,13 +282,13 @@ void static_scaled_int8_quant(
   APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "static_scaled_int8_quant_kernel", [&] {
         if (!azp) {
-          vllm::static_scaled_int8_quant_kernel<scalar_t, float>
+          aphrodite::static_scaled_int8_quant_kernel<scalar_t, float>
               <<<grid, block, 0, stream>>>(input.const_data_ptr<scalar_t>(),
                                            out.mutable_data_ptr<int8_t>(),
                                            scale.const_data_ptr<float>(),
                                            hidden_size);
         } else {
-          vllm::static_scaled_int8_azp_quant_kernel<scalar_t, float, int32_t>
+          aphrodite::static_scaled_int8_azp_quant_kernel<scalar_t, float, int32_t>
               <<<grid, block, 0, stream>>>(
                   input.const_data_ptr<scalar_t>(),
                   out.mutable_data_ptr<int8_t>(), scale.const_data_ptr<float>(),
@@ -317,13 +317,13 @@ void dynamic_scaled_int8_quant(
   APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
       input.scalar_type(), "dynamic_scaled_int8_quant_kernel", [&] {
         if (!azp) {
-          vllm::dynamic_scaled_int8_quant_kernel<scalar_t, float>
+          aphrodite::dynamic_scaled_int8_quant_kernel<scalar_t, float>
               <<<grid, block, 0, stream>>>(input.const_data_ptr<scalar_t>(),
                                            out.mutable_data_ptr<int8_t>(),
                                            scales.mutable_data_ptr<float>(),
                                            hidden_size);
         } else {
-          vllm::dynamic_scaled_int8_azp_quant_kernel<scalar_t, float, int32_t>
+          aphrodite::dynamic_scaled_int8_azp_quant_kernel<scalar_t, float, int32_t>
               <<<grid, block, 0, stream>>>(input.const_data_ptr<scalar_t>(),
                                            out.mutable_data_ptr<int8_t>(),
                                            scales.mutable_data_ptr<float>(),

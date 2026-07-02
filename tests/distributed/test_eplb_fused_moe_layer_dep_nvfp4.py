@@ -9,7 +9,7 @@ import pytest
 import torch
 
 from tests.kernels.moe.utils import make_test_quant_config
-from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.distributed.eplb.eplb_communicator import create_eplb_communicator
 from aphrodite.distributed.eplb.eplb_state import EplbLayerState
 from aphrodite.distributed.eplb.rebalance_execute import rearrange_expert_weights_inplace
@@ -112,12 +112,12 @@ def make_fused_moe_layer(
 def _test_eplb_fml(env, world_size: int, test_config: TestConfig):
     set_env_vars_and_device(env)
 
-    vllm_config = AphroditeConfig()
-    vllm_config.parallel_config.data_parallel_size = world_size
-    vllm_config.parallel_config.enable_expert_parallel = True
-    vllm_config.kernel_config.moe_backend = test_config.moe_backend
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.parallel_config.data_parallel_size = world_size
+    aphrodite_config.parallel_config.enable_expert_parallel = True
+    aphrodite_config.kernel_config.moe_backend = test_config.moe_backend
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         ensure_model_parallel_initialized(
             tensor_model_parallel_size=1, pipeline_model_parallel_size=1
         )
@@ -158,7 +158,7 @@ def _test_eplb_fml(env, world_size: int, test_config: TestConfig):
             num_tokens_across_dp=torch.tensor(
                 [test_config.num_tokens] * world_size, device="cpu", dtype=torch.int
             ),
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
         ):
             for lidx, fml in enumerate(fml_layers):
                 out_before_shuffle.append(
@@ -239,7 +239,7 @@ def _test_eplb_fml(env, world_size: int, test_config: TestConfig):
             num_tokens_across_dp=torch.tensor(
                 [test_config.num_tokens] * world_size, device="cpu", dtype=torch.int
             ),
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
         ):
             for lidx, fml in enumerate(fml_layers):
                 out_after_shuffle.append(

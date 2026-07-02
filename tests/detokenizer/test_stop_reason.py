@@ -20,15 +20,15 @@ MAX_TOKENS = 1024
 
 
 @pytest.fixture
-def vllm_model(vllm_runner):
-    with vllm_runner(MODEL) as vllm_model:
-        yield vllm_model
+def aphrodite_model(aphrodite_runner):
+    with aphrodite_runner(MODEL) as aphrodite_model:
+        yield aphrodite_model
 
 
-def test_stop_reason(vllm_model, example_prompts):
+def test_stop_reason(aphrodite_model, example_prompts):
     tokenizer = transformers.AutoTokenizer.from_pretrained(MODEL)
     stop_token_id = tokenizer.convert_tokens_to_ids(STOP_STR)
-    llm = vllm_model.llm
+    llm = aphrodite_model.llm
 
     # test stop token
     outputs = llm.generate(

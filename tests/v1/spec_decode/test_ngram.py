@@ -67,7 +67,7 @@ def test_ngram_proposer():
         # Dummy model config. Just to set max_model_len.
         model_config = ModelConfig(model="facebook/opt-125m")
         return NgramProposer(
-            vllm_config=AphroditeConfig(
+            aphrodite_config=AphroditeConfig(
                 model_config=model_config,
                 speculative_config=SpeculativeConfig(
                     prompt_lookup_min=min_n,

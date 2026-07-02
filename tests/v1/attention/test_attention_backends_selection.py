@@ -81,7 +81,7 @@ from aphrodite.v1.attention.backends.short_conv_attn import ShortConvAttentionBa
     ],
 )
 def test_mamba_layers_get_attn_backend(
-    default_vllm_config,
+    default_aphrodite_config,
     dist_init,
     layer_class,
     init_kwargs,
@@ -90,7 +90,7 @@ def test_mamba_layers_get_attn_backend(
 ):
     """Test that Mamba-like layers return the correct attention backend."""
     if layer_class is MiniMaxText01LinearAttention:
-        init_kwargs["vllm_config"] = default_vllm_config
+        init_kwargs["aphrodite_config"] = default_aphrodite_config
     layer = layer_class(**init_kwargs)
 
     backend_class = layer.get_attn_backend()

@@ -26,7 +26,7 @@ rms_norm_native = ir.ops.rms_norm.impls["native"].impl_fn
 def test_rms_norm_registration():
     expected = {
         "native": True,
-        "vllm_c": current_platform.is_cuda_alike(),
+        "aphrodite_c": current_platform.is_cuda_alike(),
         "aiter": current_platform.is_rocm(),
         "oink": current_platform.has_device_capability(100)
         and hasattr(torch.ops, "oink")
@@ -113,7 +113,7 @@ class TestRMSNorm:
         out_unit_weight = impl.impl_fn(x, torch.ones_like(weight), eps)
         assert_close(ir.ops.rms_norm, out_no_weight, out_unit_weight)
 
-    @pytest.mark.parametrize("provider", ["vllm_c", "aiter", "xpu_kernels", "native"])
+    @pytest.mark.parametrize("provider", ["aphrodite_c", "aiter", "xpu_kernels", "native"])
     def test_torch_opcheck(self, dtype, n_tokens, hidden_size, epsilon, provider):
         if not ir.ops.rms_norm.impls[provider].supported:
             pytest.skip(f"{provider} impl not supported on this platform")
@@ -124,7 +124,7 @@ class TestRMSNorm:
 
         # When checking the torch op, we have to set priority and use dispatch
         with ir.ops.rms_norm.set_priority([provider, "native"]):
-            torch.library.opcheck(torch.ops.vllm_ir.rms_norm, args)
+            torch.library.opcheck(torch.ops.aphrodite_ir.rms_norm, args)
 
 
 @pytest.mark.skipif(
@@ -143,13 +143,13 @@ def test_aiter_rejects_unsupported_dtypes():
 
 @pytest.mark.skipif(
     not current_platform.is_rocm(),
-    reason="ROCm vllm_c RMSNorm needs explicit ND input handling",
+    reason="ROCm aphrodite_c RMSNorm needs explicit ND input handling",
 )
-def test_vllm_c_rms_norm_accepts_nd_input():
+def test_aphrodite_c_rms_norm_accepts_nd_input():
     torch.set_default_device(current_platform.device_type)
-    impl = ir.ops.rms_norm.impls["vllm_c"]
+    impl = ir.ops.rms_norm.impls["aphrodite_c"]
     if not impl.supported:
-        pytest.skip("vllm_c impl not supported on this platform")
+        pytest.skip("aphrodite_c impl not supported on this platform")
 
     base = torch.randn(3, 8, 192, dtype=torch.float16)
     x = base.split(64, dim=-1)[0].view(3, 8, 4, 16)
@@ -174,7 +174,7 @@ fused_add_rms_norm_native = ir.ops.fused_add_rms_norm.impls["native"].impl_fn
 def test_fused_add_rms_norm_registration():
     expected = {
         "native": True,
-        "vllm_c": current_platform.is_cuda_alike(),
+        "aphrodite_c": current_platform.is_cuda_alike(),
         "aiter": current_platform.is_rocm(),
         "oink": current_platform.has_device_capability(100)
         and hasattr(torch.ops, "oink")
@@ -192,13 +192,13 @@ def test_fused_add_rms_norm_registration():
 
 @pytest.mark.skipif(
     not current_platform.is_rocm(),
-    reason="ROCm vllm_c fused_add_rms_norm needs explicit ND input handling",
+    reason="ROCm aphrodite_c fused_add_rms_norm needs explicit ND input handling",
 )
-def test_vllm_c_fused_add_rms_norm_accepts_nd_input():
+def test_aphrodite_c_fused_add_rms_norm_accepts_nd_input():
     torch.set_default_device(current_platform.device_type)
-    impl = ir.ops.fused_add_rms_norm.impls["vllm_c"]
+    impl = ir.ops.fused_add_rms_norm.impls["aphrodite_c"]
     if not impl.supported:
-        pytest.skip("vllm_c impl not supported on this platform")
+        pytest.skip("aphrodite_c impl not supported on this platform")
 
     base = torch.randn(3, 8, 192, dtype=torch.float16)
     residual_base = torch.randn(3, 8, 192, dtype=torch.float16)
@@ -315,7 +315,7 @@ class TestFusedAddRMSNorm:
             ir.ops.fused_add_rms_norm, residual_no_weight, residual_unit_weight
         )
 
-    @pytest.mark.parametrize("provider", ["vllm_c"])
+    @pytest.mark.parametrize("provider", ["aphrodite_c"])
     def test_inplace_semantics(self, dtype, n_tokens, hidden_size, epsilon, provider):
         """Test that inplace implementations reuse inputs,
         for maybe_inplace overload but not for default overload."""
@@ -374,7 +374,7 @@ class TestFusedAddRMSNorm:
 
         # When checking the torch op, we have to set priority and use dispatch
         with ir.ops.fused_add_rms_norm.set_priority([provider, "native"]):
-            torch.library.opcheck(torch.ops.vllm_ir.fused_add_rms_norm.default, args)
+            torch.library.opcheck(torch.ops.aphrodite_ir.fused_add_rms_norm.default, args)
 
             # Only test maybe_inplace with non-inplace implementations
             # Inplace implementations return aliases of inputs which is not allowed.
@@ -382,5 +382,5 @@ class TestFusedAddRMSNorm:
             # overload during compilation, so maybe_inplace never reaches Inductor.
             if not ir.ops.fused_add_rms_norm.impls[provider].inplace:
                 torch.library.opcheck(
-                    torch.ops.vllm_ir.fused_add_rms_norm.maybe_inplace, args
+                    torch.ops.aphrodite_ir.fused_add_rms_norm.maybe_inplace, args
                 )

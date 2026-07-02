@@ -26,7 +26,7 @@ SEEDS = [0]
 @pytest.mark.parametrize("seed", SEEDS)
 @torch.inference_mode()
 def test_compiled_vs_eager(
-    default_vllm_config,
+    default_aphrodite_config,
     num_tokens: int,
     hidden_size: int,
     activation: str,
@@ -71,7 +71,7 @@ def test_compiled_vs_eager(
 @pytest.mark.parametrize("seed", SEEDS)
 @torch.inference_mode()
 def test_compiled_vs_eager_multidim(
-    default_vllm_config,
+    default_aphrodite_config,
     shape: tuple,
     activation: str,
     elementwise_affine: bool,

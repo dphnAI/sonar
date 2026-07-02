@@ -21,7 +21,7 @@
 
 #include <torch/headeronly/core/ScalarType.h>
 
-namespace vllm {
+namespace aphrodite {
 namespace tensorrt_llm {
 
 template <typename DType>
@@ -76,4 +76,4 @@ struct MiniMaxReduceRMSParams {
 void minimax_reduce_rms_op(MiniMaxReduceRMSParams const& params);
 
 }  // namespace tensorrt_llm
-}  // namespace vllm
+}  // namespace aphrodite

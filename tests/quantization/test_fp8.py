@@ -55,7 +55,7 @@ MODELS = [
     "use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False]
 )
 def test_model_load_and_run(
-    vllm_runner, model_id: str, force_marlin: bool, use_rocm_aiter: bool, monkeypatch
+    aphrodite_runner, model_id: str, force_marlin: bool, use_rocm_aiter: bool, monkeypatch
 ) -> None:
     if use_rocm_aiter:
         monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
@@ -63,7 +63,7 @@ def test_model_load_and_run(
     if force_marlin:
         monkeypatch.setenv("APHRODITE_TEST_FORCE_FP8_MARLIN", "1")
 
-    with vllm_runner(model_id, enforce_eager=True) as llm:
+    with aphrodite_runner(model_id, enforce_eager=True) as llm:
         # note: this does not test accuracy, just that we can run through
         # see lm-eval tests for accuracy
         outputs = llm.generate_greedy(["Hello my name is"], max_tokens=4)
@@ -82,7 +82,7 @@ def test_model_load_and_run(
     "use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False]
 )
 def test_online_quantization(
-    vllm_runner,
+    aphrodite_runner,
     kv_cache_dtype: str,
     force_marlin: bool,
     use_rocm_aiter: bool,
@@ -97,7 +97,7 @@ def test_online_quantization(
     if force_marlin:
         monkeypatch.setenv("APHRODITE_TEST_FORCE_FP8_MARLIN", "1")
 
-    with vllm_runner(
+    with aphrodite_runner(
         "facebook/opt-125m",
         quantization="fp8",
         enforce_eager=True,
@@ -154,7 +154,7 @@ def test_online_quantization(
     reason="FP8 is not supported on this GPU type.",
 )
 def test_online_quant_peak_mem(
-    vllm_runner,
+    aphrodite_runner,
     caplog_mp_spawn,
     monkeypatch,
 ) -> None:
@@ -174,7 +174,7 @@ def test_online_quant_peak_mem(
 
     with (
         caplog_mp_spawn(logging.DEBUG) as log_holder,
-        vllm_runner(
+        aphrodite_runner(
             model_name,
             quantization="fp8",
             enforce_eager=True,
@@ -228,11 +228,11 @@ def test_online_quant_peak_mem(
     reason="FP8 is not supported on this GPU type.",
 )
 def test_online_quant_load_format_dummy(
-    vllm_runner,
+    aphrodite_runner,
     monkeypatch,
     caplog,
 ) -> None:
-    with vllm_runner(
+    with aphrodite_runner(
         "ibm-granite/granite-3.0-1b-a400m-base",
         quantization="fp8",
         enforce_eager=True,
@@ -337,7 +337,7 @@ def test_scaled_fp8_quant(dtype) -> None:
 # this is the case for marlin as well as per-tensor Fp8MoEMethod
 @pytest.mark.parametrize("use_marlin", [False])  # skip True
 def test_fp8_reloading(
-    default_vllm_config,
+    default_aphrodite_config,
     method_cls,
     is_checkpoint_fp8_serialized,
     weight_block_size,
@@ -360,7 +360,7 @@ def test_fp8_reloading(
         )
 
     # Set model config as model_config.dtype is required in Fp8LinearMethod.
-    default_vllm_config.model_config = ModelConfig()
+    default_aphrodite_config.model_config = ModelConfig()
     with torch.device(f"{DEVICE_TYPE}:0"):
         config = Fp8Config(
             is_checkpoint_fp8_serialized=is_checkpoint_fp8_serialized,
@@ -426,11 +426,11 @@ def test_fp8_reloading(
     not is_quant_method_supported("fp8"),
     reason="FP8 is not supported on this GPU type.",
 )
-def test_kv_cache_dtype_skip_layers(vllm_runner, monkeypatch):
+def test_kv_cache_dtype_skip_layers(aphrodite_runner, monkeypatch):
     """Test that kv_cache_dtype_skip_layers skips quantization for specified layers."""
     monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
 
-    with vllm_runner(
+    with aphrodite_runner(
         "facebook/opt-125m",
         kv_cache_dtype="fp8",
         kv_cache_dtype_skip_layers=["0", "2"],

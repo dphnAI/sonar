@@ -15,9 +15,9 @@ void cutlass_scaled_mm_sm100(torch::stable::Tensor& c,
                              torch::stable::Tensor const& b_scales,
                              std::optional<torch::stable::Tensor> const& bias) {
   dispatch_scaled_mm(c, a, b, a_scales, b_scales, bias,
-                     vllm::cutlass_scaled_mm_sm100_fp8,
+                     aphrodite::cutlass_scaled_mm_sm100_fp8,
                      nullptr,  // int8 not supported on SM100
-                     vllm::cutlass_scaled_mm_blockwise_sm100_fp8);
+                     aphrodite::cutlass_scaled_mm_blockwise_sm100_fp8);
 }
 
 #endif

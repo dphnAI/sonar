@@ -79,7 +79,7 @@ def apply_chat_template_and_add_eos(
 
 def _run_test(
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     input_texts: list[str],
     input_images: PromptImageInput,
     embed_texts: list[bool],
@@ -92,12 +92,12 @@ def _run_test(
     # Aphrodite needs a fresh new process without cuda initialization.
     # if we run HF first, the cuda initialization will be done and it
     # will hurt multiprocessing backend with fork method (the default method).
-    with vllm_runner(
+    with aphrodite_runner(
         model, runner="pooling", dtype=dtype, enforce_eager=True, max_model_len=8192
-    ) as vllm_model:
-        tokenizer = vllm_model.llm.get_tokenizer()
+    ) as aphrodite_model:
+        tokenizer = aphrodite_model.llm.get_tokenizer()
         texts = [
-            # this is necessary because vllm_model.embed will not apply any
+            # this is necessary because aphrodite_model.embed will not apply any
             # templating to the prompt, and therefore lacks an image_pad
             # token unless one is inserted beforehand (the (28,28) image
             # above is converted to an image pad token by the chat template).
@@ -109,7 +109,7 @@ def _run_test(
             # aphrodite will replace the pad token with the actual image,
             # which may be a placeholder image, later.
         ]
-        vllm_outputs = vllm_model.embed(texts, images=input_images)
+        aphrodite_outputs = aphrodite_model.embed(texts, images=input_images)
 
     hf_outputs = []
     with hf_runner(
@@ -154,7 +154,7 @@ def _run_test(
 
     check_embeddings_close(
         embeddings_0_lst=hf_outputs,
-        embeddings_1_lst=vllm_outputs,
+        embeddings_1_lst=aphrodite_outputs,
         name_0="hf",
         name_1="aphrodite",
     )
@@ -164,7 +164,7 @@ def _run_test(
 @pytest.mark.parametrize("dtype", ["bfloat16"])
 def test_models_text(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     image_assets,
     model: str,
     dtype: str,
@@ -178,7 +178,7 @@ def test_models_text(
 
     _run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         input_texts,
         input_images,  # type: ignore
         embed_texts,
@@ -192,7 +192,7 @@ def test_models_text(
 @pytest.mark.parametrize("dtype", ["bfloat16"])
 def test_models_image(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     image_assets,
     model: str,
     dtype: str,
@@ -206,7 +206,7 @@ def test_models_image(
 
     _run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         input_texts,
         input_images,
         embed_texts,

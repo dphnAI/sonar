@@ -24,7 +24,7 @@ SAMPLE_PROMPTS = (
 )
 
 
-def check_vllm_server(url: str, timeout=5, retries=3) -> bool:
+def check_aphrodite_server(url: str, timeout=5, retries=3) -> bool:
     """
     Checks if the Aphrodite server is ready by sending a GET request to the
     /health endpoint.
@@ -112,7 +112,7 @@ def main():
     parser.add_argument(
         "--file_name",  # Name of the second argument
         type=str,
-        default=".vllm_output.txt",
+        default=".aphrodite_output.txt",
         help="the file that saves the output tokens ",
     )
 
@@ -135,7 +135,7 @@ def main():
 
     service_url = f"{args.service_url}/v1"
 
-    if not check_vllm_server(health_check_url):
+    if not check_aphrodite_server(health_check_url):
         raise RuntimeError(f"aphrodite server: {args.service_url} is not ready yet!")
 
     output_strs = dict()

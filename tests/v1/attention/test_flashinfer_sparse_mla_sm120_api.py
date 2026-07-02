@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import torch
 
-from aphrodite.config import set_current_vllm_config
+from aphrodite.config import set_current_aphrodite_config
 from aphrodite.platforms.interface import DeviceCapability
 from aphrodite.utils import flashinfer as fi_utils
 from aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse import (
@@ -15,7 +15,7 @@ from aphrodite.v1.attention.backends.mla.flashinfer_mla_sparse import (
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 
 
-def _fake_vllm_config(model_type: str) -> SimpleNamespace:
+def _fake_aphrodite_config(model_type: str) -> SimpleNamespace:
     return SimpleNamespace(
         model_config=SimpleNamespace(
             hf_text_config=SimpleNamespace(model_type=model_type, index_topk=2048),
@@ -36,7 +36,7 @@ def test_v32_glm_sm120_backend_accepts_glm_block_size(
 ) -> None:
     monkeypatch.setattr(fi_utils, "has_flashinfer_sparse_mla_sm120", lambda: True)
 
-    with set_current_vllm_config(_fake_vllm_config("glm4_moe")):
+    with set_current_aphrodite_config(_fake_aphrodite_config("glm4_moe")):
         invalid_reasons = FlashInferMLASparseSM120Backend.validate_configuration(
             head_size=576,
             dtype=torch.bfloat16,

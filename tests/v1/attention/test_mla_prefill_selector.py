@@ -40,7 +40,7 @@ def _make_mock_model_config(
     return mock_config
 
 
-def _make_vllm_config(
+def _make_aphrodite_config(
     model_config: ModelConfig | None = None,
     mla_prefill_backend: MLAPrefillBackendEnum | None = None,
 ) -> AphroditeConfig:
@@ -48,22 +48,22 @@ def _make_vllm_config(
         model_config = _make_mock_model_config()
 
     attention_config = AttentionConfig(mla_prefill_backend=mla_prefill_backend)
-    mock_vllm_config = MagicMock(spec=AphroditeConfig)
-    mock_vllm_config.model_config = model_config
-    mock_vllm_config.attention_config = attention_config
-    return mock_vllm_config
+    mock_aphrodite_config = MagicMock(spec=AphroditeConfig)
+    mock_aphrodite_config.model_config = model_config
+    mock_aphrodite_config.attention_config = attention_config
+    return mock_aphrodite_config
 
 
 class TestGetMLAPrefillBackend:
     """Tests for get_mla_prefill_backend (public API)."""
 
     def test_no_device_capability_returns_flash_attn(self):
-        vllm_config = _make_vllm_config()
+        aphrodite_config = _make_aphrodite_config()
 
         with patch("aphrodite.platforms.current_platform") as mock_platform:
             mock_platform.get_device_capability.return_value = None
 
-            backend = get_mla_prefill_backend(vllm_config)
+            backend = get_mla_prefill_backend(aphrodite_config)
             assert backend.get_name() == "FLASH_ATTN"
 
     def test_explicit_flash_attn_selection(self):
@@ -73,7 +73,7 @@ class TestGetMLAPrefillBackend:
             pytest.skip("FLASH_ATTN backend not available")
             return
 
-        vllm_config = _make_vllm_config(
+        aphrodite_config = _make_aphrodite_config(
             mla_prefill_backend=MLAPrefillBackendEnum.FLASH_ATTN,
         )
 
@@ -87,11 +87,11 @@ class TestGetMLAPrefillBackend:
                 "validate_configuration",
                 return_value=[],
             ):
-                backend = get_mla_prefill_backend(vllm_config)
+                backend = get_mla_prefill_backend(aphrodite_config)
                 assert backend.get_name() == "FLASH_ATTN"
 
     def test_explicit_backend_invalid_raises_error(self):
-        vllm_config = _make_vllm_config(
+        aphrodite_config = _make_aphrodite_config(
             mla_prefill_backend=MLAPrefillBackendEnum.FLASHINFER,
         )
 
@@ -101,10 +101,10 @@ class TestGetMLAPrefillBackend:
             )
 
             with pytest.raises(ValueError, match="is not valid"):
-                get_mla_prefill_backend(vllm_config)
+                get_mla_prefill_backend(aphrodite_config)
 
     def test_explicit_backend_import_error_raises(self):
-        vllm_config = _make_vllm_config(
+        aphrodite_config = _make_aphrodite_config(
             mla_prefill_backend=MLAPrefillBackendEnum.TRTLLM_RAGGED,
         )
 
@@ -121,7 +121,7 @@ class TestGetMLAPrefillBackend:
                 ),
                 pytest.raises(ValueError, match="is not valid"),
             ):
-                get_mla_prefill_backend(vllm_config)
+                get_mla_prefill_backend(aphrodite_config)
 
     def test_auto_selection_on_hopper(self):
         try:
@@ -130,7 +130,7 @@ class TestGetMLAPrefillBackend:
             pytest.skip("FLASH_ATTN backend not available")
             return
 
-        vllm_config = _make_vllm_config()
+        aphrodite_config = _make_aphrodite_config()
 
         with patch("aphrodite.platforms.current_platform") as mock_platform:
             mock_platform.get_device_capability.return_value = DeviceCapability(
@@ -142,7 +142,7 @@ class TestGetMLAPrefillBackend:
                 "validate_configuration",
                 return_value=[],
             ):
-                backend = get_mla_prefill_backend(vllm_config)
+                backend = get_mla_prefill_backend(aphrodite_config)
                 assert backend.get_name() == "FLASH_ATTN"
 
 

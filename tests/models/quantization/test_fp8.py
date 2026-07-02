@@ -49,7 +49,7 @@ from ..utils import check_logprobs_close
 # reset distributed env properly. Use a value > 1 just when you test.
 @pytest.mark.parametrize("tensor_parallel_size", [1])
 def test_models(
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     kv_cache_dtype: str,
     base_model: str,
@@ -85,27 +85,27 @@ def test_models(
         MAX_MODEL_LEN = 1024
         NUM_LOG_PROBS = 8
 
-        with vllm_runner(
+        with aphrodite_runner(
             base_model,
             max_model_len=MAX_MODEL_LEN,
             tensor_parallel_size=tensor_parallel_size,
             enforce_eager=enforce_eager,
             kv_cache_dtype="auto",
             attention_config={"backend": backend},
-        ) as vllm_model:
-            baseline_outputs = vllm_model.generate_greedy_logprobs(
+        ) as aphrodite_model:
+            baseline_outputs = aphrodite_model.generate_greedy_logprobs(
                 example_prompts, max_tokens, NUM_LOG_PROBS
             )
 
-        with vllm_runner(
+        with aphrodite_runner(
             test_model,
             max_model_len=MAX_MODEL_LEN,
             tensor_parallel_size=tensor_parallel_size,
             enforce_eager=enforce_eager,
             kv_cache_dtype=kv_cache_dtype,
             attention_config={"backend": backend},
-        ) as vllm_model:
-            test_outputs = vllm_model.generate_greedy_logprobs(
+        ) as aphrodite_model:
+            test_outputs = aphrodite_model.generate_greedy_logprobs(
                 example_prompts, max_tokens, NUM_LOG_PROBS
             )
 
@@ -133,7 +133,7 @@ def test_models(
 # Due to low-precision numerical divergence, we only test logprob of 4 tokens
 @pytest.mark.parametrize("max_tokens", [4])
 def test_cpu_models(
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     kv_cache_dtype: str,
     base_model: str,
@@ -151,23 +151,23 @@ def test_cpu_models(
         MAX_MODEL_LEN = 1024
         NUM_LOG_PROBS = 8
 
-        with vllm_runner(
+        with aphrodite_runner(
             base_model,
             max_model_len=MAX_MODEL_LEN,
             dtype="bfloat16",
             kv_cache_dtype="auto",
-        ) as vllm_model:
-            baseline_outputs = vllm_model.generate_greedy_logprobs(
+        ) as aphrodite_model:
+            baseline_outputs = aphrodite_model.generate_greedy_logprobs(
                 example_prompts, max_tokens, NUM_LOG_PROBS
             )
 
-        with vllm_runner(
+        with aphrodite_runner(
             test_model,
             max_model_len=MAX_MODEL_LEN,
             dtype="bfloat16",
             kv_cache_dtype=kv_cache_dtype,
-        ) as vllm_model:
-            test_outputs = vllm_model.generate_greedy_logprobs(
+        ) as aphrodite_model:
+            test_outputs = aphrodite_model.generate_greedy_logprobs(
                 example_prompts, max_tokens, NUM_LOG_PROBS
             )
 

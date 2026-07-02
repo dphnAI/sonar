@@ -26,7 +26,7 @@ class VitCudagraphTestConfig:
     max_num_seqs: int = 2
     num_video_frames: int = 16
     needs_video_metadata: bool = False
-    vllm_runner_kwargs: dict = field(default_factory=dict)
+    aphrodite_runner_kwargs: dict = field(default_factory=dict)
     compilation_config_overrides: dict = field(default_factory=dict)
     marks: list = field(default_factory=list)
     skip: bool = False
@@ -88,7 +88,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
         max_model_len=4096,
         max_tokens=32,
         max_num_seqs=2,
-        vllm_runner_kwargs={
+        aphrodite_runner_kwargs={
             "load_format": "dummy",
             "hf_overrides": partial(
                 dummy_hf_overrides,
@@ -139,7 +139,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
         # test runs on any CI GPU (incl. L4) and skips the multi-GiB
         # weight download. The test only validates that encoder CG
         # capture/replay functions correctly, not output quality.
-        vllm_runner_kwargs={
+        aphrodite_runner_kwargs={
             "trust_remote_code": True,
             "load_format": "dummy",
             "hf_overrides": partial(
@@ -181,7 +181,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
             "<video>\nDescribe this video in one sentence."
         ),
         needs_video_metadata=False,
-        vllm_runner_kwargs={"trust_remote_code": True},
+        aphrodite_runner_kwargs={"trust_remote_code": True},
         marks=[pytest.mark.core_model],
     ),
     "step3_vl": VitCudagraphTestConfig(
@@ -199,7 +199,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
         # test runs on any CI GPU (incl. L4) and skips the 20 GiB weight
         # download. The test only validates that encoder CG capture/
         # replay functions correctly, not output quality.
-        vllm_runner_kwargs={
+        aphrodite_runner_kwargs={
             "load_format": "dummy",
             "hf_overrides": partial(
                 dummy_hf_overrides,
@@ -221,7 +221,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
         ),
         needs_video_metadata=True,
         marks=[pytest.mark.core_model],
-        vllm_runner_kwargs={
+        aphrodite_runner_kwargs={
             "load_format": "dummy",
             "hf_overrides": partial(
                 dummy_hf_overrides,
@@ -239,7 +239,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
             "mode": 0,
             "cudagraph_mode": 2,
         },
-        vllm_runner_kwargs={
+        aphrodite_runner_kwargs={
             "load_format": "dummy",
             "hf_overrides": partial(
                 dummy_hf_overrides,
@@ -267,7 +267,7 @@ def get_compilation_config(config: VitCudagraphTestConfig):
 
 @pytest.mark.parametrize("model_id", params_with_marks(MODEL_CONFIGS))
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="Requires CUDA")
-def test_vit_cudagraph_image(model_id, vllm_runner, image_assets):
+def test_vit_cudagraph_image(model_id, aphrodite_runner, image_assets):
     config = MODEL_CONFIGS[model_id]
 
     if config.skip:
@@ -284,16 +284,16 @@ def test_vit_cudagraph_image(model_id, vllm_runner, image_assets):
     )
     images = [[asset.pil_image] for asset in image_assets]
 
-    with vllm_runner(
+    with aphrodite_runner(
         config.model,
         dtype=config.dtype,
         max_model_len=config.max_model_len,
         max_num_seqs=config.max_num_seqs,
         limit_mm_per_prompt={"image": 1},
         compilation_config=get_compilation_config(config),
-        **config.vllm_runner_kwargs,
-    ) as vllm_model:
-        outputs = vllm_model.generate_greedy(
+        **config.aphrodite_runner_kwargs,
+    ) as aphrodite_model:
+        outputs = aphrodite_model.generate_greedy(
             image_prompts, config.max_tokens, images=images
         )
 
@@ -311,7 +311,7 @@ def test_vit_cudagraph_image(model_id, vllm_runner, image_assets):
 
 @pytest.mark.parametrize("model_id", params_with_marks(MODEL_CONFIGS))
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="Requires CUDA")
-def test_vit_cudagraph_video(model_id, vllm_runner, video_assets):
+def test_vit_cudagraph_video(model_id, aphrodite_runner, video_assets):
     config = MODEL_CONFIGS[model_id]
 
     if config.skip:
@@ -339,16 +339,16 @@ def test_vit_cudagraph_video(model_id, vllm_runner, video_assets):
         ]
     videos = [sampled_vids[0]]
 
-    with vllm_runner(
+    with aphrodite_runner(
         config.model,
         dtype=config.dtype,
         max_model_len=config.max_model_len,
         max_num_seqs=config.max_num_seqs,
         limit_mm_per_prompt={"video": 1},
         compilation_config=get_compilation_config(config),
-        **config.vllm_runner_kwargs,
-    ) as vllm_model:
-        outputs = vllm_model.generate_greedy(
+        **config.aphrodite_runner_kwargs,
+    ) as aphrodite_model:
+        outputs = aphrodite_model.generate_greedy(
             video_prompts, config.max_tokens, videos=videos
         )
 

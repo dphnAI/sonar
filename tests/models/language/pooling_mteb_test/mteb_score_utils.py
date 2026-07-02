@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 from tests.conftest import HfRunner
 from tests.models.utils import (
     RerankModelInfo,
-    get_vllm_extra_kwargs,
+    get_aphrodite_extra_kwargs,
 )
 
 # See #19344
@@ -55,10 +55,10 @@ class MtebCrossEncoderMixin(mteb.CrossEncoderProtocol):
 
 
 class AphroditeMtebCrossEncoder(MtebCrossEncoderMixin):
-    def __init__(self, vllm_model):
-        self.llm = vllm_model
+    def __init__(self, aphrodite_model):
+        self.llm = aphrodite_model
         self.rng = np.random.default_rng(seed=42)
-        self.chat_template: str | None = getattr(vllm_model, "chat_template", None)
+        self.chat_template: str | None = getattr(aphrodite_model, "chat_template", None)
 
     def predict(
         self,
@@ -225,30 +225,30 @@ def run_mteb_rerank(cross_encoder: mteb.CrossEncoderProtocol, tasks, languages):
 
 
 def mteb_test_rerank_models(
-    vllm_runner,
+    aphrodite_runner,
     model_info: RerankModelInfo,
     hf_runner=HFMtebCrossEncoder,
-    vllm_extra_kwargs=None,
-    vllm_mteb_encoder=AphroditeMtebCrossEncoder,
+    aphrodite_extra_kwargs=None,
+    aphrodite_mteb_encoder=AphroditeMtebCrossEncoder,
     atol=MTEB_RERANK_TOL,
 ):
-    vllm_extra_kwargs = get_vllm_extra_kwargs(model_info, vllm_extra_kwargs)
+    aphrodite_extra_kwargs = get_aphrodite_extra_kwargs(model_info, aphrodite_extra_kwargs)
 
     # Maybe load chat_template.
     chat_template: str | None = None
     if model_info.chat_template_name is not None:
         chat_template = (template_home / model_info.chat_template_name).read_text()
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_info.name,
         revision=model_info.revision,
         runner="pooling",
         max_model_len=None,
         max_num_seqs=8,
-        **vllm_extra_kwargs,
-    ) as vllm_model:
-        model_config = vllm_model.llm.llm_engine.model_config
-        vllm_model.chat_template = chat_template
+        **aphrodite_extra_kwargs,
+    ) as aphrodite_model:
+        model_config = aphrodite_model.llm.llm_engine.model_config
+        aphrodite_model.chat_template = chat_template
 
         # Confirm whether aphrodite is using the correct architecture
         if model_info.architecture:
@@ -276,12 +276,12 @@ def mteb_test_rerank_models(
                 == model_info.is_chunked_prefill_supported
             )
 
-        vllm_main_score = run_mteb_rerank(
-            vllm_mteb_encoder(vllm_model),
+        aphrodite_main_score = run_mteb_rerank(
+            aphrodite_mteb_encoder(aphrodite_model),
             tasks=MTEB_RERANK_TASKS,
             languages=MTEB_RERANK_LANGS,
         )
-        vllm_dtype = model_config.dtype
+        aphrodite_dtype = model_config.dtype
         head_dtype = model_config.head_dtype
 
     # Accelerate mteb test by setting
@@ -302,10 +302,10 @@ def mteb_test_rerank_models(
         st_dtype = "Constant"
 
     print("Model:", model_info.name)
-    print("APHRODITE:", f"dtype:{vllm_dtype}", f"head_dtype:{head_dtype}", vllm_main_score)
+    print("APHRODITE:", f"dtype:{aphrodite_dtype}", f"head_dtype:{head_dtype}", aphrodite_main_score)
     print("SentenceTransformers:", st_dtype, st_main_score)
-    print("Difference:", st_main_score - vllm_main_score)
+    print("Difference:", st_main_score - aphrodite_main_score)
 
     # We are not concerned that the aphrodite mteb results are better
     # than SentenceTransformers, so we only perform one-sided testing.
-    assert st_main_score - vllm_main_score < atol
+    assert st_main_score - aphrodite_main_score < atol

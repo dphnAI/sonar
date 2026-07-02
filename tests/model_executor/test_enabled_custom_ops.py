@@ -9,7 +9,7 @@ from aphrodite.config import (
     CompilationConfig,
     AphroditeConfig,
     get_cached_compilation_config,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.model_executor.custom_op import CustomOp, op_registry
 from aphrodite.model_executor.layers.activation import (
@@ -20,8 +20,8 @@ from aphrodite.model_executor.layers.activation import (
 from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import (
     dispatch_topk_sigmoid_func,
     dispatch_topk_softmax_func,
-    vllm_topk_sigmoid,
-    vllm_topk_softmax,
+    aphrodite_topk_sigmoid,
+    aphrodite_topk_softmax,
 )
 from aphrodite.model_executor.layers.layernorm import RMSNorm
 from aphrodite.platforms import current_platform
@@ -83,13 +83,13 @@ def test_enabled_ops(
     default_on: bool,
 ):
     custom_ops = env.split(",") if env else []
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(
             backend=backend, mode=compilation_mode, custom_ops=custom_ops
         )
     )
     get_cached_compilation_config.cache_clear()
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         assert CustomOp.default_on() == default_on
 
         ops_enabled = [bool(x) for x in ops_enabled]
@@ -120,10 +120,10 @@ def test_enabled_ops(
 )
 def test_enabled_ops_invalid(env: str):
     with pytest.raises(Exception):  # noqa
-        vllm_config = AphroditeConfig(
+        aphrodite_config = AphroditeConfig(
             compilation_config=CompilationConfig(custom_ops=env.split(","))
         )
-        with set_current_vllm_config(vllm_config):
+        with set_current_aphrodite_config(aphrodite_config):
             RMSNorm(1024).enabled()
 
 
@@ -136,7 +136,7 @@ def test_topk_softmax_dispatch(use_rocm_aiter: bool):
     if current_platform.is_rocm() and use_rocm_aiter:
         assert topk_func == rocm_aiter_ops.topk_softmax
     else:
-        assert topk_func == vllm_topk_softmax
+        assert topk_func == aphrodite_topk_softmax
 
 
 @pytest.mark.parametrize(
@@ -148,4 +148,4 @@ def test_topk_sigmoid_dispatch(use_rocm_aiter: bool):
     if current_platform.is_rocm() and use_rocm_aiter:
         assert topk_func == rocm_aiter_ops.topk_sigmoid
     else:
-        assert topk_func == vllm_topk_sigmoid
+        assert topk_func == aphrodite_topk_sigmoid

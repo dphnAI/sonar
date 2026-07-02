@@ -19,7 +19,7 @@ from ..registry import _MULTIMODAL_EXAMPLE_MODELS, HF_EXAMPLE_MODELS
 def test_cosmos3_new_checkpoint_weights_mapper():
     from aphrodite.model_executor.models.cosmos3 import Cosmos3ForConditionalGeneration
 
-    mapper = Cosmos3ForConditionalGeneration.hf_to_vllm_mapper
+    mapper = Cosmos3ForConditionalGeneration.hf_to_aphrodite_mapper
 
     assert mapper.apply_list(
         [
@@ -151,7 +151,7 @@ def test_hf_model_weights_mapper(model_arch: str):
     if issubclass(model_cls, TransformersBase):
         # Transformers backend models create their mapper during __init__
         # by inspecting the HF model instance. We simulate this by calling
-        # _create_hf_to_vllm_mapper with a minimal proxy object.
+        # _create_hf_to_aphrodite_mapper with a minimal proxy object.
         model_cls = type(
             "ProxyModelCls",
             (),
@@ -160,13 +160,13 @@ def test_hf_model_weights_mapper(model_arch: str):
                 "_maybe_apply_model_mapping": lambda self: None,
             },
         )()
-        TransformersBase._create_hf_to_vllm_mapper(model_cls)
+        TransformersBase._create_hf_to_aphrodite_mapper(model_cls)
 
     original_weights = create_repo_dummy_weights(model_id)
     hf_dummy_model = create_dummy_model(model_id, model_arch)
     hf_converted_weights = hf_dummy_model.named_parameters()
     hf_converted_buffers = hf_dummy_model.named_buffers()
-    mapper: WeightsMapper = model_cls.hf_to_vllm_mapper
+    mapper: WeightsMapper = model_cls.hf_to_aphrodite_mapper
 
     mapped_original_weights = mapper.apply(original_weights)
     mapped_hf_converted_weights = mapper.apply(hf_converted_weights)

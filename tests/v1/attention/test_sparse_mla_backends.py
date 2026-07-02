@@ -17,10 +17,10 @@ from tests.v1.attention.test_mla_backends import (
 from tests.v1.attention.utils import (
     create_common_attn_metadata,
     create_standard_kv_cache_spec,
-    create_vllm_config,
+    create_aphrodite_config,
 )
 from aphrodite import _custom_ops as ops
-from aphrodite.config import set_current_vllm_config
+from aphrodite.config import set_current_aphrodite_config
 from aphrodite.model_executor.layers.linear import ColumnParallelLinear
 from aphrodite.platforms import current_platform
 
@@ -183,7 +183,7 @@ def _quantize_dequantize_fp8_ds_mla(
 @pytest.mark.parametrize("block_size", [32, 64])
 @pytest.mark.parametrize(("q_scale", "k_scale"), [(1.0, 1.0), (2.0, 3.0)])
 def test_sparse_backend_decode_correctness(
-    default_vllm_config,
+    default_aphrodite_config,
     dist_init,
     backend_cls,
     batch_name,
@@ -247,7 +247,7 @@ def test_sparse_backend_decode_correctness(
 
     # Note: We use TP=1 to avoid multi-GPU requirements in CI.
     # The test simulates head partitioning via mocked methods below.
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         model_name="deepseek-ai/DeepSeek-V2-Lite-Chat",
         tensor_parallel_size=1,
         max_model_len=max_seqlen,
@@ -258,7 +258,7 @@ def test_sparse_backend_decode_correctness(
             "attn_module_list_cfg": [{"topk_tokens": topk_tokens}],
         },
     )
-    model_config = vllm_config.model_config
+    model_config = aphrodite_config.model_config
     model_config.hf_text_config = SimpleNamespace(
         q_lora_rank=None,
         kv_lora_rank=kv_lora_rank,
@@ -278,7 +278,7 @@ def test_sparse_backend_decode_correctness(
     model_config.get_head_size = MethodType(lambda self: head_size, model_config)
     model_config.get_sliding_window = MethodType(lambda self: None, model_config)
 
-    kv_cache_spec = create_standard_kv_cache_spec(vllm_config)
+    kv_cache_spec = create_standard_kv_cache_spec(aphrodite_config)
 
     torch.manual_seed(0)
 
@@ -337,7 +337,7 @@ def test_sparse_backend_decode_correctness(
             tok_indices[0] = 0  # At least one valid index
         sparse_indices[tok_idx] = tok_indices
 
-    all_q_vllm, all_kv_c_vllm, all_k_pe_vllm = [], [], []
+    all_q_aphrodite, all_kv_c_aphrodite, all_k_pe_aphrodite = [], [], []
     kv_c_contexts, k_pe_contexts = [], []
     reference_outputs = []
 
@@ -407,23 +407,23 @@ def test_sparse_backend_decode_correctness(
 
             global_token_idx += 1
 
-        all_q_vllm.append(q_c)
-        all_kv_c_vllm.append(kv_c_full[ctx_len:])
-        all_k_pe_vllm.append(k_pe_full[ctx_len:])
+        all_q_aphrodite.append(q_c)
+        all_kv_c_aphrodite.append(kv_c_full[ctx_len:])
+        all_k_pe_aphrodite.append(k_pe_full[ctx_len:])
         kv_c_contexts.append(kv_c_full[: ctx_len + 1])
         k_pe_contexts.append(k_pe_full[: ctx_len + 1])
 
-    query_vllm = torch.cat(all_q_vllm, dim=0)
-    kv_c_vllm = torch.cat(all_kv_c_vllm, dim=0)
-    k_pe_vllm = torch.cat(all_k_pe_vllm, dim=0)
+    query_aphrodite = torch.cat(all_q_aphrodite, dim=0)
+    kv_c_aphrodite = torch.cat(all_kv_c_aphrodite, dim=0)
+    k_pe_aphrodite = torch.cat(all_k_pe_aphrodite, dim=0)
     sdpa_reference = torch.cat(reference_outputs, dim=0)
 
-    vllm_config.cache_config.cache_dtype = kv_cache_dtype
-    vllm_config.model_config.hf_config.index_topk = topk_tokens
+    aphrodite_config.cache_config.cache_dtype = kv_cache_dtype
+    aphrodite_config.model_config.hf_config.index_topk = topk_tokens
 
     common_attn_metadata = create_common_attn_metadata(
         batch_spec,
-        vllm_config.cache_config.block_size,
+        aphrodite_config.cache_config.block_size,
         device,
         arange_block_indices=True,
     )
@@ -431,11 +431,11 @@ def test_sparse_backend_decode_correctness(
     kv_cache = create_and_prepopulate_kv_cache(
         kv_c_contexts=kv_c_contexts,
         k_pe_contexts=k_pe_contexts,
-        block_size=vllm_config.cache_config.block_size,
+        block_size=aphrodite_config.cache_config.block_size,
         head_size=head_size,
         dtype=dtype,
         device=device,
-        num_blocks=vllm_config.cache_config.num_gpu_blocks,
+        num_blocks=aphrodite_config.cache_config.num_gpu_blocks,
         common_attn_metadata=common_attn_metadata,
         randomize_blocks=False,
         kv_cache_dtype=kv_cache_dtype,
@@ -443,7 +443,7 @@ def test_sparse_backend_decode_correctness(
     )
 
     builder_cls = backend_cls.get_builder_cls()
-    builder = builder_cls(kv_cache_spec, ["placeholder"], vllm_config, device)
+    builder = builder_cls(kv_cache_spec, ["placeholder"], aphrodite_config, device)
     metadata = builder.build(
         common_prefix_len=0, common_attn_metadata=common_attn_metadata
     )
@@ -464,7 +464,7 @@ def test_sparse_backend_decode_correctness(
     mock_kv_b_proj.weight = torch.nn.Parameter(kv_b_proj_weight.T.contiguous())
 
     impl_cls = backend_cls.get_impl_cls()
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         impl = impl_cls(
             num_heads=num_heads,
             head_size=head_size,
@@ -472,7 +472,7 @@ def test_sparse_backend_decode_correctness(
             num_kv_heads=1,
             alibi_slopes=None,
             sliding_window=None,
-            kv_cache_dtype=vllm_config.cache_config.cache_dtype,
+            kv_cache_dtype=aphrodite_config.cache_config.cache_dtype,
             logits_soft_cap=None,
             attn_type="decoder",
             kv_sharing_target_layer_name=None,
@@ -509,9 +509,9 @@ def test_sparse_backend_decode_correctness(
 
     with torch.inference_mode():
         backend_output = mock_layer.forward_impl(
-            query_vllm,
-            kv_c_vllm,
-            k_pe_vllm,
+            query_aphrodite,
+            kv_c_aphrodite,
+            k_pe_aphrodite,
             kv_cache,
             metadata,
             out_buffer,

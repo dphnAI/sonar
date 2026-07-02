@@ -27,8 +27,8 @@ class DummyConnectorMetadata(KVConnectorMetadata):
 
 
 class DummyKVConnector(KVConnectorBase_V1):
-    def __init__(self, vllm_config, role, kv_cache_config: KVCacheConfig):
-        super().__init__(vllm_config, role, kv_cache_config)
+    def __init__(self, aphrodite_config, role, kv_cache_config: KVCacheConfig):
+        super().__init__(aphrodite_config, role, kv_cache_config)
 
     def get_num_new_matched_tokens(
         self, request: Request, num_computed_tokens: int

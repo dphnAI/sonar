@@ -16,7 +16,7 @@
 
 #pragma once
 
-namespace vllm {
+namespace aphrodite {
 namespace cuda_async {
 
 __device__ __forceinline__ void cp_async_shared_global_16_cg(
@@ -97,4 +97,4 @@ __device__ __forceinline__ void cp_async_wait_group() {
 }
 
 }  // namespace cuda_async
-}  // namespace vllm
+}  // namespace aphrodite

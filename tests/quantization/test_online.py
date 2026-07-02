@@ -66,7 +66,7 @@ from aphrodite.platforms import current_platform
     "use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False]
 )
 def test_online_quantization(
-    vllm_runner,
+    aphrodite_runner,
     quant_scheme: str,
     online_quant_args: dict | None,
     expected_linear_cls,
@@ -98,7 +98,7 @@ def test_online_quantization(
     if online_quant_args is not None:
         runner_kwargs["quantization_config"] = online_quant_args
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_name,
         **runner_kwargs,
     ) as llm:
@@ -150,12 +150,12 @@ def test_online_quantization(
     reason="FP8 is not supported on this GPU type.",
 )
 def test_online_quant_peak_mem(
-    vllm_runner,
+    aphrodite_runner,
     caplog_mp_spawn,
     monkeypatch,
 ) -> None:
     _test_online_quant_peak_mem_impl(
-        "fp8_per_tensor", vllm_runner, caplog_mp_spawn, monkeypatch
+        "fp8_per_tensor", aphrodite_runner, caplog_mp_spawn, monkeypatch
     )
 
 
@@ -164,11 +164,11 @@ def test_online_quant_peak_mem(
     reason="FP8 is not supported on this GPU type.",
 )
 def test_online_quant_load_format_dummy(
-    vllm_runner,
+    aphrodite_runner,
     monkeypatch,
     caplog,
 ) -> None:
-    with vllm_runner(
+    with aphrodite_runner(
         "ibm-granite/granite-3.0-1b-a400m-base",
         quantization="fp8_per_tensor",
         enforce_eager=True,

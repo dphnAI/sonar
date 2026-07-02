@@ -168,7 +168,7 @@ def ops_impl(
 @pytest.mark.parametrize("strided_input", [False, True])
 @torch.inference_mode()
 def test_rms_norm(
-    default_vllm_config,
+    default_aphrodite_config,
     num_tokens: int,
     hidden_size: int,
     add_residual: bool,

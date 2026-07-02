@@ -54,7 +54,7 @@ RERANK_MODELS = [
 
 
 @pytest.mark.parametrize("model_info", EMBEDDING_MODELS)
-def test_embed_models_mteb(hf_runner, vllm_runner, model_info: EmbedModelInfo) -> None:
+def test_embed_models_mteb(hf_runner, aphrodite_runner, model_info: EmbedModelInfo) -> None:
     task = "retrieval" if "v5" in model_info.name else "text-matching"
     prompt_prefix: str | None = "Document: " if "v5" in model_info.name else None
 
@@ -63,7 +63,7 @@ def test_embed_models_mteb(hf_runner, vllm_runner, model_info: EmbedModelInfo) -
 
     mteb_test_embed_models(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         model_info,
         hf_model_callback=hf_model_callback,
         prompt_prefix=prompt_prefix,
@@ -72,7 +72,7 @@ def test_embed_models_mteb(hf_runner, vllm_runner, model_info: EmbedModelInfo) -
 
 @pytest.mark.parametrize("model_info", EMBEDDING_MODELS)
 def test_embed_models_correctness(
-    hf_runner, vllm_runner, model_info: EmbedModelInfo, example_prompts
+    hf_runner, aphrodite_runner, model_info: EmbedModelInfo, example_prompts
 ) -> None:
     task = "retrieval" if "v5" in model_info.name else "text-matching"
 
@@ -81,7 +81,7 @@ def test_embed_models_correctness(
 
     correctness_test_embed_models(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         model_info,
         example_prompts,
         hf_model_callback=hf_model_callback,
@@ -89,8 +89,8 @@ def test_embed_models_correctness(
 
 
 @pytest.mark.parametrize("model_info", RERANK_MODELS)
-def test_rerank_models_mteb(vllm_runner, model_info: RerankModelInfo) -> None:
-    mteb_test_rerank_models(vllm_runner, model_info)
+def test_rerank_models_mteb(aphrodite_runner, model_info: RerankModelInfo) -> None:
+    mteb_test_rerank_models(aphrodite_runner, model_info)
 
 
 @pytest.mark.skip(
@@ -102,7 +102,7 @@ def test_rerank_models_mteb(vllm_runner, model_info: RerankModelInfo) -> None:
 @pytest.mark.parametrize("dimensions", [16, 32])
 def test_matryoshka(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     model_info,
     dtype: str,
     dimensions: int,
@@ -125,29 +125,29 @@ def test_matryoshka(
         hf_outputs = hf_model.encode(example_prompts, task=task)
         hf_outputs = matryoshka_fy(hf_outputs, dimensions)
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_info.name, runner="pooling", dtype=dtype, max_model_len=None
-    ) as vllm_model:
-        assert vllm_model.llm.llm_engine.model_config.is_matryoshka
+    ) as aphrodite_model:
+        assert aphrodite_model.llm.llm_engine.model_config.is_matryoshka
 
         matryoshka_dimensions = (
-            vllm_model.llm.llm_engine.model_config.matryoshka_dimensions
+            aphrodite_model.llm.llm_engine.model_config.matryoshka_dimensions
         )
         assert matryoshka_dimensions is not None
 
         if dimensions not in matryoshka_dimensions:
             with pytest.raises(ValueError):
-                vllm_model.embed(
+                aphrodite_model.embed(
                     example_prompts, pooling_params=PoolingParams(dimensions=dimensions)
                 )
         else:
-            vllm_outputs = vllm_model.embed(
+            aphrodite_outputs = aphrodite_model.embed(
                 example_prompts, pooling_params=PoolingParams(dimensions=dimensions)
             )
 
             check_embeddings_close(
                 embeddings_0_lst=hf_outputs,
-                embeddings_1_lst=vllm_outputs,
+                embeddings_1_lst=aphrodite_outputs,
                 name_0="hf",
                 name_1="aphrodite",
                 tol=1e-2,

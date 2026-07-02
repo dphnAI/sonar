@@ -13,7 +13,7 @@ from aphrodite.config import (
     ParallelConfig,
     SchedulerConfig,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.config.load import LoadConfig
 from aphrodite.config.lora import LoRAConfig
@@ -49,7 +49,7 @@ def test_worker_apply_lora(qwen3_lora_files):
         enforce_eager=True,
     )
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=model_config,
         load_config=LoadConfig(
             download_dir=None,
@@ -78,13 +78,13 @@ def test_worker_apply_lora(qwen3_lora_files):
         ),
     )
     worker = Worker(
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         local_rank=0,
         rank=0,
         distributed_init_method=f"file://{tempfile.mkstemp()[1]}",
     )
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         worker.init_device()
         worker.load_model()
 

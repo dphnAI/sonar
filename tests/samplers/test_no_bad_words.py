@@ -48,8 +48,8 @@ class TestOneTokenBadWord:
             self.TARGET_TOKEN, add_special_tokens=False
         )[0]
 
-    def test_one_token_bad_word(self, vllm_runner):
-        with vllm_runner(self.MODEL) as llm:
+    def test_one_token_bad_word(self, aphrodite_runner):
+        with aphrodite_runner(self.MODEL) as llm:
             output_token_ids = self._generate(llm)
             assert output_token_ids[0] == self.target_token_id
 
@@ -93,8 +93,8 @@ class TestTwoTokenBadWord:
             self.NEIGHBOUR_TOKEN2, add_special_tokens=False
         )[0]
 
-    def test_two_token_bad_word(self, vllm_runner):
-        with vllm_runner(self.MODEL, dtype="half") as llm:
+    def test_two_token_bad_word(self, aphrodite_runner):
+        with aphrodite_runner(self.MODEL, dtype="half") as llm:
             output_token_ids = self._generate(llm)
             assert output_token_ids[:2] == [
                 self.target_token_id1,

@@ -29,7 +29,7 @@ def is_quant_method_supported(quant_method: str) -> bool:
 
 def _test_online_quant_peak_mem_impl(
     quantization_arg_value,
-    vllm_runner,
+    aphrodite_runner,
     caplog_mp_spawn,
     monkeypatch,
 ) -> None:
@@ -49,7 +49,7 @@ def _test_online_quant_peak_mem_impl(
 
     with (
         caplog_mp_spawn(logging.DEBUG) as log_holder,
-        vllm_runner(
+        aphrodite_runner(
             model_name,
             quantization=quantization_arg_value,
             enforce_eager=True,

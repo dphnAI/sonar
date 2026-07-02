@@ -12,7 +12,7 @@ from aphrodite.config import (
     CompilationConfig,
     CompilationMode,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 
 
@@ -41,13 +41,13 @@ def test_torch_compile_wrapper(use_bytecode_hook, monkeypatch):
     monkeypatch.setenv("APHRODITE_USE_BYTECODE_HOOK", "1" if use_bytecode_hook else "0")
 
     # Create a proper Aphrodite config instead of mocking
-    vllm_config = AphroditeConfig()
-    vllm_config.compilation_config = CompilationConfig()
-    vllm_config.compilation_config.mode = CompilationMode.DYNAMO_TRACE_ONCE
-    vllm_config.compilation_config.backend = "inductor"
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.compilation_config = CompilationConfig()
+    aphrodite_config.compilation_config.mode = CompilationMode.DYNAMO_TRACE_ONCE
+    aphrodite_config.compilation_config.backend = "inductor"
 
     # Test DYNAMO_TRACE_ONCE
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         torch._dynamo.reset()
         mod = MyMod()
         wrapper = MyWrapper(mod)
@@ -79,9 +79,9 @@ def test_torch_compile_wrapper(use_bytecode_hook, monkeypatch):
         )
 
     # with STOCK_TORCH_COMPILE we do not remove guards.
-    vllm_config.compilation_config.mode = CompilationMode.STOCK_TORCH_COMPILE
+    aphrodite_config.compilation_config.mode = CompilationMode.STOCK_TORCH_COMPILE
     torch._dynamo.reset()
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         mod = MyMod()
         wrapper = MyWrapper(mod)
 
@@ -104,9 +104,9 @@ def test_torch_compile_wrapper(use_bytecode_hook, monkeypatch):
         )
 
     # NO_COMPILATION level not supported.
-    vllm_config.compilation_config.mode = None
+    aphrodite_config.compilation_config.mode = None
     torch._dynamo.reset()
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         torch._dynamo.reset()
         mod = MyMod()
 

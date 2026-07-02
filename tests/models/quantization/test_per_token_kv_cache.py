@@ -39,7 +39,7 @@ from ..utils import check_logprobs_close
 @pytest.mark.parametrize("backend", ["TRITON_ATTN"])
 @pytest.mark.parametrize("tensor_parallel_size", [1])
 def test_per_token_head_kv_cache_accuracy(
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     base_model: str,
     test_model: str,
@@ -62,19 +62,19 @@ def test_per_token_head_kv_cache_accuracy(
         MAX_MODEL_LEN = 1024
         NUM_LOG_PROBS = 8
 
-        with vllm_runner(
+        with aphrodite_runner(
             base_model,
             max_model_len=MAX_MODEL_LEN,
             tensor_parallel_size=tensor_parallel_size,
             enforce_eager=enforce_eager,
             kv_cache_dtype="auto",
             attention_config={"backend": backend},
-        ) as vllm_model:
-            baseline_outputs = vllm_model.generate_greedy_logprobs(
+        ) as aphrodite_model:
+            baseline_outputs = aphrodite_model.generate_greedy_logprobs(
                 example_prompts, max_tokens, NUM_LOG_PROBS
             )
 
-        with vllm_runner(
+        with aphrodite_runner(
             test_model,
             max_model_len=MAX_MODEL_LEN,
             tensor_parallel_size=tensor_parallel_size,
@@ -82,8 +82,8 @@ def test_per_token_head_kv_cache_accuracy(
             kv_cache_dtype=kv_cache_dtype,
             calculate_kv_scales=True,
             attention_config={"backend": backend},
-        ) as vllm_model:
-            test_outputs = vllm_model.generate_greedy_logprobs(
+        ) as aphrodite_model:
+            test_outputs = aphrodite_model.generate_greedy_logprobs(
                 example_prompts, max_tokens, NUM_LOG_PROBS
             )
 

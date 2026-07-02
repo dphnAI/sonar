@@ -91,7 +91,7 @@ __device__ inline uint32_t prmt(uint32_t a) {
   return res;
 }
 
-template <typename scalar_t2, vllm::ScalarTypeId w_type_id,
+template <typename scalar_t2, aphrodite::ScalarTypeId w_type_id,
           bool skip_flop = false>
 __device__ inline void dequant(int q, scalar_t2* frag_b);
 
@@ -105,7 +105,7 @@ __device__ inline void dequant(int q, scalar_t2* frag_b);
 // https://github.com/NVIDIA/FasterTransformer/blob/release/v5.3_tag/src/fastertransformer/cutlass_extensions/include/cutlass_extensions/interleaved_numeric_conversion.h#L327-L385
 //
 template <>
-__device__ inline void dequant<half2, vllm::kU4B8.id(), true>(int q,
+__device__ inline void dequant<half2, aphrodite::kU4B8.id(), true>(int q,
                                                               half2* frag_b) {
   const int MASK = 0x000f000f;
   const int EX = 0x64006400;
@@ -119,7 +119,7 @@ __device__ inline void dequant<half2, vllm::kU4B8.id(), true>(int q,
 }
 
 template <>
-__device__ inline void dequant<half2, vllm::kU4B8.id(), false>(int q,
+__device__ inline void dequant<half2, aphrodite::kU4B8.id(), false>(int q,
                                                                half2* frag_b) {
   const int LO = 0x000f000f;
   const int HI = 0x00f000f0;
@@ -142,13 +142,13 @@ __device__ inline void dequant<half2, vllm::kU4B8.id(), false>(int q,
 }
 
 template <>
-__device__ inline void dequant<half2, vllm::kU4.id(), true>(int q,
+__device__ inline void dequant<half2, aphrodite::kU4.id(), true>(int q,
                                                             half2* frag_b) {
-  dequant<half2, vllm::kU4B8.id(), true>(q, frag_b);
+  dequant<half2, aphrodite::kU4B8.id(), true>(q, frag_b);
 }
 
 template <>
-__device__ inline void dequant<half2, vllm::kU4.id(), false>(int q,
+__device__ inline void dequant<half2, aphrodite::kU4.id(), false>(int q,
                                                              half2* frag_b) {
   const int LO = 0x000f000f;
   const int HI = 0x00f000f0;
@@ -171,7 +171,7 @@ __device__ inline void dequant<half2, vllm::kU4.id(), false>(int q,
 }
 
 template <>
-__device__ inline void dequant<nv_bfloat162, vllm::kU4B8.id(), true>(
+__device__ inline void dequant<nv_bfloat162, aphrodite::kU4B8.id(), true>(
     int q, nv_bfloat162* frag_b) {
   static constexpr uint32_t MASK = 0x000f000f;
   static constexpr uint32_t EX = 0x43004300;
@@ -188,9 +188,9 @@ __device__ inline void dequant<nv_bfloat162, vllm::kU4B8.id(), true>(
 }
 
 template <>
-__device__ inline void dequant<nv_bfloat162, vllm::kU4B8.id(), false>(
+__device__ inline void dequant<nv_bfloat162, aphrodite::kU4B8.id(), false>(
     int q, nv_bfloat162* frag_b) {
-  dequant<nv_bfloat162, vllm::kU4B8.id(), true>(q, frag_b);
+  dequant<nv_bfloat162, aphrodite::kU4B8.id(), true>(q, frag_b);
 
   static constexpr uint32_t SUB = 0x43084308;
 
@@ -199,15 +199,15 @@ __device__ inline void dequant<nv_bfloat162, vllm::kU4B8.id(), false>(
 }
 
 template <>
-__device__ inline void dequant<nv_bfloat162, vllm::kU4.id(), true>(
+__device__ inline void dequant<nv_bfloat162, aphrodite::kU4.id(), true>(
     int q, nv_bfloat162* frag_b) {
-  dequant<nv_bfloat162, vllm::kU4B8.id(), true>(q, frag_b);
+  dequant<nv_bfloat162, aphrodite::kU4B8.id(), true>(q, frag_b);
 }
 
 template <>
-__device__ inline void dequant<nv_bfloat162, vllm::kU4.id(), false>(
+__device__ inline void dequant<nv_bfloat162, aphrodite::kU4.id(), false>(
     int q, nv_bfloat162* frag_b) {
-  dequant<nv_bfloat162, vllm::kU4.id(), true>(q, frag_b);
+  dequant<nv_bfloat162, aphrodite::kU4.id(), true>(q, frag_b);
 
   static constexpr uint32_t SUB = 0x43004300;
 
@@ -224,7 +224,7 @@ __device__ inline void dequant<nv_bfloat162, vllm::kU4.id(), false>(
 // https://github.com/NVIDIA/FasterTransformer/blob/release/v5.3_tag/src/fastertransformer/cutlass_extensions/include/cutlass_extensions/interleaved_numeric_conversion.h#L125-L175
 //
 template <>
-__device__ inline void dequant<half2, vllm::kU8B128.id(), true>(int q,
+__device__ inline void dequant<half2, aphrodite::kU8B128.id(), true>(int q,
                                                                 half2* frag_b) {
   static constexpr uint32_t mask_for_elt_01 = 0x5250;
   static constexpr uint32_t mask_for_elt_23 = 0x5351;
@@ -238,9 +238,9 @@ __device__ inline void dequant<half2, vllm::kU8B128.id(), true>(int q,
 }
 
 template <>
-__device__ inline void dequant<half2, vllm::kU8B128.id(), false>(
+__device__ inline void dequant<half2, aphrodite::kU8B128.id(), false>(
     int q, half2* frag_b) {
-  dequant<half2, vllm::kU8B128.id(), true>(q, frag_b);
+  dequant<half2, aphrodite::kU8B128.id(), true>(q, frag_b);
 
   static constexpr uint32_t I8s_TO_F16s_MAGIC_NUM = 0x64806480;
   frag_b[0] = __hsub2(frag_b[0],
@@ -250,15 +250,15 @@ __device__ inline void dequant<half2, vllm::kU8B128.id(), false>(
 }
 
 template <>
-__device__ inline void dequant<half2, vllm::kU8.id(), true>(int q,
+__device__ inline void dequant<half2, aphrodite::kU8.id(), true>(int q,
                                                             half2* frag_b) {
-  dequant<half2, vllm::kU8B128.id(), true>(q, frag_b);
+  dequant<half2, aphrodite::kU8B128.id(), true>(q, frag_b);
 }
 
 template <>
-__device__ inline void dequant<half2, vllm::kU8.id(), false>(int q,
+__device__ inline void dequant<half2, aphrodite::kU8.id(), false>(int q,
                                                              half2* frag_b) {
-  dequant<half2, vllm::kU8.id(), true>(q, frag_b);
+  dequant<half2, aphrodite::kU8.id(), true>(q, frag_b);
 
   static constexpr uint32_t I8s_TO_F16s_MAGIC_NUM = 0x64006400;
   frag_b[0] = __hsub2(frag_b[0],
@@ -268,7 +268,7 @@ __device__ inline void dequant<half2, vllm::kU8.id(), false>(int q,
 }
 
 template <>
-__device__ inline void dequant<nv_bfloat162, vllm::kU8B128.id(), false>(
+__device__ inline void dequant<nv_bfloat162, aphrodite::kU8B128.id(), false>(
     int q, nv_bfloat162* frag_b) {
   float fp32_intermediates[4];
   uint32_t* fp32_intermediates_casted =
@@ -293,7 +293,7 @@ __device__ inline void dequant<nv_bfloat162, vllm::kU8B128.id(), false>(
 }
 
 template <>
-__device__ inline void dequant<nv_bfloat162, vllm::kU8.id(), false>(
+__device__ inline void dequant<nv_bfloat162, aphrodite::kU8.id(), false>(
     int q, nv_bfloat162* frag_b) {
   float fp32_intermediates[4];
   uint32_t* fp32_intermediates_casted =
@@ -318,7 +318,7 @@ __device__ inline void dequant<nv_bfloat162, vllm::kU8.id(), false>(
 }
 
 template <>
-__device__ inline void dequant<half2, vllm::kFE4M3fn.id(), true>(
+__device__ inline void dequant<half2, aphrodite::kFE4M3fn.id(), true>(
     int q, half2* frag_b) {
   // Constants for FP8 (E4M3) and FP16 formats
   constexpr int FP8_EXPONENT = 4, FP16_EXPONENT = 5;
@@ -336,9 +336,9 @@ __device__ inline void dequant<half2, vllm::kFE4M3fn.id(), true>(
 }
 
 template <>
-__device__ inline void dequant<half2, vllm::kFE4M3fn.id(), false>(
+__device__ inline void dequant<half2, aphrodite::kFE4M3fn.id(), false>(
     int q, half2* frag_b) {
-  dequant<half2, vllm::kFE4M3fn.id(), true>(q, frag_b);
+  dequant<half2, aphrodite::kFE4M3fn.id(), true>(q, frag_b);
 
   // Constants for FP8 (E4M3) and FP16 formats
   constexpr int FP8_EXPONENT = 4, FP16_EXPONENT = 5;
@@ -354,7 +354,7 @@ __device__ inline void dequant<half2, vllm::kFE4M3fn.id(), false>(
 }
 
 template <>
-__device__ inline void dequant<nv_bfloat162, vllm::kFE4M3fn.id(), true>(
+__device__ inline void dequant<nv_bfloat162, aphrodite::kFE4M3fn.id(), true>(
     int q, nv_bfloat162* frag_b) {
   // Constants for FP8 (E4M3) and BF16 formats
   constexpr int FP8_EXPONENT = 4, BF16_EXPONENT = 8;
@@ -373,9 +373,9 @@ __device__ inline void dequant<nv_bfloat162, vllm::kFE4M3fn.id(), true>(
 }
 
 template <>
-__device__ inline void dequant<nv_bfloat162, vllm::kFE4M3fn.id(), false>(
+__device__ inline void dequant<nv_bfloat162, aphrodite::kFE4M3fn.id(), false>(
     int q, nv_bfloat162* frag_b) {
-  dequant<nv_bfloat162, vllm::kFE4M3fn.id(), true>(q, frag_b);
+  dequant<nv_bfloat162, aphrodite::kFE4M3fn.id(), true>(q, frag_b);
 
   // Constants for FP8 (E4M3) and BF16 formats
   constexpr int FP8_EXPONENT = 4, BF16_EXPONENT = 8;
@@ -395,7 +395,7 @@ __device__ inline void dequant<nv_bfloat162, vllm::kFE4M3fn.id(), false>(
 }
 
 template <>
-__device__ inline void dequant<half2, vllm::kFE2M1f.id(), true>(int q,
+__device__ inline void dequant<half2, aphrodite::kFE2M1f.id(), true>(int q,
                                                                 half2* frag_b) {
   // Constants for FP4 (E2M1) and FP16 formats
   constexpr int FP4_EXPONENT = 2, FP16_EXPONENT = 5;
@@ -413,9 +413,9 @@ __device__ inline void dequant<half2, vllm::kFE2M1f.id(), true>(int q,
 }
 
 template <>
-__device__ inline void dequant<half2, vllm::kFE2M1f.id(), false>(
+__device__ inline void dequant<half2, aphrodite::kFE2M1f.id(), false>(
     int q, half2* frag_b) {
-  dequant<half2, vllm::kFE2M1f.id(), true>(q, frag_b);
+  dequant<half2, aphrodite::kFE2M1f.id(), true>(q, frag_b);
 
   // Constants for FP4 (E2M1) and FP16 formats
   constexpr int FP4_EXPONENT = 2, FP16_EXPONENT = 5;
@@ -431,7 +431,7 @@ __device__ inline void dequant<half2, vllm::kFE2M1f.id(), false>(
 }
 
 template <>
-__device__ inline void dequant<nv_bfloat162, vllm::kFE2M1f.id(), true>(
+__device__ inline void dequant<nv_bfloat162, aphrodite::kFE2M1f.id(), true>(
     int q, nv_bfloat162* frag_b) {
   // Constants for FP4 (E2M1) and FP16 formats
   constexpr int FP4_EXPONENT = 2, BF16_EXPONENT = 8;
@@ -449,9 +449,9 @@ __device__ inline void dequant<nv_bfloat162, vllm::kFE2M1f.id(), true>(
 }
 
 template <>
-__device__ inline void dequant<nv_bfloat162, vllm::kFE2M1f.id(), false>(
+__device__ inline void dequant<nv_bfloat162, aphrodite::kFE2M1f.id(), false>(
     int q, nv_bfloat162* frag_b) {
-  dequant<nv_bfloat162, vllm::kFE2M1f.id(), true>(q, frag_b);
+  dequant<nv_bfloat162, aphrodite::kFE2M1f.id(), true>(q, frag_b);
 
   // Constants for FP4 (E2M1) and BF16 formats
   constexpr int FP4_EXPONENT = 2, BF16_EXPONENT = 8;
@@ -471,7 +471,7 @@ __device__ inline void dequant<nv_bfloat162, vllm::kFE2M1f.id(), false>(
 }
 
 template <>
-__device__ inline void dequant<__nv_fp8x4_e4m3, vllm::kFE2M1f.id(), true>(
+__device__ inline void dequant<__nv_fp8x4_e4m3, aphrodite::kFE2M1f.id(), true>(
     int q, __nv_fp8x4_e4m3* frag_b) {
   // Constants for FP4 (E2M1) and FP16 formats
   constexpr int FP4_EXPONENT = 2, FP8_EXPONENT = 4;
@@ -491,7 +491,7 @@ __device__ inline void dequant<__nv_fp8x4_e4m3, vllm::kFE2M1f.id(), true>(
 }
 
 template <>
-__device__ inline void dequant<int32_t, vllm::kU4B8.id(), true>(
+__device__ inline void dequant<int32_t, aphrodite::kU4B8.id(), true>(
     int q, int32_t* frag_b) {
   constexpr int repeated_zp = 0x08080808;
   constexpr int MASK = 0x80808080;
@@ -502,7 +502,7 @@ __device__ inline void dequant<int32_t, vllm::kU4B8.id(), true>(
 }
 
 template <>
-__device__ inline void dequant<__nv_fp8x4_e4m3, vllm::kU4B8.id(), true>(
+__device__ inline void dequant<__nv_fp8x4_e4m3, aphrodite::kU4B8.id(), true>(
     int q, __nv_fp8x4_e4m3* frag_b) {
   int s = q & 0x08080808;
   int Out1 = ((q & 0x07070707) | (s << 4)) + (s >> 3);
@@ -514,11 +514,11 @@ __device__ inline void dequant<__nv_fp8x4_e4m3, vllm::kU4B8.id(), true>(
   frag_b[1] = *reinterpret_cast<const __nv_fp8x4_e4m3*>(&Out2);
 }
 
-template <typename scalar_t2, vllm::ScalarTypeId s_type_id>
+template <typename scalar_t2, aphrodite::ScalarTypeId s_type_id>
 __device__ inline void dequant_fp8_scales(int q, scalar_t2* frag_b);
 
 template <>
-__device__ inline void dequant_fp8_scales<half2, vllm::kFE4M3fn.id()>(
+__device__ inline void dequant_fp8_scales<half2, aphrodite::kFE4M3fn.id()>(
     int q, half2* frag_b) {
   int Out1 = (q & 0xFF00FF00) >> 1;
   ;
@@ -531,7 +531,7 @@ __device__ inline void dequant_fp8_scales<half2, vllm::kFE4M3fn.id()>(
 };
 
 template <>
-__device__ inline void dequant_fp8_scales<nv_bfloat162, vllm::kFE4M3fn.id()>(
+__device__ inline void dequant_fp8_scales<nv_bfloat162, aphrodite::kFE4M3fn.id()>(
     int q, nv_bfloat162* frag_b) {
   constexpr int FP8_EXPONENT = 4, BF16_EXPONENT = 8;
   constexpr int RIGHT_SHIFT = BF16_EXPONENT - FP8_EXPONENT;
@@ -548,7 +548,7 @@ __device__ inline void dequant_fp8_scales<nv_bfloat162, vllm::kFE4M3fn.id()>(
 }
 
 template <>
-__device__ inline void dequant_fp8_scales<nv_bfloat162, vllm::kFE8M0fnu.id()>(
+__device__ inline void dequant_fp8_scales<nv_bfloat162, aphrodite::kFE8M0fnu.id()>(
     int q, nv_bfloat162* frag_b) {
   // In this conversion, 2 ** -127 in FP8E8M0 would become 0 in BF16,
   // but we assume that such a extreme value would not occur in real models.
@@ -562,12 +562,12 @@ __device__ inline void dequant_fp8_scales<nv_bfloat162, vllm::kFE8M0fnu.id()>(
 };
 
 // subtract zero point in quanted format and then dequant
-template <typename scalar_t2, vllm::ScalarTypeId w_type_id,
+template <typename scalar_t2, aphrodite::ScalarTypeId w_type_id,
           bool skip_flop = false>
 __device__ inline void sub_zp_and_dequant(int q, scalar_t2* frag_b, int zp);
 
 template <>
-__device__ inline void sub_zp_and_dequant<int32_t, vllm::kU4.id(), true>(
+__device__ inline void sub_zp_and_dequant<int32_t, aphrodite::kU4.id(), true>(
     int q, int32_t* frag_b, int zp) {
   // INT4 with zp -> INT8
   // see https://github.com/vllm-project/vllm/pull/24722
@@ -580,7 +580,7 @@ __device__ inline void sub_zp_and_dequant<int32_t, vllm::kU4.id(), true>(
 }
 
 template <>
-__device__ inline void sub_zp_and_dequant<__nv_fp8x4_e4m3, vllm::kU4.id(),
+__device__ inline void sub_zp_and_dequant<__nv_fp8x4_e4m3, aphrodite::kU4.id(),
                                           true>(int q, __nv_fp8x4_e4m3* frag_b,
                                                 int zp) {
   // INT4 with zp -> FP8

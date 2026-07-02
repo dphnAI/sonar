@@ -15,7 +15,7 @@ test_model = "openai-community/gpt2"
 
 
 def test_runai_model_loader_download_files_s3_mocked_with_patch(
-    vllm_runner,
+    aphrodite_runner,
     tmp_path: Path,
     monkeypatch,
 ):
@@ -46,7 +46,7 @@ def test_runai_model_loader_download_files_s3_mocked_with_patch(
         tensor_parallel_size=1,
     )
 
-    vllm_config = engine_args.create_engine_config()
+    aphrodite_config = engine_args.create_engine_config()
 
-    executor = RunaiDummyExecutor(vllm_config)
+    executor = RunaiDummyExecutor(aphrodite_config)
     executor.driver_worker.load_model()

@@ -37,7 +37,7 @@ class SimpleMLP(nn.Module):
         return self.fc2(self.fc1(x))
 
 
-def _create_vllm_config(
+def _create_aphrodite_config(
     compilation_config: CompilationConfig,
     max_num_seqs: int = 8,
     lora_config: bool = False,
@@ -100,7 +100,7 @@ class TestCudagraphDispatcher:
             cudagraph_capture_sizes=[1, 8],
         )
 
-        config = _create_vllm_config(
+        config = _create_aphrodite_config(
             comp_config, max_num_seqs=8, lora_config=lora_config
         )
         if (
@@ -228,7 +228,7 @@ class TestCudagraphDispatcher:
             cudagraph_capture_sizes=[1, 4, 8, 16],
         )
 
-        config = _create_vllm_config(comp_config, max_num_seqs=16)
+        config = _create_aphrodite_config(comp_config, max_num_seqs=16)
         dispatcher = CudagraphDispatcher(config)
         dispatcher.initialize_cudagraph_keys(
             cudagraph_mode=comp_config.cudagraph_mode, uniform_decode_query_len=1
@@ -261,7 +261,7 @@ class TestCudagraphDispatcher:
             mode=CompilationMode.NONE,
             cudagraph_capture_sizes=[1, 8],
         )
-        config = _create_vllm_config(comp_config, max_num_seqs=8)
+        config = _create_aphrodite_config(comp_config, max_num_seqs=8)
         dispatcher = CudagraphDispatcher(config)
         # Don't initialize keys
 
@@ -271,21 +271,21 @@ class TestCudagraphDispatcher:
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="Skip if not cuda")
 class TestCUDAGraphWrapper:
     def setup_method(self):
-        self.vllm_config = _create_vllm_config(CompilationConfig())
+        self.aphrodite_config = _create_aphrodite_config(CompilationConfig())
         self.model = SimpleMLP().to(DEVICE_TYPE)
         self.persistent_input_buffer = torch.zeros(1, 10, device=DEVICE_TYPE)
         self.input_tensor = torch.randn(1, 10, device=DEVICE_TYPE)
 
     def test_capture_and_replay(self):
         wrapper = CUDAGraphWrapper(
-            self.model, self.vllm_config, runtime_mode=CUDAGraphMode.FULL
+            self.model, self.aphrodite_config, runtime_mode=CUDAGraphMode.FULL
         )
         batch_descriptor = BatchDescriptor(num_tokens=10)
 
         # 0. global warmup
         with set_forward_context(
             attn_metadata=None,
-            vllm_config=self.vllm_config,
+            aphrodite_config=self.aphrodite_config,
             cudagraph_runtime_mode=CUDAGraphMode.NONE,
             batch_descriptor=None,
         ):
@@ -295,7 +295,7 @@ class TestCUDAGraphWrapper:
         with (
             set_forward_context(
                 attn_metadata=None,
-                vllm_config=self.vllm_config,
+                aphrodite_config=self.aphrodite_config,
                 cudagraph_runtime_mode=CUDAGraphMode.FULL,
                 batch_descriptor=batch_descriptor,
             ),
@@ -314,7 +314,7 @@ class TestCUDAGraphWrapper:
         with (
             set_forward_context(
                 attn_metadata=None,
-                vllm_config=self.vllm_config,
+                aphrodite_config=self.aphrodite_config,
                 cudagraph_runtime_mode=CUDAGraphMode.FULL,
                 batch_descriptor=batch_descriptor,
             ),
@@ -331,14 +331,14 @@ class TestCUDAGraphWrapper:
 
     def test_bypass_on_mode_mismatch(self):
         wrapper = CUDAGraphWrapper(
-            self.model, self.vllm_config, runtime_mode=CUDAGraphMode.FULL
+            self.model, self.aphrodite_config, runtime_mode=CUDAGraphMode.FULL
         )
         batch_descriptor = BatchDescriptor(num_tokens=10)
 
         with (
             set_forward_context(
                 attn_metadata=None,
-                vllm_config=self.vllm_config,
+                aphrodite_config=self.aphrodite_config,
                 cudagraph_runtime_mode=CUDAGraphMode.PIECEWISE,
                 batch_descriptor=batch_descriptor,
             ),
@@ -354,14 +354,14 @@ class TestCUDAGraphWrapper:
 
     def test_bypass_on_mode_none(self):
         wrapper = CUDAGraphWrapper(
-            self.model, self.vllm_config, runtime_mode=CUDAGraphMode.FULL
+            self.model, self.aphrodite_config, runtime_mode=CUDAGraphMode.FULL
         )
         batch_descriptor = BatchDescriptor(num_tokens=10)
 
         with (
             set_forward_context(
                 attn_metadata=None,
-                vllm_config=self.vllm_config,
+                aphrodite_config=self.aphrodite_config,
                 cudagraph_runtime_mode=CUDAGraphMode.NONE,
                 batch_descriptor=batch_descriptor,
             ),
@@ -373,7 +373,7 @@ class TestCUDAGraphWrapper:
 
 
 def _run_and_monitor_call(
-    wrapper, input_tensor, runtime_mode, batch_descriptor, vllm_config
+    wrapper, input_tensor, runtime_mode, batch_descriptor, aphrodite_config
 ):
     """Helper to run a single call and monitor the action."""
 
@@ -385,7 +385,7 @@ def _run_and_monitor_call(
 
         context = set_forward_context(
             attn_metadata=None,
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             cudagraph_runtime_mode=runtime_mode,
             batch_descriptor=batch_descriptor,
         )
@@ -423,13 +423,13 @@ def test_capture_replay_bypass_logic():
         cudagraph_mode="FULL",
         cudagraph_capture_sizes=[1, 2],
     )
-    vllm_config = _create_vllm_config(comp_config)
-    dispatcher = CudagraphDispatcher(vllm_config)
+    aphrodite_config = _create_aphrodite_config(comp_config)
+    dispatcher = CudagraphDispatcher(aphrodite_config)
     dispatcher.initialize_cudagraph_keys(
         comp_config.cudagraph_mode, uniform_decode_query_len=1
     )
     model = SimpleMLP().to(DEVICE_TYPE)
-    full_wrapper = CUDAGraphWrapper(model, vllm_config, CUDAGraphMode.FULL)
+    full_wrapper = CUDAGraphWrapper(model, aphrodite_config, CUDAGraphMode.FULL)
     max_bs = 16
     persistent_input_buffer = torch.zeros(max_bs, 10, device=DEVICE_TYPE)
     input_1 = persistent_input_buffer[:1]
@@ -443,7 +443,7 @@ def test_capture_replay_bypass_logic():
     # 0. global warmup
     with set_forward_context(
         attn_metadata=None,
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         cudagraph_runtime_mode=CUDAGraphMode.NONE,
         batch_descriptor=None,
     ):
@@ -451,35 +451,35 @@ def test_capture_replay_bypass_logic():
 
     rt_mode, key = dispatcher.dispatch(num_tokens=desc_1.num_tokens)
     # 1. Capture first shape
-    action = _run_and_monitor_call(full_wrapper, input_1, rt_mode, key, vllm_config)
+    action = _run_and_monitor_call(full_wrapper, input_1, rt_mode, key, aphrodite_config)
     assert action == "capture_global"
 
     # 2. Replay first shape
-    action = _run_and_monitor_call(full_wrapper, input_1, rt_mode, key, vllm_config)
+    action = _run_and_monitor_call(full_wrapper, input_1, rt_mode, key, aphrodite_config)
     assert action == "replay"
 
     rt_mode, key = dispatcher.dispatch(num_tokens=desc_2.num_tokens)
     # 3. Capture second shape
-    action = _run_and_monitor_call(full_wrapper, input_2, rt_mode, key, vllm_config)
+    action = _run_and_monitor_call(full_wrapper, input_2, rt_mode, key, aphrodite_config)
     assert action == "capture_global"
 
     # 4. Replay second shape
     action = _run_and_monitor_call(
-        full_wrapper, input_2, CUDAGraphMode.FULL, key, vllm_config
+        full_wrapper, input_2, CUDAGraphMode.FULL, key, aphrodite_config
     )
     assert action == "replay"
 
     # 5. Bypass if no key match
     rt_mode, key = dispatcher.dispatch(num_tokens=desc_3_unseen.num_tokens)
     assert rt_mode == CUDAGraphMode.NONE
-    action = _run_and_monitor_call(full_wrapper, input_3, rt_mode, key, vllm_config)
+    action = _run_and_monitor_call(full_wrapper, input_3, rt_mode, key, aphrodite_config)
     assert action == "bypass"
 
     # capture unseen shape is not allowed after disable
     set_cudagraph_capturing_enabled(False)
     with pytest.raises(RuntimeError):
         _run_and_monitor_call(
-            full_wrapper, input_3, CUDAGraphMode.FULL, desc_3_unseen, vllm_config
+            full_wrapper, input_3, CUDAGraphMode.FULL, desc_3_unseen, aphrodite_config
         )
     set_cudagraph_capturing_enabled(True)
 
@@ -493,19 +493,19 @@ def test_nested_wrappers():
         cudagraph_mode="FULL",
         cudagraph_capture_sizes=[1],
     )
-    vllm_config = _create_vllm_config(comp_config)
-    dispatcher = CudagraphDispatcher(vllm_config)
+    aphrodite_config = _create_aphrodite_config(comp_config)
+    dispatcher = CudagraphDispatcher(aphrodite_config)
     dispatcher.initialize_cudagraph_keys(
         comp_config.cudagraph_mode, uniform_decode_query_len=1
     )
     model = SimpleMLP().to(DEVICE_TYPE)
-    full_wrapper = CUDAGraphWrapper(model, vllm_config, CUDAGraphMode.FULL)
+    full_wrapper = CUDAGraphWrapper(model, aphrodite_config, CUDAGraphMode.FULL)
     input_1 = torch.randn(1, 10, device=DEVICE_TYPE)
 
     # Setup: Inner model is wrapped with PIECEWISE, outer with FULL
     inner_model = SimpleMLP().to(DEVICE_TYPE)
     piecewise_wrapper = CUDAGraphWrapper(
-        inner_model, vllm_config, CUDAGraphMode.PIECEWISE
+        inner_model, aphrodite_config, CUDAGraphMode.PIECEWISE
     )
     inner_model.forward = MagicMock(wraps=inner_model.forward)
     outer_model = SimpleMLP().to(DEVICE_TYPE)
@@ -513,14 +513,14 @@ def test_nested_wrappers():
     outer_model.forward = MagicMock(
         wraps=outer_model.forward, side_effect=piecewise_wrapper
     )
-    full_wrapper = CUDAGraphWrapper(outer_model, vllm_config, CUDAGraphMode.FULL)
+    full_wrapper = CUDAGraphWrapper(outer_model, aphrodite_config, CUDAGraphMode.FULL)
 
     desc_1 = BatchDescriptor(num_tokens=1)
 
     # 0. global warmup
     with set_forward_context(
         attn_metadata=None,
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         cudagraph_runtime_mode=CUDAGraphMode.NONE,
         batch_descriptor=None,
     ):
@@ -532,7 +532,7 @@ def test_nested_wrappers():
     outer_model.forward.reset_mock()
     inner_model.forward.reset_mock()
     action = _run_and_monitor_call(
-        full_wrapper, input_1, CUDAGraphMode.FULL, desc_1, vllm_config
+        full_wrapper, input_1, CUDAGraphMode.FULL, desc_1, aphrodite_config
     )
     assert action == "capture_global"
     assert outer_model.forward.call_count == 1
@@ -542,7 +542,7 @@ def test_nested_wrappers():
     # The outer model should NOT be called because the whole graph
     # is replayed.
     action = _run_and_monitor_call(
-        full_wrapper, input_1, CUDAGraphMode.FULL, desc_1, vllm_config
+        full_wrapper, input_1, CUDAGraphMode.FULL, desc_1, aphrodite_config
     )
     assert action == "replay"
     assert outer_model.forward.call_count == 1  # No new call
@@ -555,7 +555,7 @@ def test_nested_wrappers():
     # Expect outer wrapper to bypass and call inner wrapper.
     # Inner wrapper should capture.
     action = _run_and_monitor_call(
-        full_wrapper, input_1, CUDAGraphMode.PIECEWISE, desc_1, vllm_config
+        full_wrapper, input_1, CUDAGraphMode.PIECEWISE, desc_1, aphrodite_config
     )
     assert action == "capture_global"
     assert outer_model.forward.call_count == 1
@@ -564,7 +564,7 @@ def test_nested_wrappers():
     # Run again with PIECEWISE.
     # Outer bypasses, inner replays.
     action = _run_and_monitor_call(
-        full_wrapper, input_1, CUDAGraphMode.PIECEWISE, desc_1, vllm_config
+        full_wrapper, input_1, CUDAGraphMode.PIECEWISE, desc_1, aphrodite_config
     )
     assert action == "bypass"
     assert outer_model.forward.call_count == 2

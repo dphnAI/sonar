@@ -23,16 +23,16 @@ MODELS_QUANT = [
 
 @pytest.mark.parametrize("model_id, lm_head_quantized", MODELS_QUANT)
 def test_lm_head(
-    vllm_runner,
+    aphrodite_runner,
     model_id: str,
     lm_head_quantized: bool,
     monkeypatch,
 ) -> None:
     # `LLM.apply_model` requires pickling a function.
     monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
-    with vllm_runner(
+    with aphrodite_runner(
         model_id, dtype=torch.float16, max_model_len=2048, enforce_eager=True
-    ) as vllm_model:
+    ) as aphrodite_model:
 
         def check_model(model):
             lm_head_layer = model.lm_head
@@ -46,6 +46,6 @@ def test_lm_head(
                     lm_head_layer.quant_method, UnquantizedEmbeddingMethod
                 )
 
-        vllm_model.apply_model(check_model)
+        aphrodite_model.apply_model(check_model)
 
-        print(vllm_model.generate_greedy(["Hello my name is"], max_tokens=4)[0][1])
+        print(aphrodite_model.generate_greedy(["Hello my name is"], max_tokens=4)[0][1])

@@ -17,7 +17,7 @@ from aphrodite.config import (
     CompilationMode,
     CUDAGraphMode,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.forward_context import BatchDescriptor, set_forward_context
 from aphrodite.utils.torch_utils import is_torch_equal_or_newer
@@ -35,7 +35,7 @@ RANDOM_SEED = 0
 
 @support_torch_compile
 class ParentModel(nn.Module):
-    def __init__(self, *, vllm_config: AphroditeConfig, prefix: str = "", **kwargs) -> None:
+    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", **kwargs) -> None:
         super().__init__()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -87,7 +87,7 @@ class CompiledAttention(nn.Module):
         *,
         mlp_size: int,
         hidden_size: int,
-        vllm_config: AphroditeConfig,
+        aphrodite_config: AphroditeConfig,
         prefix: str = "",
         **kwargs,
     ) -> None:
@@ -111,11 +111,11 @@ class SimpleModelWithTwoGraphs(ParentModel):
         *,
         mlp_size: int,
         hidden_size: int,
-        vllm_config: AphroditeConfig,
+        aphrodite_config: AphroditeConfig,
         prefix: str = "",
         **kwargs,
     ) -> None:
-        super().__init__(vllm_config=vllm_config, prefix=prefix)
+        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
         # Test will fail without set_model_tag here with error:
         # "ValueError: too many values to unpack (expected 3)"
         # This is because CompiledAttention and CompiledAttentionTwo
@@ -125,14 +125,14 @@ class SimpleModelWithTwoGraphs(ParentModel):
             self.attn_one = CompiledAttention(
                 mlp_size=mlp_size,
                 hidden_size=hidden_size,
-                vllm_config=vllm_config,
+                aphrodite_config=aphrodite_config,
                 prefix=f"{prefix}.attn_one",
             )
         with set_model_tag("attn_two"):
             self.attn_two = CompiledAttentionTwo(
                 mlp_size=mlp_size,
                 hidden_size=hidden_size,
-                vllm_config=vllm_config,
+                aphrodite_config=aphrodite_config,
                 prefix=f"{prefix}.attn_two",
             )
 
@@ -150,19 +150,19 @@ class SimpleModelWithTwoGraphs(ParentModel):
 
 @torch.inference_mode
 def run_model(
-    vllm_config: AphroditeConfig,
+    aphrodite_config: AphroditeConfig,
     model: nn.Module,
     inputs: torch.Tensor,
     cudagraph_runtime_mode: CUDAGraphMode,
 ):
-    with set_forward_context({}, vllm_config=vllm_config):
+    with set_forward_context({}, aphrodite_config=aphrodite_config):
         # warmup for the model with cudagraph_mode NONE
         model(inputs)
 
         # simulate cudagraphs capturing
         with set_forward_context(
             {},
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
             batch_descriptor=BatchDescriptor(
                 num_tokens=2,
@@ -171,7 +171,7 @@ def run_model(
             model(inputs[:2])
         with set_forward_context(
             {},
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
             batch_descriptor=BatchDescriptor(
                 num_tokens=1,
@@ -182,7 +182,7 @@ def run_model(
         # simulate cudagraphs replay
         with set_forward_context(
             {},
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
             batch_descriptor=BatchDescriptor(
                 num_tokens=2,
@@ -208,8 +208,8 @@ def test_multi_graph_piecewise_compile(
 
     outputs = []
 
-    # vllmcompile compile
-    vllm_config = AphroditeConfig(
+    # aphroditecompile compile
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
             cudagraph_mode=CUDAGraphMode.PIECEWISE,
@@ -220,12 +220,12 @@ def test_multi_graph_piecewise_compile(
     )
     cudagraph_runtime_mode = CUDAGraphMode.PIECEWISE
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         model = (
             SimpleModelWithTwoGraphs(
                 mlp_size=MLP_SIZE,
                 hidden_size=HIDDEN_SIZE,
-                vllm_config=vllm_config,
+                aphrodite_config=aphrodite_config,
                 prefix="",
             )
             .eval()
@@ -255,22 +255,22 @@ def test_multi_graph_piecewise_compile(
         num_backend_compilations=num_piecewise_capturable_fx,
         num_cudagraph_captured=8,  # num_cudagraph_sizes * num_partitions
     ):
-        outputs.append(run_model(vllm_config, model, inputs, cudagraph_runtime_mode))
+        outputs.append(run_model(aphrodite_config, model, inputs, cudagraph_runtime_mode))
 
     # no compile or cudagraph
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(
             mode=CompilationMode.NONE,
         )
     )
     cudagraph_runtime_mode = CUDAGraphMode.NONE
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         model = (
             SimpleModelWithTwoGraphs(
                 mlp_size=MLP_SIZE,
                 hidden_size=HIDDEN_SIZE,
-                vllm_config=vllm_config,
+                aphrodite_config=aphrodite_config,
                 prefix="",
             )
             .eval()
@@ -284,10 +284,10 @@ def test_multi_graph_piecewise_compile(
         num_backend_compilations=0,
         num_cudagraph_captured=0,
     ):
-        outputs.append(run_model(vllm_config, model, inputs, cudagraph_runtime_mode))
+        outputs.append(run_model(aphrodite_config, model, inputs, cudagraph_runtime_mode))
 
     # piecewise compile without CUDA graph
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
             cudagraph_mode=CUDAGraphMode.NONE,
@@ -297,12 +297,12 @@ def test_multi_graph_piecewise_compile(
     )
     cudagraph_runtime_mode = CUDAGraphMode.PIECEWISE
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         model = (
             SimpleModelWithTwoGraphs(
                 mlp_size=MLP_SIZE,
                 hidden_size=HIDDEN_SIZE,
-                vllm_config=vllm_config,
+                aphrodite_config=aphrodite_config,
                 prefix="",
             )
             .eval()
@@ -316,7 +316,7 @@ def test_multi_graph_piecewise_compile(
         num_backend_compilations=num_piecewise_capturable_fx,
         num_cudagraph_captured=0,  # no cudagraph captured
     ):
-        outputs.append(run_model(vllm_config, model, inputs, cudagraph_runtime_mode))
+        outputs.append(run_model(aphrodite_config, model, inputs, cudagraph_runtime_mode))
 
     # Generally don't expect outputs with and without inductor
     # to be bitwise equivalent

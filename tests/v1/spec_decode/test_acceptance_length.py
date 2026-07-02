@@ -263,20 +263,20 @@ def test_eagle3_acceptance_length(
             enable_expert_parallel=(
                 tp_size == 4 and "Qwen3-VL" in model_config.verifier
             ),
-        ) as vllm_runner:
-            tokenizer = vllm_runner.llm.get_tokenizer()
+        ) as aphrodite_runner:
+            tokenizer = aphrodite_runner.llm.get_tokenizer()
             prompt_ids = get_mt_bench_prompts(tokenizer, DEFAULT_NUM_PROMPTS)
 
             sampling_params = SamplingParams(
                 temperature=0,
                 max_tokens=DEFAULT_OUTPUT_LEN,
             )
-            vllm_runner.llm.generate(
+            aphrodite_runner.llm.generate(
                 [TokensPrompt(prompt_token_ids=ids) for ids in prompt_ids],
                 sampling_params=sampling_params,
             )
 
-            metrics = vllm_runner.llm.get_metrics()
+            metrics = aphrodite_runner.llm.get_metrics()
             results = extract_acceptance_metrics(metrics, num_spec_tokens)
 
             actual_acceptance_length = results["acceptance_length"]

@@ -151,21 +151,21 @@ class Config:
         """
         make env data for aphrodite launch.
         """
-        vllm_config = AphroditeConfig()
-        vllm_config.model_config = SimpleNamespace(
+        aphrodite_config = AphroditeConfig()
+        aphrodite_config.model_config = SimpleNamespace(
             enforce_eager=True,
             is_moe=True,
         )
-        vllm_config.parallel_config.data_parallel_size = self.world_size
-        vllm_config.parallel_config.enable_expert_parallel = True
+        aphrodite_config.parallel_config.data_parallel_size = self.world_size
+        aphrodite_config.parallel_config.enable_expert_parallel = True
 
         env_dict = {
             "APHRODITE_USE_DEEP_GEMM": str(int(self.needs_deep_gemm())),
         }
 
-        vllm_config.parallel_config.all2all_backend = self.all2all_backend()
+        aphrodite_config.parallel_config.all2all_backend = self.all2all_backend()
 
-        return vllm_config, env_dict
+        return aphrodite_config, env_dict
 
     def fe_supports_quant_scheme(self) -> bool:
         """Check if the fused experts class supports this quant config.
@@ -622,7 +622,7 @@ def _make_gscale(num_experts: int) -> torch.Tensor:
 
 def make_modular_kernel(
     config: Config,
-    vllm_config: AphroditeConfig,
+    aphrodite_config: AphroditeConfig,
     quant_config: FusedMoEQuantConfig,
 ) -> mk.FusedMoEKernel:
     # make moe config
@@ -631,7 +631,7 @@ def make_modular_kernel(
         pcp_size_=get_pcp_group().world_size,
         dp_size_=get_dp_group().world_size,
         sp_size_=1,
-        vllm_parallel_config=vllm_config.parallel_config,
+        aphrodite_parallel_config=aphrodite_config.parallel_config,
     )
 
     moe = FusedMoEConfig(
@@ -645,7 +645,7 @@ def make_modular_kernel(
         in_dtype=config.dtype,
         max_num_tokens=next_power_of_2(config.M),
         activation=MoEActivation.SILU,
-        device=vllm_config.device_config.device,
+        device=aphrodite_config.device_config.device,
         routing_method=RoutingMethodType.DeepSeekV3,
     )
 
@@ -726,7 +726,7 @@ def _maybe_convert_weights_for_experts(
 
 def run_modular_kernel(
     pgi: ProcessGroupInfo,
-    vllm_config: AphroditeConfig,
+    aphrodite_config: AphroditeConfig,
     config: Config,
     weights: WeightTensors,
     rank_tensors: RankTensors,
@@ -757,7 +757,7 @@ def run_modular_kernel(
         per_out_ch_quant=config.is_per_out_ch_quant,
     )
 
-    mk = make_modular_kernel(config, vllm_config, quant_config)
+    mk = make_modular_kernel(config, aphrodite_config, quant_config)
 
     # impls might update the tensor in place
     hidden_states = rank_tensors.hidden_states.clone()
@@ -786,7 +786,7 @@ def run_modular_kernel(
 
     with set_forward_context(
         None,
-        vllm_config,
+        aphrodite_config,
         num_tokens=num_tokens,
         num_tokens_across_dp=num_tokens_across_dp,
     ):

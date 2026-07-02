@@ -17,7 +17,7 @@ from aphrodite.config import (
     ModelConfig,
     SchedulerConfig,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
     MoRIIOAgentMetadata,
@@ -221,7 +221,7 @@ class FakeMoRIIOConnectorWorker(MoRIIOConnectorWorker):
 
     def __init__(
         self,
-        vllm_config,
+        aphrodite_config,
         engine_id,
         *args,
         hand_shake_latency: float = 1.8,
@@ -230,11 +230,11 @@ class FakeMoRIIOConnectorWorker(MoRIIOConnectorWorker):
         **kwargs,
     ):
         super().__init__(
-            vllm_config, engine_id, kv_cache_config or _make_test_kv_cache_config()
+            aphrodite_config, engine_id, kv_cache_config or _make_test_kv_cache_config()
         )
 
 
-def create_vllm_config(
+def create_aphrodite_config(
     model: str = "facebook/opt-125m",
     max_num_seqs: int = 16,
     max_num_batched_tokens: int = 64,
@@ -288,11 +288,11 @@ def test_write_mode_saves_local_block_ids():
     """Write mode records local block ids in MoRIIOConnectorMetadata.reqs_to_save."""
 
     # Setup Scheduler and Request
-    vllm_config = create_vllm_config(role="kv_producer")
-    scheduler = create_scheduler(vllm_config)
+    aphrodite_config = create_aphrodite_config(role="kv_producer")
+    scheduler = create_scheduler(aphrodite_config)
 
     # 2 Full Blocks and 1 Half Block.
-    BLOCK_SIZE = vllm_config.cache_config.block_size
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 
@@ -346,12 +346,12 @@ def test_write_mode_with_chunked_prefill_saves_local_block_ids():
     MAX_NUM_BATCHED_TOKENS = 64
     NUM_TOKENS = MAX_NUM_BATCHED_TOKENS * 2 + MAX_NUM_BATCHED_TOKENS // 2
 
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         max_num_batched_tokens=MAX_NUM_BATCHED_TOKENS, role="kv_producer"
     )
-    BLOCK_SIZE = vllm_config.cache_config.block_size
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
 
-    scheduler = create_scheduler(vllm_config)
+    scheduler = create_scheduler(aphrodite_config)
 
     # 2 Full Blocks and 1 Half Block.
 
@@ -399,11 +399,11 @@ def test_read_mode_loads_remote_block_ids():
     """Read mode loads remote block ids into local cache mapping."""
 
     # Setup Scheduler and Request
-    vllm_config = create_vllm_config(role="kv_consumer", read_mode=True)
-    scheduler = create_scheduler(vllm_config)
+    aphrodite_config = create_aphrodite_config(role="kv_consumer", read_mode=True)
+    scheduler = create_scheduler(aphrodite_config)
 
     # 2 Full Blocks and 1 Half Block.
-    BLOCK_SIZE = vllm_config.cache_config.block_size
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 
@@ -521,7 +521,7 @@ def test_register_kv_caches(mock_parallel_groups):
     """Test that MoRIIOConnector.register_kv_caches correctly registers kv caches."""
     ROLE = "kv_consumer"
     IP = get_ip()
-    vllm_config = create_vllm_config(role=ROLE)
+    aphrodite_config = create_aphrodite_config(role=ROLE)
     DEFAULT_PORT = 6301
     TP_RANK = 0
     DP_RANK = 0
@@ -550,7 +550,7 @@ def test_register_kv_caches(mock_parallel_groups):
         ),
     ):
         # Create connector
-        vllm_config.kv_transfer_config.kv_connector_extra_config.update(
+        aphrodite_config.kv_transfer_config.kv_connector_extra_config.update(
             {
                 "proxy_ip": "127.0.0.1",
                 "proxy_ping_port": 12345,
@@ -558,14 +558,14 @@ def test_register_kv_caches(mock_parallel_groups):
             }
         )
 
-        with set_current_vllm_config(vllm_config):
+        with set_current_aphrodite_config(aphrodite_config):
             connector = MoRIIOConnector(
-                vllm_config,
+                aphrodite_config,
                 KVConnectorRole.WORKER,
                 _make_test_kv_cache_config(),
             )
             connector.connector_worker = FakeMoRIIOConnectorWorker(
-                vllm_config, connector.engine_id, hand_shake_latency=0
+                aphrodite_config, connector.engine_id, hand_shake_latency=0
             )
 
         from mori.io import (
@@ -620,7 +620,7 @@ def test_moriio_handshake_returns_metadata(mock_parallel_groups):
     """MoRIIO handshake socket returns valid agent metadata over ZMQ."""
 
     ROLE = "kv_consumer"
-    vllm_config = create_vllm_config(role=ROLE)
+    aphrodite_config = create_aphrodite_config(role=ROLE)
     from aphrodite.v1.attention.backends.rocm_aiter_fa import AiterFlashAttentionBackend
 
     backend_cls = AiterFlashAttentionBackend
@@ -645,7 +645,7 @@ def test_moriio_handshake_returns_metadata(mock_parallel_groups):
     ):
         handshake_port = _find_free_port()
         # Create connector
-        vllm_config.kv_transfer_config.kv_connector_extra_config.update(
+        aphrodite_config.kv_transfer_config.kv_connector_extra_config.update(
             {
                 "proxy_ip": "127.0.0.1",
                 "proxy_ping_port": 12345,
@@ -653,9 +653,9 @@ def test_moriio_handshake_returns_metadata(mock_parallel_groups):
                 "handshake_port": handshake_port,
             }
         )
-        with set_current_vllm_config(vllm_config):
+        with set_current_aphrodite_config(aphrodite_config):
             connector = MoRIIOConnector(
-                vllm_config,
+                aphrodite_config,
                 KVConnectorRole.WORKER,
                 _make_test_kv_cache_config(),
             )

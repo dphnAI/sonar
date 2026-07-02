@@ -7,7 +7,7 @@ import pytest
 import torch
 import torch.distributed
 
-from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.distributed.eplb.eplb_communicator import (
     create_eplb_communicator,
     has_nixl,
@@ -303,10 +303,10 @@ def _test_async_transfer_layer_without_mtp_worker(
 ) -> None:
     set_env_vars_and_device(env)
 
-    vllm_config = AphroditeConfig()
-    vllm_config.parallel_config.tensor_parallel_size = world_size
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.parallel_config.tensor_parallel_size = world_size
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         ensure_model_parallel_initialized(
             tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1
         )
@@ -420,10 +420,10 @@ def _test_rearrange_expert_weights_with_redundancy(
     # to expert parallel)
     set_env_vars_and_device(env)
 
-    vllm_config = AphroditeConfig()
-    vllm_config.parallel_config.tensor_parallel_size = world_size
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.parallel_config.tensor_parallel_size = world_size
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         ensure_model_parallel_initialized(
             tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1
         )
@@ -561,10 +561,10 @@ def test_rearrange_expert_weights_with_redundancy(
 def _test_rearrange_expert_weights_no_change(env, world_size) -> None:
     set_env_vars_and_device(env)
 
-    vllm_config = AphroditeConfig()
-    vllm_config.parallel_config.tensor_parallel_size = world_size
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.parallel_config.tensor_parallel_size = world_size
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         ensure_model_parallel_initialized(
             tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1
         )
@@ -687,10 +687,10 @@ def test_rearrange_expert_weights_no_change(world_size):
 def _test_rearrange_expert_weights_profile_mode(env, world_size) -> None:
     set_env_vars_and_device(env)
 
-    vllm_config = AphroditeConfig()
-    vllm_config.parallel_config.tensor_parallel_size = world_size
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.parallel_config.tensor_parallel_size = world_size
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         ensure_model_parallel_initialized(
             tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1
         )
@@ -796,10 +796,10 @@ def _test_nixl_deferred_init_worker(
 
     set_env_vars_and_device(env)
 
-    vllm_config = AphroditeConfig()
-    vllm_config.parallel_config.tensor_parallel_size = world_size
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.parallel_config.tensor_parallel_size = world_size
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         ensure_model_parallel_initialized(
             tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1
         )

@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 #
 # The transfer-thread scaffolding (KVTransferThread, KVCacheStoreSendingThread,
-# KVCacheStoreRecvingThread) is adapted from vllm-project/vllm-ascend
+# KVCacheStoreRecvingThread) is adapted from vllm-project/aphrodite-ascend
 # (aphrodite_ascend/distributed/kv_transfer/kv_pool/ascend_store/).
 """Worker-side logic for MooncakeStoreConnector.
 

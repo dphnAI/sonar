@@ -63,7 +63,7 @@ def _create_dflash_scheduler(num_speculative_tokens: int) -> Scheduler:
         cache_dtype="auto",
         enable_prefix_caching=False,
     )
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         scheduler_config=scheduler_config,
         model_config=model_config,
         cache_config=cache_config,
@@ -87,11 +87,11 @@ def _create_dflash_scheduler(num_speculative_tokens: int) -> Scheduler:
     )
     cache_config.num_gpu_blocks = NUM_BLOCKS
     return Scheduler(
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         kv_cache_config=kv_cache_config,
         block_size=BLOCK_SIZE,
         log_stats=True,
-        structured_output_manager=StructuredOutputManager(vllm_config),
+        structured_output_manager=StructuredOutputManager(aphrodite_config),
     )
 
 

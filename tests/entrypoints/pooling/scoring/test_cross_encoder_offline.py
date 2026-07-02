@@ -61,14 +61,14 @@ def test_1_to_1(llm, hf_model):
     text_pair = [TEXTS_1[0], TEXTS_2[0]]
 
     hf_outputs = hf_model.predict([text_pair]).tolist()
-    vllm_outputs = [
+    aphrodite_outputs = [
         output.outputs.score for output in llm.score(text_pair[0], text_pair[1])
     ]
 
-    assert len(vllm_outputs) == 1
+    assert len(aphrodite_outputs) == 1
     assert len(hf_outputs) == 1
 
-    assert hf_outputs[0] == pytest.approx(vllm_outputs[0], rel=0.01)
+    assert hf_outputs[0] == pytest.approx(aphrodite_outputs[0], rel=0.01)
 
 
 @pytest.mark.skip_global_cleanup
@@ -78,14 +78,14 @@ def test_1_to_n(llm, hf_model):
         [TEXTS_1[0], TEXTS_2[1]],
     ]
 
-    vllm_outputs = [output.outputs.score for output in llm.score(TEXTS_1[0], TEXTS_2)]
+    aphrodite_outputs = [output.outputs.score for output in llm.score(TEXTS_1[0], TEXTS_2)]
     hf_outputs = hf_model.predict(text_pairs).tolist()
 
-    assert len(vllm_outputs) == 2
+    assert len(aphrodite_outputs) == 2
     assert len(hf_outputs) == 2
 
-    assert hf_outputs[0] == pytest.approx(vllm_outputs[0], rel=0.01)
-    assert hf_outputs[1] == pytest.approx(vllm_outputs[1], rel=0.01)
+    assert hf_outputs[0] == pytest.approx(aphrodite_outputs[0], rel=0.01)
+    assert hf_outputs[1] == pytest.approx(aphrodite_outputs[1], rel=0.01)
 
 
 @pytest.mark.skip_global_cleanup
@@ -95,14 +95,14 @@ def test_n_to_n(llm, hf_model):
         [TEXTS_1[1], TEXTS_2[1]],
     ]
 
-    vllm_outputs = [output.outputs.score for output in llm.score(TEXTS_1, TEXTS_2)]
+    aphrodite_outputs = [output.outputs.score for output in llm.score(TEXTS_1, TEXTS_2)]
     hf_outputs = hf_model.predict(text_pairs).tolist()
 
-    assert len(vllm_outputs) == 2
+    assert len(aphrodite_outputs) == 2
     assert len(hf_outputs) == 2
 
-    assert hf_outputs[0] == pytest.approx(vllm_outputs[0], rel=0.01)
-    assert hf_outputs[1] == pytest.approx(vllm_outputs[1], rel=0.01)
+    assert hf_outputs[0] == pytest.approx(aphrodite_outputs[0], rel=0.01)
+    assert hf_outputs[1] == pytest.approx(aphrodite_outputs[1], rel=0.01)
 
 
 @pytest.mark.skip_global_cleanup

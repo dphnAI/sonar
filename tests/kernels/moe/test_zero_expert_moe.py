@@ -13,7 +13,7 @@ Note: tests generated with Claude.
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.forward_context import get_forward_context, set_forward_context
 from aphrodite.model_executor.layers.fused_moe.layer import FusedMoE
 from aphrodite.model_executor.layers.fused_moe.router.zero_expert_router import (
@@ -23,7 +23,7 @@ from aphrodite.v1.worker.workspace import init_workspace_manager
 
 
 @pytest.fixture
-def zero_expert_moe(dist_init, default_vllm_config):
+def zero_expert_moe(dist_init, default_aphrodite_config):
     """Create a FusedMoE layer with zero experts."""
     num_experts = 4
     top_k = 2
@@ -39,10 +39,10 @@ def zero_expert_moe(dist_init, default_vllm_config):
         device="cuda",
     )
 
-    vllm_config = AphroditeConfig()
-    vllm_config.compilation_config.static_forward_context = dict()
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.compilation_config.static_forward_context = dict()
 
-    with set_current_vllm_config(vllm_config), set_forward_context(None, vllm_config):
+    with set_current_aphrodite_config(aphrodite_config), set_forward_context(None, aphrodite_config):
         init_workspace_manager(torch.accelerator.current_device_index())
 
         layer = FusedMoE(
@@ -61,7 +61,7 @@ def zero_expert_moe(dist_init, default_vllm_config):
 
         layer._quant_method.process_weights_after_loading(layer.routed_experts)
 
-        yield layer, vllm_config
+        yield layer, aphrodite_config
 
 
 @pytest.mark.parametrize("num_tokens", [1, 32])
@@ -84,7 +84,7 @@ def test_zero_expert_moe_router_is_zero_expert_router(zero_expert_moe, num_token
 @pytest.mark.parametrize("num_tokens", [1, 32])
 def test_zero_expert_moe_forward(zero_expert_moe, num_tokens):
     """Run a forward pass through FusedMoE with zero experts and verify output shape."""
-    layer, vllm_config = zero_expert_moe
+    layer, aphrodite_config = zero_expert_moe
 
     hidden_size = layer.routed_experts.hidden_size
     num_experts = 4
@@ -105,7 +105,7 @@ def test_zero_expert_moe_forward(zero_expert_moe, num_tokens):
             if param.dtype.is_floating_point:
                 param.normal_(0, 0.01)
 
-    with set_current_vllm_config(vllm_config), set_forward_context(None, vllm_config):
+    with set_current_aphrodite_config(aphrodite_config), set_forward_context(None, aphrodite_config):
         get_forward_context().all_moe_layers = None
         output = layer.forward(hidden_states, router_logits)
 
@@ -129,7 +129,7 @@ def test_zero_expert_moe_output_decomposition(zero_expert_moe, num_tokens):
     router logits, compute the zero expert output via the ZeroExpertRouter, and
     verify the sum matches the FusedMoE output.
     """
-    layer, vllm_config = zero_expert_moe
+    layer, aphrodite_config = zero_expert_moe
     num_experts = 4
     zero_expert_num = 1
     total_experts = num_experts + zero_expert_num
@@ -149,7 +149,7 @@ def test_zero_expert_moe_output_decomposition(zero_expert_moe, num_tokens):
             if param.dtype.is_floating_point:
                 param.normal_(0, 0.01)
 
-    with set_current_vllm_config(vllm_config), set_forward_context(None, vllm_config):
+    with set_current_aphrodite_config(aphrodite_config), set_forward_context(None, aphrodite_config):
         get_forward_context().all_moe_layers = None
 
         # Create a plain FusedMoE layer with the same config but no zero
@@ -224,7 +224,7 @@ def test_zero_expert_moe_zero_expert_is_identity(zero_expert_moe, num_tokens):
     this by manually computing the expected zero expert output from the
     routing weights and comparing against what the router produces.
     """
-    layer, vllm_config = zero_expert_moe
+    layer, aphrodite_config = zero_expert_moe
     num_experts = 4
     zero_expert_num = 1
     total_experts = num_experts + zero_expert_num
@@ -246,7 +246,7 @@ def test_zero_expert_moe_zero_expert_is_identity(zero_expert_moe, num_tokens):
             if param.dtype.is_floating_point:
                 param.normal_(0, 0.01)
 
-    with set_current_vllm_config(vllm_config), set_forward_context(None, vllm_config):
+    with set_current_aphrodite_config(aphrodite_config), set_forward_context(None, aphrodite_config):
         get_forward_context().all_moe_layers = None
 
         # Run routing to get topk_weights/topk_ids before masking.

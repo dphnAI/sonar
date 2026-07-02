@@ -16,16 +16,16 @@ from aphrodite.sequence import IntermediateTensors
 class MyGemma2Embedding(nn.Module):
     is_pooling_model = True
 
-    hf_to_vllm_mapper = WeightsMapper(orig_to_new_prefix={"model.": ""})
+    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_prefix={"model.": ""})
 
-    def __init__(self, *, vllm_config: AphroditeConfig, prefix: str = ""):
+    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
 
         self.model = Gemma2Model(
-            vllm_config=vllm_config, prefix=maybe_prefix(prefix, "model")
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
         )
 
-        pooler_config = vllm_config.model_config.pooler_config
+        pooler_config = aphrodite_config.model_config.pooler_config
         assert pooler_config is not None
 
         self.pooler = DispatchPooler.for_embedding(pooler_config)
@@ -55,7 +55,7 @@ class MyGemma2Embedding(nn.Module):
         return torch.zeros_like(hidden_states)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
-        weights = self.hf_to_vllm_mapper.apply(weights)
+        weights = self.hf_to_aphrodite_mapper.apply(weights)
         weights = (
             (name, data) for name, data in weights if not name.startswith("lm_head.")
         )

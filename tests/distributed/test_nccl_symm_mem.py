@@ -10,7 +10,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 
 import aphrodite.envs as envs
-from tests.utils import ensure_current_vllm_config
+from tests.utils import ensure_current_aphrodite_config
 from aphrodite.distributed import cleanup_dist_env_and_memory
 from aphrodite.distributed.device_communicators.cuda_communicator import CudaCommunicator
 from aphrodite.distributed.device_communicators.pynccl import register_nccl_symmetric_ops
@@ -52,7 +52,7 @@ def nccl_symm_mem_allreduce_worker(local_rank: int, world_size: int):
         )
 
         init_distributed_environment()
-        with ensure_current_vllm_config():
+        with ensure_current_aphrodite_config():
             initialize_model_parallel(tensor_model_parallel_size=world_size)
 
         cuda_communicator = typing.cast(
@@ -116,7 +116,7 @@ def nccl_symm_mem_allgather_worker(local_rank: int, world_size: int):
         )
 
         init_distributed_environment()
-        with ensure_current_vllm_config():
+        with ensure_current_aphrodite_config():
             initialize_model_parallel(tensor_model_parallel_size=world_size)
 
         cuda_communicator = typing.cast(
@@ -179,7 +179,7 @@ def nccl_symm_mem_reduce_scatter_worker(local_rank: int, world_size: int):
         )
 
         init_distributed_environment()
-        with ensure_current_vllm_config():
+        with ensure_current_aphrodite_config():
             initialize_model_parallel(tensor_model_parallel_size=world_size)
 
         cuda_communicator = typing.cast(

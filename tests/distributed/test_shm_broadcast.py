@@ -189,9 +189,9 @@ def worker_fn_test_shutdown_busy():
     dist.barrier()
 
 
-def test_message_queue_shutdown_busy(caplog_vllm):
+def test_message_queue_shutdown_busy(caplog_aphrodite):
     distributed_run(worker_fn_test_shutdown_busy, 4)
-    print(caplog_vllm.text)
+    print(caplog_aphrodite.text)
 
 
 @worker_fn_wrapper
@@ -348,7 +348,7 @@ def test_message_queue_busy_to_idle():
     distributed_run(worker_fn_test_busy_to_idle, 4)
 
 
-def test_warning_logs(caplog_vllm):
+def test_warning_logs(caplog_aphrodite):
     """
     Test that warning logs are emitted at APHRODITE_RINGBUFFER_WARNING_INTERVAL intervals
     when indefinite=False, and are not emitted when indefinite=True.
@@ -376,9 +376,9 @@ def test_warning_logs(caplog_vllm):
         assert any(
             "No available shared memory broadcast block found in 0 seconds"
             in record.message
-            for record in caplog_vllm.records
+            for record in caplog_aphrodite.records
         )
-        caplog_vllm.clear()
+        caplog_aphrodite.clear()
 
         # We should have no warnings this time
         with pytest.raises(TimeoutError):
@@ -386,7 +386,7 @@ def test_warning_logs(caplog_vllm):
         assert all(
             "No available shared memory broadcast block found in 0 seconds"
             not in record.message
-            for record in caplog_vllm.records
+            for record in caplog_aphrodite.records
         )
 
         # Clean up when done

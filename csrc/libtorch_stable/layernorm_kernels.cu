@@ -8,7 +8,7 @@
 #include "dispatch_utils.h"
 #include "quantization/vectorization_utils.cuh"
 
-namespace vllm {
+namespace aphrodite {
 
 // TODO(woosuk): Further optimize this kernel.
 template <typename scalar_t, int VEC_SIZE, int NUM_DIMS, bool HasWeight>
@@ -62,7 +62,7 @@ __global__ void rms_norm_kernel(
     float x = static_cast<float>(val);
     variance += x * x;
   };
-  vllm::vectorize_read_with_alignment<VEC_SIZE>(
+  aphrodite::vectorize_read_with_alignment<VEC_SIZE>(
       input_row, hidden_size, threadIdx.x, blockDim.x, vec_op, scalar_op);
 
   using BlockReduce = cub::BlockReduce<float, 1024>;
@@ -214,7 +214,7 @@ fused_add_rms_norm_kernel(
   }
 }
 
-}  // namespace vllm
+}  // namespace aphrodite
 
 void rms_norm(torch::stable::Tensor& out,    // [..., hidden_size]
               torch::stable::Tensor& input,  // [..., hidden_size]
@@ -267,7 +267,7 @@ void rms_norm(torch::stable::Tensor& out,    // [..., hidden_size]
           dim3 block(block_size);
           APHRODITE_STABLE_DISPATCH_VEC_SIZE(calculated_vec_size, [&] {
             if (has_weight) {
-              vllm::rms_norm_kernel<scalar_t, vec_size, tensor_rank, true>
+              aphrodite::rms_norm_kernel<scalar_t, vec_size, tensor_rank, true>
                   <<<grid, block, 0, stream>>>(
                       out.mutable_data_ptr<scalar_t>(),
                       input.const_data_ptr<scalar_t>(), input_stride_d2,
@@ -275,7 +275,7 @@ void rms_norm(torch::stable::Tensor& out,    // [..., hidden_size]
                       input_shape_d3, weight_ptr, weight_stride, epsilon,
                       num_tokens, hidden_size);
             } else {
-              vllm::rms_norm_kernel<scalar_t, vec_size, tensor_rank, false>
+              aphrodite::rms_norm_kernel<scalar_t, vec_size, tensor_rank, false>
                   <<<grid, block, 0, stream>>>(
                       out.mutable_data_ptr<scalar_t>(),
                       input.const_data_ptr<scalar_t>(), input_stride_d2,
@@ -292,14 +292,14 @@ void rms_norm(torch::stable::Tensor& out,    // [..., hidden_size]
   APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                     \
       input.scalar_type(), "fused_add_rms_norm_kernel", [&] {              \
         if (has_weight) {                                                  \
-          vllm::fused_add_rms_norm_kernel<scalar_t, width, true>           \
+          aphrodite::fused_add_rms_norm_kernel<scalar_t, width, true>           \
               <<<grid, block, 0, stream>>>(                                \
                   input.mutable_data_ptr<scalar_t>(), input_stride,        \
                   residual.mutable_data_ptr<scalar_t>(),                   \
                   weight->const_data_ptr<scalar_t>(), epsilon, num_tokens, \
                   hidden_size);                                            \
         } else {                                                           \
-          vllm::fused_add_rms_norm_kernel<scalar_t, width, false>          \
+          aphrodite::fused_add_rms_norm_kernel<scalar_t, width, false>          \
               <<<grid, block, 0, stream>>>(                                \
                   input.mutable_data_ptr<scalar_t>(), input_stride,        \
                   residual.mutable_data_ptr<scalar_t>(), nullptr, epsilon, \
@@ -337,7 +337,7 @@ void fused_add_rms_norm(torch::stable::Tensor& input,     // [..., hidden_size]
   auto res_ptr = reinterpret_cast<std::uintptr_t>(residual.data_ptr());
   bool offsets_are_multiple_of_vector_width =
       hidden_size % vector_width == 0 && input_stride % vector_width == 0;
-  bool batch_invariant_launch = vllm::vllm_is_batch_invariant();
+  bool batch_invariant_launch = aphrodite::aphrodite_is_batch_invariant();
   const bool has_weight = weight.has_value();
   if (has_weight) {
     auto wt_ptr = reinterpret_cast<std::uintptr_t>(weight->data_ptr());

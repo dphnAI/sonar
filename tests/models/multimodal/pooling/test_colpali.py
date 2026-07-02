@@ -74,21 +74,21 @@ def _make_image_mm_param(
 
 
 def _run_token_embed_test(
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     model: str,
     *,
     dtype: str,
 ) -> None:
     """Verify per-token embedding shape and L2 normalization."""
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="pooling",
         dtype=dtype,
         max_model_len=4096,
         enforce_eager=True,
         gpu_memory_utilization=GPU_MEMORY_UTILIZATION,
-    ) as vllm_model:
-        outputs = vllm_model.token_embed([TEXT_QUERIES[0]])
+    ) as aphrodite_model:
+        outputs = aphrodite_model.token_embed([TEXT_QUERIES[0]])
 
         assert len(outputs) == 1
         emb = torch.tensor(outputs[0])
@@ -108,7 +108,7 @@ def _run_token_embed_test(
 
 
 def _run_late_interaction_test(
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     model: str,
     *,
     dtype: str,
@@ -116,30 +116,30 @@ def _run_late_interaction_test(
     """Verify MaxSim scoring matches manual computation."""
     from aphrodite.entrypoints.pooling.scoring.utils import compute_maxsim_score
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="pooling",
         dtype=dtype,
         max_model_len=4096,
         enforce_eager=True,
         gpu_memory_utilization=GPU_MEMORY_UTILIZATION,
-    ) as vllm_model:
-        q_outputs = vllm_model.token_embed([TEXT_QUERIES[0]])
-        d_outputs = vllm_model.token_embed([TEXT_DOCUMENTS[0]])
+    ) as aphrodite_model:
+        q_outputs = aphrodite_model.token_embed([TEXT_QUERIES[0]])
+        d_outputs = aphrodite_model.token_embed([TEXT_DOCUMENTS[0]])
 
         q_emb = torch.tensor(q_outputs[0])
         d_emb = torch.tensor(d_outputs[0])
 
         manual_score = compute_maxsim_score(q_emb, d_emb).item()
 
-        vllm_scores = vllm_model.score(TEXT_QUERIES[0], TEXT_DOCUMENTS[0])
+        aphrodite_scores = aphrodite_model.score(TEXT_QUERIES[0], TEXT_DOCUMENTS[0])
 
-        assert len(vllm_scores) == 1
-        assert vllm_scores[0] == pytest.approx(manual_score, rel=0.01)
+        assert len(aphrodite_scores) == 1
+        assert aphrodite_scores[0] == pytest.approx(manual_score, rel=0.01)
 
 
 def _run_relevance_test(
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     model: str,
     *,
     dtype: str,
@@ -152,15 +152,15 @@ def _run_relevance_test(
         "Deep learning uses neural networks for complex tasks.",
     ]
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="pooling",
         dtype=dtype,
         max_model_len=4096,
         enforce_eager=True,
         gpu_memory_utilization=GPU_MEMORY_UTILIZATION,
-    ) as vllm_model:
-        scores = vllm_model.score(query, documents)
+    ) as aphrodite_model:
+        scores = aphrodite_model.score(query, documents)
 
         assert len(scores) == 3
         assert scores[0] > scores[1], "ML doc should score higher than weather doc"
@@ -170,38 +170,38 @@ def _run_relevance_test(
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("dtype", [DTYPE])
 def test_colpali_token_embed(
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     dtype: str,
 ) -> None:
-    _run_token_embed_test(vllm_runner, model, dtype=dtype)
+    _run_token_embed_test(aphrodite_runner, model, dtype=dtype)
 
 
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("dtype", [DTYPE])
 def test_colpali_late_interaction_scoring(
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     dtype: str,
 ) -> None:
-    _run_late_interaction_test(vllm_runner, model, dtype=dtype)
+    _run_late_interaction_test(aphrodite_runner, model, dtype=dtype)
 
 
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("dtype", [DTYPE])
 def test_colpali_relevance_ordering(
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     dtype: str,
 ) -> None:
-    _run_relevance_test(vllm_runner, model, dtype=dtype)
+    _run_relevance_test(aphrodite_runner, model, dtype=dtype)
 
 
 # ── Multimodal scoring tests ────────────────────────────────
 
 
 def _run_multimodal_text_query_image_docs_test(
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     model: str,
     *,
     dtype: str,
@@ -216,15 +216,15 @@ def _run_multimodal_text_query_image_docs_test(
         _make_image_mm_param(blue_image),
     ]
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="pooling",
         dtype=dtype,
         max_model_len=4096,
         enforce_eager=True,
         gpu_memory_utilization=GPU_MEMORY_UTILIZATION,
-    ) as vllm_model:
-        scores = vllm_model.llm.score(query, image_docs)
+    ) as aphrodite_model:
+        scores = aphrodite_model.llm.score(query, image_docs)
 
         assert len(scores) == 2
         for s in scores:
@@ -232,7 +232,7 @@ def _run_multimodal_text_query_image_docs_test(
 
 
 def _run_multimodal_mixed_docs_test(
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     model: str,
     *,
     dtype: str,
@@ -246,15 +246,15 @@ def _run_multimodal_mixed_docs_test(
         _make_image_mm_param(red_image),
     ]
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="pooling",
         dtype=dtype,
         max_model_len=4096,
         enforce_eager=True,
         gpu_memory_utilization=GPU_MEMORY_UTILIZATION,
-    ) as vllm_model:
-        scores = vllm_model.llm.score(query, documents)
+    ) as aphrodite_model:
+        scores = aphrodite_model.llm.score(query, documents)
 
         assert len(scores) == 2
         for s in scores:
@@ -264,7 +264,7 @@ def _run_multimodal_mixed_docs_test(
 
 
 def _run_multimodal_image_query_text_docs_test(
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     model: str,
     *,
     dtype: str,
@@ -278,15 +278,15 @@ def _run_multimodal_image_query_text_docs_test(
         "The weather forecast shows rain tomorrow.",
     ]
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="pooling",
         dtype=dtype,
         max_model_len=4096,
         enforce_eager=True,
         gpu_memory_utilization=GPU_MEMORY_UTILIZATION,
-    ) as vllm_model:
-        scores = vllm_model.llm.score(image_query, documents)
+    ) as aphrodite_model:
+        scores = aphrodite_model.llm.score(image_query, documents)
 
         assert len(scores) == 2
         for s in scores:
@@ -296,28 +296,28 @@ def _run_multimodal_image_query_text_docs_test(
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("dtype", [DTYPE])
 def test_colpali_multimodal_text_query_image_docs(
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     dtype: str,
 ) -> None:
-    _run_multimodal_text_query_image_docs_test(vllm_runner, model, dtype=dtype)
+    _run_multimodal_text_query_image_docs_test(aphrodite_runner, model, dtype=dtype)
 
 
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("dtype", [DTYPE])
 def test_colpali_multimodal_mixed_docs(
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     dtype: str,
 ) -> None:
-    _run_multimodal_mixed_docs_test(vllm_runner, model, dtype=dtype)
+    _run_multimodal_mixed_docs_test(aphrodite_runner, model, dtype=dtype)
 
 
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("dtype", [DTYPE])
 def test_colpali_multimodal_image_query_text_docs(
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     dtype: str,
 ) -> None:
-    _run_multimodal_image_query_text_docs_test(vllm_runner, model, dtype=dtype)
+    _run_multimodal_image_query_text_docs_test(aphrodite_runner, model, dtype=dtype)

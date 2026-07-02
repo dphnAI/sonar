@@ -32,7 +32,7 @@ from aphrodite.v1.kv_offload.tiering.obj.manager import ObjectStoreSecondaryTier
 # ---------------------------------------------------------------------------
 
 
-def _make_vllm_config():
+def _make_aphrodite_config():
     return SimpleNamespace(
         model_config=SimpleNamespace(model="test/model"),
         cache_config=SimpleNamespace(block_size=16, cache_dtype="float16"),
@@ -48,7 +48,7 @@ def _make_vllm_config():
 
 
 _OFFLOADING_SPEC = SimpleNamespace(
-    vllm_config=_make_vllm_config(),
+    aphrodite_config=_make_aphrodite_config(),
     kv_cache_config=SimpleNamespace(kv_cache_groups=[]),
 )
 

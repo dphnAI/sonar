@@ -2,7 +2,7 @@
 #include "cutlass/half.h"
 #include "cuda_bf16.h"
 
-#include "cutlass_extensions/vllm_custom_types.cuh"
+#include "cutlass_extensions/aphrodite_custom_types.cuh"
 
 namespace cutlass {
 
@@ -32,10 +32,10 @@ NAMEOF_TYPE(int8_t)
 NAMEOF_TYPE(int32_t)
 NAMEOF_TYPE(int64_t)
 
-NAMEOF_TYPE(vllm_uint4b8_t)
+NAMEOF_TYPE(aphrodite_uint4b8_t)
 NAMEOF_TYPE(uint4b_t)
 NAMEOF_TYPE(uint8_t)
-NAMEOF_TYPE(vllm_uint8b128_t)
+NAMEOF_TYPE(aphrodite_uint8b128_t)
 NAMEOF_TYPE(uint32_t)
 NAMEOF_TYPE(uint64_t)
 

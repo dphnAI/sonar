@@ -8,7 +8,7 @@ import torch.nn as nn
 from torch.multiprocessing import spawn
 
 from tests.kernels.utils import opcheck
-from tests.utils import ensure_current_vllm_config, init_test_distributed_environment
+from tests.utils import ensure_current_aphrodite_config, init_test_distributed_environment
 from aphrodite.distributed import cleanup_dist_env_and_memory
 from aphrodite.model_executor.layers.minimax_rms_norm import (
     MiniMaxText01RMSNormTP,
@@ -20,7 +20,7 @@ from aphrodite.utils.network_utils import get_open_port
 from aphrodite.utils.torch_utils import set_random_seed
 
 
-@ensure_current_vllm_config()
+@ensure_current_aphrodite_config()
 def _worker_forward_qk(
     local_rank,
     world_size,

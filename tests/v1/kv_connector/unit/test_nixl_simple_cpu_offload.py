@@ -17,7 +17,7 @@ from tests.v1.kv_connector.unit.utils import (
     create_model_runner_output,
     create_request,
     create_scheduler,
-    create_vllm_config,
+    create_aphrodite_config,
 )
 from aphrodite import SamplingParams
 from aphrodite.distributed.kv_transfer.kv_connector.v1.multi_connector import (
@@ -179,9 +179,9 @@ def _make_kv_cache_config(
 
 
 def _multi_connector_config(swa_enabled: bool = False):
-    """Return (vllm_config, kv_cache_config) for a MultiConnector test."""
+    """Return (aphrodite_config, kv_cache_config) for a MultiConnector test."""
     kv_cache_config = _make_kv_cache_config(swa_enabled=swa_enabled)
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MultiConnector",
         kv_connector_extra_config={
             "connectors": [
@@ -199,7 +199,7 @@ def _multi_connector_config(swa_enabled: bool = False):
             ],
         },
     )
-    return vllm_config, kv_cache_config
+    return aphrodite_config, kv_cache_config
 
 
 @patch(NIXL_WRAPPER_PATCH, FakeNixlWrapper)
@@ -207,8 +207,8 @@ def test_nixl_wins_load_over_cpu_offload():
     """When NixlConnector (index 0) has matched tokens from a remote prefill, it should
     win the load: Nixl metadata tracks the recv while CPU offload metadata has no load
      scheduled."""
-    vllm_config, kv_cache_config = _multi_connector_config()
-    scheduler = create_scheduler(vllm_config, kv_cache_config=kv_cache_config)
+    aphrodite_config, kv_cache_config = _multi_connector_config()
+    scheduler = create_scheduler(aphrodite_config, kv_cache_config=kv_cache_config)
     mc = scheduler.connector
     assert isinstance(mc, MultiConnector)
 
@@ -241,8 +241,8 @@ def test_nixl_wins_load_over_cpu_offload():
 def test_cpu_offload_wins_when_nixl_has_no_match():
     """When NixlConnector returns 0 matched tokens and SimpleCPUOffloadConnector has a
     CPU cache hit, the CPU offload connector (index 1) wins the load."""
-    vllm_config, kv_cache_config = _multi_connector_config()
-    scheduler = create_scheduler(vllm_config, kv_cache_config=kv_cache_config)
+    aphrodite_config, kv_cache_config = _multi_connector_config()
+    scheduler = create_scheduler(aphrodite_config, kv_cache_config=kv_cache_config)
     mc = scheduler.connector
     assert isinstance(mc, MultiConnector)
 
@@ -302,8 +302,8 @@ def test_request_finished_no_async_save(swa_enabled: bool):
     request_finished_all_groups, and cleans up _requests_to_connector."""
     from aphrodite.v1.request import RequestStatus
 
-    vllm_config, kv_cache_config = _multi_connector_config(swa_enabled=swa_enabled)
-    scheduler = create_scheduler(vllm_config, kv_cache_config=kv_cache_config)
+    aphrodite_config, kv_cache_config = _multi_connector_config(swa_enabled=swa_enabled)
+    scheduler = create_scheduler(aphrodite_config, kv_cache_config=kv_cache_config)
     mc = scheduler.connector
     assert isinstance(mc, MultiConnector)
 

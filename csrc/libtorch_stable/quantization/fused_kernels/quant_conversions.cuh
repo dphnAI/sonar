@@ -8,7 +8,7 @@
 // TODO(luka/varun):refactor common.cuh to use this file instead
 #include "../../../quantization/w8a8/fp8/common.cuh"
 
-namespace vllm {
+namespace aphrodite {
 
 // TODO(luka/varun): combine into common utilities for int8
 //  (with int8_quant_kernels.cu)
@@ -87,4 +87,4 @@ __device__ void scaled_quant_conversion(quant_type_t* __restrict__ output,
   }
 }
 
-}  // namespace vllm
+}  // namespace aphrodite

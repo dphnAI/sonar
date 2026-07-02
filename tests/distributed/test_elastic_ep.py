@@ -109,10 +109,10 @@ def test_elastic_ep_scaling(use_async_eplb: bool):
         if not has_nixl():
             pytest.skip("Async EPLB with elastic EP requires NIXL (not installed)")
 
-    vllm_serve_args = _base_serve_args(use_async_eplb)
+    aphrodite_serve_args = _base_serve_args(use_async_eplb)
 
     with RemoteOpenAIServer(
-        MODEL_NAME, vllm_serve_args, env_dict={}, max_wait_seconds=1200
+        MODEL_NAME, aphrodite_serve_args, env_dict={}, max_wait_seconds=1200
     ) as server:
         initial_accuracy = _run_gsm8k_eval(server, "Initial (2 GPUs)")
 
@@ -164,10 +164,10 @@ def test_elastic_ep_scaling_uneven(use_async_eplb: bool):
         if not has_nixl():
             pytest.skip("Async EPLB with elastic EP requires NIXL (not installed)")
 
-    vllm_serve_args = _base_serve_args(use_async_eplb)
+    aphrodite_serve_args = _base_serve_args(use_async_eplb)
 
     with RemoteOpenAIServer(
-        MODEL_NAME, vllm_serve_args, env_dict={}, max_wait_seconds=1200
+        MODEL_NAME, aphrodite_serve_args, env_dict={}, max_wait_seconds=1200
     ) as server:
         initial_accuracy = _run_gsm8k_eval(server, "Initial (2 GPUs)")
 

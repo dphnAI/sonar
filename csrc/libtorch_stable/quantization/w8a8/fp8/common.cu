@@ -4,7 +4,7 @@
 #include "../../vectorization_utils.cuh"
 #include "../../../torch_utils.h"
 #include <torch/csrc/stable/macros.h>
-namespace vllm {
+namespace aphrodite {
 
 // STRIDE_I_ZERO: true if scale_stride_i == 0 (per-tensor or per-channel)
 // STRIDE_J_ZERO: true if scale_stride_j == 0 (per-tensor or per-token)
@@ -178,7 +178,7 @@ __global__ void dynamic_per_token_scaled_fp8_quant_kernel_strided(
       });
 }
 
-}  // namespace vllm
+}  // namespace aphrodite
 
 void static_scaled_fp8_quant(
     torch::stable::Tensor& out,          // [..., d]
@@ -320,7 +320,7 @@ void static_scaled_fp8_quant(
             out.scalar_type(), "scaled_fp8_quant_kernel_fp8_type", [&] {
               APHRODITE_STABLE_DISPATCH_BOOL(scale_stride_i == 0, S0_ZERO, [&] {
                 APHRODITE_STABLE_DISPATCH_BOOL(scale_stride_j == 0, S1_ZERO, [&] {
-                  vllm::scaled_fp8_quant_kernel_strided_group_shape<
+                  aphrodite::scaled_fp8_quant_kernel_strided_group_shape<
                       scalar_t, fp8_t, S0_ZERO, S1_ZERO>
                       <<<grid, block, 0, stream>>>(
                           out.mutable_data_ptr<fp8_t>(),
@@ -364,13 +364,13 @@ void dynamic_scaled_fp8_quant(torch::stable::Tensor& out,          // [..., d]
       input.scalar_type(), "scaled_fp8_quant_kernel_scalar_type", [&] {
         APHRODITE_STABLE_DISPATCH_FP8_TYPES(
             out.scalar_type(), "scaled_fp8_quant_kernel_fp8_type", [&] {
-              vllm::segmented_max_reduction_strided<scalar_t, fp8_t>
+              aphrodite::segmented_max_reduction_strided<scalar_t, fp8_t>
                   <<<grid, block, 0, stream>>>(
                       scale.mutable_data_ptr<float>(),
                       input.const_data_ptr<scalar_t>(), hidden_size,
                       in_row_stride, static_cast<int64_t>(num_tokens));
 
-              vllm::scaled_fp8_quant_kernel_strided_dynamic<scalar_t, fp8_t>
+              aphrodite::scaled_fp8_quant_kernel_strided_dynamic<scalar_t, fp8_t>
                   <<<grid, block, 0, stream>>>(out.mutable_data_ptr<fp8_t>(),
                                                input.const_data_ptr<scalar_t>(),
                                                scale.const_data_ptr<float>(),
@@ -408,7 +408,7 @@ void dynamic_per_token_scaled_fp8_quant(
         APHRODITE_STABLE_DISPATCH_FP8_TYPES(
             out.scalar_type(),
             "dynamic_per_token_scaled_fp8_quant_kernel_fp8_type", [&] {
-              vllm::dynamic_per_token_scaled_fp8_quant_kernel_strided<scalar_t,
+              aphrodite::dynamic_per_token_scaled_fp8_quant_kernel_strided<scalar_t,
                                                                       fp8_t>
                   <<<grid, block, 0, stream>>>(
                       out.mutable_data_ptr<fp8_t>(),

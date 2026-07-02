@@ -78,13 +78,13 @@ class TestApplyFxgraphcachePicklePatch:
             def dumps(self, obj):
                 return b"ok"
 
-        assert not hasattr(Pickler.dumps, "_vllm_patched")
-        assert not getattr(Pickler, "_vllm_fxgraph_dumps_patched", False)
+        assert not hasattr(Pickler.dumps, "_aphrodite_patched")
+        assert not getattr(Pickler, "_aphrodite_fxgraph_dumps_patched", False)
 
         _apply_fxgraphcache_pickle_patch(Pickler, _BypassStub)
 
-        assert Pickler.dumps._vllm_patched is True  # type: ignore[attr-defined]
-        assert Pickler._vllm_fxgraph_dumps_patched is True  # type: ignore[attr-defined]
+        assert Pickler.dumps._aphrodite_patched is True  # type: ignore[attr-defined]
+        assert Pickler._aphrodite_fxgraph_dumps_patched is True  # type: ignore[attr-defined]
 
 
 def test_patch_applied_in_current_environment():
@@ -97,7 +97,7 @@ def test_patch_applied_in_current_environment():
         "2.10.0"
     ) and not is_torch_equal_or_newer("2.11.0")
 
-    assert getattr(FxGraphCachePickler, "_vllm_fxgraph_dumps_patched", False) == (
+    assert getattr(FxGraphCachePickler, "_aphrodite_fxgraph_dumps_patched", False) == (
         should_be_patched
     )
-    assert hasattr(FxGraphCachePickler.dumps, "_vllm_patched") == should_be_patched
+    assert hasattr(FxGraphCachePickler.dumps, "_aphrodite_patched") == should_be_patched

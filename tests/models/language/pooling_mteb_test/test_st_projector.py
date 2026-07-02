@@ -34,5 +34,5 @@ ST_PROJECTOR_MODELS = [
 
 
 @pytest.mark.parametrize("model_info", ST_PROJECTOR_MODELS)
-def test_embed_models_mteb(hf_runner, vllm_runner, model_info: EmbedModelInfo) -> None:
-    mteb_test_embed_models(hf_runner, vllm_runner, model_info)
+def test_embed_models_mteb(hf_runner, aphrodite_runner, model_info: EmbedModelInfo) -> None:
+    mteb_test_embed_models(hf_runner, aphrodite_runner, model_info)

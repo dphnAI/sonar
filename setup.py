@@ -509,7 +509,7 @@ def get_nvcc_cuda_version() -> Version:
     return nvcc_cuda_version
 
 
-def get_vllm_version() -> str:
+def get_aphrodite_version() -> str:
     # Allow overriding the version. This is useful to build platform-specific
     # wheels (e.g. CPU, TPU) without modifying the source.
     if env_version := os.getenv("APHRODITE_VERSION_OVERRIDE"):
@@ -696,18 +696,18 @@ package_data = {
 }
 
 
-def add_vllm_package_data(filename: str) -> None:
-    vllm_files = package_data.setdefault("aphrodite", [])
-    if filename not in vllm_files:
-        vllm_files.append(filename)
+def add_aphrodite_package_data(filename: str) -> None:
+    aphrodite_files = package_data.setdefault("aphrodite", [])
+    if filename not in aphrodite_files:
+        aphrodite_files.append(filename)
 
 
 # If the rust frontend binary is already present in the source tree (e.g.,
 # pre-built in a separate Docker build stage), ship it as-is.
 if PRECOMPILED_RUST_FRONTEND_PATH.exists():
-    add_vllm_package_data("aphrodite-rs")
+    add_aphrodite_package_data("aphrodite-rs")
 for rust_extension_path in get_precompiled_rust_extension_paths():
-    add_vllm_package_data(rust_extension_path.name)
+    add_aphrodite_package_data(rust_extension_path.name)
 
 if _no_device():
     ext_modules = []
@@ -725,7 +725,7 @@ rust_extensions = rust_build.rust_extensions(
 
 setup(
     # static metadata should rather go in pyproject.toml
-    version=get_vllm_version(),
+    version=get_aphrodite_version(),
     ext_modules=ext_modules,
     rust_extensions=rust_extensions,
     install_requires=get_requirements(),

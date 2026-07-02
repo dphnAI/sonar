@@ -17,7 +17,7 @@ from aphrodite.config import (
     ModelConfig,
     PassConfig,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.config.utils import Range
 from aphrodite.distributed import (
@@ -305,14 +305,14 @@ def test_async_tp_pass_replace(
 
 
 def test_async_tp_pass_requires_full_graph_compilation():
-    vllm_config = AphroditeConfig()
-    vllm_config.compilation_config.use_inductor_graph_partition = False
-    vllm_config.compilation_config.splitting_ops = [
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.compilation_config.use_inductor_graph_partition = False
+    aphrodite_config.compilation_config.splitting_ops = [
         "aphrodite::unified_attention_with_output"
     ]
 
     async_tp_pass = object.__new__(AsyncTPPass)
-    async_tp_pass.compilation_config = vllm_config.compilation_config
+    async_tp_pass.compilation_config = aphrodite_config.compilation_config
 
     with pytest.raises(
         AssertionError, match="AsyncTPPass requires full-graph compilation"
@@ -352,34 +352,34 @@ def async_tp_pass_on_test_model(
     init_distributed_environment()
 
     # configure aphrodite config for SequenceParallelismPass
-    vllm_config = AphroditeConfig()
-    vllm_config.compilation_config = CompilationConfig(
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.compilation_config = CompilationConfig(
         pass_config=PassConfig(
             fuse_gemm_comms=True,
         ),
     )
-    vllm_config.device_config = DeviceConfig(device=torch.device(DEVICE_TYPE))
+    aphrodite_config.device_config = DeviceConfig(device=torch.device(DEVICE_TYPE))
 
     # this is a fake model name to construct the model config
-    # in the vllm_config, it's not really used.
+    # in the aphrodite_config, it's not really used.
     model_name = "RedHatAI/Llama-3.2-1B-Instruct-FP8"
-    vllm_config.model_config = ModelConfig(
+    aphrodite_config.model_config = ModelConfig(
         model=model_name, trust_remote_code=True, dtype=dtype, seed=42
     )
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         initialize_model_parallel(tensor_model_parallel_size=world_size)
 
-        async_tp_pass = AsyncTPPass(vllm_config)
+        async_tp_pass = AsyncTPPass(aphrodite_config)
         backend = TestBackend(async_tp_pass)
 
         assert (
             async_tp_pass.compilation_config.splitting_ops
-            == vllm_config.compilation_config.splitting_ops
+            == aphrodite_config.compilation_config.splitting_ops
         )
         assert (
             async_tp_pass.compilation_config.use_inductor_graph_partition
-            == vllm_config.compilation_config.use_inductor_graph_partition
+            == aphrodite_config.compilation_config.use_inductor_graph_partition
         )
 
         model = test_model_cls(hidden_size, dtype)  # Pass dtype to model constructor

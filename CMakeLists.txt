@@ -11,7 +11,7 @@ cmake_minimum_required(VERSION 3.26)
 # If you want to only build one target, make sure to install it manually:
 # cmake --build . --target _C
 # cmake --install . --component _C
-project(vllm_extensions LANGUAGES CXX)
+project(aphrodite_extensions LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -1449,7 +1449,7 @@ endif()
 # Must run after the last HIP `define_extension_target` so every extension
 # has registered its sources.
 if (APHRODITE_GPU_LANG STREQUAL "HIP")
-  vllm_finalize_hipify_target()
+  aphrodite_finalize_hipify_target()
 endif()
 
 # For CUDA and HIP builds also build the triton_kernels external package.

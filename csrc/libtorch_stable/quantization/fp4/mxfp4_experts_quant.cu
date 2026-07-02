@@ -45,7 +45,7 @@ static_assert(CVT_FP4_ELTS_PER_THREAD == 16,
 
 #if APHRODITE_MXFP4_EXPERTS_QUANT_SUPPORTED
 
-namespace vllm {
+namespace aphrodite {
 
 // MXFP4 block size constants
 static constexpr int MXFP4_SF_VEC_SIZE = 32;
@@ -263,7 +263,7 @@ void mxfp4_quant_impl(void* output, void* output_scale, void* input,
   int const totalWorkSize = m_topk * workSizePerRow;
   dim3 block(std::min(workSizePerRow, 512));
   int const numBlocksPerSM =
-      vllm_runtime_blocks_per_sm(static_cast<int>(block.x));
+      aphrodite_runtime_blocks_per_sm(static_cast<int>(block.x));
   dim3 grid(std::min(static_cast<int>((totalWorkSize + block.x - 1) / block.x),
                      multiProcessorCount * numBlocksPerSM));
   while (grid.x <= multiProcessorCount && block.x > 64) {
@@ -316,7 +316,7 @@ void mxfp4_quant_impl(void* output, void* output_scale, void* input,
   }
 }
 
-}  // namespace vllm
+}  // namespace aphrodite
 
   /*Quantization entry for mxfp4 experts quantization*/
   #define CHECK_TH_CUDA(x, m) \
@@ -408,8 +408,8 @@ void mxfp4_experts_quant(
 
   APHRODITE_STABLE_DISPATCH_HALF_TYPES(
       input.scalar_type(), "mxfp4_experts_quant_kernel", [&] {
-        using cuda_type = vllm::CUDATypeConverter<scalar_t>::Type;
-        vllm::mxfp4_quant_impl<cuda_type, /*FUSE_SILU_MUL=*/false>(
+        using cuda_type = aphrodite::CUDATypeConverter<scalar_t>::Type;
+        aphrodite::mxfp4_quant_impl<cuda_type, /*FUSE_SILU_MUL=*/false>(
             output.data_ptr(), output_scale.data_ptr(), input.data_ptr(),
             input_offset_by_experts.data_ptr(),
             output_scale_offset_by_experts.data_ptr(), m_topk, k, n_experts,
@@ -448,8 +448,8 @@ void silu_and_mul_mxfp4_experts_quant(
 
   APHRODITE_STABLE_DISPATCH_HALF_TYPES(
       input.scalar_type(), "silu_mul_mxfp4_experts_quant_kernel", [&] {
-        using cuda_type = vllm::CUDATypeConverter<scalar_t>::Type;
-        vllm::mxfp4_quant_impl<cuda_type, /*FUSE_SILU_MUL=*/true>(
+        using cuda_type = aphrodite::CUDATypeConverter<scalar_t>::Type;
+        aphrodite::mxfp4_quant_impl<cuda_type, /*FUSE_SILU_MUL=*/true>(
             output.data_ptr(), output_scale.data_ptr(), input.data_ptr(),
             input_offset_by_experts.data_ptr(),
             output_scale_offset_by_experts.data_ptr(), m_topk, k, n_experts,

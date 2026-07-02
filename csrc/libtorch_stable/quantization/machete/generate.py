@@ -11,7 +11,7 @@ from dataclasses import dataclass, fields
 from functools import reduce
 
 import jinja2
-from vllm_cutlass_library_extension import (
+from aphrodite_cutlass_library_extension import (
     DataType,
     EpilogueScheduleTag,
     EpilogueScheduleType,

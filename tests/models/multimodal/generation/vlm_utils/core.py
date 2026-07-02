@@ -19,7 +19,7 @@ from .types import PromptWithMultiModalInput, RunnerOutput
 def run_test(
     *,
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     inputs: list[PromptWithMultiModalInput],
     model: str,
     dtype: str,
@@ -29,25 +29,25 @@ def run_test(
     max_model_len: int,
     max_num_seqs: int,
     hf_output_post_proc: Callable[[RunnerOutput, str], Any] | None,
-    vllm_output_post_proc: Callable[[RunnerOutput, str], Any] | None,
+    aphrodite_output_post_proc: Callable[[RunnerOutput, str], Any] | None,
     auto_cls: type[_BaseAutoModelClass],
     use_tokenizer_eos: bool,
     comparator: Callable[..., None],
     get_stop_token_ids: Callable[[TokenizerLike], list[int]] | None,
     stop_str: list[str] | None,
     limit_mm_per_prompt: dict[str, int],
-    vllm_runner_kwargs: dict[str, Any] | None,
+    aphrodite_runner_kwargs: dict[str, Any] | None,
     hf_model_kwargs: dict[str, Any] | None,
     hf_processor: Callable[[str], Any] | None,
     patch_hf_runner: Callable[[HfRunner], HfRunner] | None,
     runner: RunnerOption = "auto",
     distributed_executor_backend: str | None = None,
     tensor_parallel_size: int = 1,
-    vllm_embeddings: torch.Tensor | None = None,
+    aphrodite_embeddings: torch.Tensor | None = None,
 ):
     """Modality agnostic test executor for comparing HF/Aphrodite outputs."""
     # In the case of embeddings, Aphrodite takes separate input tensors
-    vllm_inputs = vllm_embeddings if vllm_embeddings is not None else inputs
+    aphrodite_inputs = aphrodite_embeddings if aphrodite_embeddings is not None else inputs
 
     model_info = HF_EXAMPLE_MODELS.find_hf_info(model)
     model_info.check_available_online(on_fail="skip")
@@ -57,7 +57,7 @@ def run_test(
     default_limits = {"image": 0, "video": 0, "audio": 0}
     limit_mm_per_prompt = default_limits | limit_mm_per_prompt
 
-    vllm_outputs_per_mm = []
+    aphrodite_outputs_per_mm = []
     hf_outputs_per_mm = []
 
     # NOTE: take care of the order. run Aphrodite first, and then run HF.
@@ -65,28 +65,28 @@ def run_test(
     # if we run HF first, the cuda initialization will be done and it
     # will hurt multiprocessing backend with fork method (the default method).
 
-    vllm_runner_kwargs_: dict[str, Any] = {"mm_processor_cache_gb": 0}
+    aphrodite_runner_kwargs_: dict[str, Any] = {"mm_processor_cache_gb": 0}
     if model_info.tokenizer:
-        vllm_runner_kwargs_["tokenizer_name"] = model_info.tokenizer
+        aphrodite_runner_kwargs_["tokenizer_name"] = model_info.tokenizer
     if model_info.tokenizer_mode:
-        vllm_runner_kwargs_["tokenizer_mode"] = model_info.tokenizer_mode
+        aphrodite_runner_kwargs_["tokenizer_mode"] = model_info.tokenizer_mode
     if model_info.hf_overrides:
-        vllm_runner_kwargs_["hf_overrides"] = model_info.hf_overrides
+        aphrodite_runner_kwargs_["hf_overrides"] = model_info.hf_overrides
     if model_info.require_embed_inputs:
         for k in ("skip_tokenizer_init", "enable_prompt_embeds", "enable_mm_embeds"):
-            vllm_runner_kwargs_[k] = model_info.require_embed_inputs
+            aphrodite_runner_kwargs_[k] = model_info.require_embed_inputs
     if not model_info.enable_prefix_caching:
-        vllm_runner_kwargs_["enable_prefix_caching"] = False
+        aphrodite_runner_kwargs_["enable_prefix_caching"] = False
 
-    if vllm_runner_kwargs:
-        vllm_runner_kwargs_.update(vllm_runner_kwargs)
+    if aphrodite_runner_kwargs:
+        aphrodite_runner_kwargs_.update(aphrodite_runner_kwargs)
 
-    # Avoid passing limit_mm_per_prompt twice when vllm_runner_kwargs
-    # already contains it (e.g. gemma4 sets it via vllm_runner_kwargs).
-    if "limit_mm_per_prompt" in vllm_runner_kwargs_:
-        limit_mm_per_prompt = vllm_runner_kwargs_.pop("limit_mm_per_prompt")
+    # Avoid passing limit_mm_per_prompt twice when aphrodite_runner_kwargs
+    # already contains it (e.g. gemma4 sets it via aphrodite_runner_kwargs).
+    if "limit_mm_per_prompt" in aphrodite_runner_kwargs_:
+        limit_mm_per_prompt = aphrodite_runner_kwargs_.pop("limit_mm_per_prompt")
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         max_model_len=max_model_len,
         max_num_seqs=max_num_seqs,
@@ -96,26 +96,26 @@ def run_test(
         distributed_executor_backend=distributed_executor_backend,
         enforce_eager=enforce_eager,
         runner=runner,
-        **vllm_runner_kwargs_,
-    ) as vllm_model:
-        tokenizer = vllm_model.llm.get_tokenizer()
+        **aphrodite_runner_kwargs_,
+    ) as aphrodite_model:
+        tokenizer = aphrodite_model.llm.get_tokenizer()
 
-        vllm_kwargs: dict[str, Any] = {}
+        aphrodite_kwargs: dict[str, Any] = {}
         if get_stop_token_ids is not None:
-            vllm_kwargs["stop_token_ids"] = get_stop_token_ids(tokenizer)
+            aphrodite_kwargs["stop_token_ids"] = get_stop_token_ids(tokenizer)
         if stop_str:
-            vllm_kwargs["stop"] = stop_str
+            aphrodite_kwargs["stop"] = stop_str
 
-        for prompts, image_data, video_data, audio_data in vllm_inputs:
+        for prompts, image_data, video_data, audio_data in aphrodite_inputs:
             mm_data = dict(images=image_data, videos=video_data, audios=audio_data)
-            vllm_kwargs_with_mm_data = vllm_kwargs | mm_data
-            vllm_output = vllm_model.generate_greedy_logprobs(
+            aphrodite_kwargs_with_mm_data = aphrodite_kwargs | mm_data
+            aphrodite_output = aphrodite_model.generate_greedy_logprobs(
                 prompts,
                 max_tokens,
                 num_logprobs=num_logprobs,
-                **vllm_kwargs_with_mm_data,
+                **aphrodite_kwargs_with_mm_data,
             )
-            vllm_outputs_per_mm.append(vllm_output)
+            aphrodite_outputs_per_mm.append(aphrodite_output)
 
     hf_runner_kwargs: dict[str, Any] = {}
     if model_info.tokenizer:
@@ -161,20 +161,20 @@ def run_test(
             hf_outputs_per_mm.append(hf_output)
 
     # Apply output processing / sanitation to the Aphrodite and HF runner results
-    hf_outputs_per_mm, vllm_outputs_per_mm = process_runner_outputs(
+    hf_outputs_per_mm, aphrodite_outputs_per_mm = process_runner_outputs(
         model,
         first_runner_outputs=hf_outputs_per_mm,
-        second_runner_outputs=vllm_outputs_per_mm,
+        second_runner_outputs=aphrodite_outputs_per_mm,
         first_runner_processor=hf_output_post_proc,
-        second_runner_processor=vllm_output_post_proc,
+        second_runner_processor=aphrodite_output_post_proc,
     )
 
-    for hf_outputs, vllm_outputs in zip(hf_outputs_per_mm, vllm_outputs_per_mm):
+    for hf_outputs, aphrodite_outputs in zip(hf_outputs_per_mm, aphrodite_outputs_per_mm):
         # This is usually check_logprobs_close, but it's passed through to
         # allow things like check_outputs_equal where needed
         comparator(
             outputs_0_lst=hf_outputs,
-            outputs_1_lst=vllm_outputs,
+            outputs_1_lst=aphrodite_outputs,
             name_0="hf",
             name_1="aphrodite",
         )

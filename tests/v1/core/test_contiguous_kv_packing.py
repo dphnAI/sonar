@@ -83,7 +83,7 @@ def _make_groups(n_c4, n_c128, n_swa):
     return [mla_group, swa_group]
 
 
-def _mock_vllm_config(kv_connector_extra_config: dict[str, str] | None = None):
+def _mock_aphrodite_config(kv_connector_extra_config: dict[str, str] | None = None):
     config = MagicMock()
     config.cache_config.num_gpu_blocks_override = None
     config.kv_transfer_config = None
@@ -95,7 +95,7 @@ def _mock_vllm_config(kv_connector_extra_config: dict[str, str] | None = None):
 
 def _run(n_c4=3, n_c128=2, n_swa=5, mem=100 * 1024 * 1024):
     groups = _make_groups(n_c4, n_c128, n_swa)
-    return _get_kv_cache_config_packed(_mock_vllm_config(), groups, mem)
+    return _get_kv_cache_config_packed(_mock_aphrodite_config(), groups, mem)
 
 
 def _page_sizes_by_layer(
@@ -139,7 +139,7 @@ class TestInterleavedPacking:
         groups = _make_groups(n_c4=3, n_c128=2, n_swa=5)
         page_sizes = _page_sizes_by_layer(groups)
         num_blocks, tensors = _get_kv_cache_config_packed(
-            _mock_vllm_config(), groups, 100 * 1024 * 1024
+            _mock_aphrodite_config(), groups, 100 * 1024 * 1024
         )
         backing = torch.zeros(tensors[0].size, dtype=torch.uint8)
         views = []
@@ -170,7 +170,7 @@ class TestInterleavedPacking:
         ]
 
         config = get_kv_cache_config_from_groups(
-            _mock_vllm_config(), groups, available_memory=page_size * 2 * 32
+            _mock_aphrodite_config(), groups, available_memory=page_size * 2 * 32
         )
 
         assert config.num_blocks == 32
@@ -191,7 +191,7 @@ class TestInterleavedPacking:
         ]
 
         config = get_kv_cache_config_from_groups(
-            _mock_vllm_config({"enable_cross_layers_blocks": "True"}),
+            _mock_aphrodite_config({"enable_cross_layers_blocks": "True"}),
             groups,
             available_memory=page_size * 2 * 32,
         )
@@ -218,7 +218,7 @@ class TestInterleavedPacking:
         groups = [KVCacheGroupSpec(["full.0", "full.1"], spec)]
 
         config = get_kv_cache_config_from_groups(
-            _mock_vllm_config(), groups, available_memory=spec.page_size_bytes * 2 * 32
+            _mock_aphrodite_config(), groups, available_memory=spec.page_size_bytes * 2 * 32
         )
 
         assert sum(t.size for t in config.kv_cache_tensors) == (

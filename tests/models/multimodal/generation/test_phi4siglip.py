@@ -47,11 +47,11 @@ MAX_TOKENS = 128
 NUM_LOGPROBS = 10
 
 
-def vllm_to_hf_output(
-    vllm_output: tuple[list[int], str, SampleLogprobs | None], model: str
+def aphrodite_to_hf_output(
+    aphrodite_output: tuple[list[int], str, SampleLogprobs | None], model: str
 ):
     """Sanitize aphrodite output to be comparable with hf output."""
-    _, output_str, out_logprobs = vllm_output
+    _, output_str, out_logprobs = aphrodite_output
 
     output_str_without_image = re.sub(r"(<image>)+", "", output_str)
     if output_str_without_image and output_str_without_image[0] == " ":
@@ -105,7 +105,7 @@ def _build_multi_image_inputs(
 
 def _run_and_compare(
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     all_inputs: Sequence[tuple[list[str], PromptImageInput]],
     model: str,
     max_model_len: int,
@@ -117,7 +117,7 @@ def _run_and_compare(
     # NOTE: run Aphrodite first, then HF.  Aphrodite needs a fresh process without
     # cuda initialization; running HF first would break the multiprocessing
     # backend with fork method.
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="generate",
         max_model_len=max_model_len,
@@ -128,9 +128,9 @@ def _run_and_compare(
         tensor_parallel_size=2,
         trust_remote_code=True,
         enforce_eager=True,
-    ) as vllm_model:
-        vllm_outputs_per_case = [
-            vllm_model.generate_greedy_logprobs(
+    ) as aphrodite_model:
+        aphrodite_outputs_per_case = [
+            aphrodite_model.generate_greedy_logprobs(
                 prompts,
                 MAX_TOKENS,
                 num_logprobs=NUM_LOGPROBS,
@@ -157,10 +157,10 @@ def _run_and_compare(
             for prompts, images in all_inputs
         ]
 
-    for hf_outputs, vllm_outputs in zip(hf_outputs_per_case, vllm_outputs_per_case):
+    for hf_outputs, aphrodite_outputs in zip(hf_outputs_per_case, aphrodite_outputs_per_case):
         check_logprobs_close(
             outputs_0_lst=hf_outputs,
-            outputs_1_lst=vllm_outputs,
+            outputs_1_lst=aphrodite_outputs,
             name_0="hf",
             name_1="aphrodite",
         )
@@ -168,11 +168,11 @@ def _run_and_compare(
 
 @multi_gpu_test(num_gpus=2)
 @pytest.mark.parametrize("model", [MODEL_ID])
-def test_models(hf_runner, vllm_runner, image_assets, model) -> None:
+def test_models(hf_runner, aphrodite_runner, image_assets, model) -> None:
     all_inputs = _build_single_image_inputs(image_assets)
     _run_and_compare(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         all_inputs,
         model,
         max_model_len=8192,
@@ -184,11 +184,11 @@ def test_models(hf_runner, vllm_runner, image_assets, model) -> None:
 
 @multi_gpu_test(num_gpus=2)
 @pytest.mark.parametrize("model", [MODEL_ID])
-def test_multi_images_models(hf_runner, vllm_runner, image_assets, model) -> None:
+def test_multi_images_models(hf_runner, aphrodite_runner, image_assets, model) -> None:
     all_inputs = _build_multi_image_inputs(image_assets)
     _run_and_compare(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         all_inputs,
         model,
         max_model_len=8192,

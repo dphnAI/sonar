@@ -13,7 +13,7 @@ from torch.distributed import ProcessGroup
 
 from tests.kernels.moe.utils import make_dummy_moe_config, make_test_weights
 from tests.kernels.utils import torch_experts
-from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.fused_moe import TritonExperts
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.model_executor.layers.fused_moe.config import (
@@ -220,7 +220,7 @@ def _deep_ep_v2_moe(
     pg = torch.distributed.new_group(list(range(pgi.world_size)))
     test_tensors = TestTensors.make(config)
 
-    with set_current_vllm_config(AphroditeConfig()):
+    with set_current_aphrodite_config(AphroditeConfig()):
         # Reference
         q_dtype = torch.float8_e4m3fn if is_quantized else None
         torch_combined = torch_experts(
@@ -371,10 +371,10 @@ def _deep_ep_v2_moe_cudagraph(
 
     from aphrodite.config import KernelConfig
 
-    vllm_cfg = AphroditeConfig()
-    vllm_cfg.kernel_config = KernelConfig(moe_backend="flashinfer_trtllm")
+    aphrodite_cfg = AphroditeConfig()
+    aphrodite_cfg.kernel_config = KernelConfig(moe_backend="flashinfer_trtllm")
 
-    with set_current_vllm_config(vllm_cfg):
+    with set_current_aphrodite_config(aphrodite_cfg):
         # Initialize Aphrodite parallel state (needed by FusedMoE layer)
         temp_file = tempfile.mktemp()
         init_distributed_environment(

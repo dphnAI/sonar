@@ -224,7 +224,7 @@ def init_test_http_connection():
 
 @pytest.fixture
 def dist_init():
-    from tests.utils import ensure_current_vllm_config
+    from tests.utils import ensure_current_aphrodite_config
 
     # Close the fd returned by mkstemp; FileStore opens the path itself.
     # Leaving it open leaks one FD per test and eventually exhausts the
@@ -234,7 +234,7 @@ def dist_init():
     os.close(fd)
 
     try:
-        with ensure_current_vllm_config():
+        with ensure_current_aphrodite_config():
             init_distributed_environment(
                 world_size=1,
                 rank=0,
@@ -251,14 +251,14 @@ def dist_init():
 
 
 @pytest.fixture
-def default_vllm_config():
+def default_aphrodite_config():
     """Set a default AphroditeConfig for tests that directly test CustomOps or pathways
-    that use get_current_vllm_config() outside of a full engine context.
+    that use get_current_aphrodite_config() outside of a full engine context.
     """
-    from aphrodite.config import AphroditeConfig, set_current_vllm_config
+    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 
     config = AphroditeConfig()
-    with set_current_vllm_config(config):
+    with set_current_aphrodite_config(config):
         yield config
 
 
@@ -1301,7 +1301,7 @@ class AphroditeRunner:
         # might not be fast enough in shutting down the llm engine. This can lead to OOMs
         # because when the next test starts some GPU memory is still in use.
         gpu_memory_utilization = (
-            self.llm.llm_engine.vllm_config.cache_config.gpu_memory_utilization
+            self.llm.llm_engine.aphrodite_config.cache_config.gpu_memory_utilization
         )
         from aphrodite.platforms import current_platform
 
@@ -1323,7 +1323,7 @@ class AphroditeRunner:
 
 
 @pytest.fixture(scope="session")
-def vllm_runner():
+def aphrodite_runner():
     return AphroditeRunner
 
 
@@ -1338,7 +1338,7 @@ def temporary_enable_log_propagate():
 
 
 @pytest.fixture()
-def caplog_vllm(temporary_enable_log_propagate, caplog):
+def caplog_aphrodite(temporary_enable_log_propagate, caplog):
     # To capture aphrodite log, we should enable propagate=True temporarily
     # because caplog depends on logs propagated to the root logger.
     yield caplog
@@ -1348,7 +1348,7 @@ def caplog_vllm(temporary_enable_log_propagate, caplog):
 def caplog_mp_fork():
     """
     This fixture enables capturing logs from a forked MP subprocess.
-    It should be used in conjunction with caplog_vllm.
+    It should be used in conjunction with caplog_aphrodite.
 
     By default, subprocess logs do not go through the parent process.
     We instead create a queue listener in the parent process which
@@ -1393,7 +1393,7 @@ class LogHolder:
 def caplog_mp_spawn(tmp_path, monkeypatch):
     """
     This fixture enables capturing logs from a forked MP subprocess.
-    It does not require caplog_vllm (but it only contains logs from the child).
+    It does not require caplog_aphrodite (but it only contains logs from the child).
 
     By default, subprocess logs do not go through the parent process.
     We instead add a FileHandler to the config so the spawned child process
@@ -1409,7 +1409,7 @@ def caplog_mp_spawn(tmp_path, monkeypatch):
     def ctx(level: int | str):
         from aphrodite.logger import DEFAULT_LOGGING_CONFIG
 
-        config_path = tmp_path / "vllm_logging_config.json"
+        config_path = tmp_path / "aphrodite_logging_config.json"
         log_path = tmp_path / "aphrodite.log"
         log_holder = LogHolder()
 
@@ -1419,8 +1419,8 @@ def caplog_mp_spawn(tmp_path, monkeypatch):
             assert path.exists()
             config = json.loads(path.read_text())
 
-        config["loggers"]["aphrodite"]["handlers"] += ["vllm_file"]
-        config["handlers"]["vllm_file"] = {
+        config["loggers"]["aphrodite"]["handlers"] += ["aphrodite_file"]
+        config["handlers"]["aphrodite_file"] = {
             "class": "logging.FileHandler",
             "formatter": "aphrodite",
             "level": level,
@@ -1733,7 +1733,7 @@ def use_fresh_inductor_cache():
 
 
 @pytest.fixture
-def fresh_vllm_cache(monkeypatch, use_fresh_inductor_cache):
+def fresh_aphrodite_cache(monkeypatch, use_fresh_inductor_cache):
     """Temporary APHRODITE_CACHE_ROOT combined with a fresh inductor cache."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         monkeypatch.setenv("APHRODITE_CACHE_ROOT", tmp_dir)
@@ -1770,22 +1770,22 @@ def disable_log_dedup(monkeypatch):
 
 
 @pytest.fixture(scope="function")
-def fake_vllm_ir(monkeypatch):
+def fake_aphrodite_ir(monkeypatch):
     """
     Pytest fixture to allow isolated IR op registration in tests.
 
-    Replaces IrOp.registry with an empty dict and swaps ``vllm_ir_torch_lib`` for a
+    Replaces IrOp.registry with an empty dict and swaps ``aphrodite_ir_torch_lib`` for a
     fresh ``Library`` with a unique namespace per test (see ``Library.ns``).
 
     Torch keeps registrations for the process lifetime; reusing the fragment
-    name ``vllm_ir`` and defining the same op string again can segfault. A
+    name ``aphrodite_ir`` and defining the same op string again can segfault. A
     random library name keeps each fixture run on a disjoint namespace.
 
     The test Library is kept alive until after monkeypatch teardown so PyTorch's
     C++ state is not freed while references may still exist.
 
     Usage:
-        def test_my_ir_op(fake_vllm_ir):
+        def test_my_ir_op(fake_aphrodite_ir):
             @aphrodite.ir.register_op
             def my_test_op(x: torch.Tensor) -> torch.Tensor:
                 return x * 2
@@ -1802,8 +1802,8 @@ def fake_vllm_ir(monkeypatch):
 
     # Keep a local reference so the Library is not GC'd before monkeypatch
     # teardown restores the original reference.
-    test_lib = Library(f"vllm_ir_{secrets.token_hex(8)}", "FRAGMENT")
-    monkeypatch.setattr("aphrodite.ir.op.vllm_ir_torch_lib", test_lib)
+    test_lib = Library(f"aphrodite_ir_{secrets.token_hex(8)}", "FRAGMENT")
+    monkeypatch.setattr("aphrodite.ir.op.aphrodite_ir_torch_lib", test_lib)
 
     yield
 

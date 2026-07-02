@@ -12,9 +12,9 @@ from torch.nn.attention.flex_attention import create_block_mask, flex_attention
 from tests.v1.attention.utils import (
     BatchSpec,
     create_common_attn_metadata,
-    create_vllm_config,
+    create_aphrodite_config,
 )
-from aphrodite.config import set_current_vllm_config
+from aphrodite.config import set_current_aphrodite_config
 from aphrodite.platforms import current_platform
 from aphrodite.utils.math_utils import cdiv
 from aphrodite.utils.torch_utils import nvfp4_kv_cache_full_dim, set_random_seed
@@ -74,8 +74,8 @@ BATCH_SPECS = {
 }
 
 
-def _mock_get_per_layer_parameters(vllm_config, layer_names, impl_cls):
-    head_size = vllm_config.model_config.get_head_size()
+def _mock_get_per_layer_parameters(aphrodite_config, layer_names, impl_cls):
+    head_size = aphrodite_config.model_config.get_head_size()
     return {
         name: PerLayerParameters(
             window_left=-1,
@@ -285,23 +285,23 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
     set_random_seed(42)
     device = torch.device(f"{DEVICE_TYPE}:0")
 
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         model_name=model_name,
         max_model_len=max(batch_spec.seq_lens),
         block_size=BLOCK_SIZE,
         num_gpu_blocks=NUM_GPU_BLOCKS,
     )
-    vllm_config.attention_config.use_trtllm_attention = True
-    vllm_config.cache_config.cache_dtype = kv_cache_dtype
+    aphrodite_config.attention_config.use_trtllm_attention = True
+    aphrodite_config.cache_config.cache_dtype = kv_cache_dtype
 
-    num_q_heads = vllm_config.model_config.get_num_attention_heads(
-        vllm_config.parallel_config
+    num_q_heads = aphrodite_config.model_config.get_num_attention_heads(
+        aphrodite_config.parallel_config
     )
-    num_kv_heads = vllm_config.model_config.get_num_kv_heads(
-        vllm_config.parallel_config
+    num_kv_heads = aphrodite_config.model_config.get_num_kv_heads(
+        aphrodite_config.parallel_config
     )
-    head_size = vllm_config.model_config.get_head_size()
-    dtype = vllm_config.model_config.dtype
+    head_size = aphrodite_config.model_config.get_head_size()
+    dtype = aphrodite_config.model_config.dtype
     scale = 1.0 / (head_size**0.5)
 
     # 1. Generate data and compute SDPA reference
@@ -351,9 +351,9 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
         k_contexts.append(k_full[:ctx_len])
         v_contexts.append(v_full[:ctx_len])
 
-    query_vllm = torch.cat(all_q, dim=0)
-    key_vllm = torch.cat(all_k, dim=0)
-    value_vllm = torch.cat(all_v, dim=0)
+    query_aphrodite = torch.cat(all_q, dim=0)
+    key_aphrodite = torch.cat(all_k, dim=0)
+    value_aphrodite = torch.cat(all_v, dim=0)
     sdpa_output = torch.cat(all_sdpa_out, dim=0)
 
     common_attn_metadata = create_common_attn_metadata(batch_spec, BLOCK_SIZE, device)
@@ -408,7 +408,7 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
         layer_names = ["test_layer_0"]
 
         with (
-            set_current_vllm_config(vllm_config),
+            set_current_aphrodite_config(aphrodite_config),
             unittest.mock.patch(
                 "aphrodite.utils.flashinfer.supports_trtllm_attention",
                 return_value=True,
@@ -419,7 +419,7 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
             ),
         ):
             builder = FlashInferMetadataBuilder(
-                kv_cache_spec, layer_names, vllm_config, device
+                kv_cache_spec, layer_names, aphrodite_config, device
             )
             attn_metadata = builder.build(
                 common_prefix_len=0,
@@ -460,12 +460,12 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
                 mock_layer._v_scale = kv_scale_t
                 mock_layer._k_scale_float = kv_scale_val
                 mock_layer._v_scale_float = kv_scale_val
-            output = torch.empty_like(query_vllm)
+            output = torch.empty_like(query_aphrodite)
 
             impl.do_kv_cache_update(
                 mock_layer,
-                key_vllm,
-                value_vllm,
+                key_aphrodite,
+                value_aphrodite,
                 kv_cache,
                 attn_metadata.slot_mapping,
             )
@@ -475,10 +475,10 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
             # quantize manually.
             if is_nvfp4:
                 finfo = torch.finfo(torch.float8_e4m3fn)
-                q_amax = query_vllm.abs().amax().clamp(min=1e-12)
+                q_amax = query_aphrodite.abs().amax().clamp(min=1e-12)
                 q_s = (finfo.max / q_amax * 0.1).item()
-                query_vllm = (
-                    (query_vllm * q_s)
+                query_aphrodite = (
+                    (query_aphrodite * q_s)
                     .clamp(finfo.min, finfo.max)
                     .to(torch.float8_e4m3fn)
                 )
@@ -489,9 +489,9 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
 
             output = impl.forward(
                 mock_layer,
-                query_vllm,
-                key_vllm,
-                value_vllm,
+                query_aphrodite,
+                key_aphrodite,
+                value_aphrodite,
                 kv_cache,
                 attn_metadata,
                 output=output,

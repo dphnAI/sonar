@@ -23,7 +23,7 @@
 #include <cooperative_groups/reduce.h>
 #include <cub/cub.cuh>
 
-namespace vllm {
+namespace aphrodite {
 namespace moe {
 namespace reduce_topk {
 namespace cg = cooperative_groups;
@@ -254,4 +254,4 @@ __forceinline__ __device__ void reduceTopK(
 
 }  // namespace reduce_topk
 }  // namespace moe
-}  // namespace vllm
+}  // namespace aphrodite

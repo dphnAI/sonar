@@ -153,11 +153,11 @@ def test_mp_client_uses_env_timeout(monkeypatch: pytest.MonkeyPatch):
         local_engines_only=False,
         enable_elastic_ep=False,
     )
-    vllm_config = SimpleNamespace(parallel_config=parallel_config)
+    aphrodite_config = SimpleNamespace(parallel_config=parallel_config)
 
     client = core_client_mod.MPClient(
         asyncio_mode=False,
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         executor_class=object,
         log_stats=False,
         client_addresses={
@@ -241,7 +241,7 @@ def test_apply_ready_response_syncs_block_size():
     import msgspec
 
     client = object.__new__(MPClient)
-    client.vllm_config = SimpleNamespace(
+    client.aphrodite_config = SimpleNamespace(
         cache_config=SimpleNamespace(block_size=16, num_gpu_blocks=0),
         model_config=SimpleNamespace(max_model_len=8192),
     )
@@ -254,13 +254,13 @@ def test_apply_ready_response_syncs_block_size():
             block_size=1056,
             dp_stats_address=None,
             dtype="bfloat16",
-            vllm_version="test",
+            aphrodite_version="test",
             world_size=1,
             data_parallel_size=1,
         )
     )
     client._apply_ready_response(payload)
-    assert client.vllm_config.cache_config.block_size == 1056
+    assert client.aphrodite_config.cache_config.block_size == 1056
 
 
 def loop_until_done(client: EngineCoreClient, outputs: dict):
@@ -530,14 +530,14 @@ def test_engine_core_client(
         m.setattr(EngineCore, "echo", echo, raising=False)
 
         engine_args = EngineArgs(model=MODEL_NAME, enforce_eager=True)
-        vllm_config = engine_args.create_engine_config(UsageContext.UNKNOWN_CONTEXT)
-        executor_class = Executor.get_class(vllm_config)
+        aphrodite_config = engine_args.create_engine_config(UsageContext.UNKNOWN_CONTEXT)
+        executor_class = Executor.get_class(aphrodite_config)
 
         with set_default_torch_num_threads(1):
             client = EngineCoreClient.make_client(
                 multiprocess_mode=multiprocessing_mode,
                 asyncio_mode=False,
-                vllm_config=vllm_config,
+                aphrodite_config=aphrodite_config,
                 executor_class=executor_class,
                 log_stats=False,
             )
@@ -619,16 +619,16 @@ async def test_engine_core_client_asyncio(
         m.setattr(EngineCore, "echo", echo, raising=False)
 
         engine_args = EngineArgs(model=MODEL_NAME, enforce_eager=True)
-        vllm_config = engine_args.create_engine_config(
+        aphrodite_config = engine_args.create_engine_config(
             usage_context=UsageContext.UNKNOWN_CONTEXT
         )
-        executor_class = Executor.get_class(vllm_config)
+        executor_class = Executor.get_class(aphrodite_config)
 
         with set_default_torch_num_threads(1):
             client = EngineCoreClient.make_client(
                 multiprocess_mode=True,
                 asyncio_mode=True,
-                vllm_config=vllm_config,
+                aphrodite_config=aphrodite_config,
                 executor_class=executor_class,
                 log_stats=True,
             )
@@ -719,16 +719,16 @@ async def test_engine_core_client_util_method_custom_return(
         m.setattr(EngineCore, "echo_dc", echo_dc, raising=False)
 
         engine_args = EngineArgs(model=MODEL_NAME, enforce_eager=True)
-        vllm_config = engine_args.create_engine_config(
+        aphrodite_config = engine_args.create_engine_config(
             usage_context=UsageContext.UNKNOWN_CONTEXT
         )
-        executor_class = Executor.get_class(vllm_config)
+        executor_class = Executor.get_class(aphrodite_config)
 
         with set_default_torch_num_threads(1):
             client = EngineCoreClient.make_client(
                 multiprocess_mode=True,
                 asyncio_mode=True,
-                vllm_config=vllm_config,
+                aphrodite_config=aphrodite_config,
                 executor_class=executor_class,
                 log_stats=True,
             )
@@ -767,16 +767,16 @@ async def test_engine_core_client_util_method_custom_dict_return(
         m.setattr(EngineCore, "echo_dc_dict", echo_dc_dict, raising=False)
 
         engine_args = EngineArgs(model=MODEL_NAME, enforce_eager=True)
-        vllm_config = engine_args.create_engine_config(
+        aphrodite_config = engine_args.create_engine_config(
             usage_context=UsageContext.UNKNOWN_CONTEXT
         )
-        executor_class = Executor.get_class(vllm_config)
+        executor_class = Executor.get_class(aphrodite_config)
 
         with set_default_torch_num_threads(1):
             client = EngineCoreClient.make_client(
                 multiprocess_mode=True,
                 asyncio_mode=True,
-                vllm_config=vllm_config,
+                aphrodite_config=aphrodite_config,
                 executor_class=executor_class,
                 log_stats=True,
             )
@@ -824,16 +824,16 @@ async def test_engine_core_client_util_method_nested_structures(
         m.setattr(EngineCore, "echo_dc_nested", echo_dc_nested, raising=False)
 
         engine_args = EngineArgs(model=MODEL_NAME, enforce_eager=True)
-        vllm_config = engine_args.create_engine_config(
+        aphrodite_config = engine_args.create_engine_config(
             usage_context=UsageContext.UNKNOWN_CONTEXT
         )
-        executor_class = Executor.get_class(vllm_config)
+        executor_class = Executor.get_class(aphrodite_config)
 
         with set_default_torch_num_threads(1):
             client = EngineCoreClient.make_client(
                 multiprocess_mode=True,
                 asyncio_mode=True,
-                vllm_config=vllm_config,
+                aphrodite_config=aphrodite_config,
                 executor_class=executor_class,
                 log_stats=True,
             )
@@ -933,16 +933,16 @@ async def test_engine_core_client_future_utility_async(
         m.setattr(EngineCore, "future_echo", future_echo, raising=False)
 
         engine_args = EngineArgs(model=MODEL_NAME, enforce_eager=True)
-        vllm_config = engine_args.create_engine_config(
+        aphrodite_config = engine_args.create_engine_config(
             usage_context=UsageContext.UNKNOWN_CONTEXT
         )
-        executor_class = Executor.get_class(vllm_config)
+        executor_class = Executor.get_class(aphrodite_config)
 
         with set_default_torch_num_threads(1):
             client = EngineCoreClient.make_client(
                 multiprocess_mode=True,
                 asyncio_mode=True,
-                vllm_config=vllm_config,
+                aphrodite_config=aphrodite_config,
                 executor_class=executor_class,
                 log_stats=True,
             )
@@ -992,14 +992,14 @@ def test_kv_cache_events(
     )
     engine_args.kv_events_config = publisher_config
 
-    vllm_config = engine_args.create_engine_config(UsageContext.UNKNOWN_CONTEXT)
+    aphrodite_config = engine_args.create_engine_config(UsageContext.UNKNOWN_CONTEXT)
 
-    executor_class = Executor.get_class(vllm_config)
+    executor_class = Executor.get_class(aphrodite_config)
     with set_default_torch_num_threads(1):
         client = EngineCoreClient.make_client(
             multiprocess_mode=multiprocessing_mode,
             asyncio_mode=False,
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             executor_class=executor_class,
             log_stats=False,
         )
@@ -1075,14 +1075,14 @@ async def test_kv_cache_events_dp(
     )
     engine_args.kv_events_config = publisher_config
 
-    vllm_config = engine_args.create_engine_config(UsageContext.UNKNOWN_CONTEXT)
+    aphrodite_config = engine_args.create_engine_config(UsageContext.UNKNOWN_CONTEXT)
 
-    executor_class = Executor.get_class(vllm_config)
+    executor_class = Executor.get_class(aphrodite_config)
     with set_default_torch_num_threads(1):
         client = EngineCoreClient.make_client(
             multiprocess_mode=multiprocessing_mode,
             asyncio_mode=True,
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             executor_class=executor_class,
             log_stats=False,
         )
@@ -1159,10 +1159,10 @@ def test_startup_failure(monkeypatch: pytest.MonkeyPatch):
 
         t = time.time()
         engine_args = EngineArgs(model=MODEL_NAME)
-        vllm_config = engine_args.create_engine_config(
+        aphrodite_config = engine_args.create_engine_config(
             usage_context=UsageContext.UNKNOWN_CONTEXT
         )
-        executor_class = Executor.get_class(vllm_config)
+        executor_class = Executor.get_class(aphrodite_config)
         print(f"AphroditeConfig creation took {time.time() - t:.2f} seconds.")
 
         # Start another thread to wait for engine core process to start
@@ -1180,7 +1180,7 @@ def test_startup_failure(monkeypatch: pytest.MonkeyPatch):
         _core_client = EngineCoreClient.make_client(
             multiprocess_mode=True,
             asyncio_mode=True,
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             executor_class=executor_class,
             log_stats=True,
         )
@@ -1201,7 +1201,7 @@ def test_engine_core_proc_instantiation_cuda_empty(monkeypatch: pytest.MonkeyPat
     # Create a simple mock executor instead of a complex custom class
     mock_executor_class = MagicMock(spec=Executor)
 
-    def create_mock_executor(vllm_config):
+    def create_mock_executor(aphrodite_config):
         mock_executor = MagicMock()
 
         # Only implement the methods that are actually called during init
@@ -1237,11 +1237,11 @@ def test_engine_core_proc_instantiation_cuda_empty(monkeypatch: pytest.MonkeyPat
         # Background processes are not important here
         m.setattr(EngineCoreProc, "startup_handshake", mock_startup_handshake)
 
-        vllm_config = EngineArgs(
+        aphrodite_config = EngineArgs(
             model="deepseek-ai/DeepSeek-V2-Lite", trust_remote_code=True
         ).create_engine_config()
         engine_core_proc = EngineCoreProc(
-            vllm_config=vllm_config,
+            aphrodite_config=aphrodite_config,
             local_client=True,
             handshake_address="tcp://127.0.0.1:12345",
             executor_class=mock_executor_class,

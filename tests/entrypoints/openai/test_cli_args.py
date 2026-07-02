@@ -20,22 +20,22 @@ CHATML_JINJA_PATH = APHRODITE_PATH / "examples/template_chatml.jinja"
 assert CHATML_JINJA_PATH.exists()
 
 
-def _build_vllm_parsers():
-    vllm_parser = FlexibleArgumentParser()
-    subparsers = vllm_parser.add_subparsers()
+def _build_aphrodite_parsers():
+    aphrodite_parser = FlexibleArgumentParser()
+    subparsers = aphrodite_parser.add_subparsers()
     serve_parser = subparsers.add_parser("serve")
     make_arg_parser(serve_parser)
-    return {"aphrodite": vllm_parser, "aphrodite serve": serve_parser}
+    return {"aphrodite": aphrodite_parser, "aphrodite serve": serve_parser}
 
 
 @pytest.fixture
-def vllm_parser():
-    return _build_vllm_parsers()["aphrodite"]
+def aphrodite_parser():
+    return _build_aphrodite_parsers()["aphrodite"]
 
 
 @pytest.fixture
 def serve_parser():
-    return _build_vllm_parsers()["aphrodite serve"]
+    return _build_aphrodite_parsers()["aphrodite serve"]
 
 
 ### Test config parsing
@@ -272,7 +272,7 @@ def test_default_chat_template_kwargs_invalid_json(serve_parser):
         "served_model_name_with_no_model_in_config",
     ],
 )
-def test_served_model_name_parsing(tmp_path, vllm_parser, args, raises):
+def test_served_model_name_parsing(tmp_path, aphrodite_parser, args, raises):
     """Ensure that users don't misuse --served-model-name and end up with the default
     model tag instead of the one they intended to serve."""
     # Call the serve subparser
@@ -285,12 +285,12 @@ def test_served_model_name_parsing(tmp_path, vllm_parser, args, raises):
         args[args.index("config.yaml")] = config_path.as_posix()
     # Do the parsing and check for expected exceptions or values
     if raises is None:
-        parsed_args = vllm_parser.parse_args(args=args)
+        parsed_args = aphrodite_parser.parse_args(args=args)
         expected = "user/model"
         assert parsed_args.model_tag == expected or parsed_args.model == expected
     else:
         with pytest.raises(raises):
-            vllm_parser.parse_args(args=args)
+            aphrodite_parser.parse_args(args=args)
 
 
 ### Tests for LoRA target modules parsing

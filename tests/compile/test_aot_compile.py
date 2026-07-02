@@ -24,7 +24,7 @@ from aphrodite.config import (
     CompilationConfig,
     CompilationMode,
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.envs import disable_envs_cache
 from aphrodite.forward_context import set_forward_context
@@ -34,9 +34,9 @@ from ..utils import create_new_process_for_each_test
 
 
 @pytest.fixture
-def vllm_tmp_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def aphrodite_tmp_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Fixture that sets APHRODITE_CACHE_ROOT to a temporary directory."""
-    monkeypatch.setenv("APHRODITE_CACHE_ROOT", str(tmp_path / "vllm_cache"))
+    monkeypatch.setenv("APHRODITE_CACHE_ROOT", str(tmp_path / "aphrodite_cache"))
     return tmp_path
 
 
@@ -77,7 +77,7 @@ class CompiledModTuple(torch.nn.Module):
         return reference_fn_tuple(x)
 
 
-def make_vllm_config() -> AphroditeConfig:
+def make_aphrodite_config() -> AphroditeConfig:
     return AphroditeConfig(
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
@@ -87,18 +87,18 @@ def make_vllm_config() -> AphroditeConfig:
 
 
 @contextmanager
-def use_vllm_config(vllm_config: AphroditeConfig):
-    with set_forward_context({}, vllm_config), set_current_vllm_config(vllm_config):
+def use_aphrodite_config(aphrodite_config: AphroditeConfig):
+    with set_forward_context({}, aphrodite_config), set_current_aphrodite_config(aphrodite_config):
         yield
 
 
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
 def test_no_dynamo_cache_entry(monkeypatch: pytest.MonkeyPatch):
     with monkeypatch.context() as m:
-        vllm_config = make_vllm_config()
+        aphrodite_config = make_aphrodite_config()
         args = (torch.randn(10, 10),)
         expected = reference_fn(*args)
-        with use_vllm_config(vllm_config):
+        with use_aphrodite_config(aphrodite_config):
             m.setenv("APHRODITE_USE_AOT_COMPILE", "0")
             m.setenv("APHRODITE_USE_MEGA_AOT_ARTIFACT", "1")
             m.setenv("APHRODITE_USE_STANDALONE_COMPILE", "1")
@@ -106,13 +106,13 @@ def test_no_dynamo_cache_entry(monkeypatch: pytest.MonkeyPatch):
                 pytest.raises(RuntimeError, match="Detected recompile"),
                 torch.compiler.set_stance("fail_on_recompile"),
             ):
-                CompiledMod(vllm_config=vllm_config)(*args)
+                CompiledMod(aphrodite_config=aphrodite_config)(*args)
             disable_envs_cache()
 
             m.setenv("APHRODITE_USE_AOT_COMPILE", "1")
             torch._dynamo.reset()
             with torch.compiler.set_stance("fail_on_recompile"):
-                actual = CompiledMod(vllm_config=vllm_config)(*args)
+                actual = CompiledMod(aphrodite_config=aphrodite_config)(*args)
             assert torch.allclose(actual, expected)
 
 
@@ -125,9 +125,9 @@ def test_force_aot_load(monkeypatch: pytest.MonkeyPatch):
         m.setenv("APHRODITE_USE_STANDALONE_COMPILE", "1")
         m.setenv("APHRODITE_FORCE_AOT_LOAD", "1")
         m.setenv("APHRODITE_CACHE_ROOT", tmpdirname)
-        vllm_config = make_vllm_config()
-        with use_vllm_config(vllm_config), pytest.raises(FileNotFoundError):
-            CompiledMod(vllm_config=vllm_config)(*args)
+        aphrodite_config = make_aphrodite_config()
+        with use_aphrodite_config(aphrodite_config), pytest.raises(FileNotFoundError):
+            CompiledMod(aphrodite_config=aphrodite_config)(*args)
 
 
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
@@ -140,17 +140,17 @@ def test_save_and_load(monkeypatch: pytest.MonkeyPatch):
             m.setenv("APHRODITE_USE_AOT_COMPILE", "1")
             m.setenv("APHRODITE_USE_MEGA_AOT_ARTIFACT", "1")
             m.setenv("APHRODITE_USE_STANDALONE_COMPILE", "1")
-            vllm_config = make_vllm_config()
-            with use_vllm_config(vllm_config):
-                compiled_mod = CompiledMod(vllm_config=vllm_config)
+            aphrodite_config = make_aphrodite_config()
+            with use_aphrodite_config(aphrodite_config):
+                compiled_mod = CompiledMod(aphrodite_config=aphrodite_config)
                 expected = compiled_mod(*args)
 
             disable_envs_cache()
 
             m.setenv("APHRODITE_FORCE_AOT_LOAD", "1")
-            vllm_config = make_vllm_config()
-            with use_vllm_config(vllm_config):
-                cached_mod = CompiledMod(vllm_config=vllm_config)
+            aphrodite_config = make_aphrodite_config()
+            with use_aphrodite_config(aphrodite_config):
+                cached_mod = CompiledMod(aphrodite_config=aphrodite_config)
                 ret = cached_mod(*args)
             assert cached_mod.was_aot_compile_fn_loaded_from_disk, (
                 "Expected was_aot_compile_fn_loaded_from_disk to be True"
@@ -166,13 +166,13 @@ def test_save_and_load_slice(monkeypatch: pytest.MonkeyPatch):
     def foo(x: torch.Tensor):
         return x[slice(0, x.shape[0])]
 
-    vllm_config = make_vllm_config()
+    aphrodite_config = make_aphrodite_config()
 
     example_input = torch.randn(10, 10)
     torch._dynamo.mark_dynamic(example_input, 0)
     gm = torch.fx.symbolic_trace(foo)
     assert "getitem_1 = x[slice(0, getitem, None)]" in gm.code
-    with use_vllm_config(vllm_config):
+    with use_aphrodite_config(aphrodite_config):
         payload = AphroditeSerializableFunction.serialize_graph_module(gm)
         fake_mode = FakeTensorMode(shape_env=ShapeEnv())
         loaded_gm = AphroditeSerializableFunction.deserialize_graph_module(
@@ -199,11 +199,11 @@ def test_cache_load_returns_tuple_consistency(monkeypatch: pytest.MonkeyPatch):
             m.setenv("APHRODITE_USE_AOT_COMPILE", "1")
             m.setenv("APHRODITE_USE_MEGA_AOT_ARTIFACT", "1")
             m.setenv("APHRODITE_USE_STANDALONE_COMPILE", "1")
-            vllm_config = make_vllm_config()
+            aphrodite_config = make_aphrodite_config()
 
             # Fresh compilation
-            with use_vllm_config(vllm_config):
-                compiled_mod = CompiledMod(vllm_config=vllm_config)
+            with use_aphrodite_config(aphrodite_config):
+                compiled_mod = CompiledMod(aphrodite_config=aphrodite_config)
                 fresh_result = compiled_mod(*args)
                 fresh_result_type = type(fresh_result)
 
@@ -216,9 +216,9 @@ def test_cache_load_returns_tuple_consistency(monkeypatch: pytest.MonkeyPatch):
 
             # Load from cache
             m.setenv("APHRODITE_FORCE_AOT_LOAD", "1")
-            vllm_config = make_vllm_config()
-            with use_vllm_config(vllm_config):
-                cached_mod = CompiledMod(vllm_config=vllm_config)
+            aphrodite_config = make_aphrodite_config()
+            with use_aphrodite_config(aphrodite_config):
+                cached_mod = CompiledMod(aphrodite_config=aphrodite_config)
                 cached_result = cached_mod(*args)
                 cached_result_type = type(cached_result)
 
@@ -259,11 +259,11 @@ def test_cache_load_returns_tuple_consistency_tuple_output(
             m.setenv("APHRODITE_USE_AOT_COMPILE", "1")
             m.setenv("APHRODITE_USE_MEGA_AOT_ARTIFACT", "1")
             m.setenv("APHRODITE_USE_STANDALONE_COMPILE", "1")
-            vllm_config = make_vllm_config()
+            aphrodite_config = make_aphrodite_config()
 
             # Fresh compilation with tuple-returning model
-            with use_vllm_config(vllm_config):
-                compiled_mod = CompiledModTuple(vllm_config=vllm_config)
+            with use_aphrodite_config(aphrodite_config):
+                compiled_mod = CompiledModTuple(aphrodite_config=aphrodite_config)
                 fresh_result = compiled_mod(*args)
                 fresh_result_type = type(fresh_result)
 
@@ -279,9 +279,9 @@ def test_cache_load_returns_tuple_consistency_tuple_output(
 
             # Load from cache
             m.setenv("APHRODITE_FORCE_AOT_LOAD", "1")
-            vllm_config = make_vllm_config()
-            with use_vllm_config(vllm_config):
-                cached_mod = CompiledModTuple(vllm_config=vllm_config)
+            aphrodite_config = make_aphrodite_config()
+            with use_aphrodite_config(aphrodite_config):
+                cached_mod = CompiledModTuple(aphrodite_config=aphrodite_config)
                 cached_result = cached_mod(*args)
                 cached_result_type = type(cached_result)
 
@@ -324,9 +324,9 @@ def test_shape_env(monkeypatch: pytest.MonkeyPatch):
             m.setenv("APHRODITE_USE_AOT_COMPILE", "1")
             m.setenv("APHRODITE_USE_MEGA_AOT_ARTIFACT", "1")
             m.setenv("APHRODITE_USE_STANDALONE_COMPILE", "1")
-            vllm_config = make_vllm_config()
-            with use_vllm_config(vllm_config):
-                compiled_mod = CompiledMod(vllm_config=vllm_config)
+            aphrodite_config = make_aphrodite_config()
+            with use_aphrodite_config(aphrodite_config):
+                compiled_mod = CompiledMod(aphrodite_config=aphrodite_config)
                 compiled_mod(*args)
                 artifacts = compiled_mod.aot_compiled_fn._artifacts
                 guards_string = artifacts.compiled_fn.shape_env.format_guards()
@@ -335,9 +335,9 @@ def test_shape_env(monkeypatch: pytest.MonkeyPatch):
             disable_envs_cache()
 
             m.setenv("APHRODITE_FORCE_AOT_LOAD", "1")
-            vllm_config = make_vllm_config()
-            with use_vllm_config(vllm_config):
-                compiled_mod = CompiledMod(vllm_config=vllm_config)
+            aphrodite_config = make_aphrodite_config()
+            with use_aphrodite_config(aphrodite_config):
+                compiled_mod = CompiledMod(aphrodite_config=aphrodite_config)
                 compiled_mod(*args)
                 assert compiled_mod.was_aot_compile_fn_loaded_from_disk, (
                     "Expected was_aot_compile_fn_loaded_from_disk to be True"
@@ -349,7 +349,7 @@ def test_shape_env(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
 def test_partition_wrapper_applied_on_aot_load(
-    monkeypatch: pytest.MonkeyPatch, vllm_tmp_cache: Path, mocker
+    monkeypatch: pytest.MonkeyPatch, aphrodite_tmp_cache: Path, mocker
 ):
     """
     Test that partition wrappers are applied when loading AOT cached functions.
@@ -365,7 +365,7 @@ def test_partition_wrapper_applied_on_aot_load(
     monkeypatch.setenv("APHRODITE_USE_AOT_COMPILE", "1")
 
     # Create config with partition enabled
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
             use_inductor_graph_partition=True,
@@ -374,15 +374,15 @@ def test_partition_wrapper_applied_on_aot_load(
     )
 
     # First compilation - save to cache
-    with use_vllm_config(vllm_config):
-        compiled_mod = CompiledMod(vllm_config=vllm_config)
+    with use_aphrodite_config(aphrodite_config):
+        compiled_mod = CompiledMod(aphrodite_config=aphrodite_config)
         compiled_mod(*args)
 
     disable_envs_cache()
 
     # Second run - load from cache, verify partition wrapper applied
     monkeypatch.setenv("APHRODITE_FORCE_AOT_LOAD", "1")
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
             use_inductor_graph_partition=True,
@@ -393,8 +393,8 @@ def test_partition_wrapper_applied_on_aot_load(
     # Use mocker to spy on set_customized_partition_wrappers
     spy = mocker.spy(torch._inductor.utils, "set_customized_partition_wrappers")
 
-    with use_vllm_config(vllm_config):
-        compiled_mod = CompiledMod(vllm_config=vllm_config)
+    with use_aphrodite_config(aphrodite_config):
+        compiled_mod = CompiledMod(aphrodite_config=aphrodite_config)
 
         # First call after restart: loads from AOT cache.
         # This tests the fix for the first call after a restart.
@@ -759,7 +759,7 @@ class TestStandaloneCompiledArtifactsIntegration:
         reason="There's no AOT Autograd run with mega artifact",
     )
     def test_functorch_config(self):
-        vllm_config = make_vllm_config()
+        aphrodite_config = make_aphrodite_config()
         example_inputs = (torch.randn(10, 10),)
 
         def add_1(x: torch.Tensor):
@@ -775,7 +775,7 @@ class TestStandaloneCompiledArtifactsIntegration:
 
         with (
             torch._functorch.config.patch(bundled_autograd_cache=False),
-            set_current_vllm_config(vllm_config),
+            set_current_aphrodite_config(aphrodite_config),
         ):
             with torch._functorch.config.patch(bundled_autograd_cache=True):
                 fn = AphroditeSerializableFunction(gm, example_inputs, "", add_1)
@@ -802,7 +802,7 @@ class TestStandaloneCompiledArtifactsIntegration:
 
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
 def test_disable_compile_cache_skips_aot_save(
-    monkeypatch: pytest.MonkeyPatch, fresh_vllm_cache: str
+    monkeypatch: pytest.MonkeyPatch, fresh_aphrodite_cache: str
 ):
     """When APHRODITE_DISABLE_COMPILE_CACHE=1, AOT artifacts must not be saved."""
     monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", "1")
@@ -811,23 +811,23 @@ def test_disable_compile_cache_skips_aot_save(
 
     args = (torch.randn(10, 10),)
     expected = reference_fn(*args)
-    vllm_config = make_vllm_config()
+    aphrodite_config = make_aphrodite_config()
 
     with (
-        use_vllm_config(vllm_config),
+        use_aphrodite_config(aphrodite_config),
         compilation_counter.expect(
             num_aot_compiles=1,
             num_aot_artifacts_saved=0,
             num_aot_artifacts_loaded=0,
         ),
     ):
-        mod = CompiledMod(vllm_config=vllm_config)
+        mod = CompiledMod(aphrodite_config=aphrodite_config)
         actual = mod(*args)
 
     assert torch.allclose(actual, expected)
 
     # No cached artifact should exist on disk
-    aot_dir = os.path.join(fresh_vllm_cache, "torch_compile_cache", "torch_aot_compile")
+    aot_dir = os.path.join(fresh_aphrodite_cache, "torch_compile_cache", "torch_aot_compile")
     if os.path.isdir(aot_dir):
         for root, _dirs, files in os.walk(aot_dir):
             for f in files:
@@ -838,7 +838,7 @@ def test_disable_compile_cache_skips_aot_save(
 
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
 def test_disable_compile_cache_skips_aot_load(
-    monkeypatch: pytest.MonkeyPatch, fresh_vllm_cache: str
+    monkeypatch: pytest.MonkeyPatch, fresh_aphrodite_cache: str
 ):
     """When APHRODITE_DISABLE_COMPILE_CACHE=1, AOT artifacts must not be loaded."""
     # Phase 1: compile and save with cache enabled
@@ -846,29 +846,29 @@ def test_disable_compile_cache_skips_aot_load(
     disable_envs_cache()
 
     args = (torch.randn(10, 10),)
-    vllm_config = make_vllm_config()
+    aphrodite_config = make_aphrodite_config()
 
     with (
-        use_vllm_config(vllm_config),
+        use_aphrodite_config(aphrodite_config),
         compilation_counter.expect(num_aot_artifacts_saved=1),
     ):
-        CompiledMod(vllm_config=vllm_config)(*args)
+        CompiledMod(aphrodite_config=aphrodite_config)(*args)
 
     # Phase 2: disable cache, compile again — should NOT load from disk
     monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", "1")
     disable_envs_cache()
     torch._dynamo.reset()
 
-    vllm_config = make_vllm_config()
+    aphrodite_config = make_aphrodite_config()
     with (
-        use_vllm_config(vllm_config),
+        use_aphrodite_config(aphrodite_config),
         compilation_counter.expect(
             num_aot_compiles=1,
             num_aot_artifacts_saved=0,
             num_aot_artifacts_loaded=0,
         ),
     ):
-        mod = CompiledMod(vllm_config=vllm_config)
+        mod = CompiledMod(aphrodite_config=aphrodite_config)
         mod(*args)
 
     assert not mod.was_aot_compile_fn_loaded_from_disk
@@ -876,7 +876,7 @@ def test_disable_compile_cache_skips_aot_load(
 
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
 def test_aot_counters_on_save_and_load(
-    monkeypatch: pytest.MonkeyPatch, fresh_vllm_cache: str
+    monkeypatch: pytest.MonkeyPatch, fresh_aphrodite_cache: str
 ):
     """Verify AOT counters are incremented correctly on save and load."""
     monkeypatch.setenv("APHRODITE_USE_AOT_COMPILE", "1")
@@ -885,28 +885,28 @@ def test_aot_counters_on_save_and_load(
     args = (torch.randn(10, 10),)
 
     # Phase 1: fresh compile + save
-    vllm_config = make_vllm_config()
+    aphrodite_config = make_aphrodite_config()
     with (
-        use_vllm_config(vllm_config),
+        use_aphrodite_config(aphrodite_config),
         compilation_counter.expect(
             num_aot_compiles=1,
             num_aot_artifacts_saved=1,
             num_aot_artifacts_loaded=0,
         ),
     ):
-        CompiledMod(vllm_config=vllm_config)(*args)
+        CompiledMod(aphrodite_config=aphrodite_config)(*args)
 
     # Phase 2: load from cache
     monkeypatch.setenv("APHRODITE_FORCE_AOT_LOAD", "1")
     disable_envs_cache()
 
-    vllm_config = make_vllm_config()
+    aphrodite_config = make_aphrodite_config()
     with (
-        use_vllm_config(vllm_config),
+        use_aphrodite_config(aphrodite_config),
         compilation_counter.expect(
             num_aot_compiles=0,
             num_aot_artifacts_saved=0,
             num_aot_artifacts_loaded=1,
         ),
     ):
-        CompiledMod(vllm_config=vllm_config)(*args)
+        CompiledMod(aphrodite_config=aphrodite_config)(*args)

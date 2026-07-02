@@ -2,11 +2,11 @@
 #include <cstdlib>
 #include <string>
 
-namespace vllm {
+namespace aphrodite {
 
-// vllm_is_batch_invariant(); returns true
+// aphrodite_is_batch_invariant(); returns true
 // if env APHRODITE_BATCH_INVARIANT=1
-inline bool vllm_is_batch_invariant() {
+inline bool aphrodite_is_batch_invariant() {
   static bool cached = []() {
     std::string env_key = "APHRODITE_BATCH_INVARIANT";
     const char* val = std::getenv(env_key.c_str());
@@ -15,4 +15,4 @@ inline bool vllm_is_batch_invariant() {
   return cached;
 }
 
-}  // namespace vllm
+}  // namespace aphrodite

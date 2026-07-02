@@ -17,11 +17,11 @@ from ...utils import check_logprobs_close
 HF_AUDIO_PROMPT = "<|start_of_role|>system<|end_of_role|>Knowledge Cutoff Date: April 2024.\nToday's Date: December 19, 2024.\nYou are Granite, developed by IBM. You are a helpful AI assistant<|end_of_text|>\n<|start_of_role|>user<|end_of_role|><|audio|>can you transcribe the speech into a written format?<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|>"  # noqa: E501
 
 
-def vllm_to_hf_output(
-    vllm_output: tuple[list[int], str, SampleLogprobs | None],
+def aphrodite_to_hf_output(
+    aphrodite_output: tuple[list[int], str, SampleLogprobs | None],
 ) -> tuple[list[int], str, SampleLogprobs | None]:
     """Sanitize hf output to be comparable with aphrodite output."""
-    output_ids, output_str, out_logprobs = vllm_output
+    output_ids, output_str, out_logprobs = aphrodite_output
 
     hf_output_str = output_str + "<|end_of_text|>"
 
@@ -55,7 +55,7 @@ def granite_speech_attention_config():
 
 def run_test(
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     inputs: Sequence[tuple[list[str], PromptAudioInput]],
     model: str,
     *,
@@ -82,7 +82,7 @@ def run_test(
     # if we run HF first, the cuda initialization will be done and it
     # will hurt multiprocessing backend with fork method (the default method).
     # max_model_len should be greater than image_feature_size
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         runner="generate",
         max_model_len=max_model_len,
@@ -95,12 +95,12 @@ def run_test(
         max_lora_rank=64,
         enforce_eager=True,
         attention_config=attention_config,
-    ) as vllm_model:
+    ) as aphrodite_model:
         lora_request = (
             LoRARequest("audio", 1, audio_lora_path) if audio_lora_path else None
         )
-        vllm_outputs_per_case = [
-            vllm_model.generate_greedy_logprobs(
+        aphrodite_outputs_per_case = [
+            aphrodite_model.generate_greedy_logprobs(
                 prompts,
                 max_tokens,
                 num_logprobs=num_logprobs,
@@ -125,10 +125,10 @@ def run_test(
             for prompts, audios in inputs
         ]
 
-    for hf_outputs, vllm_outputs in zip(hf_outputs_per_case, vllm_outputs_per_case):
+    for hf_outputs, aphrodite_outputs in zip(hf_outputs_per_case, aphrodite_outputs_per_case):
         check_logprobs_close(
             outputs_0_lst=hf_outputs,
-            outputs_1_lst=[vllm_to_hf_output(output) for output in vllm_outputs],
+            outputs_1_lst=[aphrodite_to_hf_output(output) for output in aphrodite_outputs],
             name_0="hf",
             name_1="aphrodite",
         )
@@ -145,7 +145,7 @@ def run_test(
 @pytest.mark.parametrize("num_logprobs", [10])
 def test_models(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     audio_lora_path: str | None,
     audio_assets: AudioTestAssets,
@@ -166,7 +166,7 @@ def test_models(
     assert sr == 16000
     run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         [
             ([HF_AUDIO_PROMPT], [audio]),
         ],

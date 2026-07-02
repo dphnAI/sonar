@@ -12,7 +12,7 @@ import torch
 import zmq.asyncio
 
 from aphrodite import envs
-from aphrodite.config import set_current_vllm_config
+from aphrodite.config import set_current_aphrodite_config
 from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector import (
     KVConnectorRole,
     MooncakeConnector,
@@ -40,7 +40,7 @@ from aphrodite.v1.kv_cache_interface import (
 )
 from aphrodite.v1.request import RequestStatus
 
-from .utils import create_request, create_scheduler, create_vllm_config
+from .utils import create_request, create_scheduler, create_aphrodite_config
 
 
 def _make_test_kv_cache_config() -> KVCacheConfig:
@@ -276,13 +276,13 @@ async def test_send_kv_to_decode_aligns_consumer_regions_by_layer_metadata(
     """Producer sends its PP layer shard to the matching consumer layer address."""
 
     monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MooncakeConnector", kv_role="kv_producer"
     )
 
-    with set_current_vllm_config(vllm_config), patch_worker_dependencies():
+    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
         prefill_connector = MooncakeConnector(
-            vllm_config,
+            aphrodite_config,
             KVConnectorRole.WORKER,
             _make_test_kv_cache_config(),
         )
@@ -361,13 +361,13 @@ async def test_send_kv_to_decode_aligns_consumer_regions_by_layer_metadata(
 def test_basic_interface():
     """Unit test for basic MooncakeConnector interface functionality."""
 
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MooncakeConnector", kv_role="kv_consumer"
     )
-    scheduler = create_scheduler(vllm_config)
+    scheduler = create_scheduler(aphrodite_config)
 
     # 2 Full Blocks and 1 Half Block.
-    BLOCK_SIZE = vllm_config.cache_config.block_size
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
     NUM_EXTERNAL_FULL_BLOCKS = 2
     NUM_TOKENS = int(BLOCK_SIZE * (NUM_EXTERNAL_FULL_BLOCKS + 0.5))
 
@@ -411,13 +411,13 @@ def test_basic_interface():
 def test_prompt_less_than_block_size():
     """Test that we can handle case where prompt is < block."""
 
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MooncakeConnector", kv_role="kv_consumer"
     )
-    scheduler = create_scheduler(vllm_config)
+    scheduler = create_scheduler(aphrodite_config)
 
     # Half of a block.
-    BLOCK_SIZE = vllm_config.cache_config.block_size
+    BLOCK_SIZE = aphrodite_config.cache_config.block_size
     NUM_TOKENS = int(BLOCK_SIZE * 0.5)
 
     # Request will have 1 partial remote block.
@@ -530,7 +530,7 @@ async def test_bootstrap_server(bootstrap_server: MooncakeBootstrapServer):
         assert "Engine ID mismatch" in response.text
 
 
-def _make_bootstrap_vllm_config(
+def _make_bootstrap_aphrodite_config(
     *,
     local_engines_only: bool = False,
     data_parallel_rank_local: int = 0,
@@ -583,7 +583,7 @@ def test_should_launch_bootstrap_server_selects_single_owner(
     data_parallel_index: int,
     expected: bool,
 ):
-    vllm_config = _make_bootstrap_vllm_config(
+    aphrodite_config = _make_bootstrap_aphrodite_config(
         local_engines_only=local_engines_only,
         data_parallel_rank_local=data_parallel_rank_local,
         data_parallel_index=data_parallel_index,
@@ -600,7 +600,7 @@ def test_should_launch_bootstrap_server_selects_single_owner(
         ) as mock_pp_group,
     ):
         mock_pp_group.return_value.rank_in_group = pp_rank
-        assert should_launch_bootstrap_server(vllm_config) is expected
+        assert should_launch_bootstrap_server(aphrodite_config) is expected
 
 
 @pytest.mark.parametrize(
@@ -617,12 +617,12 @@ def test_get_mooncake_bootstrap_addr_selects_expected_host(
     nnodes_within_dp: int,
     expected_host: str,
 ):
-    vllm_config = _make_bootstrap_vllm_config(
+    aphrodite_config = _make_bootstrap_aphrodite_config(
         local_engines_only=local_engines_only,
         nnodes_within_dp=nnodes_within_dp,
     )
 
-    assert get_mooncake_bootstrap_addr(vllm_config) == (
+    assert get_mooncake_bootstrap_addr(aphrodite_config) == (
         expected_host,
         envs.APHRODITE_MOONCAKE_BOOTSTRAP_PORT,
     )
@@ -636,10 +636,10 @@ def test_scheduler_request_finished():
     and 'Aborted' (immediate free).
     """
 
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MooncakeConnector", kv_role="kv_producer"
     )
-    scheduler = create_scheduler(vllm_config)
+    scheduler = create_scheduler(aphrodite_config)
     scheduler_connector = scheduler.get_kv_connector().connector_scheduler
 
     request = create_request(request_id=1, do_remote_decode=True)
@@ -734,13 +734,13 @@ async def test_receive_kv_selects_remote_pp_workers(
 ):
     """Decode workers should not hard-code producer pp_rank 0."""
 
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MooncakeConnector", kv_role="kv_consumer"
     )
 
-    with set_current_vllm_config(vllm_config), patch_worker_dependencies():
+    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
         decode_connector = MooncakeConnector(
-            vllm_config,
+            aphrodite_config,
             KVConnectorRole.WORKER,
             _make_test_kv_cache_config(),
         )
@@ -819,13 +819,13 @@ async def test_kv_producer(monkeypatch):
     """
 
     monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MooncakeConnector", kv_role="kv_producer"
     )
 
-    with set_current_vllm_config(vllm_config), patch_worker_dependencies():
+    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
         prefill_connector = MooncakeConnector(
-            vllm_config,
+            aphrodite_config,
             KVConnectorRole.WORKER,
             _make_test_kv_cache_config(),
         )
@@ -997,13 +997,13 @@ async def test_kv_consumuer(monkeypatch):
     Verifies that MooncakeXferMetadata is correctly serialized and sent via ZMQ.
     """
 
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MooncakeConnector", kv_role="kv_consumer"
     )
 
-    with set_current_vllm_config(vllm_config), patch_worker_dependencies() as mocks:
+    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies() as mocks:
         decode_connector = MooncakeConnector(
-            vllm_config,
+            aphrodite_config,
             KVConnectorRole.WORKER,
             _make_test_kv_cache_config(),
         )
@@ -1070,12 +1070,12 @@ async def test_kv_consumuer(monkeypatch):
 async def test_worker_get_finished_timeout(monkeypatch):
     """Tests the cleanup mechanism for requests."""
 
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MooncakeConnector", kv_role="kv_producer"
     )
-    with set_current_vllm_config(vllm_config), patch_worker_dependencies():
+    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
         prefill_connector = MooncakeConnector(
-            vllm_config,
+            aphrodite_config,
             KVConnectorRole.WORKER,
             _make_test_kv_cache_config(),
         )
@@ -1110,12 +1110,12 @@ async def test_worker_get_finished_timeout(monkeypatch):
 def test_register_kv_caches():
     """Tests the memory registration logic with the underlying Mooncake engine."""
 
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MooncakeConnector", kv_role="kv_consumer"
     )
 
     with (
-        set_current_vllm_config(vllm_config),
+        set_current_aphrodite_config(aphrodite_config),
         patch_worker_dependencies(),
         patch(
             "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.threading.Event"
@@ -1125,7 +1125,7 @@ def test_register_kv_caches():
         ) as mock_thread,
     ):
         connector = MooncakeConnector(
-            vllm_config,
+            aphrodite_config,
             KVConnectorRole.WORKER,
             _make_test_kv_cache_config(),
         )
@@ -1164,12 +1164,12 @@ def test_register_kv_caches():
 def test_register_kv_caches_supports_mixed_mla_and_eagle_shapes():
     """Mixed MLA+Eagle caches should register by byte length, not shape."""
 
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MooncakeConnector", kv_role="kv_consumer"
     )
 
     with (
-        set_current_vllm_config(vllm_config),
+        set_current_aphrodite_config(aphrodite_config),
         patch_worker_dependencies(),
         patch(
             "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.threading.Event"
@@ -1179,7 +1179,7 @@ def test_register_kv_caches_supports_mixed_mla_and_eagle_shapes():
         ) as mock_thread,
     ):
         connector = MooncakeConnector(
-            vllm_config,
+            aphrodite_config,
             KVConnectorRole.WORKER,
             _make_test_kv_cache_config(),
         )
@@ -1245,13 +1245,13 @@ async def test_kv_producer_heterogeneous_tp(monkeypatch, d_tp_size):
     remote_block_len = LOCAL_BLOCK_LEN * P_TP_SIZE // d_tp_size
 
     monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="MooncakeConnector", kv_role="kv_producer"
     )
 
-    with set_current_vllm_config(vllm_config), patch_worker_dependencies():
+    with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
         prefill_connector = MooncakeConnector(
-            vllm_config,
+            aphrodite_config,
             KVConnectorRole.WORKER,
             _make_test_kv_cache_config(),
         )

@@ -49,21 +49,21 @@ def my_plugin_entry_points():
 
 
 def test_loading_missing_plugin():
-    vllm_config = AphroditeConfig()
+    aphrodite_config = AphroditeConfig()
     renderer = MagicMock(spec=BaseRenderer)
     with pytest.raises(ValueError):
         get_io_processor(
-            vllm_config, renderer=renderer, plugin_from_init="wrong_plugin"
+            aphrodite_config, renderer=renderer, plugin_from_init="wrong_plugin"
         )
 
 
 def test_loading_plugin(my_plugin_entry_points):
     # Plugin name supplied via plugin_from_init.
-    vllm_config = MagicMock(spec=AphroditeConfig)
+    aphrodite_config = MagicMock(spec=AphroditeConfig)
     renderer = MagicMock(spec=BaseRenderer)
 
     result = get_io_processor(
-        vllm_config, renderer=renderer, plugin_from_init="my_plugin"
+        aphrodite_config, renderer=renderer, plugin_from_init="my_plugin"
     )
 
     assert isinstance(result, DummyIOProcessor)
@@ -75,12 +75,12 @@ def test_loading_missing_plugin_from_model_config():
     mock_hf_config = MagicMock()
     mock_hf_config.to_dict.return_value = {"io_processor_plugin": "wrong_plugin"}
 
-    vllm_config = MagicMock(spec=AphroditeConfig)
-    vllm_config.model_config.hf_config = mock_hf_config
+    aphrodite_config = MagicMock(spec=AphroditeConfig)
+    aphrodite_config.model_config.hf_config = mock_hf_config
 
     renderer = MagicMock(spec=BaseRenderer)
     with pytest.raises(ValueError):
-        get_io_processor(vllm_config, renderer=renderer)
+        get_io_processor(aphrodite_config, renderer=renderer)
 
 
 def test_loading_plugin_from_model_config(my_plugin_entry_points):
@@ -88,11 +88,11 @@ def test_loading_plugin_from_model_config(my_plugin_entry_points):
     mock_hf_config = MagicMock()
     mock_hf_config.to_dict.return_value = {"io_processor_plugin": "my_plugin"}
 
-    vllm_config = MagicMock(spec=AphroditeConfig)
-    vllm_config.model_config.hf_config = mock_hf_config
+    aphrodite_config = MagicMock(spec=AphroditeConfig)
+    aphrodite_config.model_config.hf_config = mock_hf_config
 
     renderer = MagicMock(spec=BaseRenderer)
 
-    result = get_io_processor(vllm_config, renderer=renderer)
+    result = get_io_processor(aphrodite_config, renderer=renderer)
 
     assert isinstance(result, DummyIOProcessor)

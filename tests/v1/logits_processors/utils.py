@@ -66,7 +66,7 @@ class DummyLogitsProcessor(LogitsProcessor):
             )
 
     def __init__(
-        self, vllm_config: "AphroditeConfig", device: torch.device, is_pin_memory: bool
+        self, aphrodite_config: "AphroditeConfig", device: torch.device, is_pin_memory: bool
     ):
         self.req_info: dict[int, int] = {}
 

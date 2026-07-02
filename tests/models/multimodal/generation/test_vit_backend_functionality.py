@@ -135,7 +135,7 @@ MODEL_CONFIGS: dict[str, dict[str, Any]] = {
     },
     "qwen2_5_vl": {
         "model_name": "Qwen/Qwen2.5-VL-3B-Instruct",
-        "interface": "vllm_runner",
+        "interface": "aphrodite_runner",
         "media_type": "video",
         "max_model_len": 4000,
         "max_num_seqs": 1,
@@ -340,7 +340,7 @@ def run_llm_chat_test(config, mm_encoder_attn_backend, image_assets):
         )
 
 
-def run_video_test(config, mm_encoder_attn_backend, video_assets, vllm_runner):
+def run_video_test(config, mm_encoder_attn_backend, video_assets, aphrodite_runner):
     """Video test with EVS (Efficient Video Sampling) handler."""
     for pruning_rate in config["video_params"]["pruning_rates"]:
         num_frames = config["video_params"]["num_frames"]
@@ -356,8 +356,8 @@ def run_video_test(config, mm_encoder_attn_backend, video_assets, vllm_runner):
         prompts = [prompt]
         videos = [sampled_vids[0]]
 
-        # Run with vllm_runner context manager
-        with vllm_runner(
+        # Run with aphrodite_runner context manager
+        with aphrodite_runner(
             config["model_name"],
             max_model_len=config["max_model_len"],
             max_num_seqs=config["max_num_seqs"],
@@ -368,8 +368,8 @@ def run_video_test(config, mm_encoder_attn_backend, video_assets, vllm_runner):
             hf_overrides=dummy_hf_overrides,
             load_format="dummy",
             **config["runner_kwargs"],
-        ) as vllm_model:
-            outputs = vllm_model.generate_greedy(
+        ) as aphrodite_model:
+            outputs = aphrodite_model.generate_greedy(
                 prompts,
                 config["sampling_params"]["max_tokens"],
                 videos=videos,
@@ -398,7 +398,7 @@ def test_vit_backend_functionality(
     mm_encoder_attn_backend: AttentionBackendEnum | None,
     image_assets,
     video_assets,
-    vllm_runner,
+    aphrodite_runner,
     request,
 ):
     """Test ViT attention backend functionality for multimodal models.
@@ -429,7 +429,7 @@ def test_vit_backend_functionality(
 
     # Step 3: Route to appropriate handler
     if config.get("media_type") == "video":
-        run_video_test(config, mm_encoder_attn_backend, video_assets, vllm_runner)
+        run_video_test(config, mm_encoder_attn_backend, video_assets, aphrodite_runner)
     elif config["interface"] == "llm_chat":
         run_llm_chat_test(config, mm_encoder_attn_backend, image_assets)
     elif config["interface"] == "llm_generate":

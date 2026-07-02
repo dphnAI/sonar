@@ -25,7 +25,7 @@ pytestmark = pytest.mark.usefixtures("enable_ray_v2_backend")
 MODEL = "facebook/opt-125m"
 
 
-def create_vllm_config(
+def create_aphrodite_config(
     tensor_parallel_size: int = 1,
     pipeline_parallel_size: int = 1,
     max_model_len: int = 256,
@@ -41,12 +41,12 @@ def create_vllm_config(
         distributed_executor_backend="ray",
         enforce_eager=True,
     )
-    vllm_config = engine_args.create_engine_config()
+    aphrodite_config = engine_args.create_engine_config()
 
     if placement_group is not None:
-        vllm_config.parallel_config.placement_group = placement_group
+        aphrodite_config.parallel_config.placement_group = placement_group
 
-    return vllm_config
+    return aphrodite_config
 
 
 def ensure_ray_initialized():
@@ -68,7 +68,7 @@ def create_placement_group(request):
 @pytest.fixture
 def executor(request):
     """Create a RayExecutorV2 and shut it down after the test."""
-    executor = RayExecutorV2(vllm_config=request.param)
+    executor = RayExecutorV2(aphrodite_config=request.param)
     yield executor
     executor.shutdown()
 
@@ -84,7 +84,7 @@ def assert_executor(executor, tp_size, pp_size):
     assert executor._get_output_rank() == expected_output_rank
 
     if pp_size > 1:
-        assert executor.vllm_config.max_concurrent_batches == pp_size
+        assert executor.aphrodite_config.max_concurrent_batches == pp_size
 
     executor.check_health()
     assert not executor.is_failed
@@ -136,11 +136,11 @@ def test_select_tcpstore_port_full_window_uses_random(monkeypatch):
 @pytest.mark.parametrize("tp_size, pp_size", [(1, 1), (2, 1), (4, 1), (2, 2)])
 def test_ray_v2_executor(tp_size, pp_size):
     """Validate RayExecutorV2 with various TP/PP configs."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         tensor_parallel_size=tp_size,
         pipeline_parallel_size=pp_size,
     )
-    executor = RayExecutorV2(vllm_config=vllm_config)
+    executor = RayExecutorV2(aphrodite_config=aphrodite_config)
     try:
         assert_executor(executor, tp_size, pp_size)
     finally:
@@ -154,12 +154,12 @@ def test_ray_v2_executor(tp_size, pp_size):
 )
 def test_ray_v2_executor_pg(tp_size, pp_size, create_placement_group):
     """Validate RayExecutorV2 with various TP/PP configs using external PG."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         tensor_parallel_size=tp_size,
         pipeline_parallel_size=pp_size,
         placement_group=create_placement_group,
     )
-    executor = RayExecutorV2(vllm_config=vllm_config)
+    executor = RayExecutorV2(aphrodite_config=aphrodite_config)
     try:
         assert_executor(executor, tp_size, pp_size)
     finally:
@@ -168,7 +168,7 @@ def test_ray_v2_executor_pg(tp_size, pp_size, create_placement_group):
 
 @pytest.mark.parametrize(
     "executor",
-    [create_vllm_config(tensor_parallel_size=2)],
+    [create_aphrodite_config(tensor_parallel_size=2)],
     indirect=True,
 )
 def test_ray_v2_executor_failure_callback(executor):
@@ -189,7 +189,7 @@ def test_ray_v2_executor_failure_callback(executor):
 
 @pytest.mark.parametrize(
     "executor",
-    [create_vllm_config(tensor_parallel_size=2)],
+    [create_aphrodite_config(tensor_parallel_size=2)],
     indirect=True,
 )
 def test_ray_v2_executor_collective_rpc(executor):
@@ -201,7 +201,7 @@ def test_ray_v2_executor_collective_rpc(executor):
 
 @pytest.mark.parametrize(
     "executor",
-    [create_vllm_config(tensor_parallel_size=2)],
+    [create_aphrodite_config(tensor_parallel_size=2)],
     indirect=True,
 )
 def test_ray_v2_executor_driver_node_rank_0(executor):
@@ -217,7 +217,7 @@ def test_ray_v2_executor_driver_node_rank_0(executor):
 
 @pytest.mark.parametrize(
     "executor",
-    [create_vllm_config(tensor_parallel_size=2)],
+    [create_aphrodite_config(tensor_parallel_size=2)],
     indirect=True,
 )
 def test_ray_v2_executor_worker_death(executor):
@@ -242,7 +242,7 @@ def test_ray_v2_executor_worker_death(executor):
 
 def test_ray_v2_executor_shutdown():
     """Validate graceful shutdown: ray.kill() terminates all worker actors."""
-    executor = RayExecutorV2(vllm_config=create_vllm_config(tensor_parallel_size=2))
+    executor = RayExecutorV2(aphrodite_config=create_aphrodite_config(tensor_parallel_size=2))
     assert executor.rpc_broadcast_mq is not None
     assert len(executor.response_mqs) == executor.world_size
 
@@ -259,7 +259,7 @@ def test_ray_v2_executor_shutdown():
 
 @pytest.mark.parametrize(
     "executor",
-    [create_vllm_config(tensor_parallel_size=2)],
+    [create_aphrodite_config(tensor_parallel_size=2)],
     indirect=True,
 )
 def test_ray_v2_run_refs_stored_for_monitoring(executor):
@@ -311,11 +311,11 @@ def test_ray_v2_bundle_indices_env(
 ):
     """Validate explicit APHRODITE_RAY_BUNDLE_INDICES bundle placement."""
     monkeypatch.setenv("APHRODITE_RAY_BUNDLE_INDICES", bundle_indices)
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         tensor_parallel_size=2,
         placement_group=create_placement_group,
     )
-    executor = RayExecutorV2(vllm_config=vllm_config)
+    executor = RayExecutorV2(aphrodite_config=aphrodite_config)
     try:
         actual = [
             h.bundle_id_idx
@@ -340,11 +340,11 @@ def test_ray_v2_invalid_bundle_indices(
 ):
     """Validate invalid bundle indices are rejected."""
     monkeypatch.setenv("APHRODITE_RAY_BUNDLE_INDICES", bundle_indices)
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         tensor_parallel_size=2, placement_group=create_placement_group
     )
     with pytest.raises(AssertionError, match=expected_error):
-        RayExecutorV2(vllm_config=vllm_config)
+        RayExecutorV2(aphrodite_config=aphrodite_config)
 
 
 @pytest.mark.parametrize("tp_size, pp_size", [(2, 1), (2, 2)])

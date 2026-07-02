@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """
-vllm_utils is a package for Aphrodite testing utilities.
+aphrodite_utils is a package for Aphrodite testing utilities.
 It does not import any Aphrodite modules.
 """
 

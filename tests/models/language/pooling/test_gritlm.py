@@ -98,15 +98,15 @@ def validate_embed_output(q_rep: list[list[float]], d_rep: list[list[float]]):
     assert cosine_sim_q1_d1 == pytest.approx(0.534, abs=ATOL)
 
 
-def test_gritlm_offline_embedding(vllm_runner):
+def test_gritlm_offline_embedding(aphrodite_runner):
     queries, q_instruction, documents, d_instruction = get_test_data()
 
-    with vllm_runner(
+    with aphrodite_runner(
         MODEL_NAME,
         runner="pooling",
         max_model_len=MAX_MODEL_LEN,
-    ) as vllm_model:
-        llm = vllm_model.llm
+    ) as aphrodite_model:
+        llm = aphrodite_model.llm
 
         d_rep = run_llm_encode(
             llm,
@@ -153,15 +153,15 @@ async def test_gritlm_api_server_embedding():
     validate_embed_output(q_rep, d_rep)
 
 
-def test_gritlm_offline_generate(monkeypatch: pytest.MonkeyPatch, vllm_runner):
+def test_gritlm_offline_generate(monkeypatch: pytest.MonkeyPatch, aphrodite_runner):
     input = "<|user|>\nWhat is the capital of France?\n<|assistant|>\n"
 
-    with vllm_runner(
+    with aphrodite_runner(
         MODEL_NAME,
         runner="generate",
         max_model_len=MAX_MODEL_LEN,
-    ) as vllm_model:
-        llm = vllm_model.llm
+    ) as aphrodite_model:
+        llm = aphrodite_model.llm
 
         sampling_params = SamplingParams(temperature=0.0, max_tokens=256)
         outputs = llm.generate(input, sampling_params=sampling_params)

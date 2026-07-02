@@ -20,10 +20,10 @@
       int max_shared_mem
 
 namespace MARLIN_NAMESPACE_NAME {
-template <const vllm::ScalarTypeId a_type_id,  // A ScalarType id
-          const vllm::ScalarTypeId b_type_id,  // B ScalarType id
-          const vllm::ScalarTypeId c_type_id,  // C ScalarType id
-          const vllm::ScalarTypeId s_type_id,  // B_SCALE ScalarType id
+template <const aphrodite::ScalarTypeId a_type_id,  // A ScalarType id
+          const aphrodite::ScalarTypeId b_type_id,  // B ScalarType id
+          const aphrodite::ScalarTypeId c_type_id,  // C ScalarType id
+          const aphrodite::ScalarTypeId s_type_id,  // B_SCALE ScalarType id
           const int threads,          // number of threads in a threadblock
           const int thread_m_blocks,  // number of 16x16 blocks in the m
                                       // dimension (batchsize) of the

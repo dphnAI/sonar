@@ -48,12 +48,12 @@
   #define __HIP__RDNA3__
 #endif
 
-namespace vllm {
+namespace aphrodite {
 namespace gptq_rdna3_wmma {
 
 // Pull dequant types from the sibling namespace.
-using vllm::gptq_rdna3::bf162_t;
-using vllm::gptq_rdna3::bf16_t;
+using aphrodite::gptq_rdna3::bf162_t;
+using aphrodite::gptq_rdna3::bf16_t;
 
 // Device code below uses RDNA3-only __builtin_amdgcn_wmma_* intrinsics;
 // non-RDNA3 device passes fall through to empty __global__ stubs at the
@@ -2067,7 +2067,7 @@ void launch_gemm_q4_wmma_64x64_4w(const T* a, const uint32_t* b_q_weight,
 }
 
 }  // namespace gptq_rdna3_wmma
-}  // namespace vllm
+}  // namespace aphrodite
 
 // ---------------------------------------------------------------------------
 // Public entry point.
@@ -2145,19 +2145,19 @@ torch::Tensor gptq_gemm_rdna3_wmma(torch::Tensor a, torch::Tensor b_q_weight,
   //   32 <= M < 64       → 32x16_2w (2 waves)
   //   M < 32             → 16x16_1w (1 wave)
   if (a.scalar_type() == torch::kHalf) {
-    vllm::gptq_rdna3_wmma::launch_gemm_q4_wmma_64x64_4w<half>(
+    aphrodite::gptq_rdna3_wmma::launch_gemm_q4_wmma_64x64_4w<half>(
         (const half*)a.data_ptr(), (const uint32_t*)b_q_weight.data_ptr(),
         (const uint32_t*)b_qzeros.data_ptr(), (const half*)b_scales.data_ptr(),
         g_idx_ptr, (half*)c.data_ptr(), size_m, size_n, size_k, groups,
         zero_offset, stream);
   } else {
-    vllm::gptq_rdna3_wmma::launch_gemm_q4_wmma_64x64_4w<
-        vllm::gptq_rdna3_wmma::bf16_t>(
-        (const vllm::gptq_rdna3_wmma::bf16_t*)a.data_ptr(),
+    aphrodite::gptq_rdna3_wmma::launch_gemm_q4_wmma_64x64_4w<
+        aphrodite::gptq_rdna3_wmma::bf16_t>(
+        (const aphrodite::gptq_rdna3_wmma::bf16_t*)a.data_ptr(),
         (const uint32_t*)b_q_weight.data_ptr(),
         (const uint32_t*)b_qzeros.data_ptr(),
-        (const vllm::gptq_rdna3_wmma::bf16_t*)b_scales.data_ptr(), g_idx_ptr,
-        (vllm::gptq_rdna3_wmma::bf16_t*)c.data_ptr(), size_m, size_n, size_k,
+        (const aphrodite::gptq_rdna3_wmma::bf16_t*)b_scales.data_ptr(), g_idx_ptr,
+        (aphrodite::gptq_rdna3_wmma::bf16_t*)c.data_ptr(), size_m, size_n, size_k,
         groups, zero_offset, stream);
   }
 

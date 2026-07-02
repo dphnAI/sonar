@@ -15,8 +15,8 @@ def register():
     if "MyGemma2Embedding" not in ModelRegistry.get_supported_archs():
         ModelRegistry.register_model(
             "MyGemma2Embedding",
-            "vllm_add_dummy_model.my_gemma_embedding:MyGemma2Embedding",
+            "aphrodite_add_dummy_model.my_gemma_embedding:MyGemma2Embedding",
         )
 
     if "MyLlava" not in ModelRegistry.get_supported_archs():
-        ModelRegistry.register_model("MyLlava", "vllm_add_dummy_model.my_llava:MyLlava")
+        ModelRegistry.register_model("MyLlava", "aphrodite_add_dummy_model.my_llava:MyLlava")

@@ -113,22 +113,22 @@ def _init_dp_environment(world_size, rank, port, dp_size, dp_port):
         port: Port for torch.distributed init.
         dp_port: Separate port for the DP master group init.
     """
-    from aphrodite.config import AphroditeConfig, set_current_vllm_config
+    from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
     from aphrodite.config.parallel import ParallelConfig
     from aphrodite.distributed.parallel_state import (
         ensure_model_parallel_initialized,
         init_distributed_environment,
     )
 
-    vllm_config = AphroditeConfig()
-    vllm_config.parallel_config = ParallelConfig(
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.parallel_config = ParallelConfig(
         data_parallel_size=dp_size,
         data_parallel_rank=rank,
         # Pre-populate port list so __post_init__ doesn't auto-generate
         # random ports. All DP ranks must agree on the same port.
         _data_parallel_master_port_list=[int(dp_port)],
     )
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         # rank=0 here because each DP rank has a single (tp=1,pp=1) process,
         # so the local rank within the tp*pp group is always 0.
         # init_distributed_environment will offset by data_parallel_rank.
@@ -160,15 +160,15 @@ def _make_forward_context(rank, world_size, num_tokens_per_rank):
 
         dp_metadata = None
 
-    vllm_config = AphroditeConfig()
-    vllm_config.parallel_config = ParallelConfig(
+    aphrodite_config = AphroditeConfig()
+    aphrodite_config.parallel_config = ParallelConfig(
         data_parallel_size=world_size,
         is_moe_model=True,
         data_parallel_rank=rank,
     )
     return set_forward_context(
         _AttnMeta(),
-        vllm_config,
+        aphrodite_config,
         num_tokens=num_tokens_per_rank,
         num_tokens_across_dp=torch.tensor(
             [num_tokens_per_rank] * world_size, dtype=torch.int

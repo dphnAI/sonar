@@ -24,7 +24,7 @@ MIN_CAPABILITY = os.environ.get("MIN_CAPABILITY", "80")
     not current_platform.has_device_capability(int(MIN_CAPABILITY)),
     reason="Current system does not have minimum capability.",
 )
-def test_weight_loading(vllm_runner):
+def test_weight_loading(aphrodite_runner):
     """
     Test parameter weight loading with tp>1.
     """
@@ -34,7 +34,7 @@ def test_weight_loading(vllm_runner):
         QUANTIZATION == "gptq"
         or MODEL_NAME == "nm-testing/test-w4a16-mixtral-actorder-group"
     )
-    with vllm_runner(
+    with aphrodite_runner(
         model_name=MODEL_NAME,
         revision=REVISION,
         dtype=torch.half if NEEDS_FP16 else "auto",

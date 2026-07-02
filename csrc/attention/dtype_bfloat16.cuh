@@ -36,7 +36,7 @@ typedef __hip_bfloat16 __nv_bfloat16;
 
 #include <stdint.h>
 
-namespace vllm {
+namespace aphrodite {
 
 // Define custom BF16 vector data types.
 struct bf16_4_t {
@@ -460,4 +460,4 @@ inline __device__ void zero(__nv_bfloat16& dst) {
 #endif
 }
 
-}  // namespace vllm
+}  // namespace aphrodite

@@ -279,7 +279,7 @@ class TestHybridAttentionIndices:
 
 class TestTurboQuantWorkspaceReservation:
     @staticmethod
-    def _fake_vllm_config(
+    def _fake_aphrodite_config(
         *,
         max_num_seqs: int = 16,
         max_num_batched_tokens: int = 4096,
@@ -346,7 +346,7 @@ class TestTurboQuantWorkspaceReservation:
         turboquant_attn.TurboQuantMetadataBuilder(
             kv_cache_spec=self._fake_kv_cache_spec(),
             layer_names=["layers.0.self_attn.attn"],
-            vllm_config=self._fake_vllm_config(),
+            aphrodite_config=self._fake_aphrodite_config(),
             device=torch.device("cuda"),
         )
 
@@ -387,7 +387,7 @@ class TestTurboQuantWorkspaceReservation:
         turboquant_attn.TurboQuantMetadataBuilder(
             kv_cache_spec=self._fake_kv_cache_spec(),
             layer_names=["layers.0.self_attn.attn"],
-            vllm_config=self._fake_vllm_config(enable_chunked_prefill=False),
+            aphrodite_config=self._fake_aphrodite_config(enable_chunked_prefill=False),
             device=torch.device("cuda"),
         )
 

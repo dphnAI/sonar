@@ -3,7 +3,7 @@
 
 #include "cuda_vec_utils.cuh"
 
-namespace vllm {
+namespace aphrodite {
 
 // Concatenates ql_nope [num_tokens, num_heads, NOPE_DIM] and
 // q_pe [num_tokens, num_heads, 64]
@@ -52,6 +52,6 @@ __global__ void ConcatMLAQKernel(
   st32_cs(rope_dst + lane_id, ld32_cs(rope_src + lane_id));
 }
 
-}  // namespace vllm
+}  // namespace aphrodite
 
 #endif  // CONCAT_MLA_Q_CUH_

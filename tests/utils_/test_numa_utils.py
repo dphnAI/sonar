@@ -56,21 +56,21 @@ def _make_config(**parallel_kwargs):
 
 
 def test_get_numactl_args_with_node_binding():
-    vllm_config = _make_config(numa_bind=True, numa_bind_nodes=[0, 1])
+    aphrodite_config = _make_config(numa_bind=True, numa_bind_nodes=[0, 1])
     assert (
-        numa_utils._get_numactl_worker_args(vllm_config.parallel_config, local_rank=1)
+        numa_utils._get_numactl_worker_args(aphrodite_config.parallel_config, local_rank=1)
         == "--cpunodebind=1 --membind=1"
     )
 
 
 def test_get_numactl_args_with_cpu_binding():
-    vllm_config = _make_config(
+    aphrodite_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0, 1],
         numa_bind_cpus=["0-3", "4-7"],
     )
     assert (
-        numa_utils._get_numactl_worker_args(vllm_config.parallel_config, local_rank=1)
+        numa_utils._get_numactl_worker_args(aphrodite_config.parallel_config, local_rank=1)
         == "--physcpubind=4-7 --membind=1"
     )
 
@@ -206,19 +206,19 @@ def test_pct_binding_returns_none_when_node_cpulist_missing(monkeypatch):
 
 def test_get_numactl_args_uses_pct_when_user_did_not_specify_cpus(monkeypatch):
     _patch_pct_gates(monkeypatch, model_match=True, highest_perf=46)
-    vllm_config = _make_config(numa_bind=True, numa_bind_nodes=[0, 1])
+    aphrodite_config = _make_config(numa_bind=True, numa_bind_nodes=[0, 1])
     assert (
-        numa_utils._get_numactl_worker_args(vllm_config.parallel_config, local_rank=1)
+        numa_utils._get_numactl_worker_args(aphrodite_config.parallel_config, local_rank=1)
         == "--physcpubind=0,1,16,17,64,65,80,81 --membind=1"
     )
 
 
 def test_get_numactl_args_engine_core_baseline_single_node_shard():
     """Baseline (no PCT): single-NUMA shard -> single-node bind."""
-    vllm_config = _make_config(numa_bind=True, numa_bind_nodes=[0, 1])
+    aphrodite_config = _make_config(numa_bind=True, numa_bind_nodes=[0, 1])
     assert (
         numa_utils._get_numactl_enginecore_args(
-            vllm_config.parallel_config, local_rank=0
+            aphrodite_config.parallel_config, local_rank=0
         )
         == "--cpunodebind=0 --membind=0"
     )
@@ -226,14 +226,14 @@ def test_get_numactl_args_engine_core_baseline_single_node_shard():
 
 def test_get_numactl_args_engine_core_baseline_spans_shard_numa_nodes():
     """Baseline (no PCT): a TP=4 shard spanning both NUMA nodes -> bind to both."""
-    vllm_config = _make_config(
+    aphrodite_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0, 0, 1, 1],
         tensor_parallel_size=4,
     )
     assert (
         numa_utils._get_numactl_enginecore_args(
-            vllm_config.parallel_config, local_rank=0
+            aphrodite_config.parallel_config, local_rank=0
         )
         == "--cpunodebind=0,1 --membind=0,1"
     )
@@ -249,13 +249,13 @@ def test_get_numactl_args_engine_core_pct_spans_shard_numa_nodes(monkeypatch):
         highest_perf=46,
         cpulist_by_node={0: "0-31,128-159", 1: "64-95,192-223"},
     )
-    vllm_config = _make_config(
+    aphrodite_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0, 0, 1, 1],
         tensor_parallel_size=4,
     )
     assert numa_utils._get_numactl_enginecore_args(
-        vllm_config.parallel_config, local_rank=0
+        aphrodite_config.parallel_config, local_rank=0
     ) == (
         "--physcpubind="
         "0,1,16,17,64,65,80,81,128,129,144,145,192,193,208,209"
@@ -271,7 +271,7 @@ def test_get_numactl_args_engine_core_pct_dp_shard_picks_local_nodes(monkeypatch
         highest_perf=46,
         cpulist_by_node={0: "0-31,128-159", 1: "64-95,192-223"},
     )
-    vllm_config = _make_config(
+    aphrodite_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0, 0, 1, 1],
         tensor_parallel_size=2,
@@ -280,7 +280,7 @@ def test_get_numactl_args_engine_core_pct_dp_shard_picks_local_nodes(monkeypatch
     # Shard 1 owns gpu_indices 2 and 3 -> nodes [1, 1] -> {1}.
     assert (
         numa_utils._get_numactl_enginecore_args(
-            vllm_config.parallel_config, local_rank=0
+            aphrodite_config.parallel_config, local_rank=0
         )
         == "--physcpubind=64,65,80,81,192,193,208,209 --membind=1"
     )
@@ -299,14 +299,14 @@ def test_get_numactl_args_engine_core_pct_external_launcher_spans_local_nodes(
         highest_perf=46,
         cpulist_by_node={0: "0-31,128-159", 1: "64-95,192-223"},
     )
-    vllm_config = _make_config(
+    aphrodite_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0, 0, 0, 0, 1, 1, 1, 1],
         distributed_executor_backend="external_launcher",
         tensor_parallel_size=8,
     )
     assert numa_utils._get_numactl_enginecore_args(
-        vllm_config.parallel_config, local_rank=0
+        aphrodite_config.parallel_config, local_rank=0
     ) == (
         "--physcpubind="
         "0,1,16,17,64,65,80,81,128,129,144,145,192,193,208,209"
@@ -317,7 +317,7 @@ def test_get_numactl_args_engine_core_pct_external_launcher_spans_local_nodes(
 def test_get_numactl_args_engine_core_baseline_multi_node_within_dp_spans_locals():
     """Multi-node-within-DP fallback: bind EngineCore to all local NUMA
     nodes that the visible ``numa_bind_nodes`` reference."""
-    vllm_config = _make_config(
+    aphrodite_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0, 0, 0, 0, 1, 1, 1, 1],
         nnodes_within_dp=2,
@@ -325,7 +325,7 @@ def test_get_numactl_args_engine_core_baseline_multi_node_within_dp_spans_locals
     )
     assert (
         numa_utils._get_numactl_enginecore_args(
-            vllm_config.parallel_config, local_rank=0
+            aphrodite_config.parallel_config, local_rank=0
         )
         == "--cpunodebind=0,1 --membind=0,1"
     )
@@ -341,7 +341,7 @@ def test_get_numactl_args_engine_core_skips_user_cpu_list(monkeypatch):
     the user is explicit (its priority-core union may not be a superset
     of the user's per-worker cores)."""
     _patch_pct_gates(monkeypatch, model_match=True, highest_perf=46)
-    vllm_config = _make_config(
+    aphrodite_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0, 0, 1, 1],
         numa_bind_cpus=["0-3", "4-7", "64-67", "68-71"],
@@ -349,7 +349,7 @@ def test_get_numactl_args_engine_core_skips_user_cpu_list(monkeypatch):
     )
     assert (
         numa_utils._get_numactl_enginecore_args(
-            vllm_config.parallel_config, local_rank=0
+            aphrodite_config.parallel_config, local_rank=0
         )
         == "--cpunodebind=0,1 --membind=0,1"
     )
@@ -357,19 +357,19 @@ def test_get_numactl_args_engine_core_skips_user_cpu_list(monkeypatch):
 
 def test_get_numactl_args_user_cpus_override_pct(monkeypatch):
     _patch_pct_gates(monkeypatch, model_match=True, highest_perf=46)
-    vllm_config = _make_config(
+    aphrodite_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0, 1],
         numa_bind_cpus=["0-3", "4-7"],
     )
     assert (
-        numa_utils._get_numactl_worker_args(vllm_config.parallel_config, local_rank=1)
+        numa_utils._get_numactl_worker_args(aphrodite_config.parallel_config, local_rank=1)
         == "--physcpubind=4-7 --membind=1"
     )
 
 
 def test_get_numactl_args_uses_dp_offset():
-    vllm_config = _make_config(
+    aphrodite_config = _make_config(
         numa_bind=True,
         numa_bind_nodes=[0, 0, 1, 1],
         data_parallel_rank_local=1,
@@ -377,27 +377,27 @@ def test_get_numactl_args_uses_dp_offset():
         tensor_parallel_size=2,
     )
     assert (
-        numa_utils._get_numactl_worker_args(vllm_config.parallel_config, local_rank=1)
+        numa_utils._get_numactl_worker_args(aphrodite_config.parallel_config, local_rank=1)
         == "--cpunodebind=1 --membind=1"
     )
 
 
 def test_get_numactl_args_requires_detectable_nodes(monkeypatch):
-    vllm_config = _make_config(numa_bind=True)
+    aphrodite_config = _make_config(numa_bind=True)
     monkeypatch.setattr(numa_utils, "get_auto_numa_nodes", lambda: None)
     with pytest.raises(RuntimeError):
-        numa_utils._get_numactl_worker_args(vllm_config.parallel_config, local_rank=0)
+        numa_utils._get_numactl_worker_args(aphrodite_config.parallel_config, local_rank=0)
 
 
 def test_configure_subprocess_rejects_unknown_process_kind():
     """configure_subprocess only knows 'worker' and 'EngineCore'; anything
     else must raise ValueError instead of silently routing to the worker
     path."""
-    vllm_config = _make_config(numa_bind=True, numa_bind_nodes=[0])
+    aphrodite_config = _make_config(numa_bind=True, numa_bind_nodes=[0])
     with (
         pytest.raises(ValueError, match="process_kind"),
         numa_utils.configure_subprocess(
-            vllm_config, local_rank=0, process_kind="bogus"
+            aphrodite_config, local_rank=0, process_kind="bogus"
         ),
     ):
         pass

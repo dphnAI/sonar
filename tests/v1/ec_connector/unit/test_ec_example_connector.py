@@ -50,7 +50,7 @@ def temp_storage(tmp_path):
 
 
 @pytest.fixture
-def mock_vllm_config_producer(temp_storage):
+def mock_aphrodite_config_producer(temp_storage):
     """Fixture providing mock AphroditeConfig for producer role."""
     config = Mock(spec=AphroditeConfig)
     config.ec_transfer_config = Mock()
@@ -60,7 +60,7 @@ def mock_vllm_config_producer(temp_storage):
 
 
 @pytest.fixture
-def mock_vllm_config_consumer(temp_storage):
+def mock_aphrodite_config_consumer(temp_storage):
     """Fixture providing mock AphroditeConfig for consumer role."""
     config = Mock(spec=AphroditeConfig)
     config.ec_transfer_config = Mock()
@@ -84,10 +84,10 @@ def mock_request_with_3_mm():
 class TestECExampleConnectorBasics:
     """Test basic EC connector functionality."""
 
-    def test_initialization_producer(self, mock_vllm_config_producer, temp_storage):
+    def test_initialization_producer(self, mock_aphrodite_config_producer, temp_storage):
         """Test connector initializes correctly as producer."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_producer,
+            aphrodite_config=mock_aphrodite_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -96,10 +96,10 @@ class TestECExampleConnectorBasics:
         assert connector._storage_path == temp_storage
         assert connector._mm_datas_need_loads == {}
 
-    def test_initialization_consumer(self, mock_vllm_config_consumer, temp_storage):
+    def test_initialization_consumer(self, mock_aphrodite_config_consumer, temp_storage):
         """Test connector initializes correctly as consumer."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_consumer,
+            aphrodite_config=mock_aphrodite_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -107,14 +107,14 @@ class TestECExampleConnectorBasics:
         assert not connector.is_producer
         assert connector._storage_path == temp_storage
 
-    def test_role_assignment(self, mock_vllm_config_producer):
+    def test_role_assignment(self, mock_aphrodite_config_producer):
         """Test role is correctly assigned."""
         scheduler_connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_producer,
+            aphrodite_config=mock_aphrodite_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
         worker_connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_producer,
+            aphrodite_config=mock_aphrodite_config_producer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -127,14 +127,14 @@ class TestCacheExistence:
 
     def test_has_cache_item_all_exist_3_items(
         self,
-        mock_vllm_config_producer,
-        mock_vllm_config_consumer,
+        mock_aphrodite_config_producer,
+        mock_aphrodite_config_consumer,
         mock_request_with_3_mm,
     ):
         """Test has_cache_item returns True when all 3 caches exist."""
         # Test for producer first
         producer = ECExampleConnector(
-            vllm_config=mock_vllm_config_producer,
+            aphrodite_config=mock_aphrodite_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -158,7 +158,7 @@ class TestCacheExistence:
 
         # Also test consumer can check if cache exists
         consumer = ECExampleConnector(
-            vllm_config=mock_vllm_config_consumer,
+            aphrodite_config=mock_aphrodite_config_consumer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -173,11 +173,11 @@ class TestCacheExistence:
         assert all(consumer_result), f"Expected all True, got {consumer_result}"
 
     def test_has_cache_item_none_exist(
-        self, mock_vllm_config_producer, mock_request_with_3_mm
+        self, mock_aphrodite_config_producer, mock_request_with_3_mm
     ):
         """Test has_caches returns False when no caches exist."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_producer,
+            aphrodite_config=mock_aphrodite_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -192,11 +192,11 @@ class TestCacheExistence:
         assert not any(result), f"Expected all False, got {result}"
 
     def test_has_cache_item_partial_exist(
-        self, mock_vllm_config_producer, mock_request_with_3_mm
+        self, mock_aphrodite_config_producer, mock_request_with_3_mm
     ):
         """Test has_caches with some caches existing (1 of 3)."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_producer,
+            aphrodite_config=mock_aphrodite_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -222,11 +222,11 @@ class TestStateManagement:
     """Test connector state management."""
 
     def test_update_state_after_alloc_3_items(
-        self, mock_vllm_config_producer, mock_request_with_3_mm
+        self, mock_aphrodite_config_producer, mock_request_with_3_mm
     ):
         """Test state update after allocation for 3 MM items."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_producer,
+            aphrodite_config=mock_aphrodite_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -248,11 +248,11 @@ class TestStateManagement:
         assert connector._mm_datas_need_loads["img_hash_3"] == 200
 
     def test_build_connector_meta_3_items(
-        self, mock_vllm_config_producer, mock_request_with_3_mm
+        self, mock_aphrodite_config_producer, mock_request_with_3_mm
     ):
         """Test metadata building for 3 MM items."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_producer,
+            aphrodite_config=mock_aphrodite_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -278,10 +278,10 @@ class TestStateManagement:
         # State should be cleared after building
         assert len(connector._mm_datas_need_loads) == 0
 
-    def test_build_connector_meta_empty(self, mock_vllm_config_producer):
+    def test_build_connector_meta_empty(self, mock_aphrodite_config_producer):
         """Test metadata building with empty state."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_producer,
+            aphrodite_config=mock_aphrodite_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -292,11 +292,11 @@ class TestStateManagement:
         assert len(metadata.mm_datas) == 0
 
     def test_state_cleared_after_metadata_build(
-        self, mock_vllm_config_producer, mock_request_with_3_mm
+        self, mock_aphrodite_config_producer, mock_request_with_3_mm
     ):
         """Test that state is properly cleared after building metadata."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_producer,
+            aphrodite_config=mock_aphrodite_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
 
@@ -322,11 +322,11 @@ class TestCacheSaving:
     """Test encoder cache saving (producer only)."""
 
     def test_save_caches_producer_3_items(
-        self, mock_vllm_config_producer, mock_request_with_3_mm, temp_storage
+        self, mock_aphrodite_config_producer, mock_request_with_3_mm, temp_storage
     ):
         """Test cache saving as producer for 3 different MM items."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_producer,
+            aphrodite_config=mock_aphrodite_config_producer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -352,10 +352,10 @@ class TestCacheSaving:
             assert "ec_cache" in loaded
             assert torch.allclose(loaded["ec_cache"], encoder_cache[mm_hash].cpu())
 
-    def test_save_caches_consumer_skips(self, mock_vllm_config_consumer):
+    def test_save_caches_consumer_skips(self, mock_aphrodite_config_consumer):
         """Test cache saving is skipped for consumer."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_consumer,
+            aphrodite_config=mock_aphrodite_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -376,15 +376,15 @@ class TestCacheLoading:
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_start_load_caches_consumer_3_items(
         self,
-        mock_vllm_config_producer,
-        mock_vllm_config_consumer,
+        mock_aphrodite_config_producer,
+        mock_aphrodite_config_consumer,
         mock_request_with_3_mm,
         temp_storage,
     ):
         """Test consumer loads 3 caches from storage."""
         # First, create producer to save caches
         producer = ECExampleConnector(
-            vllm_config=mock_vllm_config_producer,
+            aphrodite_config=mock_aphrodite_config_producer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -397,7 +397,7 @@ class TestCacheLoading:
 
         # Now consumer loads
         consumer = ECExampleConnector(
-            vllm_config=mock_vllm_config_consumer,
+            aphrodite_config=mock_aphrodite_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -423,12 +423,12 @@ class TestCacheLoading:
             ), f"{mm_hash} cache saved and loaded tesnor are not the same"
 
     def test_start_load_caches_skip_existing(
-        self, mock_vllm_config_producer, mock_vllm_config_consumer, temp_storage
+        self, mock_aphrodite_config_producer, mock_aphrodite_config_consumer, temp_storage
     ):
         """Test cache loading skips already cached items."""
         # Setup: producer saves cache
         producer = ECExampleConnector(
-            vllm_config=mock_vllm_config_producer,
+            aphrodite_config=mock_aphrodite_config_producer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -438,7 +438,7 @@ class TestCacheLoading:
 
         # Consumer setup
         consumer = ECExampleConnector(
-            vllm_config=mock_vllm_config_consumer,
+            aphrodite_config=mock_aphrodite_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -459,10 +459,10 @@ class TestCacheLoading:
         # Verify original cache unchanged
         assert torch.equal(encoder_cache[mm_hash], existing_cache)
 
-    def test_start_load_caches_empty_metadata(self, mock_vllm_config_consumer):
+    def test_start_load_caches_empty_metadata(self, mock_aphrodite_config_consumer):
         """Test loading with empty metadata does nothing."""
         consumer = ECExampleConnector(
-            vllm_config=mock_vllm_config_consumer,
+            aphrodite_config=mock_aphrodite_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -481,10 +481,10 @@ class TestCacheLoading:
 class TestFilenameGeneration:
     """Test filename and path generation."""
 
-    def test_generate_foldername(self, mock_vllm_config_producer, temp_storage):
+    def test_generate_foldername(self, mock_aphrodite_config_producer, temp_storage):
         """Test folder name generation."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_producer,
+            aphrodite_config=mock_aphrodite_config_producer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -494,10 +494,10 @@ class TestFilenameGeneration:
         assert folder == os.path.join(temp_storage, mm_hash)
         assert os.path.isdir(folder)  # Should be created
 
-    def test_generate_filename(self, mock_vllm_config_producer, temp_storage):
+    def test_generate_filename(self, mock_aphrodite_config_producer, temp_storage):
         """Test filename generation."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_producer,
+            aphrodite_config=mock_aphrodite_config_producer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -508,10 +508,10 @@ class TestFilenameGeneration:
         assert filename == expected
         assert os.path.isdir(os.path.dirname(filename))  # Folder created
 
-    def test_generate_filename_consistency(self, mock_vllm_config_producer):
+    def test_generate_filename_consistency(self, mock_aphrodite_config_producer):
         """Test filename generation is consistent."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_producer,
+            aphrodite_config=mock_aphrodite_config_producer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -525,10 +525,10 @@ class TestFilenameGeneration:
 class TestMetadataBindingLifecycle:
     """Test metadata binding and clearing lifecycle."""
 
-    def test_bind_connector_metadata(self, mock_vllm_config_consumer):
+    def test_bind_connector_metadata(self, mock_aphrodite_config_consumer):
         """Test binding connector metadata."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_consumer,
+            aphrodite_config=mock_aphrodite_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -539,10 +539,10 @@ class TestMetadataBindingLifecycle:
 
         assert connector._connector_metadata is metadata
 
-    def test_clear_connector_metadata(self, mock_vllm_config_consumer):
+    def test_clear_connector_metadata(self, mock_aphrodite_config_consumer):
         """Test clearing connector metadata."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_consumer,
+            aphrodite_config=mock_aphrodite_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -553,10 +553,10 @@ class TestMetadataBindingLifecycle:
 
         assert connector._connector_metadata is None
 
-    def test_get_connector_metadata(self, mock_vllm_config_consumer):
+    def test_get_connector_metadata(self, mock_aphrodite_config_consumer):
         """Test getting connector metadata."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_consumer,
+            aphrodite_config=mock_aphrodite_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -567,10 +567,10 @@ class TestMetadataBindingLifecycle:
 
         assert retrieved is metadata
 
-    def test_get_connector_metadata_not_set(self, mock_vllm_config_consumer):
+    def test_get_connector_metadata_not_set(self, mock_aphrodite_config_consumer):
         """Test getting metadata when not set raises."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_consumer,
+            aphrodite_config=mock_aphrodite_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -581,10 +581,10 @@ class TestMetadataBindingLifecycle:
 class TestEdgeCases:
     """Test edge cases and error handling."""
 
-    def test_save_empty_cache(self, mock_vllm_config_producer):
+    def test_save_empty_cache(self, mock_aphrodite_config_producer):
         """Test saving empty tensor."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_producer,
+            aphrodite_config=mock_aphrodite_config_producer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -594,10 +594,10 @@ class TestEdgeCases:
         # Should not raise
         connector.save_caches(encoder_cache, mm_hash)
 
-    def test_load_nonexistent_cache(self, mock_vllm_config_consumer):
+    def test_load_nonexistent_cache(self, mock_aphrodite_config_consumer):
         """Test loading cache that doesn't exist raises error."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_consumer,
+            aphrodite_config=mock_aphrodite_config_consumer,
             role=ECConnectorRole.WORKER,
         )
 
@@ -611,10 +611,10 @@ class TestEdgeCases:
         with pytest.raises(FileNotFoundError):
             connector.start_load_caches(encoder_cache=encoder_cache)
 
-    def test_has_cache_item_empty_request(self, mock_vllm_config_producer):
+    def test_has_cache_item_empty_request(self, mock_aphrodite_config_producer):
         """Test has_cache_item with a nonexistent identifier."""
         connector = ECExampleConnector(
-            vllm_config=mock_vllm_config_producer,
+            aphrodite_config=mock_aphrodite_config_producer,
             role=ECConnectorRole.SCHEDULER,
         )
 

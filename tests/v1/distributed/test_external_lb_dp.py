@@ -163,8 +163,8 @@ def _get_parallel_config(server: RemoteOpenAIServer):
     response = requests.get(server.url_for("server_info?config_format=json"))
     response.raise_for_status()
 
-    vllm_config = response.json()["vllm_config"]
-    return vllm_config["parallel_config"]
+    aphrodite_config = response.json()["aphrodite_config"]
+    return aphrodite_config["parallel_config"]
 
 
 def test_external_lb_server_info(server_manager):

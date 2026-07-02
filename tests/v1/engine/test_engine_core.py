@@ -66,12 +66,12 @@ def make_request() -> EngineCoreRequest:
 def test_engine_core():
     """Setup the EngineCore."""
     engine_args = EngineArgs(model=MODEL_NAME)
-    vllm_config = engine_args.create_engine_config()
-    executor_class = Executor.get_class(vllm_config)
+    aphrodite_config = engine_args.create_engine_config()
+    executor_class = Executor.get_class(aphrodite_config)
 
     with set_default_torch_num_threads(1):
         engine_core = EngineCore(
-            vllm_config=vllm_config, executor_class=executor_class, log_stats=True
+            aphrodite_config=aphrodite_config, executor_class=executor_class, log_stats=True
         )
     """Test basic request lifecycle."""
 
@@ -199,12 +199,12 @@ def test_engine_core_advanced_sampling():
     """
     """Setup the EngineCore."""
     engine_args = EngineArgs(model=MODEL_NAME)
-    vllm_config = engine_args.create_engine_config()
-    executor_class = Executor.get_class(vllm_config)
+    aphrodite_config = engine_args.create_engine_config()
+    executor_class = Executor.get_class(aphrodite_config)
 
     with set_default_torch_num_threads(1):
         engine_core = EngineCore(
-            vllm_config=vllm_config, executor_class=executor_class, log_stats=True
+            aphrodite_config=aphrodite_config, executor_class=executor_class, log_stats=True
         )
     """Test basic request lifecycle."""
     # First request.
@@ -310,7 +310,7 @@ def test_engine_core_concurrent_batches():
         # Test concurrent batch behaviour independently of async scheduling.
         async_scheduling=False,
     )
-    vllm_config = engine_args.create_engine_config()
+    aphrodite_config = engine_args.create_engine_config()
     # Force two concurrent batches to exercise the batch queue independently
     # of async scheduling (which is disabled above).
     with (
@@ -323,7 +323,7 @@ def test_engine_core_concurrent_batches():
         ),
     ):
         engine_core = EngineCore(
-            vllm_config=vllm_config, log_stats=False, executor_class=DummyExecutor
+            aphrodite_config=aphrodite_config, log_stats=False, executor_class=DummyExecutor
         )
     assert engine_core.batch_queue is not None
 
@@ -411,12 +411,12 @@ def test_engine_core_tp():
         # Reduce startup time.
         enforce_eager=True,
     )
-    vllm_config = engine_args.create_engine_config()
-    executor_class = Executor.get_class(vllm_config)
+    aphrodite_config = engine_args.create_engine_config()
+    executor_class = Executor.get_class(aphrodite_config)
 
     with set_default_torch_num_threads(1):
         engine_core = EngineCore(
-            vllm_config=vllm_config, executor_class=executor_class, log_stats=True
+            aphrodite_config=aphrodite_config, executor_class=executor_class, log_stats=True
         )
 
     def get_worker_cache_config_field(worker, key: str):
@@ -436,12 +436,12 @@ def test_engine_core_tp():
 def test_engine_core_invalid_request_id_type():
     """Test that engine raises TypeError for non-string request_id."""
     engine_args = EngineArgs(model=MODEL_NAME)
-    vllm_config = engine_args.create_engine_config()
-    executor_class = Executor.get_class(vllm_config)
+    aphrodite_config = engine_args.create_engine_config()
+    executor_class = Executor.get_class(aphrodite_config)
 
     with set_default_torch_num_threads(1):
         engine_core = EngineCore(
-            vllm_config=vllm_config, executor_class=executor_class, log_stats=True
+            aphrodite_config=aphrodite_config, executor_class=executor_class, log_stats=True
         )
 
     # Test with UUID object (common mistake)
@@ -531,7 +531,7 @@ def test_encoder_instance_zero_kv_cache(
         ec_connector_extra_config={"shared_storage_path": "/tmp/ec_test_encoder"},
     )
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=model_config,
         cache_config=cache_config,
         scheduler_config=scheduler_config,
@@ -539,12 +539,12 @@ def test_encoder_instance_zero_kv_cache(
         ec_transfer_config=ec_transfer_config,
     )
 
-    executor_class = Executor.get_class(vllm_config)
+    executor_class = Executor.get_class(aphrodite_config)
     print(f"executor_class: {executor_class}")
 
     with set_default_torch_num_threads(1):
         engine_core = EngineCore(
-            vllm_config=vllm_config, executor_class=executor_class, log_stats=True
+            aphrodite_config=aphrodite_config, executor_class=executor_class, log_stats=True
         )
 
     # Check encoder cache manager exists
@@ -583,7 +583,7 @@ def test_encoder_instance_zero_kv_cache(
         )
 
         # Check 5: Verify chunked prefill is disabled
-        assert not vllm_config.scheduler_config.enable_chunked_prefill, (
+        assert not aphrodite_config.scheduler_config.enable_chunked_prefill, (
             "Encoder instance should disable chunked prefill (no KV cache)"
         )
 

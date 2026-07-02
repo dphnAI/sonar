@@ -6,7 +6,7 @@ import pytest
 import torch
 import torch.multiprocessing as mp
 
-from tests.utils import ensure_current_vllm_config, multi_gpu_test
+from tests.utils import ensure_current_aphrodite_config, multi_gpu_test
 from aphrodite.distributed import get_tensor_model_parallel_world_size
 from aphrodite.distributed.parallel_state import (
     init_distributed_environment,
@@ -117,7 +117,7 @@ def run_dp_sharded_vision_model_vs_direct(
 
     # initialize distributed
     init_distributed_environment()
-    with ensure_current_vllm_config():
+    with ensure_current_aphrodite_config():
         initialize_model_parallel(tensor_model_parallel_size=world_size)
 
     # Create a test input tensor
@@ -303,7 +303,7 @@ def run_dp_sharded_mrope_vision_model_vs_direct(
 
     # initialize distributed
     init_distributed_environment()
-    with ensure_current_vllm_config():
+    with ensure_current_aphrodite_config():
         initialize_model_parallel(tensor_model_parallel_size=world_size)
 
     # Create test data
@@ -379,7 +379,7 @@ def run_dp_sharded_mrope_vision_model_empty_input_worker(
     )
 
     init_distributed_environment()
-    with ensure_current_vllm_config():
+    with ensure_current_aphrodite_config():
         initialize_model_parallel(tensor_model_parallel_size=world_size)
 
     # Create empty inputs
@@ -428,7 +428,7 @@ def run_dp_sharded_mrope_vision_model_uneven_load_worker(
     )
 
     init_distributed_environment()
-    with ensure_current_vllm_config():
+    with ensure_current_aphrodite_config():
         initialize_model_parallel(tensor_model_parallel_size=world_size)
 
     # Create images with very different sizes

@@ -78,16 +78,16 @@ def _build_decode_metadata():
     from tests.v1.attention.utils import (
         BatchSpec,
         create_common_attn_metadata,
-        create_vllm_config,
+        create_aphrodite_config,
     )
-    from aphrodite.config.aphrodite import set_current_vllm_config
+    from aphrodite.config.aphrodite import set_current_aphrodite_config
     from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
     from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
     from aphrodite.v1.worker.workspace import init_workspace_manager
 
     device = torch.device("cuda:0")
 
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         model_name="deepseek-ai/DeepSeek-R1",
         max_model_len=CONTEXT_LEN,
         # One flat page per token (page_size=1); +buffer for the null block.
@@ -97,13 +97,13 @@ def _build_decode_metadata():
         max_num_batched_tokens=8192,
         hf_config_override={"num_attention_heads": NUM_QUERY_HEADS},
     )
-    vllm_config.cache_config.cache_dtype = "fp8"
+    aphrodite_config.cache_config.cache_dtype = "fp8"
 
     spec = MLAAttentionSpec(
         block_size=PAGE_SIZE,
         num_kv_heads=1,
-        head_size=vllm_config.model_config.get_head_size(),
-        dtype=vllm_config.model_config.dtype,
+        head_size=aphrodite_config.model_config.get_head_size(),
+        dtype=aphrodite_config.model_config.dtype,
         cache_dtype_str="fp8",
     )
 
@@ -112,7 +112,7 @@ def _build_decode_metadata():
     # The builder reads layer.prefill_backend from static_forward_context; a
     # stub with the attribute is enough for metadata construction.
     layer_name = "placeholder"
-    vllm_config.compilation_config.static_forward_context[layer_name] = (
+    aphrodite_config.compilation_config.static_forward_context[layer_name] = (
         types.SimpleNamespace(prefill_backend=None)
     )
 
@@ -125,8 +125,8 @@ def _build_decode_metadata():
 
     captured: dict = {}
 
-    with set_current_vllm_config(vllm_config):
-        builder = builder_cls(spec, [layer_name], vllm_config, device)
+    with set_current_aphrodite_config(aphrodite_config):
+        builder = builder_cls(spec, [layer_name], aphrodite_config, device)
         common_attn_metadata = create_common_attn_metadata(
             batch_spec, PAGE_SIZE, device, arange_block_indices=True
         )

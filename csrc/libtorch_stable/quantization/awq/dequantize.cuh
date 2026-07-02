@@ -11,7 +11,7 @@ Shang and Dang, Xingyu and Han, Song}, journal={arXiv}, year={2023}
 
 #pragma once
 
-namespace vllm {
+namespace aphrodite {
 namespace awq {
 
 __device__ uint4 dequantize_s4_to_fp16x2(uint32_t const& source) {
@@ -99,4 +99,4 @@ __device__ uint4 dequantize_s4_to_fp16x2(uint32_t const& source) {
 }
 
 }  // namespace awq
-}  // namespace vllm
+}  // namespace aphrodite

@@ -12,7 +12,7 @@ import torch
 import torch.nn as nn
 from PIL import Image
 
-from aphrodite.config import ModelConfig, AphroditeConfig, set_current_vllm_config
+from aphrodite.config import ModelConfig, AphroditeConfig, set_current_aphrodite_config
 from aphrodite.config.cache import CacheConfig
 from aphrodite.config.multimodal import (
     AudioDummyOptions,
@@ -132,10 +132,10 @@ def initialize_dummy_model(
 ):
     temp_file = tempfile.mkstemp()[1]
     current_device = torch.get_default_device()
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=model_config, cache_config=CacheConfig(block_size=16)
     )
-    with set_current_vllm_config(vllm_config=vllm_config):
+    with set_current_aphrodite_config(aphrodite_config=aphrodite_config):
         init_distributed_environment(
             world_size=1,
             rank=0,
@@ -147,7 +147,7 @@ def initialize_dummy_model(
 
         with set_default_torch_dtype(model_config.dtype):
             torch.set_default_device(current_platform.device_type)
-            model = model_cls(vllm_config=vllm_config)
+            model = model_cls(aphrodite_config=aphrodite_config)
             torch.set_default_device(current_device)
         yield model
 

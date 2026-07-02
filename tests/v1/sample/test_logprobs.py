@@ -55,8 +55,8 @@ else:
     # Parameterize APC
     params=[False, True],
 )
-def vllm_model(vllm_runner, request) -> Generator[AphroditeRunner, None, None]:
-    with vllm_runner(
+def aphrodite_model(aphrodite_runner, request) -> Generator[AphroditeRunner, None, None]:
+    with aphrodite_runner(
         MODEL,
         dtype=DTYPE,
         max_logprobs=7,
@@ -71,8 +71,8 @@ def vllm_model(vllm_runner, request) -> Generator[AphroditeRunner, None, None]:
         # prompt logprobs.
         enable_prefix_caching=request.param,
         gpu_memory_utilization=0.4,
-    ) as vllm_model:
-        yield vllm_model
+    ) as aphrodite_model:
+        yield aphrodite_model
 
 
 @pytest.fixture(scope="module")
@@ -138,9 +138,9 @@ def _repeat_logprob_config(
 
 
 def _run_and_validate(
-    vllm_model: AphroditeRunner,
+    aphrodite_model: AphroditeRunner,
     test_prompts: list[str],
-    vllm_sampling_params: SamplingParams,
+    aphrodite_sampling_params: SamplingParams,
     hf_logprobs: list[list[torch.Tensor]],
     hf_outputs: list[tuple[list[int], str]],
     logprob_prompt_logprob_list: BatchLogprobsSpecType,
@@ -148,12 +148,12 @@ def _run_and_validate(
     max_tokens: int,
     do_apc: bool,
 ) -> None:
-    vllm_results = vllm_model.llm.generate(
-        test_prompts, sampling_params=vllm_sampling_params
+    aphrodite_results = aphrodite_model.llm.generate(
+        test_prompts, sampling_params=aphrodite_sampling_params
     )
 
-    for vllm_result, hf_logprob, hf_output, logprob_prompt_logprob in zip(
-        vllm_results, hf_logprobs, hf_outputs, logprob_prompt_logprob_list
+    for aphrodite_result, hf_logprob, hf_output, logprob_prompt_logprob in zip(
+        aphrodite_results, hf_logprobs, hf_outputs, logprob_prompt_logprob_list
     ):
         # Extract request-level (prompt)logprobs config
         num_top_logprobs, num_top_prompt_logprobs = logprob_prompt_logprob
@@ -162,14 +162,14 @@ def _run_and_validate(
         # Aphrodite prompt+completion should match HF output
         if temperature == 0.0:
             assert (
-                vllm_result.prompt_token_ids + vllm_result.outputs[0].token_ids
+                aphrodite_result.prompt_token_ids + aphrodite_result.outputs[0].token_ids
                 == hf_output[0]
             )
         else:
             # Sampled tokens won't match if not greedy
             assert (
-                vllm_result.prompt_token_ids
-                == hf_output[0][: len(vllm_result.prompt_token_ids)]
+                aphrodite_result.prompt_token_ids
+                == hf_output[0][: len(aphrodite_result.prompt_token_ids)]
             )
 
         # Validate sample logprobs
@@ -177,10 +177,10 @@ def _run_and_validate(
             assert num_top_logprobs is not None
             # Confirm that the structure of the sample logprobs in the result is
             # correct
-            assert vllm_result.outputs[0].logprobs is not None
-            assert len(vllm_result.outputs[0].logprobs) == max_tokens
+            assert aphrodite_result.outputs[0].logprobs is not None
+            assert len(aphrodite_result.outputs[0].logprobs) == max_tokens
             for logprobs, token_id in zip(
-                vllm_result.outputs[0].logprobs, vllm_result.outputs[0].token_ids
+                aphrodite_result.outputs[0].logprobs, aphrodite_result.outputs[0].token_ids
             ):
                 assert logprobs is not None
 
@@ -200,9 +200,9 @@ def _run_and_validate(
                     all_ranks = {lp.rank for lp in logprobs.values()}
                     assert all(r in all_ranks for r in range(1, num_top_logprobs + 1))
 
-            output_text = vllm_result.outputs[0].text
+            output_text = aphrodite_result.outputs[0].text
             output_string_from_most_likely_tokens_lst: list[str] = []
-            for top_logprobs in vllm_result.outputs[0].logprobs:
+            for top_logprobs in aphrodite_result.outputs[0].logprobs:
                 top_logprob = next(iter(top_logprobs.values()))
                 output_string_from_most_likely_tokens_lst.append(
                     top_logprob.decoded_token
@@ -220,8 +220,8 @@ def _run_and_validate(
             )
 
             # Compare Aphrodite sample logprobs to HF
-            vllm_sample_logprobs = vllm_result.outputs[0].logprobs
-            for i, top_logprobs in enumerate(vllm_sample_logprobs):
+            aphrodite_sample_logprobs = aphrodite_result.outputs[0].logprobs
+            for i, top_logprobs in enumerate(aphrodite_sample_logprobs):
                 for token_id, sample_logprob in top_logprobs.items():
                     if temperature == 0.0 or i == 0:
                         logprob = sample_logprob.logprob
@@ -241,26 +241,26 @@ def _run_and_validate(
             # For each request, assert that the returned cumulative logprob
             # matches the correct value, which is computed below.
             torch.testing.assert_close(
-                vllm_result.outputs[0].cumulative_logprob,
-                compute_correct_cumulative_logprob(vllm_result.outputs[0]),
+                aphrodite_result.outputs[0].cumulative_logprob,
+                compute_correct_cumulative_logprob(aphrodite_result.outputs[0]),
                 atol=1e-6,
                 rtol=1e-6,
             )
         else:
             # Logprobs disabled for this request; should be None
-            assert vllm_result.outputs[0].logprobs is None
+            assert aphrodite_result.outputs[0].logprobs is None
 
         # Validate prompt logprobs
         if num_top_prompt_logprobs is not None:
             # Confirm that structure of prompt logprobs in result is correct
-            assert vllm_result.prompt_logprobs is not None
+            assert aphrodite_result.prompt_logprobs is not None
             # - The first prompt logprob is always None
-            assert vllm_result.prompt_logprobs[0] is None
+            assert aphrodite_result.prompt_logprobs[0] is None
             # - Prompt logprobs are returned for all indices in
             #   the prompt
-            assert len(vllm_result.prompt_logprobs) == len(vllm_result.prompt_token_ids)
+            assert len(aphrodite_result.prompt_logprobs) == len(aphrodite_result.prompt_token_ids)
             for prompt_logprobs, prompt_token_id in zip(
-                vllm_result.prompt_logprobs[1:], vllm_result.prompt_token_ids[1:]
+                aphrodite_result.prompt_logprobs[1:], aphrodite_result.prompt_token_ids[1:]
             ):
                 assert prompt_logprobs is not None
 
@@ -287,9 +287,9 @@ def _run_and_validate(
             # Compare prompt logprobs to HF
             # The first prompt logprob is always None, so we compare it from
             # 1:.
-            vllm_prompt_logprobs = vllm_result.prompt_logprobs[1:]
-            for i, vllm_prompt_logprob_dict in enumerate(vllm_prompt_logprobs):
-                for token_id, logprob in vllm_prompt_logprob_dict.items():
+            aphrodite_prompt_logprobs = aphrodite_result.prompt_logprobs[1:]
+            for i, aphrodite_prompt_logprob_dict in enumerate(aphrodite_prompt_logprobs):
+                for token_id, logprob in aphrodite_prompt_logprob_dict.items():
                     torch.testing.assert_close(
                         logprob.logprob,
                         hf_logprob[0][i][token_id].item(),
@@ -297,7 +297,7 @@ def _run_and_validate(
                         rtol=2e-2,
                     )
         else:
-            assert vllm_result.prompt_logprobs is None
+            assert aphrodite_result.prompt_logprobs is None
 
 
 @pytest.mark.parametrize(
@@ -306,7 +306,7 @@ def _run_and_validate(
 @pytest.mark.parametrize("temperature", [0.0, 2.0])
 def test_get_logprobs_and_prompt_logprobs(
     hf_model,
-    vllm_model,
+    aphrodite_model,
     batch_logprobs_composition: BatchLogprobsComposition,
     temperature: float,
     example_prompts: list[str],
@@ -332,13 +332,13 @@ def test_get_logprobs_and_prompt_logprobs(
 
     Args:
       hf_model: HuggingFace reference model fixture
-      vllm_model: Aphrodite model fixture
+      aphrodite_model: Aphrodite model fixture
       batch_logprobs_composition: logprobs configuration for test batch
       temperature: "temperature" sampling parameter
       example_prompts: example prompt fixture
     """
-    vllm_config = vllm_model.llm.llm_engine.vllm_config
-    do_apc = vllm_config.cache_config.enable_prefix_caching
+    aphrodite_config = aphrodite_model.llm.llm_engine.aphrodite_config
+    do_apc = aphrodite_config.cache_config.enable_prefix_caching
     if do_apc and (temperature < 2.0 or batch_logprobs_composition != SAMPLE_PROMPT):
         # Skip some test-cases to save time.
         pytest.skip()
@@ -363,7 +363,7 @@ def test_get_logprobs_and_prompt_logprobs(
         test_prompts, logprob_prompt_logprob_list
     )
     # Generate SamplingParams
-    vllm_sampling_params = [
+    aphrodite_sampling_params = [
         SamplingParams(
             max_tokens=max_tokens,
             logprobs=num_lp,
@@ -375,9 +375,9 @@ def test_get_logprobs_and_prompt_logprobs(
     ]
     for _ in range(2 if do_apc else 1):
         _run_and_validate(
-            vllm_model=vllm_model,
+            aphrodite_model=aphrodite_model,
             test_prompts=test_prompts,
-            vllm_sampling_params=vllm_sampling_params,
+            aphrodite_sampling_params=aphrodite_sampling_params,
             hf_logprobs=hf_logprobs,
             hf_outputs=hf_outputs,
             logprob_prompt_logprob_list=logprob_prompt_logprob_list,
@@ -399,9 +399,9 @@ def test_max_logprobs():
         gpu_memory_utilization=0.15,
         max_model_len=256,
     ) as runner:
-        vllm_sampling_params = SamplingParams(logprobs=1)
+        aphrodite_sampling_params = SamplingParams(logprobs=1)
         # should pass
-        runner.generate(["Hello world"], sampling_params=vllm_sampling_params)
+        runner.generate(["Hello world"], sampling_params=aphrodite_sampling_params)
 
         bad_sampling_params = SamplingParams(logprobs=2)
         with pytest.raises(ValueError):
@@ -429,11 +429,11 @@ def test_logprob_token_ids_validate_vocab_bounds_invalid(token_ids: list[int]):
         )
 
 
-def test_none_logprobs(vllm_model, example_prompts):
+def test_none_logprobs(aphrodite_model, example_prompts):
     """Engine should return `logprobs` and `prompt_logprobs` as `None`
 
     Args:
-      vllm_model: Aphrodite model fixture
+      aphrodite_model: Aphrodite model fixture
       example_prompts: list of example prompts (test fixture)
     """
     max_tokens = 5
@@ -444,7 +444,7 @@ def test_none_logprobs(vllm_model, example_prompts):
         prompt_logprobs=None,
         temperature=0.0,
     )
-    results_logprobs_none = vllm_model.llm.generate(
+    results_logprobs_none = aphrodite_model.llm.generate(
         example_prompts,
         sampling_params=sampling_params_logprobs_none,
     )
@@ -457,11 +457,11 @@ def test_none_logprobs(vllm_model, example_prompts):
         assert results_logprobs_none[i].prompt_logprobs is None
 
 
-def test_zero_logprobs(vllm_model, example_prompts):
+def test_zero_logprobs(aphrodite_model, example_prompts):
     """Engine should return sampled token and prompt token logprobs
 
     Args:
-      vllm_model: Aphrodite model fixture
+      aphrodite_model: Aphrodite model fixture
       example_prompts: list of example prompts (test fixture)
     """
     max_tokens = 5
@@ -469,7 +469,7 @@ def test_zero_logprobs(vllm_model, example_prompts):
     sampling_params_logprobs_zero = SamplingParams(
         max_tokens=max_tokens, logprobs=0, prompt_logprobs=0, temperature=0.0
     )
-    results_logprobs_zero = vllm_model.llm.generate(
+    results_logprobs_zero = aphrodite_model.llm.generate(
         example_prompts, sampling_params=sampling_params_logprobs_zero
     )
 
@@ -540,8 +540,8 @@ def test_logprobs_mode(logprobs_mode: LogprobsMode):
         logprobs_mode=logprobs_mode,
     )
     try:
-        vllm_sampling_params = SamplingParams(logprobs=1)
-        results = llm.generate(["Hello world"], sampling_params=vllm_sampling_params)
+        aphrodite_sampling_params = SamplingParams(logprobs=1)
+        results = llm.generate(["Hello world"], sampling_params=aphrodite_sampling_params)
 
         total_token_with_logprobs = 0
         positive_values = 0
@@ -1220,12 +1220,12 @@ def test_prompt_logprobs_with_chunking_and_preemption():
         num_gpu_blocks_override=32,  # Force preemptions
         disable_log_stats=False,
         gpu_memory_utilization=0.25,
-    ) as vllm_model:
-        metrics_before = vllm_model.llm.get_metrics()
+    ) as aphrodite_model:
+        metrics_before = aphrodite_model.llm.get_metrics()
 
         # Generate with prompt logprobs using generate_w_logprobs which
         # returns (output_ids, output_str, output_logprobs, prompt_logprobs)
-        outputs = vllm_model.generate_w_logprobs(
+        outputs = aphrodite_model.generate_w_logprobs(
             prompts, sampling_params=sampling_params, include_prompt_token_ids=True
         )
 
@@ -1252,7 +1252,7 @@ def test_prompt_logprobs_with_chunking_and_preemption():
                     )
 
         # Check that we actually had preemptions
-        metrics_after = vllm_model.llm.get_metrics()
+        metrics_after = aphrodite_model.llm.get_metrics()
         preemptions_before = next(
             (m.value for m in metrics_before if m.name == "aphrodite:num_preemptions"), 0
         )

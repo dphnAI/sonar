@@ -78,7 +78,7 @@ class MLADualRMSNormTestModel(torch.nn.Module):
         return q_out, kv_normed, k_pe
 
     def ops_in_model_before(self):
-        return [torch.ops.vllm_ir.rms_norm.default]
+        return [torch.ops.aphrodite_ir.rms_norm.default]
 
     def ops_in_model_after(self):
         return [torch.ops.aphrodite.fused_mla_dual_rms_norm.default]
@@ -97,7 +97,7 @@ def test_fuse_mla_dual_rms_norm(
 ):
     torch._dynamo.reset()
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
@@ -109,7 +109,7 @@ def test_fuse_mla_dual_rms_norm(
         ),
     )
 
-    with aphrodite.config.set_current_vllm_config(vllm_config), monkeypatch.context() as m:
+    with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
         from aphrodite.compilation.passes.fusion.rocm_aiter_fusion import (
             MLADualRMSNormFusionPass,
         )
@@ -121,11 +121,11 @@ def test_fuse_mla_dual_rms_norm(
         m.setenv("APHRODITE_ROCM_USE_AITER", "1")
         rocm_aiter_ops.refresh_env_variables()
 
-        fusion_pass = MLADualRMSNormFusionPass(vllm_config)
+        fusion_pass = MLADualRMSNormFusionPass(aphrodite_config)
         passes = [
-            NoOpEliminationPass(vllm_config),
+            NoOpEliminationPass(aphrodite_config),
             fusion_pass,
-            PostCleanupPass(vllm_config),
+            PostCleanupPass(aphrodite_config),
         ]
         backend = TestBackend(*passes)
         model = MLADualRMSNormTestModel(hidden_size)

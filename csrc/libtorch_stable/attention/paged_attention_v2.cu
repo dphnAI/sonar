@@ -25,7 +25,7 @@
 #define DIVIDE_ROUND_UP(a, b) (((a) + (b) - 1) / (b))
 
 #define LAUNCH_PAGED_ATTENTION_V2(HEAD_SIZE)                                   \
-  vllm::paged_attention_v2_kernel<T, CACHE_T, HEAD_SIZE, BLOCK_SIZE,           \
+  aphrodite::paged_attention_v2_kernel<T, CACHE_T, HEAD_SIZE, BLOCK_SIZE,           \
                                   NUM_THREADS, KV_DTYPE, IS_BLOCK_SPARSE,      \
                                   PARTITION_SIZE>                              \
       <<<grid, block, shared_mem_size, stream>>>(                              \
@@ -35,14 +35,14 @@
           kv_block_stride, kv_head_stride, k_scale_ptr, v_scale_ptr, tp_rank,  \
           blocksparse_local_blocks, blocksparse_vert_stride,                   \
           blocksparse_block_size, blocksparse_head_sliding_step);              \
-  vllm::paged_attention_v2_reduce_kernel<T, HEAD_SIZE, NUM_THREADS,            \
+  aphrodite::paged_attention_v2_reduce_kernel<T, HEAD_SIZE, NUM_THREADS,            \
                                          PARTITION_SIZE>                       \
       <<<reduce_grid, block, reduce_shared_mem_size, stream>>>(                \
           out_ptr, exp_sums_ptr, max_logits_ptr, tmp_out_ptr, seq_lens_ptr,    \
           max_num_partitions);
 
 template <typename T, typename CACHE_T, int BLOCK_SIZE,
-          vllm::Fp8KVCacheDataType KV_DTYPE, bool IS_BLOCK_SPARSE,
+          aphrodite::Fp8KVCacheDataType KV_DTYPE, bool IS_BLOCK_SPARSE,
           int NUM_THREADS = 128, int PARTITION_SIZE = 512>
 void paged_attention_v2_launcher(
     torch::stable::Tensor& out, torch::stable::Tensor& exp_sums,

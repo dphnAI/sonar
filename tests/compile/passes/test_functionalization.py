@@ -23,8 +23,8 @@ from aphrodite.config import (
     ModelConfig,
     PassConfig,
     AphroditeConfig,
-    get_current_vllm_config,
-    set_current_vllm_config,
+    get_current_aphrodite_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.model_executor.layers.layernorm import RMSNorm
@@ -50,7 +50,7 @@ class TestSiluMul(torch.nn.Module):
                 weight_shape=(hidden_size, hidden_size),
                 activation_quant_key=self.quant_key,
                 weight_quant_key=self.quant_key,
-                input_dtype=get_current_vllm_config().model_config.dtype,
+                input_dtype=get_current_aphrodite_config().model_config.dtype,
             )
 
     def forward(self, x):
@@ -94,7 +94,7 @@ class TestFusedAddRMSNorm(torch.nn.Module):
                 weight_shape=(hidden_size, intermediate_size),
                 activation_quant_key=self.quant_key,
                 weight_quant_key=self.quant_key,
-                input_dtype=get_current_vllm_config().model_config.dtype,
+                input_dtype=get_current_aphrodite_config().model_config.dtype,
             )
 
     def forward(self, hidden_states, residual):
@@ -280,7 +280,7 @@ def test_fix_functionalization(
     torch.set_default_dtype(dtype)
     torch.manual_seed(0)
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
             custom_ops=["all"],
@@ -292,19 +292,19 @@ def test_fix_functionalization(
         ),
     )
 
-    with set_current_vllm_config(vllm_config):
+    with set_current_aphrodite_config(aphrodite_config):
         assert RMSNorm.enabled()
-        noop_pass = NoOpEliminationPass(vllm_config)
-        fusion_pass = RMSNormQuantFusionPass(vllm_config)
-        cleanup_pass = PostCleanupPass(vllm_config)
-        act_quant_fusion_pass = ActivationQuantFusionPass(vllm_config)
+        noop_pass = NoOpEliminationPass(aphrodite_config)
+        fusion_pass = RMSNormQuantFusionPass(aphrodite_config)
+        cleanup_pass = PostCleanupPass(aphrodite_config)
+        act_quant_fusion_pass = ActivationQuantFusionPass(aphrodite_config)
 
         passes = (
             [noop_pass, fusion_pass, act_quant_fusion_pass, cleanup_pass]
             if do_fusion
             else [noop_pass, cleanup_pass]
         )
-        func_pass = FixFunctionalizationPass(vllm_config)
+        func_pass = FixFunctionalizationPass(aphrodite_config)
 
         backend_func = TestBackend(*passes, func_pass)
         backend_no_func = TestBackend(*passes)

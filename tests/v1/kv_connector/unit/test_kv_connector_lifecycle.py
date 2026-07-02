@@ -16,7 +16,7 @@ from aphrodite.v1.kv_cache_interface import KVCacheConfig
 from aphrodite.v1.worker.kv_connector_model_runner_mixin import KVConnectorModelRunnerMixin
 
 # Importing utils registers TestExampleConnector with the factory
-from .utils import create_vllm_config
+from .utils import create_aphrodite_config
 
 
 def _make_empty_scheduler_output():
@@ -35,7 +35,7 @@ def _make_empty_scheduler_output():
 
 
 def test_kv_connector_mixin_clears_metadata():
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         kv_connector="TestExampleConnector",
         kv_role="kv_both",
         kv_connector_extra_config={"name": "unit"},
@@ -54,7 +54,7 @@ def test_kv_connector_mixin_clears_metadata():
         "aphrodite.distributed.parallel_state.get_tp_group",
         return_value=mock_tp_group,
     ):
-        ensure_kv_transfer_initialized(vllm_config, kv_cache_config)
+        ensure_kv_transfer_initialized(aphrodite_config, kv_cache_config)
 
     try:
         # Minimal scheduler output with empty metadata; mixin should still
@@ -63,7 +63,7 @@ def test_kv_connector_mixin_clears_metadata():
 
         # Invoke the no-forward path which uses the mixin context manager
         KVConnectorModelRunnerMixin.kv_connector_no_forward(
-            scheduler_output, vllm_config
+            scheduler_output, aphrodite_config
         )
 
         # Verify clear_connector_metadata was called on the connector

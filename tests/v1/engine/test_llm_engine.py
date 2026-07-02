@@ -18,14 +18,14 @@ MODEL = "facebook/opt-125m"
 DTYPE = "half"
 
 
-def _vllm_model(
+def _aphrodite_model(
     apc: bool,
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     *,
     skip_tokenizer_init: bool = False,
 ):
     """Set up AphroditeRunner instance."""
-    return vllm_runner(
+    return aphrodite_runner(
         MODEL,
         dtype=DTYPE,
         max_model_len=128,
@@ -43,17 +43,17 @@ def _vllm_model(
     # Prefix caching
     params=[False, True],
 )
-def vllm_model(vllm_runner, request):
+def aphrodite_model(aphrodite_runner, request):
     """AphroditeRunner test fixture parameterized by APC True/False."""
-    with _vllm_model(request.param, vllm_runner) as vllm_model:
-        yield vllm_model
+    with _aphrodite_model(request.param, aphrodite_runner) as aphrodite_model:
+        yield aphrodite_model
 
 
 @pytest.fixture(scope="function")
-def vllm_model_apc(vllm_runner):
+def aphrodite_model_apc(aphrodite_runner):
     """AphroditeRunner test fixture with APC."""
-    with _vllm_model(True, vllm_runner) as vllm_model:
-        yield vllm_model
+    with _aphrodite_model(True, aphrodite_runner) as aphrodite_model:
+        yield aphrodite_model
 
 
 @pytest.fixture(
@@ -63,14 +63,14 @@ def vllm_model_apc(vllm_runner):
     # Prefix caching
     params=[False, True],
 )
-def vllm_model_skip_tokenizer_init(vllm_runner, request):
+def aphrodite_model_skip_tokenizer_init(aphrodite_runner, request):
     """AphroditeRunner test fixture with APC."""
-    with _vllm_model(
+    with _aphrodite_model(
         request.param,
-        vllm_runner,
+        aphrodite_runner,
         skip_tokenizer_init=True,
-    ) as vllm_model:
-        yield vllm_model
+    ) as aphrodite_model:
+        yield aphrodite_model
 
 
 def _get_test_sampling_params(
@@ -106,7 +106,7 @@ def _get_test_sampling_params(
 
 
 def test_compatibility_with_skip_tokenizer_init(
-    vllm_model_skip_tokenizer_init: AphroditeRunner,
+    aphrodite_model_skip_tokenizer_init: AphroditeRunner,
     example_prompts: list[str],
 ):
     # Case 1: Structured output request should raise an error.
@@ -114,20 +114,20 @@ def test_compatibility_with_skip_tokenizer_init(
         example_prompts,
         structured_outputs=True,
     )
-    llm: LLM = vllm_model_skip_tokenizer_init.llm
+    llm: LLM = aphrodite_model_skip_tokenizer_init.llm
     with pytest.raises(ValueError):
         _ = llm.generate(example_prompts, sampling_params_list)
 
 
-def test_parallel_sampling(vllm_model, example_prompts) -> None:
+def test_parallel_sampling(aphrodite_model, example_prompts) -> None:
     """Test passes if parallel sampling `n>1` yields `n` unique completions.
 
     Args:
-      vllm_model: AphroditeRunner instance under test.
+      aphrodite_model: AphroditeRunner instance under test.
       example_prompt: test fixture providing prompts for testing.
     """
     sampling_params_list, n_list = _get_test_sampling_params(example_prompts)
-    llm: LLM = vllm_model.llm
+    llm: LLM = aphrodite_model.llm
     outputs = llm.generate(example_prompts, sampling_params_list)
 
     # Validate each request response
@@ -150,7 +150,7 @@ def test_parallel_sampling(vllm_model, example_prompts) -> None:
             )
 
 
-def test_engine_metrics(vllm_runner, example_prompts):
+def test_engine_metrics(aphrodite_runner, example_prompts):
     max_tokens = 100
     # Use spec decoding to test num_accepted_tokens_per_pos
     speculative_config = {
@@ -160,12 +160,12 @@ def test_engine_metrics(vllm_runner, example_prompts):
         "num_speculative_tokens": 5,
     }
 
-    with vllm_runner(
+    with aphrodite_runner(
         MODEL,
         speculative_config=speculative_config,
         disable_log_stats=False,
-    ) as vllm_model:
-        llm: LLM = vllm_model.llm
+    ) as aphrodite_model:
+        llm: LLM = aphrodite_model.llm
         sampling_params = SamplingParams(temperature=0.0, max_tokens=max_tokens)
         outputs = llm.generate(example_prompts, sampling_params)
 

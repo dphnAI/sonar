@@ -6,7 +6,7 @@ import torch
 from aphrodite.v1.worker.utils import bind_kv_cache
 
 
-def test_bind_kv_cache(default_vllm_config):
+def test_bind_kv_cache(default_aphrodite_config):
     from aphrodite.model_executor.layers.attention import Attention
 
     ctx = {
@@ -34,7 +34,7 @@ def test_bind_kv_cache(default_vllm_config):
     assert runner_kv_caches[3] is kv_cache["layers.3.self_attn"]
 
 
-def test_bind_kv_cache_non_attention(default_vllm_config):
+def test_bind_kv_cache_non_attention(default_aphrodite_config):
     from aphrodite.model_executor.layers.attention import Attention
 
     # example from Jamba PP=2
@@ -57,7 +57,7 @@ def test_bind_kv_cache_non_attention(default_vllm_config):
     assert runner_kv_caches[1] is kv_cache["model.layers.28.attn"]
 
 
-def test_bind_kv_cache_draft_model(default_vllm_config):
+def test_bind_kv_cache_draft_model(default_aphrodite_config):
     from aphrodite.model_executor.layers.attention import Attention
 
     layer_names = [

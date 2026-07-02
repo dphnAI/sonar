@@ -15,26 +15,26 @@ from aphrodite.config import PoolerConfig
 @pytest.mark.parametrize("dtype", ["half"])
 def test_classify_models_using_activation(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model: str,
     dtype: str,
 ) -> None:
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         max_model_len=512,
         dtype=dtype,
         pooler_config=PoolerConfig(use_activation=False),
-    ) as vllm_model:
-        wo_activation_out = vllm_model.classify(example_prompts)
+    ) as aphrodite_model:
+        wo_activation_out = aphrodite_model.classify(example_prompts)
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         max_model_len=512,
         dtype=dtype,
         pooler_config=PoolerConfig(use_activation=True),
-    ) as vllm_model:
-        w_activation_out = vllm_model.classify(example_prompts)
+    ) as aphrodite_model:
+        w_activation_out = aphrodite_model.classify(example_prompts)
 
     for wo_activation, w_activation in zip(wo_activation_out, w_activation_out):
         wo_activation = torch.tensor(wo_activation)
@@ -57,26 +57,26 @@ def test_classify_models_using_activation(
 @pytest.mark.parametrize("dtype", ["half"])
 def test_embed_models_using_normalize(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model: str,
     dtype: str,
 ) -> None:
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         max_model_len=512,
         dtype=dtype,
         pooler_config=PoolerConfig(use_activation=False),
-    ) as vllm_model:
-        wo_normalize = torch.tensor(vllm_model.embed(example_prompts))
+    ) as aphrodite_model:
+        wo_normalize = torch.tensor(aphrodite_model.embed(example_prompts))
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         max_model_len=512,
         dtype=dtype,
         pooler_config=PoolerConfig(use_activation=True),
-    ) as vllm_model:
-        w_normalize = torch.tensor(vllm_model.embed(example_prompts))
+    ) as aphrodite_model:
+        w_normalize = torch.tensor(aphrodite_model.embed(example_prompts))
 
     assert not torch.allclose(wo_normalize, w_normalize, atol=1e-2), (
         "pooler_config normalize is not working"
@@ -95,26 +95,26 @@ def test_embed_models_using_normalize(
 @pytest.mark.parametrize("dtype", ["half"])
 def test_reward_models_using_activation(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model: str,
     dtype: str,
 ) -> None:
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         max_model_len=1024,
         dtype=dtype,
         pooler_config=PoolerConfig(use_activation=False),
-    ) as vllm_model:
-        wo_activation = vllm_model.token_classify(example_prompts)
+    ) as aphrodite_model:
+        wo_activation = aphrodite_model.token_classify(example_prompts)
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         max_model_len=1024,
         dtype=dtype,
         pooler_config=PoolerConfig(use_activation=True),
-    ) as vllm_model:
-        w_activation = vllm_model.token_classify(example_prompts)
+    ) as aphrodite_model:
+        w_activation = aphrodite_model.token_classify(example_prompts)
 
     for wo, w in zip(wo_activation, w_activation):
         wo = torch.tensor(wo)
@@ -137,26 +137,26 @@ def test_reward_models_using_activation(
 @pytest.mark.parametrize("dtype", ["half"])
 def test_multi_vector_retrieval_models_using_normalize(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     example_prompts,
     model: str,
     dtype: str,
 ) -> None:
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         max_model_len=512,
         dtype=dtype,
         pooler_config=PoolerConfig(use_activation=False, task="token_embed"),
-    ) as vllm_model:
-        wo_normalize = vllm_model.token_embed(example_prompts)
+    ) as aphrodite_model:
+        wo_normalize = aphrodite_model.token_embed(example_prompts)
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         max_model_len=512,
         dtype=dtype,
         pooler_config=PoolerConfig(use_activation=True, task="token_embed"),
-    ) as vllm_model:
-        w_normalize = vllm_model.token_embed(example_prompts)
+    ) as aphrodite_model:
+        w_normalize = aphrodite_model.token_embed(example_prompts)
 
     for wo, w in zip(wo_normalize, w_normalize):
         assert not torch.allclose(wo, w, atol=1e-2), (

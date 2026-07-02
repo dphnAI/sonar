@@ -651,7 +651,7 @@ class TestHelionKernelWrapper:
             # Init must have detected GPU and built the kernel
             mock_gpu.assert_called_once()
             assert wrapper._configured_kernel is not None
-            assert hasattr(torch.ops.vllm_helion, wrapper.op_name)
+            assert hasattr(torch.ops.aphrodite_helion, wrapper.op_name)
 
     @pytest.mark.skipif(
         _HOP_AVAILABLE, reason="CustomOp path not used when HOP available"
@@ -681,7 +681,7 @@ class TestHelionKernelWrapper:
                 "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
                 return_value="nvidia_h200",
             ),
-            patch.object(torch.ops, "vllm_helion", mock_namespace),
+            patch.object(torch.ops, "aphrodite_helion", mock_namespace),
             patch("aphrodite.kernels.helion.register.helion.kernel") as mock_kernel,
         ):
             mock_decorated = Mock()
@@ -735,7 +735,7 @@ class TestHelionKernelWrapper:
                 "aphrodite.kernels.helion.utils.get_canonical_gpu_name",
                 return_value="nvidia_h200",
             ),
-            patch.object(torch.ops, "vllm_helion", mock_namespace),
+            patch.object(torch.ops, "aphrodite_helion", mock_namespace),
             patch(
                 "aphrodite.kernels.helion.register.direct_register_custom_op",
                 side_effect=register_side_effect,

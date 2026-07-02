@@ -30,7 +30,7 @@ def use_spawn_for_whisper(monkeypatch):
 
 def run_test(
     hf_runner: type[HfRunner],
-    vllm_runner: type[AphroditeRunner],
+    aphrodite_runner: type[AphroditeRunner],
     inputs: Sequence[tuple[list[str], list[str], PromptAudioInput]],
     model: str,
     *,
@@ -50,7 +50,7 @@ def run_test(
     For aphrodite runner, we provide MultiModalDataDict objects
     and corresponding MultiModalConfig as input.
     """
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         dtype=dtype,
         max_model_len=max_model_len,
@@ -60,15 +60,15 @@ def run_test(
         enforce_eager=enforce_eager,
         gpu_memory_utilization=gpu_memory_utilization,
         disable_custom_all_reduce=True,
-    ) as vllm_model:
-        vllm_outputs_per_case = [
-            vllm_model.generate_greedy_logprobs(
-                vllm_prompts,
+    ) as aphrodite_model:
+        aphrodite_outputs_per_case = [
+            aphrodite_model.generate_greedy_logprobs(
+                aphrodite_prompts,
                 max_tokens,
                 num_logprobs=num_logprobs,
                 audios=audios,
             )
-            for vllm_prompts, _, audios in inputs
+            for aphrodite_prompts, _, audios in inputs
         ]
 
     with hf_runner(model, dtype=dtype, auto_cls=AutoModelForSpeechSeq2Seq) as hf_model:
@@ -82,10 +82,10 @@ def run_test(
             for _, hf_prompts, audios in inputs
         ]
 
-    for hf_outputs, vllm_outputs in zip(hf_outputs_per_case, vllm_outputs_per_case):
+    for hf_outputs, aphrodite_outputs in zip(hf_outputs_per_case, aphrodite_outputs_per_case):
         check_logprobs_close(
             outputs_0_lst=hf_outputs,
-            outputs_1_lst=vllm_outputs,
+            outputs_1_lst=aphrodite_outputs,
             name_0="hf",
             name_1="aphrodite",
         )
@@ -131,7 +131,7 @@ def check_model_available(model: str) -> None:
 def test_beam_search_encoder_decoder(
     monkeypatch,
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     dtype: str,
     max_tokens: int,
     beam_width: int,
@@ -158,7 +158,7 @@ def test_beam_search_encoder_decoder(
         )
 
     # Test both explicit encoder/decoder prompts
-    vllm_prompts = [
+    aphrodite_prompts = [
         # Implicit encoder/decoder prompt
         {
             "prompt": "<|startoftranscript|>",
@@ -174,7 +174,7 @@ def test_beam_search_encoder_decoder(
         },
     ]
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         dtype="half",
         max_model_len=448,
@@ -182,37 +182,37 @@ def test_beam_search_encoder_decoder(
         max_num_seqs=4,
         limit_mm_per_prompt={"audio": 2},
         enforce_eager=True,
-    ) as vllm_model:
-        vllm_outputs = vllm_model.generate_beam_search(
-            vllm_prompts,
+    ) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.generate_beam_search(
+            aphrodite_prompts,
             beam_width=beam_width,
             max_tokens=max_tokens,
         )
 
-    for i in range(len(vllm_prompts)):
+    for i in range(len(aphrodite_prompts)):
         hf_output_ids, hf_output_texts = hf_outputs[i]
-        vllm_output_ids, vllm_output_texts = vllm_outputs[i]
+        aphrodite_output_ids, aphrodite_output_texts = aphrodite_outputs[i]
 
-        for j, (hf_text, vllm_text) in enumerate(
-            zip(hf_output_texts, vllm_output_texts)
+        for j, (hf_text, aphrodite_text) in enumerate(
+            zip(hf_output_texts, aphrodite_output_texts)
         ):
             print(f">>>{j}-th hf output [NOTE: special tokens are filtered]:")
             print(hf_text)
             print(f">>>{j}-th aphrodite output:")
-            print(vllm_text)
+            print(aphrodite_text)
 
         # Check that we got the same number of beams
-        assert len(hf_output_ids) == len(vllm_output_ids)
+        assert len(hf_output_ids) == len(aphrodite_output_ids)
 
         # For encoder-decoder models, we primarily want to verify that:
         # 1. Beam search completes without errors
         # 2. We get the expected number of beams
         # 3. Outputs are reasonable (non-empty, diverse beams)
-        for j in range(len(vllm_output_ids)):
+        for j in range(len(aphrodite_output_ids)):
             # Check that outputs are not empty
-            assert len(vllm_output_ids[j]) > 0, f"Prompt {i}, beam {j}: empty output"
+            assert len(aphrodite_output_ids[j]) > 0, f"Prompt {i}, beam {j}: empty output"
             # Check that decoded text is not empty
-            assert len(vllm_output_texts[j].strip()) > 0, (
+            assert len(aphrodite_output_texts[j].strip()) > 0, (
                 f"Prompt {i}, beam {j}: empty text output"
             )
 
@@ -266,7 +266,7 @@ def test_parse_language_detection_output():
 @pytest.mark.parametrize("enforce_eager", [True, False])
 def test_models(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     dtype: str,
     num_logprobs: int,
@@ -278,7 +278,7 @@ def test_models(
         pytest.skip("Skipping test for CPU with non-eager mode")
     run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         input_audios,
         model,
         dtype=dtype,
@@ -300,7 +300,7 @@ def test_models(
 @create_new_process_for_each_test("spawn")
 def test_models_distributed(
     hf_runner,
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     distributed_executor_backend: str,
     dtype: str,
@@ -311,7 +311,7 @@ def test_models_distributed(
     check_model_available(model)
     run_test(
         hf_runner,
-        vllm_runner,
+        aphrodite_runner,
         input_audios,
         model,
         dtype=dtype,
@@ -328,7 +328,7 @@ def test_models_distributed(
 @pytest.mark.core_model
 @pytest.mark.parametrize("model", ["openai/whisper-large-v3-turbo"])
 def test_encoder_cache_cleanup(
-    vllm_runner,
+    aphrodite_runner,
     model: str,
     input_audios,
     monkeypatch,
@@ -343,21 +343,21 @@ def test_encoder_cache_cleanup(
     monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
     check_model_available(model)
 
-    with vllm_runner(
+    with aphrodite_runner(
         model,
         dtype="half",
         max_model_len=448,
         tensor_parallel_size=1,
         limit_mm_per_prompt={"audio": 2},
         enforce_eager=True,
-    ) as vllm_model:
-        engine_core = vllm_model.llm.llm_engine.engine_core.engine_core
+    ) as aphrodite_model:
+        engine_core = aphrodite_model.llm.llm_engine.engine_core.engine_core
         model_runner = engine_core.model_executor.driver_worker.worker.model_runner
         encoder_cache = model_runner.encoder_cache
 
         # Run multiple sequential requests to ensure cache is properly managed
-        for vllm_prompts, _, audios in input_audios:
-            vllm_model.generate_greedy(vllm_prompts, max_tokens=50, audios=audios)
+        for aphrodite_prompts, _, audios in input_audios:
+            aphrodite_model.generate_greedy(aphrodite_prompts, max_tokens=50, audios=audios)
 
         # After all requests complete, encoder cache should be empty
         cache_size = len(encoder_cache)

@@ -29,7 +29,7 @@ from aphrodite.v1.utils import APIServerProcessManager
 class _StubEngineCoreActor(EngineCoreActorMixin):
     def __init__(
         self,
-        vllm_config: Any,
+        aphrodite_config: Any,
         local_client: bool,
         addresses: EngineZmqAddresses,
         executor_class: type[Any],
@@ -39,10 +39,10 @@ class _StubEngineCoreActor(EngineCoreActorMixin):
     ):
         # Exercise the production Ray actor mixin without loading a model.
         EngineCoreActorMixin.__init__(
-            self, vllm_config, addresses, dp_rank, local_dp_rank
+            self, aphrodite_config, addresses, dp_rank, local_dp_rank
         )
 
-    def _set_visible_devices(self, vllm_config: Any, local_dp_rank: int) -> None:
+    def _set_visible_devices(self, aphrodite_config: Any, local_dp_rank: int) -> None:
         pass
 
     def wait_for_init(self) -> None:
@@ -112,7 +112,7 @@ def test_background_resources_passes_worker_shutdown_timeout(
     engine_manager.shutdown.assert_called_once_with(timeout=timeout)
 
 
-def _make_vllm_config() -> SimpleNamespace:
+def _make_aphrodite_config() -> SimpleNamespace:
     return SimpleNamespace(
         parallel_config=SimpleNamespace(
             data_parallel_size=1,
@@ -167,7 +167,7 @@ def test_driver_nixl_side_channel_host_does_not_leak_to_engine_core_actor(
     created_placement_groups: list[Any] = []
     manager: CoreEngineActorManager | None = None
 
-    def create_dp_placement_groups(vllm_config: Any):
+    def create_dp_placement_groups(aphrodite_config: Any):
         pg = _make_cpu_placement_group()
         created_placement_groups.append(pg)
         return [pg], [0]
@@ -182,7 +182,7 @@ def test_driver_nixl_side_channel_host_does_not_leak_to_engine_core_actor(
 
     try:
         manager = CoreEngineActorManager(
-            vllm_config=_make_vllm_config(),
+            aphrodite_config=_make_aphrodite_config(),
             addresses=_make_addresses(),
             executor_class=_DummyExecutor,
             log_stats=False,
@@ -220,8 +220,8 @@ def ray_context_dp2():
         ray.shutdown()
 
 
-def _make_vllm_config_ray_dp_multinode() -> SimpleNamespace:
-    """Minimal vllm_config that drives the Ray-DP multi-API-server path:
+def _make_aphrodite_config_ray_dp_multinode() -> SimpleNamespace:
+    """Minimal aphrodite_config that drives the Ray-DP multi-API-server path:
     ``data_parallel_size != data_parallel_size_local`` forces TCP placeholders
     (multi-node fan-out), and ``data_parallel_backend="ray"`` routes
     ``launch_core_engines`` through the Ray branch.
@@ -272,7 +272,7 @@ def test_ray_dp_addresses_resolved_before_actor_creation(
     """
     created_placement_groups: list[Any] = []
 
-    def create_dp_placement_groups(vllm_config: Any):
+    def create_dp_placement_groups(aphrodite_config: Any):
         pg1 = _make_cpu_placement_group()
         pg2 = _make_cpu_placement_group()
         created_placement_groups.extend([pg1, pg2])
@@ -285,14 +285,14 @@ def test_ray_dp_addresses_resolved_before_actor_creation(
         staticmethod(create_dp_placement_groups),
     )
 
-    vllm_config = _make_vllm_config_ray_dp_multinode()
+    aphrodite_config = _make_aphrodite_config_ray_dp_multinode()
 
     # Mirror run_multi_api_server's address-allocation logic. The Ray DP
     # carve-out forces pre-allocation so the addresses pickled into engine
     # actors at .remote() time are real, not ``tcp://host:0``.
-    is_ray_dp = vllm_config.parallel_config.data_parallel_backend == "ray"
+    is_ray_dp = aphrodite_config.parallel_config.data_parallel_backend == "ray"
     addresses = get_engine_zmq_addresses(
-        vllm_config,
+        aphrodite_config,
         num_api_servers=2,
         defer_api_server_ports=not is_ray_dp,
     )
@@ -304,7 +304,7 @@ def test_ray_dp_addresses_resolved_before_actor_creation(
     try:
         # Ray actors are spawned here, pickling ``addresses`` into each one.
         with launch_core_engines(
-            vllm_config,
+            aphrodite_config,
             executor_class=_DummyExecutor,
             log_stats=False,
             addresses=addresses,

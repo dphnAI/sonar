@@ -6,7 +6,7 @@
 #include "../../dispatch_utils.h"
 #include "quant_conversions.cuh"
 
-namespace vllm {
+namespace aphrodite {
 
 // Logic: one thread block per (token, group) pair
 
@@ -99,10 +99,10 @@ __global__ void silu_and_mul_per_block_quant_kernel(
 
   // Step 4: Quantize and write output
   token_output[tid] =
-      vllm::ScaledQuant<scalar_out_t, false>::quant_fn(result, group_scale);
+      aphrodite::ScaledQuant<scalar_out_t, false>::quant_fn(result, group_scale);
 }
 
-}  // namespace vllm
+}  // namespace aphrodite
 
 void silu_and_mul_per_block_quant(torch::stable::Tensor& out,
                                   torch::stable::Tensor const& input,
@@ -156,7 +156,7 @@ void silu_and_mul_per_block_quant(torch::stable::Tensor& out,
               APHRODITE_STABLE_DISPATCH_GROUP_SIZE(group_size, gs, [&] {
                 APHRODITE_STABLE_DISPATCH_BOOL(
                     is_scale_transposed, transpose_scale, [&] {
-                      vllm::silu_and_mul_per_block_quant_kernel<
+                      aphrodite::silu_and_mul_per_block_quant_kernel<
                           scalar_in_t, scalar_out_t, transpose_scale, gs>
                           <<<grid, block, 0, stream>>>(
                               out.mutable_data_ptr<scalar_out_t>(),

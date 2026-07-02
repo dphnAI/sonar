@@ -38,9 +38,9 @@ logger = logging.getLogger(__name__)
 
 
 ####### Aphrodite output processors functions
-def blip2_vllm_to_hf_output(vllm_output: RunnerOutput, model: str) -> RunnerOutput:
+def blip2_aphrodite_to_hf_output(aphrodite_output: RunnerOutput, model: str) -> RunnerOutput:
     """Sanitize aphrodite output [blip2 models] to be comparable with hf output."""
-    _, output_str, out_logprobs = vllm_output
+    _, output_str, out_logprobs = aphrodite_output
 
     hf_output_str = output_str + "\n"
 
@@ -52,69 +52,69 @@ def blip2_vllm_to_hf_output(vllm_output: RunnerOutput, model: str) -> RunnerOutp
     return hf_output_ids, hf_output_str, out_logprobs
 
 
-def fuyu_vllm_to_hf_output(vllm_output: RunnerOutput, model: str) -> RunnerOutput:
+def fuyu_aphrodite_to_hf_output(aphrodite_output: RunnerOutput, model: str) -> RunnerOutput:
     """Sanitize aphrodite output [fuyu models] to be comparable with hf output."""
-    output_ids, output_str, out_logprobs = vllm_output
+    output_ids, output_str, out_logprobs = aphrodite_output
 
     hf_output_str = output_str.lstrip() + "|ENDOFTEXT|"
 
     return output_ids, hf_output_str, out_logprobs
 
 
-def qwen_vllm_to_hf_output(
-    vllm_output: RunnerOutput, model: str
+def qwen_aphrodite_to_hf_output(
+    aphrodite_output: RunnerOutput, model: str
 ) -> tuple[list[int], str, SampleLogprobs | None]:
     """Sanitize aphrodite output [qwen models] to be comparable with hf output."""
-    output_ids, output_str, out_logprobs = vllm_output
+    output_ids, output_str, out_logprobs = aphrodite_output
 
     hf_output_str = output_str + "<|endoftext|>"
 
     return output_ids, hf_output_str, out_logprobs
 
 
-def qwen2_vllm_to_hf_output(
-    vllm_output: RunnerOutput, model: str
+def qwen2_aphrodite_to_hf_output(
+    aphrodite_output: RunnerOutput, model: str
 ) -> tuple[list[int], str, SampleLogprobs | None]:
     """Sanitize aphrodite output [qwen2 models] to be comparable with hf output."""
-    output_ids, output_str, out_logprobs = vllm_output
+    output_ids, output_str, out_logprobs = aphrodite_output
 
     hf_output_str = output_str + "<|im_end|>"
 
     return output_ids, hf_output_str, out_logprobs
 
 
-def kimiv_vl_vllm_to_hf_output(
-    vllm_output: RunnerOutput, model: str
+def kimiv_vl_aphrodite_to_hf_output(
+    aphrodite_output: RunnerOutput, model: str
 ) -> tuple[list[int], str, SampleLogprobs | None]:
     """Sanitize aphrodite output [kimi_vl models] to be comparable with hf output."""
-    output_ids, output_str, out_logprobs = vllm_output
+    output_ids, output_str, out_logprobs = aphrodite_output
 
     hf_output_str = output_str + "<|im_end|>[EOS]"
 
     return output_ids, hf_output_str, out_logprobs
 
 
-def llava_image_vllm_to_hf_output(
-    vllm_output: RunnerOutput, model: str
+def llava_image_aphrodite_to_hf_output(
+    aphrodite_output: RunnerOutput, model: str
 ) -> RunnerOutput:
     config = AutoConfig.from_pretrained(model)
     mm_token_id = config.image_token_index
-    return _llava_vllm_to_hf_output(vllm_output, model, mm_token_id)
+    return _llava_aphrodite_to_hf_output(aphrodite_output, model, mm_token_id)
 
 
-def llava_video_vllm_to_hf_output(
-    vllm_output: RunnerOutput, model: str
+def llava_video_aphrodite_to_hf_output(
+    aphrodite_output: RunnerOutput, model: str
 ) -> tuple[list[int], str, SampleLogprobs | None]:
     config = AutoConfig.from_pretrained(model)
     mm_token_id = config.video_token_index
-    return _llava_vllm_to_hf_output(vllm_output, model, mm_token_id)
+    return _llava_aphrodite_to_hf_output(aphrodite_output, model, mm_token_id)
 
 
-def _llava_vllm_to_hf_output(
-    vllm_output: RunnerOutput, model: str, mm_token_id: int
+def _llava_aphrodite_to_hf_output(
+    aphrodite_output: RunnerOutput, model: str, mm_token_id: int
 ) -> RunnerOutput:
     """Sanitize aphrodite output [Llava models] to be comparable with hf output."""
-    output_ids, output_str, out_logprobs = vllm_output
+    output_ids, output_str, out_logprobs = aphrodite_output
 
     tokenizer = AutoTokenizer.from_pretrained(model)
     eos_token_id = tokenizer.eos_token_id
@@ -142,11 +142,11 @@ def llava_onevision_hf_model_kwargs(model: str) -> dict:
     return config.to_dict()
 
 
-def llava_onevision_vllm_to_hf_output(
-    vllm_output: RunnerOutput, model: str
+def llava_onevision_aphrodite_to_hf_output(
+    aphrodite_output: RunnerOutput, model: str
 ) -> RunnerOutput:
     """Sanitize aphrodite output [llava-onevision] to compare with hf output."""
-    output_ids, output_str, out_logprobs = vllm_output
+    output_ids, output_str, out_logprobs = aphrodite_output
 
     config = AutoConfig.from_pretrained(model)
     video_token_id = config.video_token_index
@@ -167,9 +167,9 @@ def llava_onevision_vllm_to_hf_output(
     return hf_output_ids, hf_output_str, out_logprobs
 
 
-def phi3v_vllm_to_hf_output(vllm_output: RunnerOutput, model: str) -> RunnerOutput:
+def phi3v_aphrodite_to_hf_output(aphrodite_output: RunnerOutput, model: str) -> RunnerOutput:
     """Sanitize aphrodite output [phi3v] to be comparable with hf output."""
-    _, output_str, out_logprobs = vllm_output
+    _, output_str, out_logprobs = aphrodite_output
 
     output_str_without_image = re.sub(r"(<\|image_\d+\|>)+", "", output_str)
     assert output_str_without_image[0] == " "
@@ -185,9 +185,9 @@ def phi3v_vllm_to_hf_output(vllm_output: RunnerOutput, model: str) -> RunnerOutp
     return hf_output_ids, hf_output_str, out_logprobs
 
 
-def paligemma_vllm_to_hf_output(vllm_output: RunnerOutput, model: str) -> RunnerOutput:
+def paligemma_aphrodite_to_hf_output(aphrodite_output: RunnerOutput, model: str) -> RunnerOutput:
     """Sanitize aphrodite output to be comparable with hf output."""
-    output_ids, output_str, out_logprobs = vllm_output
+    output_ids, output_str, out_logprobs = aphrodite_output
 
     config = AutoConfig.from_pretrained(model)
     image_token_id = config.image_token_index
@@ -333,9 +333,9 @@ def gemma3_patch_hf_runner(hf_model: HfRunner) -> HfRunner:
     return hf_model
 
 
-def gemma3_vllm_to_hf_output(vllm_output: RunnerOutput, model: str) -> RunnerOutput:
+def gemma3_aphrodite_to_hf_output(aphrodite_output: RunnerOutput, model: str) -> RunnerOutput:
     """Sanitize aphrodite output [gemma-3] to compare with hf output."""
-    output_ids, output_str, out_logprobs = vllm_output
+    output_ids, output_str, out_logprobs = aphrodite_output
 
     config = AutoConfig.from_pretrained(model)
     image_token_id = config.image_token_id

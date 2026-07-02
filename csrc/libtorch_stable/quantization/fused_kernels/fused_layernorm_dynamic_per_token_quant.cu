@@ -5,7 +5,7 @@
 #include "layernorm_utils.cuh"
 #include "quant_conversions.cuh"
 
-namespace vllm {
+namespace aphrodite {
 
 template <typename scalar_t, typename scalar_out_t, bool has_residual = false>
 __device__ void rms_norm_dynamic_per_token_quant_vec(
@@ -19,11 +19,11 @@ __device__ void rms_norm_dynamic_per_token_quant_vec(
   float token_scale = 0.0f;
 
   // Compute rms
-  vllm::vectorized::compute_rms<scalar_t, has_residual>(
+  aphrodite::vectorized::compute_rms<scalar_t, has_residual>(
       &rms, input, hidden_size, input_stride, var_epsilon, residual);
 
   // Compute scale
-  vllm::vectorized::compute_dynamic_per_token_scales<scalar_t, scalar_out_t,
+  aphrodite::vectorized::compute_dynamic_per_token_scales<scalar_t, scalar_out_t,
                                                      has_residual>(
       &token_scale, scales, input, weight, rms, scale_ub, hidden_size,
       input_stride, residual);
@@ -31,13 +31,13 @@ __device__ void rms_norm_dynamic_per_token_quant_vec(
   // RMS Norm + Quant
   if constexpr (std::is_same_v<scalar_out_t, int8_t>) {
     token_scale = 1.0f / token_scale;
-    vllm::vectorized::norm_and_quant<scalar_t, scalar_out_t, true,
+    aphrodite::vectorized::norm_and_quant<scalar_t, scalar_out_t, true,
                                      has_residual>(out, input, weight, rms,
                                                    &token_scale, hidden_size,
                                                    input_stride, residual);
   } else {
     // FP8 - Do not invert token_scale for exact match with FBGemm
-    vllm::vectorized::norm_and_quant<scalar_t, scalar_out_t, false,
+    aphrodite::vectorized::norm_and_quant<scalar_t, scalar_out_t, false,
                                      has_residual>(out, input, weight, rms,
                                                    &token_scale, hidden_size,
                                                    input_stride, residual);
@@ -68,22 +68,22 @@ __global__ void rms_norm_dynamic_per_token_quant_kernel(
   float token_scale = 0.0f;
 
   // Compute RMS
-  vllm::compute_rms<scalar_t, has_residual>(
+  aphrodite::compute_rms<scalar_t, has_residual>(
       &rms, input, hidden_size, input_stride, var_epsilon, residual);
   // Compute Scale
-  vllm::compute_dynamic_per_token_scales<scalar_t, scalar_out_t, has_residual>(
+  aphrodite::compute_dynamic_per_token_scales<scalar_t, scalar_out_t, has_residual>(
       &token_scale, scales, input, weight, rms, scale_ub, hidden_size,
       input_stride, residual);
 
   // RMS Norm + Quant
   if constexpr (std::is_same_v<scalar_out_t, int8_t>) {
     token_scale = 1.0f / token_scale;
-    vllm::norm_and_quant<scalar_t, scalar_out_t, true, has_residual>(
+    aphrodite::norm_and_quant<scalar_t, scalar_out_t, true, has_residual>(
         out, input, weight, rms, &token_scale, hidden_size, input_stride,
         residual);
   } else {
     // FP8 - Do not invert s_token_scale for exact match with FBGemm
-    vllm::norm_and_quant<scalar_t, scalar_out_t, false, has_residual>(
+    aphrodite::norm_and_quant<scalar_t, scalar_out_t, false, has_residual>(
         out, input, weight, rms, &token_scale, hidden_size, input_stride,
         residual);
   }
@@ -105,12 +105,12 @@ __global__ void rms_norm_per_block_quant_kernel(
   float rms;
   // Compute RMS
   // Always able to vectorize due to constraints on hidden_size
-  vllm::vectorized::compute_rms<scalar_t, has_residual>(
+  aphrodite::vectorized::compute_rms<scalar_t, has_residual>(
       &rms, input, hidden_size, input_stride, var_epsilon, residual);
 
   // Compute Scale
   // Always able to vectorize due to constraints on hidden_size and group_size
-  vllm::vectorized::compute_dynamic_per_token_scales<
+  aphrodite::vectorized::compute_dynamic_per_token_scales<
       scalar_t, scalar_out_t, has_residual, is_scale_transposed, group_size>(
       nullptr, scales, input, weight, rms, scale_ub, hidden_size, input_stride,
       residual, outer_scale_stride);
@@ -121,14 +121,14 @@ __global__ void rms_norm_per_block_quant_kernel(
   // kernel. We do it because particular elements of token_scale can be shared
   // between multiple threads, so this way, we avoid extra synchronization
   // overhead.
-  vllm::vectorized::norm_and_quant<
+  aphrodite::vectorized::norm_and_quant<
       scalar_t, scalar_out_t, std::is_same_v<scalar_out_t, int8_t>,
       has_residual, is_scale_transposed, group_size>(
       out, input, weight, rms, scales, hidden_size, input_stride, residual,
       outer_scale_stride);
 }
 
-}  // namespace vllm
+}  // namespace aphrodite
 
 // Residual add + RMS norm + dynamic per token
 template <typename scalar_in_t>
@@ -154,7 +154,7 @@ void rms_norm_dynamic_per_token_quant_dispatch(
   APHRODITE_STABLE_DISPATCH_BOOL(residual.has_value(), has_residual, [&] {
     APHRODITE_STABLE_DISPATCH_QUANT_TYPES(
         out.scalar_type(), "rms_norm_dynamic_per_token_quant_kernel", [&] {
-          vllm::rms_norm_dynamic_per_token_quant_kernel<scalar_in_t, scalar_t,
+          aphrodite::rms_norm_dynamic_per_token_quant_kernel<scalar_in_t, scalar_t,
                                                         has_residual>
               <<<grid, block, 0, stream>>>(
                   out.mutable_data_ptr<scalar_t>(),
@@ -247,7 +247,7 @@ void rms_norm_per_block_quant_dispatch(
                   APHRODITE_STABLE_DISPATCH_QUANT_TYPES(
                       out.scalar_type(), "rms_norm_per_block_quant_kernel",
                       [&] {
-                        vllm::rms_norm_per_block_quant_kernel<
+                        aphrodite::rms_norm_per_block_quant_kernel<
                             scalar_in_t, scalar_t, has_residual,
                             transpose_scale, gs><<<grid, block, 0, stream>>>(
                             out.mutable_data_ptr<scalar_t>(),

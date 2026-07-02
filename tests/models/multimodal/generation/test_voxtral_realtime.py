@@ -64,8 +64,8 @@ def _normalize(texts: list[str]) -> list[str]:
 
 
 def assert_encoder_kv_cache_spec(engine: LLM) -> None:
-    vllm_config = engine.llm_engine.vllm_config
-    audio_config = vllm_config.model_config.hf_config.audio_config
+    aphrodite_config = engine.llm_engine.aphrodite_config
+    audio_config = aphrodite_config.model_config.hf_config.audio_config
     kv_cache_specs_per_rank = engine.llm_engine.model_executor.get_kv_cache_specs()
 
     assert len(kv_cache_specs_per_rank) == 1
@@ -82,7 +82,7 @@ def assert_encoder_kv_cache_spec(engine: LLM) -> None:
     assert (
         spec.max_admission_blocks_per_request(
             max_num_batched_tokens=1,
-            max_model_len=vllm_config.model_config.max_model_len,
+            max_model_len=aphrodite_config.model_config.max_model_len,
         )
         == 13
     )

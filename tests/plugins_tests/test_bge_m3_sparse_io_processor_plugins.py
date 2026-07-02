@@ -147,7 +147,7 @@ async def test_bge_m3_sparse_plugin_online(
     "return_tokens",
     [True, False],
 )
-def test_bge_m3_sparse_plugin_offline(vllm_runner, return_tokens: bool):
+def test_bge_m3_sparse_plugin_offline(aphrodite_runner, return_tokens: bool):
     """Test BGE-M3 sparse plugin in offline mode."""
     prompt = {
         "data": {
@@ -156,7 +156,7 @@ def test_bge_m3_sparse_plugin_offline(vllm_runner, return_tokens: bool):
         }
     }
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_config["model_name"],
         runner="pooling",
         enforce_eager=True,
@@ -190,7 +190,7 @@ def test_bge_m3_sparse_plugin_offline(vllm_runner, return_tokens: bool):
     assert response.usage.total_tokens == response.usage.prompt_tokens
 
 
-def test_bge_m3_sparse_plugin_offline_multiple_inputs(vllm_runner):
+def test_bge_m3_sparse_plugin_offline_multiple_inputs(aphrodite_runner):
     """Test BGE-M3 sparse plugin with multiple inputs in offline mode."""
     prompts = {
         "data": {
@@ -203,7 +203,7 @@ def test_bge_m3_sparse_plugin_offline_multiple_inputs(vllm_runner):
         }
     }
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_config["model_name"],
         runner="pooling",
         enforce_eager=True,

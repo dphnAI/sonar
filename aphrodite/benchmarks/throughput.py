@@ -1261,9 +1261,9 @@ def main(args: argparse.Namespace):
             "\033[91mWARNING\033[0m: Multi-modal request with "
             f"{args.backend} backend detected. The "
             "following metrics are not accurate because image tokens are not"
-            " counted. See vllm-project/vllm/issues/9778 for details."
+            " counted. See vllm-project/aphrodite/issues/9778 for details."
         )
-        # TODO(vllm-project/vllm/issues/9778): Count multi-modal token length.
+        # TODO(vllm-project/aphrodite/issues/9778): Count multi-modal token length.
         # aphrodite-chat backend counts the image tokens now
 
     print(

@@ -226,7 +226,7 @@ def test_dict_args(parser):
     }
 
 
-def test_duplicate_dict_args(caplog_vllm, parser):
+def test_duplicate_dict_args(caplog_aphrodite, parser):
     args = [
         "--model-name=something.something",
         "--hf-overrides.key1",
@@ -245,10 +245,10 @@ def test_duplicate_dict_args(caplog_vllm, parser):
     assert parsed_args.optimization_level == 3
     assert parsed_args.compilation_config == {"mode": 2}
 
-    assert len(caplog_vllm.records) == 1
-    assert "duplicate" in caplog_vllm.text
-    assert "--hf-overrides.key1" in caplog_vllm.text
-    assert "--optimization-level" in caplog_vllm.text
+    assert len(caplog_aphrodite.records) == 1
+    assert "duplicate" in caplog_aphrodite.text
+    assert "--hf-overrides.key1" in caplog_aphrodite.text
+    assert "--optimization-level" in caplog_aphrodite.text
 
 
 def test_model_specification(
@@ -446,8 +446,8 @@ def test_compilation_mode_string_values(parser):
     args = parser.parse_args(["-cc.mode=none"])
     assert args.compilation_config == {"mode": "none"}
 
-    args = parser.parse_args(["-cc.mode=vllm_compile"])
-    assert args.compilation_config == {"mode": "vllm_compile"}
+    args = parser.parse_args(["-cc.mode=aphrodite_compile"])
+    assert args.compilation_config == {"mode": "aphrodite_compile"}
 
 
 def test_compilation_config_mode_validator():
@@ -475,7 +475,7 @@ def test_compilation_config_mode_validator():
     config = CompilationConfig(mode="none")
     assert config.mode == CompilationMode.NONE
 
-    config = CompilationConfig(mode="vllm_compile")
+    config = CompilationConfig(mode="aphrodite_compile")
     assert config.mode == CompilationMode.APHRODITE_COMPILE
 
     with pytest.raises(ValidationError, match="Invalid compilation mode"):

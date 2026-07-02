@@ -30,13 +30,13 @@ class ColBERTQueryEmbeddingProcessor(
     It does not support all ColBERT-style variants (e.g. colbert-ir/colbertv2.0).
     """
 
-    def __init__(self, vllm_config: AphroditeConfig, renderer: BaseRenderer):
-        super().__init__(vllm_config, renderer)
+    def __init__(self, aphrodite_config: AphroditeConfig, renderer: BaseRenderer):
+        super().__init__(aphrodite_config, renderer)
         self.requests_cache: dict[str, ColBERTEmbeddingCompletionRequestMixin] = {}
         self.renderer: BaseRenderer = renderer
         # Context window (8192 for jinaai/jina-colbert-v2); caps document
         # content length minus the 3 special-token slots.
-        self.max_model_len = vllm_config.model_config.max_model_len
+        self.max_model_len = aphrodite_config.model_config.max_model_len
         self._query_marker_id: int | None = None
         self._document_marker_id: int | None = None
 

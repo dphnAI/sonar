@@ -9,7 +9,7 @@ from aphrodite import ir
 from aphrodite.compilation.passes.ir.lowering_pass import (
     AphroditeIRLoweringPass,
 )
-from aphrodite.config import get_current_vllm_config
+from aphrodite.config import get_current_aphrodite_config
 from aphrodite.ir import ops
 from aphrodite.platforms import current_platform
 
@@ -35,10 +35,10 @@ class Model(nn.Module):
 
 
 @pytest.mark.parametrize("rms_provider", ops.rms_norm.supported_providers())
-def test_lowering_rms_norm(rms_provider, default_vllm_config):
+def test_lowering_rms_norm(rms_provider, default_aphrodite_config):
     torch.set_default_device(current_platform.device_type)
 
-    lowering_pass = AphroditeIRLoweringPass(get_current_vllm_config())
+    lowering_pass = AphroditeIRLoweringPass(get_current_aphrodite_config())
     backend = TestBackend(lowering_pass)
     backend_unlowered = TestBackend()
 

@@ -16,7 +16,7 @@ from aphrodite.compilation.passes.inductor_pass import (
 )
 from aphrodite.config import (
     AphroditeConfig,
-    set_current_vllm_config,
+    set_current_aphrodite_config,
 )
 from aphrodite.config.compilation import CompilationConfig, CompilationMode
 from aphrodite.config.scheduler import SchedulerConfig
@@ -29,7 +29,7 @@ MLP_SIZE = 128
 
 @support_torch_compile
 class TestModel(nn.Module):
-    def __init__(self, *, vllm_config: AphroditeConfig, prefix: str = "", **kwargs) -> None:
+    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", **kwargs) -> None:
         super().__init__()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -42,8 +42,8 @@ class TestModel(nn.Module):
 
 
 @torch.inference_mode
-def run_model(vllm_config: AphroditeConfig, model: nn.Module, batch_sizes: list[int]):
-    with set_forward_context({}, vllm_config=vllm_config):
+def run_model(aphrodite_config: AphroditeConfig, model: nn.Module, batch_sizes: list[int]):
+    with set_forward_context({}, aphrodite_config=aphrodite_config):
         model(torch.randn(BATCH_SIZE, MLP_SIZE))
         for batch_size in batch_sizes:
             model(torch.randn(batch_size, MLP_SIZE))
@@ -78,7 +78,7 @@ def test_compile_ranges(use_fresh_inductor_cache):
         ]
     )
     torch.set_default_device("cuda")
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         scheduler_config=SchedulerConfig(
             max_num_batched_tokens=8192,
             max_model_len=8192,
@@ -94,8 +94,8 @@ def test_compile_ranges(use_fresh_inductor_cache):
         ),
     )
 
-    with set_current_vllm_config(vllm_config):
-        model = TestModel(vllm_config=vllm_config, prefix="").eval()
+    with set_current_aphrodite_config(aphrodite_config):
+        model = TestModel(aphrodite_config=aphrodite_config, prefix="").eval()
         # Number of compilations: 3 compile ranges + 3 compile sizes
         batch_sizes = [1, 4, 16, 24, 48, 64, 8192]
 
@@ -104,7 +104,7 @@ def test_compile_ranges(use_fresh_inductor_cache):
             num_piecewise_graphs_seen=1,
             num_backend_compilations=6,
         ):
-            run_model(vllm_config, model, batch_sizes)
+            run_model(aphrodite_config, model, batch_sizes)
         assert post_grad_range_checker.num_calls == 6
 
 
@@ -173,7 +173,7 @@ def test_compile_sizes_produce_static_shapes(use_fresh_inductor_cache):
     shapes (no SymInts), while compile_ranges entries retain dynamic shapes."""
     checker = PostGradStaticShapeChecker()
     torch.set_default_device("cuda")
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         scheduler_config=SchedulerConfig(
             max_num_batched_tokens=8192,
             max_model_len=8192,
@@ -189,15 +189,15 @@ def test_compile_sizes_produce_static_shapes(use_fresh_inductor_cache):
         ),
     )
 
-    with set_current_vllm_config(vllm_config):
-        model = TestModel(vllm_config=vllm_config, prefix="").eval()
+    with set_current_aphrodite_config(aphrodite_config):
+        model = TestModel(aphrodite_config=aphrodite_config, prefix="").eval()
         # 3 compilations: Range(1,8), Range(9,8192), single-size 16
         with compilation_counter.expect(
             num_graphs_seen=1,
             num_piecewise_graphs_seen=1,
             num_backend_compilations=3,
         ):
-            run_model(vllm_config, model, [1, 16, 64])
+            run_model(aphrodite_config, model, [1, 16, 64])
 
     # compile_sizes=16 should produce static shapes
     assert checker.num_static_calls == 1, (
@@ -226,7 +226,7 @@ def test_inductor_cache_compile_ranges(monkeypatch, use_fresh_inductor_cache):
     )
     torch.set_default_device("cuda")
 
-    def create_vllm_config():
+    def create_aphrodite_config():
         return AphroditeConfig(
             scheduler_config=scheduler_config,
             compilation_config=CompilationConfig(
@@ -238,20 +238,20 @@ def test_inductor_cache_compile_ranges(monkeypatch, use_fresh_inductor_cache):
             ),
         )
 
-    vllm_config_1 = create_vllm_config()
-    with set_current_vllm_config(vllm_config_1):
-        model1 = TestModel(vllm_config=vllm_config_1, prefix="").eval()
+    aphrodite_config_1 = create_aphrodite_config()
+    with set_current_aphrodite_config(aphrodite_config_1):
+        model1 = TestModel(aphrodite_config=aphrodite_config_1, prefix="").eval()
         batch_sizes = [1, 16]
-        run_model(vllm_config_1, model1, batch_sizes)
+        run_model(aphrodite_config_1, model1, batch_sizes)
         assert post_grad_range_checker.num_calls == 2
 
     post_grad_range_checker.num_calls = 0
     # Create a new aphrodite config with the new pass context
-    vllm_config_2 = create_vllm_config()
-    with set_current_vllm_config(vllm_config_2):
-        model2 = TestModel(vllm_config=vllm_config_2, prefix="").eval()
+    aphrodite_config_2 = create_aphrodite_config()
+    with set_current_aphrodite_config(aphrodite_config_2):
+        model2 = TestModel(aphrodite_config=aphrodite_config_2, prefix="").eval()
         batch_sizes = [4, 32]
-        run_model(vllm_config_2, model2, batch_sizes)
+        run_model(aphrodite_config_2, model2, batch_sizes)
         # Check that cache is used, so the number of calls
         # should be 0
         assert post_grad_range_checker.num_calls == 0

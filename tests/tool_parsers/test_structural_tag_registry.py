@@ -69,7 +69,7 @@ def sample_tools_strict() -> list[ChatCompletionToolsParam]:
     ]
 
 
-def test_supported_structural_tag_models_include_vllm_builtins():
+def test_supported_structural_tag_models_include_aphrodite_builtins():
     assert SUPPORTED_STRUCTURAL_TAG_MODELS == (
         XGRAMMAR_BUILTIN_STRUCTURAL_TAG_MODELS | APHRODITE_BUILTIN_STRUCTURAL_TAG_MODELS
     )
@@ -91,7 +91,7 @@ def test_get_model_structural_tag_supports_all_xgrammar_builtins(
     assert isinstance(tag, StructuralTag)
 
 
-def test_get_model_structural_tag_supports_vllm_hermes(
+def test_get_model_structural_tag_supports_aphrodite_hermes(
     sample_tools: list[ChatCompletionToolsParam],
 ):
     tag = get_model_structural_tag(

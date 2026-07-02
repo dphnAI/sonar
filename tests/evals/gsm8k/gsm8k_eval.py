@@ -75,7 +75,7 @@ def get_answer_value(answer_str: str) -> int:
         return INVALID
 
 
-async def call_vllm_api(
+async def call_aphrodite_api(
     session: aiohttp.ClientSession,
     prompt: str,
     temperature: float,
@@ -110,7 +110,7 @@ async def call_vllm_api(
         return "", 0
 
 
-async def call_vllm_chat_api(
+async def call_aphrodite_chat_api(
     session: aiohttp.ClientSession,
     model: str,
     prompt: str,
@@ -232,7 +232,7 @@ def evaluate_gsm8k(
             if use_chat_completions:
                 if model is None:
                     raise ValueError("model is required for chat completions")
-                answer, tokens = await call_vllm_chat_api(
+                answer, tokens = await call_aphrodite_chat_api(
                     session=session,
                     model=model,
                     prompt=prompts[i],
@@ -243,7 +243,7 @@ def evaluate_gsm8k(
                     seed=seed,
                 )
             else:
-                answer, tokens = await call_vllm_api(
+                answer, tokens = await call_aphrodite_api(
                     session=session,
                     prompt=prompts[i],
                     temperature=temperature,

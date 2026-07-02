@@ -20,7 +20,7 @@ from aphrodite.v1.executor.multiproc_executor import MultiprocExecutor
 MODEL = "facebook/opt-125m"
 
 
-def create_vllm_config(
+def create_aphrodite_config(
     tensor_parallel_size: int = 1,
     pipeline_parallel_size: int = 1,
     max_model_len: int = 256,
@@ -40,17 +40,17 @@ def create_vllm_config(
         distributed_executor_backend=distributed_executor_backend,
         enforce_eager=True,
     )
-    vllm_config = engine_args.create_engine_config()
+    aphrodite_config = engine_args.create_engine_config()
 
     # Override distributed node settings if needed
     if nnodes > 1 or node_rank > 0:
-        vllm_config.parallel_config.nnodes = nnodes
-        vllm_config.parallel_config.node_rank = node_rank
-        vllm_config.parallel_config.master_port = master_port
+        aphrodite_config.parallel_config.nnodes = nnodes
+        aphrodite_config.parallel_config.node_rank = node_rank
+        aphrodite_config.parallel_config.master_port = master_port
     if nnodes > 1:
-        vllm_config.parallel_config.disable_custom_all_reduce = True
+        aphrodite_config.parallel_config.disable_custom_all_reduce = True
 
-    return vllm_config
+    return aphrodite_config
 
 
 def create_test_scheduler_output(num_requests: int = 1) -> SchedulerOutput:
@@ -68,13 +68,13 @@ def create_test_scheduler_output(num_requests: int = 1) -> SchedulerOutput:
 
 def test_multiproc_executor_initialization():
     """Test that MultiprocExecutor can be initialized with proper config."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         tensor_parallel_size=1,
         pipeline_parallel_size=1,
     )
 
     # Create executor - this should initialize workers
-    executor = MultiprocExecutor(vllm_config=vllm_config)
+    executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
 
     # Verify executor properties
     assert executor.world_size == 1, "World size should be 1 for single GPU"
@@ -89,13 +89,13 @@ def test_multiproc_executor_initialization():
 @multi_gpu_test(num_gpus=2)
 def test_multiproc_executor_initialization_tensor_parallel():
     """Test MultiprocExecutor initialization with tensor parallelism."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         tensor_parallel_size=2,
         pipeline_parallel_size=1,
     )
 
     # Create executor
-    executor = MultiprocExecutor(vllm_config=vllm_config)
+    executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
 
     # Verify executor properties
     assert executor.world_size == 2, "World size should be 2 for TP=2"
@@ -113,13 +113,13 @@ def test_multiproc_executor_initialization_tensor_parallel():
 @multi_gpu_test(num_gpus=2)
 def test_multiproc_executor_collective_rpc():
     """Test collective RPC calls to all workers."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         tensor_parallel_size=2,
         pipeline_parallel_size=1,
     )
 
     # Create executor
-    executor = MultiprocExecutor(vllm_config=vllm_config)
+    executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
 
     try:
         # Test check_health RPC - should work without errors
@@ -137,12 +137,12 @@ def test_multiproc_executor_collective_rpc():
 
 def test_multiproc_executor_failure_callback():
     """Test failure callback registration and invocation."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         tensor_parallel_size=1,
         pipeline_parallel_size=1,
     )
 
-    executor = MultiprocExecutor(vllm_config=vllm_config)
+    executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
 
     try:
         # Test callback registration
@@ -174,12 +174,12 @@ def test_multiproc_executor_failure_callback():
 @multi_gpu_test(num_gpus=2)
 def test_multiproc_executor_worker_monitor():
     """Test that worker monitor is set up correctly."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         tensor_parallel_size=2,
         pipeline_parallel_size=1,
     )
 
-    executor = MultiprocExecutor(vllm_config=vllm_config)
+    executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
 
     try:
         # Verify all worker processes are alive
@@ -206,12 +206,12 @@ def test_multiproc_executor_worker_monitor():
 @multi_gpu_test(num_gpus=2)
 def test_multiproc_executor_get_response_message_queues():
     """Test message queue retrieval for different ranks."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         tensor_parallel_size=2,
         pipeline_parallel_size=1,
     )
 
-    executor = MultiprocExecutor(vllm_config=vllm_config)
+    executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
 
     try:
         # Get all message queues
@@ -232,12 +232,12 @@ def test_multiproc_executor_get_response_message_queues():
 
 def test_multiproc_executor_shutdown_cleanup():
     """Test that shutdown properly cleans up resources."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         tensor_parallel_size=1,
         pipeline_parallel_size=1,
     )
 
-    executor = MultiprocExecutor(vllm_config=vllm_config)
+    executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
 
     # Verify executor is set up
     assert hasattr(executor, "workers"), "Executor should have workers"
@@ -265,12 +265,12 @@ def test_multiproc_executor_shutdown_cleanup():
 @multi_gpu_test(num_gpus=4)
 def test_multiproc_executor_pipeline_parallel():
     """Test MultiprocExecutor with pipeline parallelism."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         tensor_parallel_size=2,
         pipeline_parallel_size=2,
     )
 
-    executor = MultiprocExecutor(vllm_config=vllm_config)
+    executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
 
     try:
         # Verify executor properties
@@ -284,7 +284,7 @@ def test_multiproc_executor_pipeline_parallel():
         assert output_rank == 2, "Output rank should be 2 (first rank of last PP stage)"
 
         # Verify max_concurrent_batches for pipeline parallel
-        assert vllm_config.max_concurrent_batches == 2, (
+        assert aphrodite_config.max_concurrent_batches == 2, (
             "Max concurrent batches should equal PP size"
         )
 
@@ -295,12 +295,12 @@ def test_multiproc_executor_pipeline_parallel():
 
 def test_multiproc_executor_properties():
     """Test various executor properties and configurations."""
-    vllm_config = create_vllm_config(
+    aphrodite_config = create_aphrodite_config(
         tensor_parallel_size=1,
         pipeline_parallel_size=1,
     )
 
-    executor = MultiprocExecutor(vllm_config=vllm_config)
+    executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
 
     try:
         # Test supports_pp property
@@ -350,7 +350,7 @@ def test_multiproc_executor_multi_node():
                 os.environ["CUDA_VISIBLE_DEVICES"] = "2,3"
 
             # Create config for this node
-            vllm_config = create_vllm_config(
+            aphrodite_config = create_aphrodite_config(
                 tensor_parallel_size=4,  # Total TP across all nodes
                 pipeline_parallel_size=1,
                 nnodes=2,  # 2 nodes
@@ -359,7 +359,7 @@ def test_multiproc_executor_multi_node():
             )
 
             # Create executor for this node
-            executor = MultiprocExecutor(vllm_config=vllm_config)
+            executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
 
             # Verify node-specific properties
             assert executor.world_size == 4, (

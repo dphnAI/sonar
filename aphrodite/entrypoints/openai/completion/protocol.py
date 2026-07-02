@@ -237,7 +237,7 @@ class CompletionRequest(OpenAIBaseModel):
 
     aphrodite_xargs: dict[str, str | int | float] | None = Field(
         default=None,
-        validation_alias=AliasChoices("aphrodite_xargs", "vllm_xargs"),
+        validation_alias=AliasChoices("aphrodite_xargs", "aphrodite_xargs"),
         description=(
             "Additional request parameters with string or "
             "numeric values, used by custom extensions."

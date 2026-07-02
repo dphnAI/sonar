@@ -11,7 +11,7 @@ import aphrodite.v1.engine.utils as utils
 from aphrodite.v1.engine.utils import CoreEngineActorManager
 
 
-def _vllm_config(
+def _aphrodite_config(
     *, dp_size, dp_local, master_ip, world_size=1, all2all_backend="naive"
 ):
     parallel = SimpleNamespace(
@@ -69,7 +69,7 @@ def _pinned_ips(created):
 def test_allowlist_confines_dp_to_listed_nodes(monkeypatch):
     monkeypatch.setenv("APHRODITE_RAY_DP_PLACEMENT_NODE_IPS", "10.0.0.1,10.0.0.3")
     resources = _resources({"10.0.0.1": 8, "10.0.0.2": 8, "10.0.0.3": 8, "10.0.0.4": 8})
-    cfg = _vllm_config(dp_size=16, dp_local=8, master_ip="10.0.0.1")
+    cfg = _aphrodite_config(dp_size=16, dp_local=8, master_ip="10.0.0.1")
 
     pgs, _, created = _run(cfg, resources)
 
@@ -80,7 +80,7 @@ def test_allowlist_confines_dp_to_listed_nodes(monkeypatch):
 def test_empty_allowlist_is_noop(monkeypatch):
     monkeypatch.delenv("APHRODITE_RAY_DP_PLACEMENT_NODE_IPS", raising=False)
     resources = _resources({"10.0.0.1": 8, "10.0.0.2": 8})
-    cfg = _vllm_config(dp_size=16, dp_local=8, master_ip="10.0.0.1")
+    cfg = _aphrodite_config(dp_size=16, dp_local=8, master_ip="10.0.0.1")
 
     pgs, _, created = _run(cfg, resources)
 
@@ -92,7 +92,7 @@ def test_master_auto_added_with_warning(monkeypatch):
     # Allowlist omits the master; Aphrodite must still keep it and warn.
     monkeypatch.setenv("APHRODITE_RAY_DP_PLACEMENT_NODE_IPS", "10.0.0.3")
     resources = _resources({"10.0.0.1": 8, "10.0.0.3": 8})
-    cfg = _vllm_config(dp_size=16, dp_local=8, master_ip="10.0.0.1")
+    cfg = _aphrodite_config(dp_size=16, dp_local=8, master_ip="10.0.0.1")
     _, _, created = _run(cfg, resources)
 
     assert _pinned_ips(created) == {"10.0.0.1", "10.0.0.3"}
@@ -102,7 +102,7 @@ def test_allowlist_isolates_two_engines(monkeypatch):
     # Engine B is confined to .2/.4, so it can never touch engine A's master .1.
     monkeypatch.setenv("APHRODITE_RAY_DP_PLACEMENT_NODE_IPS", "10.0.0.2,10.0.0.4")
     resources = _resources({"10.0.0.1": 8, "10.0.0.2": 8, "10.0.0.3": 8, "10.0.0.4": 8})
-    cfg = _vllm_config(dp_size=16, dp_local=8, master_ip="10.0.0.2")
+    cfg = _aphrodite_config(dp_size=16, dp_local=8, master_ip="10.0.0.2")
 
     _, _, created = _run(cfg, resources)
 
@@ -113,7 +113,7 @@ def test_allowlist_too_small_raises(monkeypatch):
     # Master alone can't hold all ranks and no other node is allowed.
     monkeypatch.setenv("APHRODITE_RAY_DP_PLACEMENT_NODE_IPS", "10.0.0.1")
     resources = _resources({"10.0.0.1": 8, "10.0.0.2": 8})
-    cfg = _vllm_config(dp_size=16, dp_local=8, master_ip="10.0.0.1")
+    cfg = _aphrodite_config(dp_size=16, dp_local=8, master_ip="10.0.0.1")
 
     with pytest.raises(ValueError):  # not enough placement groups created
         _run(cfg, resources)

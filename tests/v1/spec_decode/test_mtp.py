@@ -45,7 +45,7 @@ def _create_mtp_proposer(num_speculative_tokens: int) -> EagleProposer:
         num_speculative_tokens=num_speculative_tokens,
     )
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         model_config=model_config,
         cache_config=CacheConfig(),
         speculative_config=speculative_config,
@@ -58,11 +58,11 @@ def _create_mtp_proposer(num_speculative_tokens: int) -> EagleProposer:
         ),
     )
 
-    return EagleProposer(vllm_config=vllm_config, device=DEVICE_TYPE)
+    return EagleProposer(aphrodite_config=aphrodite_config, device=DEVICE_TYPE)
 
 
 @mock.patch("aphrodite.v1.spec_decode.llm_base_proposer.get_pp_group")
-@mock.patch("aphrodite.v1.spec_decode.llm_base_proposer.get_layers_from_vllm_config")
+@mock.patch("aphrodite.v1.spec_decode.llm_base_proposer.get_layers_from_aphrodite_config")
 @mock.patch("aphrodite.v1.spec_decode.llm_base_proposer.get_model")
 def test_mtp_load_model_unified(mock_get_model, mock_get_layers, mock_get_pp_group):
     """Test MTP-specific model loading with unified model approach."""
@@ -190,9 +190,9 @@ def test_mtp_propose(num_speculative_tokens, monkeypatch):
     )
 
     attn_metadata_builder = attn_metadata_builder_cls(
-        kv_cache_spec=create_standard_kv_cache_spec(proposer.vllm_config),
+        kv_cache_spec=create_standard_kv_cache_spec(proposer.aphrodite_config),
         layer_names=list(proposer._draft_attn_layer_names),
-        vllm_config=proposer.vllm_config,
+        aphrodite_config=proposer.aphrodite_config,
         device=device,
     )
 

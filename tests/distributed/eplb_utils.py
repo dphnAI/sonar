@@ -9,7 +9,7 @@ import pytest
 import torch
 import torch.multiprocessing as mp
 
-from aphrodite.config import AphroditeConfig, set_current_vllm_config
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.distributed.parallel_state import (
     init_distributed_environment,
 )
@@ -77,8 +77,8 @@ def set_env_vars_and_device(env: dict[str, str]) -> None:
     torch.accelerator.set_device_index(device)
 
     # Create a minimal aphrodite config for init_distributed_environment
-    vllm_config = AphroditeConfig()
-    with set_current_vllm_config(vllm_config):
+    aphrodite_config = AphroditeConfig()
+    with set_current_aphrodite_config(aphrodite_config):
         init_distributed_environment()
     atexit.register(_destroy_process_group_if_initialized)
     # Ensure each worker process has the same random seed

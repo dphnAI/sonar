@@ -42,7 +42,7 @@ static bool is_fp8_ocp() {
 #endif
 }
 
-namespace vllm {
+namespace aphrodite {
 
 __device__ __forceinline__ float atomicMaxFloat(float* addr, float value) {
   float old;
@@ -76,4 +76,4 @@ __device__ __forceinline__ fp8_type scaled_fp8_conversion(float const val,
 #endif
 }
 
-}  // namespace vllm
+}  // namespace aphrodite

@@ -18,7 +18,7 @@ https://github.com/qwopqwop200/GPTQ-for-LLaMa
 #include "qdq_4.cuh"
 #include "qdq_8.cuh"
 
-namespace vllm {
+namespace aphrodite {
 namespace gptq {
 
 #define BLOCK_KN_SIZE 128
@@ -1822,7 +1822,7 @@ void shuffle_exllama_weight(uint32_t* q_weight, int* q_perm, int height,
 }
 
 }  // namespace gptq
-}  // namespace vllm
+}  // namespace aphrodite
 
 torch::stable::Tensor gptq_gemm(torch::stable::Tensor a,
                                 torch::stable::Tensor b_q_weight,
@@ -1837,7 +1837,7 @@ torch::stable::Tensor gptq_gemm(torch::stable::Tensor a,
       torch::stable::empty({b_q_weight.size(0) * 32 / bit, b_q_weight.size(1)},
                            a.scalar_type(), std::nullopt, a.device());
 
-  vllm::gptq::gemm_half_q_half_cuda(
+  aphrodite::gptq::gemm_half_q_half_cuda(
       get_current_cuda_blas_handle(), (const half*)a.data_ptr(),
       (const uint32_t*)b_q_weight.data_ptr(),
       (const uint32_t*)b_gptq_qzeros.data_ptr(),
@@ -1858,7 +1858,7 @@ void gptq_shuffle(torch::stable::Tensor q_weight, torch::stable::Tensor q_perm,
                   int64_t bit) {
   const torch::stable::accelerator::DeviceGuard device_guard(
       q_weight.get_device_index());
-  vllm::gptq::shuffle_exllama_weight(
+  aphrodite::gptq::shuffle_exllama_weight(
       (uint32_t*)q_weight.data_ptr(),
       q_perm.device().type() == torch::stable::DeviceType::Meta ||
               q_perm.numel() == 0

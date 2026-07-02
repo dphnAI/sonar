@@ -32,8 +32,8 @@ APHRODITEDataTypeNames: dict[APHRODITEDataType | DataType, str] = {
 APHRODITEDataTypeTag: dict[APHRODITEDataType | DataType, str] = {
     **DataTypeTag,  # type: ignore
     **{
-        APHRODITEDataType.u4b8: "cutlass::vllm_uint4b8_t",
-        APHRODITEDataType.u8b128: "cutlass::vllm_uint8b128_t",
+        APHRODITEDataType.u4b8: "cutlass::aphrodite_uint4b8_t",
+        APHRODITEDataType.u8b128: "cutlass::aphrodite_uint8b128_t",
     },
 }
 
@@ -46,14 +46,14 @@ APHRODITEDataTypeSize: dict[APHRODITEDataType | DataType, int] = {
 }
 
 APHRODITEDataTypeAPHRODITEScalarTypeTag: dict[APHRODITEDataType | DataType, str] = {
-    APHRODITEDataType.u4b8: "vllm::kU4B8",
-    APHRODITEDataType.u8b128: "vllm::kU8B128",
-    DataType.u4: "vllm::kU4",
-    DataType.u8: "vllm::kU8",
-    DataType.s4: "vllm::kS4",
-    DataType.s8: "vllm::kS8",
-    DataType.f16: "vllm::kFloat16",
-    DataType.bf16: "vllm::kBfloat16",
+    APHRODITEDataType.u4b8: "aphrodite::kU4B8",
+    APHRODITEDataType.u8b128: "aphrodite::kU8B128",
+    DataType.u4: "aphrodite::kU4",
+    DataType.u8: "aphrodite::kU8",
+    DataType.s4: "aphrodite::kS4",
+    DataType.s8: "aphrodite::kS8",
+    DataType.f16: "aphrodite::kFloat16",
+    DataType.bf16: "aphrodite::kBfloat16",
 }
 
 APHRODITEDataTypeTorchDataTypeTag: dict[APHRODITEDataType | DataType, str] = {

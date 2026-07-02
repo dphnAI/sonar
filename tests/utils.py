@@ -200,10 +200,10 @@ def _run_in_new_process_group(
     child_process_fxn: Callable[[dict[str, str] | None, str, list[str]], None],
     env_dict: dict[str, str] | None,
     model: str,
-    vllm_serve_args: list[str],
+    aphrodite_serve_args: list[str],
 ) -> None:
     os.setsid()
-    child_process_fxn(env_dict, model, vllm_serve_args)
+    child_process_fxn(env_dict, model, aphrodite_serve_args)
 
 
 class RemoteAPHRODITEServer:
@@ -226,7 +226,7 @@ class RemoteAPHRODITEServer:
         raise NotImplementedError
 
     def _start_server(
-        self, model: str, vllm_serve_args: list[str], env_dict: dict[str, str] | None
+        self, model: str, aphrodite_serve_args: list[str], env_dict: dict[str, str] | None
     ) -> None:
         """Subclasses override this method to customize server process launch"""
         raise NotImplementedError
@@ -245,7 +245,7 @@ class RemoteAPHRODITEServer:
     def __init__(
         self,
         model: str,
-        vllm_serve_args: list[str],
+        aphrodite_serve_args: list[str],
         *,
         env_dict: dict[str, str] | None = None,
         seed: int = 0,
@@ -254,25 +254,25 @@ class RemoteAPHRODITEServer:
         override_hf_configs: dict[str, Any] | None = None,
     ) -> None:
         if auto_port:
-            if "-p" in vllm_serve_args or "--port" in vllm_serve_args:
+            if "-p" in aphrodite_serve_args or "--port" in aphrodite_serve_args:
                 raise ValueError(
                     "You have manually specified the port when `auto_port=True`."
                 )
 
             # No need for a port if using unix sockets
-            if "--uds" not in vllm_serve_args:
+            if "--uds" not in aphrodite_serve_args:
                 # Don't mutate the input args
-                vllm_serve_args = vllm_serve_args + ["--port", str(get_open_port())]
+                aphrodite_serve_args = aphrodite_serve_args + ["--port", str(get_open_port())]
         if seed is not None:
-            if "--seed" in vllm_serve_args:
+            if "--seed" in aphrodite_serve_args:
                 raise ValueError(
                     f"You have manually specified the seed when `seed={seed}`."
                 )
 
-            vllm_serve_args = vllm_serve_args + ["--seed", str(seed)]
+            aphrodite_serve_args = aphrodite_serve_args + ["--seed", str(seed)]
 
         if override_hf_configs is not None:
-            vllm_serve_args = vllm_serve_args + [
+            aphrodite_serve_args = aphrodite_serve_args + [
                 "--hf-overrides",
                 json.dumps(override_hf_configs),
             ]
@@ -280,7 +280,7 @@ class RemoteAPHRODITEServer:
         parser = FlexibleArgumentParser(description="Aphrodite's remote server.")
         subparsers = parser.add_subparsers(required=False, dest="subparser")
         parser = self._create_cli_subcommand().subparser_init(subparsers)
-        args = parser.parse_args(["--model", model, *vllm_serve_args])
+        args = parser.parse_args(["--model", model, *aphrodite_serve_args])
         self.uds = args.uds
         if args.uds:
             self.host = None
@@ -307,7 +307,7 @@ class RemoteAPHRODITEServer:
                 f"{pre_gb:.2f} GB"
             )
 
-        self._start_server(model, vllm_serve_args, env_dict)
+        self._start_server(model, aphrodite_serve_args, env_dict)
         self._register_active_server()
         max_wait_seconds = max_wait_seconds or 480
         try:
@@ -767,7 +767,7 @@ class RemoteOpenAIServer(RemoteAPHRODITEServer):
         return ServeSubcommand()
 
     def _start_server(
-        self, model: str, vllm_serve_args: list[str], env_dict: dict[str, str] | None
+        self, model: str, aphrodite_serve_args: list[str], env_dict: dict[str, str] | None
     ) -> None:
         env = os.environ.copy()
         # the current process might initialize cuda,
@@ -776,7 +776,7 @@ class RemoteOpenAIServer(RemoteAPHRODITEServer):
         if env_dict is not None:
             env.update(env_dict)
         _sanitize_pythonpath_env(env)
-        serve_cmd = ["aphrodite", "serve", model, *vllm_serve_args]
+        serve_cmd = ["aphrodite", "serve", model, *aphrodite_serve_args]
         print(f"Launching RemoteOpenAIServer with: {' '.join(serve_cmd)}")
         print(f"Environment variables: {env}")
         self.proc: subprocess.Popen = subprocess.Popen(
@@ -797,14 +797,14 @@ class RemoteLaunchRenderServer(RemoteAPHRODITEServer):
         return ServeSubcommand()
 
     def _start_server(
-        self, model: str, vllm_serve_args: list[str], env_dict: dict[str, str] | None
+        self, model: str, aphrodite_serve_args: list[str], env_dict: dict[str, str] | None
     ) -> None:
         env = os.environ.copy()
         env["APHRODITE_WORKER_MULTIPROC_METHOD"] = "spawn"
         if env_dict is not None:
             env.update(env_dict)
         _sanitize_pythonpath_env(env)
-        serve_cmd = ["aphrodite", "launch", "render", model, *vllm_serve_args]
+        serve_cmd = ["aphrodite", "launch", "render", model, *aphrodite_serve_args]
         print(f"Launching RemoteLaunchRenderServer with: {' '.join(serve_cmd)}")
         self.proc: subprocess.Popen = subprocess.Popen(
             serve_cmd,
@@ -837,13 +837,13 @@ class RemoteOpenAIServerCustom(RemoteOpenAIServer):
     """Launch test server with custom child process"""
 
     def _start_server(
-        self, model: str, vllm_serve_args: list[str], env_dict: dict[str, str] | None
+        self, model: str, aphrodite_serve_args: list[str], env_dict: dict[str, str] | None
     ) -> None:
         method = "spawn" if requires_spawn_multiprocessing() else "fork"
         ctx = get_context(method)
         self.proc: Process = cast(Any, ctx).Process(
             target=_run_in_new_process_group,
-            args=(self.child_process_fxn, env_dict, model, vllm_serve_args),
+            args=(self.child_process_fxn, env_dict, model, aphrodite_serve_args),
         )  # type: ignore[assignment]
         with _temporarily_sanitized_pythonpath_env():
             self.proc.start()
@@ -851,7 +851,7 @@ class RemoteOpenAIServerCustom(RemoteOpenAIServer):
     def __init__(
         self,
         model: str,
-        vllm_serve_args: list[str],
+        aphrodite_serve_args: list[str],
         child_process_fxn: Callable[[dict[str, str] | None, str, list[str]], None],
         *,
         env_dict: dict[str, str] | None = None,
@@ -864,7 +864,7 @@ class RemoteOpenAIServerCustom(RemoteOpenAIServer):
         self.child_process_fxn = child_process_fxn
         super().__init__(
             model=model,
-            vllm_serve_args=vllm_serve_args,
+            aphrodite_serve_args=aphrodite_serve_args,
             env_dict=env_dict,
             seed=seed,
             auto_port=auto_port,
@@ -1349,7 +1349,7 @@ def compare_all_settings(
 
 
 @contextmanager
-def ensure_current_vllm_config():
+def ensure_current_aphrodite_config():
     """Ensures a aphrodite config is set for the duration of the context.
 
     If a config is already set, this is a no-op. Otherwise, it creates a default
@@ -1359,22 +1359,22 @@ def ensure_current_vllm_config():
     need a specific config.
 
     Example:
-        with ensure_current_vllm_config():
+        with ensure_current_aphrodite_config():
             init_distributed_environment(...)
             ensure_model_parallel_initialized(...)
     """
     from aphrodite.config import (
         AphroditeConfig,
-        get_current_vllm_config_or_none,
-        set_current_vllm_config,
+        get_current_aphrodite_config_or_none,
+        set_current_aphrodite_config,
     )
 
-    if get_current_vllm_config_or_none() is not None:
+    if get_current_aphrodite_config_or_none() is not None:
         # Config already set, just yield
         yield
     else:
         # No config set, create a default one for the duration
-        with set_current_vllm_config(AphroditeConfig()):
+        with set_current_aphrodite_config(AphroditeConfig()):
             yield
 
 
@@ -1390,13 +1390,13 @@ def init_test_distributed_environment(
     # is already set and only create a default one if needed.
     from aphrodite.config import (
         AphroditeConfig,
-        get_current_vllm_config_or_none,
-        set_current_vllm_config,
+        get_current_aphrodite_config_or_none,
+        set_current_aphrodite_config,
     )
 
     distributed_init_method = f"tcp://localhost:{distributed_init_port}"
 
-    if get_current_vllm_config_or_none() is not None:
+    if get_current_aphrodite_config_or_none() is not None:
         # Config already set, use it directly
         init_distributed_environment(
             world_size=pp_size * tp_size,
@@ -1407,7 +1407,7 @@ def init_test_distributed_environment(
         ensure_model_parallel_initialized(tp_size, pp_size)
     else:
         # No config set, create a default one for the test
-        with set_current_vllm_config(AphroditeConfig()):
+        with set_current_aphrodite_config(AphroditeConfig()):
             init_distributed_environment(
                 world_size=pp_size * tp_size,
                 rank=rank,
@@ -1681,7 +1681,7 @@ def fork_new_process_for_each_test(func: Callable[_P, None]) -> Callable[_P, Non
             tempfile.NamedTemporaryFile(
                 delete=False,
                 mode="w+b",
-                prefix=f"vllm_test_{func.__name__}_{os.getpid()}_",
+                prefix=f"aphrodite_test_{func.__name__}_{os.getpid()}_",
                 suffix=".exc",
             ) as exc_file,
             ExitStack() as delete_after,

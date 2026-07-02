@@ -8,7 +8,7 @@
   #include <hipcub/hipcub.hpp>
 #endif
 
-namespace vllm {
+namespace aphrodite {
 
 template <typename scalar_t>
 __global__ void apply_repetition_penalties_kernel(
@@ -613,7 +613,7 @@ static __global__ __launch_bounds__(kNumThreadsPerBlock) void topKPerRowDecode(
       indices, logits, rowStart, rowEnd, outIndices, outLogits, stride1, topK);
 }
 
-}  // namespace vllm
+}  // namespace aphrodite
 
 void apply_repetition_penalties_(
     torch::stable::Tensor& logits,  // [num_seqs, vocab_size], in-place
@@ -648,7 +648,7 @@ void apply_repetition_penalties_(
   const cudaStream_t stream = get_current_cuda_stream();
   APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(
       logits.scalar_type(), "apply_repetition_penalties_kernel", [&] {
-        vllm::apply_repetition_penalties_kernel<scalar_t>
+        aphrodite::apply_repetition_penalties_kernel<scalar_t>
             <<<grid, block, 0, stream>>>(
                 logits.mutable_data_ptr<scalar_t>(),
                 prompt_mask.const_data_ptr<bool>(),
@@ -675,7 +675,7 @@ void top_k_per_row_decode(const torch::stable::Tensor& logits, int64_t next_n,
 
   if (numColumns < kSortingAlgorithmThreshold) {
     // Use insertion sort
-    vllm::topKPerRowDecode<kNumThreadsPerBlock, false>
+    aphrodite::topKPerRowDecode<kNumThreadsPerBlock, false>
         <<<numRows, kNumThreadsPerBlock, topK * sizeof(int32_t), stream>>>(
             logits.const_data_ptr<float>(), seqLens.const_data_ptr<int>(),
             indices.mutable_data_ptr<int>(), static_cast<int>(stride0),
@@ -683,7 +683,7 @@ void top_k_per_row_decode(const torch::stable::Tensor& logits, int64_t next_n,
             static_cast<int>(next_n), seqLensIs2D);
   } else if (numColumns < kSplitWorkThreshold) {
     // From this threshold, use radix sort instead
-    vllm::topKPerRowDecode<kNumThreadsPerBlock, true>
+    aphrodite::topKPerRowDecode<kNumThreadsPerBlock, true>
         <<<numRows, kNumThreadsPerBlock, topK * sizeof(int32_t), stream>>>(
             logits.const_data_ptr<float>(), seqLens.const_data_ptr<int>(),
             indices.mutable_data_ptr<int>(), static_cast<int>(stride0),
@@ -700,7 +700,7 @@ void top_k_per_row_decode(const torch::stable::Tensor& logits, int64_t next_n,
         {numRows, multipleBlocksPerRowConfig, topK},
         torch::headeronly::ScalarType::Float, std::nullopt, logits.device());
 
-    vllm::topKPerRowDecode<kNumThreadsPerBlock, true, true>
+    aphrodite::topKPerRowDecode<kNumThreadsPerBlock, true, true>
         <<<dim3(numRows, multipleBlocksPerRowConfig), kNumThreadsPerBlock,
            2 * topK * sizeof(int32_t), stream>>>(
             logits.const_data_ptr<float>(), seqLens.const_data_ptr<int>(),
@@ -710,7 +710,7 @@ void top_k_per_row_decode(const torch::stable::Tensor& logits, int64_t next_n,
             outLogitsAux.mutable_data_ptr<float>());
 
     constexpr int kNumThreadsPerBlockMerge = 1024;
-    vllm::topKPerRowDecode<kNumThreadsPerBlockMerge, true, false, true>
+    aphrodite::topKPerRowDecode<kNumThreadsPerBlockMerge, true, false, true>
         <<<numRows, kNumThreadsPerBlockMerge, topK * sizeof(int32_t), stream>>>(
             outLogitsAux.const_data_ptr<float>(), seqLens.const_data_ptr<int>(),
             indices.mutable_data_ptr<int>(), multipleBlocksPerRowConfig * topK,
@@ -731,7 +731,7 @@ void top_k_per_row_prefill(const torch::stable::Tensor& logits,
 
   int numInsertionBlocks =
       std::min(static_cast<int>(numRows), kSortingAlgorithmThreshold);
-  vllm::topKPerRowPrefill<kNumThreadsPerBlock, false>
+  aphrodite::topKPerRowPrefill<kNumThreadsPerBlock, false>
       <<<numInsertionBlocks, kNumThreadsPerBlock, topK * sizeof(int32_t),
          stream>>>(logits.const_data_ptr<float>(),
                    rowStarts.const_data_ptr<int>(),
@@ -741,7 +741,7 @@ void top_k_per_row_prefill(const torch::stable::Tensor& logits,
 
   if (numRows > kSortingAlgorithmThreshold) {
     int numRadixBlocks = numRows - kSortingAlgorithmThreshold;
-    vllm::topKPerRowPrefill<kNumThreadsPerBlock, true>
+    aphrodite::topKPerRowPrefill<kNumThreadsPerBlock, true>
         <<<numRadixBlocks, kNumThreadsPerBlock, topK * sizeof(int32_t),
            stream>>>(
             logits.const_data_ptr<float>(), rowStarts.const_data_ptr<int>(),

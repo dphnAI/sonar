@@ -28,13 +28,13 @@ MODELS = [
 
 
 @pytest.mark.parametrize("model_id", MODELS)
-def test_gptq_with_dynamic(vllm_runner, model_id: str, monkeypatch):
+def test_gptq_with_dynamic(aphrodite_runner, model_id: str, monkeypatch):
     # `LLM.apply_model` requires pickling a function.
     monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
 
     linear_method_cls = AutoGPTQLinearMethod
 
-    with vllm_runner(
+    with aphrodite_runner(
         model_id, dtype=torch.float16, max_model_len=2048, enforce_eager=True
     ) as llm:
 

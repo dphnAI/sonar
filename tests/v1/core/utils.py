@@ -140,7 +140,7 @@ def create_scheduler(
         else None
     )
 
-    vllm_config = AphroditeConfig(
+    aphrodite_config = AphroditeConfig(
         scheduler_config=scheduler_config,
         model_config=model_config,
         cache_config=cache_config,
@@ -165,14 +165,14 @@ def create_scheduler(
         ],
     )
     cache_config.num_gpu_blocks = num_blocks
-    register_all_kvcache_specs(vllm_config)
+    register_all_kvcache_specs(aphrodite_config)
     scheduler_cls = AsyncScheduler if async_scheduling else Scheduler
     scheduler = scheduler_cls(
-        vllm_config=vllm_config,
+        aphrodite_config=aphrodite_config,
         kv_cache_config=kv_cache_config,
         block_size=block_size,
         log_stats=True,
-        structured_output_manager=StructuredOutputManager(vllm_config),
+        structured_output_manager=StructuredOutputManager(aphrodite_config),
     )
     if use_v2_model_runner is None:
         use_v2_model_runner = bool(envs.APHRODITE_USE_V2_MODEL_RUNNER)

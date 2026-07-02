@@ -57,12 +57,12 @@ def get_8bit_types():
 @pytest.mark.parametrize("num_logprobs", [10])
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="Should only run on ROCm")
 def test_rocm_compressed_tensors_w8a8(
-    vllm_runner, example_prompts, model_path, max_tokens, num_logprobs
+    aphrodite_runner, example_prompts, model_path, max_tokens, num_logprobs
 ):
     dtype = "bfloat16"
 
-    with vllm_runner(model_path, dtype=dtype) as vllm_model:
-        vllm_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+    with aphrodite_runner(model_path, dtype=dtype) as aphrodite_model:
+        aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
 
 
 MNK_FACTORS = [

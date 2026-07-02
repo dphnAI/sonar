@@ -17,7 +17,7 @@ template <long scalar_type_id>
 class MarlinScalarType {};
 
 template <>
-class MarlinScalarType<vllm::kFloat16.id()> {
+class MarlinScalarType<aphrodite::kFloat16.id()> {
  public:
   using scalar_t = half;
   using scalar_t2 = half2;
@@ -56,7 +56,7 @@ class MarlinScalarType<vllm::kFloat16.id()> {
 };
 
 template <>
-class MarlinScalarType<vllm::kBFloat16.id()> {
+class MarlinScalarType<aphrodite::kBFloat16.id()> {
  public:
   using scalar_t = nv_bfloat16;
   using scalar_t2 = nv_bfloat162;
@@ -95,7 +95,7 @@ class MarlinScalarType<vllm::kBFloat16.id()> {
 };
 
 template <>
-class MarlinScalarType<vllm::kFE4M3fn.id()> {
+class MarlinScalarType<aphrodite::kFE4M3fn.id()> {
  public:
   using scalar_t = __nv_fp8_e4m3;
   using scalar_t2 = __nv_fp8x2_e4m3;
@@ -114,7 +114,7 @@ class MarlinScalarType<vllm::kFE4M3fn.id()> {
 };
 
 template <>
-class MarlinScalarType<vllm::kS8.id()> {
+class MarlinScalarType<aphrodite::kS8.id()> {
  public:
   using scalar_t = int8_t;
   using scalar_t2 = int16_t;
@@ -131,18 +131,18 @@ template <typename scalar_t>
 class MarlinScalarType2 {};
 
 template <>
-class MarlinScalarType2<half> : public MarlinScalarType<vllm::kFloat16.id()> {};
+class MarlinScalarType2<half> : public MarlinScalarType<aphrodite::kFloat16.id()> {};
 
 template <>
 class MarlinScalarType2<nv_bfloat16>
-    : public MarlinScalarType<vllm::kBFloat16.id()> {};
+    : public MarlinScalarType<aphrodite::kBFloat16.id()> {};
 
 template <>
 class MarlinScalarType2<__nv_fp8_e4m3>
-    : public MarlinScalarType<vllm::kFE4M3fn.id()> {};
+    : public MarlinScalarType<aphrodite::kFE4M3fn.id()> {};
 
 template <>
-class MarlinScalarType2<int8_t> : public MarlinScalarType<vllm::kS8.id()> {};
+class MarlinScalarType2<int8_t> : public MarlinScalarType<aphrodite::kS8.id()> {};
 
 }  // namespace MARLIN_NAMESPACE_NAME
 

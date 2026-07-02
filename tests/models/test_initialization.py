@@ -80,22 +80,22 @@ def can_initialize(
     )
 
     # Avoid calling model.forward()
-    def _initialize_kv_caches_v1(self, vllm_config):
+    def _initialize_kv_caches_v1(self, aphrodite_config):
         kv_cache_specs = self.model_executor.get_kv_cache_specs()
         kv_cache_configs = get_kv_cache_configs(
-            vllm_config,
+            aphrodite_config,
             kv_cache_specs,
             [10 * GiB_bytes],
         )
         scheduler_kv_cache_config = generate_scheduler_kv_cache_config(kv_cache_configs)
-        vllm_config.cache_config.num_gpu_blocks = scheduler_kv_cache_config.num_blocks
+        aphrodite_config.cache_config.num_gpu_blocks = scheduler_kv_cache_config.num_blocks
         kv_cache_groups = scheduler_kv_cache_config.kv_cache_groups
         if kv_cache_groups:
-            vllm_config.cache_config.block_size = min(
+            aphrodite_config.cache_config.block_size = min(
                 g.kv_cache_spec.block_size for g in kv_cache_groups
             )
 
-        vllm_config.validate_block_size()
+        aphrodite_config.validate_block_size()
         return scheduler_kv_cache_config
 
     if model_arch == "MoonshotKimiaForCausalLM":
