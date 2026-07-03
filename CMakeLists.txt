@@ -1125,9 +1125,21 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
       "csrc/quantization/exl3/exllamav3_ext/quant/comp_units/exl3_comp_unit_6.cu"
       "csrc/quantization/exl3/exllamav3_ext/quant/comp_units/exl3_comp_unit_7.cu"
       "csrc/quantization/exl3/exllamav3_ext/quant/comp_units/exl3_comp_unit_8.cu")
+    # EXL3 (exllamav3) kernels require Ampere+ (cp.async / m16n8k16 MMA) and
+    # cannot target SM7.x. Drop arches < 8.0 so release arch lists that include
+    # 7.5 (Turing) still build; exl3 is simply unavailable on those GPUs. Other
+    # arches are preserved verbatim (native cubins for 8.0..12.x, Thor 11.0).
+    set(EXL3_ARCHS)
+    foreach(_arch IN LISTS CUDA_ARCHS)
+      string(REGEX MATCH "^[0-9]+\\.[0-9]+" _arch_num "${_arch}")
+      if(_arch_num AND NOT _arch_num VERSION_LESS "8.0")
+        list(APPEND EXL3_ARCHS "${_arch}")
+      endif()
+    endforeach()
+    message(STATUS "EXL3_ARCHS (SM80+ subset of CUDA_ARCHS): ${EXL3_ARCHS}")
     set_gencode_flags_for_srcs(
       SRCS "${APHRODITE_FORK_EXL3_SRC}"
-      CUDA_ARCHS "${CUDA_ARCHS}")
+      CUDA_ARCHS "${EXL3_ARCHS}")
     list(APPEND APHRODITE_FORK_EXT_SRC "${APHRODITE_FORK_EXL3_SRC}")
   endif()
 
