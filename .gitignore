@@ -23,6 +23,9 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+# but keep the tracked build-requirements dir (not a build artifact)
+!requirements/build/
+!requirements/build/*.txt
 develop-eggs/
 dist/
 downloads/
