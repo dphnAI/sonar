@@ -38,8 +38,12 @@ class FlexOlmoAttention(OlmoeAttention):
         hf_config = aphrodite_config.model_config.hf_config
         assert isinstance(hf_config, FlexOlmoConfig)
 
-        self.k_norm = RMSNorm(self.total_num_kv_heads * self.head_dim, eps=hf_config.rms_norm_eps)
-        self.q_norm = RMSNorm(self.total_num_heads * self.head_dim, eps=hf_config.rms_norm_eps)
+        self.k_norm = RMSNorm(
+            self.total_num_kv_heads * self.head_dim, eps=hf_config.rms_norm_eps
+        )
+        self.q_norm = RMSNorm(
+            self.total_num_heads * self.head_dim, eps=hf_config.rms_norm_eps
+        )
 
 
 class FlexOlmoMoE(nn.Module):
@@ -107,9 +111,15 @@ class FlexOlmoDecoderLayer(nn.Module):
         hf_config = aphrodite_config.model_config.hf_config
         assert isinstance(hf_config, FlexOlmoConfig)
 
-        self.self_attn = FlexOlmoAttention(aphrodite_config=aphrodite_config, prefix=f"{prefix}.self_attn")
-        self.post_attention_layernorm = RMSNorm(hf_config.hidden_size, eps=hf_config.rms_norm_eps)
-        self.post_feedforward_layernorm = RMSNorm(hf_config.hidden_size, eps=hf_config.rms_norm_eps)
+        self.self_attn = FlexOlmoAttention(
+            aphrodite_config=aphrodite_config, prefix=f"{prefix}.self_attn"
+        )
+        self.post_attention_layernorm = RMSNorm(
+            hf_config.hidden_size, eps=hf_config.rms_norm_eps
+        )
+        self.post_feedforward_layernorm = RMSNorm(
+            hf_config.hidden_size, eps=hf_config.rms_norm_eps
+        )
 
         self.mlp = FlexOlmoMoE(aphrodite_config=aphrodite_config, prefix=f"{prefix}.mlp")
 

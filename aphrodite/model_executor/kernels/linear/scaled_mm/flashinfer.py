@@ -12,6 +12,8 @@ from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
 )
 from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
+    QuantKey,
+    kFp8StaticTensorSym,
 )
 from aphrodite.platforms import current_platform
 from aphrodite.utils.flashinfer import (
@@ -36,7 +38,9 @@ from .ScaledMMLinearKernel import (
 
 class FlashInferFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
     @classmethod
-    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
+    def is_supported(
+        cls, compute_capability: int | None = None
+    ) -> tuple[bool, str | None]:
         if not current_platform.is_cuda():
             return False, "requires CUDA."
 
@@ -46,17 +50,30 @@ class FlashInferFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         if compute_capability is not None and compute_capability < 100:
             return False, "requires compute capability 100 and above."
 
+        # FlashInfer ships fp8 GEMM cubins/JIT for SM100a and SM120a but not for
+        # SM110a (Thor / Jetson Blackwell); on SM110 it silently produces wrong
+        # results. Fall back to the Cutlass fp8 kernel there (verified correct).
+        if compute_capability == 110:
+            return False, "FlashInfer fp8 GEMM is not supported on SM110 (Thor)."
+
         return True, None
 
     @classmethod
     def can_implement(cls, c: FP8ScaledMMLinearLayerConfig) -> tuple[bool, str | None]:
-        per_tensor_activation_scales = c.activation_quant_key.scale.group_shape.is_per_tensor()
+        per_tensor_activation_scales = (
+            c.activation_quant_key.scale.group_shape.is_per_tensor()
+        )
         per_tensor_weight_scales = c.weight_quant_key.scale.group_shape.is_per_tensor()
 
         if not (per_tensor_activation_scales and per_tensor_weight_scales):
             return False, "requires per tensor activation and weight scales."
 
         return True, None
+
+    def input_quant_key(self) -> QuantKey | None:
+        if self.config.activation_quant_key == kFp8StaticTensorSym:
+            return kFp8StaticTensorSym
+        return None
 
     def apply_scaled_mm(
         self,
@@ -69,7 +86,9 @@ class FlashInferFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         bias: torch.Tensor | None,
         output_shape: list,
     ) -> torch.Tensor:
-        return flashinfer_scaled_fp8_mm(A, B, out_dtype=out_dtype, scale_a=As, scale_b=Bs, bias=bias)
+        return flashinfer_scaled_fp8_mm(
+            A, B, out_dtype=out_dtype, scale_a=As, scale_b=Bs, bias=bias
+        )
 
 
 class FlashInferFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
@@ -89,7 +108,8 @@ class FlashInferFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
         if act_quant_desc.group_shape != GroupShape(1, 128):
             return (
                 False,
-                "Supports only dynamic per token group activation quantization with group_shape=(1,128).",
+                "Supports only dynamic per token group activation "
+                "quantization with group_shape=(1,128).",
             )
 
         if not should_use_flashinfer_for_blockscale_fp8_gemm(
@@ -132,7 +152,9 @@ class FlashInferFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
         )
 
 
-class FlashInferFp8DeepGEMMDynamicBlockScaledKernel(Fp8BlockScaledDynamicMMLinearKernel):
+class FlashInferFp8DeepGEMMDynamicBlockScaledKernel(
+    Fp8BlockScaledDynamicMMLinearKernel
+):
     """
     Conditional FlashInfer / DeepGEMM FP8 block-scaled GEMM.
 
@@ -147,8 +169,12 @@ class FlashInferFp8DeepGEMMDynamicBlockScaledKernel(Fp8BlockScaledDynamicMMLinea
     BF16 tensor operand list passed by torch.cond.
     """
 
-    base_type: ClassVar[type[FlashInferFp8BlockScaledMMKernel]] = FlashInferFp8BlockScaledMMKernel
-    fallback_type: ClassVar[type[DeepGemmFp8BlockScaledMMKernel]] = DeepGemmFp8BlockScaledMMKernel
+    base_type: ClassVar[type[FlashInferFp8BlockScaledMMKernel]] = (
+        FlashInferFp8BlockScaledMMKernel
+    )
+    fallback_type: ClassVar[type[DeepGemmFp8BlockScaledMMKernel]] = (
+        DeepGemmFp8BlockScaledMMKernel
+    )
     apply_input_quant: ClassVar[bool] = False
 
     def __init__(self, config: FP8ScaledMMLinearLayerConfig):
@@ -171,7 +197,9 @@ class FlashInferFp8DeepGEMMDynamicBlockScaledKernel(Fp8BlockScaledDynamicMMLinea
         group_size = self.weight_group_shape.col
         use_deep_gemm_e8m0 = self.fallback.use_deep_gemm_e8m0
 
-        return torch.ops.aphrodite.dynamic_flashinfer_deepgemm_blockscale_gemm(A, B, Bs, group_size, use_deep_gemm_e8m0)
+        return torch.ops.aphrodite.dynamic_flashinfer_deepgemm_blockscale_gemm(
+            A, B, Bs, group_size, use_deep_gemm_e8m0
+        )
 
 
 def _flashinfer_fp8_blockscale_gemm_impl(
@@ -195,7 +223,9 @@ def _flashinfer_fp8_blockscale_gemm_fake(
     """
     Required fake/meta implementation for torch.compile graph tracing.
     """
-    return torch.empty(input.shape[0], weight.shape[0], dtype=torch.bfloat16, device=input.device)
+    return torch.empty(
+        input.shape[0], weight.shape[0], dtype=torch.bfloat16, device=input.device
+    )
 
 
 direct_register_custom_op(
@@ -302,7 +332,9 @@ def _dynamic_flashinfer_deepgemm_blockscale_gemm_fake(
     """
     Required fake/meta implementation for torch.compile graph tracing.
     """
-    return torch.empty(input.shape[0], weight.shape[0], dtype=torch.bfloat16, device=input.device)
+    return torch.empty(
+        input.shape[0], weight.shape[0], dtype=torch.bfloat16, device=input.device
+    )
 
 
 direct_register_custom_op(

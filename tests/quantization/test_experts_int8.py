@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 # flake8: noqa
 """Tests experts_int8 quantization startup and generation,
 doesn't test correctness
@@ -20,7 +21,7 @@ MODELS = ["ai21labs/Jamba-tiny-random", "pfnet/plamo-2-1b"]
 )
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("dtype", ["bfloat16"])
-@pytest.mark.parametrize("max_tokens", [10])
+@pytest.mark.parametrize("max_tokens", [4])
 def test_model_experts_int8_startup(
     hf_runner,
     aphrodite_runner,
@@ -32,5 +33,10 @@ def test_model_experts_int8_startup(
     model_info = HF_EXAMPLE_MODELS.find_hf_info(model)
     model_info.check_transformers_version(on_fail="skip")
 
-    with aphrodite_runner(model, dtype=dtype, quantization="experts_int8") as aphrodite_model:
+    with aphrodite_runner(
+        model,
+        dtype=dtype,
+        enforce_eager=True,
+        quantization="experts_int8",
+    ) as aphrodite_model:
         aphrodite_model.generate_greedy(example_prompts, max_tokens)

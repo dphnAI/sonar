@@ -1,20 +1,28 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import weakref
 from collections.abc import Callable, Sequence
 from contextlib import nullcontext
 from copy import deepcopy
 
 import depyf
-from aphrodite.compilation.aphrodite_inductor_pass import AphroditeInductorPass
-from aphrodite.compilation.fx_utils import find_op_nodes
-from aphrodite.compilation.inductor_pass import InductorPass
-from aphrodite.compilation.pass_manager import with_pattern_match_debug
 from torch import fx
-from torch._ops import OpOverload
+from torch._ops import OpOverload, OpOverloadPacket
 from torch.fx._utils import lazy_format_graph_code
 
+from aphrodite.compilation.passes.fx_utils import find_op_nodes
+from aphrodite.compilation.passes.inductor_pass import (
+    InductorPass,
+    pass_context,
+)
+from aphrodite.compilation.passes.ir.inplace_functionalization import (
+    AphroditeIRInplaceFunctionalizationPass,
+)
+from aphrodite.compilation.passes.pass_manager import with_pattern_match_debug
+from aphrodite.compilation.passes.aphrodite_inductor_pass import AphroditeInductorPass
 from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
+from aphrodite.config.utils import Range
 from aphrodite.logger import init_logger
 
 logger = init_logger("aphrodite.tests.compile.backend")
@@ -52,10 +60,16 @@ class TestBackend:
         self.custom_passes = list(passes)
         aphrodite_config = get_current_aphrodite_config()
         compile_config = aphrodite_config.compilation_config
+        self.range = Range(1, aphrodite_config.scheduler_config.max_num_batched_tokens)
         # Deepcopy to allow multiple TestBackend instances to use the same AphroditeConfig
         self.inductor_config = deepcopy(compile_config.inductor_compile_config)
         self.inductor_config["force_disable_caches"] = True
         self.inductor_config["post_grad_custom_post_pass"] = self.post_pass
+
+        # Add AphroditeIRInplaceFunctionalizationPass as pre-grad pass by default
+        self.inductor_config["pre_grad_custom_pass"] = (
+            AphroditeIRInplaceFunctionalizationPass(aphrodite_config)
+        )
 
         if debug_dump_path := aphrodite_config.compile_debug_dump_path():
             logger.debug("Dumping depyf output to %s", debug_dump_path)
@@ -67,8 +81,10 @@ class TestBackend:
         self.graph_pre_compile = deepcopy(graph)
         from torch._inductor.compile_fx import compile_fx
 
-        with self.debug_ctx:
-            return compile_fx(graph, example_inputs, config_patches=self.inductor_config)
+        with self.debug_ctx, pass_context(self.range):
+            return compile_fx(
+                graph, example_inputs, config_patches=self.inductor_config
+            )
 
     @with_pattern_match_debug
     def post_pass(self, graph: fx.Graph):
@@ -87,7 +103,9 @@ class TestBackend:
         # assign by reference, will reflect the final state of the graph
         self.final_graph = graph
 
-    def check_before_ops(self, ops: Sequence[OpOverload], fully_replaced=True):
+    def check_before_ops(
+        self, ops: Sequence[OpOverload | OpOverloadPacket], fully_replaced=True
+    ):
         for op in ops:
             num_pre = len(list(find_op_nodes(op, self.graph_pre_pass)))
             num_post = len(list(find_op_nodes(op, self.graph_post_pass)))
@@ -96,13 +114,19 @@ class TestBackend:
             if fully_replaced:
                 assert num_post == 0, f"Unexpected op {op.name()} in post-pass graph"
 
-    def check_after_ops(self, ops: Sequence[OpOverload]):
+    def check_after_ops(self, ops: Sequence[OpOverload | OpOverloadPacket]):
         for op in ops:
             num_pre = len(list(find_op_nodes(op, self.graph_pre_pass)))
             num_post = len(list(find_op_nodes(op, self.graph_post_pass)))
             assert num_pre == 0, f"Unexpected op {op.name()} in pre-pass graph"
             assert num_post > 0, f"Op {op.name()} not found in post-pass graph"
 
-    def op_count(self, op: OpOverload, before=False) -> int:
+    def op_count(self, op: OpOverload | OpOverloadPacket, before=False) -> int:
         graph = self.graph_pre_pass if before else self.graph_post_pass
         return len(list(find_op_nodes(op, graph)))
+
+    def print_graphs(self):
+        print("=== Graph before custom passes ===")
+        print(self.graph_pre_pass.python_code(root_module="self", verbose=True).src)
+        print("=== Graph after custom passes ===")
+        print(self.graph_post_pass.python_code(root_module="self", verbose=True).src)

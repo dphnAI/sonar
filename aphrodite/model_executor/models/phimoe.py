@@ -3,7 +3,7 @@
 
 # Adapted from
 # https://github.com/huggingface/transformers/blob/v4.28.0/src/transformers/models/llama/modeling_llama.py
-# Copyright 2023 The Aphrodite team.
+# Copyright 2023 The vLLM team.
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -32,12 +32,11 @@ from torch import nn
 from transformers.configuration_utils import PretrainedConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
+from aphrodite.config import CacheConfig, AphroditeConfig
 from aphrodite.distributed import get_pp_group, get_tensor_model_parallel_world_size
 from aphrodite.model_executor.layers.attention import Attention
 from aphrodite.model_executor.layers.fused_moe import (
     FusedMoE,
-    fused_moe_make_expert_params_mapping,
 )
 from aphrodite.model_executor.layers.linear import (
     QKVParallelLinear,
@@ -51,16 +50,12 @@ from aphrodite.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
-    default_weight_loader,
-    maybe_remap_kv_scale_name,
-)
 from aphrodite.sequence import IntermediateTensors
 
 from .interfaces import SupportsLoRA, SupportsPP
 from .utils import (
     AutoWeightsLoader,
-    is_pp_missing_parameter,
+    WeightsMapper,
     make_empty_intermediate_tensors_factory,
     make_layers,
     maybe_prefix,
@@ -186,7 +181,9 @@ def sparsemixer(scores, jitter_eps=0.01):
         # compute mask for sparsity
         mask_logits_threshold, max_ind = scores.max(dim=-1, keepdim=True)
         factor = scores.abs().clamp(min=mask_logits_threshold)
-        mask_logits_threshold = ((mask_logits_threshold - scores) / factor) > (2 * jitter_eps)
+        mask_logits_threshold = ((mask_logits_threshold - scores) / factor) > (
+            2 * jitter_eps
+        )
 
     # apply mask
     masked_gates = scores.masked_fill(mask_logits_threshold, float("-inf"))
@@ -209,7 +206,9 @@ def sparsemixer(scores, jitter_eps=0.01):
         # compute mask for sparsity
         mask_logits_threshold, max_ind = masked_scores.max(dim=-1, keepdim=True)
         factor = scores.abs().clamp(min=mask_logits_threshold)
-        mask_logits_threshold = ((mask_logits_threshold - scores) / factor) > (2 * jitter_eps)
+        mask_logits_threshold = ((mask_logits_threshold - scores) / factor) > (
+            2 * jitter_eps
+        )
 
     # apply mask
     masked_gates_top2 = masked_scores.masked_fill(mask_logits_threshold, float("-inf"))
@@ -285,6 +284,7 @@ class PhiMoE(nn.Module):
             tp_size=tp_size,
             custom_routing_function=phimoe_routing_function,
             prefix=f"{prefix}.experts",
+            ckpt_names=("w1", "w2", "w3"),
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -394,7 +394,9 @@ class PhiMoEDecoderLayer(nn.Module):
             num_heads=config.num_attention_heads,
             max_position=config.max_position_embeddings,
             num_kv_heads=config.num_key_value_heads,
-            head_dim=getattr(config, "head_dim", self.hidden_size // config.num_attention_heads),
+            head_dim=getattr(
+                config, "head_dim", self.hidden_size // config.num_attention_heads
+            ),
             cache_config=cache_config,
             quant_config=quant_config,
             rope_parameters=config.rope_parameters,
@@ -408,7 +410,9 @@ class PhiMoEDecoderLayer(nn.Module):
             quant_config=quant_config,
             prefix=f"{prefix}.block_sparse_moe",
         )
-        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True)
+        self.input_layernorm = nn.LayerNorm(
+            config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True
+        )
         self.post_attention_layernorm = nn.LayerNorm(
             config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True
         )
@@ -459,10 +463,14 @@ class PhiMoEModel(nn.Module):
         )
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
-            lambda prefix: PhiMoEDecoderLayer(config, cache_config, quant_config, prefix=prefix),
+            lambda prefix: PhiMoEDecoderLayer(
+                config, cache_config, quant_config, prefix=prefix
+            ),
             prefix=f"{prefix}.layers",
         )
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True)
+        self.norm = nn.LayerNorm(
+            config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True
+        )
 
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
             ["hidden_states", "residual"], config.hidden_size
@@ -497,96 +505,25 @@ class PhiMoEModel(nn.Module):
             )
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
+            return IntermediateTensors(
+                {"hidden_states": hidden_states, "residual": residual}
+            )
 
         hidden_states = self.norm(hidden_states)
         return hidden_states
-
-    def get_expert_mapping(self) -> list[tuple[str, str, int, str]]:
-        return fused_moe_make_expert_params_mapping(
-            self,
-            ckpt_gate_proj_name="w1",
-            ckpt_down_proj_name="w2",
-            ckpt_up_proj_name="w3",
-            num_experts=self.config.num_local_experts,
-        )
-
-    def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            # (param_name, shard_name, shard_id)
-            ("qkv_proj", "q_proj", "q"),
-            ("qkv_proj", "k_proj", "k"),
-            ("qkv_proj", "v_proj", "v"),
-        ]
-
-        params_dict = dict(self.named_parameters())
-        loaded_params: set[str] = set()
-        expert_params_mapping = self.get_expert_mapping()
-        for name, loaded_weight in weights:
-            if self.quant_config is not None and (scale_name := self.quant_config.get_cache_scale(name)):
-                # Loading kv cache quantization scales
-                param = params_dict[scale_name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                loaded_weight = loaded_weight if loaded_weight.dim() == 0 else loaded_weight[0]
-                weight_loader(param, loaded_weight)
-                loaded_params.add(scale_name)
-                continue
-
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                if weight_name not in name:
-                    continue
-                name = name.replace(weight_name, param_name)
-                # Skip loading extra bias for GPTQ models.
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-                # Skip layers on other devices.
-                if is_pp_missing_parameter(name, self):
-                    continue
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                for mapping in expert_params_mapping:
-                    param_name, weight_name, expert_id, shard_id = mapping
-                    if weight_name not in name:
-                        continue
-                    name = name.replace(weight_name, param_name)
-                    # Skip layers on other devices.
-                    if is_pp_missing_parameter(name, self):
-                        continue
-                    param = params_dict[name]
-                    weight_loader = param.weight_loader
-                    weight_loader(
-                        param,
-                        loaded_weight,
-                        name,
-                        shard_id=shard_id,
-                        expert_id=expert_id,
-                    )
-                    break
-                else:
-                    # Skip loading extra bias for GPTQ models.
-                    if name.endswith(".bias") and name not in params_dict:
-                        continue
-                    # Skip layers on other devices.
-                    if is_pp_missing_parameter(name, self):
-                        continue
-                    # Remapping the name of FP8 kv-scale.
-                    name = maybe_remap_kv_scale_name(name, params_dict)
-                    if name is None:
-                        continue
-
-                    param = params_dict[name]
-                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                    weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
 
 
 class PhiMoEForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
     fall_back_to_pt_during_load = False
 
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_stacked={
+            # weight_name: (param_name, shard_id)
+            ".q_proj": (".qkv_proj", "q"),
+            ".k_proj": (".qkv_proj", "k"),
+            ".v_proj": (".qkv_proj", "v"),
+        }
+    )
     packed_modules_mapping = {
         "qkv_proj": [
             "q_proj",
@@ -609,7 +546,9 @@ class PhiMoEForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
 
         self.quant_config = aphrodite_config.quant_config
 
-        self.model = PhiMoEModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = PhiMoEModel(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
+        )
 
         self.lm_head = ParallelLMHead(
             config.vocab_size,
@@ -620,7 +559,9 @@ class PhiMoEForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         )
         self.logits_processor = LogitsProcessor(config.vocab_size)
 
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -632,7 +573,9 @@ class PhiMoEForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
+        hidden_states = self.model(
+            input_ids, positions, intermediate_tensors, inputs_embeds
+        )
         return hidden_states
 
     def compute_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -641,7 +584,4 @@ class PhiMoEForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
-        return loader.load_weights(weights)
-
-    def get_expert_mapping(self) -> list[tuple[str, str, int, str]]:
-        return self.model.get_expert_mapping()
+        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)

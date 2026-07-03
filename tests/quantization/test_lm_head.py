@@ -7,9 +7,11 @@ Run `pytest tests/quantization/test_quant_lm_head_true.py --forked`.
 
 import pytest
 import torch
-from aphrodite.modeling.layers.vocab_parallel_embedding import UnquantizedEmbeddingMethod
-from aphrodite.quantization.gptq import GPTQLinearMethod
-from aphrodite.quantization.gptq_marlin import GPTQMarlinLinearMethod
+
+from aphrodite.model_executor.layers.quantization.auto_gptq import AutoGPTQLinearMethod
+from aphrodite.model_executor.layers.vocab_parallel_embedding import (
+    UnquantizedEmbeddingMethod,
+)
 
 PROMPT = "On the surface of Mars, we found"
 
@@ -28,18 +30,22 @@ def test_lm_head(
 ) -> None:
     # `LLM.apply_model` requires pickling a function.
     monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
-    with aphrodite_runner(model_id, dtype=torch.float16, max_model_len=2048, enforce_eager=True) as aphrodite_model:
+    with aphrodite_runner(
+        model_id, dtype=torch.float16, max_model_len=2048, enforce_eager=True
+    ) as aphrodite_model:
 
         def check_model(model):
             lm_head_layer = model.lm_head
             if lm_head_quantized:
                 assert isinstance(
                     lm_head_layer.quant_method,
-                    (GPTQLinearMethod, GPTQMarlinLinearMethod),
+                    AutoGPTQLinearMethod,
                 )
             else:
-                assert isinstance(lm_head_layer.quant_method, UnquantizedEmbeddingMethod)
+                assert isinstance(
+                    lm_head_layer.quant_method, UnquantizedEmbeddingMethod
+                )
 
         aphrodite_model.apply_model(check_model)
 
-        print(aphrodite_model.generate_greedy(["Hello my name is"], max_tokens=10)[0][1])
+        print(aphrodite_model.generate_greedy(["Hello my name is"], max_tokens=4)[0][1])

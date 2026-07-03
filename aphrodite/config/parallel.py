@@ -42,7 +42,9 @@ All2AllBackend = Literal[
     "pplx",
     "deepep_high_throughput",
     "deepep_low_latency",
-    "mori",
+    "deepep_v2",
+    "mori_high_throughput",
+    "mori_low_latency",
     "nixl_ep",
     "allgather_reducescatter",
     "flashinfer_all2allv",  # temporary alias for flashinfer_nvlink_two_sided
@@ -77,7 +79,7 @@ class EPLBConfig:
     """
     Interval for logging the balancedness.
     """
-    use_async: bool = False
+    use_async: bool = True
     """
     Whether to use non-blocking EPLB.
     """
@@ -92,13 +94,20 @@ class EPLBConfig:
     - "torch_gloo": Use torch.distributed gloo with CPU staging
     - "nixl": Use NIXL/ RIXL with staged send/recv buffers
     - "pynccl": Use PyNccl send/recv
-    - None: Auto-select backend ("torch_gloo" for async, "torch_nccl" for sync)
+    - None: Auto-select backend (prefers "nixl", falls back to "torch_gloo")
     """
 
     @model_validator(mode="after")
     def _validate_eplb_config(self) -> Self:
         if self.use_async and self.policy != "default":
             raise ValueError("Async EPLB is only supported with the default policy.")
+        if self.use_async and self.communicator in ("torch_nccl", "pynccl"):
+            raise ValueError(
+                f"{self.communicator} communicator is incompatible with "
+                "async EPLB due to NCCL multi-stream conflicts. Use "
+                "'torch_gloo' or 'nixl' instead, or leave communicator "
+                "unset for automatic selection."
+            )
         if self.log_balancedness and self.log_balancedness_interval <= 0:
             raise ValueError("log_balancedness_interval must be greater than 0.")
         return self
@@ -108,22 +117,24 @@ class EPLBConfig:
 class ParallelConfig:
     """Configuration for the distributed execution."""
 
-    pipeline_parallel_size: int = 1
+    pipeline_parallel_size: int = Field(default=1, ge=1)
     """Number of pipeline parallel groups."""
-    tensor_parallel_size: int = 1
+    tensor_parallel_size: int = Field(default=1, ge=1)
     """Number of tensor parallel groups."""
-    prefill_context_parallel_size: int = 1
+    prefill_context_parallel_size: int = Field(default=1, ge=1)
     """Number of prefill context parallel groups."""
-    data_parallel_size: int = 1
+    data_parallel_size: int = Field(default=1, ge=1)
     """Number of data parallel groups. MoE layers will be sharded according to
     the product of the tensor parallel size and data parallel size."""
-    data_parallel_size_local: int = 1
-    """Number of local data parallel groups."""
-    data_parallel_rank: int = 0
-    """Rank of the data parallel group."""
+    data_parallel_size_local: int = Field(default=1, ge=0)
+    """Number of local data parallel groups. A value of 0 is a sentinel used by
+    the engine-args layer to signal that data parallelism was specified
+    externally (see `ParallelConfig.__post_init__`)."""
+    data_parallel_rank: int = Field(default=0, ge=0)
+    """Rank of the data parallel group. The runtime check at
+    ``__post_init__`` further bounds this by ``data_parallel_size``."""
     data_parallel_rank_local: int | None = None
-    """Local rank of the data parallel group,
-    set only in SPMD mode."""
+    """Local rank of the data parallel group, set only in SPMD mode."""
     data_parallel_master_ip: str = "127.0.0.1"
     """IP of the data parallel master."""
     data_parallel_rpc_port: int = 29550
@@ -135,8 +146,10 @@ class ParallelConfig:
     data_parallel_external_lb: bool = False
     """Whether to use "external" DP LB mode. Applies only to online serving
     and when data_parallel_size > 0. This is useful for a "one-pod-per-rank"
-    wide-EP setup in Kubernetes. Set implicitly when --data-parallel-rank
-    is provided explicitly to aphrodite serve."""
+    wide-EP setup in Kubernetes. Supported only for MoE deployments; non-MoE
+    models should use independent Aphrodite instances without --data-parallel-*
+    arguments. Set implicitly when --data-parallel-rank is provided explicitly
+    to aphrodite serve."""
     data_parallel_hybrid_lb: bool = False
     """Whether to use "hybrid" DP LB mode. Applies only to online serving
     and when data_parallel_size > 0. Enables running an AsyncLLM
@@ -175,12 +188,13 @@ class ParallelConfig:
     - "allgather_reducescatter": All2all based on allgather and reducescatter
     - "deepep_high_throughput": Use deepep high-throughput kernels
     - "deepep_low_latency": Use deepep low-latency kernels
-    - "mori": Use mori kernels
+    - "mori_high_throughput": MoRI EP with InterNodeV1 for multi-node
+    - "mori_low_latency": MoRI EP with InterNodeV1LL for multi-node
     - "nixl_ep": Use nixl-ep kernels
     - "flashinfer_nvlink_two_sided": Use flashinfer two-sided kernels for mnnvl
     - "flashinfer_nvlink_one_sided": Use flashinfer high-throughput a2a kernels"""
 
-    max_parallel_loading_workers: int | None = None
+    max_parallel_loading_workers: int | None = Field(default=None, ge=1)
     """Maximum number of parallel loading workers when loading model
     sequentially in multiple batches. To avoid RAM OOM when using tensor
     parallel and large models."""
@@ -193,15 +207,15 @@ class ParallelConfig:
 
     enable_dbo: bool = False
     """Enable dual batch overlap for the model executor."""
-    ubatch_size: int = 0
+    ubatch_size: int = Field(default=0, ge=0)
     """Number of ubatch size."""
 
-    dbo_decode_token_threshold: int = 32
+    dbo_decode_token_threshold: int = Field(default=32, ge=0)
     """The threshold for dual batch overlap for batches only containing decodes.
     If the number of tokens in the request is greater than this threshold,
     microbatching will be used. Otherwise, the request will be processed in a
     single batch."""
-    dbo_prefill_token_threshold: int = 512  # TODO(lucas): tune
+    dbo_prefill_token_threshold: int = Field(default=512, ge=0)  # TODO(lucas): tune
     """The threshold for dual batch overlap for batches that contain one or more
     prefills. If the number of tokens in the request is greater than this
     threshold, microbatching will be used. Otherwise, the request will be
@@ -223,7 +237,9 @@ class ParallelConfig:
     placement_group: PlacementGroup | None = None
     """ray distributed model workers placement group."""
 
-    distributed_executor_backend: str | DistributedExecutorBackend | type[Executor] | None = None
+    distributed_executor_backend: (
+        str | DistributedExecutorBackend | type[Executor] | None
+    ) = None
     """
     Backend to use for distributed model workers, either "ray" or "mp"
     (multiprocessing). If the product of pipeline_parallel_size and tensor_parallel_size
@@ -233,7 +249,8 @@ class ParallelConfig:
     distributed_executor_backend to "ray".
 
     Note:
-        TPU platform only supports Ray for distributed inference.
+        [TPU](https://docs.aphrodite.ai/projects/tpu/en/latest/) platform only supports Ray
+        for distributed inference.
     """
 
     worker_cls: str = "auto"
@@ -253,14 +270,19 @@ class ParallelConfig:
     master_port: int = 29501
     """distributed master port for multi-node distributed 
     inference when distributed_executor_backend is mp."""
-    node_rank: int = 0
-    """distributed node rank for multi-node distributed 
+    node_rank: int = Field(default=0, ge=0)
+    """distributed node rank for multi-node distributed
     inference when distributed_executor_backend is mp."""
-    nnodes: int = 1
+    nnodes: int = Field(default=1, ge=1)
     """num of nodes for multi-node distributed
     inference when distributed_executor_backend is mp."""
     numa_bind: bool = False
-    """Enable NUMA binding for GPU worker subprocesses."""
+    """Enable NUMA binding for GPU worker subprocesses.
+
+    By default, workers are pinned to their GPU's NUMA-local CPUs and
+    memory; on PCT-capable Xeons they also auto-bind to the SKU's
+    PCT priority cores.
+    """
     numa_bind_nodes: list[int] | None = None
     """NUMA node to bind each GPU worker to.
 
@@ -280,12 +302,24 @@ class ParallelConfig:
     Each entry must use `numactl --physcpubind` CPU-list syntax, for example
     `"0-3"` or `"0,2,4-7"`.
     """
+    assigned_physical_gpu_ids: list[int] | None = None
+    """Mapping from Aphrodite-local logical GPU IDs to physical GPU IDs.
+
+    For example, ``[2, 3]`` means logical GPU 0 maps to physical GPU 2,
+    and logical GPU 1 maps to physical GPU 3. Physical IDs are used only
+    at platform/topology boundaries such as NVML, NIC affinity, P2P
+    checks, and final CUDA device selection when needed. When None,
+    logical IDs map to visible device IDs in order."""
 
     distributed_timeout_seconds: int | None = None
     """Timeout in seconds for distributed operations (e.g., init_process_group).
     If set, this value is passed to torch.distributed.init_process_group as the
     timeout parameter. If None, PyTorch's default timeout is used (600s for NCCL).
     Increase this for multi-node setups where model downloads may be slow."""
+
+    cpu_distributed_timeout_seconds: int | None = None
+    """Timeout (in seconds) for cpu communication groups. If None, PyTorch's
+    default timeout is used (1800s for gloo)."""
 
     world_size: int = Field(init=False)
     """world_size is TPxPP, it affects the number of workers we create."""
@@ -302,7 +336,7 @@ class ParallelConfig:
     """Port of the coordination TCPStore. Can be set by the API server; workers
     connect as clients to exchange self-picked group ports at runtime."""
 
-    decode_context_parallel_size: int = 1
+    decode_context_parallel_size: int = Field(default=1, ge=1)
     """Number of decode context parallel groups, because the world size does
     not change by dcp, it simply reuse the GPUs of TP group, and tp_size
     needs to be divisible by dcp_size."""
@@ -390,14 +424,17 @@ class ParallelConfig:
                 raise ValueError("numa_bind_cpus entries must not be empty.")
             if not _NUMACTL_CPUSET_PATTERN.fullmatch(cpuset):
                 raise ValueError(
-                    "numa_bind_cpus entries must use numactl CPU list syntax, for example '0-3' or '0,2,4-7'."
+                    "numa_bind_cpus entries must use numactl CPU list syntax, "
+                    "for example '0-3' or '0,2,4-7'."
                 )
             for part in cpuset.split(","):
                 if "-" not in part:
                     continue
                 start_str, end_str = part.split("-", 1)
                 if int(start_str) > int(end_str):
-                    raise ValueError(f"numa_bind_cpus ranges must be ascending, but got '{cpuset}'.")
+                    raise ValueError(
+                        f"numa_bind_cpus ranges must be ascending, but got '{cpuset}'."
+                    )
         return value
 
     @model_validator(mode="after")
@@ -411,7 +448,8 @@ class ParallelConfig:
 
         if self.all2all_backend in ["pplx", "naive"]:
             logger.warning(
-                "The '%s' all2all backend has been removed. Falling back to 'allgather_reducescatter'.",
+                "The '%s' all2all backend has been removed. "
+                "Falling back to 'allgather_reducescatter'.",
                 self.all2all_backend,
             )
             self.all2all_backend = "allgather_reducescatter"
@@ -423,15 +461,22 @@ class ParallelConfig:
             )
 
         if self.data_parallel_size <= 1 and self.data_parallel_external_lb:
-            raise ValueError("data_parallel_external_lb can only be set when data_parallel_size > 1")
+            raise ValueError(
+                "data_parallel_external_lb can only be set when data_parallel_size > 1"
+            )
 
-        if not self.numa_bind and (self.numa_bind_nodes is not None or self.numa_bind_cpus is not None):
-            raise ValueError("numa_bind_nodes and numa_bind_cpus require numa_bind=True.")
+        if not self.numa_bind and (
+            self.numa_bind_nodes is not None or self.numa_bind_cpus is not None
+        ):
+            raise ValueError(
+                "numa_bind_nodes and numa_bind_cpus require numa_bind=True."
+            )
 
         if self.enable_eplb:
             if not current_platform.is_cuda_alike():
                 raise ValueError(
-                    "Expert parallelism load balancing is only supported on CUDA devices or ROCm devices now."
+                    "Expert parallelism load balancing is only supported on "
+                    "CUDA devices or ROCm devices now."
                 )
             if not self.enable_expert_parallel:
                 raise ValueError("enable_expert_parallel must be True to use EPLB.")
@@ -457,11 +502,14 @@ class ParallelConfig:
         # tp_size//dcp_size DCP groups.
         if self.tensor_parallel_size % self.decode_context_parallel_size != 0:
             raise ValueError(
-                f"tp_size={self.tensor_parallel_size} must be divisible bydcp_size={self.decode_context_parallel_size}."
+                f"tp_size={self.tensor_parallel_size} must be divisible by"
+                f"dcp_size={self.decode_context_parallel_size}."
             )
 
         if self.dcp_comm_backend == "a2a" and self.decode_context_parallel_size <= 1:
-            raise ValueError("dcp_comm_backend='a2a' requires decode_context_parallel_size > 1.")
+            raise ValueError(
+                "dcp_comm_backend='a2a' requires decode_context_parallel_size > 1."
+            )
 
         return self
 
@@ -516,7 +564,9 @@ class ParallelConfig:
 
         from aphrodite.distributed.utils import get_cached_tcp_store_client
 
-        store = get_cached_tcp_store_client(self.data_parallel_master_ip, self._coord_store_port)
+        store = get_cached_tcp_store_client(
+            self.data_parallel_master_ip, self._coord_store_port
+        )
 
         key = "dp_master_port"
         if self.data_parallel_rank == 0:
@@ -530,10 +580,16 @@ class ParallelConfig:
             return int(store.get(key).decode()), None
 
     @overload
-    def stateless_init_dp_group(self, return_store: Literal[False] = ...) -> ProcessGroup: ...
+    def stateless_init_dp_group(
+        self, return_store: Literal[False] = ...
+    ) -> ProcessGroup: ...
     @overload
-    def stateless_init_dp_group(self, return_store: Literal[True] = ...) -> tuple[ProcessGroup, Store]: ...
-    def stateless_init_dp_group(self, return_store: bool = False) -> ProcessGroup | tuple[ProcessGroup, Store]:
+    def stateless_init_dp_group(
+        self, return_store: Literal[True] = ...
+    ) -> tuple[ProcessGroup, Store]: ...
+    def stateless_init_dp_group(
+        self, return_store: bool = False
+    ) -> ProcessGroup | tuple[ProcessGroup, Store]:
         # NOTE: In high-concurrency scenarios multiple processes
         # can pick the same (currently free) port through a race
         # condition when calling `get_open_port()`. When the first
@@ -590,7 +646,8 @@ class ParallelConfig:
                 "allgather_reducescatter",
                 "deepep_high_throughput",
                 "deepep_low_latency",
-                "mori",
+                "mori_high_throughput",
+                "mori_low_latency",
                 "nixl_ep",
             )
             and self.enable_expert_parallel
@@ -618,7 +675,9 @@ class ParallelConfig:
     def nnodes_within_dp(self) -> int:
         if self.nnodes == 1:
             return 1
-        data_parallel_node_size = self.data_parallel_size // self.data_parallel_size_local
+        data_parallel_node_size = (
+            self.data_parallel_size // self.data_parallel_size_local
+        )
         return self.nnodes // data_parallel_node_size
 
     @property
@@ -637,19 +696,26 @@ class ParallelConfig:
         return aggregated_has_unfinished
 
     @staticmethod
-    def sync_dp_state(dp_group: ProcessGroup, has_unfinished: bool, pending_pause: bool) -> tuple[bool, bool]:
+    def sync_dp_state(
+        dp_group: ProcessGroup, has_unfinished: bool, pending_pause: bool
+    ) -> tuple[bool, bool]:
         """Combined all-reduce for DP state synchronization.
+
         Uses a single SUM all-reduce on a 2-element tensor:
           [0] = 1 if this rank has unfinished work, else 0.
                 SUM > 0 ≡ logical OR across ranks → any rank has work.
           [1] = 1 if this rank has a pending pause request, else 0.
                 SUM == dp_size ≡ all ranks reached pause consensus.
+
         has_unfinished_global is true if any rank has unfinished work,
         or if some ranks are waiting for a pause consensus.
+
         Returns:
             (has_unfinished_global, pause_consensus)
         """
-        tensor = torch.tensor([int(has_unfinished), int(pending_pause)], dtype=torch.int32, device="cpu")
+        tensor = torch.tensor(
+            [int(has_unfinished), int(pending_pause)], dtype=torch.int32, device="cpu"
+        )
         torch.distributed.all_reduce(tensor, op=ReduceOp.SUM, group=dp_group)
         dp_size = dp_group.size()
         pause_count = tensor[1].item()
@@ -714,6 +780,7 @@ class ParallelConfig:
             "numa_bind",
             "numa_bind_nodes",
             "numa_bind_cpus",
+            "assigned_physical_gpu_ids",
         }
 
         from aphrodite.config.utils import get_hash_factors, hash_factors
@@ -723,7 +790,11 @@ class ParallelConfig:
 
     def __post_init__(self) -> None:
         # Continue with the rest of the initialization
-        self.world_size = self.pipeline_parallel_size * self.tensor_parallel_size * self.prefill_context_parallel_size
+        self.world_size = (
+            self.pipeline_parallel_size
+            * self.tensor_parallel_size
+            * self.prefill_context_parallel_size
+        )
 
         if self.distributed_executor_backend == "external_launcher":
             logger.info("Using external launcher for distributed inference.")
@@ -743,13 +814,24 @@ class ParallelConfig:
                     "or data_parallel_hybrid_lb. Elastic EP relies on a single API "
                     "server and core client to coordinate scale up/down."
                 )
+            if self.eplb_config.use_async:
+                from aphrodite.distributed.nixl_utils import is_nixl_available
+
+                if not is_nixl_available():
+                    raise ValueError(
+                        "Elastic EP with async EPLB requires the NIXL "
+                        "package. Either install NIXL or set "
+                        "--eplb-config.use_async=false."
+                    )
 
         if self.data_parallel_size > 1 or self.data_parallel_size_local == 0:
             # Data parallel was specified in the engine args.
             if self.distributed_executor_backend == "external_launcher":
                 # For external launcher,
                 # we need to set the data parallel rank automatically
-                self.data_parallel_rank = int(os.environ["RANK"]) // (self.world_size // self.data_parallel_size)
+                self.data_parallel_rank = int(os.environ["RANK"]) // (
+                    self.world_size // self.data_parallel_size
+                )
                 logger.info(
                     "Set data_parallel_rank to %d automatically.",
                     self.data_parallel_rank,
@@ -757,7 +839,9 @@ class ParallelConfig:
             if not self.enable_elastic_ep:
                 if not self._data_parallel_master_port_list:
                     self._data_parallel_master_port_list = get_open_ports_list(5)
-                self.data_parallel_master_port = self._data_parallel_master_port_list.pop()
+                self.data_parallel_master_port = (
+                    self._data_parallel_master_port_list.pop()
+                )
 
             if not (0 <= self.data_parallel_rank < self.data_parallel_size):
                 raise ValueError(
@@ -773,7 +857,10 @@ class ParallelConfig:
             self.data_parallel_master_port = envs.APHRODITE_DP_MASTER_PORT
 
             if self.data_parallel_size > 1 and self.is_moe_model is False:
-                raise ValueError("Offline data parallel mode is not supported/useful for dense models.")
+                raise ValueError(
+                    "Offline data parallel mode is not supported/useful"
+                    " for dense models."
+                )
 
         self.data_parallel_index = self.data_parallel_rank
 
@@ -793,7 +880,10 @@ class ParallelConfig:
                 backend = "uni"
             elif current_platform.is_cuda() and self.nnodes > 1:
                 backend = "mp"
-            elif current_platform.is_cuda() and current_platform.device_count() < self.world_size:
+            elif (
+                current_platform.is_cuda()
+                and current_platform.device_count() < self.world_size
+            ):
                 gpu_count = current_platform.device_count()
                 raise ValueError(
                     f"World size ({self.world_size}) is larger than the number of "
@@ -803,7 +893,10 @@ class ParallelConfig:
                     "- multiprocessing, set '--nnodes' appropriately."
                 )
             elif self.data_parallel_backend == "ray":
-                logger.info("Using ray distributed inference because data_parallel_backend is ray")
+                logger.info(
+                    "Using ray distributed inference because "
+                    "data_parallel_backend is ray"
+                )
                 backend = "ray"
             elif ray_found:
                 if self.placement_group:
@@ -823,25 +916,36 @@ class ParallelConfig:
             self.distributed_executor_backend = "uni"
 
         if self.max_parallel_loading_workers is not None:
-            logger.warning("max_parallel_loading_workers is currently not supported and will be ignored.")
+            logger.warning(
+                "max_parallel_loading_workers is currently "
+                "not supported and will be ignored."
+            )
         allowed_backends = ("mp", "uni", "external_launcher")
-        if self.distributed_executor_backend not in allowed_backends and self.nnodes > 1:
+        if (
+            self.distributed_executor_backend not in allowed_backends
+            and self.nnodes > 1
+        ):
             raise ValueError(
-                "nnodes > 1 can only be set when distributed executor backend is mp, uni or external_launcher."
+                "nnodes > 1 can only be set when distributed executor "
+                "backend is mp, uni or external_launcher."
             )
 
         if self.enable_eplb and self.eplb_config.communicator is None:
-            if self.enable_elastic_ep:
-                # Elastic EP requires stateless mode
-                # (torch.distributed.batch_isend_irecv doesn't
-                # support stateless mode), so we use PyNCCL backend
+            # Prefer NIXL when available: zero-copy RDMA reads, compatible
+            # with both async EPLB and elastic EP (deferred remote setup).
+            # Fallbacks: pynccl for elastic EP (stateless groups need it),
+            # torch_gloo for static EP.  torch_nccl is avoided because NCCL
+            # is incompatible with async EPLB (multi-stream conflicts) and
+            # batched isend/irecv hangs under high load.
+            # See https://github.com/pytorch/pytorch/issues/174288
+            from aphrodite.distributed.nixl_utils import is_nixl_available
+
+            if is_nixl_available():
+                self.eplb_config.communicator = "nixl"
+            elif self.enable_elastic_ep:
                 self.eplb_config.communicator = "pynccl"
-            elif self.eplb_config.use_async:
-                # Torch Gloo is a backend that allows avoiding hangs
-                # due to NCCL multi-thread conflicts in async EPLB
-                self.eplb_config.communicator = "torch_gloo"
             else:
-                self.eplb_config.communicator = "torch_nccl"
+                self.eplb_config.communicator = "torch_gloo"
 
     @property
     def use_ray(self) -> bool:
@@ -880,11 +984,18 @@ class ParallelConfig:
 
         if not current_platform.use_custom_allreduce():
             self.disable_custom_all_reduce = True
-            logger.debug("Disabled the custom all-reduce kernel because it is not supported on current platform.")
+            logger.debug(
+                "Disabled the custom all-reduce kernel because it is not "
+                "supported on current platform."
+            )
         if self.nnodes > 1:
             self.disable_custom_all_reduce = True
-            logger.debug("Disabled the custom all-reduce since we are running on multi-node.")
+            logger.debug(
+                "Disabled the custom all-reduce since we are running on multi-node."
+            )
         if self.ray_workers_use_nsight and not self.use_ray:
-            raise ValueError("Unable to use nsight profiling unless workers run with Ray.")
+            raise ValueError(
+                "Unable to use nsight profiling unless workers run with Ray."
+            )
 
         return self

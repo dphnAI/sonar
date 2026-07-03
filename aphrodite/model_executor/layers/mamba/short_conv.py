@@ -2,8 +2,6 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 
-from typing import cast
-
 import torch
 
 from aphrodite.config import CacheConfig, ModelConfig, get_current_aphrodite_config
@@ -26,6 +24,8 @@ from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import (
     causal_conv1d_update,
 )
 from aphrodite.utils.torch_utils import direct_register_custom_op
+from aphrodite.v1.attention.backend import AttentionMetadata
+from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
 from aphrodite.v1.attention.backends.short_conv_attn import ShortConvAttentionMetadata
 
 
@@ -115,12 +115,16 @@ class ShortConv(MambaBase, CustomOp):
         # since they stay the same and reused for all mamba layers in the same
         # iteration.
         attn_metadata_raw = forward_context.attn_metadata
-        attn_metadata: ShortConvAttentionMetadata | None = None
+        attn_metadata: AttentionMetadata | None = None
         if attn_metadata_raw is not None:
             assert isinstance(attn_metadata_raw, dict)
-            attn_metadata = cast(ShortConvAttentionMetadata, attn_metadata_raw[self.prefix])
+            attn_metadata = attn_metadata_raw[self.prefix]
             assert isinstance(attn_metadata, ShortConvAttentionMetadata)
-            conv_state = self.kv_cache[0] if is_conv_state_dim_first() else self.kv_cache[0].transpose(-1, -2)
+            conv_state = (
+                self.kv_cache[0]
+                if is_conv_state_dim_first()
+                else self.kv_cache[0].transpose(-1, -2)
+            )
             state_indices_tensor_p = attn_metadata.state_indices_tensor_p
             state_indices_tensor_d = attn_metadata.state_indices_tensor_d
             has_initial_states_p = attn_metadata.has_initial_states_p
@@ -130,7 +134,9 @@ class ShortConv(MambaBase, CustomOp):
 
         B, C, x = BCx.chunk(3, dim=-1)
 
-        conv_weights = self.conv.weight.view(self.conv.weight.size(0), self.conv.weight.size(2))
+        conv_weights = self.conv.weight.view(
+            self.conv.weight.size(0), self.conv.weight.size(2)
+        )
 
         if attn_metadata is None:
             # V1 profile run
@@ -218,8 +224,8 @@ class ShortConv(MambaBase, CustomOp):
         )
 
     @property
-    def mamba_type(self) -> str:
-        return "short_conv"
+    def mamba_type(self) -> MambaAttentionBackendEnum:
+        return MambaAttentionBackendEnum.SHORT_CONV
 
 
 def short_conv(

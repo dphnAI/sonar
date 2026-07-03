@@ -8,14 +8,11 @@ import regex as re
 from transformers import PreTrainedTokenizerBase
 
 from aphrodite.entrypoints.openai.engine.protocol import DeltaMessage
-from aphrodite.logger import init_logger
 from aphrodite.reasoning import ReasoningParser
 
 if TYPE_CHECKING:
     from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
     from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-
-logger = init_logger(__name__)
 
 
 class HunyuanA13BReasoningParser(ReasoningParser):
@@ -133,7 +130,9 @@ class HunyuanA13BReasoningParser(ReasoningParser):
 
         return None, model_output
 
-    def _is_strict_increasing_subsequence(self, subsequence: Sequence[int], sequence: Sequence[int]) -> bool:
+    def _is_strict_increasing_subsequence(
+        self, subsequence: Sequence[int], sequence: Sequence[int]
+    ) -> bool:
         if not subsequence:
             return False
 

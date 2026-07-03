@@ -5,14 +5,16 @@ from typing import Literal
 
 from torch import nn
 
-from aphrodite.config import AphroditeConfig, ModelConfig
+from aphrodite.config import ModelConfig, AphroditeConfig
 from aphrodite.config.load import LoadConfig
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.model_loader.base_loader import BaseModelLoader
 from aphrodite.model_executor.model_loader.bitsandbytes_loader import BitsAndBytesModelLoader
 from aphrodite.model_executor.model_loader.default_loader import DefaultModelLoader
 from aphrodite.model_executor.model_loader.dummy_loader import DummyModelLoader
-from aphrodite.model_executor.model_loader.gguf_loader import GGUFModelLoader
+from aphrodite.model_executor.model_loader.modelexpress_loader import (
+    ModelExpressModelLoader,
+)
 from aphrodite.model_executor.model_loader.runai_streamer_loader import (
     RunaiModelStreamerLoader,
 )
@@ -34,9 +36,9 @@ LoadFormats = Literal[
     "bitsandbytes",
     "dummy",
     "fastsafetensors",
-    "gguf",
     "instanttensor",
     "mistral",
+    "modelexpress",
     "npcache",
     "pt",
     "runai_streamer",
@@ -51,9 +53,9 @@ _LOAD_FORMAT_TO_MODEL_LOADER: dict[str, type[BaseModelLoader]] = {
     "bitsandbytes": BitsAndBytesModelLoader,
     "dummy": DummyModelLoader,
     "fastsafetensors": DefaultModelLoader,
-    "gguf": GGUFModelLoader,
     "instanttensor": DefaultModelLoader,
     "mistral": DefaultModelLoader,
+    "modelexpress": ModelExpressModelLoader,
     "npcache": DefaultModelLoader,
     "pt": DefaultModelLoader,
     "runai_streamer": RunaiModelStreamerLoader,
@@ -97,12 +99,15 @@ def register_model_loader(load_format: str):
     def _wrapper(model_loader_cls):
         if load_format in _LOAD_FORMAT_TO_MODEL_LOADER:
             logger.warning(
-                "Load format `%s` is already registered, and will be overwritten by the new loader class `%s`.",
+                "Load format `%s` is already registered, and will be "
+                "overwritten by the new loader class `%s`.",
                 load_format,
                 model_loader_cls,
             )
         if not issubclass(model_loader_cls, BaseModelLoader):
-            raise ValueError("The model loader must be a subclass of `BaseModelLoader`.")
+            raise ValueError(
+                "The model loader must be a subclass of `BaseModelLoader`."
+            )
         _LOAD_FORMAT_TO_MODEL_LOADER[load_format] = model_loader_cls
         logger.info(
             "Registered model loader `%s` with load format `%s`",
@@ -132,7 +137,9 @@ def get_model(
     loader = get_model_loader(load_config or aphrodite_config.load_config)
     if model_config is None:
         model_config = aphrodite_config.model_config
-    return loader.load_model(aphrodite_config=aphrodite_config, model_config=model_config, prefix=prefix)
+    return loader.load_model(
+        aphrodite_config=aphrodite_config, model_config=model_config, prefix=prefix
+    )
 
 
 __all__ = [
@@ -144,7 +151,7 @@ __all__ = [
     "register_model_loader",
     "BaseModelLoader",
     "BitsAndBytesModelLoader",
-    "GGUFModelLoader",
+    "ModelExpressModelLoader",
     "DefaultModelLoader",
     "DummyModelLoader",
     "RunaiModelStreamerLoader",

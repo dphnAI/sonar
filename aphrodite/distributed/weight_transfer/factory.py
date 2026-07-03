@@ -10,7 +10,9 @@ from aphrodite.distributed.weight_transfer.base import WeightTransferEngine
 from aphrodite.logger import init_logger
 
 if TYPE_CHECKING:
-    from aphrodite.config.parallel import ParallelConfig
+    import torch
+
+    from aphrodite.config import AphroditeConfig
     from aphrodite.config.weight_transfer import WeightTransferConfig
 
 logger = init_logger(__name__)
@@ -56,7 +58,9 @@ class WeightTransferEngineFactory:
             # Lazy loading path
             module_path = module_path_or_cls
             if class_name is None:
-                raise ValueError("class_name is required when registering with module path")
+                raise ValueError(
+                    "class_name is required when registering with module path"
+                )
 
             def loader() -> type[WeightTransferEngine]:
                 module = importlib.import_module(module_path)
@@ -72,13 +76,17 @@ class WeightTransferEngineFactory:
     def create_engine(
         cls,
         config: "WeightTransferConfig",
-        parallel_config: "ParallelConfig",
+        aphrodite_config: "AphroditeConfig",
+        device: "torch.device",
+        model: "torch.nn.Module",
     ) -> WeightTransferEngine:
         """Create a weight transfer engine instance.
 
         Args:
             config: Weight transfer configuration containing the backend name
-            parallel_config: Parallel configuration for the engine
+            aphrodite_config: The full Aphrodite config (provides parallel/model config)
+            device: The device this worker's model lives on
+            model: The local model instance which will receive the weights
 
         Returns:
             An initialized weight transfer engine instance
@@ -89,7 +97,10 @@ class WeightTransferEngineFactory:
         backend = config.backend
         if backend not in cls._registry:
             available = list(cls._registry.keys())
-            raise ValueError(f"Invalid weight transfer backend: {backend}. Available engines: {available}")
+            raise ValueError(
+                f"Invalid weight transfer backend: {backend}. "
+                f"Available engines: {available}"
+            )
         engine_cls = cls._registry[backend]()
 
         logger.info(
@@ -97,7 +108,7 @@ class WeightTransferEngineFactory:
             engine_cls.__name__,
         )
 
-        return engine_cls(config, parallel_config)
+        return engine_cls(config, aphrodite_config, device, model)
 
 
 # Register built-in weight transfer engines here.
@@ -114,4 +125,10 @@ WeightTransferEngineFactory.register_engine(
     "ipc",
     "aphrodite.distributed.weight_transfer.ipc_engine",
     "IPCWeightTransferEngine",
+)
+
+WeightTransferEngineFactory.register_engine(
+    "sparse_nccl",
+    "aphrodite.distributed.weight_transfer.sparse_nccl_engine",
+    "SparseNCCLWeightTransferEngine",
 )

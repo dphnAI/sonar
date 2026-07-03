@@ -16,9 +16,9 @@ from aphrodite import PoolingParams, PoolingRequestOutput, envs
 from aphrodite.config import AphroditeConfig
 from aphrodite.engine.protocol import EngineClient
 from aphrodite.entrypoints.chat_utils import ChatTemplateConfig
-from aphrodite.entrypoints.logger import RequestLogger
 from aphrodite.entrypoints.openai.engine.protocol import ErrorResponse
 from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
+from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
 from aphrodite.exceptions import APHRODITENotFoundError
 from aphrodite.inputs import EngineInput
 from aphrodite.lora.request import LoRARequest
@@ -52,7 +52,7 @@ class PoolingServingBase(ABC):
         self.engine_client = engine_client
         self.models = models
         self.model_config = models.model_config
-        self.renderer = models.renderer
+        self.renderer = engine_client.renderer
         self.aphrodite_config = engine_client.aphrodite_config
         self.max_model_len = self.model_config.max_model_len
         self.request_logger = request_logger
@@ -61,9 +61,13 @@ class PoolingServingBase(ABC):
         self.chat_template_config = chat_template_config
 
         # Shared thread pool executor for preprocessing and postprocessing.
-        self._executor: Executor = models.renderer._executor
-        self._preprocessing_async = make_async(self._preprocessing, executor=self._executor)
-        self._postprocessing_async = make_async(self._postprocessing, executor=self._executor)
+        self._executor: Executor = self.renderer._executor
+        self._preprocessing_async = make_async(
+            self._preprocessing, executor=self._executor
+        )
+        self._postprocessing_async = make_async(
+            self._postprocessing, executor=self._executor
+        )
 
     async def __call__(
         self,
@@ -82,11 +86,15 @@ class PoolingServingBase(ABC):
         raise NotImplementedError
 
     @torch.inference_mode()
-    def _preprocessing(self, io_processor: PoolingIOProcessor, ctx: PoolingServeContext):
+    def _preprocessing(
+        self, io_processor: PoolingIOProcessor, ctx: PoolingServeContext
+    ):
         return io_processor.pre_process_online(ctx)
 
     @torch.inference_mode()
-    def _postprocessing(self, io_processor: PoolingIOProcessor, ctx: PoolingServeContext):
+    def _postprocessing(
+        self, io_processor: PoolingIOProcessor, ctx: PoolingServeContext
+    ):
         io_processor.post_process_online(ctx)
         return self._build_response(ctx)
 
@@ -122,7 +130,11 @@ class PoolingServingBase(ABC):
 
         generators: list[AsyncGenerator[PoolingRequestOutput, None]] = []
 
-        trace_headers = None if ctx.raw_request is None else await self._get_trace_headers(ctx.raw_request.headers)
+        trace_headers = (
+            None
+            if ctx.raw_request is None
+            else await self._get_trace_headers(ctx.raw_request.headers)
+        )
 
         assert ctx.pooling_params is not None
         pooling_params = ctx.pooling_params
@@ -134,9 +146,17 @@ class PoolingServingBase(ABC):
             pooling_params.verify(self.model_config)
 
         for i, engine_input in enumerate(ctx.engine_inputs):
-            prompt_request_id = f"{ctx.request_id}-{i}" if ctx.prompt_request_ids is None else ctx.prompt_request_ids[i]
+            prompt_request_id = (
+                f"{ctx.request_id}-{i}"
+                if ctx.prompt_request_ids is None
+                else ctx.prompt_request_ids[i]
+            )
 
-            params = pooling_params[i] if isinstance(pooling_params, list) else pooling_params
+            params = (
+                pooling_params[i]
+                if isinstance(pooling_params, list)
+                else pooling_params
+            )
 
             self._log_inputs(
                 prompt_request_id,
@@ -188,9 +208,13 @@ class PoolingServingBase(ABC):
         raise NotImplementedError
 
     @staticmethod
-    def _base_request_id(raw_request: Request | None, default: str | None = None) -> str | None:
+    def _base_request_id(
+        raw_request: Request | None, default: str | None = None
+    ) -> str | None:
         """Pulls the request id to use from a header, if provided"""
-        if raw_request is not None and ((req_id := raw_request.headers.get("X-Request-Id")) is not None):
+        if raw_request is not None and (
+            (req_id := raw_request.headers.get("X-Request-Id")) is not None
+        ):
             return req_id
 
         return random_uuid() if default is None else default
@@ -215,16 +239,24 @@ class PoolingServingBase(ABC):
         ):
             if isinstance(load_result, LoRARequest):
                 return None
-            if isinstance(load_result, ErrorResponse) and load_result.error.code == HTTPStatus.BAD_REQUEST.value:
+            if (
+                isinstance(load_result, ErrorResponse)
+                and load_result.error.code == HTTPStatus.BAD_REQUEST.value
+            ):
                 raise ValueError(load_result.error.message)
         return None
 
     def _validate_request(self, ctx: PoolingServeContext) -> None:
         truncate_prompt_tokens = getattr(ctx.request, "truncate_prompt_tokens", None)
 
-        if truncate_prompt_tokens is not None and truncate_prompt_tokens > self.max_model_len:
+        if (
+            truncate_prompt_tokens is not None
+            and truncate_prompt_tokens > self.max_model_len
+        ):
             raise ValueError(
-                "truncate_prompt_tokens value is greater than max_model_len. Please request a smaller truncation size."
+                "truncate_prompt_tokens value is "
+                "greater than max_model_len."
+                " Please request a smaller truncation size."
             )
 
         return None
@@ -251,6 +283,7 @@ class PoolingServingBase(ABC):
         request = ctx.request
         if request.model in self.models.lora_requests:
             ctx.lora_request = self.models.lora_requests[request.model]
+            return None
 
         # Currently only support default modality specific loras
         # if we have exactly one lora matched on the request.
@@ -265,7 +298,9 @@ class PoolingServingBase(ABC):
         # if _check_model has been called earlier, this will be unreachable
         raise APHRODITENotFoundError(f"The model `{request.model}` does not exist.")
 
-    def _get_active_default_mm_loras(self, request: AnyPoolingRequest) -> LoRARequest | None:
+    def _get_active_default_mm_loras(
+        self, request: AnyPoolingRequest
+    ) -> LoRARequest | None:
         """Determine if there are any active default multimodal loras."""
         # TODO: Currently this is only enabled for chat completions
         # to be better aligned with only being enabled for .generate
@@ -303,7 +338,11 @@ class PoolingServingBase(ABC):
             return message_types
 
         for message in messages:
-            if isinstance(message, dict) and "content" in message and isinstance(message["content"], list):
+            if (
+                isinstance(message, dict)
+                and "content" in message
+                and isinstance(message["content"], list)
+            ):
                 for content_dict in message["content"]:
                     if "type" in content_dict:
                         message_types.add(content_dict["type"].split("_")[0])

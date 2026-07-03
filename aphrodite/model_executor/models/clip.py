@@ -29,7 +29,6 @@ from aphrodite.model_executor.layers.linear import (
 from aphrodite.model_executor.layers.pooler import DispatchPooler
 from aphrodite.model_executor.layers.quantization import QuantizationConfig
 from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 from aphrodite.model_executor.models.interfaces import SupportsQuant
 from aphrodite.multimodal import MULTIMODAL_REGISTRY
 from aphrodite.multimodal.inputs import (
@@ -56,7 +55,7 @@ from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
 
 from .interfaces import MultiModalEmbeddings, SupportsMultiModal
 from .interfaces_base import default_pooling_type
-from .utils import AutoWeightsLoader, maybe_prefix
+from .utils import AutoWeightsLoader, WeightsMapper, maybe_prefix
 from .vision import (
     VisionEncoderInfo,
     VisionFeatureSelectStrategy,
@@ -114,7 +113,10 @@ def _get_vision_feature_select_strategy(pooling_type: str):
     try:
         return _POOLING_TYPE_TO_STRATEGY[pooling_type]
     except KeyError:
-        raise ValueError(f"No feature selection strategy is defined for pooling_type: {pooling_type!r}") from None
+        raise ValueError(
+            f"No feature selection strategy is defined for "
+            f"pooling_type: {pooling_type!r}"
+        ) from None
 
 
 class CLIPProcessingInfo(BaseProcessingInfo):
@@ -281,7 +283,9 @@ class CLIPTextEmbeddings(nn.Module):
         embed_dim = config.hidden_size
 
         self.token_embedding = VocabParallelEmbedding(config.vocab_size, embed_dim)
-        self.position_embedding = VocabParallelEmbedding(config.max_position_embeddings, embed_dim)
+        self.position_embedding = VocabParallelEmbedding(
+            config.max_position_embeddings, embed_dim
+        )
 
     def forward(
         self,
@@ -291,7 +295,9 @@ class CLIPTextEmbeddings(nn.Module):
     ) -> torch.Tensor:
         if inputs_embeds is None:
             if input_ids is None:
-                raise ValueError("Either `input_ids` or `input_embeds` must be provided")
+                raise ValueError(
+                    "Either `input_ids` or `input_embeds` must be provided"
+                )
 
             inputs_embeds = self.token_embedding(input_ids)
 
@@ -332,7 +338,9 @@ class CLIPVisionEmbeddings(nn.Module):
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
         target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+        patch_embeds = self.patch_embedding(
+            pixel_values.to(dtype=target_dtype)
+        )  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
@@ -383,23 +391,17 @@ class CLIPAttention(nn.Module):
             disable_tp=use_data_parallel,
         )
 
-        self.tp_size = 1 if use_data_parallel else get_tensor_model_parallel_world_size()
+        self.tp_size = (
+            1 if use_data_parallel else get_tensor_model_parallel_world_size()
+        )
         self.num_heads_per_partition = divide(self.num_heads, self.tp_size)
 
-        if attn_cls == MMEncoderAttention:
-            self.attn = attn_cls(
-                self.num_heads_per_partition,
-                self.head_dim,
-                self.scale,
-                prefix=f"{prefix}.attn",
-            )
-        else:
-            self.attn = attn_cls(
-                self.num_heads_per_partition,
-                self.head_dim,
-                self.scale,
-                prefix=f"{prefix}.attn",
-            )
+        self.attn = attn_cls(
+            self.num_heads_per_partition,
+            self.head_dim,
+            self.scale,
+            prefix=f"{prefix}.attn",
+        )
 
     def forward(
         self,
@@ -552,6 +554,14 @@ class CLIPEncoder(nn.Module):
 
 
 class CLIPTextTransformer(nn.Module):
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_stacked={
+            ".q_proj": (".qkv_proj", "q"),
+            ".k_proj": (".qkv_proj", "k"),
+            ".v_proj": (".qkv_proj", "v"),
+        }
+    )
+
     def __init__(
         self,
         config: CLIPTextConfig,
@@ -602,34 +612,19 @@ class CLIPTextTransformer(nn.Module):
         return last_hidden_state
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            # (param_name, shard_name, shard_id)
-            ("qkv_proj", "q_proj", "q"),
-            ("qkv_proj", "k_proj", "k"),
-            ("qkv_proj", "v_proj", "v"),
-        ]
-        params_dict = dict(self.named_parameters())
-        loaded_params: set[str] = set()
-
-        for name, loaded_weight in weights:
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                if weight_name not in name:
-                    continue
-                name = name.replace(weight_name, param_name)
-
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
+        loader = AutoWeightsLoader(self)
+        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
 
 
 class CLIPVisionTransformer(nn.Module):
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_stacked={
+            ".q_proj": (".qkv_proj", "q"),
+            ".k_proj": (".qkv_proj", "k"),
+            ".v_proj": (".qkv_proj", "v"),
+        }
+    )
+
     def __init__(
         self,
         config: CLIPVisionConfig,
@@ -711,42 +706,21 @@ class CLIPVisionTransformer(nn.Module):
         return encoder_outputs
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            # (param_name, shard_name, shard_id)
-            ("qkv_proj", "q_proj", "q"),
-            ("qkv_proj", "k_proj", "k"),
-            ("qkv_proj", "v_proj", "v"),
-        ]
-        params_dict = dict(self.named_parameters())
-        loaded_params: set[str] = set()
-        layer_count = len(self.encoder.layers)
+        skip_prefixes: list[str] = []
+        if self.post_layernorm is None:
+            skip_prefixes.append("post_layernorm.")
+        loader = AutoWeightsLoader(self, skip_prefixes=skip_prefixes)
 
-        for name, loaded_weight in weights:
-            # post_layernorm is not needed in CLIPVisionModel
-            if name.startswith("post_layernorm") and self.post_layernorm is None:
-                continue
-
-            # omit layers when num_hidden_layers_override is set
-            if name.startswith("encoder.layers"):
-                layer_idx = int(name.split(".")[2])
-                if layer_idx >= layer_count:
+        # Drop layers beyond num_hidden_layers_override.
+        def _filter(ws):
+            for name, w in ws:
+                if name.startswith("encoder.layers.") and int(
+                    name.split(".")[2]
+                ) >= len(self.encoder.layers):
                     continue
+                yield name, w
 
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                if weight_name not in name:
-                    continue
-                name = name.replace(weight_name, param_name)
-
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
+        return loader.load_weights(_filter(weights), mapper=self.hf_to_aphrodite_mapper)
 
 
 class CLIPVisionModel(nn.Module):
@@ -766,7 +740,7 @@ class CLIPVisionModel(nn.Module):
             quant_config=quant_config,
             num_hidden_layers_override=num_hidden_layers_override,
             require_post_norm=require_post_norm,
-            prefix=f"{prefix}.vision_model",
+            prefix=maybe_prefix(prefix, "vision_model"),
         )
 
     def forward(
@@ -880,7 +854,9 @@ class CLIPEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
         feature_select_strategy: VisionFeatureSelectStrategy | None = None,
     ) -> torch.Tensor:
         if feature_select_strategy is None:
-            feature_select_strategy = _get_vision_feature_select_strategy(self.pooler_config.seq_pooling_type)
+            feature_select_strategy = _get_vision_feature_select_strategy(
+                self.pooler_config.seq_pooling_type
+            )
 
         pooled_output = self.vision_model(
             pixel_values=pixel_values,
@@ -892,7 +868,9 @@ class CLIPEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
 
         return image_features
 
-    def _parse_and_validate_image_input(self, **kwargs: object) -> CLIPImagePixelInputs | None:
+    def _parse_and_validate_image_input(
+        self, **kwargs: object
+    ) -> CLIPImagePixelInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         if pixel_values is None:
             return None
@@ -949,7 +927,9 @@ class CLIPEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
         *,
         is_multimodal: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        self._is_text_input = multimodal_embeddings is None or len(multimodal_embeddings) == 0
+        self._is_text_input = (
+            multimodal_embeddings is None or len(multimodal_embeddings) == 0
+        )
 
         # This is to satisfy the type checker for each overload
         if multimodal_embeddings is None or is_multimodal is None:

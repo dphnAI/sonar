@@ -2,7 +2,6 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import json
 import os
-from typing import Any
 
 
 class ParameterSweep(list["ParameterSweepItem"]):
@@ -34,14 +33,18 @@ class ParameterSweep(list["ParameterSweepItem"]):
     @classmethod
     def from_records(cls, records: list[dict[str, object]]):
         if not isinstance(records, list):
-            raise TypeError(f"The parameter sweep should be a list of dictionaries, but found type: {type(records)}")
+            raise TypeError(
+                f"The parameter sweep should be a list of dictionaries, "
+                f"but found type: {type(records)}"
+            )
 
         # Validate that all _benchmark_name values are unique if provided
         names = [r["_benchmark_name"] for r in records if "_benchmark_name" in r]
         if names and len(names) != len(set(names)):
             duplicates = [name for name in names if names.count(name) > 1]
             raise ValueError(
-                f"Duplicate _benchmark_name values found: {set(duplicates)}. All _benchmark_name values must be unique."
+                f"Duplicate _benchmark_name values found: {set(duplicates)}. "
+                f"All _benchmark_name values must be unique."
             )
 
         return cls(ParameterSweepItem.from_record(record) for record in records)
@@ -51,12 +54,15 @@ class ParameterSweepItem(dict[str, object]):
     @classmethod
     def from_record(cls, record: dict[str, object]):
         if not isinstance(record, dict):
-            raise TypeError(f"Each item in the parameter sweep should be a dictionary, but found type: {type(record)}")
+            raise TypeError(
+                f"Each item in the parameter sweep should be a dictionary, "
+                f"but found type: {type(record)}"
+            )
 
         return cls(record)
 
-    def __or__(self, other: dict[str, Any]):
-        return type(self)(super().__or__(other))
+    def __or__(self, other: dict[str, object], /) -> "ParameterSweepItem":  # type: ignore[override]
+        return ParameterSweepItem(super().__or__(other))
 
     @property
     def name(self) -> str:

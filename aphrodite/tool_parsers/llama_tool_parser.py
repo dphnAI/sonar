@@ -46,6 +46,7 @@ class Llama3JsonToolParser(ToolParser):
     """
 
     bot_token: str = "<|python_tag|>"
+    structural_tag_model = "llama"
     # Simple regex to find opening braces - we'll use JSON decoder for parsing
     # This handles arbitrary nesting depth correctly
     tool_call_start_regex: re.Pattern = re.compile(r"\{")
@@ -63,14 +64,19 @@ class Llama3JsonToolParser(ToolParser):
         self.prev_tool_call_arr: list[dict] = []
         self.current_tool_id: int = -1
         self.current_tool_name_sent: bool = False
-        self.streamed_args_for_tool: list[str] = []  # map what has been streamed for each tool so far to a list
+        self.streamed_args_for_tool: list[
+            str
+        ] = []  # map what has been streamed for each tool so far to a list
         self.bot_token_id = self.vocab.get(self.bot_token)
         if self.bot_token_id is None:
             raise RuntimeError(
-                f"Llama3JsonToolParser could not locate the bot token '{self.bot_token}' in the tokenizer."
+                "Llama3JsonToolParser could not locate the bot token "
+                f"'{self.bot_token}' in the tokenizer."
             )
 
-    def extract_tool_calls(self, model_output: str, request: ChatCompletionRequest) -> ExtractedToolCallInformation:
+    def extract_tool_calls(
+        self, model_output: str, request: ChatCompletionRequest
+    ) -> ExtractedToolCallInformation:
         """
         Extract the tool calls from a complete model response.
         Only extracts JSON content and ignores any surrounding plain text.
@@ -78,7 +84,9 @@ class Llama3JsonToolParser(ToolParser):
         """
         # Quick check before running regex
         if not (self.bot_token in model_output or "{" in model_output):
-            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
+            return ExtractedToolCallInformation(
+                tools_called=False, tool_calls=[], content=model_output
+            )
 
         # Keep track of the end index of the last parsed JSON object
         # so we don't parse inner brackets
@@ -95,12 +103,16 @@ class Llama3JsonToolParser(ToolParser):
                     continue
 
                 try:
-                    obj, json_end_index = self.json_decoder.raw_decode(model_output[start_index:])
+                    obj, json_end_index = self.json_decoder.raw_decode(
+                        model_output[start_index:]
+                    )
                     end_index = start_index + json_end_index
 
                     # raise KeyError if missing
                     name = obj["name"]
-                    arguments_or_params = obj["arguments"] if "arguments" in obj else obj["parameters"]
+                    arguments_or_params = (
+                        obj["arguments"] if "arguments" in obj else obj["parameters"]
+                    )
 
                     tool_calls.append(
                         ToolCall(
@@ -108,7 +120,9 @@ class Llama3JsonToolParser(ToolParser):
                             function=FunctionCall(
                                 name=name,
                                 # function call args are JSON but as a string
-                                arguments=json.dumps(arguments_or_params, ensure_ascii=False),
+                                arguments=json.dumps(
+                                    arguments_or_params, ensure_ascii=False
+                                ),
                             ),
                         )
                     )
@@ -121,24 +135,37 @@ class Llama3JsonToolParser(ToolParser):
                         "Returning output in content with empty tool calls.",
                         missing_key,
                     )
-                    return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
+                    return ExtractedToolCallInformation(
+                        tools_called=False, tool_calls=[], content=model_output
+                    )
                 except Exception:
                     # Any other error during parsing
                     logger.exception(
-                        "Error in extracting tool call from response. Returning output in content with empty tool calls"
+                        "Error in extracting tool call from response. "
+                        "Returning output in content with empty tool calls"
                     )
-                    return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
+                    return ExtractedToolCallInformation(
+                        tools_called=False, tool_calls=[], content=model_output
+                    )
         except TimeoutError:
             logger.warning("Regex timeout occurred when matching tool call pattern.")
-            logger.debug("Regex timeout occurred when matching user input: %s", model_output)
-            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
+            logger.debug(
+                "Regex timeout occurred when matching user input: %s", model_output
+            )
+            return ExtractedToolCallInformation(
+                tools_called=False, tool_calls=[], content=model_output
+            )
 
         # If we have valid tool calls, return them normally
         if tool_calls:
-            return ExtractedToolCallInformation(tools_called=True, tool_calls=tool_calls, content=None)
+            return ExtractedToolCallInformation(
+                tools_called=True, tool_calls=tool_calls, content=None
+            )
 
         # No valid tool calls found
-        return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
+        return ExtractedToolCallInformation(
+            tools_called=False, tool_calls=[], content=model_output
+        )
 
     def extract_tool_calls_streaming(
         self,
@@ -150,7 +177,9 @@ class Llama3JsonToolParser(ToolParser):
         delta_token_ids: Sequence[int],
         request: ChatCompletionRequest,
     ) -> DeltaMessage | None:
-        if not (current_text.startswith(self.bot_token) or current_text.startswith("{")):
+        if not (
+            current_text.startswith(self.bot_token) or current_text.startswith("{")
+        ):
             return DeltaMessage(content=delta_text)
 
         # bit mask flags for partial JSON parsing. If the name hasn't been
@@ -164,15 +193,23 @@ class Llama3JsonToolParser(ToolParser):
             try:
                 # depending on the prompt format the Llama model may or may not
                 # prefix the output with the <|python_tag|> token
-                start_idx = len(self.bot_token) if current_text.startswith(self.bot_token) else 0
+                start_idx = (
+                    len(self.bot_token)
+                    if current_text.startswith(self.bot_token)
+                    else 0
+                )
                 while start_idx < len(current_text):
                     (obj, end_idx) = partial_json_loads(current_text[start_idx:], flags)
-                    is_complete.append(is_complete_json(current_text[start_idx : start_idx + end_idx]))
+                    is_complete.append(
+                        is_complete_json(current_text[start_idx : start_idx + end_idx])
+                    )
                     start_idx += end_idx + len("; ")
                     # depending on the prompt Llama can use
                     # either arguments or parameters
                     if "parameters" in obj:
-                        assert "arguments" not in obj, "model generated both parameters and arguments"
+                        assert "arguments" not in obj, (
+                            "model generated both parameters and arguments"
+                        )
                         obj["arguments"] = obj["parameters"]
                     tool_call_arr.append(obj)
             except partial_json_parser.core.exceptions.MalformedJSON:
@@ -180,7 +217,9 @@ class Llama3JsonToolParser(ToolParser):
                 return None
 
             # select as the current tool call the one we're on the state at
-            current_tool_call: dict = tool_call_arr[self.current_tool_id] if len(tool_call_arr) > 0 else {}
+            current_tool_call: dict = (
+                tool_call_arr[self.current_tool_id] if len(tool_call_arr) > 0 else {}
+            )
 
             # case -- if no tokens have been streamed for the tool, e.g.
             #   only the array brackets, stream nothing
@@ -189,7 +228,9 @@ class Llama3JsonToolParser(ToolParser):
 
             # case: we are starting a new tool in the array
             #   -> array has > 0 length AND length has moved past cursor
-            elif len(tool_call_arr) > 0 and len(tool_call_arr) > self.current_tool_id + 1:
+            elif (
+                len(tool_call_arr) > 0 and len(tool_call_arr) > self.current_tool_id + 1
+            ):
                 # if we're moving on to a new call, first make sure we
                 # haven't missed anything in the previous one that was
                 # auto-generated due to JSON completions, but wasn't
@@ -206,11 +247,15 @@ class Llama3JsonToolParser(ToolParser):
                             tool_calls=[
                                 DeltaToolCall(
                                     index=self.current_tool_id,
-                                    function=DeltaFunctionCall(arguments=argument_diff).model_dump(exclude_none=True),
+                                    function=DeltaFunctionCall(
+                                        arguments=argument_diff
+                                    ).model_dump(exclude_none=True),
                                 )
                             ]
                         )
-                        self.streamed_args_for_tool[self.current_tool_id] += argument_diff
+                        self.streamed_args_for_tool[self.current_tool_id] += (
+                            argument_diff
+                        )
                     else:
                         delta = None
                 else:
@@ -233,7 +278,9 @@ class Llama3JsonToolParser(ToolParser):
                                 index=self.current_tool_id,
                                 type="function",
                                 id=make_tool_call_id(),
-                                function=DeltaFunctionCall(name=function_name).model_dump(exclude_none=True),
+                                function=DeltaFunctionCall(
+                                    name=function_name
+                                ).model_dump(exclude_none=True),
                             )
                         ]
                     )
@@ -250,7 +297,9 @@ class Llama3JsonToolParser(ToolParser):
                 if cur_arguments:
                     sent = len(self.streamed_args_for_tool[self.current_tool_id])
                     cur_args_json = json.dumps(cur_arguments, ensure_ascii=False)
-                    prev_arguments = self.prev_tool_call_arr[self.current_tool_id].get("arguments")
+                    prev_arguments = self.prev_tool_call_arr[self.current_tool_id].get(
+                        "arguments"
+                    )
 
                     argument_diff = None
                     if is_complete[self.current_tool_id]:
@@ -266,16 +315,22 @@ class Llama3JsonToolParser(ToolParser):
                             tool_calls=[
                                 DeltaToolCall(
                                     index=self.current_tool_id,
-                                    function=DeltaFunctionCall(arguments=argument_diff).model_dump(exclude_none=True),
+                                    function=DeltaFunctionCall(
+                                        arguments=argument_diff
+                                    ).model_dump(exclude_none=True),
                                 )
                             ]
                         )
-                        self.streamed_args_for_tool[self.current_tool_id] += argument_diff
+                        self.streamed_args_for_tool[self.current_tool_id] += (
+                            argument_diff
+                        )
 
             self.prev_tool_call_arr = tool_call_arr
             return delta
 
         except Exception:
             logger.exception("Error trying to handle streaming tool call.")
-            logger.debug("Skipping chunk as a result of tool streaming extraction error")
+            logger.debug(
+                "Skipping chunk as a result of tool streaming extraction error"
+            )
             return None

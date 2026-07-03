@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import json
 from typing import Any
 
@@ -8,7 +9,7 @@ import pytest
 import pytest_asyncio
 from transformers import AutoTokenizer
 
-from ....conftest import AUDIO_ASSETS, AphroditeRunner, AudioTestAssets
+from ....conftest import AUDIO_ASSETS, AudioTestAssets, AphroditeRunner
 from ....utils import RemoteOpenAIServer
 from ...registry import HF_EXAMPLE_MODELS
 
@@ -66,7 +67,9 @@ def server(request, audio_assets: AudioTestAssets):
         "--trust-remote-code",
     ] + params_kwargs_to_cli_args(request.param)
 
-    with RemoteOpenAIServer(MODEL_NAME, args, env_dict={"APHRODITE_AUDIO_FETCH_TIMEOUT": "30"}) as remote_server:
+    with RemoteOpenAIServer(
+        MODEL_NAME, args, env_dict={"APHRODITE_AUDIO_FETCH_TIMEOUT": "30"}
+    ) as remote_server:
         yield remote_server
 
 
@@ -105,7 +108,9 @@ def run_multi_audio_test(
         model,
         dtype=dtype,
         enforce_eager=True,
-        limit_mm_per_prompt={"audio": max((len(audio) for _, audio in prompts_and_audios))},
+        limit_mm_per_prompt={
+            "audio": max((len(audio) for _, audio in prompts_and_audios))
+        },
         **kwargs,
     ) as aphrodite_model:
         aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
@@ -151,6 +156,51 @@ def test_models_with_multiple_audios(
     )
 
 
+@pytest.mark.core_model
+@pytest.mark.parametrize("dtype", ["half"])
+@pytest.mark.parametrize("max_tokens", [32])
+def test_variable_length_audio_batching(
+    aphrodite_runner,
+    audio_assets: AudioTestAssets,
+    dtype: str,
+    max_tokens: int,
+) -> None:
+    """Test batching of requests with different audio durations.
+
+    This exercises the variable-length tensor handling in
+    MultiModalFlatField._reduce_data() which was buggy before
+    https://github.com/vllm-project/vllm/issues/31658 was fixed.
+    """
+    model_info = HF_EXAMPLE_MODELS.find_hf_info(MODEL_NAME)
+    model_info.check_available_online(on_fail="skip")
+    model_info.check_transformers_version(on_fail="skip")
+
+    # Create prompts with single audio each (different durations)
+    prompts_and_audios = []
+    for audio, question in zip(audio_assets, AUDIO_PROMPTS):
+        prompt = _get_prompt(1, question, APHRODITE_PLACEHOLDER)
+        prompts_and_audios.append((prompt, [audio.audio_and_sample_rate]))
+
+    with aphrodite_runner(
+        MODEL_NAME,
+        dtype=dtype,
+        enforce_eager=True,
+        limit_mm_per_prompt={"audio": 1},
+    ) as aphrodite_model:
+        # Generate for all prompts in a single batch
+        # This triggers the variable-length batching code path
+        outputs = aphrodite_model.generate_greedy(
+            [prompt for prompt, _ in prompts_and_audios],
+            max_tokens,
+            audios=[audios for _, audios in prompts_and_audios],
+        )
+
+    # Verify outputs were generated for each request
+    assert len(outputs) == len(prompts_and_audios)
+    for output in outputs:
+        assert len(output[1]) > 0, "Expected non-empty output"
+
+
 @pytest.mark.asyncio
 async def test_online_serving(client, audio_assets: AudioTestAssets):
     """Exercises online serving with/without chunked prefill enabled."""
@@ -159,7 +209,10 @@ async def test_online_serving(client, audio_assets: AudioTestAssets):
         {
             "role": "user",
             "content": [
-                *[{"type": "audio_url", "audio_url": {"url": audio.url}} for audio in audio_assets],
+                *[
+                    {"type": "audio_url", "audio_url": {"url": audio.url}}
+                    for audio in audio_assets
+                ],
                 {
                     "type": "text",
                     "text": f"What's happening in these {len(audio_assets)} audio clips?",  # noqa: E501
@@ -168,7 +221,9 @@ async def test_online_serving(client, audio_assets: AudioTestAssets):
         }
     ]
 
-    chat_completion = await client.chat.completions.create(model=MODEL_NAME, messages=messages, max_tokens=10)
+    chat_completion = await client.chat.completions.create(
+        model=MODEL_NAME, messages=messages, max_tokens=10
+    )
 
     assert len(chat_completion.choices) == 1
     choice = chat_completion.choices[0]

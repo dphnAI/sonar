@@ -1,25 +1,33 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import glob
 import tempfile
 
 import huggingface_hub.constants
 import pytest
 import torch
-from aphrodite.modeling.model_loader.weight_utils import (
+
+from aphrodite.model_executor.model_loader.weight_utils import (
     download_weights_from_hf,
     fastsafetensors_weights_iterator,
     safetensors_weights_iterator,
 )
-
 from aphrodite.platforms import current_platform
 
 
-@pytest.mark.skipif(not current_platform.is_cuda(), reason="fastsafetensors requires CUDA/NVIDIA GPUs")
-def test_fastsafetensors_model_loader():
+@pytest.mark.skipif(
+    not current_platform.is_cuda_alike(),
+    reason="fastsafetensors requires NVIDIA/AMD GPUs",
+)
+@pytest.mark.parametrize("queue_size", [0, 1])
+def test_fastsafetensors_model_loader(monkeypatch, queue_size):
+    monkeypatch.setenv("APHRODITE_FASTSAFETENSORS_QUEUE_SIZE", str(queue_size))
     with tempfile.TemporaryDirectory() as tmpdir:
         huggingface_hub.constants.HF_HUB_OFFLINE = False
-        download_weights_from_hf("openai-community/gpt2", allow_patterns=["*.safetensors"], cache_dir=tmpdir)
+        download_weights_from_hf(
+            "openai-community/gpt2", allow_patterns=["*.safetensors"], cache_dir=tmpdir
+        )
         safetensors = glob.glob(f"{tmpdir}/**/*.safetensors", recursive=True)
         assert len(safetensors) > 0
 
@@ -39,7 +47,3 @@ def test_fastsafetensors_model_loader():
             assert fastsafetensors_tensor.dtype == hf_safetensors_tensors[name].dtype
             assert fastsafetensors_tensor.shape == hf_safetensors_tensors[name].shape
             assert torch.all(fastsafetensors_tensor.eq(hf_safetensors_tensors[name]))
-
-
-if __name__ == "__main__":
-    test_fastsafetensors_model_loader()

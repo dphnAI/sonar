@@ -38,6 +38,15 @@ class TokensInput(_InputOptions):
     prompt: NotRequired[str]
     """The prompt text corresponding to the token IDs, if available."""
 
+    prompt_token_offsets: NotRequired[list[tuple[int, int]] | None]
+    """Char-level (start, end) offsets per token, propagated from the
+    renderer's TokensPrompt when offsets were computed."""
+
+    assistant_tokens_mask: NotRequired[list[int] | None]
+    """Per-token 0/1 mask marking assistant-generated tokens.
+    Populated when ``return_assistant_tokens_mask=True`` is set on the
+    render request and the chat template supports ``{% generation %}``."""
+
 
 def tokens_input(
     prompt_token_ids: list[int],
@@ -146,6 +155,11 @@ class MultiModalInput(_InputOptions):
     For each modality, information about the placeholder tokens in
     `prompt_token_ids`.
     """
+
+    assistant_tokens_mask: NotRequired[list[int] | None]
+    """Per-token 0/1 mask marking assistant-generated tokens.
+    Populated when ``return_assistant_tokens_mask=True`` is set on the
+    render request and the chat template supports ``{% generation %}``."""
 
 
 def mm_input(
@@ -270,17 +284,27 @@ which can be passed to `LLMEngine.add_request` or `AsyncLLM.add_request`.
 
 def _validate_enc_input(enc_input: SingletonInput) -> EncoderInput:
     if enc_input["type"] == "embeds":
-        raise ValueError("Embedding inputs are not supported for encoder-decoder models")
+        raise ValueError(
+            "Embedding inputs are not supported for encoder-decoder models"
+        )
 
-    if enc_input["type"] == "multimodal" and "encoder_prompt_token_ids" not in enc_input:
-        raise RuntimeError("You should register an encoder-decoder multi-modal processor for encoder-decoder models.")
+    if (
+        enc_input["type"] == "multimodal"
+        and "encoder_prompt_token_ids" not in enc_input
+    ):
+        raise RuntimeError(
+            "You should register an encoder-decoder multi-modal processor "
+            "for encoder-decoder models."
+        )
 
     return enc_input  # type: ignore[return-value]
 
 
 def _validate_dec_input(dec_input: SingletonInput) -> DecoderEngineInput:
     if dec_input["type"] == "embeds":
-        raise ValueError("Embedding inputs are not supported for encoder-decoder models")
+        raise ValueError(
+            "Embedding inputs are not supported for encoder-decoder models"
+        )
 
     return dec_input
 

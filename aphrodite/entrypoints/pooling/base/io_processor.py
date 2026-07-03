@@ -12,7 +12,7 @@ from aphrodite.entrypoints.chat_utils import (
     ChatTemplateContentFormatOption,
     ConversationMessage,
 )
-from aphrodite.entrypoints.openai.engine.serving import RendererChatRequest, RendererRequest
+from aphrodite.entrypoints.serve.engine.typing import RendererChatRequest, RendererRequest
 from aphrodite.inputs import EngineInput, SingletonPrompt
 from aphrodite.renderers import BaseRenderer, TokenizeParams, merge_kwargs
 from aphrodite.renderers.inputs.preprocess import parse_model_prompt, prompt_to_seq
@@ -49,8 +49,12 @@ class PoolingIOProcessor:
         self.renderer = renderer
 
         self.chat_template = chat_template_config.chat_template
-        self.chat_template_content_format: Final = chat_template_config.chat_template_content_format
-        self.trust_request_chat_template = chat_template_config.trust_request_chat_template
+        self.chat_template_content_format: Final = (
+            chat_template_config.chat_template_content_format
+        )
+        self.trust_request_chat_template = (
+            chat_template_config.trust_request_chat_template
+        )
 
     #######################################
     # online APIs
@@ -100,7 +104,9 @@ class PoolingIOProcessor:
         )
 
         prompts_seq = prompt_to_seq(ctx.prompts)
-        tok_params = self.renderer.default_cmpl_tok_params.with_kwargs(**(ctx.tokenization_kwargs or {}))
+        tok_params = self.renderer.default_cmpl_tok_params.with_kwargs(
+            **(ctx.tokenization_kwargs or {})
+        )
         return self._preprocess_cmpl_offline(prompts=prompts_seq, tok_params=tok_params)
 
     def post_process_offline(
@@ -128,7 +134,12 @@ class PoolingIOProcessor:
             prompts.extend(prompt_to_seq(prompt_input))
 
         parsed_prompts = [
-            (prompt if isinstance(prompt, bytes) else parse_model_prompt(model_config, prompt)) for prompt in prompts
+            (
+                prompt
+                if isinstance(prompt, bytes)
+                else parse_model_prompt(model_config, prompt)
+            )
+            for prompt in prompts
         ]
         tok_params = request.build_tok_params(model_config)
 
@@ -136,7 +147,9 @@ class PoolingIOProcessor:
             parsed_prompts,
             tok_params,
             prompt_extras={
-                k: v for k in ("mm_processor_kwargs", "cache_salt") if (v := getattr(request, k, None)) is not None
+                k: v
+                for k in ("mm_processor_kwargs", "cache_salt")
+                if (v := getattr(request, k, None)) is not None
             },
         )
 
@@ -163,7 +176,9 @@ class PoolingIOProcessor:
         mm_config = self.model_config.multimodal_config
 
         tok_params = request.build_tok_params(self.model_config)
-        chat_params = request.build_chat_params(default_template, default_template_content_format).with_defaults(
+        chat_params = request.build_chat_params(
+            default_template, default_template_content_format
+        ).with_defaults(
             default_template_kwargs,
             default_media_io_kwargs=(mm_config.media_io_kwargs if mm_config else None),
         )
@@ -173,7 +188,9 @@ class PoolingIOProcessor:
             chat_params,
             tok_params,
             prompt_extras={
-                k: v for k in ("mm_processor_kwargs", "cache_salt") if (v := getattr(request, k, None)) is not None
+                k: v
+                for k in ("mm_processor_kwargs", "cache_salt")
+                if (v := getattr(request, k, None)) is not None
             },
         )
 
@@ -187,11 +204,17 @@ class PoolingIOProcessor:
     ) -> Sequence[EngineInput]:
         prompts = prompt_to_seq(prompts)
         parsed_prompts = [
-            (prompt if isinstance(prompt, bytes) else parse_model_prompt(self.model_config, prompt))
+            (
+                prompt
+                if isinstance(prompt, bytes)
+                else parse_model_prompt(self.model_config, prompt)
+            )
             for prompt in prompts
         ]
 
-        return self.renderer.render_cmpl(parsed_prompts, tok_params, prompt_extras=prompt_extras)
+        return self.renderer.render_cmpl(
+            parsed_prompts, tok_params, prompt_extras=prompt_extras
+        )
 
     def _validate_chat_template(
         self,
@@ -201,7 +224,10 @@ class PoolingIOProcessor:
     ):
         if not trust_request_chat_template and (
             request_chat_template is not None
-            or (chat_template_kwargs and chat_template_kwargs.get("chat_template") is not None)
+            or (
+                chat_template_kwargs
+                and chat_template_kwargs.get("chat_template") is not None
+            )
         ):
             raise ValueError(
                 "Chat template is passed with request, but "
@@ -218,7 +244,8 @@ class PoolingIOProcessor:
         if isinstance(params, Sequence):
             if len(params) != num_requests:
                 raise ValueError(
-                    f"The lengths of prompts ({num_requests}) and params ({len(params)}) must be the same."
+                    f"The lengths of prompts ({num_requests}) "
+                    f"and params ({len(params)}) must be the same."
                 )
 
             return params

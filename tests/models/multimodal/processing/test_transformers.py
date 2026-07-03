@@ -19,9 +19,9 @@ def test_multimodal_processor(model_id):
     image_pil = ImageAsset("cherry_blossom").pil_image
     mm_data = {"image": image_pil}
     str_prompt = "<|im_start|>user <image>\nWhat is the content of this image?<|im_end|><|im_start|>assistant\n"  # noqa: E501
-    str_processed_inputs = mm_processor.apply(
+    str_processed_inputs = mm_processor(
         prompt=str_prompt,
-        mm_data=mm_data,
+        mm_items=mm_processor.info.parse_mm_data(mm_data),
         hf_processor_mm_kwargs={},
     )
 
@@ -44,10 +44,13 @@ def test_multimodal_processor(model_id):
         77091,
         198,
     ]
-    ids_processed_inputs = mm_processor.apply(
+    ids_processed_inputs = mm_processor(
         prompt=ids_prompt,
-        mm_data=mm_data,
+        mm_items=mm_processor.info.parse_mm_data(mm_data),
         hf_processor_mm_kwargs={},
     )
 
-    assert str_processed_inputs["prompt_token_ids"] == ids_processed_inputs["prompt_token_ids"]
+    assert (
+        str_processed_inputs["prompt_token_ids"]
+        == ids_processed_inputs["prompt_token_ids"]
+    )

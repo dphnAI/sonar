@@ -9,16 +9,11 @@ import regex as re
 from transformers import PreTrainedTokenizerBase
 
 from aphrodite.entrypoints.openai.engine.protocol import DeltaMessage
-from aphrodite.logger import init_logger
 from aphrodite.reasoning import ReasoningParser
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.openai.chat_completion.protocol import (
-        ChatCompletionRequest,
-    )
+    from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
     from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-
-logger = init_logger(__name__)
 
 
 class Step3ReasoningParser(ReasoningParser):
@@ -38,12 +33,16 @@ class Step3ReasoningParser(ReasoningParser):
 
         if not self.model_tokenizer:
             raise ValueError(
-                "The model tokenizer must be passed to the ReasoningParser constructor during construction."
+                "The model tokenizer must be passed to the ReasoningParser "
+                "constructor during construction."
             )
 
         think_end_token_id = self.vocab.get(self.think_end_token)
         if think_end_token_id is None:
-            raise RuntimeError("Step3 reasoning parser could not locate think end token in the tokenizer!")
+            raise RuntimeError(
+                "Step3 reasoning parser could not locate think end "
+                "token in the tokenizer!"
+            )
         self.think_end_token_id: int = think_end_token_id
 
     @property
@@ -111,12 +110,16 @@ class Step3ReasoningParser(ReasoningParser):
     def is_reasoning_end(self, input_ids: Sequence[int]) -> bool:
         return self.think_end_token_id in input_ids
 
-    def is_reasoning_end_streaming(self, input_ids: Sequence[int], delta_ids: Iterable[int]) -> bool:
+    def is_reasoning_end_streaming(
+        self, input_ids: Sequence[int], delta_ids: Iterable[int]
+    ) -> bool:
         end_token_id = self.think_end_token_id
         return end_token_id in delta_ids
 
     def extract_content_ids(self, input_ids: list[int]) -> list[int]:
-        if self.think_end_token_id not in islice(input_ids, 0, max(0, len(input_ids) - 1)):
+        if self.think_end_token_id not in islice(
+            input_ids, 0, max(0, len(input_ids) - 1)
+        ):
             return []
         else:
             return input_ids[input_ids.index(self.think_end_token_id) + 1 :]

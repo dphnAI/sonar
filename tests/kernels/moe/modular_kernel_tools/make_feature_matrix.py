@@ -1,18 +1,29 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import copy
 from enum import Enum
 from itertools import product
 
 import torch
-from aphrodite.modeling.layers.fused_moe.config import FUSED_MOE_UNQUANTIZED_CONFIG
 from tqdm import tqdm
 
 from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.platforms import current_platform
+from aphrodite.model_executor.layers.fused_moe.config import FUSED_MOE_UNQUANTIZED_CONFIG
+from aphrodite.utils.torch_utils import set_random_seed
 
-from .common import Config, RankTensors, WeightTensors, reference_moe_impl, run_modular_kernel
-from .mk_objects import MK_FUSED_EXPERT_TYPES, MK_MULTI_GPU_PREPARE_FINALIZE_TYPES, MK_QUANT_CONFIGS
+from .common import (
+    Config,
+    RankTensors,
+    WeightTensors,
+    reference_moe_impl,
+    run_modular_kernel,
+)
+from .mk_objects import (
+    MK_FUSED_EXPERT_TYPES,
+    MK_MULTI_GPU_PREPARE_FINALIZE_TYPES,
+    MK_QUANT_CONFIGS,
+)
 from .parallel_utils import ProcessGroupInfo, parallel_launch_with_config
 
 
@@ -29,13 +40,7 @@ def rank_worker(
     config: Config,
     weights: WeightTensors,
 ):
-    current_platform.seed_everything(pgi.rank)
-
-    # sanity check
-    from aphrodite import envs
-
-    if config.fused_moe_chunk_size is not None:
-        assert config.fused_moe_chunk_size == envs.APHRODITE_FUSED_MOE_CHUNK_SIZE
+    set_random_seed(pgi.rank)
 
     # get weights to this device
     weights.to_current_device()
@@ -69,9 +74,13 @@ def make_feature_matrix(csv_file_path: str):
 
     import pandas as pd
 
-    def add_to_results(config: Config, success: Result, results_df: pd.DataFrame | None = None):
+    def add_to_results(
+        config: Config, success: Result, results_df: pd.DataFrame | None = None
+    ):
         config_dict = asdict(config)
-        config_dict["prepare_finalize_type"] = config_dict["prepare_finalize_type"].__name__
+        config_dict["prepare_finalize_type"] = config_dict[
+            "prepare_finalize_type"
+        ].__name__
         config_dict["fused_experts_type"] = config_dict["fused_experts_type"].__name__
         config_dict["per_tensor_act_quant"] = config.is_per_tensor_act_quant
         quant_config_dict = config_dict["quant_config"]
@@ -101,10 +110,14 @@ def make_feature_matrix(csv_file_path: str):
     FE_TYPES = MK_FUSED_EXPERT_TYPES
     Q_TYPES = MK_QUANT_CONFIGS
 
-    combinations = list(product(Ms, Ks, Ns, Es, TOPKs, DTYPEs, PF_TYPES, FE_TYPES, Q_TYPES))
+    combinations = list(
+        product(Ms, Ks, Ns, Es, TOPKs, DTYPEs, PF_TYPES, FE_TYPES, Q_TYPES)
+    )
 
     results_df: pd.DataFrame | None = None
-    for m, k, n, e, topks, dtype, pf_type, experts_type, quant_config in tqdm(combinations):
+    for m, k, n, e, topks, dtype, pf_type, experts_type, quant_config in tqdm(
+        combinations
+    ):
         config = Config(
             Ms=[m],
             K=k,
@@ -116,7 +129,6 @@ def make_feature_matrix(csv_file_path: str):
             fused_experts_type=experts_type,
             quant_config=quant_config,
             world_size=2,
-            fused_moe_chunk_size=None,
         )
 
         success = None
@@ -167,7 +179,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     csv_path = args.feature_matrix_csv_file_path
-    assert csv_path.endswith("csv"), f"Need a file path ending with .csv, got {csv_path}"
-    assert Path(csv_path).parent.is_dir(), f"Cannot find parent directory for {Path(csv_path).parent}"
+    assert csv_path.endswith("csv"), (
+        f"Need a file path ending with .csv, got {csv_path}"
+    )
+    assert Path(csv_path).parent.is_dir(), (
+        f"Cannot find parent directory for {Path(csv_path).parent}"
+    )
 
     make_feature_matrix(args.feature_matrix_csv_file_path)

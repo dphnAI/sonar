@@ -49,6 +49,7 @@ class InputProcessor:
         self.speculative_config = aphrodite_config.speculative_config
         self.structured_outputs_config = aphrodite_config.structured_outputs_config
         self.observability_config = aphrodite_config.observability_config
+        self.use_v2_model_runner = aphrodite_config.use_v2_model_runner
 
         self.generation_config_fields = model_config.try_get_generation_config()
 
@@ -60,7 +61,9 @@ class InputProcessor:
         if self.supports_mm_inputs:
             mm_budget = MultiModalBudget(aphrodite_config, mm_registry)
             self.mm_encoder_cache_size = mm_budget.encoder_cache_size
-            self.skip_prompt_length_check = mm_budget.processor.info.skip_prompt_length_check
+            self.skip_prompt_length_check = (
+                mm_budget.processor.info.skip_prompt_length_check
+            )
             mm_budget.reset_cache()  # Not used anymore
 
         self.input_preprocessor = InputPreprocessor(
@@ -83,7 +86,9 @@ class InputProcessor:
     ) -> None:
         """Raise `ValueError` if SamplingParams or PoolingParams is not valid."""
         if isinstance(params, SamplingParams):
-            supported_generation_tasks = [task for task in supported_tasks if task in GENERATION_TASKS]
+            supported_generation_tasks = [
+                task for task in supported_tasks if task in GENERATION_TASKS
+            ]
             if not supported_generation_tasks:
                 raise ValueError("This model does not support generation")
 
@@ -94,16 +99,26 @@ class InputProcessor:
                 self.tokenizer,
             )
 
-            if params.thinking_token_budget is not None and (
-                self.aphrodite_config.reasoning_config is None or not self.aphrodite_config.reasoning_config.enabled
-            ):
-                raise ValueError(
-                    "thinking_token_budget is set but reasoning_config is "
-                    "not configured. Please set --reasoning-config to use "
-                    "thinking_token_budget."
-                )
+            if params.thinking_token_budget is not None:
+                if (
+                    self.aphrodite_config.reasoning_config is None
+                    or not self.aphrodite_config.reasoning_config.enabled
+                ):
+                    raise ValueError(
+                        "thinking_token_budget is set but reasoning_config is "
+                        "not configured. Please set --reasoning-parser "
+                        "and/or --reasoning-config to use thinking_token_budget."
+                    )
+                if self.use_v2_model_runner:
+                    raise ValueError(
+                        "thinking_token_budget is not yet supported by the V2 "
+                        "model runner. Run Aphrodite with APHRODITE_USE_V2_MODEL_RUNNER=0 "
+                        "to use thinking_token_budget."
+                    )
         elif isinstance(params, PoolingParams):
-            supported_pooling_tasks = [task for task in supported_tasks if task in POOLING_TASKS]
+            supported_pooling_tasks = [
+                task for task in supported_tasks if task in POOLING_TASKS
+            ]
             if not supported_pooling_tasks:
                 raise ValueError("This model does not support pooling")
 
@@ -116,11 +131,17 @@ class InputProcessor:
                     params.task = "plugin"
 
             if params.task not in supported_pooling_tasks:
-                raise ValueError(f"Unsupported task: {params.task!r} Supported tasks: {supported_pooling_tasks}")
+                raise ValueError(
+                    f"Unsupported task: {params.task!r} "
+                    f"Supported tasks: {supported_pooling_tasks}"
+                )
 
             params.verify(self.model_config)
         else:
-            raise TypeError(f"params must be either SamplingParams or PoolingParams, but got {type(params).__name__}")
+            raise TypeError(
+                f"params must be either SamplingParams or PoolingParams, "
+                f"but got {type(params).__name__}"
+            )
 
     def _validate_lora(self, lora_request: LoRARequest | None) -> None:
         if lora_request is None:
@@ -128,7 +149,9 @@ class InputProcessor:
 
         # LoRA request passed in while LoRA is not enabled
         if not self.lora_config:
-            raise ValueError(f"Got lora_request {lora_request} but LoRA is not enabled!")
+            raise ValueError(
+                f"Got lora_request {lora_request} but LoRA is not enabled!"
+            )
 
         if self.tokenizer is not None:
             logger.warning_once(
@@ -149,7 +172,11 @@ class InputProcessor:
         vary depending on the LoRA request. Therefore, the mm_hash must be
         generated based on the LoRA request to prevent incorrect cache hits.
         """
-        if lora_request is None or self.lora_config is None or not self.lora_config.enable_tower_connector_lora:
+        if (
+            lora_request is None
+            or self.lora_config is None
+            or not self.lora_config.enable_tower_connector_lora
+        ):
             return mm_hash
         return f"{lora_request.lora_name}:{mm_hash}"
 
@@ -234,7 +261,10 @@ class InputProcessor:
         dp_local_size = parallel_config.data_parallel_size_local
         num_ranks = dp_local_size if parallel_config.local_engines_only else dp_size
         if data_parallel_rank is not None and not (0 <= data_parallel_rank < num_ranks):
-            raise ValueError(f"data_parallel_rank {data_parallel_rank} is out of range [0, {num_ranks}).")
+            raise ValueError(
+                f"data_parallel_rank {data_parallel_rank} "
+                f"is out of range [0, {num_ranks})."
+            )
 
         if isinstance(prompt, dict) and "type" in prompt:
             if tokenization_kwargs:
@@ -285,7 +315,9 @@ class InputProcessor:
             sampling_params = params.clone()
             # If unset max tokens, then generate up to the max_model_len.
             if sampling_params.max_tokens is None:
-                seq_len = length_from_prompt_token_ids_or_embeds(prompt_token_ids, prompt_embeds)
+                seq_len = length_from_prompt_token_ids_or_embeds(
+                    prompt_token_ids, prompt_embeds
+                )
                 sampling_params.max_tokens = self.model_config.max_model_len - seq_len
 
             sampling_params.update_from_generation_config(
@@ -305,7 +337,9 @@ class InputProcessor:
             decoder_mm_positions = decoder_inputs["mm_placeholders"]
             decoder_mm_hashes = decoder_inputs["mm_hashes"]
 
-            if not all(isinstance(leaf, str) for leaf in json_iter_leaves(decoder_mm_hashes)):
+            if not all(
+                isinstance(leaf, str) for leaf in json_iter_leaves(decoder_mm_hashes)
+            ):
                 raise ValueError(
                     f"mm_hashes must contain only strings, got: {decoder_mm_hashes}. "
                     "This is likely due to an incorrect custom implementation of "
@@ -362,7 +396,11 @@ class InputProcessor:
             raise ValueError(f"The {prompt_type} prompt cannot be empty")
 
         model_config = self.model_config
-        max_prompt_len = model_config.max_model_len if prompt_type == "decoder" else self.mm_encoder_cache_size
+        max_prompt_len = (
+            model_config.max_model_len
+            if prompt_type == "decoder"
+            else self.mm_encoder_cache_size
+        )
         if prompt_len > max_prompt_len:
             if self.supports_mm_inputs:
                 suggestion = (
@@ -372,7 +410,10 @@ class InputProcessor:
                     "of images, and possibly their aspect ratios as well."
                 )
             else:
-                suggestion = "Make sure that `max_model_len` is no smaller than the number of text tokens."
+                suggestion = (
+                    "Make sure that `max_model_len` is no smaller than the "
+                    "number of text tokens."
+                )
 
             raise ValueError(
                 f"The {prompt_type} prompt (length {prompt_len}) is "
@@ -398,8 +439,14 @@ class InputProcessor:
         model_config = self.model_config
         tokenizer = self.tokenizer
 
-        prompt_ids = None if prompt_input["type"] == "embeds" else prompt_input["prompt_token_ids"]
-        prompt_embeds = prompt_input["prompt_embeds"] if prompt_input["type"] == "embeds" else None
+        prompt_ids = (
+            None
+            if prompt_input["type"] == "embeds"
+            else prompt_input["prompt_token_ids"]
+        )
+        prompt_embeds = (
+            prompt_input["prompt_embeds"] if prompt_input["type"] == "embeds" else None
+        )
 
         prompt_len = length_from_prompt_token_ids_or_embeds(prompt_ids, prompt_embeds)
         self._validate_prompt_len(prompt_len, prompt_type)

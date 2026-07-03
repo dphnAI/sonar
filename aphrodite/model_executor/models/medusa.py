@@ -90,7 +90,9 @@ class Medusa(nn.Module):
             )
 
         logit_scale = getattr(config, "logit_scale", 1.0)
-        self.logits_processor = LogitsProcessor(config.vocab_size, self.truncated_vocab_size, logit_scale)
+        self.logits_processor = LogitsProcessor(
+            config.vocab_size, self.truncated_vocab_size, logit_scale
+        )
 
         # Token map is a idx to token mapping to reduce the vocab size for
         # the draft model. Using smaller vocab size for draft, containing
@@ -134,6 +136,26 @@ class Medusa(nn.Module):
 
         return logits_lst
 
+    @staticmethod
+    def _remap_old_checkpoint_key(name: str) -> str:
+        """Map old FasterDecoding checkpoint keys to Aphrodite parameter names.
+
+        Old format uses bare numeric prefixes:
+          '{head}.{layer}.linear.weight' -> 'blocks.{head}.layers.{layer}.weight'
+          '{head}.{layer}.linear.bias'   -> 'blocks.{head}.layers.{layer}.bias'
+          '{head}.{N}.weight'            -> 'lm_heads.{head}.weight'
+        """
+        parts = name.split(".")
+        if len(parts) >= 3 and parts[0].isdigit() and parts[1].isdigit():
+            head, layer = parts[0], parts[1]
+            rest = parts[2:]
+            if "linear" in rest:
+                param = ".".join(rest[rest.index("linear") + 1 :])
+                return f"blocks.{head}.layers.{layer}.{param}"
+            else:
+                return f"lm_heads.{head}.{'.'.join(rest)}"
+        return name
+
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         params_dict = dict(self.named_parameters())
         loaded_params: set[str] = set()
@@ -142,17 +164,25 @@ class Medusa(nn.Module):
 
         for name, loaded_weight in weights:
             name = name.replace("medusa_heads.", "")
+            name = self._remap_old_checkpoint_key(name)
 
             if name == "token_map":
                 if self.truncated_vocab_size < self.orig_vocab_size:
                     self.token_map = nn.Parameter(loaded_weight, requires_grad=False)
             elif name in params_dict:
                 weights_map[name] = loaded_weight
-            elif getattr(self.config, "original_lm_head", False) and name == "lm_heads.0.weight":
+            elif (
+                getattr(self.config, "original_lm_head", False)
+                and name == "lm_heads.0.weight"
+            ):
                 weights_map["lm_head.weight"] = loaded_weight
 
         for name, loaded_weight in weights_map.items():
-            if "lm_head" in name and self.token_map is not None and loaded_weight.shape[0] > self.token_map.shape[0]:
+            if (
+                "lm_head" in name
+                and self.token_map is not None
+                and loaded_weight.shape[0] > self.token_map.shape[0]
+            ):
                 loaded_weight = loaded_weight[self.token_map]
 
             param = params_dict[name]
@@ -163,6 +193,8 @@ class Medusa(nn.Module):
         if self.token_map is not None:
             self.token_map.to(device=self.lm_heads[0].weight.device)
 
-        assert (self.truncated_vocab_size == self.orig_vocab_size) or (self.token_map is not None)
+        assert (self.truncated_vocab_size == self.orig_vocab_size) or (
+            self.token_map is not None
+        )
 
         return loaded_params

@@ -6,11 +6,8 @@ from dataclasses import dataclass
 
 import pytest
 import torch
-from aphrodite.attention.backends.abstract import AttentionImpl
-from aphrodite.attention.backends.registry import _Backend, backend_to_class_str
 
 from aphrodite.config import (
-    AphroditeConfig,
     CacheConfig,
     CompilationConfig,
     DeviceConfig,
@@ -18,11 +15,25 @@ from aphrodite.config import (
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
+    AphroditeConfig,
 )
 from aphrodite.config.model import ModelDType
-from aphrodite.utils.import_utils import resolve_obj_by_qualname
-from aphrodite.v1.attention.backends.utils import AttentionMetadataBuilder, CommonAttentionMetadata
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec
+from aphrodite.v1.attention.backend import (
+    AttentionImpl,
+    AttentionMetadataBuilder,
+    AttentionType,
+    CommonAttentionMetadata,
+)
+from aphrodite.v1.attention.backends.mamba_attn import (
+    BaseMambaAttentionMetadata,
+    BaseMambaAttentionMetadataBuilder,
+)
+from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from aphrodite.v1.kv_cache_interface import (
+    EncoderOnlyAttentionSpec,
+    FullAttentionSpec,
+    MambaSpec,
+)
 
 
 @dataclass
@@ -54,8 +65,12 @@ def create_common_attn_metadata(
 ) -> CommonAttentionMetadata:
     """Create CommonAttentionMetadata from a BatchSpec and ModelParams."""
     # Create query start locations
-    query_start_loc = torch.zeros(batch_spec.batch_size + 1, dtype=torch.int32, device=device)
-    query_start_loc[1:] = torch.tensor(batch_spec.query_lens, dtype=torch.int32, device=device).cumsum(0)
+    query_start_loc = torch.zeros(
+        batch_spec.batch_size + 1, dtype=torch.int32, device=device
+    )
+    query_start_loc[1:] = torch.tensor(
+        batch_spec.query_lens, dtype=torch.int32, device=device
+    ).cumsum(0)
     query_start_loc_cpu = query_start_loc.cpu()
     num_tokens = batch_spec.compute_num_tokens()
 
@@ -65,17 +80,22 @@ def create_common_attn_metadata(
     max_seq_len = int(seq_lens_cpu.max())
 
     # Create computed tokens (context length for each sequence)
-    context_lens = [batch_spec.seq_lens[i] - batch_spec.query_lens[i] for i in range(batch_spec.batch_size)]
+    context_lens = [
+        batch_spec.seq_lens[i] - batch_spec.query_lens[i]
+        for i in range(batch_spec.batch_size)
+    ]
     num_computed_tokens_cpu = torch.tensor(context_lens, dtype=torch.int32)
 
     # Create block table and slot mapping
     max_blocks = (max(batch_spec.seq_lens) + block_size - 1) // block_size
     if arange_block_indices:
         num_blocks = batch_spec.batch_size * max_blocks
-        block_table_tensor = torch.arange(num_blocks, dtype=torch.int32, device=device).view(
-            batch_spec.batch_size, max_blocks
+        block_table_tensor = torch.arange(
+            num_blocks, dtype=torch.int32, device=device
+        ).view(batch_spec.batch_size, max_blocks)
+        slot_mapping = torch.arange(num_tokens, dtype=torch.int64, device=device).view(
+            num_tokens
         )
-        slot_mapping = torch.arange(num_tokens, dtype=torch.int64, device=device).view(num_tokens)
     else:
         block_table_tensor = torch.randint(
             0,
@@ -84,7 +104,9 @@ def create_common_attn_metadata(
             dtype=torch.int32,
             device=device,
         )
-        slot_mapping = torch.randint(0, max_block_idx, (num_tokens,), dtype=torch.int64, device=device)
+        slot_mapping = torch.randint(
+            0, max_block_idx, (num_tokens,), dtype=torch.int64, device=device
+        )
 
     # Calculate max query length
     max_query_len = max(batch_spec.query_lens)
@@ -93,8 +115,9 @@ def create_common_attn_metadata(
         query_start_loc=query_start_loc,
         query_start_loc_cpu=query_start_loc_cpu,
         seq_lens=seq_lens,
-        seq_lens_cpu=seq_lens_cpu,
-        num_computed_tokens_cpu=num_computed_tokens_cpu,
+        seq_lens_cpu_upper_bound=seq_lens_cpu,
+        _seq_lens_cpu=seq_lens_cpu,
+        _num_computed_tokens_cpu=num_computed_tokens_cpu,
         num_reqs=batch_spec.batch_size,
         num_actual_tokens=num_tokens,
         max_query_len=max_query_len,
@@ -106,23 +129,52 @@ def create_common_attn_metadata(
 
 
 def try_get_attention_backend(
-    backend: _Backend,
+    backend: AttentionBackendEnum,
 ) -> tuple[type[AttentionMetadataBuilder], type[AttentionImpl]]:
     """Try to get the attention backend class, skipping test if not found."""
-    backend_class_str = backend_to_class_str(backend)
     try:
-        backend_class = resolve_obj_by_qualname(backend_class_str)
+        backend_class = backend.get_class()
         return backend_class.get_builder_cls(), backend_class.get_impl_cls()
     except ImportError as e:
-        pytest.skip(f"{backend_class_str} not available: {e}")
+        pytest.skip(f"{backend.name} not available: {e}")
         raise AssertionError("unreachable") from None
 
 
-def create_standard_kv_cache_spec(aphrodite_config: AphroditeConfig) -> FullAttentionSpec:
-    """Create a FullAttentionSpec from ModelParams only."""
+def try_backend_includes_kv_cache_update(
+    backend: AttentionBackendEnum,
+) -> bool:
+    """Try to get the attention backend class, skipping test if not found."""
+    try:
+        backend_class = backend.get_class()
+        return backend_class.forward_includes_kv_cache_update
+    except ImportError as e:
+        pytest.skip(f"{backend.name} not available: {e}")
+        raise AssertionError("unreachable") from None
+
+
+def create_standard_kv_cache_spec(
+    aphrodite_config: AphroditeConfig,
+    attn_type: AttentionType = AttentionType.DECODER,
+) -> FullAttentionSpec | EncoderOnlyAttentionSpec:
+    """Create an AttentionSpec from AphroditeConfig.
+
+    Returns an EncoderOnlyAttentionSpec for encoder-only attention (no KV
+    cache), and a FullAttentionSpec otherwise.
+    """
+    if attn_type == AttentionType.ENCODER_ONLY:
+        return EncoderOnlyAttentionSpec(
+            block_size=aphrodite_config.cache_config.block_size,
+            num_kv_heads=aphrodite_config.model_config.get_num_kv_heads(
+                aphrodite_config.parallel_config
+            ),
+            head_size=aphrodite_config.model_config.get_head_size(),
+            dtype=aphrodite_config.model_config.dtype,
+        )
     return FullAttentionSpec(
         block_size=aphrodite_config.cache_config.block_size,
-        num_kv_heads=aphrodite_config.model_config.get_num_kv_heads(aphrodite_config.parallel_config),
+        num_kv_heads=aphrodite_config.model_config.get_num_kv_heads(
+            aphrodite_config.parallel_config
+        ),
         head_size=aphrodite_config.model_config.get_head_size(),
         dtype=aphrodite_config.model_config.dtype,
         sliding_window=aphrodite_config.model_config.get_sliding_window(),
@@ -156,7 +208,6 @@ def create_aphrodite_config(
     cache_config = CacheConfig(
         block_size=block_size,
         cache_dtype="auto",
-        swap_space=0,
     )
     # Set cache blocks for testing
     #   (these may be set during initialization normally)
@@ -171,6 +222,8 @@ def create_aphrodite_config(
         max_num_seqs=max_num_seqs,
         max_num_batched_tokens=max_num_batched_tokens,
         enable_chunked_prefill=enable_chunked_prefill,
+        max_model_len=model_config.max_model_len,
+        is_encoder_decoder=model_config.is_encoder_decoder,
     )
 
     device_config = DeviceConfig()
@@ -185,8 +238,12 @@ def create_aphrodite_config(
         import types
 
         model_config.get_num_layers = types.MethodType(lambda self: 1, model_config)
-        model_config.get_sliding_window_for_layer = types.MethodType(lambda self, i: None, model_config)
-        model_config.get_logits_soft_cap_for_layer = types.MethodType(lambda self, i: 0.0, model_config)
+        model_config.get_sliding_window_for_layer = types.MethodType(
+            lambda self, i: None, model_config
+        )
+        model_config.get_logits_soft_cap_for_layer = types.MethodType(
+            lambda self, i: 0.0, model_config
+        )
         model_config.get_sm_scale_for_layer = types.MethodType(
             lambda self, i: 1.0 / model_config.get_head_size() ** 0.5, model_config
         )
@@ -229,8 +286,8 @@ def create_dummy_kv_cache(
 @dataclass
 class BackendConfig:
     name: str
-    env_vars: dict
-    comp_config: dict  # compilation config
+    attention_config: dict
+    comp_config: dict
     specific_gpu_arch: tuple | None = None
 
 
@@ -239,10 +296,10 @@ full_cg_backend_configs = {
     # FA3 on Hopper
     "FA3": BackendConfig(
         name="FA3",
-        env_vars={
-            "APHRODITE_ATTENTION_BACKEND": "FLASH_ATTN",
-            "APHRODITE_FLASH_ATTN_VERSION": "3",
-            "APHRODITE_FLASH_ATTN_MAX_NUM_SPLITS_FOR_CUDA_GRAPH": "16",
+        attention_config={
+            "backend": "FLASH_ATTN",
+            "flash_attn_version": 3,
+            "flash_attn_max_num_splits_for_cuda_graph": 16,
         },
         comp_config={
             "cudagraph_mode": "FULL",
@@ -252,9 +309,7 @@ full_cg_backend_configs = {
     # FlashMLA on Hopper
     "FlashMLA": BackendConfig(
         name="FlashMLA",
-        env_vars={
-            "APHRODITE_ATTENTION_BACKEND": "FLASHMLA",
-        },
+        attention_config={"backend": "FLASHMLA"},
         comp_config={
             "cudagraph_mode": "FULL_AND_PIECEWISE",
         },
@@ -263,10 +318,16 @@ full_cg_backend_configs = {
     # Cutlass MLA on Blackwell
     "CutlassMLA": BackendConfig(
         name="CutlassMLA",
-        env_vars={
-            "APHRODITE_ATTENTION_BACKEND": "CUTLASS_MLA",
-            "FORCE_NUM_KV_SPLITS": "1",  # TODO: remove this when hang issue is fixed
+        attention_config={"backend": "CUTLASS_MLA"},
+        comp_config={
+            "cudagraph_mode": "FULL_AND_PIECEWISE",
         },
+        specific_gpu_arch=(10, 0),
+    ),
+    # FlashInfer MLA on Blackwell
+    "FlashInferMLA": BackendConfig(
+        name="FlashInferMLA",
+        attention_config={"backend": "FLASHINFER_MLA"},
         comp_config={
             "cudagraph_mode": "FULL_AND_PIECEWISE",
         },
@@ -275,9 +336,9 @@ full_cg_backend_configs = {
     # FlashAttention MLA on Hopper
     "FlashAttentionMLA": BackendConfig(
         name="FlashAttentionMLA",
-        env_vars={
-            "APHRODITE_ATTENTION_BACKEND": "FLASH_ATTN_MLA",
-            "APHRODITE_FLASH_ATTN_MAX_NUM_SPLITS_FOR_CUDA_GRAPH": "16",
+        attention_config={
+            "backend": "FLASH_ATTN_MLA",
+            "flash_attn_max_num_splits_for_cuda_graph": 16,
         },
         comp_config={
             "cudagraph_mode": "FULL_DECODE_ONLY",
@@ -287,10 +348,10 @@ full_cg_backend_configs = {
     # FA2
     "FA2": BackendConfig(
         name="FA2",
-        env_vars={
-            "APHRODITE_ATTENTION_BACKEND": "FLASH_ATTN",
-            "APHRODITE_FLASH_ATTN_VERSION": "2",
-            "APHRODITE_FLASH_ATTN_MAX_NUM_SPLITS_FOR_CUDA_GRAPH": "16",
+        attention_config={
+            "backend": "FLASH_ATTN",
+            "flash_attn_version": 2,
+            "flash_attn_max_num_splits_for_cuda_graph": 16,
         },
         comp_config={
             "cudagraph_mode": "FULL_AND_PIECEWISE",
@@ -299,7 +360,7 @@ full_cg_backend_configs = {
     # Triton Attention
     "TritonAttn": BackendConfig(
         name="TritonAttn",
-        env_vars={"APHRODITE_ATTENTION_BACKEND": "TRITON_ATTN"},
+        attention_config={"backend": "TRITON_ATTN"},
         comp_config={
             "cudagraph_mode": "FULL_AND_PIECEWISE",
         },
@@ -307,9 +368,50 @@ full_cg_backend_configs = {
     # FlashInfer
     "FlashInfer": BackendConfig(
         name="FlashInfer",
-        env_vars={"APHRODITE_ATTENTION_BACKEND": "FLASHINFER"},
+        attention_config={"backend": "FLASHINFER"},
         comp_config={
             "cudagraph_mode": "FULL_AND_PIECEWISE",
         },
     ),
+    "RocmAttn": BackendConfig(
+        name="RocmAttn",
+        attention_config={
+            "backend": "ROCM_ATTN",
+            "use_prefill_decode_attention": True,
+        },
+        comp_config={
+            "cudagraph_mode": "FULL",
+        },
+    ),
 }
+
+
+class MockMambaBuilder(BaseMambaAttentionMetadataBuilder[BaseMambaAttentionMetadata]):
+    """Minimal concrete subclass for testing (base class is ABC)."""
+
+    metadata_cls = BaseMambaAttentionMetadata
+
+    @classmethod
+    def build_mamba_metadata(
+        cls,
+        aphrodite_config: AphroditeConfig,
+        seq_lens: list[int],
+        query_lens: list[int],
+        is_prefilling: list[bool],
+        *,
+        device: torch.device | None = None,
+    ) -> BaseMambaAttentionMetadata:
+        block_size = aphrodite_config.cache_config.block_size
+        device = device or torch.device("cpu")
+        mamba_spec = MambaSpec(
+            block_size=block_size, shapes=((1,), (1,)), dtypes=(torch.float32,)
+        )
+        builder = cls(mamba_spec, ["layer0"], aphrodite_config, device)
+        batch_spec = BatchSpec(seq_lens=seq_lens, query_lens=query_lens)
+        common_metadata = create_common_attn_metadata(
+            batch_spec, block_size=block_size, device=device, arange_block_indices=True
+        )
+        common_metadata = common_metadata.replace(
+            is_prefilling=torch.tensor(is_prefilling, dtype=torch.bool)
+        )
+        return builder.build(0, common_metadata)

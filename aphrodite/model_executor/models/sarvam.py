@@ -28,7 +28,7 @@ from itertools import islice
 import torch
 from torch import nn
 
-from aphrodite.config import AphroditeConfig, CacheConfig, ParallelConfig
+from aphrodite.config import CacheConfig, ParallelConfig, AphroditeConfig
 from aphrodite.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
@@ -37,6 +37,7 @@ from aphrodite.distributed import (
 from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.model_executor.layers.fused_moe import (
     FusedMoE,
+    MoERunner,
     fused_moe_make_expert_params_mapping,
 )
 from aphrodite.model_executor.layers.layernorm import RMSNorm
@@ -47,10 +48,7 @@ from aphrodite.model_executor.layers.linear import (
     RowParallelLinear,
 )
 from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.mla import (
-    MLAModules,
-    MultiHeadLatentAttentionWrapper,
-)
+from aphrodite.model_executor.layers.mla import MLAModules, MultiHeadLatentAttentionWrapper
 from aphrodite.model_executor.layers.quantization import QuantizationConfig
 from aphrodite.model_executor.layers.rotary_embedding import get_rope
 from aphrodite.model_executor.layers.vocab_parallel_embedding import (
@@ -79,7 +77,9 @@ def yarn_get_mscale(scale: float = 1, mscale: float = 1) -> float:
 
 
 def _is_gate_expert_bias_name(name: str) -> bool:
-    return name.endswith(".mlp.gate.e_score_correction_bias") or name.endswith(".gate.e_score_correction_bias")
+    return name.endswith(".mlp.gate.e_score_correction_bias") or name.endswith(
+        ".gate.e_score_correction_bias"
+    )
 
 
 def _zero_mean_tensor(t: torch.Tensor) -> torch.Tensor:
@@ -356,14 +356,16 @@ class SarvamMLAMoE(nn.Module):
             routed_scaling_factor=self.routed_scaling_factor,
         )
 
-    def maybe_get_fused_moe(self) -> FusedMoE:
+    def maybe_get_fused_moe(self) -> MoERunner:
         return self.experts
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         num_tokens, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         router_logits = self.gate(
-            hidden_states.to(self.router_dtype) if self.router_dtype is not None else hidden_states
+            hidden_states.to(self.router_dtype)
+            if self.router_dtype is not None
+            else hidden_states
         )
         router_logits = router_logits.to(hidden_states.dtype)
         final_hidden = self.experts(
@@ -402,7 +404,9 @@ class SarvamMLABlock(nn.Module):
         first_k_dense = getattr(config, "first_k_dense_replace", 1)
         moe_layer_freq = getattr(config, "moe_layer_freq", 1)
         if use_moe:
-            is_moe_layer = layer_idx >= first_k_dense and ((layer_idx - first_k_dense) % moe_layer_freq == 0)
+            is_moe_layer = layer_idx >= first_k_dense and (
+                (layer_idx - first_k_dense) % moe_layer_freq == 0
+            )
         else:
             is_moe_layer = False
 
@@ -459,7 +463,9 @@ class SarvamMLAModel(nn.Module):
         self.vocab_size = config.vocab_size
         self.embed_dim = config.hidden_size
         self.tie_word_embeddings = getattr(config, "tie_word_embeddings", False)
-        if get_pp_group().is_first_rank or (self.tie_word_embeddings and get_pp_group().is_last_rank):
+        if get_pp_group().is_first_rank or (
+            self.tie_word_embeddings and get_pp_group().is_last_rank
+        ):
             self.embed_tokens = VocabParallelEmbedding(
                 self.vocab_size,
                 self.embed_dim,
@@ -469,7 +475,9 @@ class SarvamMLAModel(nn.Module):
         else:
             self.embed_tokens = PPMissingLayer()
 
-        self.embedding_dropout = torch.nn.Dropout(getattr(config, "embedding_dropout", 0.0))
+        self.embedding_dropout = torch.nn.Dropout(
+            getattr(config, "embedding_dropout", 0.0)
+        )
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
             lambda prefix: SarvamMLABlock(
@@ -515,7 +523,9 @@ class SarvamMLAModel(nn.Module):
                 residual,
             )
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
+            return IntermediateTensors(
+                {"hidden_states": hidden_states, "residual": residual}
+            )
         if residual is None:
             hidden_states = self.norm(hidden_states)
         else:
@@ -583,7 +593,9 @@ class SarvamMLAModel(nn.Module):
                         continue
 
                     param = params_dict[new_name]
-                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
+                    weight_loader = getattr(
+                        param, "weight_loader", default_weight_loader
+                    )
                     weight_loader(
                         param,
                         loaded_weight,
@@ -695,9 +707,10 @@ class SarvamMLAForCausalLM(nn.Module, SupportsPP, SupportsLoRA, SarvamMixtureOfE
             self.lm_head = PPMissingLayer()
             self.logits_processor = None  # type: ignore
 
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
 
-        self.expert_weights = []
         self.num_moe_layers = 0
 
         self.moe_layers = []

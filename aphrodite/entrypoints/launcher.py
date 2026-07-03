@@ -15,11 +15,11 @@ from fastapi import FastAPI
 
 from aphrodite import envs
 from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.constants import (
+from aphrodite.entrypoints.serve.utils.constants import (
     H11_MAX_HEADER_COUNT_DEFAULT,
     H11_MAX_INCOMPLETE_EVENT_SIZE_DEFAULT,
 )
-from aphrodite.entrypoints.ssl import SSLCertRefresher
+from aphrodite.entrypoints.serve.utils.ssl import SSLCertRefresher
 from aphrodite.logger import init_logger
 from aphrodite.utils.network_utils import find_process_using_port
 
@@ -139,7 +139,9 @@ def _log_full_routes(app: FastAPI) -> None:
 
 
 def _log_compact_routes(app: FastAPI) -> None:
-    grouped_routes: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+    grouped_routes: dict[str, dict[str, set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
     endpoint_routes: dict[str, set[str]] = defaultdict(set)
     route_count = 0
 
@@ -164,7 +166,9 @@ def _log_compact_routes(app: FastAPI) -> None:
         grouped_routes[group][_normalize_methods(methods)].add(compact_path)
 
     displayed_route_count = sum(
-        len(paths) for method_groups in grouped_routes.values() for paths in method_groups.values()
+        len(paths)
+        for method_groups in grouped_routes.values()
+        for paths in method_groups.values()
     ) + sum(len(endpoints) for endpoints in endpoint_routes.values())
     alias_note = ""
     if displayed_route_count != route_count:
@@ -174,7 +178,9 @@ def _log_compact_routes(app: FastAPI) -> None:
         _route_log_color("Available routes:", _ANSI_BOLD),
         route_count,
         alias_note,
-        _route_log_color("(set APHRODITE_LOG_ROUTES=full for details)", _ANSI_DIM),
+        _route_log_color(
+            "(set APHRODITE_LOG_ROUTES=full for details)", _ANSI_DIM
+        ),
     )
 
     for group in ("Core", "OpenAI", "Kobold", "Docs", "Other"):
@@ -183,7 +189,9 @@ def _log_compact_routes(app: FastAPI) -> None:
         if not method_groups and not endpoints:
             continue
 
-        group_route_count = sum(len(paths) for paths in method_groups.values()) + len(endpoints)
+        group_route_count = sum(
+            len(paths) for paths in method_groups.values()
+        ) + len(endpoints)
         group_label = _route_log_color(
             f"Routes [{group}]:",
             f"{_ANSI_BOLD}{_ROUTE_GROUP_COLORS[group]}",
@@ -229,7 +237,9 @@ async def serve_http(
     _log_routes(app)
 
     # Extract header limit options if present
-    h11_max_incomplete_event_size = uvicorn_kwargs.pop("h11_max_incomplete_event_size", None)
+    h11_max_incomplete_event_size = uvicorn_kwargs.pop(
+        "h11_max_incomplete_event_size", None
+    )
     h11_max_header_count = uvicorn_kwargs.pop("h11_max_header_count", None)
 
     # Set safe defaults if not provided
@@ -265,6 +275,9 @@ async def serve_http(
     shutdown_event = asyncio.Event()
 
     def signal_handler() -> None:
+        if shutdown_event.is_set():
+            return
+        logger.info_once("[shutdown] API server: shutdown triggered")
         shutdown_event.set()
 
     async def dummy_shutdown() -> None:
@@ -278,10 +291,21 @@ async def serve_http(
 
         engine_client = app.state.engine_client
         timeout = engine_client.aphrodite_config.shutdown_timeout
+        mode = "abort" if timeout == 0 else "drain"
 
-        await loop.run_in_executor(None, partial(engine_client.shutdown, timeout=timeout))
+        logger.info(
+            "[shutdown] API server: stopping engine client mode=%s timeout=%ss",
+            mode,
+            timeout,
+        )
+
+        await loop.run_in_executor(
+            None, partial(engine_client.shutdown, timeout=timeout)
+        )
+        logger.info_once("[shutdown] API server: engine client stopped")
 
         server.should_exit = True
+        logger.info_once("[shutdown] API server: signalling HTTP server shutdown")
         server_task.cancel()
         watchdog_task.cancel()
         if ssl_cert_refresher:
@@ -302,7 +326,7 @@ async def serve_http(
                 process,
                 " ".join(process.cmdline()),
             )
-        logger.info("Shutting down FastAPI HTTP server.")
+        logger.info_once("[shutdown] API server: shutting down FastAPI HTTP server")
         return server.shutdown()
     finally:
         shutdown_task.cancel()

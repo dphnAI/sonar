@@ -86,6 +86,15 @@ class StatelessGroupCoordinator(GroupCoordinator):
 
         self.rank = global_rank
         self.local_rank = local_rank
+        from aphrodite.distributed.parallel_state import _WORLD
+
+        if _WORLD is not None:
+            self.device_index = _WORLD.device_index
+        else:
+            assert local_rank >= 0, (
+                "local_rank must be provided when creating the world group"
+            )
+            self.device_index = local_rank
 
         self_device_group = None
         self_cpu_group = None
@@ -152,18 +161,27 @@ class StatelessGroupCoordinator(GroupCoordinator):
         self.tcp_store_group = self_tcp_store_group
 
         if current_platform.is_cuda_alike():
-            self.device = torch.device(f"cuda:{local_rank}")
+            visible_device_index = (
+                current_platform.logical_device_id_to_visible_device_id(
+                    self.device_index
+                )
+            )
+            self.device = torch.device(f"cuda:{visible_device_index}")
         elif current_platform.is_xpu():
-            self.device = torch.device(f"xpu:{local_rank}")
+            self.device = torch.device(f"xpu:{self.device_index}")
         elif current_platform.is_out_of_tree():
-            self.device = torch.device(f"{current_platform.device_name}:{local_rank}")
+            self.device = torch.device(
+                f"{current_platform.device_name}:{self.device_index}"
+            )
         else:
             self.device = torch.device("cpu")
 
         self.use_device_communicator = use_device_communicator
         self.device_communicator = None
         if use_device_communicator and self.world_size > 1:
-            device_comm_cls = resolve_obj_by_qualname(current_platform.get_device_communicator_cls())
+            device_comm_cls = resolve_obj_by_qualname(
+                current_platform.get_device_communicator_cls()
+            )
             assert device_comm_cls == CudaCommunicator
             self.device_communicator = CudaCommunicator(
                 cpu_group=self.cpu_group,
@@ -177,7 +195,9 @@ class StatelessGroupCoordinator(GroupCoordinator):
 
         self.mq_broadcaster = None
 
-        self.use_custom_op_call = current_platform.is_cuda_alike() or current_platform.is_tpu()
+        self.use_custom_op_call = (
+            current_platform.is_cuda_alike() or current_platform.is_tpu()
+        )
         self.use_cpu_custom_send_recv = False
 
     def destroy(self):
@@ -206,7 +226,9 @@ class StatelessGroupCoordinator(GroupCoordinator):
             return obj
         return self.tcp_store_group.broadcast_obj(obj, src)
 
-    def broadcast_object_list(self, obj_list: list[Any], src: int = 0, group: ProcessGroup | None = None):
+    def broadcast_object_list(
+        self, obj_list: list[Any], src: int = 0, group: ProcessGroup | None = None
+    ):
         assert src < self.world_size
 
         if self.world_size == 1:
@@ -232,19 +254,25 @@ class StatelessGroupCoordinator(GroupCoordinator):
             return tensor_dict
 
         if self.rank_in_group == src:
-            assert isinstance(tensor_dict, dict), f"Expecting a dictionary, got {type(tensor_dict)}"
+            assert isinstance(tensor_dict, dict), (
+                f"Expecting a dictionary, got {type(tensor_dict)}"
+            )
             metadata_list, tensor_list = _split_tensor_dict(tensor_dict)
         else:
             metadata_list = None
             tensor_list = []
 
-        recv_metadata_list: list[tuple[str, Any]] = self.tcp_store_group.broadcast_obj(metadata_list, src)
+        recv_metadata_list: list[tuple[str, Any]] = self.tcp_store_group.broadcast_obj(
+            metadata_list, src
+        )
 
         if self.rank_in_group != src:
             tensor_dict = {}
             for key, value in recv_metadata_list:
                 if isinstance(value, TensorMetadata):
-                    tensor = torch.empty(value.size, dtype=value.dtype, device=value.device)
+                    tensor = torch.empty(
+                        value.size, dtype=value.dtype, device=value.device
+                    )
                     tensor_list.append(tensor)
                     tensor_dict[key] = tensor
                 else:
@@ -317,7 +345,9 @@ class StatelessGroupCoordinator(GroupCoordinator):
                 tensor = torch.empty(value.size, dtype=value.dtype, device=value.device)
                 if tensor.numel() > 0:
                     if self.device_communicator and tensor.is_cuda:
-                        tensor = self.device_communicator.recv(tensor.size(), tensor.dtype, src)
+                        tensor = self.device_communicator.recv(
+                            tensor.size(), tensor.dtype, src
+                        )
                     else:
                         tensor = self.tcp_store_group.recv(tensor, src)
                 tensor_dict[key] = tensor
@@ -328,7 +358,9 @@ class StatelessGroupCoordinator(GroupCoordinator):
     def barrier(self):
         self.tcp_store_group.barrier()
 
-    def gather(self, input_: torch.Tensor, dst: int = 0, dim: int = -1) -> torch.Tensor | None:
+    def gather(
+        self, input_: torch.Tensor, dst: int = 0, dim: int = -1
+    ) -> torch.Tensor | None:
         if self.world_size == 1:
             return input_
 
@@ -340,7 +372,9 @@ class StatelessGroupCoordinator(GroupCoordinator):
             gathered_list[self.rank_in_group] = input_
             for src_rank in range(self.world_size):
                 if src_rank != self.rank_in_group:
-                    gathered_list[src_rank] = self.device_communicator.recv(input_.size(), input_.dtype, src_rank)
+                    gathered_list[src_rank] = self.device_communicator.recv(
+                        input_.size(), input_.dtype, src_rank
+                    )
             return torch.cat(gathered_list, dim=dim)
         else:
             self.device_communicator.send(input_, dst)

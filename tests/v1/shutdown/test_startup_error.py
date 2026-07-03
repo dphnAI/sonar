@@ -2,16 +2,21 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Test that we handle a startup Error and shutdown."""
 
-import pytest
-from aphrodite.engine.args_tools import AsyncEngineArgs
-from aphrodite.modeling.models.llama import LlamaForCausalLM
+import inspect
 
+import pytest
+
+from tests.utils import wait_for_gpu_memory_to_clear
+from tests.v1.shutdown.utils import (
+    SHUTDOWN_TEST_THRESHOLD_BYTES,
+    SHUTDOWN_TEST_TIMEOUT_SEC,
+)
 from aphrodite import LLM
 from aphrodite.distributed import get_tensor_model_parallel_rank
-from aphrodite.utils.torch_utils import cuda_device_count_stateless
+from aphrodite.engine.arg_utils import AsyncEngineArgs
+from aphrodite.model_executor.models.llama import LlamaForCausalLM
+from aphrodite.platforms import current_platform
 from aphrodite.v1.engine.async_llm import AsyncLLM
-from tests.utils import wait_for_gpu_memory_to_clear
-from tests.v1.shutdown.utils import SHUTDOWN_TEST_THRESHOLD_BYTES, SHUTDOWN_TEST_TIMEOUT_SEC
 
 MODELS = ["hmellor/tiny-random-LlamaForCausalLM"]
 
@@ -25,25 +30,45 @@ def evil_method(self, *args, **kwargs):
     return self.model(*args, **kwargs, intermediate_tensors=None)
 
 
+@pytest.fixture
+def rocm_evil_method(rocm_sitecustomize_factory, request):
+    failing_method = request.getfixturevalue("failing_method")
+    lines = [
+        "from aphrodite.distributed import get_tensor_model_parallel_rank",
+        "from aphrodite.model_executor.models.llama import LlamaForCausalLM",
+        inspect.getsource(evil_method),
+        f"LlamaForCausalLM.{failing_method} = {evil_method.__name__}",
+    ]
+    rocm_sitecustomize_factory(lines)
+
+
 @pytest.mark.timeout(SHUTDOWN_TEST_TIMEOUT_SEC)
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("tensor_parallel_size", [2, 1])
 @pytest.mark.parametrize("failing_method", ["forward", "load_weights"])
-def test_async_llm_startup_error(monkeypatch, model: str, tensor_parallel_size: int, failing_method: str) -> None:
+def test_async_llm_startup_error(
+    monkeypatch,
+    rocm_evil_method,
+    model: str,
+    tensor_parallel_size: int,
+    failing_method: str,
+) -> None:
     """Test that AsyncLLM propagates an __init__ error & frees memory.
     Test profiling (forward()) and load weights failures.
     AsyncLLM always uses an MP client.
     """
-    if cuda_device_count_stateless() < tensor_parallel_size:
+    if current_platform.device_count() < tensor_parallel_size:
         pytest.skip(reason="Not enough CUDA devices")
 
     # Monkeypatch an error in the model.
     monkeypatch.setattr(LlamaForCausalLM, failing_method, evil_method)
 
-    engine_args = AsyncEngineArgs(model=model, enforce_eager=True, tensor_parallel_size=tensor_parallel_size)
+    engine_args = AsyncEngineArgs(
+        model=model, enforce_eager=True, tensor_parallel_size=tensor_parallel_size
+    )
 
     # Confirm we get an exception.
-    with pytest.raises(Exception, match="initialization failed"):
+    with pytest.raises(Exception, match=r"initialization fail(ed|ure)"):
         _ = AsyncLLM.from_engine_args(engine_args)
 
     # Confirm all the processes are cleaned up.
@@ -60,6 +85,7 @@ def test_async_llm_startup_error(monkeypatch, model: str, tensor_parallel_size: 
 @pytest.mark.parametrize("failing_method", ["forward", "load_weights"])
 def test_llm_startup_error(
     monkeypatch,
+    rocm_evil_method,
     model: str,
     tensor_parallel_size: int,
     enable_multiprocessing: bool,
@@ -73,7 +99,7 @@ def test_llm_startup_error(
     # If MODELS list grows, each architecture needs its own test variant.
     if model != "JackFram/llama-68m":
         pytest.skip(reason="Only test JackFram/llama-68m")
-    if cuda_device_count_stateless() < tensor_parallel_size:
+    if current_platform.device_count() < tensor_parallel_size:
         pytest.skip(reason="Not enough CUDA devices")
 
     with monkeypatch.context() as m:
@@ -85,7 +111,9 @@ def test_llm_startup_error(
 
         with pytest.raises(
             Exception,
-            match="initialization failed" if enable_multiprocessing else "Simulated Error in startup!",
+            match=r"initialization fail(ed|ure)"
+            if enable_multiprocessing
+            else "Simulated Error in startup!",
         ):
             _ = LLM(
                 model=model,

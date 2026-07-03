@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 
 from aphrodite.config import PoolerConfig
-from aphrodite.platforms import current_platform
 
 from ...utils import check_embeddings_close
 
@@ -22,10 +22,11 @@ from ...utils import check_embeddings_close
         ),
         pytest.param(
             "intfloat/e5-mistral-7b-instruct",
-            # CPU v1 doesn't support sliding window
-            marks=[pytest.mark.core_model],
+            marks=[pytest.mark.core_model, pytest.mark.cpu_model],
         ),
-        pytest.param("ssmits/Qwen2-7B-Instruct-embed-base", marks=[pytest.mark.cpu_model]),
+        pytest.param(
+            "ssmits/Qwen2-7B-Instruct-embed-base", marks=[pytest.mark.cpu_model]
+        ),
         # [Encoder-only]
         pytest.param(
             "BAAI/bge-base-en-v1.5",
@@ -49,16 +50,12 @@ def test_models(
     aphrodite_runner,
     example_prompts,
     model,
-    monkeypatch,
 ) -> None:
-    if model == "BAAI/bge-multilingual-gemma2" and current_platform.is_rocm():
-        # ROCm Triton FA does not currently support sliding window attention
-        # switch to use ROCm CK FA backend
-        monkeypatch.setenv("APHRODITE_USE_TRITON_FLASH_ATTN", "False")
-
     aphrodite_extra_kwargs = {}
     if model == "ssmits/Qwen2-7B-Instruct-embed-base":
-        aphrodite_extra_kwargs["pooler_config"] = PoolerConfig(pooling_type="MEAN", normalize=False)
+        aphrodite_extra_kwargs["pooler_config"] = PoolerConfig(
+            seq_pooling_type="MEAN", use_activation=False
+        )
 
     max_model_len: int | None = 512
     if model in [

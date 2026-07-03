@@ -6,7 +6,11 @@ import time
 import msgspec
 import pytest
 
-from aphrodite.distributed.kv_events import EventBatch, EventPublisherFactory, NullEventPublisher
+from aphrodite.distributed.kv_events import (
+    EventBatch,
+    EventPublisherFactory,
+    NullEventPublisher,
+)
 
 DP_RANK = 0
 
@@ -87,7 +91,9 @@ def test_replay_mechanism(publisher, subscriber):
     assert len(replayed) > 0, "No replayed messages received"
     seqs = [seq for seq, _ in replayed]
     assert all(seq >= 10 for seq in seqs), "Replayed messages not in order"
-    assert seqs == list(range(min(seqs), max(seqs) + 1)), "Replayed messages not consecutive"
+    assert seqs == list(range(min(seqs), max(seqs) + 1)), (
+        "Replayed messages not consecutive"
+    )
 
 
 def test_buffer_limit(publisher, subscriber, publisher_config):
@@ -134,10 +140,14 @@ def test_topic_filtering(publisher_config):
             pub.publish(create_test_events(1))
 
         foo_received = [sub_foo.receive_one(timeout=200) for _ in range(3)]
-        assert all(msg is not None for msg in foo_received), "Subscriber with matching topic should receive messages"
+        assert all(msg is not None for msg in foo_received), (
+            "Subscriber with matching topic should receive messages"
+        )
 
         bar_received = [sub_bar.receive_one(timeout=200) for _ in range(3)]
-        assert all(msg is None for msg in bar_received), "Subscriber with non-matching topic should receive no messages"
+        assert all(msg is None for msg in bar_received), (
+            "Subscriber with non-matching topic should receive no messages"
+        )
     finally:
         pub.shutdown()
         sub_foo.close()
@@ -203,7 +213,9 @@ def test_data_parallel_rank_tagging(publisher_config):
     if "tcp://" in base_endpoint:
         # For TCP endpoints: tcp://localhost:5557 -> tcp://localhost:5557, tcp://localhost:5558
         expected_endpoint_0 = base_endpoint  # rank 0 gets port + 0 = same port
-        expected_endpoint_1 = base_endpoint.replace(":5557", ":5558")  # rank 1 gets port + 1
+        expected_endpoint_1 = base_endpoint.replace(
+            ":5557", ":5558"
+        )  # rank 1 gets port + 1
     else:
         # For inproc endpoints: inproc://test -> inproc://test_dp0, inproc://test_dp1
         expected_endpoint_0 = base_endpoint  # rank 0 gets base
@@ -235,8 +247,12 @@ def test_data_parallel_rank_tagging(publisher_config):
         seq_1, received_1 = result_1
 
         # Verify DP rank tagging
-        assert received_0.data_parallel_rank == 0, f"Expected DP rank 0, got {received_0.data_parallel_rank}"
-        assert received_1.data_parallel_rank == 1, f"Expected DP rank 1, got {received_1.data_parallel_rank}"
+        assert received_0.data_parallel_rank == 0, (
+            f"Expected DP rank 0, got {received_0.data_parallel_rank}"
+        )
+        assert received_1.data_parallel_rank == 1, (
+            f"Expected DP rank 1, got {received_1.data_parallel_rank}"
+        )
 
         # Verify event content is correct
         assert len(received_0.events) == 2, "Wrong number of events from rank 0"

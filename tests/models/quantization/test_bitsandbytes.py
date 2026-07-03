@@ -5,19 +5,28 @@
 Run `pytest tests/quantization/test_bitsandbytes.py`.
 """
 
-import pytest
-from transformers import BitsAndBytesConfig
+import types
+from unittest.mock import MagicMock, patch
 
-from aphrodite.platforms import current_platform
+import pytest
+from packaging.version import Version
+from transformers import BitsAndBytesConfig
+from transformers import __version__ as TRANSFORMERS_VERSION
+
 from tests.quantization.utils import is_quant_method_supported
+from aphrodite.model_executor.model_loader import bitsandbytes_loader as bnb
+from aphrodite.platforms import current_platform
 
 from ...utils import compare_two_settings, multi_gpu_test
 from ..utils import check_embeddings_close, check_logprobs_close
 
-pytestmark = pytest.mark.skipif(
-    current_platform.is_rocm(),
-    reason="bitsandbytes quantization not supported on ROCm (CUDA-only kernels)",
-)
+if current_platform.is_rocm():
+    from aphrodite.platforms.rocm import on_gfx9
+
+    pytestmark = pytest.mark.skipif(
+        on_gfx9(),
+        reason="bitsandbytes not supported on gfx9 (warp size 64 limitation)",
+    )
 
 models_4bit_to_test = [
     ("facebook/opt-125m", "quantize opt model inflight"),
@@ -54,9 +63,13 @@ models_pre_quant_8bit_to_test = [
     reason="bitsandbytes is not supported on this GPU type.",
 )
 @pytest.mark.parametrize("model_name, description", models_4bit_to_test)
-def test_load_4bit_bnb_model(hf_runner, aphrodite_runner, example_prompts, model_name, description) -> None:
+def test_load_4bit_bnb_model(
+    hf_runner, aphrodite_runner, example_prompts, model_name, description
+) -> None:
     hf_model_kwargs = dict(quantization_config=BitsAndBytesConfig(load_in_4bit=True))
-    validate_generated_texts(hf_runner, aphrodite_runner, example_prompts[:1], model_name, False, hf_model_kwargs)
+    validate_generated_texts(
+        hf_runner, aphrodite_runner, example_prompts[:1], model_name, False, hf_model_kwargs
+    )
 
 
 @pytest.mark.skipif(
@@ -64,8 +77,12 @@ def test_load_4bit_bnb_model(hf_runner, aphrodite_runner, example_prompts, model
     reason="bitsandbytes is not supported on this GPU type.",
 )
 @pytest.mark.parametrize("model_name, description", models_pre_qaunt_4bit_to_test)
-def test_load_pre_quant_4bit_bnb_model(hf_runner, aphrodite_runner, example_prompts, model_name, description) -> None:
-    validate_generated_texts(hf_runner, aphrodite_runner, example_prompts[:1], model_name, True)
+def test_load_pre_quant_4bit_bnb_model(
+    hf_runner, aphrodite_runner, example_prompts, model_name, description
+) -> None:
+    validate_generated_texts(
+        hf_runner, aphrodite_runner, example_prompts[:1], model_name, True
+    )
 
 
 @pytest.mark.skipif(
@@ -73,8 +90,12 @@ def test_load_pre_quant_4bit_bnb_model(hf_runner, aphrodite_runner, example_prom
     reason="bitsandbytes is not supported on this GPU type.",
 )
 @pytest.mark.parametrize("model_name, description", models_pre_quant_8bit_to_test)
-def test_load_8bit_bnb_model(hf_runner, aphrodite_runner, example_prompts, model_name, description) -> None:
-    validate_generated_texts(hf_runner, aphrodite_runner, example_prompts[:1], model_name, True)
+def test_load_8bit_bnb_model(
+    hf_runner, aphrodite_runner, example_prompts, model_name, description
+) -> None:
+    validate_generated_texts(
+        hf_runner, aphrodite_runner, example_prompts[:1], model_name, True
+    )
 
 
 @pytest.mark.skipif(
@@ -83,7 +104,9 @@ def test_load_8bit_bnb_model(hf_runner, aphrodite_runner, example_prompts, model
 )
 @pytest.mark.parametrize("model_name, description", models_4bit_to_test)
 @multi_gpu_test(num_gpus=2)
-def test_load_tp_4bit_bnb_model(hf_runner, aphrodite_runner, example_prompts, model_name, description) -> None:
+def test_load_tp_4bit_bnb_model(
+    hf_runner, aphrodite_runner, example_prompts, model_name, description
+) -> None:
     hf_model_kwargs = dict(quantization_config=BitsAndBytesConfig(load_in_4bit=True))
     validate_generated_texts(
         hf_runner,
@@ -118,15 +141,27 @@ def test_load_pp_4bit_bnb_model(model_name, description) -> None:
         "--pipeline-parallel-size",
         "2",
     ]
-    compare_two_settings(model_name, common_args, pp_args)
+    compare_two_settings(
+        model_name,
+        common_args,
+        pp_args,
+    )
 
 
+@pytest.mark.skipif(
+    Version(TRANSFORMERS_VERSION) >= Version("5.0.0"),
+    reason="Need to add support for quantizing MoE experts with bnb"
+    " in transformers v5. See"
+    " https://github.com/bitsandbytes-foundation/bitsandbytes/issues/1849",
+)
 @pytest.mark.skipif(
     not is_quant_method_supported("bitsandbytes"),
     reason="bitsandbytes is not supported on this GPU type.",
 )
 @pytest.mark.parametrize("model_name, description", models_4bit_to_moe_test)
-def test_4bit_bnb_moe_model(hf_runner, aphrodite_runner, example_prompts, model_name, description) -> None:
+def test_4bit_bnb_moe_model(
+    hf_runner, aphrodite_runner, example_prompts, model_name, description
+) -> None:
     hf_model_kwargs = dict(
         quantization_config=BitsAndBytesConfig(
             load_in_4bit=True,
@@ -140,10 +175,16 @@ def test_4bit_bnb_moe_model(hf_runner, aphrodite_runner, example_prompts, model_
         enforce_eager=False,
         default_torch_num_threads=1,
     ) as llm:
-        aphrodite_outputs = llm.generate_greedy_logprobs(example_prompts, max_tokens=32, num_logprobs=5)
+        aphrodite_outputs = llm.generate_greedy_logprobs(
+            example_prompts, max_tokens=32, num_logprobs=5
+        )
 
-    with hf_runner(model_name, model_kwargs=hf_model_kwargs, default_torch_num_threads=1) as llm:
-        transformers_outputs = llm.generate_greedy_logprobs_limit(example_prompts, max_tokens=32, num_logprobs=5)
+    with hf_runner(
+        model_name, model_kwargs=hf_model_kwargs, default_torch_num_threads=1
+    ) as llm:
+        transformers_outputs = llm.generate_greedy_logprobs_limit(
+            example_prompts, max_tokens=32, num_logprobs=5
+        )
     check_logprobs_close(
         outputs_0_lst=transformers_outputs,
         outputs_1_lst=aphrodite_outputs,
@@ -234,6 +275,9 @@ def validate_generated_texts(
         tensor_parallel_size=aphrodite_tp_size,
         enforce_eager=False,
         default_torch_num_threads=1,
+        tokenizer_mode="hf",
+        load_format="hf",
+        config_format="hf",
     ) as llm:
         aphrodite_outputs = llm.generate_greedy(prompts, max_tokens)
         aphrodite_logs = log_generated_texts(prompts, aphrodite_outputs, "AphroditeRunner")
@@ -242,7 +286,9 @@ def validate_generated_texts(
         hf_model_kwargs = {}
 
     # Run with HF runner
-    with hf_runner(model_name, model_kwargs=hf_model_kwargs, default_torch_num_threads=1) as llm:
+    with hf_runner(
+        model_name, model_kwargs=hf_model_kwargs, default_torch_num_threads=1
+    ) as llm:
         hf_outputs = llm.generate_greedy(prompts, max_tokens)
         hf_logs = log_generated_texts(prompts, hf_outputs, "HfRunner")
 
@@ -258,3 +304,27 @@ def validate_generated_texts(
             f"HF Output: '{hf_str}'\n"
             f"Aphrodite Output: '{aphrodite_str}'"
         )
+
+
+def test_bitsandbytes_passes_revision_by_name():
+    # revision must reach download_safetensors_index_file_from_hf as the
+    # ``revision`` keyword, not a positional slot.
+    fake_self = types.SimpleNamespace(
+        load_config=types.SimpleNamespace(download_dir="/cache"),
+        _get_weight_files=MagicMock(
+            return_value=("/folder", ["/folder/model.safetensors"], "*.safetensors")
+        ),
+    )
+    with (
+        patch.object(bnb, "download_safetensors_index_file_from_hf") as mock_idx,
+        patch.object(
+            bnb,
+            "filter_duplicate_safetensors_files",
+            return_value=["/folder/model.safetensors"],
+        ),
+    ):
+        bnb.BitsAndBytesModelLoader._prepare_weights(fake_self, "org/model", "myrev")
+
+    mock_idx.assert_called_once()
+    assert mock_idx.call_args.kwargs.get("revision") == "myrev"
+    assert "myrev" not in mock_idx.call_args.args

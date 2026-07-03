@@ -9,9 +9,9 @@ import torch
 from transformers.models.auto.auto_factory import _BaseAutoModelClass
 
 from aphrodite.config.model import RunnerOption
-from aphrodite.transformers_utils.tokenizer import AnyTokenizer
+from aphrodite.tokenizers import TokenizerLike
 
-from .....conftest import AphroditeRunner, HfRunner
+from .....conftest import HfRunner, AphroditeRunner
 from ....registry import HF_EXAMPLE_MODELS
 from .types import PromptWithMultiModalInput, RunnerOutput
 
@@ -33,11 +33,12 @@ def run_test(
     auto_cls: type[_BaseAutoModelClass],
     use_tokenizer_eos: bool,
     comparator: Callable[..., None],
-    get_stop_token_ids: Callable[[AnyTokenizer], list[int]] | None,
+    get_stop_token_ids: Callable[[TokenizerLike], list[int]] | None,
     stop_str: list[str] | None,
     limit_mm_per_prompt: dict[str, int],
     aphrodite_runner_kwargs: dict[str, Any] | None,
     hf_model_kwargs: dict[str, Any] | None,
+    hf_processor: Callable[[str], Any] | None,
     patch_hf_runner: Callable[[HfRunner], HfRunner] | None,
     runner: RunnerOption = "auto",
     distributed_executor_backend: str | None = None,
@@ -74,9 +75,16 @@ def run_test(
     if model_info.require_embed_inputs:
         for k in ("skip_tokenizer_init", "enable_prompt_embeds", "enable_mm_embeds"):
             aphrodite_runner_kwargs_[k] = model_info.require_embed_inputs
+    if not model_info.enable_prefix_caching:
+        aphrodite_runner_kwargs_["enable_prefix_caching"] = False
 
     if aphrodite_runner_kwargs:
         aphrodite_runner_kwargs_.update(aphrodite_runner_kwargs)
+
+    # Avoid passing limit_mm_per_prompt twice when aphrodite_runner_kwargs
+    # already contains it (e.g. gemma4 sets it via aphrodite_runner_kwargs).
+    if "limit_mm_per_prompt" in aphrodite_runner_kwargs_:
+        limit_mm_per_prompt = aphrodite_runner_kwargs_.pop("limit_mm_per_prompt")
 
     with aphrodite_runner(
         model,
@@ -109,7 +117,19 @@ def run_test(
             )
             aphrodite_outputs_per_mm.append(aphrodite_output)
 
-    hf_model = hf_runner(model, dtype=dtype, auto_cls=auto_cls, model_kwargs=hf_model_kwargs)
+    hf_runner_kwargs: dict[str, Any] = {}
+    if model_info.tokenizer:
+        hf_runner_kwargs["tokenizer_name"] = model_info.tokenizer
+    if hf_processor is not None:
+        hf_runner_kwargs["processor"] = hf_processor(model)
+
+    hf_model = hf_runner(
+        model,
+        dtype=dtype,
+        auto_cls=auto_cls,
+        model_kwargs=hf_model_kwargs,
+        **hf_runner_kwargs,
+    )
 
     # Some models need to patch things like the model processor, e.g., internvl
     if patch_hf_runner is not None:
@@ -169,12 +189,19 @@ def process_runner_outputs(
 ):
     """Applies the runner processor(s) to the runner outputs, if any."""
     if first_runner_processor is not None:
-        first_runner_outputs = process_outputs(first_runner_processor, model, first_runner_outputs)
+        first_runner_outputs = process_outputs(
+            first_runner_processor, model, first_runner_outputs
+        )
     if second_runner_processor is not None:
-        second_runner_outputs = process_outputs(second_runner_processor, model, second_runner_outputs)
+        second_runner_outputs = process_outputs(
+            second_runner_processor, model, second_runner_outputs
+        )
     return first_runner_outputs, second_runner_outputs
 
 
 def process_outputs(output_processor, model, outputs_per_image):
     """Applies a model specific post-processor function to a runner's output"""
-    return [[output_processor(res, model) for res in outputs] for outputs in outputs_per_image]
+    return [
+        [output_processor(res, model) for res in outputs]
+        for outputs in outputs_per_image
+    ]

@@ -3,6 +3,7 @@
 
 from collections.abc import Callable, Hashable
 from fractions import Fraction
+from typing import Any
 from weakref import WeakValueDictionary
 
 import torch
@@ -42,10 +43,9 @@ class BaseAphroditeParameter(Parameter):
         """
         Initialize the BaseAphroditeParameter
 
-        :param data: torch tensor with the parameter data
-        :param weight_loader: weight loader callable
-
-        :returns: a torch.nn.parameter
+        Args:
+            data: torch tensor with the parameter data
+            weight_loader: weight loader callable
         """
 
         # During weight loading, we often do something like:
@@ -72,7 +72,9 @@ class BaseAphroditeParameter(Parameter):
         # weight loading should be implemented via Model.load_weights. In the
         # meantime, support deleting and overriding `weight_loader` attribute
         if self._weight_loader is None:
-            raise AttributeError(f"{self.__class__.__name__} weight_loader attribute has been deleted")
+            raise AttributeError(
+                f"{self.__class__.__name__} weight_loader attribute has been deleted"
+            )
         return self._weight_loader
 
     @weight_loader.setter
@@ -89,7 +91,9 @@ class BaseAphroditeParameter(Parameter):
         return cond1 and cond2
 
     def _assert_and_load(self, loaded_weight: torch.Tensor):
-        assert self.data.shape == loaded_weight.shape or self._is_1d_and_scalar(loaded_weight)
+        assert self.data.shape == loaded_weight.shape or self._is_1d_and_scalar(
+            loaded_weight
+        )
         self.data.copy_(loaded_weight)
 
     def load_column_parallel_weight(self, loaded_weight: torch.Tensor):
@@ -143,7 +147,9 @@ class _ColumnAphroditeParameter(BaseAphroditeParameter):
 
     def load_column_parallel_weight(self, loaded_weight: torch.Tensor):
         shard_size = self.data.shape[self.output_dim]
-        loaded_weight = loaded_weight.narrow(self.output_dim, self.tp_rank * shard_size, shard_size)
+        loaded_weight = loaded_weight.narrow(
+            self.output_dim, self.tp_rank * shard_size, shard_size
+        )
         assert self.data.shape == loaded_weight.shape
         self.data.copy_(loaded_weight)
 
@@ -152,7 +158,10 @@ class _ColumnAphroditeParameter(BaseAphroditeParameter):
         shard_size: int = kwargs["shard_size"]
 
         # TODO: move these to PackedColumnParameter and PackedAphroditeParameter
-        if isinstance(self, (PackedColumnParameter, PackedAphroditeParameter)) and self.packed_dim == self.output_dim:
+        if (
+            isinstance(self, (PackedColumnParameter, PackedAphroditeParameter))
+            and self.packed_dim == self.output_dim
+        ):
             shard_size, shard_offset = self.adjust_shard_indexes_for_packing(
                 shard_offset=shard_offset, shard_size=shard_size
             )
@@ -160,7 +169,9 @@ class _ColumnAphroditeParameter(BaseAphroditeParameter):
         param_data = self.data
 
         param_data = param_data.narrow(self.output_dim, shard_offset, shard_size)
-        loaded_weight = loaded_weight.narrow(self.output_dim, self.tp_rank * shard_size, shard_size)
+        loaded_weight = loaded_weight.narrow(
+            self.output_dim, self.tp_rank * shard_size, shard_size
+        )
         assert param_data.shape == loaded_weight.shape
         param_data.copy_(loaded_weight)
 
@@ -171,7 +182,10 @@ class _ColumnAphroditeParameter(BaseAphroditeParameter):
         num_heads: int = kwargs["num_heads"]
 
         # TODO: move these to PackedColumnParameter and PackedAphroditeParameter
-        if isinstance(self, (PackedColumnParameter, PackedAphroditeParameter)) and self.output_dim == self.packed_dim:
+        if (
+            isinstance(self, (PackedColumnParameter, PackedAphroditeParameter))
+            and self.output_dim == self.packed_dim
+        ):
             shard_size, shard_offset = self.adjust_shard_indexes_for_packing(
                 shard_offset=shard_offset, shard_size=shard_size
             )
@@ -179,7 +193,9 @@ class _ColumnAphroditeParameter(BaseAphroditeParameter):
         param_data = self.data
         shard_id_int = self.tp_rank if shard_id == "q" else self.tp_rank // num_heads
         param_data = param_data.narrow(self.output_dim, shard_offset, shard_size)
-        loaded_weight = loaded_weight.narrow(self.output_dim, shard_id_int * shard_size, shard_size)
+        loaded_weight = loaded_weight.narrow(
+            self.output_dim, shard_id_int * shard_size, shard_size
+        )
 
         assert param_data.shape == loaded_weight.shape
         param_data.copy_(loaded_weight)
@@ -203,7 +219,9 @@ class RowAphroditeParameter(BaseAphroditeParameter):
 
     def load_row_parallel_weight(self, loaded_weight: torch.Tensor):
         shard_size = self.data.shape[self.input_dim]
-        loaded_weight = loaded_weight.narrow(self.input_dim, self.tp_rank * shard_size, shard_size)
+        loaded_weight = loaded_weight.narrow(
+            self.input_dim, self.tp_rank * shard_size, shard_size
+        )
 
         if len(loaded_weight.shape) == 0:
             loaded_weight = loaded_weight.reshape(1)
@@ -270,7 +288,9 @@ class PerTensorScaleParameter(BaseAphroditeParameter):
     def load_column_parallel_weight(self, *args, **kwargs):
         super().load_row_parallel_weight(*args, **kwargs)
 
-    def _load_into_shard_id(self, loaded_weight: torch.Tensor, shard_id: str | int, **kwargs):
+    def _load_into_shard_id(
+        self, loaded_weight: torch.Tensor, shard_id: str | int, **kwargs
+    ):
         """
         Slice the parameter data based on the shard id for
         loading.
@@ -420,17 +440,21 @@ class SharedWeightParameter(BaseAphroditeParameter):
         }
 
         if self.tp_size > 1:
-            raise NotImplementedError(f"{self.__class__.__name__} does not currently support tensor parallelism")
+            raise NotImplementedError(
+                f"{self.__class__.__name__} does not "
+                "currently support tensor parallelism"
+            )
 
-    def add_partition(self, index: int, data_key: Hashable, *args, **kwargs):
+    def add_partition(self, index: int, data_key: Hashable, *args: Any, **kwargs: Any):
         """
         Add a partition to the weight parameter. Partitions whose `data_key`
         is the same will share tensor data
 
-        :param index: index of partition to add
-        :param data_key: hashable key used to key shared tensors
-        :param *args: arguments for `torch.empty`
-        :param **kwargs: keyword arguments for `torch.empty`
+        Args:
+            index: index of partition to add
+            data_key: hashable key used to key shared tensors
+            *args: arguments for `torch.empty`
+            **kwargs: keyword arguments for `torch.empty`
         """
         # load (shared) tensor using `data_key`
         if data_key not in self.tensors_registry:
@@ -492,7 +516,9 @@ class SharedWeightParameter(BaseAphroditeParameter):
 
     def process_weights_after_loading(self):
         for key in self.partitions:
-            self.partitions[key] = torch.nn.Parameter(data=self.partitions[key].data, requires_grad=False)
+            self.partitions[key] = torch.nn.Parameter(
+                data=self.partitions[key].data, requires_grad=False
+            )
 
     @property
     def data(self):
@@ -534,7 +560,8 @@ def permute_param_layout_(
 
     if curr_input_dim is None or curr_output_dim is None:
         assert param.data.dim() == 2, (
-            "permute_param_layout_ only supports 2D parameters when either input_dim or output_dim is not set"
+            "permute_param_layout_ only supports 2D parameters when either "
+            "input_dim or output_dim is not set"
         )
 
     # if one of the dimensions is not set, set it to the opposite of the other
@@ -549,14 +576,17 @@ def permute_param_layout_(
     # create permutation from the current layout to the layout with
     # self.input_dim at input_dim and self.output_dim at output_dim preserving
     # other dimensions
-    perm = [i for i in range(param.data.dim()) if i not in [curr_input_dim, curr_output_dim]]
+    perm = [
+        i for i in range(param.data.dim()) if i not in [curr_input_dim, curr_output_dim]
+    ]
     perm.insert(input_dim, curr_input_dim)
     perm.insert(output_dim, curr_output_dim)
 
     if "packed_dim" in kwargs:
-        assert hasattr(param, "packed_dim") and param.packed_dim == perm[kwargs["packed_dim"]], (
-            "permute_param_layout_ currently doesn't support repacking"
-        )
+        assert (
+            hasattr(param, "packed_dim")
+            and param.packed_dim == perm[kwargs["packed_dim"]]
+        ), "permute_param_layout_ currently doesn't support repacking"
 
     param.data = param.data.permute(*perm)
     if hasattr(param, "_input_dim"):
@@ -573,7 +603,9 @@ def _adjust_shard_indexes_for_marlin(shard_size, shard_offset, marlin_tile_size)
     return shard_size * marlin_tile_size, shard_offset * marlin_tile_size
 
 
-def _adjust_shard_indexes_for_packing(shard_size, shard_offset, packed_factor, marlin_tile_size):
+def _adjust_shard_indexes_for_packing(
+    shard_size, shard_offset, packed_factor, marlin_tile_size
+):
     shard_size = round(shard_size // packed_factor)
     shard_offset = round(shard_offset // packed_factor)
     if marlin_tile_size is not None:

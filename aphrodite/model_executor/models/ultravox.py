@@ -5,7 +5,6 @@
 """PyTorch Ultravox model."""
 
 import copy
-import inspect
 from collections.abc import Iterable, Mapping, Sequence
 from types import SimpleNamespace
 from typing import Annotated, Any, Literal, TypeAlias
@@ -99,10 +98,14 @@ class UltravoxAudioEmbeddingInputs(TensorSchema):
     """
 
     type: Literal["audio_embeds"]
-    data: Annotated[torch.Tensor | list[torch.Tensor], TensorShape("b", "na", "afs", "hs")]
+    data: Annotated[
+        torch.Tensor | list[torch.Tensor], TensorShape("b", "na", "afs", "hs")
+    ]
 
 
-UltravoxAudioInputs: TypeAlias = UltravoxAudioFeatureInputs | UltravoxAudioEmbeddingInputs
+UltravoxAudioInputs: TypeAlias = (
+    UltravoxAudioFeatureInputs | UltravoxAudioEmbeddingInputs
+)
 
 
 class UltravoxProcessingInfo(BaseProcessingInfo):
@@ -165,7 +168,9 @@ class UltravoxDummyInputsBuilder(BaseDummyInputsBuilder[UltravoxProcessingInfo])
         feature_extractor = self.info.get_feature_extractor()
 
         sampling_rate = feature_extractor.sampling_rate
-        audio_len = feature_extractor.chunk_length * sampling_rate * _MAX_ENCODER_BATCH_SIZE
+        audio_len = (
+            feature_extractor.chunk_length * sampling_rate * _MAX_ENCODER_BATCH_SIZE
+        )
         num_audios = mm_counts.get("audio", 0)
 
         audio_overrides = mm_options.get("audio")
@@ -189,7 +194,9 @@ class UltravoxMultiModalProcessor(BaseMultiModalProcessor[UltravoxProcessingInfo
     ) -> BatchFeature:
         # Text-only input not supported in composite processor
         if not mm_data.get("audios", []):
-            prompt_ids = self.info.get_tokenizer().encode(prompt, add_special_tokens=False)
+            prompt_ids = self.info.get_tokenizer().encode(
+                prompt, add_special_tokens=False
+            )
             prompt_ids = self._apply_hf_processor_tokens_only(prompt_ids)
             return BatchFeature(dict(input_ids=[prompt_ids]), tensor_type="pt")
 
@@ -254,8 +261,12 @@ class UltravoxMultiModalProcessor(BaseMultiModalProcessor[UltravoxProcessingInfo
         # belonging to the i-th audio.
         out_mm_data = out_mm_kwargs.get_data()
         num_chunks = out_mm_data.get("audio_num_chunks", torch.zeros(0))
-        chunks_start_idx: torch.Tensor = torch.cumsum(num_chunks, dim=0, dtype=torch.int32)
-        chunks_start_idx = torch.cat([torch.tensor([0], dtype=torch.int32), chunks_start_idx])
+        chunks_start_idx: torch.Tensor = torch.cumsum(
+            num_chunks, dim=0, dtype=torch.int32
+        )
+        chunks_start_idx = torch.cat(
+            [torch.tensor([0], dtype=torch.int32), chunks_start_idx]
+        )
 
         def get_replacement_ultravox(item_idx: int):
             start = chunks_start_idx[item_idx]
@@ -287,7 +298,9 @@ class StackAudioFrames(nn.Module):
         T_pad = (T + self.stack_factor - 1) // self.stack_factor * self.stack_factor
         audio_embeds = F.pad(audio_embeds, (0, 0, 0, T_pad - T))
         B, T, C = audio_embeds.shape
-        audio_embeds = audio_embeds.view(B, T // self.stack_factor, C * self.stack_factor)
+        audio_embeds = audio_embeds.view(
+            B, T // self.stack_factor, C * self.stack_factor
+        )
         return audio_embeds
 
 
@@ -319,7 +332,9 @@ class UltravoxFeedForwardProjector(nn.Module):
             self.ln_mid = nn.Identity()
             self.ln_post = RMSNorm(dim_out)
 
-    def forward(self, audio_features: torch.Tensor, audio_token_len: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, audio_features: torch.Tensor, audio_token_len: torch.Tensor
+    ) -> torch.Tensor:
         audio_features = self._pad_and_stack(audio_features)
         audio_features = self.ln_pre(audio_features)
         hidden_states = self.linear_1(audio_features)
@@ -349,19 +364,26 @@ class UltravoxTransformerProjector(nn.Module, ModuleUtilsMixin):
         )
 
         self.layers = nn.ModuleList(
-            [WhisperEncoderLayer(projector_audio_config) for _ in range(config.num_projector_layers)]
+            [
+                WhisperEncoderLayer(projector_audio_config)
+                for _ in range(config.num_projector_layers)
+            ]
         )
 
         self.ln_post = RMSNorm(projector_audio_config.d_model)
-        self.linear_out = nn.Linear(projector_audio_config.d_model, config.text_config.hidden_size)
+        self.linear_out = nn.Linear(
+            projector_audio_config.d_model, config.text_config.hidden_size
+        )
 
-    def forward(self, audio_features: torch.Tensor, audio_token_len: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, audio_features: torch.Tensor, audio_token_len: torch.Tensor
+    ) -> torch.Tensor:
         audio_features = self._pad_and_stack(audio_features)
 
         max_len_stacked = audio_features.shape[1]
-        attention_mask = torch.arange(max_len_stacked, device=audio_features.device)[None, :].lt(
-            audio_token_len[:, None]
-        )
+        attention_mask = torch.arange(max_len_stacked, device=audio_features.device)[
+            None, :
+        ].lt(audio_token_len[:, None])
         extended_attention_mask = self.get_extended_attention_mask(
             attention_mask, attention_mask.shape, audio_features.dtype
         )
@@ -369,20 +391,15 @@ class UltravoxTransformerProjector(nn.Module, ModuleUtilsMixin):
         hidden_states = self.ln_pre(audio_features)
         hidden_states = self.linear_in(hidden_states)
 
-        positions = self.embed_positions(torch.arange(hidden_states.size(1), device=hidden_states.device))
+        positions = self.embed_positions(
+            torch.arange(hidden_states.size(1), device=hidden_states.device)
+        )
         hidden_states = hidden_states + positions
-
-        # Backward compatibility for Transformers v4 where layer_head_mask
-        # was a required argument for WhisperEncoderLayer.forward
-        kwargs = {}
-        if "layer_head_mask" in inspect.signature(self.layers[0].forward).parameters:
-            kwargs["layer_head_mask"] = None
 
         for layer in self.layers:
             hidden_states = layer(
                 hidden_states,
                 attention_mask=extended_attention_mask,
-                **kwargs,
             )
             # BC version that allows for the old tupled output
             if isinstance(hidden_states, tuple):
@@ -418,9 +435,15 @@ class ModifiedWhisperEncoder(WhisperEncoder):
 
     @property
     def max_context_length(self):
-        return self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
+        return (
+            self.config.max_source_positions
+            * self.conv1.stride[0]
+            * self.conv2.stride[0]
+        )
 
-    def get_attention_mask_by_audio_len(self, audio_lens: torch.Tensor | None, hidden_states: torch.Tensor):
+    def get_attention_mask_by_audio_len(
+        self, audio_lens: torch.Tensor | None, hidden_states: torch.Tensor
+    ):
         """
         Create attention mask based on audio lengths to mask out padding tokens
         For each sample in batch:
@@ -436,9 +459,9 @@ class ModifiedWhisperEncoder(WhisperEncoder):
 
         audio_feature_len = self._get_feat_extract_output_lengths(audio_lens)
         max_seq_len = hidden_states.shape[1]
-        attention_mask = torch.arange(max_seq_len, device=hidden_states.device)[None, :].lt(
-            audio_feature_len.view(-1, 1)
-        )
+        attention_mask = torch.arange(max_seq_len, device=hidden_states.device)[
+            None, :
+        ].lt(audio_feature_len.view(-1, 1))
         attention_mask = self.get_extended_attention_mask(
             attention_mask,
             None,
@@ -467,21 +490,16 @@ class ModifiedWhisperEncoder(WhisperEncoder):
         embed_pos = self.embed_positions.weight[: inputs_embeds.size(-2)]
 
         hidden_states = inputs_embeds + embed_pos
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
 
         attention_mask = self.get_attention_mask_by_audio_len(audio_lens, hidden_states)
-
-        # Backward compatibility for Transformers v4 where layer_head_mask
-        # was a required argument for WhisperEncoderLayer.forward
-        kwargs = {}
-        if "layer_head_mask" in inspect.signature(self.layers[0].forward).parameters:
-            kwargs["layer_head_mask"] = None
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask,
-                **kwargs,
             )
             # BC version that allows for the old tupled output
             if isinstance(hidden_states, tuple):
@@ -502,7 +520,9 @@ class UltravoxModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_prefix={"audio_tower.model.encoder.": "audio_tower."})
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_prefix={"audio_tower.model.encoder.": "audio_tower."}
+    )
 
     @classmethod
     def get_placeholder_str(cls, modality: str, i: int) -> str | None:
@@ -531,7 +551,7 @@ class UltravoxModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
             self.secondary_weights.append(
                 DefaultModelLoader.Source(
                     model_or_path=config.audio_model_id,
-                    revision=None,
+                    revision=aphrodite_config.model_config.revision,
                     prefix="audio_tower.",
                 )
             )
@@ -541,7 +561,7 @@ class UltravoxModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
             self.secondary_weights.append(
                 DefaultModelLoader.Source(
                     model_or_path=config.text_model_id,
-                    revision=None,
+                    revision=aphrodite_config.model_config.revision,
                     prefix="language_model.",
                 )
             )
@@ -560,7 +580,9 @@ class UltravoxModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
-        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.language_model.make_empty_intermediate_tensors
+        )
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """
@@ -586,18 +608,24 @@ class UltravoxModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
         for start in range(0, batch_size, _MAX_ENCODER_BATCH_SIZE):
             end = min(start + _MAX_ENCODER_BATCH_SIZE, batch_size)
             # Process through audio tower
-            batch_features = self.audio_tower(audio_features[start:end], audio_lens[start:end])
+            batch_features = self.audio_tower(
+                audio_features[start:end], audio_lens[start:end]
+            )
             batch_features = batch_features.to(self.audio_tower.dtype)
 
             # Process through projector
-            batch_embeddings = self.multi_modal_projector(batch_features, audio_token_len[start:end])
+            batch_embeddings = self.multi_modal_projector(
+                batch_features, audio_token_len[start:end]
+            )
             audio_embeddings.append(batch_embeddings)
 
         # Concatenate results
         audio_embeddings = torch.cat(audio_embeddings, dim=0)
         return audio_embeddings
 
-    def _parse_and_validate_audio_input(self, **kwargs: object) -> UltravoxAudioInputs | None:
+    def _parse_and_validate_audio_input(
+        self, **kwargs: object
+    ) -> UltravoxAudioInputs | None:
         audio_features = kwargs.pop("audio_features", None)
         audio_embeds = kwargs.pop("audio_embeds", None)
         audio_lens = kwargs.pop("audio_lens", None)
@@ -635,7 +663,9 @@ class UltravoxModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
         audio_lens = audio_input["lens"]
         audio_token_len = audio_input["token_len"]
 
-        embeddings = self._audio_features_to_embeddings(audio_features, audio_lens, audio_token_len)
+        embeddings = self._audio_features_to_embeddings(
+            audio_features, audio_lens, audio_token_len
+        )
 
         # We should flatten and concatenate embeddings based on token lengths
         # For example, with token_len = [4, 2, 3], flattened_embeddings will be
@@ -643,14 +673,17 @@ class UltravoxModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
 
         # Create a mask of valid indices based on token lengths
         max_len = embeddings.shape[1]
-        indices = torch.arange(max_len, device=embeddings.device).expand(embeddings.shape[0], -1)
+        indices = torch.arange(max_len, device=embeddings.device).expand(
+            embeddings.shape[0], -1
+        )
         mask = indices < audio_token_len[:, None]
         # Apply mask and flatten
         flattened_embeddings = embeddings[mask]
 
         # Return one tensor per input audio
         embed_lens = [
-            chunk_lens.sum().item() for chunk_lens in audio_token_len.split(audio_input["num_chunks"].tolist())
+            chunk_lens.sum().item()
+            for chunk_lens in audio_token_len.split(audio_input["num_chunks"].tolist())
         ]
         return flattened_embeddings.split(embed_lens)
 
@@ -711,7 +744,9 @@ class UltravoxModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
         if hasattr(language_model, "language_model"):
             language_model = language_model.language_model
 
-        hidden_states = language_model.model(input_ids, positions, intermediate_tensors, inputs_embeds=inputs_embeds)
+        hidden_states = language_model.model(
+            input_ids, positions, intermediate_tensors, inputs_embeds=inputs_embeds
+        )
         return hidden_states
 
     def compute_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:

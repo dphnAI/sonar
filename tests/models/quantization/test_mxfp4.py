@@ -37,4 +37,6 @@ def test_models(example_prompts, model_name) -> None:
     for i, output in enumerate(outputs):
         output_str = output.outputs[0].text
         expected_str = EXPECTED_STRS_MAP[model_name][i]
-        assert expected_str == output_str, f"Expected: {expected_str!r}\nAphrodite: {output_str!r}"
+        assert expected_str == output_str, (
+            f"Expected: {expected_str!r}\nAphrodite: {output_str!r}"
+        )

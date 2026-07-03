@@ -53,7 +53,8 @@ class Executor(ABC):
         if isinstance(distributed_executor_backend, type):
             if not issubclass(distributed_executor_backend, Executor):
                 raise TypeError(
-                    f"distributed_executor_backend must be a subclass of Executor. Got {distributed_executor_backend}."
+                    "distributed_executor_backend must be a subclass of "
+                    f"Executor. Got {distributed_executor_backend}."
                 )
             executor_class = distributed_executor_backend
         elif distributed_executor_backend == "ray":
@@ -80,9 +81,14 @@ class Executor(ABC):
         elif isinstance(distributed_executor_backend, str):
             executor_class = resolve_obj_by_qualname(distributed_executor_backend)
             if not issubclass(executor_class, Executor):
-                raise TypeError(f"distributed_executor_backend must be a subclass of Executor. Got {executor_class}.")
+                raise TypeError(
+                    "distributed_executor_backend must be a subclass of "
+                    f"Executor. Got {executor_class}."
+                )
         else:
-            raise ValueError(f"Unknown distributed executor backend: {distributed_executor_backend}")
+            raise ValueError(
+                f"Unknown distributed executor backend: {distributed_executor_backend}"
+            )
         return executor_class
 
     @instrument(span_name="Executor init")
@@ -115,13 +121,17 @@ class Executor(ABC):
         underlying workers.
         """
         self.collective_rpc("initialize_from_config", args=(kv_cache_configs,))
-        compilation_times: list[CompilationTimes] = self.collective_rpc("compile_or_warm_up_model")
+        compilation_times: list[CompilationTimes] = self.collective_rpc(
+            "compile_or_warm_up_model"
+        )
         # Propagate compilation time from workers back to the main process.
         # With TP>1, compilation happens in worker processes, so the main
         # process config is never updated. Use max across workers since they
         # compile in parallel.
         if compilation_times:
-            self.aphrodite_config.compilation_config.compilation_time = max(t.language_model for t in compilation_times)
+            self.aphrodite_config.compilation_config.compilation_time = max(
+                t.language_model for t in compilation_times
+            )
             self.aphrodite_config.compilation_config.encoder_compilation_time = max(
                 t.encoder for t in compilation_times
             )
@@ -186,12 +196,14 @@ class Executor(ABC):
         pass
 
     @abstractmethod
-    def collective_rpc(self, method, timeout=None, args=(), kwargs=None, non_block: bool = False):
+    def collective_rpc(
+        self, method, timeout=None, args=(), kwargs=None, non_block: bool = False
+    ):
         raise NotImplementedError
 
     def get_kv_connector_handshake_metadata(
         self,
-    ) -> list[dict[int, KVConnectorHandshakeMetadata]]:
+    ) -> list[dict[tuple[int, int], KVConnectorHandshakeMetadata]]:
         return self.collective_rpc("get_kv_connector_handshake_metadata")
 
     @overload
@@ -241,10 +253,6 @@ class Executor(ABC):
         output: list[DraftTokenIds] = self.collective_rpc("take_draft_token_ids")
         return output[0]
 
-    @property
-    def max_concurrent_batches(self) -> int:
-        return 1
-
     def profile(self, is_start: bool = True, profile_prefix: str | None = None):
         self.collective_rpc("profile", args=(is_start, profile_prefix))
 
@@ -271,7 +279,9 @@ class Executor(ABC):
 
     def init_kv_output_aggregator(self, connector: "KVConnectorBase") -> None:
         """Init KVOutputAggregator"""
-        self.kv_output_aggregator = KVOutputAggregator.from_connector(connector, self.parallel_config.world_size)
+        self.kv_output_aggregator = KVOutputAggregator.from_connector(
+            connector, self.parallel_config.world_size
+        )
 
     @cached_property  # Avoid unnecessary RPC calls
     def supported_tasks(self) -> tuple[SupportedTask, ...]:
@@ -314,7 +324,9 @@ class Executor(ABC):
         time_after_sleep = time.perf_counter()
         self.sleeping_tags = {"weights", "kv_cache"}
         self.is_sleeping = True
-        logger.info("It took %.6f seconds to fall asleep.", time_after_sleep - time_before_sleep)
+        logger.info(
+            "It took %.6f seconds to fall asleep.", time_after_sleep - time_before_sleep
+        )
 
     def wake_up(self, tags: list[str] | None = None):
         if not self.is_sleeping:
@@ -323,7 +335,9 @@ class Executor(ABC):
         if tags:
             for tag in tags:
                 if tag not in self.sleeping_tags:
-                    logger.warning("Tag %s is not in sleeping tags %s", tag, self.sleeping_tags)
+                    logger.warning(
+                        "Tag %s is not in sleeping tags %s", tag, self.sleeping_tags
+                    )
                     return
         time_before_wakeup = time.perf_counter()
         self.collective_rpc("wake_up", kwargs=dict(tags=tags))
@@ -341,7 +355,9 @@ class Executor(ABC):
         if not self.sleeping_tags:
             self.is_sleeping = False
 
-    def reinitialize_distributed(self, reconfig_request: ReconfigureDistributedRequest) -> None:
+    def reinitialize_distributed(
+        self, reconfig_request: ReconfigureDistributedRequest
+    ) -> None:
         raise NotImplementedError
 
     @classmethod

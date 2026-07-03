@@ -6,14 +6,18 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, overload
 
-from aphrodite.distributed.kv_events import KVCacheEvent
+from aphrodite.distributed.kv_events import BlockStored, KVCacheEvent
 from aphrodite.logger import init_logger
 from aphrodite.v1.core.kv_cache_coordinator import get_kv_cache_coordinator
 from aphrodite.v1.core.kv_cache_metrics import KVCacheMetricsCollector
 from aphrodite.v1.core.kv_cache_utils import KVCacheBlock
-from aphrodite.v1.kv_cache_interface import KVCacheConfig
+from aphrodite.v1.kv_cache_interface import (
+    KVCacheConfig,
+    get_kv_cache_spec_kind,
+    get_kv_cache_spec_sliding_window,
+)
 from aphrodite.v1.metrics.stats import PrefixCacheStats
-from aphrodite.v1.request import Request
+from aphrodite.v1.request import Request, RequestStatus
 
 logger = init_logger(__name__)
 
@@ -43,7 +47,12 @@ class KVCacheBlocks:
 
     def __add__(self, other: "KVCacheBlocks") -> "KVCacheBlocks":
         """Adds two KVCacheBlocks instances."""
-        return KVCacheBlocks(tuple(list(itertools.chain(blk1, blk2)) for blk1, blk2 in zip(self.blocks, other.blocks)))
+        return KVCacheBlocks(
+            tuple(
+                list(itertools.chain(blk1, blk2))
+                for blk1, blk2 in zip(self.blocks, other.blocks)
+            )
+        )
 
     @overload
     def get_block_ids(
@@ -83,7 +92,11 @@ class KVCacheBlocks:
         """Get block_ids of unhashed blocks from KVCacheBlocks instance."""
         # Skip padding blocks.
         return [
-            [block.block_id for block in group if block.block_hash is None and not block.is_null]
+            [
+                block.block_id
+                for block in group
+                if block.block_hash is None and not block.is_null
+            ]
             for group in self.blocks
         ]
 
@@ -99,6 +112,7 @@ class KVCacheManager:
         self,
         kv_cache_config: KVCacheConfig,
         max_model_len: int,
+        scheduler_block_size: int,
         hash_block_size: int,
         max_num_batched_tokens: int | None = None,
         enable_caching: bool = True,
@@ -108,6 +122,7 @@ class KVCacheManager:
         dcp_world_size: int = 1,
         pcp_world_size: int = 1,
         metrics_collector: KVCacheMetricsCollector | None = None,
+        watermark: float = 0.0,
     ) -> None:
         self.max_model_len = max_model_len
         # When unset, fall back to `max_model_len` so the recycling-aware cap
@@ -134,6 +149,7 @@ class KVCacheManager:
             enable_kv_cache_events=enable_kv_cache_events,
             dcp_world_size=dcp_world_size,
             pcp_world_size=pcp_world_size,
+            scheduler_block_size=scheduler_block_size,
             hash_block_size=hash_block_size,
             metrics_collector=self.metrics_collector,
         )
@@ -141,12 +157,26 @@ class KVCacheManager:
         self.block_pool = self.coordinator.block_pool
         self.kv_cache_config = kv_cache_config
 
+        # Watermark: minimum number of KV cache blocks to keep free when
+        # admitting waiting/preempted requests, to avoid frequent preemptions.
+        assert watermark >= 0.0, "watermark must be non-negative"
+        self.watermark_blocks = int(watermark * kv_cache_config.num_blocks)
+        self.kv_cache_event_metadata = tuple(
+            (
+                get_kv_cache_spec_kind(group.kv_cache_spec).value,
+                get_kv_cache_spec_sliding_window(group.kv_cache_spec),
+            )
+            for group in kv_cache_config.kv_cache_groups
+        )
+
         # Pre-constructed KVCacheBlocks with no blocks, callers should use this
         # via create_kv_cache_blocks instead of creating new ones to avoid GC
         # overhead.
         #
         # We use nested tuples to ensure the empty KVCacheBlocks is immutable.
-        self.empty_kv_cache_blocks = KVCacheBlocks(tuple(() for _ in range(self.num_kv_cache_groups)))
+        self.empty_kv_cache_blocks = KVCacheBlocks(
+            tuple(() for _ in range(self.num_kv_cache_groups))
+        )
 
     @property
     def usage(self) -> float:
@@ -195,8 +225,10 @@ class KVCacheManager:
         # num_computed_tokens to be block-size aligned. Removing this limitation
         # could slightly improve performance in the future.
         max_cache_hit_length = request.num_tokens - 1
-        computed_blocks, num_new_computed_tokens = self.coordinator.find_longest_cache_hit(
-            request.block_hashes, max_cache_hit_length
+        computed_blocks, num_new_computed_tokens = (
+            self.coordinator.find_longest_cache_hit(
+                request.block_hashes, max_cache_hit_length
+            )
         )
 
         if self.log_stats:
@@ -220,6 +252,8 @@ class KVCacheManager:
         delay_cache_blocks: bool = False,
         num_encoder_tokens: int = 0,
         full_sequence_must_fit: bool = False,
+        reserved_blocks: int = 0,
+        has_scheduled_reqs: bool = True,
     ) -> KVCacheBlocks | None:
         """Add slots for a request with new tokens to append.
 
@@ -245,6 +279,13 @@ class KVCacheManager:
                 free blocks to hold the full sequence, accounting for prefix cache hits
                 and sliding window. Used as an admission gate to prevent over-admitting
                 requests when chunked prefill would otherwise only check the first chunk
+            reserved_blocks: Number of free blocks that must be left available for
+                other in-flight sequences to complete. The actual allocation is only
+                made if it fits within (free blocks - reserved_blocks). Used to gate
+                async KV-connector loads so their initial allocation cannot consume
+                blocks an already in-flight (prefilling) sequence is relying on.
+            has_scheduled_reqs: Whether any requests are already scheduled to run
+                this step, controls whether watermark is applied.
 
         Blocks layout:
         ```
@@ -299,7 +340,10 @@ class KVCacheManager:
         # When loading KV data asynchronously, we may have zero new tokens to
         # compute while still allocating slots for externally computed tokens.
         if num_new_tokens == 0 and num_external_computed_tokens == 0:
-            raise ValueError("num_new_tokens must be greater than 0 when there are no external computed tokens")
+            raise ValueError(
+                "num_new_tokens must be greater than 0 when there are no "
+                "external computed tokens"
+            )
 
         if new_computed_blocks is not None:
             new_computed_block_list = new_computed_blocks.blocks
@@ -308,11 +352,22 @@ class KVCacheManager:
 
         # The number of computed tokens is the number of computed tokens plus
         # the new prefix caching hits
-        num_local_computed_tokens = request.num_computed_tokens + num_new_computed_tokens
+        num_local_computed_tokens = (
+            request.num_computed_tokens + num_new_computed_tokens
+        )
         total_computed_tokens = min(
             num_local_computed_tokens + num_external_computed_tokens,
             self.max_model_len,
         )
+
+        watermark_blocks = 0
+        # The watermark is applied to waiting/preempted requests only, and only
+        # when there's at least one request already scheduled.
+        if has_scheduled_reqs and request.status in (
+            RequestStatus.WAITING,
+            RequestStatus.PREEMPTED,
+        ):
+            watermark_blocks = self.watermark_blocks
 
         if full_sequence_must_fit:
             # First check and fail if the full request sequence won't fit.
@@ -327,11 +382,14 @@ class KVCacheManager:
                 num_tokens_main_model=full_num_tokens,
                 apply_admission_cap=True,
             )
-            if num_blocks_to_allocate > self.block_pool.get_num_free_blocks():
+            required_blocks = num_blocks_to_allocate + watermark_blocks
+            if required_blocks > self.block_pool.get_num_free_blocks():
                 return None
 
         num_tokens_main_model = total_computed_tokens + num_new_tokens
-        num_tokens_need_slot = min(num_tokens_main_model + num_lookahead_tokens, self.max_model_len)
+        num_tokens_need_slot = min(
+            num_tokens_main_model + num_lookahead_tokens, self.max_model_len
+        )
 
         # Free the blocks that are skipped during the attention computation
         # (e.g., tokens outside the sliding window).
@@ -339,22 +397,34 @@ class KVCacheManager:
         # insufficient free blocks.
         # Should call this function before allocating new blocks to reduce
         # the number of evicted blocks.
-        self.coordinator.remove_skipped_blocks(request.request_id, total_computed_tokens)
+        self.coordinator.remove_skipped_blocks(
+            request.request_id,
+            total_computed_tokens,
+            num_prompt_tokens=request.num_prompt_tokens,
+        )
 
         num_blocks_to_allocate = self.coordinator.get_num_blocks_to_allocate(
             request_id=request.request_id,
             num_tokens=num_tokens_need_slot,
             new_computed_blocks=new_computed_block_list,
             num_encoder_tokens=num_encoder_tokens,
-            total_computed_tokens=num_local_computed_tokens + num_external_computed_tokens,
+            total_computed_tokens=num_local_computed_tokens
+            + num_external_computed_tokens,
             num_tokens_main_model=num_tokens_main_model,
         )
 
-        if num_blocks_to_allocate > self.block_pool.get_num_free_blocks():
+        # Keep `reserved_blocks` free for other in-flight sequences, and an
+        # additional watermark of headroom for waiting/preempted admissions.
+        available_blocks = self.block_pool.get_num_free_blocks() - reserved_blocks
+        required_blocks = num_blocks_to_allocate + watermark_blocks
+        if required_blocks > available_blocks:
             # Cannot allocate new blocks
             return None
 
-        if new_computed_block_list is not self.empty_kv_cache_blocks.blocks or num_external_computed_tokens > 0:
+        if (
+            new_computed_block_list is not self.empty_kv_cache_blocks.blocks
+            or num_external_computed_tokens > 0
+        ):
             # Append the new computed blocks to the request blocks until now to
             # avoid the case where the new blocks cannot be allocated.
             self.coordinator.allocate_new_computed_blocks(
@@ -399,7 +469,12 @@ class KVCacheManager:
         """
         self.coordinator.free(request.request_id)
 
-    def remove_skipped_blocks(self, request_id: str, total_computed_tokens: int) -> None:
+    def remove_skipped_blocks(
+        self,
+        request_id: str,
+        total_computed_tokens: int,
+        num_prompt_tokens: int | None = None,
+    ) -> None:
         """Remove the blocks that are no longer needed from `blocks` and replace
         the removed blocks with null_block.
 
@@ -407,8 +482,24 @@ class KVCacheManager:
             request_id: The request ID.
             total_computed_tokens: The total number of computed tokens, including
                 local computed tokens and external computed tokens.
+            num_prompt_tokens: Optional prompt length for R-SWA gap eviction.
         """
-        self.coordinator.remove_skipped_blocks(request_id, total_computed_tokens)
+        self.coordinator.remove_skipped_blocks(
+            request_id, total_computed_tokens, num_prompt_tokens
+        )
+
+    def pop_blocks_for_free(self, request: Request) -> list[KVCacheBlock]:
+        """Pop the request's bookkeeping and return its blocks without
+        returning them to the block pool. The caller must eventually free
+        them in reverse order (so that tail blocks are evicted first).
+
+        Args:
+            request: The request to pop the blocks for.
+
+        Returns:
+            The request's blocks in allocation order.
+        """
+        return self.coordinator.pop_blocks_for_free(request.request_id)
 
     def evict_blocks(self, block_ids: set[int]) -> None:
         """evict blocks from the prefix cache by their block IDs.
@@ -474,7 +565,25 @@ class KVCacheManager:
         Returns:
             A list of KV cache events.
         """
-        return self.block_pool.take_events()
+        events = self.block_pool.take_events()
+        for event in events:
+            if not isinstance(event, BlockStored):
+                continue
+            if event.group_idx is None:
+                continue
+            if event.group_idx < 0 or event.group_idx >= len(
+                self.kv_cache_event_metadata
+            ):
+                logger.warning(
+                    "Group index `%s` not in KV cache metadata", event.group_idx
+                )
+                continue
+            # Annotate here so BlockPool can keep emitting structural cache
+            # events without owning semantic KV cache spec metadata.
+            kind, sliding_window = self.kv_cache_event_metadata[event.group_idx]
+            event.kv_cache_spec_kind = kind
+            event.kv_cache_spec_sliding_window = sliding_window
+        return events
 
     def get_blocks(self, request_id: str) -> KVCacheBlocks:
         """Get the blocks of a request."""
@@ -495,7 +604,9 @@ class KVCacheManager:
         if self.enable_caching:
             self.coordinator.cache_blocks(request, num_computed_tokens)
 
-    def create_kv_cache_blocks(self, blocks: tuple[list[KVCacheBlock], ...]) -> KVCacheBlocks:
+    def create_kv_cache_blocks(
+        self, blocks: tuple[list[KVCacheBlock], ...]
+    ) -> KVCacheBlocks:
         # Only create new KVCacheBlocks for non-empty blocks
         return KVCacheBlocks(blocks) if any(blocks) else self.empty_kv_cache_blocks
 

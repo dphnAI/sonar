@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 
-from aphrodite.common.sampling_params import SamplingParams
+from aphrodite.sampling_params import SamplingParams
 from aphrodite.v1.engine import EngineCoreRequest
 from aphrodite.v1.engine.detokenizer import BaseIncrementalDetokenizer
 
@@ -34,7 +35,6 @@ def _make_request(stop, include_stop_str_in_output: bool, min_tokens: int = 0):
         mm_features=None,
         sampling_params=params,
         pooling_params=None,
-        eos_token_id=None,
         arrival_time=0.0,
         lora_request=None,
         cache_salt=None,
@@ -76,7 +76,9 @@ def test_stop_string_while_stop_token_terminates(include_stop_str_in_output: boo
     token_ids = [ord(c) for c in generated_text]
 
     # Create a request with the stop string and initialize the detokenizer.
-    req = _make_request(stop=[stop_string], include_stop_str_in_output=include_stop_str_in_output)
+    req = _make_request(
+        stop=[stop_string], include_stop_str_in_output=include_stop_str_in_output
+    )
     detok = _DummyDetokenizer(req)
 
     # Simulate that the last token ('Z') is a stop token (stop_terminated=True).

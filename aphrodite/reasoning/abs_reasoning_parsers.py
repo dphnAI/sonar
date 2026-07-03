@@ -31,6 +31,8 @@ class ReasoningParser:
     It is used to extract reasoning content from the model output.
     """
 
+    engine_based_streaming: bool = False
+
     def __init__(self, tokenizer: "TokenizerLike", *args, **kwargs):
         self.model_tokenizer = tokenizer
         # Optional Aphrodite ModelConfig from the server. Use get (not pop) so composite
@@ -57,6 +59,17 @@ class ReasoningParser:
         """
         return None
 
+    def has_engine_confirmed_reasoning_end(self) -> bool:
+        """Whether the engine has confirmed the reasoning end transition.
+
+        Engine-based parsers may defer terminal processing when the
+        detokenizer holds back text.  This method returns the engine's
+        *processed* state, not a raw token-ID check.
+
+        Only called for parsers with ``engine_based_streaming = True``.
+        """
+        return False
+
     @abstractmethod
     def is_reasoning_end(self, input_ids: Sequence[int]) -> bool:
         """
@@ -74,7 +87,9 @@ class ReasoningParser:
             True if the reasoning content ends in the input_ids.
         """
 
-    def is_reasoning_end_streaming(self, input_ids: Sequence[int], delta_ids: Iterable[int]) -> bool:
+    def is_reasoning_end_streaming(
+        self, input_ids: Sequence[int], delta_ids: Iterable[int]
+    ) -> bool:
         """
         Check if the reasoning content ends in the input_ids on a
         decode step.
@@ -172,6 +187,18 @@ class ReasoningParser:
         """Adjust request parameters; override in subclasses as needed."""
         return request
 
+    def adjust_initial_state_from_prompt(self, prompt_token_ids: Sequence[int]) -> None:
+        """Hook called once at the start of streaming with the prompt tokens.
+
+        Gives parsers a chance to adjust their initial parsing state based on
+        the prompt — for example, when the chat template leaves the prompt
+        inside an open reasoning channel and the engine's default initial
+        state would otherwise misclassify the first generated tokens.
+
+        Default is a no-op; override in subclasses as needed.
+        """
+        return
+
     def prepare_structured_tag(
         self,
         original_tag: str | None,
@@ -179,9 +206,8 @@ class ReasoningParser:
     ) -> str | None:
         """
         Instance method that is implemented for preparing the structured tag
-        Otherwise, None is returned
         """
-        return None
+        return original_tag
 
 
 class ReasoningParserManager:
@@ -216,7 +242,9 @@ class ReasoningParserManager:
             return cls._load_lazy_parser(name)
 
         registered = ", ".join(cls.list_registered())
-        raise KeyError(f"Reasoning parser '{name}' not found. Available parsers: {registered}")
+        raise KeyError(
+            f"Reasoning parser '{name}' not found. Available parsers: {registered}"
+        )
 
     @classmethod
     def list_registered(cls) -> list[str]:
@@ -231,7 +259,9 @@ class ReasoningParserManager:
             mod = importlib.import_module(module_path)
             parser_cls = getattr(mod, class_name)
             if not issubclass(parser_cls, ReasoningParser):
-                raise TypeError(f"{class_name} in {module_path} is not a ReasoningParser subclass.")
+                raise TypeError(
+                    f"{class_name} in {module_path} is not a ReasoningParser subclass."
+                )
 
             cls.reasoning_parsers[name] = parser_cls  # cache
             return parser_cls
@@ -253,7 +283,9 @@ class ReasoningParserManager:
     ) -> None:
         """Register a ReasoningParser class immediately."""
         if not issubclass(module, ReasoningParser):
-            raise TypeError(f"module must be subclass of ReasoningParser, but got {type(module)}")
+            raise TypeError(
+                f"module must be subclass of ReasoningParser, but got {type(module)}"
+            )
 
         if module_name is None:
             module_names = [module.__name__]
@@ -278,8 +310,8 @@ class ReasoningParserManager:
         Example:
             ReasoningParserManager.register_lazy_module(
                 name="qwen3",
-                module_path="aphrodite.reasoning.parsers.qwen3_reasoning_parser",
-                class_name="Qwen3ReasoningParser",
+                module_path="aphrodite.reasoning.qwen3_engine_reasoning_parser",
+                class_name="Qwen3ParserReasoningAdapter",
             )
         """
         cls.lazy_parsers[name] = (module_path, class_name)
@@ -290,7 +322,9 @@ class ReasoningParserManager:
         name: str | list[str] | None = None,
         force: bool = True,
         module: type[ReasoningParser] | None = None,
-    ) -> type[ReasoningParser] | Callable[[type[ReasoningParser]], type[ReasoningParser]]:
+    ) -> (
+        type[ReasoningParser] | Callable[[type[ReasoningParser]], type[ReasoningParser]]
+    ):
         """
         Register module with the given name or name list. it can be used as a
         decoder(with module as None) or normal function(with module as not
@@ -334,5 +368,7 @@ class ReasoningParserManager:
         try:
             import_from_path(module_name, plugin_path)
         except Exception:
-            logger.exception("Failed to load module '%s' from %s.", module_name, plugin_path)
+            logger.exception(
+                "Failed to load module '%s' from %s.", module_name, plugin_path
+            )
             return

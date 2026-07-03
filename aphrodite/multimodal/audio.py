@@ -21,6 +21,11 @@ try:
 except ImportError:
     scipy_signal = PlaceholderModule("scipy").placeholder_attr("signal")  # type: ignore[assignment]
 
+try:
+    import soxr as soxr
+except ImportError:
+    soxr = PlaceholderModule("soxr")  # type: ignore[assignment]
+
 
 # ============================================================
 # Aligned with `librosa.get_duration` function
@@ -72,7 +77,10 @@ class AudioSpec:
     def __repr__(self) -> str:
         if self.target_channels is None:
             return "AudioSpec(passthrough)"
-        return f"AudioSpec(channels={self.target_channels}, reduction={self.channel_reduction.value})"
+        return (
+            f"AudioSpec(channels={self.target_channels}, "
+            f"reduction={self.channel_reduction.value})"
+        )
 
 
 # Pre-defined specs for common use cases
@@ -132,7 +140,9 @@ def normalize_audio(
 
     # Cannot expand channels
     if num_channels < spec.target_channels:
-        raise ValueError(f"Cannot expand {num_channels} channels to {spec.target_channels}")
+        raise ValueError(
+            f"Cannot expand {num_channels} channels to {spec.target_channels}"
+        )
 
     # Reduce channels
     is_numpy = isinstance(audio, np.ndarray)
@@ -188,7 +198,10 @@ def resample_audio_pyav(
     if audio.ndim == 2:
         # Resample each channel independently and re-stack.
         return np.stack(
-            [resample_audio_pyav(ch, orig_sr=orig_sr, target_sr=target_sr) for ch in audio],
+            [
+                resample_audio_pyav(ch, orig_sr=orig_sr, target_sr=target_sr)
+                for ch in audio
+            ],
             axis=0,
         )
 
@@ -222,11 +235,43 @@ def resample_audio_scipy(
     orig_sr: float,
     target_sr: float,
 ) -> npt.NDArray[np.floating]:
-    if orig_sr > target_sr:
-        return scipy_signal.resample_poly(audio, 1, orig_sr // target_sr)
-    elif orig_sr < target_sr:
-        return scipy_signal.resample_poly(audio, target_sr // orig_sr, 1)
-    return audio
+    orig_sr_int = int(round(orig_sr))
+    target_sr_int = int(round(target_sr))
+
+    if orig_sr_int == target_sr_int:
+        return audio
+
+    gcd = math.gcd(orig_sr_int, target_sr_int)
+    return scipy_signal.resample_poly(
+        audio,
+        target_sr_int // gcd,
+        orig_sr_int // gcd,
+        axis=-1,
+    )
+
+
+def resample_audio_soxr(
+    audio: npt.NDArray[np.floating],
+    *,
+    orig_sr: float,
+    target_sr: float,
+) -> npt.NDArray[np.floating]:
+    orig_sr_int = int(round(orig_sr))
+    target_sr_int = int(round(target_sr))
+
+    if orig_sr_int == target_sr_int:
+        return audio
+
+    if audio.ndim == 2:
+        return np.stack(
+            [
+                resample_audio_soxr(ch, orig_sr=orig_sr, target_sr=target_sr)
+                for ch in audio
+            ],
+            axis=0,
+        )
+
+    return soxr.resample(audio, orig_sr_int, target_sr_int)
 
 
 class AudioResampler:
@@ -235,7 +280,7 @@ class AudioResampler:
     def __init__(
         self,
         target_sr: float | None = None,
-        method: Literal["pyav", "scipy"] = "pyav",
+        method: Literal["pyav", "scipy", "soxr"] = "pyav",
     ):
         self.target_sr = target_sr
         self.method = method
@@ -247,7 +292,9 @@ class AudioResampler:
         orig_sr: float,
     ) -> npt.NDArray[np.floating]:
         if self.target_sr is None:
-            raise RuntimeError("Audio resampling is not supported when `target_sr` is not provided")
+            raise RuntimeError(
+                "Audio resampling is not supported when `target_sr` is not provided"
+            )
         if math.isclose(
             float(orig_sr),
             float(self.target_sr),
@@ -258,9 +305,16 @@ class AudioResampler:
         if self.method == "pyav":
             return resample_audio_pyav(audio, orig_sr=orig_sr, target_sr=self.target_sr)
         elif self.method == "scipy":
-            return resample_audio_scipy(audio, orig_sr=orig_sr, target_sr=self.target_sr)
+            return resample_audio_scipy(
+                audio, orig_sr=orig_sr, target_sr=self.target_sr
+            )
+        elif self.method == "soxr":
+            return resample_audio_soxr(audio, orig_sr=orig_sr, target_sr=self.target_sr)
         else:
-            raise ValueError(f"Invalid resampling method: {self.method}. Supported methods are 'pyav' and 'scipy'.")
+            raise ValueError(
+                f"Invalid resampling method: {self.method}. "
+                "Supported methods are 'pyav', 'scipy', and 'soxr'."
+            )
 
 
 # ============================================================
@@ -320,7 +374,14 @@ def split_audio(
         # Find the best split point in the overlap region
         search_start = i + chunk_size - overlap_size
         search_end = min(i + chunk_size, audio_data.shape[-1])
-        split_point = find_split_point(audio_data, search_start, search_end, min_energy_window_size)
+        split_point = find_split_point(
+            audio_data, search_start, search_end, min_energy_window_size
+        )
+
+        # Guarantee forward progress: if split_point didn't advance,
+        # fall back to the hard chunk boundary.
+        if split_point <= i:
+            split_point = min(i + chunk_size, audio_data.shape[-1])
 
         # Extract chunk up to the split point
         chunks.append(audio_data[..., i:split_point])
@@ -367,12 +428,12 @@ def find_split_point(
 
     # Calculate RMS energy in small windows
     min_energy = math.inf
-    quietest_idx = 0
+    quietest_idx = start_idx
 
     for i in range(0, len(segment) - min_energy_window, min_energy_window):
         window = segment[i : i + min_energy_window]
         energy = (window**2).mean() ** 0.5
-        if energy < min_energy:
+        if not math.isnan(energy) and energy < min_energy:
             quietest_idx = i + start_idx
             min_energy = energy
 

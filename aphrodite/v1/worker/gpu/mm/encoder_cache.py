@@ -12,7 +12,12 @@ class EncoderCache:
         # MM hash -> encoder outputs
         self.encoder_outputs: dict[str, torch.Tensor] = {}
 
-    def add_request(self, req_id: str, mm_features: list[MultiModalFeatureSpec]) -> None:
+    def __len__(self) -> int:
+        return len(self.encoder_outputs)
+
+    def add_request(
+        self, req_id: str, mm_features: list[MultiModalFeatureSpec]
+    ) -> None:
         self.mm_features[req_id] = mm_features
 
     def remove_request(self, req_id: str) -> None:

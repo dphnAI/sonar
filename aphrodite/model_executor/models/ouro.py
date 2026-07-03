@@ -5,7 +5,7 @@
 # Adapted from
 # https://github.com/huggingface/transformers/blob/v4.28.0/src/transformers/models/qwen2/modeling_qwen2.py
 # Copyright 2024 The Qwen team.
-# Copyright 2023 The Aphrodite team.
+# Copyright 2023 The vLLM team.
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -34,7 +34,7 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
+from aphrodite.config import CacheConfig, AphroditeConfig
 from aphrodite.distributed import get_tensor_model_parallel_world_size
 from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.model_executor.layers.attention import Attention
@@ -51,16 +51,13 @@ from aphrodite.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
-    default_weight_loader,
-    maybe_remap_kv_scale_name,
-)
 from aphrodite.sequence import IntermediateTensors
 from aphrodite.v1.attention.backend import AttentionType
 
 from .interfaces import SupportsLoRA
 from .utils import (
     AutoWeightsLoader,
+    WeightsMapper,
     extract_layer_index,
     make_empty_intermediate_tensors_factory,
     make_layers,
@@ -93,7 +90,9 @@ class OuroMLP(nn.Module):
             prefix=f"{prefix}.down_proj",
         )
         if hidden_act != "silu":
-            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu is supported for now.")
+            raise ValueError(
+                f"Unsupported activation: {hidden_act}. Only silu is supported for now."
+            )
         self.act_fn = SiluAndMul()
 
     def forward(self, x):
@@ -173,7 +172,9 @@ class OuroAttention(nn.Module):
             base_layer_idx = extract_layer_index(prefix)
             unique_layer_idx = ut_step * total_layers + base_layer_idx
 
-            unique_prefix = prefix.replace(f"layers.{base_layer_idx}", f"layers.{unique_layer_idx}")
+            unique_prefix = prefix.replace(
+                f"layers.{base_layer_idx}", f"layers.{unique_layer_idx}"
+            )
 
             self.attn.append(
                 Attention(
@@ -218,7 +219,9 @@ class OuroDecoderLayer(nn.Module):
     ) -> None:
         super().__init__()
         self.hidden_size = config.hidden_size
-        dual_chunk_attention_config = getattr(config, "dual_chunk_attention_config", None)
+        dual_chunk_attention_config = getattr(
+            config, "dual_chunk_attention_config", None
+        )
 
         if getattr(config, "is_causal", True):
             attn_type = AttentionType.DECODER
@@ -247,8 +250,12 @@ class OuroDecoderLayer(nn.Module):
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.input_layernorm_2 = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm_2 = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
+        self.post_attention_layernorm_2 = RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
     def forward(
         self,
@@ -262,7 +269,9 @@ class OuroDecoderLayer(nn.Module):
             hidden_states = self.input_layernorm(hidden_states)
         else:
             hidden_states, residual = self.input_layernorm(hidden_states, residual)
-        hidden_states = self.self_attn(positions=positions, hidden_states=hidden_states, current_ut=current_ut)
+        hidden_states = self.self_attn(
+            positions=positions, hidden_states=hidden_states, current_ut=current_ut
+        )
         hidden_states = self.input_layernorm_2(hidden_states)
 
         hidden_states, residual = self.post_attention_layernorm(hidden_states, residual)
@@ -295,7 +304,9 @@ class OuroModel(nn.Module):
         quant_config = aphrodite_config.quant_config
 
         # TODO (@robertgshaw2): see if this can be moved out
-        if cache_config.sliding_window is not None and hasattr(config, "max_window_layers"):
+        if cache_config.sliding_window is not None and hasattr(
+            config, "max_window_layers"
+        ):
             assert config.max_window_layers == config.num_hidden_layers, (
                 "Sliding window for some but all layers is not supported. "
                 "This model uses sliding window but `max_window_layers` = {} "
@@ -356,77 +367,27 @@ class OuroModel(nn.Module):
         for current_ut in range(self.total_ut_steps):
             residual = None
             for layer in self.layers[self.start_layer : self.end_layer]:
-                hidden_states, residual = layer(positions, hidden_states, current_ut, residual)
+                hidden_states, residual = layer(
+                    positions, hidden_states, current_ut, residual
+                )
             hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
 
-    def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            # (param_name, shard_name, shard_id)
-            ("qkv_proj", "q_proj", "q"),
-            ("qkv_proj", "k_proj", "k"),
-            ("qkv_proj", "v_proj", "v"),
-            ("gate_up_proj", "gate_proj", 0),
-            ("gate_up_proj", "up_proj", 1),
-        ]
-        params_dict = dict(self.named_parameters(remove_duplicate=False))
-        loaded_params: set[str] = set()
-        for name, loaded_weight in weights:
-            if "rotary_emb.inv_freq" in name:
-                continue
-            if self.quant_config is not None and (scale_name := self.quant_config.get_cache_scale(name)):
-                # Loading kv cache quantization scales
-                param = params_dict[scale_name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                loaded_weight = loaded_weight if loaded_weight.dim() == 0 else loaded_weight[0]
-                weight_loader(param, loaded_weight)
-                loaded_params.add(scale_name)
-                continue
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                if weight_name not in name:
-                    continue
-                name = name.replace(weight_name, param_name)
-                # Skip loading extra bias for GPTQ models.
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-                if name.endswith("scale"):
-                    # Remapping the name of FP8 kv-scale.
-                    name = maybe_remap_kv_scale_name(name, params_dict)
-                    if name is None:
-                        continue
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                if weight_loader == default_weight_loader:
-                    weight_loader(param, loaded_weight)
-                else:
-                    weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                # Skip loading extra bias for GPTQ models.
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-                # Remapping the name of FP8 kv-scale.
-                name = maybe_remap_kv_scale_name(name, params_dict)
-                if name is None:
-                    continue
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
-
 
 class OuroForCausalLM(nn.Module, SupportsLoRA):
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_stacked={
+            # weight_name: (param_name, shard_id)
+            ".q_proj": (".qkv_proj", "q"),
+            ".k_proj": (".qkv_proj", "k"),
+            ".v_proj": (".qkv_proj", "v"),
+            ".gate_proj": (".gate_up_proj", 0),
+            ".up_proj": (".gate_up_proj", 1),
+        }
+    )
     packed_modules_mapping = {
-        "qkv_proj": [
-            "q_proj",
-            "k_proj",
-            "v_proj",
-        ],
-        "gate_up_proj": [
-            "gate_proj",
-            "up_proj",
-        ],
+        "qkv_proj": ["q_proj", "k_proj", "v_proj"],
+        "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
@@ -437,7 +398,9 @@ class OuroForCausalLM(nn.Module, SupportsLoRA):
         self.config = config
 
         self.quant_config = quant_config
-        self.model = OuroModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = OuroModel(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
+        )
 
         if config.tie_word_embeddings:
             self.lm_head = self.model.embed_tokens
@@ -451,7 +414,9 @@ class OuroForCausalLM(nn.Module, SupportsLoRA):
 
         self.logits_processor = LogitsProcessor(config.vocab_size)
 
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -463,7 +428,9 @@ class OuroForCausalLM(nn.Module, SupportsLoRA):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
+        hidden_states = self.model(
+            input_ids, positions, intermediate_tensors, inputs_embeds
+        )
         return hidden_states
 
     def compute_logits(
@@ -478,4 +445,4 @@ class OuroForCausalLM(nn.Module, SupportsLoRA):
             self,
             skip_prefixes=(["lm_head."] if self.config.tie_word_embeddings else None),
         )
-        return loader.load_weights(weights)
+        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)

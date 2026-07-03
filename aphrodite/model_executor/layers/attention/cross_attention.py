@@ -6,7 +6,7 @@ from copy import copy
 import numpy as np
 import torch
 
-from aphrodite.config import AphroditeConfig, CacheConfig
+from aphrodite.config import CacheConfig, AphroditeConfig
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.attention import Attention
 from aphrodite.utils.math_utils import cdiv
@@ -94,23 +94,30 @@ def create_cross_attention_backend(
             # The upper bound is exact for this `> 0` test - prefill rows have
             # num_computed == 0 and decode rows have num_computed > 0.
             query_lens_cpu = (
-                common_attn_metadata.query_start_loc_cpu[1:] - common_attn_metadata.query_start_loc_cpu[:-1]
+                common_attn_metadata.query_start_loc_cpu[1:]
+                - common_attn_metadata.query_start_loc_cpu[:-1]
             )
             assert common_attn_metadata.seq_lens_cpu_upper_bound is not None
-            num_computed_tokens_cpu = common_attn_metadata.seq_lens_cpu_upper_bound - query_lens_cpu
+            num_computed_tokens_cpu = (
+                common_attn_metadata.seq_lens_cpu_upper_bound - query_lens_cpu
+            )
             num_cache_decodes = (num_computed_tokens_cpu > 0).sum().item()
             if num_cache_decodes > 0:
                 # CrossAttn KV cache has already been populated on first decoder step,
                 # skip slot_mapping calculation for requests that do not need
                 # reshape_and_cache.
                 num_tokens = num_computed_tokens_cpu.numpy()
-                new_metadata.encoder_seq_lens_cpu = np.where(num_tokens > 0, 0, new_metadata.encoder_seq_lens_cpu)
+                new_metadata.encoder_seq_lens_cpu = np.where(
+                    num_tokens > 0, 0, new_metadata.encoder_seq_lens_cpu
+                )
 
             # seq_lens is provided by model runner: initial encoder input length is
             # needed here to know how many tokens to attend to from the cached
             # cross-attention KV cache.
             new_metadata.seq_lens = common_attn_metadata.encoder_seq_lens
-            new_metadata._seq_lens_cpu = torch.from_numpy(common_attn_metadata.encoder_seq_lens_cpu)
+            new_metadata._seq_lens_cpu = torch.from_numpy(
+                common_attn_metadata.encoder_seq_lens_cpu
+            )
 
             # NOTE (NickLucche) use `new_metadata` instead of `common_*` (initial) here
             slot_mapping = _get_cross_slot_mapping(

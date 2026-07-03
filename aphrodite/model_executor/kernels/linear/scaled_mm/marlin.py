@@ -33,7 +33,9 @@ class MarlinFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
     """
 
     @classmethod
-    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
+    def is_supported(
+        cls, compute_capability: int | None = None
+    ) -> tuple[bool, str | None]:
         if not current_platform.is_cuda():
             return False, "requires CUDA."
         # Check if platform supports FP8 Marlin
@@ -41,10 +43,15 @@ class MarlinFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
             return False, "FP8 Marlin requires compute capability 7.5 or higher"
         if envs.APHRODITE_BATCH_INVARIANT:
             return False, "FP8 Marlin not supported for batch invariant execution."
-        if compute_capability is not None and compute_capability >= 89 and not envs.APHRODITE_TEST_FORCE_FP8_MARLIN:
+        if (
+            compute_capability is not None
+            and compute_capability >= 89
+            and not envs.APHRODITE_TEST_FORCE_FP8_MARLIN
+        ):
             return (
                 False,
-                "To apply FP8 Marlin on high-capability GPUs, please set APHRODITE_TEST_FORCE_FP8_MARLIN=1",
+                "To apply FP8 Marlin on high-capability GPUs, please set "
+                "APHRODITE_TEST_FORCE_FP8_MARLIN=1",
             )
         return True, None
 
@@ -52,7 +59,9 @@ class MarlinFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
     def can_implement(cls, c: FP8ScaledMMLinearLayerConfig) -> tuple[bool, str | None]:
         return True, None
 
-    def __init__(self, c: FP8ScaledMMLinearLayerConfig, layer_param_names: Sequence[str]) -> None:
+    def __init__(
+        self, c: FP8ScaledMMLinearLayerConfig, layer_param_names: Sequence[str]
+    ) -> None:
         super().__init__(c, layer_param_names)
         self.marlin_input_dtype = None
         self.block_quant = self.config.weight_quant_key in {kFp8Static128BlockSym}
@@ -60,32 +69,18 @@ class MarlinFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         if self.block_quant:
-            weight, weight_scale_inv = process_fp8_weight_block_strategy(layer.weight, layer.weight_scale_inv)
+            weight, weight_scale_inv = process_fp8_weight_block_strategy(
+                layer.weight, layer.weight_scale_inv
+            )
             # Update layer with new values
             replace_parameter(layer, "weight", weight.data)
             replace_parameter(layer, "weight_scale_inv", weight_scale_inv.data)
-        else:
-            w_q, *_ = self._get_layer_params(layer)
-            # Compressed tensors transposes the weight to (K, N)
-            # for channel and tensor quant strategies.
-            # So we can skip the transpose if the layout is
-            # already (K, N).
-            # TODO: Remove this check once the layouts have been
-            # canonicalized to a standard (N, K) dimension. See issue
-            # #33314 for more details.
-            if w_q.shape != (
-                layer.input_size_per_partition,
-                layer.output_size_per_partition,
-            ):
-                # transpose the weights to (K,N)
-                replace_parameter(
-                    layer,
-                    "weight",
-                    w_q.t(),
-                )
+        # Non-block: callers must pass weight in (K, N) layout.
 
         layer.input_scale = None
-        prepare_fp8_layer_for_marlin(layer, self.size_k_first, input_dtype=self.marlin_input_dtype)
+        prepare_fp8_layer_for_marlin(
+            layer, self.size_k_first, input_dtype=self.marlin_input_dtype
+        )
         del layer.input_scale
 
     def apply_weights(

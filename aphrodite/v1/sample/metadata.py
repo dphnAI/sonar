@@ -11,13 +11,13 @@ from aphrodite.v1.sample.logits_processor import LogitsProcessors
 from aphrodite.v1.sample.thinking_budget_state import ThinkingBudgetStateHolder
 
 
-@dataclass
+@dataclass(kw_only=True)
 class SamplingMetadata:
     # Temperature
     temperature: torch.Tensor | None
-    dynatemp_min: torch.Tensor | None
-    dynatemp_max: torch.Tensor | None
-    dynatemp_exp: torch.Tensor | None
+    dynatemp_min: torch.Tensor | None = None
+    dynatemp_max: torch.Tensor | None = None
+    dynatemp_exp: torch.Tensor | None = None
 
     all_greedy: bool
     all_random: bool
@@ -27,51 +27,51 @@ class SamplingMetadata:
     top_k: torch.Tensor | None
     # min_p is done in the logits processor
     # min_p: Optional[torch.Tensor]
-    top_a: torch.Tensor | None
+    top_a: torch.Tensor | None = None
 
     # DRY
-    dry_multiplier: torch.Tensor | None
-    dry_base: torch.Tensor | None
-    dry_allowed_length: torch.Tensor | None
-    dry_sequence_breaker_ids: torch.Tensor | None
-    dry_ranges: torch.Tensor | None
-    dry_max_ngram: torch.Tensor | None
-    dry_max_occurrences: torch.Tensor | None
-    dry_early_exit_match_len: torch.Tensor | None
+    dry_multiplier: torch.Tensor | None = None
+    dry_base: torch.Tensor | None = None
+    dry_allowed_length: torch.Tensor | None = None
+    dry_sequence_breaker_ids: torch.Tensor | None = None
+    dry_ranges: torch.Tensor | None = None
+    dry_max_ngram: torch.Tensor | None = None
+    dry_max_occurrences: torch.Tensor | None = None
+    dry_early_exit_match_len: torch.Tensor | None = None
 
     # No repeat ngram
-    no_repeat_ngram_size: torch.Tensor | None
+    no_repeat_ngram_size: torch.Tensor | None = None
 
     # Tail-Free Sampling
-    tfs: torch.Tensor | None
+    tfs: torch.Tensor | None = None
 
     # Eta Cutoff
-    eta_cutoff: torch.Tensor | None
+    eta_cutoff: torch.Tensor | None = None
 
     # Epsilon Cutoff
-    epsilon_cutoff: torch.Tensor | None
+    epsilon_cutoff: torch.Tensor | None = None
 
     # Typical Sampling
-    typical_p: torch.Tensor | None
+    typical_p: torch.Tensor | None = None
 
     # Quadratic Sampling
-    quadratic_smoothing_factor: torch.Tensor | None
-    quadratic_smoothing_curve: torch.Tensor | None
+    quadratic_smoothing_factor: torch.Tensor | None = None
+    quadratic_smoothing_curve: torch.Tensor | None = None
 
     # XTC Sampling
-    xtc_threshold: torch.Tensor | None
-    xtc_probability: torch.Tensor | None
+    xtc_threshold: torch.Tensor | None = None
+    xtc_probability: torch.Tensor | None = None
 
     # Top-nsigma Sampling
-    top_nsigma: torch.Tensor | None
+    top_nsigma: torch.Tensor | None = None
 
     # Mirostat Sampling
-    mirostat_mode: torch.Tensor | None
-    mirostat_tau: torch.Tensor | None
-    mirostat_eta: torch.Tensor | None
+    mirostat_mode: torch.Tensor | None = None
+    mirostat_tau: torch.Tensor | None = None
+    mirostat_eta: torch.Tensor | None = None
 
     # Skew
-    skew: torch.Tensor | None
+    skew: torch.Tensor | None = None
 
     generators: dict[int, torch.Generator]
 
@@ -93,7 +93,7 @@ class SamplingMetadata:
     # req_index -> bad_words_token_ids
     bad_words_token_ids: dict[int, list[list[int]]]
 
-    logit_bias: dict[int, dict[int, float]]
+    logit_bias: dict[int, dict[int, float]] = None
 
     # Loaded logits processors
     logitsprocs: LogitsProcessors

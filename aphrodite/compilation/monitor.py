@@ -5,7 +5,7 @@ import contextlib
 import time
 from collections.abc import Generator
 
-from aphrodite.config import AphroditeConfig, CompilationMode
+from aphrodite.config import CompilationMode, AphroditeConfig
 from aphrodite.logger import init_logger
 
 logger = init_logger(__name__)
@@ -72,7 +72,9 @@ def monitor_profiling_run() -> Generator[None, None, None]:
     start = time.perf_counter()
     yield
     elapsed = time.perf_counter() - start
-    assert compilation_counter.num_backend_compilations == backend_compilations_before, (
+    assert (
+        compilation_counter.num_backend_compilations == backend_compilations_before
+    ), (
         "backend compilation occurred during the initial profiling run; "
         "all compilation should be complete before the profiling run starts."
     )
@@ -92,7 +94,8 @@ def validate_cudagraph_capturing_enabled() -> None:
     global cudagraph_capturing_enabled
     if not cudagraph_capturing_enabled:
         raise RuntimeError(
-            "CUDA graph capturing detected at an inappropriate time. This operation is currently disabled."
+            "CUDA graph capturing detected at an inappropriate "
+            "time. This operation is currently disabled."
         )
 
 

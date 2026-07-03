@@ -3,9 +3,9 @@
 from abc import ABC, abstractmethod
 
 import tokenizers
+import tokenizers.decoders
 from packaging import version
 from tokenizers import Tokenizer
-from tokenizers.decoders import DecodeStream
 from transformers import PreTrainedTokenizerFast
 
 from aphrodite.logger import init_logger
@@ -177,13 +177,17 @@ class FastIncrementalDetokenizer(BaseIncrementalDetokenizer):
         self.tokenizer: Tokenizer = tokenizer._tokenizer
 
         # Use native prefill to prime the decode stream with prompt tokens.
-        self.stream = DecodeStream(
+        # Look up DecodeStream on the module so backend patches (e.g. the
+        # fastokens shim that replaces ``tokenizers.decoders.DecodeStream``)
+        # are honored regardless of import order.
+        self.stream = tokenizers.decoders.DecodeStream(
             ids=request.prompt_token_ids,
             skip_special_tokens=self.skip_special_tokens,
         )
 
         self.spaces_between_special_tokens = (
-            sampling_params.skip_special_tokens or sampling_params.spaces_between_special_tokens
+            sampling_params.skip_special_tokens
+            or sampling_params.spaces_between_special_tokens
         )
 
         if not self.spaces_between_special_tokens:
@@ -192,7 +196,8 @@ class FastIncrementalDetokenizer(BaseIncrementalDetokenizer):
             added_token_ids = getattr(self.tokenizer, "added_token_ids", None)
             if added_token_ids is None:
                 self.tokenizer.added_token_ids = added_token_ids = {
-                    tid: tok.content for tid, tok in self.tokenizer.get_added_tokens_decoder().items()
+                    tid: tok.content
+                    for tid, tok in self.tokenizer.get_added_tokens_decoder().items()
                 }
 
             if added_token_ids:
@@ -231,10 +236,13 @@ class FastIncrementalDetokenizer(BaseIncrementalDetokenizer):
             # tokenizers' DecodeStream.
             # See https://github.com/vllm-project/vllm/issues/17448.
             logger.warning(
-                "Encountered invalid prefix detokenization error for request %s, resetting decode stream.",
+                "Encountered invalid prefix detokenization error"
+                " for request %s, resetting decode stream.",
                 self.request_id,
             )
-            self.stream = DecodeStream(skip_special_tokens=self.skip_special_tokens)
+            self.stream = tokenizers.decoders.DecodeStream(
+                skip_special_tokens=self.skip_special_tokens
+            )
             token = self.stream.step(self.tokenizer, next_token_id)
         return token
 
@@ -247,14 +255,18 @@ class SlowIncrementalDetokenizer(BaseIncrementalDetokenizer):
         params = request.sampling_params
         assert params is not None
 
-        self.prompt_len = length_from_prompt_token_ids_or_embeds(request.prompt_token_ids, request.prompt_embeds)
+        self.prompt_len = length_from_prompt_token_ids_or_embeds(
+            request.prompt_token_ids, request.prompt_embeds
+        )
 
         # Metadata for incremental detokenization.
         if request.prompt_token_ids is not None:
-            self.tokens, self.prefix_offset, self.read_offset = convert_prompt_ids_to_tokens(
-                tokenizer=tokenizer,
-                prompt_ids=request.prompt_token_ids,
-                skip_special_tokens=params.skip_special_tokens,
+            self.tokens, self.prefix_offset, self.read_offset = (
+                convert_prompt_ids_to_tokens(
+                    tokenizer=tokenizer,
+                    prompt_ids=request.prompt_token_ids,
+                    skip_special_tokens=params.skip_special_tokens,
+                )
             )
         else:
             # Prompt embedding requests cannot be detokenized, in general.

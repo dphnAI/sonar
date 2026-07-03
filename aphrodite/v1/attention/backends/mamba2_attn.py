@@ -7,6 +7,7 @@ from typing import Any
 import torch
 
 from aphrodite.config import AphroditeConfig
+from aphrodite.utils.torch_utils import async_tensor_h2d
 from aphrodite.v1.attention.backend import (
     AttentionBackend,
     CommonAttentionMetadata,
@@ -68,22 +69,22 @@ def compute_varlen_chunk_metadata(
 
     # Exclusive prefix sum over logical-chunk lengths
     if chunk_lens:
-        cu_chunk_seqlens = torch.tensor(
-            [0] + list(itertools.accumulate(chunk_lens)),
-            device=device,
-            dtype=torch.int32,
-        )
-        # Final boundary must equal total tokens
-        assert int(cu_chunk_seqlens[-1].item()) == total
+        cu_chunk_seqlens_list = [0] + list(itertools.accumulate(chunk_lens))
+        # Final boundary must equal total tokens (check on host to avoid a sync)
+        assert cu_chunk_seqlens_list[-1] == total
     else:
-        cu_chunk_seqlens = torch.tensor([0], device=device, dtype=torch.int32)
-
-    last_chunk_indices_t = (
-        torch.tensor(last_chunk_indices, device=device, dtype=torch.int32)
-        if len(starts) > 0
-        else torch.empty((0,), device=device, dtype=torch.int32)
+        cu_chunk_seqlens_list = [0]
+    cu_chunk_seqlens = async_tensor_h2d(
+        cu_chunk_seqlens_list, dtype=torch.int32, device=device
     )
-    seq_idx_chunks_t = torch.tensor(seq_idx_chunks, device=device, dtype=torch.int32)
+
+    # last_chunk_indices is empty when there are no sequences (len(starts) == 0).
+    last_chunk_indices_t = async_tensor_h2d(
+        last_chunk_indices, dtype=torch.int32, device=device
+    )
+    seq_idx_chunks_t = async_tensor_h2d(
+        seq_idx_chunks, dtype=torch.int32, device=device
+    )
     return cu_chunk_seqlens, last_chunk_indices_t, seq_idx_chunks_t
 
 
@@ -110,7 +111,9 @@ class Mamba2AttentionMetadata(BaseMambaAttentionMetadata):
     seq_idx_p: torch.Tensor | None = None
 
 
-class Mamba2AttentionMetadataBuilder(BaseMambaAttentionMetadataBuilder[Mamba2AttentionMetadata]):
+class Mamba2AttentionMetadataBuilder(
+    BaseMambaAttentionMetadataBuilder[Mamba2AttentionMetadata]
+):
     metadata_cls = Mamba2AttentionMetadata
 
     def __init__(
@@ -122,7 +125,9 @@ class Mamba2AttentionMetadataBuilder(BaseMambaAttentionMetadataBuilder[Mamba2Att
     ):
         super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
         chunk_size = aphrodite_config.model_config.get_mamba_chunk_size()
-        assert chunk_size is not None, "chunk_size needs to be set in the model config for Mamba2 models"
+        assert chunk_size is not None, (
+            "chunk_size needs to be set in the model config for Mamba2 models"
+        )
         self.chunk_size: int = chunk_size
 
     def build(
@@ -133,7 +138,9 @@ class Mamba2AttentionMetadataBuilder(BaseMambaAttentionMetadataBuilder[Mamba2Att
         **kwargs: Any,
     ) -> Mamba2AttentionMetadata:
         common = self._compute_common_metadata(
-            common_attn_metadata, num_accepted_tokens=kwargs.get("num_accepted_tokens")
+            common_attn_metadata,
+            num_accepted_tokens=kwargs.get("num_accepted_tokens"),
+            prev_last_scheduled_idx=kwargs.get("prev_last_scheduled_idx"),
         )
 
         seq_idx_p = None
@@ -144,13 +151,17 @@ class Mamba2AttentionMetadataBuilder(BaseMambaAttentionMetadataBuilder[Mamba2Att
         # Compute seq_idx for prefill only
         if common.num_prefills > 0:
             prep_initial_states = (
-                torch.any(common.has_initial_states_p).item() if common.has_initial_states_p is not None else False
+                torch.any(common.has_initial_states_p).item()
+                if common.has_initial_states_p is not None
+                else False
             )
 
-            cu_chunk_seqlen_p, seq_idx_p, last_chunk_indices_p = self._build_chunk_metadata_tensors(
-                self.chunk_size,
-                common,
-                common_attn_metadata,
+            cu_chunk_seqlen_p, seq_idx_p, last_chunk_indices_p = (
+                self._build_chunk_metadata_tensors(
+                    self.chunk_size,
+                    common,
+                    common_attn_metadata,
+                )
             )
 
         return replace(

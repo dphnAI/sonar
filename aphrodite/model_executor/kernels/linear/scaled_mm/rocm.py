@@ -73,7 +73,9 @@ if current_platform.is_rocm():
 
 class ROCmFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
     @classmethod
-    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
+    def is_supported(
+        cls, compute_capability: int | None = None
+    ) -> tuple[bool, str | None]:
         if not current_platform.is_rocm():
             return False, "requires ROCm."
 
@@ -89,7 +91,9 @@ class ROCmFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
 
     @classmethod
     def can_implement(cls, c: FP8ScaledMMLinearLayerConfig) -> tuple[bool, str | None]:
-        per_tensor_activation_scales = c.activation_quant_key.scale.group_shape.is_per_tensor()
+        per_tensor_activation_scales = (
+            c.activation_quant_key.scale.group_shape.is_per_tensor()
+        )
         per_tensor_weight_scales = c.weight_quant_key.scale.group_shape.is_per_tensor()
 
         if not (per_tensor_activation_scales and per_tensor_weight_scales):
@@ -108,5 +112,7 @@ class ROCmFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         bias: torch.Tensor | None,
         output_shape: list,
     ) -> torch.Tensor:
-        output = torch.ops.aphrodite.rocm_per_tensor_float_w8a8_scaled_mm_impl(A, B, out_dtype, As, Bs, bias)
+        output = torch.ops.aphrodite.rocm_per_tensor_float_w8a8_scaled_mm_impl(
+            A, B, out_dtype, As, Bs, bias
+        )
         return torch.narrow(output, 0, 0, A.shape[0]).view(*output_shape)

@@ -8,12 +8,15 @@ from typing import TYPE_CHECKING
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig, CUDAGraphMode, get_layers_from_aphrodite_config
+from aphrodite.config import CUDAGraphMode, AphroditeConfig, get_layers_from_aphrodite_config
+from aphrodite.distributed.eplb.eplb_state import EplbState
 from aphrodite.forward_context import set_forward_context
 from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
 from aphrodite.model_executor.model_loader import get_model
+from aphrodite.utils.torch_utils import PIN_MEMORY
 from aphrodite.v1.attention.backend import AttentionMetadataBuilder, CommonAttentionMetadata
 from aphrodite.v1.cudagraph_dispatcher import CudagraphDispatcher
+from aphrodite.v1.utils import CpuGpuBuffer
 from aphrodite.v1.worker.dp_utils import coordinate_batch_across_dp
 from aphrodite.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
 
@@ -27,22 +30,41 @@ class ExtractHiddenStatesProposer:
     def __init__(self, aphrodite_config: AphroditeConfig, device):
         assert aphrodite_config.speculative_config is not None
 
-        assert aphrodite_config.speculative_config.num_speculative_tokens == 1
+        self.num_speculative_tokens = (
+            aphrodite_config.speculative_config.num_speculative_tokens
+        )
+        assert self.num_speculative_tokens == 1
         if aphrodite_config.speculative_config.disable_padded_drafter_batch:
-            raise ValueError("disable_padded_drafter_batch is not supported with extract_hidden_states method")
+            raise ValueError(
+                "disable_padded_drafter_batch is not supported with "
+                "extract_hidden_states method"
+            )
         self.aphrodite_config = aphrodite_config
         self.device = device
         self.dtype = aphrodite_config.model_config.dtype
         self.dp_rank = aphrodite_config.parallel_config.data_parallel_rank
 
+        self.eplb_state: EplbState | None = None
+
         # Model and attention layer tracking (initialized in load_model)
         self.model: nn.Module | None = None
         self.attn_layer_names: list[str] = []
         self.attn_metadata_builder: AttentionMetadataBuilder | None = None
+        self.kv_cache_gid: int = -1
 
         # Maximum number of tokens for buffers
         max_batch_size = aphrodite_config.scheduler_config.max_num_seqs
-        self.max_num_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens + max_batch_size
+        self.max_num_tokens = (
+            aphrodite_config.scheduler_config.max_num_batched_tokens + max_batch_size
+        )
+
+        self.backup_next_token_ids = CpuGpuBuffer(
+            max_batch_size,
+            dtype=torch.int32,
+            pin_memory=PIN_MEMORY,
+            device=device,
+            with_numpy=True,
+        )
 
         self.hf_config = aphrodite_config.speculative_config.draft_model_config.hf_config
         layer_ids = getattr(self.hf_config, "eagle_aux_hidden_state_layer_ids", None)
@@ -60,14 +82,23 @@ class ExtractHiddenStatesProposer:
         )
         self.cudagraph_dispatcher = CudagraphDispatcher(self.aphrodite_config)
 
-        self._slot_mapping_buffer = torch.zeros(self.max_num_tokens, dtype=torch.int64, device=device)
+        self._slot_mapping_buffer = torch.zeros(
+            self.max_num_tokens, dtype=torch.int64, device=device
+        )
+
+    def set_eplb_state(self, eplb_state: EplbState) -> None:
+        """Inject EPLB state after construction."""
+        self.eplb_state = eplb_state
 
     def propose(
         self,
+        num_speculative_tokens: int,
         sampled_token_ids: torch.Tensor,
         target_hidden_states: list[torch.Tensor],
         common_attn_metadata: CommonAttentionMetadata,
-        slot_mappings: dict[str, torch.Tensor] | list[dict[str, torch.Tensor]] | None = None,
+        slot_mappings: dict[str, torch.Tensor]
+        | list[dict[str, torch.Tensor]]
+        | None = None,
     ) -> torch.Tensor:
         """Propose draft tokens by calling the ExtractHiddenStatesModel model.
 
@@ -92,6 +123,7 @@ class ExtractHiddenStatesProposer:
                 - Draft tokens matching sampled tokens, shape [batch_size, 1]
                 - KV connector output (if KV transfer is active), else None
         """
+        assert num_speculative_tokens == self.num_speculative_tokens
         assert self.model is not None and isinstance(target_hidden_states, list)
 
         # target_hidden_states is a list of tensors (one per layer)
@@ -114,19 +146,27 @@ class ExtractHiddenStatesProposer:
         for layer_name in self.attn_layer_names:
             per_layer_attn_metadata[layer_name] = attn_metadata
 
-        cudagraph_runtime_mode, num_input_tokens, num_tokens_across_dp = self._determine_batch_execution_and_padding(
-            num_tokens
+        cudagraph_runtime_mode, num_input_tokens, num_tokens_across_dp = (
+            self._determine_batch_execution_and_padding(num_tokens)
         )
         if num_tokens_across_dp is not None:
             num_tokens_across_dp[self.dp_rank] = num_input_tokens
 
+        if self.eplb_state is not None:
+            assert self.aphrodite_config.speculative_config is not None
+            self.eplb_state.prepare_forward(
+                self.aphrodite_config.speculative_config.draft_model_config,
+                num_tokens,
+            )
         with set_forward_context(
             per_layer_attn_metadata,
             self.aphrodite_config,
             num_tokens=num_input_tokens,
             num_tokens_across_dp=num_tokens_across_dp,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
-            slot_mapping=self._get_slot_mapping(num_input_tokens, common_attn_metadata.slot_mapping),
+            slot_mapping=self._get_slot_mapping(
+                num_input_tokens, common_attn_metadata.slot_mapping
+            ),
         ):
             self.model(
                 hidden_states=self.hidden_states[:num_input_tokens],
@@ -173,14 +213,18 @@ class ExtractHiddenStatesProposer:
         # TODO(Flechman): support DBO ubatching
         should_ubatch, num_tokens_across_dp = False, None
         if self.aphrodite_config.parallel_config.data_parallel_size > 1:
-            should_ubatch, num_tokens_across_dp, synced_cudagraph_mode = coordinate_batch_across_dp(
-                num_tokens_unpadded=num_tokens,
-                parallel_config=self.aphrodite_config.parallel_config,
-                allow_microbatching=False,
-                num_tokens_padded=num_tokens_padded,
-                cudagraph_mode=cudagraph_mode.value,
+            should_ubatch, num_tokens_across_dp, synced_cudagraph_mode = (
+                coordinate_batch_across_dp(
+                    num_tokens_unpadded=num_tokens,
+                    parallel_config=self.aphrodite_config.parallel_config,
+                    allow_microbatching=False,
+                    num_tokens_padded=num_tokens_padded,
+                    cudagraph_mode=cudagraph_mode.value,
+                )
             )
-            assert not should_ubatch, "DBO ubatching not implemented for extract_hidden_states"
+            assert not should_ubatch, (
+                "DBO ubatching not implemented for extract_hidden_states"
+            )
 
             # Extract DP-synced values
             if num_tokens_across_dp is not None:
@@ -206,10 +250,11 @@ class ExtractHiddenStatesProposer:
         Should be called after adjust_cudagraph_sizes_for_spec_decode.
         """
         assert self.aphrodite_config.speculative_config is not None
-        if not self.aphrodite_config.speculative_config.enforce_eager and cudagraph_mode.mixed_mode() in [
-            CUDAGraphMode.PIECEWISE,
-            CUDAGraphMode.FULL,
-        ]:
+        if (
+            not self.aphrodite_config.speculative_config.enforce_eager
+            and cudagraph_mode.mixed_mode()
+            in [CUDAGraphMode.PIECEWISE, CUDAGraphMode.FULL]
+        ):
             proposer_cudagraph_mode = CUDAGraphMode.PIECEWISE
         else:
             proposer_cudagraph_mode = CUDAGraphMode.NONE
@@ -225,15 +270,21 @@ class ExtractHiddenStatesProposer:
         slot_mappings: dict[str, torch.Tensor] | None = None,
     ) -> None:
         assert self.model is not None, "Model must be initialized before dummy_run"
-        cudagraph_runtime_mode, num_input_tokens, num_tokens_across_dp = self._determine_batch_execution_and_padding(
-            num_tokens, use_cudagraphs=use_cudagraphs
+        cudagraph_runtime_mode, num_input_tokens, num_tokens_across_dp = (
+            self._determine_batch_execution_and_padding(
+                num_tokens, use_cudagraphs=use_cudagraphs
+            )
         )
 
         if num_tokens_across_dp is not None:
             num_tokens_across_dp[self.dp_rank] = num_input_tokens
 
         # Use our own slot mapping buffer during cudagraph capture.
-        if self.attn_layer_names and slot_mappings is not None and self.attn_layer_names[0] in slot_mappings:
+        if (
+            self.attn_layer_names
+            and slot_mappings is not None
+            and self.attn_layer_names[0] in slot_mappings
+        ):
             slot_mapping_dict = self._get_slot_mapping(num_input_tokens)
         else:
             slot_mapping_dict = slot_mappings or {}
@@ -279,16 +330,15 @@ class ExtractHiddenStatesProposer:
         (batch_size, 1). For each request we either use the sampled token
         (if valid and not discarded) or a backup token from the request state.
         """
-        num_reqs = gpu_input_batch.num_reqs
-        device = sampled_token_ids.device
 
-        # Compute backup tokens for discarded / invalid requests
-        seq_lens_list = (gpu_input_batch.num_tokens_no_spec[:num_reqs] - 1).tolist()
-        backup_tokens_gpu = torch.tensor(
-            [requests[gpu_input_batch.req_ids[i]].get_token_id(seq_lens_list[i]) for i in range(num_reqs)],
-            dtype=torch.int32,
-            device=device,
-        )
+        # Precompute backup token IDs for discarded requests.
+        num_reqs = gpu_input_batch.num_reqs
+        for i in range(num_reqs):
+            self.backup_next_token_ids.np[i] = requests[
+                gpu_input_batch.req_ids[i]
+            ].get_token_id(gpu_input_batch.num_tokens_no_spec[i] - 1)
+        self.backup_next_token_ids.copy_to_gpu(num_reqs)
+        backup_tokens_gpu = self.backup_next_token_ids.gpu[:num_reqs]
 
         assert discard_request_mask.dtype == torch.bool
 
@@ -298,7 +348,9 @@ class ExtractHiddenStatesProposer:
         valid_sampled_tokens_count = is_valid.to(torch.int32)
 
         use_sampled = is_valid & ~discard_request_mask[:num_reqs]
-        next_token_ids = torch.where(use_sampled, sampled.to(torch.int32), backup_tokens_gpu)
+        next_token_ids = torch.where(
+            use_sampled, sampled.to(torch.int32), backup_tokens_gpu
+        )
 
         return next_token_ids, valid_sampled_tokens_count
 
@@ -323,7 +375,9 @@ class ExtractHiddenStatesProposer:
         from aphrodite.compilation.backends import set_model_tag
 
         with set_model_tag("extract_hidden_states"):
-            self.model = get_model(aphrodite_config=self.aphrodite_config, model_config=draft_model_config)
+            self.model = get_model(
+                aphrodite_config=self.aphrodite_config, model_config=draft_model_config
+            )
 
         # Identify draft model's attention layers (difference from target)
         all_attn_layers = get_layers_from_aphrodite_config(
@@ -331,18 +385,26 @@ class ExtractHiddenStatesProposer:
             AttentionLayerBase,  # type: ignore[type-abstract]
         )
         draft_attn_layers = {
-            name: layer for name, layer in all_attn_layers.items() if name not in target_attn_layer_names
+            name: layer
+            for name, layer in all_attn_layers.items()
+            if name not in target_attn_layer_names
         }
         self.attn_layer_names = list(draft_attn_layers.keys())
         assert len(draft_attn_layers) == 1, (
-            f"ExtractHiddenStatesModel should have exactly one attention layer, found {len(draft_attn_layers)}"
+            "ExtractHiddenStatesModel should have exactly one "
+            f"attention layer, found {len(draft_attn_layers)}"
         )
-        self.attn_metadata_builder = self._build_attn_metadata_builder(draft_attn_layers)
+        self.attn_metadata_builder = self._build_attn_metadata_builder(
+            draft_attn_layers
+        )
 
     def validate_same_kv_cache_group(self, kv_cache_config: KVCacheConfig) -> None:
-        """Validate all drafting layers belong to the same KV cache group.
-
-        With exactly one attention layer (asserted in load_model), this is
-        trivially satisfied.
-        """
+        """Validate all drafting layers belong to the same KV cache group
+        and record the group index for common_attn_metadata selection."""
         assert len(self.attn_layer_names) == 1
+        layer = self.attn_layer_names[0]
+        for gid, group in enumerate(kv_cache_config.kv_cache_groups):
+            if layer in group.layer_names:
+                self.kv_cache_gid = gid
+                return
+        raise ValueError(f"Cache-only layer {layer!r} not in any KV cache group")

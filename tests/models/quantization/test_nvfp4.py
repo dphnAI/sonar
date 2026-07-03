@@ -11,8 +11,10 @@ from typing import List
 import pytest
 from transformers import AutoTokenizer
 
-from aphrodite import LLM, SamplingParams
 from tests.quantization.utils import is_quant_method_supported
+from aphrodite import LLM, SamplingParams
+
+from aphrodite.platforms import current_platform
 
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
@@ -80,4 +82,70 @@ def test_models(example_prompts, model_name) -> None:
     for i in range(len(example_prompts)):
         generated_str = generations[i]
         expected_str = expected_strs[i]
-        assert expected_str == generated_str, f"Test{i}:\nExpected: {expected_str!r}\nAphrodite: {generated_str!r}"
+        assert expected_str == generated_str, (
+            f"Test{i}:\nExpected: {expected_str!r}\nAphrodite: {generated_str!r}"
+        )
+
+
+EAGER = [True, False]
+
+SM_100_NVFP4_BACKENDS = [
+    "flashinfer_cutedsl",
+    "flashinfer_cudnn",
+    "flashinfer_trtllm",
+    "flashinfer_cutlass",
+]
+
+
+@pytest.mark.parametrize("model", ["nvidia/Llama-3.1-8B-Instruct-NVFP4"])
+@pytest.mark.parametrize("eager", EAGER)
+@pytest.mark.parametrize(
+    "backend",
+    [
+        "emulation",
+        "flashinfer_cutedsl",
+        "flashinfer_cudnn",
+        "flashinfer_trtllm",  # the small seq_len ensures trtllm_8x4_layout backend is used
+        "flashinfer_cutlass",
+    ],
+)
+def test_nvfp4(aphrodite_runner, model, eager, backend):
+    if backend == "flashinfer_cutedsl" and not (
+        current_platform.is_device_capability_family(100)
+    ):
+        pytest.skip("The flashinfer_cutedsl backend is only supported on SM10x")
+
+    if (
+        not current_platform.has_device_capability(100)
+        and backend in SM_100_NVFP4_BACKENDS
+    ):
+        pytest.skip(
+            f"The backend {backend} is not supported with current_platform.has_device_capability(100) == False"
+        )
+
+    with aphrodite_runner(model, enforce_eager=eager, linear_backend=backend) as llm:
+        output = llm.generate_greedy(["1 2 3 4 5"], max_tokens=2)
+    assert output[0][1] == "1 2 3 4 5 6"
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "nvidia/Qwen3-30B-A3B-NVFP4",
+        "RedHatAI/Qwen3-30B-A3B-NVFP4",
+    ],
+)
+@pytest.mark.parametrize("backend", ["emulation"])
+@pytest.mark.skipif(
+    not current_platform.is_rocm(),
+    reason="NVFP4 MOE emulation is only useful on AMD Instinct MI3xx",
+)
+def test_nvfp4_moe(aphrodite_runner, model, backend):
+    with aphrodite_runner(
+        model,
+        moe_backend=backend,
+        linear_backend=backend,
+        load_format="dummy",
+        hf_overrides={"num_hidden_layers": 2},
+    ) as llm:
+        _ = llm.generate_greedy(["1 2 3 4 5"], max_tokens=2)

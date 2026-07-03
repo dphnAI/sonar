@@ -279,7 +279,9 @@ def generate_dataset_stats_plot(
     ax2.grid(True, alpha=0.3)
 
     # Bottom-left: Prompt+output tokens distribution
-    ax3.hist(total_tokens, bins=30, color="mediumseagreen", edgecolor="black", alpha=0.7)
+    ax3.hist(
+        total_tokens, bins=30, color="mediumseagreen", edgecolor="black", alpha=0.7
+    )
     ax3.set_xlabel("Total Tokens (Prompt + Output)")
     ax3.set_ylabel("Frequency")
     ax3.set_title("Total Tokens Distribution")
@@ -287,7 +289,9 @@ def generate_dataset_stats_plot(
 
     # Bottom-right: Stacked bar chart
     request_ids = list(range(len(prompt_tokens)))
-    ax4.bar(request_ids, prompt_tokens, label="Prompt Tokens", color="steelblue", alpha=0.7)
+    ax4.bar(
+        request_ids, prompt_tokens, label="Prompt Tokens", color="steelblue", alpha=0.7
+    )
     ax4.bar(
         request_ids,
         output_tokens,

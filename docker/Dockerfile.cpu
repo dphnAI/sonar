@@ -93,8 +93,8 @@ ENV APHRODITE_CPU_AVX512VNNI=${APHRODITE_CPU_AVX512VNNI}
 WORKDIR /workspace/aphrodite
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,src=requirements/cpu-build.txt,target=requirements/build.txt \
-    uv pip install -r requirements/build.txt
+    --mount=type=bind,src=requirements/build/cpu.txt,target=requirements/build/cpu.txt \
+    uv pip install -r requirements/build/cpu.txt
 
 COPY . .
 RUN --mount=type=bind,source=.git,target=.git \

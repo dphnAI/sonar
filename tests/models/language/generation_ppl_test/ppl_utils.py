@@ -7,8 +7,12 @@ import torch
 from datasets import load_dataset
 
 import tests.ci_envs as ci_envs
+from tests.models.utils import (
+    GenerateModelInfo,
+    TokensTextLogprobsPromptLogprobs,
+    get_aphrodite_extra_kwargs,
+)
 from aphrodite.logprobs import Logprob
-from tests.models.utils import GenerateModelInfo, TokensTextLogprobsPromptLogprobs, get_aphrodite_extra_kwargs
 
 # See #24485
 PPL_TOL = 0.01
@@ -26,7 +30,7 @@ def wikitext_ppl_test(
 ):
     aphrodite_extra_kwargs = get_aphrodite_extra_kwargs(model_info, aphrodite_extra_kwargs)
 
-    dataset = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
+    dataset = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="test")
 
     with aphrodite_runner(
         model_info.name,
@@ -77,7 +81,9 @@ def wikitext_ppl_test(
                 token_log_prob = list(token_data.values())[0].logprob
                 token_log_probs.append(token_log_prob)
 
-            neg_log_likelihood = -torch.tensor(token_log_probs, dtype=torch.float32, device="cpu").sum()
+            neg_log_likelihood = -torch.tensor(
+                token_log_probs, dtype=torch.float32, device="cpu"
+            ).sum()
             nll_sum += neg_log_likelihood
             n_tokens += len(token_log_probs)
         aphrodite_ppl = float(torch.exp(nll_sum / n_tokens))

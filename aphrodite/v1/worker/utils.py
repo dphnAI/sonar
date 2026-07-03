@@ -9,7 +9,7 @@ from typing import Any
 
 import torch
 
-from aphrodite.config import AphroditeConfig, CacheConfig
+from aphrodite.config import CacheConfig, AphroditeConfig
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.attention import Attention
 from aphrodite.model_executor.models.interfaces import MultiModalEmbeddings
@@ -70,7 +70,9 @@ def _zero_kv_blocks_kernel(
     block_id = tl.load(block_ids_ptr + block_index)
     seg_addr = tl.load(seg_addrs_ptr + seg_index)
     ptr = tl.cast(seg_addr, tl.pointer_type(tl.int32))
-    offset = block_id.to(tl.int64) * PAGE_SIZE_EL + chunk_index.to(tl.int64) * BLOCK_SIZE
+    offset = (
+        block_id.to(tl.int64) * PAGE_SIZE_EL + chunk_index.to(tl.int64) * BLOCK_SIZE
+    )
     cols = tl.arange(0, BLOCK_SIZE).to(tl.int64)
     tl.store(ptr + offset + cols, tl.zeros([BLOCK_SIZE], dtype=tl.int32))
 
@@ -78,30 +80,23 @@ def _zero_kv_blocks_kernel(
 class KVBlockZeroer:
     """Manages efficient zeroing of KV cache blocks via a Triton kernel.
 
-    Call :meth:`init_meta` once after KV caches are allocated to precompute
-    segment addresses, then call :meth:`zero_block_ids` each step to zero
+    Construct once after KV caches are allocated to precompute segment
+    addresses, then call :meth:`zero_block_ids` each step to zero
     newly-allocated blocks.
     """
 
-    def __init__(self, device: torch.device, pin_memory: bool):
-        self.device = device
-        self.pin_memory = pin_memory
-        self._meta: tuple[torch.Tensor, int, int, int] | None = None
-        self._id_cap: int = 0
-        self._ids_pinned: torch.Tensor | None = None
-        self._ids_gpu: torch.Tensor | None = None
-
-    def init_meta(
+    def __init__(
         self,
+        device: torch.device,
+        pin_memory: bool,
         attn_groups_iter: Iterable["AttentionGroup"],
         kernel_block_sizes: list[int],
         cache_dtype: str,
-        runner_only_attn_layers: set[str],
         static_forward_context: dict[str, Any],
+        runner_only_attn_layers: set[str] | None = None,
     ) -> None:
-        """One-time precomputation for zero_block_ids.
+        """Precompute the absolute-address table for the Triton zeroing kernel.
 
-        Builds absolute-address table for the Triton zeroing kernel.
         Each entry is the absolute byte address of a segment start on the
         GPU, so segments in different CUDA allocations work correctly.
 
@@ -112,6 +107,15 @@ class KVBlockZeroer:
 
         Only AttentionSpec layers are processed; Mamba layers are skipped.
         """
+        self.device = device
+        self.pin_memory = pin_memory
+        self._meta: tuple[torch.Tensor, int, int, int] | None = None
+        self._id_cap: int = 0
+        self._ids_pinned: torch.Tensor | None = None
+        self._ids_gpu: torch.Tensor | None = None
+
+        if runner_only_attn_layers is None:
+            runner_only_attn_layers = set()
         seen_ptrs: set[int] = set()
         seg_addrs: list[int] = []
         page_size_el: int | None = None
@@ -150,10 +154,16 @@ class KVBlockZeroer:
                 if page_size_el is None:
                     page_size_el = cur_page_el
                 else:
-                    assert page_size_el == cur_page_el, f"Non-uniform page sizes: {page_size_el} vs {cur_page_el}"
+                    assert page_size_el == cur_page_el, (
+                        f"Non-uniform page sizes: {page_size_el} vs {cur_page_el}"
+                    )
 
                 block_stride_bytes = cur_bytes
-                outer_dims = [d for d in range(block_dim) if kv.stride(d) * el > block_stride_bytes]
+                outer_dims = [
+                    d
+                    for d in range(block_dim)
+                    if kv.stride(d) * el > block_stride_bytes
+                ]
                 outer_strides = [kv.stride(d) * el for d in outer_dims]
                 for outer in iprod(*(range(kv.shape[d]) for d in outer_dims)):
                     off_bytes = sum(i * s for i, s in zip(outer, outer_strides))
@@ -191,7 +201,9 @@ class KVBlockZeroer:
                 dtype=torch.int64,
                 pin_memory=self.pin_memory,
             )
-            self._ids_gpu = torch.empty(self._id_cap, dtype=torch.int64, device=self.device)
+            self._ids_gpu = torch.empty(
+                self._id_cap, dtype=torch.int64, device=self.device
+            )
         assert self._ids_pinned is not None and self._ids_gpu is not None
         self._ids_pinned[:n_blocks].numpy()[:] = block_ids
         idx = self._ids_gpu[:n_blocks]
@@ -216,7 +228,9 @@ class AttentionGroup:
     # When ubatching is enabled we will have a metadata builder for each ubatch
     # so that if they use internal persistent buffers for cudagraphs, and they
     # won't have to worry about conflicting with the other ubatches.
-    metadata_builders: list[AttentionMetadataBuilder] = field(default_factory=lambda: [])
+    metadata_builders: list[AttentionMetadataBuilder] = field(
+        default_factory=lambda: []
+    )
 
     def create_metadata_builders(
         self,
@@ -267,7 +281,9 @@ def select_common_block_size(
         ValueError: If no valid block size found.
     """
 
-    def block_size_is_supported(backends: list[type[AttentionBackend]], block_size: int) -> bool:
+    def block_size_is_supported(
+        backends: list[type[AttentionBackend]], block_size: int
+    ) -> bool:
         """Check if the block size is supported by all backends."""
         for backend in backends:
             is_supported = False
@@ -312,7 +328,9 @@ def select_common_block_size(
     raise ValueError(f"No common block size for {kv_manager_block_size}. ")
 
 
-def prepare_kernel_block_sizes(kv_cache_config: KVCacheConfig, attn_groups: list[list[AttentionGroup]]) -> list[int]:
+def prepare_kernel_block_sizes(
+    kv_cache_config: KVCacheConfig, attn_groups: list[list[AttentionGroup]]
+) -> list[int]:
     """
     Generate kernel_block_sizes that matches each block_size.
 
@@ -340,13 +358,17 @@ def prepare_kernel_block_sizes(kv_cache_config: KVCacheConfig, attn_groups: list
             # This is an attention backend that supports virtual block splitting.
             kv_manager_block_size = kv_cache_group.kv_cache_spec.block_size
             group_backends = [g.backend for g in attn_groups[kv_cache_gid]]
-            selected_kernel_size = select_common_block_size(kv_manager_block_size, group_backends)
+            selected_kernel_size = select_common_block_size(
+                kv_manager_block_size, group_backends
+            )
             kernel_block_sizes.append(selected_kernel_size)
         elif isinstance(kv_cache_spec, MambaSpec):
             # This is likely Mamba or other non-attention cache, no splitting.
             kernel_block_sizes.append(kv_cache_spec.block_size)
         else:
-            raise NotImplementedError(f"unknown kv cache spec {kv_cache_group.kv_cache_spec}")
+            raise NotImplementedError(
+                f"unknown kv cache spec {kv_cache_group.kv_cache_spec}"
+            )
     return kernel_block_sizes
 
 
@@ -385,7 +407,9 @@ def request_memory(init_snapshot: MemorySnapshot, cache_config: CacheConfig) -> 
     Calculate the amount of memory required by Aphrodite, then validate
     that the current amount of free memory is sufficient for that.
     """
-    requested_memory = math.ceil(init_snapshot.total_memory * cache_config.gpu_memory_utilization)
+    requested_memory = math.ceil(
+        init_snapshot.total_memory * cache_config.gpu_memory_utilization
+    )
 
     if init_snapshot.free_memory < requested_memory:
         raise ValueError(
@@ -419,6 +443,9 @@ def add_kv_sharing_layers_to_kv_cache_groups(
             from the KV cache of `shared_kv_cache_layers[layer_name]`.
         kv_cache_groups: The KV cache groups of the model.
     """
+    if not shared_kv_cache_layers:
+        return
+
     layer_to_kv_cache_group: dict[str, KVCacheGroupSpec] = {}
     for kv_cache_group in kv_cache_groups:
         for layer_name in kv_cache_group.layer_names:
@@ -472,7 +499,11 @@ def bind_kv_cache(
             # TODO - analyze where runner_kv_caches is used and the right
             # way to ensure it properly reflects multiple attention layers
             # in the same decoder block.
-            if current_platform.is_cuda_alike() or current_platform.is_xpu() or current_platform.is_cpu():
+            if (
+                current_platform.is_cuda_alike()
+                or current_platform.is_xpu()
+                or current_platform.is_cpu()
+            ):
                 # We know that the GPU / CPU runner is not impacted by this
                 # case. Some test code depends on runner_kv_caches, but
                 # not in a way that's impacted by ignoring this.
@@ -487,7 +518,9 @@ def bind_kv_cache(
         forward_context[layer_name].kv_cache = kv_cache
 
 
-def is_residual_scattered_for_sp(aphrodite_config: AphroditeConfig, num_input_tokens: int) -> bool:
+def is_residual_scattered_for_sp(
+    aphrodite_config: AphroditeConfig, num_input_tokens: int
+) -> bool:
     """Check if the residual tensor is scattered for sequence parallelism.
 
     The residual tensor is scattered across tensor parallel ranks when sequence

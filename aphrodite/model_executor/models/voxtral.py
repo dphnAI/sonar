@@ -10,14 +10,15 @@ import numpy as np
 import regex as re
 import torch
 import torch.nn as nn
-from mistral_common.audio import Audio, mel_filter_bank
-from mistral_common.protocol.instruct.chunk import AudioChunk, RawAudio, TextChunk
+from mistral_common.audio import mel_filter_bank
+from mistral_common.protocol.instruct.chunk import AudioChunk, TextChunk
 from mistral_common.protocol.instruct.messages import UserMessage
 from mistral_common.protocol.instruct.request import ChatCompletionRequest
 from mistral_common.protocol.transcription.request import TranscriptionRequest
+from mistral_common.tokens.tokenizers.audio import Audio
 from transformers import BatchFeature, WhisperConfig
 
-from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
+from aphrodite.config import ModelConfig, SpeechToTextConfig, AphroditeConfig
 from aphrodite.config.multimodal import BaseDummyOptions
 from aphrodite.config.speech_to_text import SpeechToTextParams
 from aphrodite.inputs import MultiModalDataDict, PromptType, TokensPrompt
@@ -89,7 +90,9 @@ class VoxtralProcessingInfo(BaseProcessingInfo):
         return tokenizer
 
     def get_feature_extractor(self) -> MistralCommonFeatureExtractor:
-        return MistralCommonFeatureExtractor(self.get_tokenizer().instruct.audio_encoder)
+        return MistralCommonFeatureExtractor(
+            self.get_tokenizer().instruct.audio_encoder
+        )
 
     def get_hf_processor(self, **kwargs) -> MistralCommonVoxtralProcessor:
         return MistralCommonVoxtralProcessor(
@@ -122,7 +125,9 @@ class VoxtralProcessingInfo(BaseProcessingInfo):
     def get_max_audio_array_len(self) -> int:
         feature_extractor = self.get_feature_extractor()
 
-        return self.get_max_audio_tokens() * int(feature_extractor.sampling_rate // feature_extractor.frame_rate)
+        return self.get_max_audio_tokens() * int(
+            feature_extractor.sampling_rate // feature_extractor.frame_rate
+        )
 
 
 class VoxtralDummyInputsBuilder(BaseDummyInputsBuilder[VoxtralProcessingInfo]):
@@ -160,9 +165,15 @@ class VoxtralDummyInputsBuilder(BaseDummyInputsBuilder[VoxtralProcessingInfo]):
         feature_extractor = self.info.get_feature_extractor()
 
         dummy_text = self.get_dummy_text(mm_counts)
-        dummy_mm_data = self.get_dummy_mm_data(seq_len, mm_counts, mm_options) if mm_data is None else mm_data
+        dummy_mm_data = (
+            self.get_dummy_mm_data(seq_len, mm_counts, mm_options)
+            if mm_data is None
+            else mm_data
+        )
         dummy_mm_items = self.info.parse_mm_data(dummy_mm_data)
-        dummy_audios = [] if "audio" not in dummy_mm_data else dummy_mm_items["audio"].get_all()
+        dummy_audios = (
+            [] if "audio" not in dummy_mm_data else dummy_mm_items["audio"].get_all()
+        )
 
         audio_chunks: list[AudioChunk] = []
         format = "wav"
@@ -172,7 +183,7 @@ class VoxtralDummyInputsBuilder(BaseDummyInputsBuilder[VoxtralProcessingInfo]):
                 sampling_rate=feature_extractor.sampling_rate,
                 format=format,
             )
-            chunk = AudioChunk(input_audio=RawAudio.from_audio(audio_item))
+            chunk = AudioChunk.from_audio(audio_item)
             audio_chunks.append(chunk)
 
         request = ChatCompletionRequest(
@@ -257,7 +268,10 @@ class VoxtralMultiModalProcessor(BaseMultiModalProcessor[VoxtralProcessingInfo])
                 if isinstance(audio_arr, (torch.Tensor, np.ndarray)):
                     audio_len = len(audio_arr)
                 else:
-                    raise TypeError(f"Unexpected type for audio_arrays in out_mm_kwargs: {type(audio_arr)}")
+                    raise TypeError(
+                        "Unexpected type for audio_arrays in out_mm_kwargs: "
+                        f"{type(audio_arr)}"
+                    )
             else:
                 # Fallback for unexpected processor outputs.
                 audios = mm_items.get_items("audio", AudioProcessorItems)
@@ -291,7 +305,9 @@ class VoxtralMultiModalProcessor(BaseMultiModalProcessor[VoxtralProcessingInfo])
     info=VoxtralProcessingInfo,
     dummy_inputs=VoxtralDummyInputsBuilder,
 )
-class VoxtralForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA, SupportsTranscription):
+class VoxtralForConditionalGeneration(
+    nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA, SupportsTranscription
+):
     supported_languages = ISO639_1_SUPPORTED_LANGS
     # transformers' currently has limited support for MistralCommon backend
     # and cached_get_processor. Let's skip until fixed
@@ -309,7 +325,9 @@ class VoxtralForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP,
         # update quant config to so that ignored module and target module names
         # match the Aphrodite model names
         if hasattr(aphrodite_config, "quant_config"):
-            aphrodite_config.quant_config = self.maybe_update_quant_config(aphrodite_config.quant_config)
+            aphrodite_config.quant_config = self.maybe_update_quant_config(
+                aphrodite_config.quant_config
+            )
 
         config = aphrodite_config.model_config.hf_config
         self.config = config
@@ -331,6 +349,10 @@ class VoxtralForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP,
                 hidden_size=config.audio_config.d_model * self.downsample_factor,
                 dim=config.text_config.hidden_size,
             )
+
+        self.make_empty_intermediate_tensors = (
+            self.language_model.make_empty_intermediate_tensors
+        )
 
     def get_mm_mapping(self) -> MultiModelKeys:
         """Get module prefix for multimodal models to filter LoRA modules."""
@@ -357,7 +379,9 @@ class VoxtralForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP,
 
         return hidden_states
 
-    def embed_multimodal(self, **kwargs) -> list[torch.Tensor] | torch.Tensor | tuple[torch.Tensor, ...] | None:
+    def embed_multimodal(
+        self, **kwargs
+    ) -> list[torch.Tensor] | torch.Tensor | tuple[torch.Tensor, ...] | None:
         audio_inputs = self._parse_and_validate_audio_arrays(**kwargs)
         if audio_inputs is None:
             return None
@@ -367,7 +391,9 @@ class VoxtralForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP,
         for i, audio_embedding in enumerate(audio_embeddings):
             seq_len, dim = audio_embedding.shape
             # Pad such that seq_len is divisible by downsample_factor
-            target_seq_len = self.downsample_factor * math.ceil(seq_len / self.downsample_factor)
+            target_seq_len = self.downsample_factor * math.ceil(
+                seq_len / self.downsample_factor
+            )
             audio_embedding = torch.nn.functional.pad(
                 audio_embedding,
                 (0, 0, 0, target_seq_len - seq_len),
@@ -379,17 +405,23 @@ class VoxtralForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP,
         # Concat, project and resplit
         audio_embeddings_packed = torch.cat(audio_embeddings, dim=0)
         audio_embeddings_packed = self.audio_language_adapter(audio_embeddings_packed)
-        audio_embeddings = torch.split(audio_embeddings_packed, [a.shape[0] for a in audio_embeddings], dim=0)
+        audio_embeddings = torch.split(
+            audio_embeddings_packed, [a.shape[0] for a in audio_embeddings], dim=0
+        )
 
         return audio_embeddings
 
-    def _parse_and_validate_audio_arrays(self, **kwargs: object) -> list[torch.Tensor] | None:
+    def _parse_and_validate_audio_arrays(
+        self, **kwargs: object
+    ) -> list[torch.Tensor] | None:
         audio_arrays = kwargs.pop("audio_arrays", None)
         if audio_arrays is None:
             return None
 
         if not isinstance(audio_arrays, (torch.Tensor, list)):
-            raise ValueError(f"Incorrect type of audio_arrays. Got type: {type(audio_arrays)}")
+            raise ValueError(
+                f"Incorrect type of audio_arrays. Got type: {type(audio_arrays)}"
+            )
 
         if isinstance(audio_arrays, torch.Tensor):
             audio_arrays = list(audio_arrays.unbind(0))
@@ -402,7 +434,9 @@ class VoxtralForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP,
         return self.language_model.compute_logits(hidden_states)
 
     @classmethod
-    def get_speech_to_text_config(cls, model_config: ModelConfig, task_type: str) -> SpeechToTextConfig:
+    def get_speech_to_text_config(
+        cls, model_config: ModelConfig, task_type: str
+    ) -> SpeechToTextConfig:
         tokenizer = cached_tokenizer_from_config(model_config)
         audio_config = tokenizer.instruct.audio_encoder.audio_config
         max_audio_clip_s = audio_config.chunk_length_s
@@ -429,7 +463,7 @@ class VoxtralForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP,
         audio = Audio(audio, int(stt_config.sample_rate), format="wav")  # lossless
         req = TranscriptionRequest(
             model=model_config.model,
-            audio=RawAudio.from_audio(audio),
+            audio=audio.to_base64(audio.format),
             language=language,
         )
 
@@ -438,7 +472,10 @@ class VoxtralForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP,
         return TokensPrompt(
             prompt_token_ids=tokenized.tokens,
             multi_modal_data={
-                "audio": [(audio.audio_array, stt_config.sample_rate) for audio in tokenized.audios],
+                "audio": [
+                    (audio.audio_array, stt_config.sample_rate)
+                    for audio in tokenized.audios
+                ],
             },
         )
 
@@ -455,8 +492,12 @@ class VoxtralForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP,
         This is used for estimating the amount of processing for this audio.
         """
         tokenizer = cached_tokenizer_from_config(model_config)
-        feature_extractor = MistralCommonFeatureExtractor(tokenizer.instruct.audio_encoder)
-        return feature_extractor.get_num_audio_tokens(int(audio_duration_s * stt_config.sample_rate))
+        feature_extractor = MistralCommonFeatureExtractor(
+            tokenizer.instruct.audio_encoder
+        )
+        return feature_extractor.get_num_audio_tokens(
+            int(audio_duration_s * stt_config.sample_rate)
+        )
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         remapping_rules = [
@@ -526,7 +567,9 @@ class VoxtralForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP,
 
         return loaded_weights
 
-    def maybe_update_quant_config(self, quant_config: QuantizationConfig) -> QuantizationConfig:
+    def maybe_update_quant_config(
+        self, quant_config: QuantizationConfig
+    ) -> QuantizationConfig:
         """
         Update quant config to so that ignored module and target module names
         match the Aphrodite model names.
@@ -713,7 +756,9 @@ class VoxtralEncoderModel(nn.Module):
         audio_waveforms: torch.Tensor,
     ) -> torch.Tensor:
         input_dtype = audio_waveforms.dtype
-        window = torch.hann_window(self.config.window_size, device=audio_waveforms.device)
+        window = torch.hann_window(
+            self.config.window_size, device=audio_waveforms.device
+        )
         stft = torch.stft(
             audio_waveforms,
             self.config.window_size,
@@ -742,7 +787,9 @@ class VoxtralEncoderModel(nn.Module):
 
     @property
     def downsample_factor(self) -> int:
-        return self.whisper_encoder.conv1.stride[0] * self.whisper_encoder.conv2.stride[0]
+        return (
+            self.whisper_encoder.conv1.stride[0] * self.whisper_encoder.conv2.stride[0]
+        )
 
     @property
     def chunk_size(self) -> int:
@@ -754,7 +801,10 @@ class VoxtralEncoderModel(nn.Module):
     ) -> tuple[torch.Tensor, list[int]]:
         assert isinstance(audio_waveforms, list)
         # list[num_mel_bins, seq_len]
-        input_features = [self.compute_whisper_melspec(audio).to(self.dtype) for audio in audio_waveforms]
+        input_features = [
+            self.compute_whisper_melspec(audio).to(self.dtype)
+            for audio in audio_waveforms
+        ]
 
         chunked_features: list[torch.Tensor] = []
         chunks_per_example: list[int] = []
@@ -766,7 +816,9 @@ class VoxtralEncoderModel(nn.Module):
         # [total_num_chunks, num_mel_bins, chunk_size]
         return torch.stack(chunked_features), chunks_per_example
 
-    def forward(self, input_features: torch.Tensor | list[torch.Tensor]) -> list[torch.Tensor]:
+    def forward(
+        self, input_features: torch.Tensor | list[torch.Tensor]
+    ) -> list[torch.Tensor]:
         if not isinstance(input_features, list):
             input_features = [input_features]
 

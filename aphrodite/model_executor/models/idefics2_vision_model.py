@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 # adapted from https://github.com/huggingface/transformers/blob/v4.43.2/src/transformers/models/idefics2/modeling_idefics2.py
-# Copyright 2024 The Aphrodite team.
+# Copyright 2024 The vLLM team.
 # Copyright 2024 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -38,8 +38,8 @@ from aphrodite.model_executor.layers.linear import (
     RowParallelLinear,
 )
 from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 
+from .utils import AutoWeightsLoader, WeightsMapper
 from .vision import is_vit_use_data_parallel, run_dp_sharded_vision_model
 
 
@@ -88,8 +88,12 @@ class Idefics2VisionEmbeddings(nn.Module):
             max_im_h // self.patch_size,
             max_im_w // self.patch_size,
         )
-        boundaries = torch.arange(1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side)
-        position_ids = torch.full(size=(batch_size, max_nb_patches_h * max_nb_patches_w), fill_value=0)
+        boundaries = torch.arange(
+            1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side
+        )
+        position_ids = torch.full(
+            size=(batch_size, max_nb_patches_h * max_nb_patches_w), fill_value=0
+        )
 
         for batch_idx, p_attn_mask in enumerate(patch_attention_mask):
             if tgt_sizes is not None:
@@ -100,9 +104,15 @@ class Idefics2VisionEmbeddings(nn.Module):
                 nb_patches_w = p_attn_mask[0].sum()
             fractional_coords_h = torch.arange(0, 1 - 1e-6, 1 / nb_patches_h)
             fractional_coords_w = torch.arange(0, 1 - 1e-6, 1 / nb_patches_w)
-            bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
-            bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
-            pos_ids = (bucket_coords_h[:, None] * self.num_patches_per_side + bucket_coords_w).flatten()
+            bucket_coords_h = torch.bucketize(
+                fractional_coords_h, boundaries, right=True
+            )
+            bucket_coords_w = torch.bucketize(
+                fractional_coords_w, boundaries, right=True
+            )
+            pos_ids = (
+                bucket_coords_h[:, None] * self.num_patches_per_side + bucket_coords_w
+            ).flatten()
             position_ids[batch_idx][p_attn_mask.view(-1).cpu()] = pos_ids
         position_ids = position_ids.to(self.position_embedding.weight.device)
         embeddings += self.position_embedding(position_ids)
@@ -165,7 +175,9 @@ class Idefics2VisionAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        qkv, _ = self.qkv_proj(hidden_states)  # batch_size, q_len, 3 * num_heads_per_partition * head_dim
+        qkv, _ = self.qkv_proj(
+            hidden_states
+        )  # batch_size, q_len, 3 * num_heads_per_partition * head_dim
         query_states, key_states, value_states = qkv.chunk(3, dim=-1)
 
         # If attention_mask is provided, prefer Torch SDPA so the mask is
@@ -177,9 +189,15 @@ class Idefics2VisionAttention(nn.Module):
             bsz, q_len = query_states.size()[:2]
             kv_len = key_states.size(1)
 
-            query = query_states.view(bsz, q_len, self.num_heads_per_partition, self.head_dim).transpose(1, 2)
-            key = key_states.view(bsz, kv_len, self.num_heads_per_partition, self.head_dim).transpose(1, 2)
-            value = value_states.view(bsz, kv_len, self.num_heads_per_partition, self.head_dim).transpose(1, 2)
+            query = query_states.view(
+                bsz, q_len, self.num_heads_per_partition, self.head_dim
+            ).transpose(1, 2)
+            key = key_states.view(
+                bsz, kv_len, self.num_heads_per_partition, self.head_dim
+            ).transpose(1, 2)
+            value = value_states.view(
+                bsz, kv_len, self.num_heads_per_partition, self.head_dim
+            ).transpose(1, 2)
 
             out = F.scaled_dot_product_attention(
                 query,
@@ -334,6 +352,14 @@ class Idefics2Encoder(nn.Module):
 
 
 class Idefics2VisionTransformer(nn.Module):
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_stacked={
+            ".q_proj": (".qkv_proj", "q"),
+            ".k_proj": (".qkv_proj", "k"),
+            ".v_proj": (".qkv_proj", "v"),
+        }
+    )
+
     def __init__(
         self,
         config: Idefics2VisionConfig,
@@ -414,7 +440,11 @@ class Idefics2VisionTransformer(nn.Module):
         # - if patch_attention_mask was None, skip attention masking
         # - if any padding exists, create an additive 4D mask and pass it
         #   to attention; else skip mask for performance.
-        if not self.apply_encoder_attention_mask or flat_patch_mask is None or not torch.any(~flat_patch_mask):
+        if (
+            not self.apply_encoder_attention_mask
+            or flat_patch_mask is None
+            or not torch.any(~flat_patch_mask)
+        ):
             attention_mask = None
         else:
             # Additive mask: masked positions receive a large negative value.
@@ -431,42 +461,22 @@ class Idefics2VisionTransformer(nn.Module):
         return last_hidden_state
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            # (param_name, shard_name, shard_id)
-            ("qkv_proj", "q_proj", "q"),
-            ("qkv_proj", "k_proj", "k"),
-            ("qkv_proj", "v_proj", "v"),
-        ]
-        params_dict = dict(self.named_parameters())
-        loaded_params: set[str] = set()
+        # head is a pooling header absent from this model.
+        skip_prefixes = ["head."]
+        if not self.require_post_norm:
+            skip_prefixes.append("post_layernorm.")
+        loader = AutoWeightsLoader(self, skip_prefixes=skip_prefixes)
+
         layer_count = len(self.encoder.layers)
 
-        for name, loaded_weight in weights:
-            # skip pooling header
-            if name.startswith("head."):
-                continue
-
-            # post_layernorm is optional
-            if name.startswith("post_layernorm.") and not self.require_post_norm:
-                continue
-
-            # omit layers when num_hidden_layers_override is set
-            if name.startswith("encoder.layers."):
-                layer_idx = int(name.split(".")[2])
-                if layer_idx >= layer_count:
+        def _filter(ws: Iterable[tuple[str, torch.Tensor]]):
+            # Drop layers beyond num_hidden_layers_override.
+            for name, w in ws:
+                if (
+                    name.startswith("encoder.layers.")
+                    and int(name.split(".")[2]) >= layer_count
+                ):
                     continue
+                yield name, w
 
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                if weight_name not in name or self.use_data_parallel:
-                    continue
-                name = name.replace(weight_name, param_name)
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
+        return loader.load_weights(_filter(weights), mapper=self.hf_to_aphrodite_mapper)

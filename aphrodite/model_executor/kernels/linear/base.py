@@ -8,6 +8,8 @@ from typing import Any, ClassVar, Generic, TypeVar
 import torch
 from typing_extensions import Self
 
+from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
+
 
 @dataclass
 class MMLinearLayerConfig: ...
@@ -187,7 +189,9 @@ class MMLinearKernel(ABC, Generic[_ConfigT, _ParamsT]):
 
     @classmethod
     @abstractmethod
-    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
+    def is_supported(
+        cls, compute_capability: int | None = None
+    ) -> tuple[bool, str | None]:
         """Check if this kernel is supported on the current hardware.
 
         This method checks hardware-level compatibility (e.g., GPU architecture,
@@ -234,6 +238,12 @@ class MMLinearKernel(ABC, Generic[_ConfigT, _ParamsT]):
                    quantization keys, output dtypes, etc.
         """
         self.config = config
+
+    def input_quant_key(self) -> QuantKey | None:
+        """Return the input quantization key supported by this kernel. If the kernel
+        does not support input quantization outside of the kernel, return None.
+        """
+        return None
 
     @abstractmethod
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:

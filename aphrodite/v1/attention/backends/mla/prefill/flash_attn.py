@@ -8,8 +8,20 @@ from typing import TYPE_CHECKING
 import torch
 
 import aphrodite.envs as envs
+from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    kFp8StaticTensorSym,
+)
+from aphrodite.model_executor.warmup.cutedsl_warmup import (
+    CuTeDSLCompileUnit,
+    register_cutedsl_warmup_provider,
+)
+from aphrodite.model_executor.warmup.fa4_cutedsl_config import (
+    FA4MLAPrefillCompileContext,
+    iter_fa4_mla_prefill_compile_requests,
+)
 from aphrodite.platforms import current_platform
 from aphrodite.v1.attention.backends.fa_utils import (
+    compile_flash_attn_varlen_func_from_specs,
     get_flash_attn_version,
     is_flash_attn_varlen_func_available,
 )
@@ -17,6 +29,7 @@ from aphrodite.v1.attention.backends.mla.prefill.base import MLAPrefillBackend
 
 if TYPE_CHECKING:
     from aphrodite.config import AphroditeConfig
+    from aphrodite.model_executor.layers.quantization.utils.quant_utils import QuantKey
 
 if is_flash_attn_varlen_func_available():
     from aphrodite.v1.attention.backends.fa_utils import flash_attn_varlen_func
@@ -44,8 +57,6 @@ class FlashAttnPrefillBackend(MLAPrefillBackend):
         qk_rope_head_dim: int,
         v_head_dim: int,
         aphrodite_config: "AphroditeConfig",
-        device: torch.device,
-        layer_names: list[str] | None = None,
     ) -> None:
         super().__init__(
             num_heads=num_heads,
@@ -55,22 +66,20 @@ class FlashAttnPrefillBackend(MLAPrefillBackend):
             qk_rope_head_dim=qk_rope_head_dim,
             v_head_dim=v_head_dim,
             aphrodite_config=aphrodite_config,
-            device=device,
-            layer_names=layer_names,
         )
 
         # Handle the differences between the flash_attn_varlen from
-        # flash_attn and the one from aphrodite_flash_attn
+        # flash_attn and the one from vllm_flash_attn
         assert flash_attn_varlen_func is not None, (
             "FlashAttnPrefillBackend requires flash_attn_varlen_func. "
             "Ensure FlashAttnPrefillBackend.is_available() is checked first."
         )
         qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
         self.flash_attn_varlen_func = flash_attn_varlen_func
-        self.aphrodite_flash_attn_version = get_flash_attn_version(head_size=qk_head_dim)
-        if self.aphrodite_flash_attn_version is not None:
+        self.vllm_flash_attn_version = get_flash_attn_version(head_size=qk_head_dim)
+        if self.vllm_flash_attn_version is not None:
             self.flash_attn_varlen_func = functools.partial(
-                flash_attn_varlen_func, fa_version=self.aphrodite_flash_attn_version
+                flash_attn_varlen_func, fa_version=self.vllm_flash_attn_version
             )
 
         # Determine if we need to pad V
@@ -79,13 +88,67 @@ class FlashAttnPrefillBackend(MLAPrefillBackend):
         # not support different headdims.
         # FA3 on Hopper (SM90) and FA4 natively handle diff headdims.
         device_capability = current_platform.get_device_capability()
-        self.requires_v_padding = self.aphrodite_flash_attn_version is None or not (
-            (self.aphrodite_flash_attn_version == 3 and device_capability is not None and device_capability[0] == 9)
-            or self.aphrodite_flash_attn_version == 4
+        self.requires_v_padding = self.vllm_flash_attn_version is None or not (
+            (
+                self.vllm_flash_attn_version == 3
+                and device_capability is not None
+                and device_capability[0] == 9
+            )
+            or self.vllm_flash_attn_version == 4
         )
 
         # Track whether we're using aphrodite's FA or upstream (for ROCm)
         self._is_aphrodite_fa = current_platform.is_cuda() or current_platform.is_xpu()
+        if self.vllm_flash_attn_version == 4:
+            register_cutedsl_warmup_provider(self)
+
+    def get_cutedsl_warmup_compile_units(self) -> tuple[CuTeDSLCompileUnit, ...]:
+        if self.vllm_flash_attn_version != 4:
+            return ()
+        if compile_flash_attn_varlen_func_from_specs is None:
+            raise RuntimeError(
+                "FA4 compile-only API is unavailable; CuTeDSL warmup does not "
+                "fall back to synthetic forward passes."
+            )
+
+        dtype = self.aphrodite_config.model_config.dtype
+        if dtype not in self.supported_dtypes:
+            dtype = torch.bfloat16
+
+        qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
+        ctx = FA4MLAPrefillCompileContext(
+            dtype=dtype,
+            num_heads=self.num_heads,
+            qk_head_dim=qk_head_dim,
+            v_head_dim=self.v_head_dim,
+            kv_nope_head_dim=self.qk_nope_head_dim + self.v_head_dim,
+            requires_v_padding=self.requires_v_padding,
+            scale=self.scale,
+            num_splits=1 if envs.APHRODITE_BATCH_INVARIANT else 0,
+            fa_version=self.vllm_flash_attn_version,
+        )
+        compile_requests = tuple(iter_fa4_mla_prefill_compile_requests(ctx))
+        if not compile_requests:
+            return ()
+
+        return tuple(
+            CuTeDSLCompileUnit(
+                name="fa4_mla_prefill",
+                key=request.key,
+                compile=request.compile,
+            )
+            for request in compile_requests
+        )
+
+    def supports_quant_output(self, quant_key: "QuantKey") -> bool:
+        device_capability = current_platform.get_device_capability()
+        return (
+            self.vllm_flash_attn_version == 4
+            and self._is_aphrodite_fa
+            and device_capability is not None
+            and device_capability[0] in (10, 11)
+            and quant_key == kFp8StaticTensorSym
+        )
 
     def _flash_attn_varlen_diff_headdims(
         self,
@@ -94,18 +157,25 @@ class FlashAttnPrefillBackend(MLAPrefillBackend):
         v: torch.Tensor,
         return_softmax_lse: bool = False,
         softmax_scale: float | None = None,
+        out: torch.Tensor | None = None,
+        output_scale: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         maybe_padded_v = v
         if self.requires_v_padding:
-            maybe_padded_v = torch.nn.functional.pad(v, [0, q.shape[-1] - v.shape[-1]], value=0)
+            maybe_padded_v = torch.nn.functional.pad(
+                v, [0, q.shape[-1] - v.shape[-1]], value=0
+            )
 
         if self._is_aphrodite_fa:
             kwargs["return_softmax_lse"] = return_softmax_lse
+            kwargs["out"] = out
+            kwargs["output_scale"] = output_scale
         else:
             # ROCm leverages the upstream flash_attn, which takes a parameter
             # called "return_attn_probs" instead of return_softmax_lse
             kwargs["return_attn_probs"] = return_softmax_lse
+            assert out is None and output_scale is None
         if envs.APHRODITE_BATCH_INVARIANT:
             kwargs["num_splits"] = 1
 
@@ -138,6 +208,8 @@ class FlashAttnPrefillBackend(MLAPrefillBackend):
         k: torch.Tensor,
         v: torch.Tensor,
         return_softmax_lse: bool,
+        out: torch.Tensor | None = None,
+        output_scale: torch.Tensor | None = None,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         return self._flash_attn_varlen_diff_headdims(
             q=q,
@@ -150,6 +222,8 @@ class FlashAttnPrefillBackend(MLAPrefillBackend):
             softmax_scale=self.scale,
             causal=True,
             return_softmax_lse=return_softmax_lse,
+            out=out,
+            output_scale=output_scale,
         )
 
     def run_prefill_context_chunk(

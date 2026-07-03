@@ -41,7 +41,7 @@ repos:
   hooks:
     - id: pip-compile
       args: [
-        requirements/test.in,
+        requirements/test/cuda.in,
         -c, requirements/cuda.txt,
         -o, requirements/test.txt,
         --index-strategy, unsafe-best-match,

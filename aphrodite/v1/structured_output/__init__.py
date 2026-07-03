@@ -15,6 +15,7 @@ from aphrodite.v1.structured_output.backend_guidance import GuidanceBackend
 from aphrodite.v1.structured_output.backend_types import (
     StructuredOutputBackend,
     StructuredOutputGrammar,
+    StructuredOutputOptions,
 )
 from aphrodite.v1.structured_output.backend_xgrammar import XgrammarBackend
 
@@ -50,7 +51,8 @@ class StructuredOutputManager:
         # happen at different times on different TP ranks,
         # breaking the determinism assumption that external_launcher relies on.
         self._use_async_grammar_compilation = (
-            aphrodite_config.parallel_config.distributed_executor_backend != "external_launcher"
+            aphrodite_config.parallel_config.distributed_executor_backend
+            != "external_launcher"
         )
 
         self._grammar_bitmask: torch.Tensor | None = None
@@ -74,16 +76,26 @@ class StructuredOutputManager:
             # of CPUs.
             max_workers = max(1, (multiprocessing.cpu_count() + 1) // 2)
             self.executor = ThreadPoolExecutor(max_workers=max_workers)
-            self.tokenizer = cached_tokenizer_from_config(model_config=self.aphrodite_config.model_config)
-            reasoning_parser_plugin = self.aphrodite_config.structured_outputs_config.reasoning_parser_plugin
+            self.tokenizer = cached_tokenizer_from_config(
+                model_config=self.aphrodite_config.model_config
+            )
+            reasoning_parser_plugin = (
+                self.aphrodite_config.structured_outputs_config.reasoning_parser_plugin
+            )
             if reasoning_parser_plugin and len(reasoning_parser_plugin) > 3:
                 ReasoningParserManager.import_reasoning_parser(reasoning_parser_plugin)
 
-            reasoning_parser = self.aphrodite_config.structured_outputs_config.reasoning_parser
+            reasoning_parser = (
+                self.aphrodite_config.structured_outputs_config.reasoning_parser
+            )
             if reasoning_parser:
-                self.reasoner_cls = ReasoningParserManager.get_reasoning_parser(reasoning_parser)
+                self.reasoner_cls = ReasoningParserManager.get_reasoning_parser(
+                    reasoning_parser
+                )
 
-        self.enable_in_reasoning = self.aphrodite_config.structured_outputs_config.enable_in_reasoning
+        self.enable_in_reasoning = (
+            self.aphrodite_config.structured_outputs_config.enable_in_reasoning
+        )
 
     def _get_reasoner(self, request: "Request") -> "ReasoningParser | None":
         structured_req = request.structured_output_request
@@ -105,7 +117,10 @@ class StructuredOutputManager:
             return
 
         if TYPE_CHECKING:
-            assert request.sampling_params is not None and request.sampling_params.structured_outputs is not None
+            assert (
+                request.sampling_params is not None
+                and request.sampling_params.structured_outputs is not None
+            )
 
         # Initialize the backend the first time it is needed.
         #
@@ -168,7 +183,9 @@ class StructuredOutputManager:
         assert self.backend is not None
         return self.backend.compile_grammar(request_type, grammar_spec)
 
-    def _fill_bitmasks(self, batch: Iterable[tuple[StructuredOutputGrammar, int, bool]]) -> None:
+    def _fill_bitmasks(
+        self, batch: Iterable[tuple[StructuredOutputGrammar, int, bool]]
+    ) -> None:
         assert self._grammar_bitmask is not None
         for grammar, index, apply_bitmask in batch:
             if apply_bitmask and not grammar.is_terminated():
@@ -179,7 +196,9 @@ class StructuredOutputManager:
                 # requests here.
                 self._grammar_bitmask[index].fill_(self._full_mask)
 
-    def _async_submit_fill_bitmask(self, batch: list[tuple[StructuredOutputGrammar, int, bool]]) -> Future:
+    def _async_submit_fill_bitmask(
+        self, batch: list[tuple[StructuredOutputGrammar, int, bool]]
+    ) -> Future:
         return self.executor_for_fillmask.submit(self._fill_bitmasks, batch)
 
     def grammar_bitmask(
@@ -192,9 +211,8 @@ class StructuredOutputManager:
         if not structured_output_request_ids:
             return None
 
-        max_num_spec_tokens = 0
-        if self.aphrodite_config.speculative_config is not None:
-            max_num_spec_tokens = self.aphrodite_config.speculative_config.num_speculative_tokens
+        # Covers both speculative decoding and diffusion LLMs (canvas_length).
+        max_num_spec_tokens = self.aphrodite_config.num_speculative_tokens
 
         if self._grammar_bitmask is None:
             assert self.backend is not None
@@ -203,7 +221,9 @@ class StructuredOutputManager:
             # Allocate a bitmask for each token needing to be checked:
             # one for each speculative position, and one more for the
             # bonus token / non-speculative token.
-            self._grammar_bitmask = self.backend.allocate_token_bitmask(max_batch_size * (1 + max_num_spec_tokens))
+            self._grammar_bitmask = self.backend.allocate_token_bitmask(
+                max_batch_size * (1 + max_num_spec_tokens)
+            )
 
         # Generate a batched bitmask for all structured output requests.
         # When speculative decoding is enabled, we need to include multiple
@@ -213,7 +233,10 @@ class StructuredOutputManager:
 
         # Optimized parallel filling of bitmasks for
         # non-spec, large-batch-size cases
-        if len(structured_output_request_ids) > self.fill_bitmask_parallel_threshold and max_num_spec_tokens == 0:
+        if (
+            len(structured_output_request_ids) > self.fill_bitmask_parallel_threshold
+            and max_num_spec_tokens == 0
+        ):
             promises = []
             batch = []
             for req_id in structured_output_request_ids:
@@ -251,7 +274,13 @@ class StructuredOutputManager:
 
                 state_advancements = 0
                 req_tokens = scheduled_spec_decode_tokens.get(req_id, ())
-                for token in itertools.chain(req_tokens, (-1,)):
+                if self.aphrodite_config.model_config.is_diffusion and req_tokens:
+                    # Diffusion LLMs don't sample a bonus token after the
+                    # scheduled positions, so don't append the -1 placeholder.
+                    token_iter: Iterable[int] = req_tokens
+                else:
+                    token_iter = itertools.chain(req_tokens, (-1,))
+                for token in token_iter:
                     self._fill_bitmasks(((grammar, cumulative_index, apply_bitmask),))
                     if token == -1:
                         # Stop advancing the grammar once we hit a padding token.
@@ -287,8 +316,8 @@ class StructuredOutputManager:
                 # is an independent code path, it is kept for now.
                 # After unifying the `openai_gptoss` and non-`openai_gptoss` styles,
                 # it can be removed.
-                request.structured_output_request.reasoning_ended = reasoner.is_reasoning_end(
-                    request.prompt_token_ids or []
+                request.structured_output_request.reasoning_ended = (
+                    reasoner.is_reasoning_end(request.prompt_token_ids or [])
                 )
             return request.structured_output_request.reasoning_ended
         return True
@@ -319,11 +348,27 @@ class StructuredOutputManager:
         # Check if reasoning ends in *this* step
         delta_from = request.num_computed_tokens - request.num_output_placeholders
         all_token_ids = request.all_token_ids
-        start = delta_from if delta_from >= 0 else max(len(all_token_ids) + delta_from, 0)
-        if reasoner.is_reasoning_end_streaming(all_token_ids, itertools.islice(all_token_ids, start, None)):
-            # Reasoning just ended, so we shouldn't advance til
-            # next pass
+        start = (
+            delta_from if delta_from >= 0 else max(len(all_token_ids) + delta_from, 0)
+        )
+        if reasoner.is_reasoning_end_streaming(
+            all_token_ids, itertools.islice(all_token_ids, start, None)
+        ):
             structured_req.reasoning_ended = True
+
+            # Reasoning just ended this step. Defer FSM advance until the next
+            # pass (see reasoning_ended check above) for JSON/regex/choice/grammar:
+            # advancing on the closing boundary token can accept tokens that still
+            # belong to the reasoning stream. Structural tags are the only safe
+            # same-step exception: they model phased output (e.g. thinking tag ->
+            # answer tag), and speculative decoding must run grammar.validate_tokens
+            # on draft tokens produced immediately after that transition.
+            if (
+                self.aphrodite_config.speculative_config is not None
+                and structured_req.structured_output_key[0]
+                == StructuredOutputOptions.STRUCTURAL_TAG
+            ):
+                return True
 
         return False
 

@@ -65,7 +65,9 @@ def create_concrete_args(graph: fx.GraphModule, size: int) -> list[Any]:
                 new_shape = tuple(concretize(d) for d in val.shape)
                 new_strides = tuple(concretize(s) for s in val.stride())
                 new_storage_offset = concretize(val.storage_offset())
-                needed_size = compute_required_storage_length(new_shape, new_strides, new_storage_offset)
+                needed_size = compute_required_storage_length(
+                    new_shape, new_strides, new_storage_offset
+                )
                 t = torch.empty(needed_size, dtype=val.dtype, device=val.device)
                 t = t.as_strided(new_shape, new_strides, new_storage_offset)
                 args.append(t)
@@ -138,8 +140,11 @@ class PiecewiseBackend:
             # to set the upper bound of the compile ranges
             max_int32 = 2**31 - 1
             last_compile_range = self.compile_ranges[-1]
-            assert last_compile_range.end == aphrodite_config.scheduler_config.max_num_batched_tokens
-            self.compile_ranges[-1] = Range(  # type: ignore[call-arg]
+            assert (
+                last_compile_range.end
+                == aphrodite_config.scheduler_config.max_num_batched_tokens
+            )
+            self.compile_ranges[-1] = Range(
                 start=last_compile_range.start, end=max_int32
             )
 
@@ -167,7 +172,7 @@ class PiecewiseBackend:
                     )
                 else:
                     assert isinstance(size, int)
-                    range = Range(start=size, end=size)  # type: ignore[call-arg]
+                    range = Range(start=size, end=size)
                     if range not in self.compile_ranges:
                         self.range_entries[range] = RangeEntry(
                             compile_range=range,
@@ -186,7 +191,9 @@ class PiecewiseBackend:
         else:
             self.load_all_ranges()
 
-    def get_compiled_graph_wrapper(self, compiled_graph: Callable[..., Any]) -> Callable[..., Any]:
+    def get_compiled_graph_wrapper(
+        self, compiled_graph: Callable[..., Any]
+    ) -> Callable[..., Any]:
         def compiled_graph_wrapper(*args: Any) -> Any:
             graph_output = compiled_graph(*args)
             # unpack the tuple if needed
@@ -250,7 +257,9 @@ class PiecewiseBackend:
             self._log_compile_start(range_entry.compile_range)
 
             if range_entry.compile_range.is_single_size():
-                args_list = create_concrete_args(self.graph, range_entry.compile_range.start)
+                args_list = create_concrete_args(
+                    self.graph, range_entry.compile_range.start
+                )
             else:
                 args_list = get_fake_args_from_graph(self.graph)
 
@@ -270,7 +279,9 @@ class PiecewiseBackend:
     @dynamo_timed("aphrodite_log_compile_start_torch_trace_only")
     def _log_compile_start(self, compile_range: Range):
         """Log compilation event for TORCH_TRACE/tlparse."""
-        is_cudagraph_size = self.compile_sizes is not None and compile_range.start in self.compile_sizes
+        is_cudagraph_size = (
+            self.compile_sizes is not None and compile_range.start in self.compile_sizes
+        )
         subgraph_index = self.piecewise_compile_index
         submod_name = self.submod_name
         trace_structured(
@@ -313,7 +324,8 @@ class PiecewiseBackend:
         for the cold start path.
         """
         assert self.compiled_runnables is not None, (
-            "load_all_ranges should only be called when compiled_runnables is set (warm start / cache loading path)."
+            "load_all_ranges should only be called when compiled_runnables "
+            "is set (warm start / cache loading path)."
         )
         for range_entry in self.range_entries.values():
             if range_entry.compiled:
@@ -323,7 +335,9 @@ class PiecewiseBackend:
                 f"Missing compiled runnable for range {range_entry.compile_range}. "
                 f"Available keys: {list(self.compiled_runnables.keys())}"
             )
-            range_entry.runnable = self.get_compiled_graph_wrapper(self.compiled_runnables[key])
+            range_entry.runnable = self.get_compiled_graph_wrapper(
+                self.compiled_runnables[key]
+            )
             range_entry.compiled = True
 
     def _find_range_for_shape(self, runtime_shape: int) -> RangeEntry | None:
@@ -334,9 +348,7 @@ class PiecewiseBackend:
             return None
 
         if runtime_shape in self.compile_sizes:
-            return self.range_entries[
-                Range(start=runtime_shape, end=runtime_shape)  # type: ignore[call-arg]
-            ]
+            return self.range_entries[Range(start=runtime_shape, end=runtime_shape)]
         else:
             for range in self.compile_ranges:
                 if runtime_shape in range:
@@ -347,7 +359,10 @@ class PiecewiseBackend:
         if self.sym_shape_indices:
             runtime_shape = args[self.sym_shape_indices[0]]
             range_entry = self._find_range_for_shape(runtime_shape)
-            assert range_entry is not None, f"Shape: {runtime_shape} out of considered ranges: {self.compile_ranges}"
+            assert range_entry is not None, (
+                f"Shape: {runtime_shape} out of considered ranges: "
+                f"{self.compile_ranges}"
+            )
         else:
             # All inputs have static shapes; use the only compiled range_entry
             compiled_entries = [re for re in self.range_entries.values() if re.compiled]

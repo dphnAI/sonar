@@ -42,7 +42,7 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
+from aphrodite.config import CacheConfig, AphroditeConfig
 from aphrodite.distributed import get_pp_group
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.activation import SiluAndMul
@@ -144,7 +144,9 @@ class FlashConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers if num_hidden_layers is not None else num_layers
+        self.num_hidden_layers = (
+            num_hidden_layers if num_hidden_layers is not None else num_layers
+        )
         self.num_attention_heads = num_attention_heads
         self.ep_size = ep_size
         self.kv_lora_rank = kv_lora_rank
@@ -178,7 +180,11 @@ class FlashConfig(PretrainedConfig):
         self.zero_expert_type = zero_expert_type
         self.routed_scaling_factor = routed_scaling_factor
         self.hidden_act = "silu"
-        self.intermediate_size = self.ffn_hidden_size if hasattr(self, "ffn_hidden_size") else intermediate_size
+        self.intermediate_size = (
+            self.ffn_hidden_size
+            if hasattr(self, "ffn_hidden_size")
+            else intermediate_size
+        )
         if hasattr(self, "moe_intermediate_size"):
             self.moe_intermediate_size = self.moe_intermediate_size
         elif hasattr(self, "expert_ffn_hidden_size"):
@@ -216,7 +222,9 @@ class FlashMLP(nn.Module):
             prefix=f"{prefix}.down_proj",
         )
         if hidden_act != "silu":
-            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu is supported for now.")
+            raise ValueError(
+                f"Unsupported activation: {hidden_act}. Only silu is supported for now."
+            )
         self.act_fn = SiluAndMul()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -239,7 +247,9 @@ class LongcatRouter(nn.Module):
     ):
         super().__init__()
         self.n_routed_experts = (
-            config.n_routed_experts if hasattr(config, "n_routed_experts") else config.num_experts[0]
+            config.n_routed_experts
+            if hasattr(config, "n_routed_experts")
+            else config.num_experts[0]
         )
         self.n_routed_experts = self.n_routed_experts + zero_expert_num
         self.classifier = ReplicatedLinear(
@@ -250,7 +260,9 @@ class LongcatRouter(nn.Module):
             quant_config=None,
             prefix=f"{prefix}.classifier",
         )
-        self.e_score_correction_bias = nn.Parameter(torch.zeros((self.n_routed_experts), dtype=router_params_dtype))
+        self.e_score_correction_bias = nn.Parameter(
+            torch.zeros((self.n_routed_experts), dtype=router_params_dtype)
+        )
 
     def forward(self, hidden_states):
         logits, _ = self.classifier(hidden_states)
@@ -317,7 +329,9 @@ class LongcatMoe(nn.Module):
         else:
             hidden_states_padded = hidden_states
 
-        router_logits_full = self.router(hidden_states_padded.to(self.router_params_dtype))
+        router_logits_full = self.router(
+            hidden_states_padded.to(self.router_params_dtype)
+        )
 
         # FusedMoE handles routing memoization and zero expert computation
         # internally. Pass full router_logits (including zero experts) so that
@@ -362,17 +376,23 @@ class FlashDecoderLayer(nn.Module):
                     qk_nope_head_dim=config.qk_nope_head_dim,
                     qk_rope_head_dim=config.qk_rope_head_dim,
                     v_head_dim=config.v_head_dim,
-                    q_lora_rank=(config.q_lora_rank if hasattr(config, "q_lora_rank") else None),
+                    q_lora_rank=(
+                        config.q_lora_rank if hasattr(config, "q_lora_rank") else None
+                    ),
                     kv_lora_rank=config.kv_lora_rank,
                     max_position_embeddings=max_position_embeddings,
                     cache_config=cache_config,
-                    quant_config=None if "self_attn" in getattr(config, "disable_quant_module", []) else quant_config,
+                    quant_config=None
+                    if "self_attn" in getattr(config, "disable_quant_module", [])
+                    else quant_config,
                     prefix=f"{prefix}.self_attn.{i}",
                 )
                 for i in range(2)
             ]
         )
-        self.input_layernorm = nn.ModuleList([RMSNorm(config.hidden_size, eps=config.rms_norm_eps) for i in range(2)])
+        self.input_layernorm = nn.ModuleList(
+            [RMSNorm(config.hidden_size, eps=config.rms_norm_eps) for i in range(2)]
+        )
         self.post_attention_layernorm = nn.ModuleList(
             [RMSNorm(config.hidden_size, eps=config.rms_norm_eps) for i in range(2)]
         )
@@ -384,7 +404,9 @@ class FlashDecoderLayer(nn.Module):
                     hidden_size=self.hidden_size,
                     intermediate_size=config.intermediate_size,
                     hidden_act=config.hidden_act,
-                    quant_config=None if "mlps" in getattr(config, "disable_quant_module", []) else quant_config,
+                    quant_config=None
+                    if "mlps" in getattr(config, "disable_quant_module", [])
+                    else quant_config,
                     prefix=f"{prefix}.mlps.{i}",
                 )
                 for i in range(2)
@@ -396,7 +418,9 @@ class FlashDecoderLayer(nn.Module):
             num_experts=config.n_routed_experts
             if hasattr(config, "n_routed_experts")
             else config.num_experts[self.layer_idx],
-            top_k=config.moe_topk if hasattr(config, "moe_topk") else config.num_experts_per_tok,
+            top_k=config.moe_topk
+            if hasattr(config, "moe_topk")
+            else config.num_experts_per_tok,
             hidden_size=config.hidden_size,
             intermediate_size=config.moe_intermediate_size,
             quant_config=quant_config,
@@ -421,7 +445,9 @@ class FlashDecoderLayer(nn.Module):
             llama_4_scaling=None,
         )
 
-        hidden_states, residual = self.post_attention_layernorm[0](hidden_states, residual)
+        hidden_states, residual = self.post_attention_layernorm[0](
+            hidden_states, residual
+        )
 
         # moe
         hidden_states_copy = hidden_states.clone()
@@ -438,7 +464,9 @@ class FlashDecoderLayer(nn.Module):
             hidden_states=hidden_states,
             llama_4_scaling=None,
         )
-        hidden_states, residual = self.post_attention_layernorm[1](hidden_states, residual)
+        hidden_states, residual = self.post_attention_layernorm[1](
+            hidden_states, residual
+        )
 
         # second_mlp
         hidden_states = self.mlps[1](hidden_states)
@@ -518,7 +546,9 @@ class FlashModel(nn.Module):
             )
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
+            return IntermediateTensors(
+                {"hidden_states": hidden_states, "residual": residual}
+            )
 
         hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
@@ -558,7 +588,9 @@ class FlashModel(nn.Module):
                     continue
                 name = name.replace(weight_name, param_name)
                 # Skip loading extra bias for GPTQ models.
-                if (name.endswith(".bias") or name.endswith("_bias")) and name not in params_dict:
+                if (
+                    name.endswith(".bias") or name.endswith("_bias")
+                ) and name not in params_dict:
                     continue
                 # Skip mtp
                 if ".mtp." in name:
@@ -580,13 +612,17 @@ class FlashModel(nn.Module):
                     # Skip mtp
                     if ".mtp." in name_mapped:
                         continue
-                    if (name_mapped.endswith(".bias") or name_mapped.endswith("_bias")) and name not in params_dict:
+                    if (
+                        name_mapped.endswith(".bias") or name_mapped.endswith("_bias")
+                    ) and name not in params_dict:
                         continue
                     if is_pp_missing_parameter(name, self):
                         continue
                     param = params_dict[name_mapped]
                     weight_loader = param.weight_loader
-                    weight_loader = typing.cast(Callable[..., bool], param.weight_loader)
+                    weight_loader = typing.cast(
+                        Callable[..., bool], param.weight_loader
+                    )
                     success = weight_loader(
                         param,
                         loaded_weight,
@@ -618,7 +654,9 @@ class FlashModel(nn.Module):
                     if is_pp_missing_parameter(name, self):
                         continue
                     param = params_dict[name]
-                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
+                    weight_loader = getattr(
+                        param, "weight_loader", default_weight_loader
+                    )
                     weight_loader(param, loaded_weight)
             loaded_params.add(name)
         for layer_id in range(self.config.num_hidden_layers):
@@ -626,7 +664,9 @@ class FlashModel(nn.Module):
                 if isinstance(self.layers[layer_id], PPMissingLayer):
                     continue
                 self_attn = self.layers[layer_id].self_attn[i]
-                if hasattr(self.quant_config, "weight_block_size") and self_attn.kv_b_proj.weight.dtype in (
+                if hasattr(
+                    self.quant_config, "weight_block_size"
+                ) and self_attn.kv_b_proj.weight.dtype in (
                     torch.float8_e4m3fn,
                     torch.float8_e4m3fnuz,
                 ):
@@ -642,15 +682,19 @@ class FlashModel(nn.Module):
                 else:
                     w = self_attn.kv_b_proj.weight
 
-                w_kc, w_vc = w.unflatten(0, (-1, self_attn.qk_nope_head_dim + self_attn.v_head_dim)).split(
-                    [self_attn.qk_nope_head_dim, self_attn.v_head_dim], dim=1
-                )
+                w_kc, w_vc = w.unflatten(
+                    0, (-1, self_attn.qk_nope_head_dim + self_attn.v_head_dim)
+                ).split([self_attn.qk_nope_head_dim, self_attn.v_head_dim], dim=1)
                 self_attn.w_kc = w_kc.transpose(1, 2).contiguous().transpose(1, 2)
                 self_attn.w_vc = w_vc.contiguous().transpose(1, 2)
                 if self.config.mla_scale_q_lora:
-                    self_attn.q_a_layernorm.weight.data *= (self.config.hidden_size / self.config.q_lora_rank) ** 0.5
+                    self_attn.q_a_layernorm.weight.data *= (
+                        self.config.hidden_size / self.config.q_lora_rank
+                    ) ** 0.5
                 if self.config.mla_scale_kv_lora:
-                    self_attn.kv_a_layernorm.weight.data *= (self.config.hidden_size / self.config.kv_lora_rank) ** 0.5
+                    self_attn.kv_a_layernorm.weight.data *= (
+                        self.config.hidden_size / self.config.kv_lora_rank
+                    ) ** 0.5
         return loaded_params
 
 
@@ -676,12 +720,16 @@ class LongcatFlashForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
 
         self.config = config
         config.intermediate_size = (
-            config.ffn_hidden_size if hasattr(config, "ffn_hidden_size") else config.intermediate_size
+            config.ffn_hidden_size
+            if hasattr(config, "ffn_hidden_size")
+            else config.intermediate_size
         )
 
         self.quant_config = quant_config
 
-        self.model = FlashModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = FlashModel(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
+        )
 
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
@@ -694,7 +742,9 @@ class LongcatFlashForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
             self.lm_head = PPMissingLayer()
 
         self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -706,7 +756,9 @@ class LongcatFlashForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
+        hidden_states = self.model(
+            input_ids, positions, intermediate_tensors, inputs_embeds
+        )
         return hidden_states
 
     def compute_logits(

@@ -71,7 +71,11 @@ def _supports_kw(
     if param_val:
         is_sig_param = param_val.kind in passable_kw_types
         # We want kwargs only, but this is passable as a positional arg
-        if requires_kw_only and is_sig_param and param_val.kind != inspect.Parameter.KEYWORD_ONLY:
+        if (
+            requires_kw_only
+            and is_sig_param
+            and param_val.kind != inspect.Parameter.KEYWORD_ONLY
+        ):
             return False
         if (requires_kw_only and param_val.kind == inspect.Parameter.KEYWORD_ONLY) or (
             not requires_kw_only and is_sig_param
@@ -85,7 +89,10 @@ def _supports_kw(
         # mapping, but it wraps an ordered dict, and they appear in order.
         # Ref: https://docs.python.org/3/library/inspect.html#inspect.Signature.parameters
         last_param = params[next(reversed(params))]  # type: ignore
-        return last_param.kind == inspect.Parameter.VAR_KEYWORD and last_param.name != kw_name
+        return (
+            last_param.kind == inspect.Parameter.VAR_KEYWORD
+            and last_param.name != kw_name
+        )
 
     return False
 
@@ -160,12 +167,14 @@ def get_allowed_kwarg_only_overrides(
     if dropped_keys:
         if requires_kw_only:
             logger.warning(
-                "The following intended overrides are not keyword-only args and will be dropped: %s",
+                "The following intended overrides are not keyword-only args "
+                "and will be dropped: %s",
                 dropped_keys,
             )
         else:
             logger.warning(
-                "The following intended overrides are not keyword args and will be dropped: %s",
+                "The following intended overrides are not keyword args "
+                "and will be dropped: %s",
                 dropped_keys,
             )
 

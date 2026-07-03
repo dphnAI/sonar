@@ -10,6 +10,7 @@ import numpy as np
 from typing_extensions import assert_never
 
 from aphrodite.benchmarks.datasets import DEFAULT_NUM_PROMPTS
+from aphrodite.utils.argparse_utils import FlexibleArgumentParser
 from aphrodite.utils.import_utils import PlaceholderModule
 
 from .param_sweep import ParameterSweep, ParameterSweepItem
@@ -151,15 +152,21 @@ def explore_comb_workloads(
 
         return
 
-    serial_workload_value = math.ceil(_estimate_workload_avg(serial_workload_data, workload_var))
+    serial_workload_value = math.ceil(
+        _estimate_workload_avg(serial_workload_data, workload_var)
+    )
     print(f"Serial inference: {workload_var}={serial_workload_value}")
 
-    batch_workload_value = math.floor(_estimate_workload_avg(batch_workload_data, workload_var))
+    batch_workload_value = math.floor(
+        _estimate_workload_avg(batch_workload_data, workload_var)
+    )
     print(f"Batch inference: {workload_var}={batch_workload_value}")
 
     # Avoid duplicated runs for intermediate values if the range between
     # `serial_workload_value` and `batch_workload_value` is small
-    inter_workload_values = np.linspace(serial_workload_value, batch_workload_value, workload_iters)[1:-1]
+    inter_workload_values = np.linspace(
+        serial_workload_value, batch_workload_value, workload_iters
+    )[1:-1]
     inter_workload_values = sorted(set(map(round, inter_workload_values)))
 
     inter_workloads_data: list[dict[str, object]] = []
@@ -251,7 +258,9 @@ class SweepServeWorkloadArgs(SweepServeArgs):
     workload_iters: int
 
     parser_name: ClassVar[str] = "serve_workload"
-    parser_help: ClassVar[str] = "Explore the latency-throughput tradeoff for different workload levels."
+    parser_help: ClassVar[str] = (
+        "Explore the latency-throughput tradeoff for different workload levels."
+    )
 
     @classmethod
     def from_cli_args(cls, args: argparse.Namespace):
@@ -265,7 +274,7 @@ class SweepServeWorkloadArgs(SweepServeArgs):
         )
 
     @classmethod
-    def add_cli_args(cls, parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    def add_cli_args(cls, parser: FlexibleArgumentParser) -> FlexibleArgumentParser:
         parser = super().add_cli_args(parser)
 
         workload_group = parser.add_argument_group("workload options")
@@ -314,7 +323,7 @@ def main(args: argparse.Namespace):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=SweepServeWorkloadArgs.parser_help)
+    parser = FlexibleArgumentParser(description=SweepServeWorkloadArgs.parser_help)
     SweepServeWorkloadArgs.add_cli_args(parser)
 
     main(parser.parse_args())

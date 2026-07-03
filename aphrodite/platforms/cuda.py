@@ -9,21 +9,16 @@ from __future__ import annotations
 import ctypes
 import ctypes.util
 import os
+import platform
 from collections.abc import Callable
 from datetime import timedelta
 from functools import cache, lru_cache, wraps
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, NamedTuple, TypeVar
 
 import torch
 from torch.distributed import PrefixStore, ProcessGroup
 from torch.distributed.distributed_c10d import is_nccl_available
 from typing_extensions import ParamSpec
-
-import aphrodite.envs as envs
-from aphrodite.logger import init_logger
-from aphrodite.utils.import_utils import import_pynvml
-from aphrodite.utils.torch_utils import is_quantized_kv_cache
-from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 
 
 def _preload_cuda_driver() -> None:
@@ -43,21 +38,33 @@ _preload_cuda_driver()
 
 # Import custom ops after preloading the CUDA driver so driver symbols such as
 # cuMemAddressFree are globally available during shared library resolution.
-import aphrodite._C  # noqa
 import aphrodite._C_stable_libtorch  # noqa
+import aphrodite.envs as envs
+from aphrodite.logger import init_logger
+from aphrodite.utils.import_utils import import_pynvml
+from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 
-from .interface import DeviceCapability, Platform, PlatformEnum
+from .interface import DeviceCapability, Platform, PlatformEnum, in_wsl
 
 if TYPE_CHECKING:
     from aphrodite.config import AphroditeConfig
     from aphrodite.config.cache import CacheDType
     from aphrodite.config.kernel import IrOpPriorityConfig
+    from aphrodite.v1.attention.backend import AttentionBackend
     from aphrodite.v1.attention.selector import AttentionSelectorConfig
 else:
     AphroditeConfig = None
     CacheDType = None
 
 logger = init_logger(__name__)
+
+try:
+    import aphrodite._qutlass_C  # noqa: F401
+except ImportError as e:
+    # QuTLASS is only built for SM100 and SM120; on every other arch
+    # (SM110/Thor, Ampere, Ada, ...) its absence is expected, so keep this at
+    # debug to avoid log spam.
+    logger.debug("Failed to import from aphrodite._qutlass_C: %r", e)
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
@@ -103,6 +110,8 @@ def _get_backend_priorities(
     kv_cache_dtype: CacheDType | None = None,
 ) -> list[AttentionBackendEnum]:
     """Get backend priorities with lazy import to avoid circular dependency."""
+    from aphrodite.utils.torch_utils import is_quantized_kv_cache
+
     if use_mla:
         if device_capability.major == 10:
             # Sparse MLA backend priorities
@@ -130,11 +139,20 @@ def _get_backend_priorities(
 
             return [
                 AttentionBackendEnum.FLASHINFER_MLA,
+                # R1 dims + FP8 KV only; rejected by supports_combination
+                # otherwise. Behind FLASHINFER_MLA: wins past bs≈8, regresses
+                # at bs≤2.
+                AttentionBackendEnum.TOKENSPEED_MLA,
                 AttentionBackendEnum.CUTLASS_MLA,
                 AttentionBackendEnum.FLASH_ATTN_MLA,
                 AttentionBackendEnum.FLASHMLA,
                 AttentionBackendEnum.TRITON_MLA,
                 *sparse_backends,
+            ]
+        elif device_capability.major == 12:
+            return [
+                AttentionBackendEnum.TRITON_MLA,
+                AttentionBackendEnum.FLASHINFER_MLA_SPARSE_SM120,
             ]
         else:
             return [
@@ -142,6 +160,7 @@ def _get_backend_priorities(
                 AttentionBackendEnum.FLASHMLA,
                 AttentionBackendEnum.FLASHINFER_MLA,
                 AttentionBackendEnum.TRITON_MLA,
+                AttentionBackendEnum.FLASH_ATTN_MLA_SPARSE,
                 AttentionBackendEnum.FLASHMLA_SPARSE,
             ]
     else:
@@ -163,6 +182,21 @@ def _get_backend_priorities(
             ]
 
 
+def _backend_cls_path(backend_cls: type[AttentionBackend]) -> str:
+    module, qualname = backend_cls.full_cls_name()
+    return f"{module}.{qualname}"
+
+
+def _get_attn_backend_class(backend: AttentionBackendEnum) -> type[AttentionBackend]:
+    return backend.get_class()
+
+
+class _BackendCandidate(NamedTuple):
+    backend_class: type[AttentionBackend]
+    backend: AttentionBackendEnum
+    priority: int
+
+
 def with_nvml_context(fn: Callable[_P, _R]) -> Callable[_P, _R]:
     @wraps(fn)
     def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
@@ -173,6 +207,21 @@ def with_nvml_context(fn: Callable[_P, _R]) -> Callable[_P, _R]:
             pynvml.nvmlShutdown()
 
     return wrapper
+
+
+@cache
+def _get_wsl_kernel_version() -> tuple[int, ...] | None:
+    """Return the WSL2 kernel version as a tuple, or None on parse failure.
+
+    platform.uname().release on WSL2 looks like
+    "5.15.167.4-microsoft-standard-WSL2"; we take the numeric prefix.
+    """
+    try:
+        release = platform.uname().release
+        parts = release.split("-")[0].split(".")
+        return tuple(int(x) for x in parts[:3])
+    except Exception:
+        return None
 
 
 class CudaPlatformBase(Platform):
@@ -186,6 +235,40 @@ class CudaPlatformBase(Platform):
     ray_noset_device_env_vars: list[str] = [
         "RAY_EXPERIMENTAL_NOSET_CUDA_VISIBLE_DEVICES",
     ]
+
+    @classmethod
+    def import_kernels(cls) -> None:
+        """Import CUDA kernel extensions.
+
+        Core ops now live in the upstream ``*_stable_libtorch`` extensions
+        (they register their ops under ``torch.ops._C`` / ``torch.ops._moe_C``
+        via ``STABLE_TORCH_LIBRARY`` regardless of the ``.so`` filename). The
+        legacy fork ``_C``/``_moe_C`` extensions are intentionally NOT imported
+        here: they would double-register the same op schemas and collide.
+        Fork-specific kernels (exl3, gguf, dry, ...) are relayered separately.
+        """
+        try:
+            import aphrodite._C_stable_libtorch  # noqa: F401
+        except ImportError as e:
+            logger.warning_once("Failed to import from aphrodite._C_stable_libtorch: %r", e)
+        try:
+            import aphrodite._moe_C_stable_libtorch  # noqa: F401
+        except ImportError as e:
+            logger.warning_once(
+                "Failed to import from aphrodite._moe_C_stable_libtorch: %r", e
+            )
+        # Fork-only kernels (DRY sampler + EXL3). Imported after the stable
+        # extensions so the torch.ops._C namespace they extend already exists.
+        try:
+            import aphrodite._C_fork  # noqa: F401
+        except ImportError as e:
+            logger.warning_once("Failed to import from aphrodite._C_fork: %r", e)
+        try:
+            import aphrodite._qutlass_C  # noqa: F401
+        except ImportError as e:
+            # QuTLASS is only built for SM100 and SM120; expected to be absent
+            # on every other arch (SM110/Thor, Ampere, Ada, ...).
+            logger.debug("Failed to import from aphrodite._qutlass_C: %r", e)
 
     @property
     def supported_dtypes(self) -> list[torch.dtype]:
@@ -219,6 +302,12 @@ class CudaPlatformBase(Platform):
         raise NotImplementedError
 
     @classmethod
+    def get_cuda_runtime_major(cls) -> int:
+        """Major ``torch.version.cuda`` version, or ``0`` if undetermined."""
+        major = (torch.version.cuda or "0").split(".", 1)[0]
+        return int(major) if major.isdigit() else 0
+
+    @classmethod
     def get_device_name(cls, device_id: int = 0) -> str:
         raise NotImplementedError
 
@@ -233,6 +322,27 @@ class CudaPlatformBase(Platform):
     @classmethod
     def log_warnings(cls):
         pass
+
+    @classmethod
+    def is_pin_memory_available(cls) -> bool:
+        if in_wsl():
+            # WSL1 has no CUDA support, so being on the CUDA platform under
+            # WSL implies WSL2. Gate on kernel >= 4.19.121, the first WSL2
+            # kernel with limited pinned memory support for CUDA.
+            version = _get_wsl_kernel_version()
+            if version is None or version < (4, 19, 121):
+                logger.warning_once(
+                    "Using 'pin_memory=False' as WSL is detected and the "
+                    "WSL2 kernel version is below 4.19.121. This may slow "
+                    "down performance. Please run `wsl --update`."
+                )
+                return False
+            # On compatible WSL2 kernels, pinned memory is supported but
+            # disabled by default. Enable it via APHRODITE_WSL2_ENABLE_PIN_MEMORY=1.
+            import aphrodite.envs as envs
+
+            return envs.APHRODITE_WSL2_ENABLE_PIN_MEMORY
+        return True
 
     @classmethod
     def check_and_update_config(cls, aphrodite_config: AphroditeConfig) -> None:
@@ -250,11 +360,37 @@ class CudaPlatformBase(Platform):
             and scheduler_config.is_multimodal_model
             and not scheduler_config.disable_chunked_mm_input
         ):
-            logger.warning("Forcing --disable_chunked_mm_input for models with multimodal-bidirectional attention.")
+            logger.warning_once(
+                "Forcing --disable_chunked_mm_input for models "
+                "with multimodal-bidirectional attention."
+            )
             scheduler_config.disable_chunked_mm_input = True
 
+        if (
+            in_wsl()
+            and aphrodite_config.offload_config.uva.cpu_offload_gb > 0
+            and bool(aphrodite_config.compilation_config.cudagraph_mode)
+        ):
+            logger.warning_once(
+                "--cpu-offload-gb is enabled with CUDA graphs on WSL2. "
+                "This combination requires pinned (page-locked) memory "
+                "allocations. WARNING: Windows (WDDM) enforces a hard "
+                "system-wide cap of roughly 50%% of physical RAM on pinned "
+                "memory shared across ALL processes by default (limit can "
+                "changed via %%USERPROFILE%%\\.wslconfig). "
+                "Excessive use of page-locked memory can prevent Windows "
+                "from reclaiming memory under load, which can cause the "
+                "entire host OS to become unresponsive and may require a "
+                "hard reboot to recover. Proceed at your own risk. "
+                "To raise the WSL2 VM memory ceiling, increase the `memory` "
+                "setting in %%USERPROFILE%%\\.wslconfig and run "
+                "`wsl --shutdown`."
+            )
+
     @classmethod
-    def get_current_memory_usage(cls, device: torch.types.Device | None = None) -> float:
+    def get_current_memory_usage(
+        cls, device: torch.types.Device | None = None
+    ) -> float:
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats(device)
         return torch.cuda.max_memory_allocated(device)
@@ -266,7 +402,7 @@ class CudaPlatformBase(Platform):
         attn_selector_config: AttentionSelectorConfig,
         num_heads: int | None = None,
     ) -> tuple[
-        list[tuple[AttentionBackendEnum, int]],
+        list[_BackendCandidate],
         dict[AttentionBackendEnum, tuple[int, list[str]]],
     ]:
         valid_backends_priorities = []
@@ -280,7 +416,7 @@ class CudaPlatformBase(Platform):
         )
         for priority, backend in enumerate(backend_priorities):
             try:
-                backend_class = backend.get_class()
+                backend_class = _get_attn_backend_class(backend)
                 invalid_reasons_i = backend_class.validate_configuration(
                     device_capability=device_capability,
                     **attn_selector_config._asdict(),
@@ -290,7 +426,9 @@ class CudaPlatformBase(Platform):
             if invalid_reasons_i:
                 invalid_reasons[backend] = (priority, invalid_reasons_i)
             else:
-                valid_backends_priorities.append((backend, priority))
+                valid_backends_priorities.append(
+                    _BackendCandidate(backend_class, backend, priority)
+                )
 
         return valid_backends_priorities, invalid_reasons
 
@@ -307,7 +445,7 @@ class CudaPlatformBase(Platform):
         # First try checking just the selected backend, if there is one.
         if selected_backend is not None:
             try:
-                backend_class = selected_backend.get_class()
+                backend_class = _get_attn_backend_class(selected_backend)
                 invalid_reasons = backend_class.validate_configuration(
                     device_capability=device_capability,
                     **attn_selector_config._asdict(),
@@ -321,7 +459,7 @@ class CudaPlatformBase(Platform):
                 )
             else:
                 logger.info("Using %s backend.", selected_backend)
-                return selected_backend.get_path()
+                return _backend_cls_path(backend_class)
 
         # No selected backend or the selected backend is invalid,
         # so we try finding a valid backend.
@@ -333,28 +471,31 @@ class CudaPlatformBase(Platform):
         reasons_str = (
             "{"
             + ", ".join(
-                f"{backend.name}: [{', '.join(reasons)}]" for backend, (_, reasons) in all_invalid_reasons.items()
+                f"{backend.name}: [{', '.join(reasons)}]"
+                for backend, (_, reasons) in all_invalid_reasons.items()
             )
             + "}"
         )
         config_str = attn_selector_config.__repr__()
         logger.debug_once(
-            f"Some attention backends are not valid for {cls.device_name} with {config_str}. Reasons: {reasons_str}."
+            f"Some attention backends are not valid for {cls.device_name} with "
+            f"{config_str}. Reasons: {reasons_str}."
         )
         if len(valid_backends_priorities) == 0:
             raise ValueError(
-                f"No valid attention backend found for {cls.device_name} with {config_str}. Reasons: {reasons_str}."
+                f"No valid attention backend found for {cls.device_name} "
+                f"with {config_str}. Reasons: {reasons_str}."
             )
 
         # We have found some valid backends. Select the one with the
         # highest priority.
-        sorted_indices = sorted(
-            range(len(valid_backends_priorities)),
-            key=lambda i: valid_backends_priorities[i][1],
+        selected_candidate = min(
+            valid_backends_priorities,
+            key=lambda candidate: candidate.priority,
         )
-        selected_index = sorted_indices[0]
-        selected_backend = valid_backends_priorities[selected_index][0]
-        selected_priority = valid_backends_priorities[selected_index][1]
+        selected_backend_class = selected_candidate.backend_class
+        selected_backend = selected_candidate.backend
+        selected_priority = selected_candidate.priority
 
         # If the user specified --block-size (but not --attention-backend),
         # check whether that constraint precluded any higher-priority backends.
@@ -362,7 +503,8 @@ class CudaPlatformBase(Platform):
             excluded = [
                 backend
                 for backend, (priority, reasons) in all_invalid_reasons.items()
-                if priority < selected_priority and reasons == ["block_size not supported"]
+                if priority < selected_priority
+                and reasons == ["block_size not supported"]
             ]
             if excluded:
                 names = ", ".join(b.name for b in excluded)
@@ -379,10 +521,14 @@ class CudaPlatformBase(Platform):
         logger.info_once(
             "Using %s attention backend out of potential backends: %s.",
             selected_backend.name,
-            "[" + ", ".join(f"'{b[0].name}'" for b in valid_backends_priorities) + "]",
+            "["
+            + ", ".join(
+                f"'{candidate.backend.name}'" for candidate in valid_backends_priorities
+            )
+            + "]",
         )
 
-        return selected_backend.get_path()
+        return _backend_cls_path(selected_backend_class)
 
     @classmethod
     def get_supported_vit_attn_backends(cls) -> list[AttentionBackendEnum]:
@@ -422,11 +568,14 @@ class CudaPlatformBase(Platform):
                 return vit_attn_backend
             try:
                 backend_class = vit_attn_backend.get_class()
-                is_backend_supported = backend_class.supports_head_size(head_size) and backend_class.supports_dtype(
-                    dtype
-                )
+                is_backend_supported = backend_class.supports_head_size(
+                    head_size
+                ) and backend_class.supports_dtype(dtype)
                 if cc is not None:
-                    is_backend_supported = is_backend_supported and backend_class.supports_compute_capability(cc)
+                    is_backend_supported = (
+                        is_backend_supported
+                        and backend_class.supports_compute_capability(cc)
+                    )
                 if is_backend_supported:
                     logger.info_once(
                         f"Using backend {vit_attn_backend} for vit attention",
@@ -443,7 +592,9 @@ class CudaPlatformBase(Platform):
 
     @classmethod
     def get_device_communicator_cls(cls) -> str:
-        return "aphrodite.distributed.device_communicators.cuda_communicator.CudaCommunicator"  # noqa
+        return (
+            "aphrodite.distributed.device_communicators.cuda_communicator.CudaCommunicator"  # noqa
+        )
 
     @classmethod
     def supports_fp8(cls) -> bool:
@@ -481,7 +632,9 @@ class CudaPlatformBase(Platform):
         backend_options = ProcessGroupNCCL.Options()
         backend_options._timeout = timeout
 
-        backend_class = ProcessGroupNCCL(prefix_store, group_rank, group_size, backend_options)
+        backend_class = ProcessGroupNCCL(
+            prefix_store, group_rank, group_size, backend_options
+        )
         backend_type = ProcessGroup.BackendType.NCCL
         device = torch.device("cuda")
         pg._set_default_backend(backend_type)
@@ -524,8 +677,8 @@ class CudaPlatformBase(Platform):
         dst_block_indices: torch.Tensor,
     ) -> None:
         """Copy blocks from src_cache to dst_cache on GPU."""
-        _src_cache = src_cache[:, src_block_indices]
-        dst_cache[:, dst_block_indices] = _src_cache.to(dst_cache.device)
+        _src_cache = src_cache[src_block_indices]
+        dst_cache[dst_block_indices] = _src_cache.to(dst_cache.device)
 
     @classmethod
     def swap_out_blocks_to_host(
@@ -536,8 +689,8 @@ class CudaPlatformBase(Platform):
         dst_block_indices: torch.Tensor,
     ) -> None:
         """Copy blocks from GPU to host (CPU)."""
-        _src_cache = src_cache[:, src_block_indices]
-        dst_cache[:, dst_block_indices] = _src_cache.cpu()
+        _src_cache = src_cache[src_block_indices]
+        dst_cache[dst_block_indices] = _src_cache.cpu()
 
     @classmethod
     def support_hybrid_kv_cache(cls) -> bool:
@@ -550,7 +703,11 @@ class CudaPlatformBase(Platform):
     @classmethod
     def support_deep_gemm(cls) -> bool:
         """Currently, only Hopper and Blackwell GPUs are supported."""
-        return cls.is_device_capability(90) or cls.is_device_capability_family(100)
+        return (
+            cls.is_device_capability(90)
+            or cls.is_device_capability_family(100)
+            or cls.is_device_capability_family(120)
+        )
 
     @classmethod
     def is_integrated_gpu(cls, device_id: int = 0) -> bool:
@@ -582,7 +739,18 @@ class CudaPlatformBase(Platform):
         if envs.APHRODITE_USE_OINK_OPS:
             rms_norm = ["oink"] + default
 
-        return IrOpPriorityConfig.with_default(default, rms_norm=rms_norm)
+        return IrOpPriorityConfig.with_default(
+            default, rms_norm=rms_norm, fused_add_rms_norm=rms_norm
+        )
+
+    @classmethod
+    def is_arch_support_pdl(cls) -> bool:
+        try:
+            device = torch.cuda.current_device()
+            major, _ = torch.cuda.get_device_capability(device)
+        except Exception:
+            return False
+        return major >= 9
 
 
 # NVML utils
@@ -590,6 +758,15 @@ class CudaPlatformBase(Platform):
 # all the related functions work on real physical device ids.
 # the major benefit of using NVML is that it will not initialize CUDA
 class NvmlCudaPlatform(CudaPlatformBase):
+    @classmethod
+    @with_nvml_context
+    def device_control_id_to_physical_device_id(cls, device_id: str) -> int:
+        try:
+            return int(device_id)
+        except ValueError:
+            handle = pynvml.nvmlDeviceGetHandleByUUID(device_id)
+            return pynvml.nvmlDeviceGetIndex(handle)
+
     @classmethod
     @cache
     @with_nvml_context
@@ -654,7 +831,8 @@ class NvmlCudaPlatform(CudaPlatformBase):
                             return False
                     except pynvml.NVMLError:
                         logger.exception(
-                            "NVLink detection failed. This is normal if your machine has no NVLink equipped."
+                            "NVLink detection failed. This is normal if"
+                            " your machine has no NVLink equipped."
                         )
                         return False
         return True
@@ -679,7 +857,8 @@ class NvmlCudaPlatform(CudaPlatformBase):
             # is a separate NUMA node with no CPUs.  Fall through to
             # CPU-affinity-based detection to find the nearest CPU node.
             logger.debug(
-                "NUMA node %d for GPU %d has no CPUs (non-CDMM topology), falling back to CPU-affinity-based detection",
+                "NUMA node %d for GPU %d has no CPUs (non-CDMM topology), "
+                "falling back to CPU-affinity-based detection",
                 numa_node,
                 device_id,
             )
@@ -779,7 +958,8 @@ class NvmlCudaPlatform(CudaPlatformBase):
                 numa_node = cls.get_device_numa_node(device_id)
                 if numa_node is None:
                     logger.warning(
-                        "Could not detect NUMA node for GPU %d, disabling automatic NUMA binding",
+                        "Could not detect NUMA node for GPU %d, "
+                        "disabling automatic NUMA binding",
                         device_id,
                     )
                     return None
@@ -791,11 +971,30 @@ class NvmlCudaPlatform(CudaPlatformBase):
 
     @classmethod
     @with_nvml_context
+    def get_all_gpu_pci_bus_ids(cls) -> dict[int, str]:
+        """Query NVML for GPU index -> PCI bus ID mapping."""
+        out: dict[int, str] = {}
+        for idx in range(pynvml.nvmlDeviceGetCount()):
+            handle = pynvml.nvmlDeviceGetHandleByIndex(idx)
+            pci_info = pynvml.nvmlDeviceGetPciInfo(handle)
+            bus_id = pci_info.busId
+            if isinstance(bus_id, bytes):
+                bus_id = bus_id.decode("utf-8")
+            out[idx] = bus_id.rstrip("\x00")
+        if not out:
+            raise RuntimeError("NVML returned no GPU PCI bus ID rows")
+        return out
+
+    @classmethod
+    @with_nvml_context
     def log_warnings(cls):
         device_ids: int = pynvml.nvmlDeviceGetCount()
         if device_ids > 1:
             device_names = [cls._get_physical_device_name(i) for i in range(device_ids)]
-            if len(set(device_names)) > 1 and os.environ.get("CUDA_DEVICE_ORDER") != "PCI_BUS_ID":
+            if (
+                len(set(device_names)) > 1
+                and os.environ.get("CUDA_DEVICE_ORDER") != "PCI_BUS_ID"
+            ):
                 logger.warning(
                     "Detected different devices in the system: %s. Please"
                     " make sure to set `CUDA_DEVICE_ORDER=PCI_BUS_ID` to "
@@ -823,7 +1022,8 @@ class NonNvmlCudaPlatform(CudaPlatformBase):
     @classmethod
     def is_fully_connected(cls, physical_device_ids: list[int]) -> bool:
         logger.exception(
-            "NVLink detection not possible, as context support was not found. Assuming no NVLink available."
+            "NVLink detection not possible, as context support was"
+            " not found. Assuming no NVLink available."
         )
         return False
 

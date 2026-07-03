@@ -53,7 +53,7 @@ class SchedulerConfig:
     In real usage, this should be set in `EngineArgs.create_engine_config`.
     """
 
-    max_num_scheduled_tokens: int | None = None
+    max_num_scheduled_tokens: int | None = Field(default=None, ge=0)
     """Maximum number of tokens that the scheduler may issue in a single iteration.
     
     This is usually equal to max_num_batched_tokens, but can be smaller in cases
@@ -77,9 +77,9 @@ class SchedulerConfig:
     this less than max_num_partial_prefills will allow shorter prompts to jump
     the queue in front of longer prompts in some cases, improving latency."""
 
-    long_prefill_token_threshold: int = 0
+    long_prefill_token_threshold: int = Field(default=0, ge=0)
     """For chunked prefill, a request is considered long if the prompt is
-    longer than this number of tokens."""
+    longer than this number of tokens. 0 disables the cap (default)."""
 
     enable_chunked_prefill: bool = True
     """If True, prefill requests can be chunked based
@@ -143,6 +143,18 @@ class SchedulerConfig:
     checking the first chunk. Prevents over-admission and KV cache thrashing
     with chunked prefill."""
 
+    watermark: float = Field(default=0.0, ge=0.0, lt=1.0)
+    """Fraction of total KV cache blocks to keep free (the watermark) when
+    admitting waiting or preempted requests into the running queue. This headroom
+    helps avoid frequent KV cache eviction and the resulting repeated preemption
+    of requests when GPU memory is scarce. Must be in the range [0.0, 1.0); 0.0
+    (the default) disables the watermark."""
+
+    prefill_schedule_interval: int = Field(default=1, ge=1)
+    """For data-parallel deployments, only admit new prefill requests
+    once every N engine steps, aligned across DP ranks, to better balance
+    per-step forward-pass times."""
+
     async_scheduling: bool | None = None
     """If set to False, disable async scheduling. Async scheduling helps to
     avoid gaps in GPU utilization, leading to better latency and throughput.
@@ -175,12 +187,13 @@ class SchedulerConfig:
 
             return Scheduler
 
-        # This warning can be removed once the Scheduler interface is
-        # finalized and we can maintain support for scheduler classes that
-        # implement it
+        # The first half of this warning can be removed once the Scheduler interface is
+        # finalized and we can maintain support for scheduler classes that implement it
         logger.warning_once(
-            "Using custom scheduler class %s. This scheduler interface is "
-            "not public and compatibility may not be maintained.",
+            "Using custom scheduler class %s. This scheduler interface is not public "
+            "and compatibility may not be maintained. If you have subclassed Scheduler "
+            "instead of AsyncScheduler, you will see degraded performance due to async "
+            "scheduling being disabled.",
             self.scheduler_cls,  # type: ignore[arg-type]
         )
         if not isinstance(self.scheduler_cls, str):
@@ -227,7 +240,10 @@ class SchedulerConfig:
             self.disable_chunked_mm_input = True
             self.enable_chunked_prefill = False
             self.long_prefill_token_threshold = 0
-            logger.info("Encoder-decoder models do not support chunked prefill nor prefix caching; disabling both.")
+            logger.info(
+                "Encoder-decoder models do not support chunked prefill nor"
+                " prefix caching; disabling both."
+            )
 
         self.max_num_encoder_input_tokens = self.max_num_batched_tokens
         self.encoder_cache_size = self.max_num_batched_tokens
@@ -254,7 +270,10 @@ class SchedulerConfig:
         self.verify_max_model_len(max_model_len)
 
     def verify_max_model_len(self, max_model_len: int) -> Self:
-        if self.max_num_batched_tokens < max_model_len and not self.enable_chunked_prefill:
+        if (
+            self.max_num_batched_tokens < max_model_len
+            and not self.enable_chunked_prefill
+        ):
             raise ValueError(
                 f"max_num_batched_tokens ({self.max_num_batched_tokens}) is "
                 f"smaller than max_model_len ({max_model_len}). "
@@ -281,7 +300,10 @@ class SchedulerConfig:
 
         if self.max_num_partial_prefills > 1:
             if not self.enable_chunked_prefill:
-                raise ValueError("Chunked prefill must be enabled to set max_num_partial_prefills > 1.")
+                raise ValueError(
+                    "Chunked prefill must be enabled to set "
+                    "max_num_partial_prefills > 1."
+                )
 
             if self.long_prefill_token_threshold > max_model_len:
                 raise ValueError(
@@ -292,7 +314,8 @@ class SchedulerConfig:
 
         if self.max_long_partial_prefills > self.max_num_partial_prefills:
             raise ValueError(
-                f"{self.max_long_partial_prefills=} must be less than or equal to {self.max_num_partial_prefills=}."
+                f"{self.max_long_partial_prefills=} must be less than or equal to "
+                f"{self.max_num_partial_prefills=}."
             )
 
         return self

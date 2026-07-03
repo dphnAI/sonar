@@ -26,9 +26,9 @@ from aphrodite.model_executor.layers.quantization import QuantizationConfig
 from aphrodite.model_executor.layers.rotary_embedding.common import (
     ApplyRotaryEmb,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 from aphrodite.platforms import current_platform
 
+from .utils import AutoWeightsLoader, WeightsMapper, maybe_prefix
 from .vision import is_vit_use_data_parallel
 
 
@@ -39,7 +39,9 @@ class VisionRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        seq = torch.arange(
+            seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype
+        )
         freqs = torch.outer(seq, self.inv_freq)
         return freqs
 
@@ -113,7 +115,9 @@ class Siglip2VisionEmbeddings(nn.Module):
             assert grid_thws is not None
             pos_embed_new = torch.zeros_like(patch_embeds)
             positional_embeddings = (
-                self.position_embedding.weight.reshape(self.position_embedding_size, self.position_embedding_size, -1)
+                self.position_embedding.weight.reshape(
+                    self.position_embedding_size, self.position_embedding_size, -1
+                )
                 .unsqueeze(0)
                 .permute(0, 3, 1, 2)
             )
@@ -208,7 +212,9 @@ class Siglip2Attention(nn.Module):
             disable_tp=use_data_parallel,
         )
 
-        self.tp_size = 1 if use_data_parallel else get_tensor_model_parallel_world_size()
+        self.tp_size = (
+            1 if use_data_parallel else get_tensor_model_parallel_world_size()
+        )
         self.num_heads_per_partition = divide(self.num_heads, self.tp_size)
         self.use_rope = config.use_rope
 
@@ -262,7 +268,9 @@ class Siglip2Attention(nn.Module):
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
         )
-        attn_output = attn_output.reshape(seq_length, self.num_heads_per_partition * self.head_dim)
+        attn_output = attn_output.reshape(
+            seq_length, self.num_heads_per_partition * self.head_dim
+        )
 
         attn_output, _ = self.out_proj(attn_output)
         return attn_output
@@ -380,7 +388,9 @@ class Siglip2Encoder(nn.Module):
             ]
         )
 
-        self.rotary_pos_emb = VisionRotaryEmbedding(config.hidden_size // config.num_attention_heads // 2)
+        self.rotary_pos_emb = VisionRotaryEmbedding(
+            config.hidden_size // config.num_attention_heads // 2
+        )
         self.patch_size = config.patch_size
         self.hidden_stride = config.hidden_stride
         self.window_size = config.window_size
@@ -388,7 +398,9 @@ class Siglip2Encoder(nn.Module):
         if config.fullatt_block_indexes is None:
             self.fullatt_block_indexes = None
         else:
-            self.fullatt_block_indexes = [int(i) for i in config.fullatt_block_indexes.split("|")]
+            self.fullatt_block_indexes = [
+                int(i) for i in config.fullatt_block_indexes.split("|")
+            ]
 
     # copied from qwen2.5_vl
     def rot_pos_emb(self, grid_thw):
@@ -425,14 +437,18 @@ class Siglip2Encoder(nn.Module):
         cu_window_seqlens: list = [0]
         window_index_id = 0
         # patch (after merge) number in each window
-        vit_merger_window_size = self.window_size // self.hidden_stride // self.patch_size
+        vit_merger_window_size = (
+            self.window_size // self.hidden_stride // self.patch_size
+        )
 
         for grid_t, grid_h, grid_w in grid_thw:
             llm_grid_h, llm_grid_w = (
                 grid_h // self.hidden_stride,  # number of patch after merge
                 grid_w // self.hidden_stride,
             )
-            index = torch.arange(grid_t * llm_grid_h * llm_grid_w).reshape(grid_t, llm_grid_h, llm_grid_w)
+            index = torch.arange(grid_t * llm_grid_h * llm_grid_w).reshape(
+                grid_t, llm_grid_h, llm_grid_w
+            )
             pad_h = vit_merger_window_size - llm_grid_h % vit_merger_window_size
             pad_w = vit_merger_window_size - llm_grid_w % vit_merger_window_size
             num_windows_h = (llm_grid_h + pad_h) // vit_merger_window_size
@@ -455,7 +471,9 @@ class Siglip2Encoder(nn.Module):
             index_padded = index_padded.reshape(-1)
             index_new = index_padded[index_padded != -100]
             window_index.append(index_new + window_index_id)
-            cu_seqlens_tmp = seqlens.cumsum(0) * self.spatial_merge_unit + cu_window_seqlens[-1]
+            cu_seqlens_tmp = (
+                seqlens.cumsum(0) * self.spatial_merge_unit + cu_window_seqlens[-1]
+            )
             cu_window_seqlens.extend(cu_seqlens_tmp.tolist())
             window_index_id += (grid_t * llm_grid_h * llm_grid_w).item()
         window_index = torch.cat(window_index, dim=0)
@@ -487,16 +505,22 @@ class Siglip2Encoder(nn.Module):
         cu_window_seqlens = torch.unique_consecutive(cu_window_seqlens)
 
         seq_len, _ = inputs_embeds.size()
-        inputs_embeds = inputs_embeds.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
+        inputs_embeds = inputs_embeds.reshape(
+            seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1
+        )
         inputs_embeds = inputs_embeds[window_index, :, :]
         inputs_embeds = inputs_embeds.reshape(seq_len, -1)
-        rotary_pos_emb = rotary_pos_emb.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
+        rotary_pos_emb = rotary_pos_emb.reshape(
+            seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1
+        )
         rotary_pos_emb = rotary_pos_emb[window_index, :, :]
         rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 
-        cu_seqlens = torch.repeat_interleave(grid_thws[:, 1] * grid_thws[:, 2], grid_thws[:, 0]).cumsum(
+        cu_seqlens = torch.repeat_interleave(
+            grid_thws[:, 1] * grid_thws[:, 2], grid_thws[:, 0]
+        ).cumsum(
             dim=0,
             # Select dtype based on the following factors:
             #  - FA2 requires that cu_seqlens_q must have dtype int32
@@ -518,7 +542,9 @@ class Siglip2Encoder(nn.Module):
                 cu_seqlens_tmp = cu_window_seqlens
             hidden_states = block(hidden_states, cu_seqlens_tmp, position_embeddings)
 
-        hidden_states = hidden_states.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
+        hidden_states = hidden_states.reshape(
+            seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1
+        )
         hidden_states = hidden_states[reverse_indices, :].reshape(seq_len, -1)
 
         return hidden_states
@@ -561,6 +587,14 @@ class Siglip2VisionTransformer(nn.Module):
 
 
 class Siglip2NavitModel(torch.nn.Module):
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_stacked={
+            ".q_proj": (".qkv_proj", "q"),
+            ".k_proj": (".qkv_proj", "k"),
+            ".v_proj": (".qkv_proj", "v"),
+        }
+    )
+
     def __init__(
         self,
         config: Siglip2VisionConfig,
@@ -572,7 +606,7 @@ class Siglip2NavitModel(torch.nn.Module):
         self.vision_model = Siglip2VisionTransformer(
             config,
             quant_config=quant_config,
-            prefix=f"{prefix}.vision_model",
+            prefix=maybe_prefix(prefix, "vision_model"),
         )
 
     def forward(
@@ -586,28 +620,5 @@ class Siglip2NavitModel(torch.nn.Module):
         )
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            # (param_name, shard_name, shard_id)
-            ("qkv_proj", "q_proj", "q"),
-            ("qkv_proj", "k_proj", "k"),
-            ("qkv_proj", "v_proj", "v"),
-        ]
-        params_dict = dict(self.named_parameters())
-        loaded_params: set[str] = set()
-
-        for name, loaded_weight in weights:
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                if weight_name not in name:
-                    continue
-                name = name.replace(weight_name, param_name)
-
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
+        loader = AutoWeightsLoader(self)
+        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)

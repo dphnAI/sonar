@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-# Copyright 2023 The Aphrodite team.
+# Copyright 2023 The vLLM team.
 # Adapted from
 # https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/core/tensor_parallel/utils.py
 # Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
@@ -38,7 +38,9 @@ logger = init_logger(__name__)
 # We prefer to use os.sched_yield as it results in tighter polling loops,
 # measured to be around 3e-7 seconds. However on earlier versions of Python
 # os.sched_yield() does not release the GIL, so we fall back to time.sleep(0)
-USE_SCHED_YIELD = (sys.version_info[:3] >= (3, 11, 1)) or (sys.version_info[:2] == (3, 10) and sys.version_info[2] >= 8)
+USE_SCHED_YIELD = (sys.version_info[:3] >= (3, 11, 1)) or (
+    sys.version_info[:2] == (3, 10) and sys.version_info[2] >= 8
+)
 
 
 def sched_yield():
@@ -50,7 +52,9 @@ def sched_yield():
 
 def ensure_divisibility(numerator, denominator):
     """Ensure that numerator is divisible by the denominator."""
-    assert numerator % denominator == 0, "{} is not divisible by {}".format(numerator, denominator)
+    assert numerator % denominator == 0, "{} is not divisible by {}".format(
+        numerator, denominator
+    )
 
 
 def divide(numerator, denominator):
@@ -58,6 +62,38 @@ def divide(numerator, denominator):
     the division value."""
     ensure_divisibility(numerator, denominator)
     return numerator // denominator
+
+
+def verify_group_size_divides_partition(
+    input_size_per_partition: int,
+    group_size: int,
+    layer_name: str | None = None,
+    extra_suggestion: str = "",
+) -> None:
+    """Validate that a TP-sharded layer holds a whole number of quant groups."""
+    if input_size_per_partition % group_size == 0:
+        return
+    location = f" for layer '{layer_name}'" if layer_name else ""
+    raise ValueError(
+        f"Weight {input_size_per_partition=}{location} is not divisible by "
+        f"{group_size=}. This happens when tensor_parallel_size splits the layer input "
+        "into shards that are not a whole number of quant groups. Consider reducing "
+        f"tensor_parallel_size{extra_suggestion}."
+    )
+
+
+def is_weak_contiguous(inp: torch.Tensor) -> bool:
+    """Check that *inp* occupies a single contiguous block of memory.
+
+    Unlike ``torch.Tensor.is_contiguous()``, this also accepts tensors
+    whose strides are not strictly C-contiguous (e.g. column-major) as
+    long as the underlying storage from the tensor's offset onward is
+    exactly ``numel * element_size`` bytes.
+    """
+    return inp.is_contiguous() or (
+        inp.storage().nbytes() - inp.storage_offset() * inp.element_size()
+        == inp.numel() * inp.element_size()
+    )
 
 
 def split_tensor_along_last_dim(
@@ -88,7 +124,9 @@ def split_tensor_along_last_dim(
     return tensor_list
 
 
-def get_pp_indices(num_hidden_layers: int, pp_rank: int, pp_size: int) -> tuple[int, int]:
+def get_pp_indices(
+    num_hidden_layers: int, pp_rank: int, pp_size: int
+) -> tuple[int, int]:
     """Try to evenly distribute layers across partitions.
 
     If the number of layers is not divisible by the number of partitions,
@@ -107,7 +145,9 @@ def get_pp_indices(num_hidden_layers: int, pp_rank: int, pp_size: int) -> tuple[
         try:
             partitions = [int(layer) for layer in partition_list_str.split(",")]
         except ValueError as err:
-            raise ValueError("Invalid partition string: {}".format(partition_list_str)) from err
+            raise ValueError(
+                "Invalid partition string: {}".format(partition_list_str)
+            ) from err
         if len(partitions) != pp_size:
             raise ValueError(f"{len(partitions)=} does not match {pp_size=}.")
         if sum(partitions) != num_hidden_layers:
@@ -205,7 +245,9 @@ class StatelessProcessGroup:
 
     def recv_obj(self, src: int) -> Any:
         """Receive an object from a source rank."""
-        obj = pickle.loads(self.store.get(f"send_to/{self.rank}/{self.recv_src_counter[src]}"))
+        obj = pickle.loads(
+            self.store.get(f"send_to/{self.rank}/{self.recv_src_counter[src]}")
+        )
         self.recv_src_counter[src] += 1
         return obj
 
@@ -271,7 +313,9 @@ class StatelessProcessGroup:
         tensor.copy_(received)
         return tensor
 
-    def all_reduce(self, tensor: torch.Tensor, op=torch.distributed.ReduceOp.SUM) -> torch.Tensor:
+    def all_reduce(
+        self, tensor: torch.Tensor, op=torch.distributed.ReduceOp.SUM
+    ) -> torch.Tensor:
         """All-reduce a tensor across all ranks."""
         tensors = self.all_gather_obj(tensor)
         result = tensors[0].clone()
@@ -382,7 +426,9 @@ class StatelessProcessGroup:
         while len(processes_departed) < self.world_size:
             # Check for timeout
             if time.time() - start_time > timeout:
-                raise RuntimeError(f"Barrier departure timed out after {timeout:.2f} seconds")
+                raise RuntimeError(
+                    f"Barrier departure timed out after {timeout:.2f} seconds"
+                )
 
             # Check for each process
             for i in range(self.world_size):
@@ -477,6 +523,16 @@ def get_cached_tcp_store_client(host: str, port: int) -> TCPStore:
     return TCPStore(host, port, is_master=False, wait_for_workers=False)
 
 
+def get_cpu_distributed_timeout_or_none() -> timedelta | None:
+    from aphrodite.config import get_current_aphrodite_config_or_none
+
+    aphrodite_config = get_current_aphrodite_config_or_none()
+    if aphrodite_config is None:
+        return None
+    timeout_seconds = aphrodite_config.parallel_config.cpu_distributed_timeout_seconds
+    return timedelta(seconds=timeout_seconds) if timeout_seconds is not None else None
+
+
 def init_gloo_process_group(
     prefix_store: PrefixStore,
     group_rank: int,
@@ -495,7 +551,9 @@ def init_gloo_process_group(
         )
         from torch.distributed.distributed_c10d import ProcessGroupGloo
 
-        backend_class = ProcessGroupGloo(prefix_store, group_rank, group_size, timeout=timeout)
+        backend_class = ProcessGroupGloo(
+            prefix_store, group_rank, group_size, timeout=timeout
+        )
         backend_type = ProcessGroup.BackendType.GLOO
         device = torch.device("cpu")
         pg._set_default_backend(backend_type)
@@ -554,6 +612,10 @@ def stateless_init_torch_distributed_process_group(
     init_method = get_tcp_uri(host, port)
     backend = Backend(backend)  # it is basically string
     timeout = _get_default_timeout(backend)
+    if backend == "gloo":
+        gloo_timeout = get_cpu_distributed_timeout_or_none()
+        if gloo_timeout is not None:
+            timeout = gloo_timeout
 
     if listen_socket is not None:
         store = create_tcp_store(
@@ -566,7 +628,9 @@ def stateless_init_torch_distributed_process_group(
             multi_tenant=True,
         )
     else:
-        store, rank, world_size = next(rendezvous(init_method, rank, world_size, timeout=timeout))
+        store, rank, world_size = next(
+            rendezvous(init_method, rank, world_size, timeout=timeout)
+        )
     store.set_timeout(timeout)
 
     group_rank = rank

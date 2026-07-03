@@ -4,7 +4,7 @@
 # Adapted from
 # https://github.com/vllm-project/vllm/blob/v0.7.3/aphrodite/model_executor/models/deepseek_mtp.py
 # Copyright 2025 Xiaomi Corporation.
-# Copyright 2023 The Aphrodite team.
+# Copyright 2023 The vLLM team.
 # Copyright 2024 DeepSeek-AI team.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +26,7 @@ import torch
 import torch.nn as nn
 from transformers import PretrainedConfig
 
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
+from aphrodite.config import CacheConfig, ModelConfig, AphroditeConfig
 from aphrodite.model_executor.layers.layernorm import RMSNorm
 from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
 from aphrodite.model_executor.layers.quantization import QuantizationConfig
@@ -34,11 +34,10 @@ from aphrodite.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 from aphrodite.model_executor.models.qwen2 import Qwen2DecoderLayer
 from aphrodite.sequence import IntermediateTensors
 
-from .utils import maybe_prefix
+from .utils import AutoWeightsLoader, WeightsMapper, maybe_prefix
 
 
 class MiMoMultiTokenPredictorLayer(nn.Module):
@@ -54,7 +53,9 @@ class MiMoMultiTokenPredictorLayer(nn.Module):
 
         self.token_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.hidden_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.input_proj = nn.Linear(config.hidden_size * 2, config.hidden_size, bias=False)
+        self.input_proj = nn.Linear(
+            config.hidden_size * 2, config.hidden_size, bias=False
+        )
         self.mtp_block = Qwen2DecoderLayer(
             config=config,
             cache_config=cache_config,
@@ -76,9 +77,13 @@ class MiMoMultiTokenPredictorLayer(nn.Module):
         inputs_embeds = self.token_layernorm(inputs_embeds)
         previous_hidden_states = self.hidden_layernorm(previous_hidden_states)
 
-        hidden_states = self.input_proj(torch.cat([previous_hidden_states, inputs_embeds], dim=-1))
+        hidden_states = self.input_proj(
+            torch.cat([previous_hidden_states, inputs_embeds], dim=-1)
+        )
 
-        hidden_states, residual = self.mtp_block(positions=positions, hidden_states=hidden_states, residual=None)
+        hidden_states, residual = self.mtp_block(
+            positions=positions, hidden_states=hidden_states, residual=None
+        )
         hidden_states = residual + hidden_states
         return self.final_layernorm(hidden_states)
 
@@ -149,11 +154,35 @@ class MiMoMTP(nn.Module):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
         self.config = aphrodite_config.model_config.hf_config
-        self.model = MiMoMultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = MiMoMultiTokenPredictor(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
+        )
         self.lm_head = ParallelLMHead(
             self.config.vocab_size,
             self.config.hidden_size,
             prefix=maybe_prefix(prefix, "lm_head"),
+        )
+        # Checkpoint stores MTP layers 0-indexed and without the `mtp_block`
+        # wrapper around the transformer block; remap onto the offset index.
+        start = self.config.num_hidden_layers
+        self.hf_to_aphrodite_mapper = WeightsMapper(
+            orig_to_new_substr={
+                ".self_attn.": ".mtp_block.self_attn.",
+                ".mlp.": ".mtp_block.mlp.",
+                ".input_layernorm.": ".mtp_block.input_layernorm.",
+                ".post_attention_layernorm.": ".mtp_block.post_attention_layernorm.",
+            },
+            orig_to_new_stacked={
+                ".q_proj": (".qkv_proj", "q"),
+                ".k_proj": (".qkv_proj", "k"),
+                ".v_proj": (".qkv_proj", "v"),
+                ".gate_proj": (".gate_up_proj", 0),
+                ".up_proj": (".gate_up_proj", 1),
+            },
+            orig_to_new_prefix={
+                f"model.mtp_layers.{i}.": f"model.mtp_layers.{i + start}."
+                for i in range(self.config.num_nextn_predict_layers)
+            },
         )
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
@@ -169,7 +198,9 @@ class MiMoMTP(nn.Module):
         spec_step_idx: int = 0,
     ) -> torch.Tensor:
         assert spec_step_idx == 0, "mimo_mtp only support predict one token now"
-        hidden_states = self.model(input_ids, positions, hidden_states, inputs_embeds, spec_step_idx)
+        hidden_states = self.model(
+            input_ids, positions, hidden_states, inputs_embeds, spec_step_idx
+        )
         return hidden_states
 
     def compute_logits(
@@ -180,101 +211,12 @@ class MiMoMTP(nn.Module):
         return self.model.compute_logits(hidden_states, self.lm_head, spec_step_idx)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            ("qkv_proj", "q_proj", "q"),
-            ("qkv_proj", "k_proj", "k"),
-            ("qkv_proj", "v_proj", "v"),
-            ("gate_up_proj", "gate_proj", 0),
-            ("gate_up_proj", "up_proj", 1),
-        ]
+        # The checkpoint carries the full model; keep only the MTP layers and
+        # the shared embedding/head.
+        def mtp_weights():
+            for name, weight in weights:
+                if "mtp_layers" in name or "embed_tokens" in name or "lm_head" in name:
+                    yield name, weight
 
-        params_dict = dict(self.named_parameters())
-        loaded_params: set[str] = set()
-        for name, loaded_weight in weights:
-            if "rotary_emb.inv_freq" in name:
-                continue
-            name = self.map_model_name_to_mtp_param_name(name)
-
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                # Skip non-stacked layers and experts (experts handled below).
-                if weight_name not in name:
-                    continue
-                if "mtp_layers" not in name:
-                    break
-                # We have mlp.experts[0].gate_proj in the checkpoint.
-                # Since we handle the experts below in expert_params_mapping,
-                # we need to skip here BEFORE we update the name, otherwise
-                # name will be updated to mlp.experts[0].gate_up_proj, which
-                # will then be updated below in expert_params_mapping
-                # for mlp.experts[0].gate_gate_up_proj, which breaks load.
-                if ("mlp.experts." in name) and name not in params_dict:
-                    continue
-                name = name.replace(weight_name, param_name)
-                # Skip loading extra bias for GPTQ models.
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                # Skip loading extra bias for GPTQ models.
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-                if "mtp_layers" not in name and ("embed_tokens" not in name and "lm_head" not in name):
-                    continue
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
-
-    def map_model_name_to_mtp_param_name(self, name: str) -> str:
-        import regex as re
-
-        # append mtp_start_layer_idx
-        pattern = r"(model\.mtp_layers\.)(\d+)(\.)"
-        match = re.match(pattern, name)
-        if match:
-            original_num = int(match.group(2))
-            new_num = original_num + self.config.num_hidden_layers
-            name = name.replace(match.group(), f"{match.group(1)}{new_num}.")
-        # check for early turn
-        name_without_prefix = [
-            "token_layernorm",
-            "hidden_layernorm",
-            "input_proj",
-            "final_layernorm",
-        ]
-        for sub_name in name_without_prefix:
-            if sub_name in name:
-                return name
-        # add mtp_block
-        pattern = r"(model\.mtp_layers\.\d+\.)"
-        match = re.match(pattern, name)
-        if match:
-            name = name.replace(match.group(), match.group() + "mtp_block.")
-        return name
-
-    def _rewrite_spec_layer_name(self, spec_layer: int, name: str) -> str:
-        """
-        Rewrite the weight name to match the format of the original model.
-        Add .mtp_block for modules in transformer layer block for spec layer
-        """
-        spec_layer_weight_names = [
-            "embed_tokens",
-            "enorm",
-            "hnorm",
-            "eh_proj",
-            "shared_head",
-        ]
-        spec_layer_weight = False
-        for weight_name in spec_layer_weight_names:
-            if weight_name in name:
-                spec_layer_weight = True
-                break
-        if not spec_layer_weight:
-            # treat rest weights as weights for transformer layer block
-            name = name.replace(f"model.layers.{spec_layer}.", f"model.layers.{spec_layer}.mtp_block.")
-        return name
+        loader = AutoWeightsLoader(self)
+        return loader.load_weights(mtp_weights(), mapper=self.hf_to_aphrodite_mapper)

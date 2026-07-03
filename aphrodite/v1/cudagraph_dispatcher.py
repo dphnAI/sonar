@@ -4,7 +4,7 @@ from collections.abc import Set as AbstractSet
 from dataclasses import replace
 from itertools import product
 
-from aphrodite.config import AphroditeConfig, CUDAGraphMode
+from aphrodite.config import CUDAGraphMode, AphroditeConfig
 from aphrodite.forward_context import BatchDescriptor
 from aphrodite.logger import init_logger
 from aphrodite.lora.utils import get_captured_lora_counts
@@ -34,11 +34,7 @@ class CudagraphDispatcher:
     def __init__(self, aphrodite_config: AphroditeConfig):
         self.aphrodite_config = aphrodite_config
         self.compilation_config = aphrodite_config.compilation_config
-        self.uniform_decode_query_len = (
-            1
-            if not self.aphrodite_config.speculative_config
-            else 1 + self.aphrodite_config.speculative_config.num_speculative_tokens
-        )
+        self.uniform_decode_query_len = 1 + self.aphrodite_config.num_speculative_tokens
 
         # Dict to store valid cudagraph dispatching keys.
         self.cudagraph_keys: dict[CUDAGraphMode, set[BatchDescriptor]] = {
@@ -46,9 +42,14 @@ class CudagraphDispatcher:
             CUDAGraphMode.FULL: set(),
         }
 
+        from aphrodite.compilation.breakable_cudagraph import (
+            is_breakable_cudagraph_enabled,
+        )
+
         assert (
             not self.compilation_config.cudagraph_mode.requires_piecewise_compilation()
             or self.compilation_config.is_attention_compiled_piecewise()
+            or is_breakable_cudagraph_enabled()
         ), (
             "Compilation mode should be CompilationMode.APHRODITE_COMPILE when "
             "cudagraph_mode piecewise cudagraphs is used, "
@@ -72,8 +73,12 @@ class CudagraphDispatcher:
         """Pre-compute the mapping from batch size to padded graph size."""
         max_size = self.compilation_config.max_cudagraph_capture_size
         capture_sizes = self.compilation_config.cudagraph_capture_sizes
-        assert max_size is not None, "Maximum cudagraph capture size must be set when cudagraphs are enabled."
-        assert capture_sizes is not None, "Cudagraph capture sizes must be set when cudagraphs are enabled."
+        assert max_size is not None, (
+            "Maximum cudagraph capture size must be set when cudagraphs are enabled."
+        )
+        assert capture_sizes is not None, (
+            "Cudagraph capture sizes must be set when cudagraphs are enabled."
+        )
         self._bs_to_padded_graph_size: list[int] = [0] * (max_size + 1)
         for end, start in zip(
             capture_sizes + [max_size + 1],
@@ -87,7 +92,10 @@ class CudagraphDispatcher:
 
         # Validate that compile_sizes won't be changed by padding.
         # Only validate when cudagraphs are actually being used.
-        if self.compilation_config.compile_sizes and self.cudagraph_mode != CUDAGraphMode.NONE:
+        if (
+            self.compilation_config.compile_sizes
+            and self.cudagraph_mode != CUDAGraphMode.NONE
+        ):
             for size in self.compilation_config.compile_sizes:
                 size = int(size)
                 if size <= max_size:
@@ -112,7 +120,9 @@ class CudagraphDispatcher:
 
         # LoRA is enabled - capture graphs based on cudagraph_specialize_lora
         if self.compilation_config.cudagraph_specialize_lora:
-            captured_counts = get_captured_lora_counts(lora_config.max_loras, self.specialize_lora_count)
+            captured_counts = get_captured_lora_counts(
+                lora_config.max_loras, self.specialize_lora_count
+            )
             # Specialize: capture separate graphs for with and without LoRA
             return [0] + captured_counts
         else:
@@ -145,13 +155,17 @@ class CudagraphDispatcher:
             num_active_loras=num_active_loras,
         )
 
-    def add_cudagraph_key(self, runtime_mode: CUDAGraphMode, batch_descriptor: BatchDescriptor):
+    def add_cudagraph_key(
+        self, runtime_mode: CUDAGraphMode, batch_descriptor: BatchDescriptor
+    ):
         assert runtime_mode in [CUDAGraphMode.PIECEWISE, CUDAGraphMode.FULL], (
             f"Invalid cudagraph runtime mode for keys: {runtime_mode}"
         )
         self.cudagraph_keys[runtime_mode].add(batch_descriptor)
 
-    def initialize_cudagraph_keys(self, cudagraph_mode: CUDAGraphMode, uniform_decode_query_len: int = 1):
+    def initialize_cudagraph_keys(
+        self, cudagraph_mode: CUDAGraphMode, uniform_decode_query_len: int = 1
+    ):
         # This should be called only after attention backend is initialized. So we can
         # get the correct cudagraph mode after backend support is resolved.
         self.cudagraph_mode = cudagraph_mode
@@ -165,7 +179,9 @@ class CudagraphDispatcher:
 
         # Get LoRA cases to capture
         lora_cases = self._get_lora_cases()
-        self.captured_lora_counts = [lora_count for lora_count in lora_cases if lora_count]
+        self.captured_lora_counts = [
+            lora_count for lora_count in lora_cases if lora_count
+        ]
 
         # Note: we create all valid keys for cudagraph here but do not
         # guarantee all keys would be used. For example, if we allow lazy
@@ -174,8 +190,12 @@ class CudagraphDispatcher:
             assert self.compilation_config.cudagraph_capture_sizes is not None, (
                 "Cudagraph capture sizes must be set when mixed mode is enabled."
             )
-            for bs, num_active_loras in product(self.compilation_config.cudagraph_capture_sizes, lora_cases):
-                batch_desc = self._create_padded_batch_descriptor(bs, False, num_active_loras > 0, num_active_loras)
+            for bs, num_active_loras in product(
+                self.compilation_config.cudagraph_capture_sizes, lora_cases
+            ):
+                batch_desc = self._create_padded_batch_descriptor(
+                    bs, False, num_active_loras > 0, num_active_loras
+                )
                 # Only relax for PIECEWISE mode. FULL mode needs exact num_reqs
                 # because FA3's scheduler_metadata computation depends on it.
                 if cudagraph_mode.mixed_mode() == CUDAGraphMode.PIECEWISE:
@@ -184,8 +204,14 @@ class CudagraphDispatcher:
 
         # if decode cudagraph mode is FULL, and we don't already have mixed
         # mode full cudagraphs then add them here.
-        if cudagraph_mode.decode_mode() == CUDAGraphMode.FULL and cudagraph_mode.separate_routine():
-            max_num_tokens = uniform_decode_query_len * self.aphrodite_config.scheduler_config.max_num_seqs
+        if (
+            cudagraph_mode.decode_mode() == CUDAGraphMode.FULL
+            and cudagraph_mode.separate_routine()
+        ):
+            max_num_tokens = (
+                uniform_decode_query_len
+                * self.aphrodite_config.scheduler_config.max_num_seqs
+            )
             assert self.compilation_config.cudagraph_capture_sizes is not None, (
                 "Cudagraph capture sizes must be set when full mode is enabled."
             )
@@ -194,10 +220,14 @@ class CudagraphDispatcher:
                 for x in self.compilation_config.cudagraph_capture_sizes
                 if x <= max_num_tokens and x >= uniform_decode_query_len
             ]
-            for bs, num_active_loras in product(cudagraph_capture_sizes_for_decode, lora_cases):
+            for bs, num_active_loras in product(
+                cudagraph_capture_sizes_for_decode, lora_cases
+            ):
                 self.add_cudagraph_key(
                     CUDAGraphMode.FULL,
-                    self._create_padded_batch_descriptor(bs, True, num_active_loras > 0, num_active_loras),
+                    self._create_padded_batch_descriptor(
+                        bs, True, num_active_loras > 0, num_active_loras
+                    ),
                 )
 
         self.keys_initialized = True
@@ -236,7 +266,8 @@ class CudagraphDispatcher:
             allowed_modes -= invalid_modes
 
         assert len(allowed_modes) >= 1, (
-            f"No allowed cudagraph modes: valid_modes={valid_modes}, invalid_modes={invalid_modes}"
+            f"No allowed cudagraph modes: valid_modes={valid_modes}, "
+            f"invalid_modes={invalid_modes}"
         )
         max_size = self.compilation_config.max_cudagraph_capture_size
 
@@ -263,7 +294,9 @@ class CudagraphDispatcher:
             else:
                 # When not specializing, graphs are captured only with max_loras + 1,
                 # so we must use max_loras + 1 for dispatch to find a matching graph.
-                assert self.aphrodite_config.lora_config is not None, "LoRA config must be set when has_lora is True."
+                assert self.aphrodite_config.lora_config is not None, (
+                    "LoRA config must be set when has_lora is True."
+                )
                 effective_num_active_loras = self.aphrodite_config.lora_config.max_loras + 1
 
         normalized_uniform = uniform_decode and self.cudagraph_mode.separate_routine()
@@ -285,7 +318,8 @@ class CudagraphDispatcher:
                 return CUDAGraphMode.PIECEWISE, batch_desc_to_check
 
         assert CUDAGraphMode.NONE in allowed_modes, (
-            f"No matching cudagraph found and NONE is not in allowed_modes={allowed_modes}"
+            f"No matching cudagraph found and NONE is not in "
+            f"allowed_modes={allowed_modes}"
         )
         return CUDAGraphMode.NONE, BatchDescriptor(num_tokens)
 

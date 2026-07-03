@@ -41,7 +41,9 @@ A `transformers.image_utils.ImageInput` representing a single image
 item, which can be passed to a HuggingFace `ImageProcessor`.
 """
 
-HfVideoItem: TypeAlias = Union[list["Image"], np.ndarray, "torch.Tensor", list[np.ndarray], list["torch.Tensor"]]
+HfVideoItem: TypeAlias = Union[
+    list["Image"], np.ndarray, "torch.Tensor", list[np.ndarray], list["torch.Tensor"]
+]
 """
 A `transformers.image_utils.VideoInput` representing a single video
 item, which can be passed to a HuggingFace `VideoProcessor`.
@@ -63,7 +65,9 @@ which are treated as image embeddings;
 these are directly passed to the model without HF processing.
 """
 
-VideoItem: TypeAlias = Union[HfVideoItem, "torch.Tensor", tuple[HfVideoItem, dict[str, Any]]]
+VideoItem: TypeAlias = Union[
+    HfVideoItem, "torch.Tensor", tuple[HfVideoItem, dict[str, Any]]
+]
 """
 A `transformers.video_utils.VideoInput` representing a single video item. 
 This can be passed to a HuggingFace `VideoProcessor` 
@@ -151,7 +155,9 @@ class PlaceholderRange:
 
         return self.embeds_cumsum[-1] if self.embeds_cumsum else 0
 
-    def get_embeds_indices_in_range(self, start_idx: int, end_idx: int) -> tuple[int, int]:
+    def get_embeds_indices_in_range(
+        self, start_idx: int, end_idx: int
+    ) -> tuple[int, int]:
         """
         Returns the starting and ending indices of the embeddings of encoder outputs
         in the range of [start_idx, end_idx) in the placeholders.
@@ -186,8 +192,12 @@ class PlaceholderRange:
             return [(self.offset, self.offset + self.length - 1)]
 
         mask_i = self.is_embed.int()
-        starts = torch.nonzero(torch.diff(mask_i, prepend=mask_i.new_zeros(1)) == 1).flatten()
-        ends = torch.nonzero(torch.diff(mask_i, append=mask_i.new_zeros(1)) == -1).flatten()
+        starts = torch.nonzero(
+            torch.diff(mask_i, prepend=mask_i.new_zeros(1)) == 1
+        ).flatten()
+        ends = torch.nonzero(
+            torch.diff(mask_i, append=mask_i.new_zeros(1)) == -1
+        ).flatten()
         ranges = torch.stack((starts, ends), dim=1) + self.offset
         return [tuple(x) for x in ranges.tolist()]
 
@@ -227,14 +237,30 @@ def nested_tensors_equal(a: NestedTensors, b: NestedTensors) -> bool:
         return isinstance(a, torch.Tensor) and torch.equal(b, a)
 
     if isinstance(a, list):
-        return isinstance(b, list) and len(a) == len(b) and all(nested_tensors_equal(a_, b_) for a_, b_ in zip(a, b))
+        return (
+            isinstance(b, list)
+            and len(a) == len(b)
+            and all(nested_tensors_equal(a_, b_) for a_, b_ in zip(a, b))
+        )
     if isinstance(b, list):
-        return isinstance(a, list) and len(b) == len(a) and all(nested_tensors_equal(b_, a_) for b_, a_ in zip(b, a))
+        return (
+            isinstance(a, list)
+            and len(b) == len(a)
+            and all(nested_tensors_equal(b_, a_) for b_, a_ in zip(b, a))
+        )
 
     if isinstance(a, tuple):
-        return isinstance(b, tuple) and len(a) == len(b) and all(nested_tensors_equal(a_, b_) for a_, b_ in zip(a, b))
+        return (
+            isinstance(b, tuple)
+            and len(a) == len(b)
+            and all(nested_tensors_equal(a_, b_) for a_, b_ in zip(a, b))
+        )
     if isinstance(b, tuple):
-        return isinstance(a, tuple) and len(b) == len(a) and all(nested_tensors_equal(b_, a_) for b_, a_ in zip(b, a))
+        return (
+            isinstance(a, tuple)
+            and len(b) == len(a)
+            and all(nested_tensors_equal(b_, a_) for b_, a_ in zip(b, a))
+        )
 
     # Both a and b are scalars
     return a == b
@@ -248,7 +274,11 @@ def _nested_tensors_h2d(
         return tensors
 
     return json_map_leaves(
-        (lambda x: x.to(device=device, non_blocking=True) if isinstance(x, torch.Tensor) else x),
+        (
+            lambda x: x.to(device=device, non_blocking=True)
+            if isinstance(x, torch.Tensor)
+            else x
+        ),
         tensors,
     )
 
@@ -458,7 +488,13 @@ class MultiModalBatchedField(BaseMultiModalField):
                 # An optimization when `batch` contains only one tensor:
                 # - produce exactly same result as `torch.stack(batch)`
                 # - will achieve zero-copy if the tensor is contiguous
-                return batch[0].unsqueeze(0).contiguous()
+                out = batch[0].unsqueeze(0)
+                if not pin_memory:
+                    return out.contiguous()
+                # Avoid extra copy - pinning unpinned memory will make it contiguous
+                if not out.is_contiguous() and out.is_pinned():
+                    out = out.contiguous()
+                return out.pin_memory()
             first_shape = batch[0].shape
             if all(elem.shape == first_shape for elem in batch):
                 out = torch.empty(
@@ -491,7 +527,9 @@ class MultiModalFlatField(BaseMultiModalField):
     ) -> Sequence[MultiModalFieldElem]:
         field_factory = self._field_factory()
         if not is_list_of(self.slices, slice, check="all"):
-            assert isinstance(data, torch.Tensor), "torch.Tensor is required for multiple slices"
+            assert isinstance(data, torch.Tensor), (
+                "torch.Tensor is required for multiple slices"
+            )
         return [field_factory(data[cast(slice, s)]) for s in self.slices]
 
     def _reduce_data(
@@ -506,7 +544,13 @@ class MultiModalFlatField(BaseMultiModalField):
                 # An optimization when `batch` contains only one tensor:
                 # - produce exactly same result as `torch.concat(batch)`
                 # - will achieve zero-copy if the tensor is contiguous
-                return batch[0].contiguous()
+                out = batch[0]
+                if not pin_memory:
+                    return out.contiguous()
+                # Avoid extra copy - pinning unpinned memory will make it contiguous
+                if not out.is_contiguous() and out.is_pinned():
+                    out = out.contiguous()
+                return out.pin_memory()
 
             dim = self.dim + (self.dim < 0) * len(batch[0].shape)
 
@@ -557,7 +601,9 @@ class MultiModalFlatField(BaseMultiModalField):
                 slices: list[slice] = []
                 for d in range(ndim):
                     if d == dim:
-                        slices.append(slice(concat_offset, concat_offset + tensor.shape[d]))
+                        slices.append(
+                            slice(concat_offset, concat_offset + tensor.shape[d])
+                        )
                     else:
                         slices.append(slice(0, tensor.shape[d]))
                 out[tuple(slices)] = tensor
@@ -744,11 +790,15 @@ class MultiModalFieldConfig:
         """
 
         if size_per_item.ndim != 1:
-            raise ValueError(f"size_per_item should be a 1-D tensor, but found shape: {size_per_item.shape}")
+            raise ValueError(
+                "size_per_item should be a 1-D tensor, "
+                f"but found shape: {size_per_item.shape}"
+            )
 
         slice_idxs = [0, *accumulate(size_per_item)]
         slices = [
-            (slice(None, None, None),) * dim + (slice(slice_idxs[i], slice_idxs[i + 1]),)
+            (slice(None, None, None),) * dim
+            + (slice(slice_idxs[i], slice_idxs[i + 1]),)
             for i in range(len(size_per_item))
         ]
 
@@ -900,18 +950,25 @@ class MultiModalKwargsItems(UserDict[str, Sequence[_I]]):
             batch_sizes = {k: len(v) for k, v in elems_in_modality.items()}
 
             if len(set(batch_sizes.values())) > 1:
-                raise ValueError(f"Cannot merge different batch sizes for {modality=}! Found: {batch_sizes=}")
+                raise ValueError(
+                    f"Cannot merge different batch sizes for {modality=}! "
+                    f"Found: {batch_sizes=}"
+                )
 
             batch_size = next(iter(batch_sizes.values()))
             items_by_modality[modality] = [
-                MultiModalKwargsItem({k: v[i] for k, v in elems_in_modality.items()}) for i in range(batch_size)
+                MultiModalKwargsItem({k: v[i] for k, v in elems_in_modality.items()})
+                for i in range(batch_size)
             ]
 
         return MultiModalKwargsItems(items_by_modality)
 
     def __getitem__(self, modality: str) -> Sequence[_I]:
         if modality not in self:
-            raise KeyError(f"Modality {modality!r} not found. Available modalities: {set(self.keys())}")
+            raise KeyError(
+                f"Modality {modality!r} not found. "
+                f"Available modalities: {set(self.keys())}"
+            )
 
         return super().__getitem__(modality)  # type: ignore[return-value]
 
@@ -949,9 +1006,15 @@ class MultiModalKwargsItems(UserDict[str, Sequence[_I]]):
         out_data: BatchedTensorInputs = {}
         for _, batches in batches_by_modality.items():
             if len(batches) != 1:
-                num_batches_by_modality = {modality: len(batches) for modality, batches in batches_by_modality.items()}
+                num_batches_by_modality = {
+                    modality: len(batches)
+                    for modality, batches in batches_by_modality.items()
+                }
 
-                raise RuntimeError(f"Some modalities cannot be merged into a single batch ({num_batches_by_modality=})")
+                raise RuntimeError(
+                    f"Some modalities cannot be merged into a single batch "
+                    f"({num_batches_by_modality=})"
+                )
 
             out_data.update(batches[0])
 
@@ -959,5 +1022,6 @@ class MultiModalKwargsItems(UserDict[str, Sequence[_I]]):
 
 
 MultiModalKwargsOptionalItems: TypeAlias = (
-    MultiModalKwargsItems[MultiModalKwargsItem] | MultiModalKwargsItems[MultiModalKwargsItem | None]
+    MultiModalKwargsItems[MultiModalKwargsItem]
+    | MultiModalKwargsItems[MultiModalKwargsItem | None]
 )

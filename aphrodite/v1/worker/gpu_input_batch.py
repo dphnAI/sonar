@@ -15,6 +15,7 @@ from aphrodite.pooling_params import PoolingParams
 from aphrodite.sampling_params import SamplingParams, SamplingType
 from aphrodite.utils import length_from_prompt_token_ids_or_embeds
 from aphrodite.utils.collection_utils import swap_dict_values
+from aphrodite.utils.torch_utils import PIN_MEMORY
 from aphrodite.v1.outputs import LogprobsTensors
 from aphrodite.v1.pool.metadata import PoolingMetadata, PoolingStates
 from aphrodite.v1.sample.logits_processor import (
@@ -52,6 +53,8 @@ class CachedRequestState:
 
     lora_request: LoRARequest | None = None
     prompt_embeds: torch.Tensor | None = None
+    # To accumulate prompt logprobs tensor chunks across prefill steps.
+    in_progress_prompt_logprobs_cpu: LogprobsTensors | None = None
 
     # Per-position mask for mixed-mode inputs (e.g chat completion with
     # prompt_embeds content parts). See `Request.prompt_is_token_ids`.
@@ -68,7 +71,9 @@ class CachedRequestState:
     pooling_states: PoolingStates | None = None
 
     def __post_init__(self):
-        self.num_prompt_tokens = length_from_prompt_token_ids_or_embeds(self.prompt_token_ids, self.prompt_embeds)
+        self.num_prompt_tokens = length_from_prompt_token_ids_or_embeds(
+            self.prompt_token_ids, self.prompt_embeds
+        )
 
         if self.pooling_params is not None:
             self.pooling_states = PoolingStates()
@@ -97,7 +102,6 @@ class InputBatch:
         max_model_len: int,
         max_num_batched_tokens: int,
         device: torch.device,
-        pin_memory: bool,
         vocab_size: int,
         block_sizes: list[int],  # The block_size of each kv cache group
         kernel_block_sizes: list[int],
@@ -114,7 +118,6 @@ class InputBatch:
             max_num_reqs,
             num_spec_tokens,
             device,
-            pin_memory,
         )
         self.thinking_token_budget_reqs: set[str] = set()
         self.is_pooling_model = is_pooling_model
@@ -122,7 +125,6 @@ class InputBatch:
         self.max_model_len = max_model_len
         self.max_num_batched_tokens = max_num_batched_tokens
         self.device = device
-        self.pin_memory = pin_memory
         self.vocab_size = vocab_size
 
         self._req_ids: list[str | None] = []
@@ -140,7 +142,10 @@ class InputBatch:
         )
         self.token_ids_cpu = self.token_ids_cpu_tensor.numpy()
         self.is_token_ids_tensor = torch.zeros(
-            (max_num_reqs, max_model_len), device="cpu", dtype=bool, pin_memory=False
+            (max_num_reqs, max_model_len),
+            device="cpu",
+            dtype=bool,
+            pin_memory=False,
         )
         self.is_token_ids = self.is_token_ids_tensor.numpy()
         # Store prompt embeddings per request to avoid OOM from large upfront
@@ -151,21 +156,21 @@ class InputBatch:
             (max_num_reqs,),
             device="cpu",
             dtype=torch.int32,
-            pin_memory=pin_memory,
+            pin_memory=PIN_MEMORY,
         )
         self.num_tokens_no_spec = self.num_tokens_no_spec_cpu_tensor.numpy()
         self.num_prompt_tokens_cpu_tensor = torch.zeros(
             (max_num_reqs,),
             device="cpu",
             dtype=torch.int32,
-            pin_memory=pin_memory,
+            pin_memory=PIN_MEMORY,
         )
         self.num_prompt_tokens = self.num_prompt_tokens_cpu_tensor.numpy()
         self.num_computed_tokens_cpu_tensor = torch.zeros(
             (max_num_reqs,),
             device="cpu",
             dtype=torch.int32,
-            pin_memory=pin_memory,
+            pin_memory=PIN_MEMORY,
         )
         self.num_computed_tokens_cpu = self.num_computed_tokens_cpu_tensor.numpy()
 
@@ -174,7 +179,7 @@ class InputBatch:
             max_num_reqs=max_num_reqs,
             max_model_len=max_model_len,
             max_num_batched_tokens=max_num_batched_tokens,
-            pin_memory=pin_memory,
+            pin_memory=PIN_MEMORY,
             device=device,
             block_sizes=block_sizes,
             kernel_block_sizes=kernel_block_sizes,
@@ -183,197 +188,263 @@ class InputBatch:
         )
 
         # Sampling-related.
-        self.temperature = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
+        self.temperature = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device=device
+        )
         self.temperature_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.temperature_cpu = self.temperature_cpu_tensor.numpy()
         self.greedy_reqs: set[str] = set()
         self.random_reqs: set[str] = set()
 
-        self.dynatemp_min = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
+        self.dynatemp_min = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device=device
+        )
         self.dynatemp_min_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.dynatemp_min_cpu = self.dynatemp_min_cpu_tensor.numpy()
-        self.dynatemp_max = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
+        self.dynatemp_max = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device=device
+        )
         self.dynatemp_max_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.dynatemp_max_cpu = self.dynatemp_max_cpu_tensor.numpy()
-        self.dynatemp_exp = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
+        self.dynatemp_exp = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device=device
+        )
         self.dynatemp_exp_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.dynatemp_exp_cpu = self.dynatemp_exp_cpu_tensor.numpy()
         self.dynatemp_reqs: set[str] = set()
 
         self.top_p = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
-        self.top_p_cpu_tensor = torch.empty((max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory)
+        self.top_p_cpu_tensor = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
+        )
         self.top_p_cpu = self.top_p_cpu_tensor.numpy()
         self.top_p_reqs: set[str] = set()
 
         self.top_k = torch.empty((max_num_reqs,), dtype=torch.int32, device=device)
-        self.top_k_cpu_tensor = torch.empty((max_num_reqs,), dtype=torch.int32, device="cpu", pin_memory=pin_memory)
+        self.top_k_cpu_tensor = torch.empty(
+            (max_num_reqs,), dtype=torch.int32, device="cpu", pin_memory=PIN_MEMORY
+        )
         self.top_k_cpu = self.top_k_cpu_tensor.numpy()
         self.top_k_reqs: set[str] = set()
 
         self.top_a = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
-        self.top_a_cpu_tensor = torch.empty((max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory)
+        self.top_a_cpu_tensor = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
+        )
         self.top_a_cpu = self.top_a_cpu_tensor.numpy()
         self.top_a_reqs: set[str] = set()
 
         self.tfs = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
-        self.tfs_cpu_tensor = torch.empty((max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory)
+        self.tfs_cpu_tensor = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
+        )
         self.tfs_cpu = self.tfs_cpu_tensor.numpy()
         self.tfs_reqs: set[str] = set()
 
-        self.eta_cutoff = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
+        self.eta_cutoff = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device=device
+        )
         self.eta_cutoff_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.eta_cutoff_cpu = self.eta_cutoff_cpu_tensor.numpy()
         self.eta_cutoff_reqs: set[str] = set()
 
-        self.epsilon_cutoff = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
+        self.epsilon_cutoff = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device=device
+        )
         self.epsilon_cutoff_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.epsilon_cutoff_cpu = self.epsilon_cutoff_cpu_tensor.numpy()
         self.epsilon_cutoff_reqs: set[str] = set()
 
-        self.typical_p = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
+        self.typical_p = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device=device
+        )
         self.typical_p_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.typical_p_cpu = self.typical_p_cpu_tensor.numpy()
         self.typical_p_reqs: set[str] = set()
 
-        self.quadratic_smoothing_factor = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
+        self.quadratic_smoothing_factor = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device=device
+        )
         self.quadratic_smoothing_factor_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
         )
-        self.quadratic_smoothing_factor_cpu = self.quadratic_smoothing_factor_cpu_tensor.numpy()
-        self.quadratic_smoothing_curve = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
+        self.quadratic_smoothing_factor_cpu = (
+            self.quadratic_smoothing_factor_cpu_tensor.numpy()
+        )
+        self.quadratic_smoothing_curve = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device=device
+        )
         self.quadratic_smoothing_curve_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
         )
-        self.quadratic_smoothing_curve_cpu = self.quadratic_smoothing_curve_cpu_tensor.numpy()
+        self.quadratic_smoothing_curve_cpu = (
+            self.quadratic_smoothing_curve_cpu_tensor.numpy()
+        )
         self.quadratic_reqs: set[str] = set()
 
-        self.xtc_threshold = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
+        self.xtc_threshold = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device=device
+        )
         self.xtc_threshold_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.xtc_threshold_cpu = self.xtc_threshold_cpu_tensor.numpy()
-        self.xtc_probability = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
+        self.xtc_probability = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device=device
+        )
         self.xtc_probability_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.xtc_probability_cpu = self.xtc_probability_cpu_tensor.numpy()
         self.xtc_reqs: set[str] = set()
 
-        self.top_nsigma = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
+        self.top_nsigma = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device=device
+        )
         self.top_nsigma_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.top_nsigma_cpu = self.top_nsigma_cpu_tensor.numpy()
         self.top_nsigma_reqs: set[str] = set()
 
-        self.mirostat_mode = torch.empty((max_num_reqs,), dtype=torch.int32, device=device)
+        self.mirostat_mode = torch.empty(
+            (max_num_reqs,), dtype=torch.int32, device=device
+        )
         self.mirostat_mode_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.int32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.int32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.mirostat_mode_cpu = self.mirostat_mode_cpu_tensor.numpy()
-        self.mirostat_tau = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
+        self.mirostat_tau = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device=device
+        )
         self.mirostat_tau_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.mirostat_tau_cpu = self.mirostat_tau_cpu_tensor.numpy()
-        self.mirostat_eta = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
+        self.mirostat_eta = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device=device
+        )
         self.mirostat_eta_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.mirostat_eta_cpu = self.mirostat_eta_cpu_tensor.numpy()
         self.mirostat_reqs: set[str] = set()
 
         self.skew = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
-        self.skew_cpu_tensor = torch.empty((max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory)
+        self.skew_cpu_tensor = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
+        )
         self.skew_cpu = self.skew_cpu_tensor.numpy()
         self.skew_reqs: set[str] = set()
 
-        self.dry_multiplier = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
+        self.dry_multiplier = torch.empty(
+            (max_num_reqs,), dtype=torch.float32, device=device
+        )
         self.dry_multiplier_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.dry_multiplier_cpu = self.dry_multiplier_cpu_tensor.numpy()
         self.dry_base = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
         self.dry_base_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.dry_base_cpu = self.dry_base_cpu_tensor.numpy()
-        self.dry_allowed_length = torch.empty((max_num_reqs,), dtype=torch.int32, device=device)
+        self.dry_allowed_length = torch.empty(
+            (max_num_reqs,), dtype=torch.int32, device=device
+        )
         self.dry_allowed_length_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.int32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.int32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.dry_allowed_length_cpu = self.dry_allowed_length_cpu_tensor.numpy()
-        self.dry_ranges = torch.empty((max_num_reqs,), dtype=torch.int32, device=device)
+        self.dry_ranges = torch.empty(
+            (max_num_reqs,), dtype=torch.int32, device=device
+        )
         self.dry_ranges_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.int32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.int32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.dry_ranges_cpu = self.dry_ranges_cpu_tensor.numpy()
-        self.dry_max_ngram = torch.empty((max_num_reqs,), dtype=torch.int32, device=device)
+        self.dry_max_ngram = torch.empty(
+            (max_num_reqs,), dtype=torch.int32, device=device
+        )
         self.dry_max_ngram_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.int32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.int32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.dry_max_ngram_cpu = self.dry_max_ngram_cpu_tensor.numpy()
-        self.dry_max_occurrences = torch.empty((max_num_reqs,), dtype=torch.int32, device=device)
+        self.dry_max_occurrences = torch.empty(
+            (max_num_reqs,), dtype=torch.int32, device=device
+        )
         self.dry_max_occurrences_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.int32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.int32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.dry_max_occurrences_cpu = self.dry_max_occurrences_cpu_tensor.numpy()
-        self.dry_early_exit_match_len = torch.empty((max_num_reqs,), dtype=torch.int32, device=device)
-        self.dry_early_exit_match_len_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.int32, device="cpu", pin_memory=pin_memory
+        self.dry_early_exit_match_len = torch.empty(
+            (max_num_reqs,), dtype=torch.int32, device=device
         )
-        self.dry_early_exit_match_len_cpu = self.dry_early_exit_match_len_cpu_tensor.numpy()
+        self.dry_early_exit_match_len_cpu_tensor = torch.empty(
+            (max_num_reqs,), dtype=torch.int32, device="cpu", pin_memory=PIN_MEMORY
+        )
+        self.dry_early_exit_match_len_cpu = (
+            self.dry_early_exit_match_len_cpu_tensor.numpy()
+        )
         self.dry_reqs: set[str] = set()
         self.dry_sequence_breaker_ids: dict[int, list[int]] = {}
 
-        self.no_repeat_ngram_size = torch.empty((max_num_reqs,), dtype=torch.int32, device=device)
+        self.no_repeat_ngram_size = torch.empty(
+            (max_num_reqs,), dtype=torch.int32, device=device
+        )
         self.no_repeat_ngram_size_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.int32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.int32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.no_repeat_ngram_size_cpu = self.no_repeat_ngram_size_cpu_tensor.numpy()
         self.no_repeat_ngram_reqs: set[str] = set()
 
         # Frequency penalty related data structures
-        self.frequency_penalties = torch.empty((max_num_reqs,), dtype=torch.float, device=device)
+        self.frequency_penalties = torch.empty(
+            (max_num_reqs,), dtype=torch.float, device=device
+        )
         self.frequency_penalties_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float, device="cpu", pin_memory=PIN_MEMORY
         )
         self.frequency_penalties_cpu = self.frequency_penalties_cpu_tensor.numpy()
         self.frequency_penalties_reqs: set[str] = set()
 
         # Presence penalty related data structures
-        self.presence_penalties = torch.empty((max_num_reqs,), dtype=torch.float, device=device)
+        self.presence_penalties = torch.empty(
+            (max_num_reqs,), dtype=torch.float, device=device
+        )
         self.presence_penalties_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float, device="cpu", pin_memory=PIN_MEMORY
         )
         self.presence_penalties_cpu = self.presence_penalties_cpu_tensor.numpy()
         self.presence_penalties_reqs: set[str] = set()
 
         # Repetition penalty related data structures
-        self.repetition_penalties = torch.empty((max_num_reqs,), dtype=torch.float, device=device)
+        self.repetition_penalties = torch.empty(
+            (max_num_reqs,), dtype=torch.float, device=device
+        )
         self.repetition_penalties_cpu_tensor = torch.empty(
-            (max_num_reqs,), dtype=torch.float, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.float, device="cpu", pin_memory=PIN_MEMORY
         )
         self.repetition_penalties_cpu = self.repetition_penalties_cpu_tensor.numpy()
         self.repetition_penalties_reqs: set[str] = set()
 
         # Speculative decoding
         self.num_accepted_tokens_cpu_tensor = torch.ones(
-            (max_num_reqs,), dtype=torch.int32, device="cpu", pin_memory=pin_memory
+            (max_num_reqs,), dtype=torch.int32, device="cpu", pin_memory=PIN_MEMORY
         )
         self.num_accepted_tokens_cpu = self.num_accepted_tokens_cpu_tensor.numpy()
 
@@ -393,9 +464,6 @@ class InputBatch:
         # More efficient than num_logprobs=-1 when only a few tokens are needed
         self.logprob_token_ids: dict[str, list[int]] = {}
 
-        # To accumulate prompt logprobs tensor chunks across prefill steps.
-        self.in_progress_prompt_logprobs_cpu: dict[str, LogprobsTensors] = {}
-
         # Internal representation of per-step batch state changes, used for
         # reordering persistent batch and generating logitsprocs batch state
         # updates. Should reset each step.
@@ -410,9 +478,12 @@ class InputBatch:
 
         # req_index -> bad_words_token_ids
         self.bad_words_token_ids: dict[int, list[list[int]]] = {}
+        # req_index -> logit_bias mapping
         self.logit_bias: dict[int, dict[int, float]] = {}
 
+        # Per-request temperature-last execution flag.
         self.temperature_last: list[bool] = [False] * max_num_reqs
+        # Persistent metadata used by custom samplers such as mirostat / DRY.
         self.persistent_data: dict[int, dict[str, Any]] = {}
 
         self.logits_processing_needs_token_ids = np.zeros(max_num_reqs, dtype=bool)
@@ -425,7 +496,7 @@ class InputBatch:
         self.logitsprocs_need_output_token_ids = logitsprocs_need_output_token_ids
 
         # Store last speculative tokens for sampler.
-        self.spec_token_ids: list[list[int]] = []
+        self.spec_token_ids: list[list[int]] = [[] for _ in range(max_num_reqs)]
 
         # This is updated each time the batch constituents change.
         self.sampling_metadata = self._make_sampling_metadata()
@@ -494,14 +565,18 @@ class InputBatch:
         self.req_id_to_index[req_id] = req_index
 
         # Copy the prompt token ids and output token ids.
-        num_prompt_tokens = length_from_prompt_token_ids_or_embeds(request.prompt_token_ids, request.prompt_embeds)
+        num_prompt_tokens = length_from_prompt_token_ids_or_embeds(
+            request.prompt_token_ids, request.prompt_embeds
+        )
         self.num_prompt_tokens[req_index] = num_prompt_tokens
         start_idx = num_prompt_tokens
         end_idx = start_idx + len(request.output_token_ids)
         if request.prompt_token_ids is not None:
             self.token_ids_cpu[req_index, :num_prompt_tokens] = request.prompt_token_ids
             if request.prompt_is_token_ids is not None:
-                self.is_token_ids[req_index, :num_prompt_tokens] = request.prompt_is_token_ids
+                self.is_token_ids[req_index, :num_prompt_tokens] = (
+                    request.prompt_is_token_ids
+                )
             else:
                 self.is_token_ids[req_index, :num_prompt_tokens] = True
         else:
@@ -528,7 +603,10 @@ class InputBatch:
             self.dynatemp_min_cpu[req_index] = sampling_params.dynatemp_min
             self.dynatemp_max_cpu[req_index] = sampling_params.dynatemp_max
             self.dynatemp_exp_cpu[req_index] = sampling_params.dynatemp_exponent
-            if sampling_params.dynatemp_min > _SAMPLING_EPS or sampling_params.dynatemp_max > _SAMPLING_EPS:
+            if (
+                sampling_params.dynatemp_min > _SAMPLING_EPS
+                or sampling_params.dynatemp_max > _SAMPLING_EPS
+            ):
                 self.dynatemp_reqs.add(req_id)
 
             self.top_p_cpu[req_index] = sampling_params.top_p
@@ -555,8 +633,12 @@ class InputBatch:
             self.typical_p_cpu[req_index] = sampling_params.typical_p
             if sampling_params.typical_p < 1.0:
                 self.typical_p_reqs.add(req_id)
-            self.quadratic_smoothing_factor_cpu[req_index] = sampling_params.smoothing_factor
-            self.quadratic_smoothing_curve_cpu[req_index] = sampling_params.smoothing_curve
+            self.quadratic_smoothing_factor_cpu[req_index] = (
+                sampling_params.smoothing_factor
+            )
+            self.quadratic_smoothing_curve_cpu[req_index] = (
+                sampling_params.smoothing_curve
+            )
             if sampling_params.smoothing_factor > 0:
                 self.quadratic_reqs.add(req_id)
             self.xtc_threshold_cpu[req_index] = sampling_params.xtc_threshold
@@ -579,13 +661,21 @@ class InputBatch:
             self.dry_allowed_length_cpu[req_index] = sampling_params.dry_allowed_length
             self.dry_ranges_cpu[req_index] = sampling_params.dry_range
             self.dry_max_ngram_cpu[req_index] = sampling_params.dry_max_ngram
-            self.dry_max_occurrences_cpu[req_index] = sampling_params.dry_max_occurrences
-            self.dry_early_exit_match_len_cpu[req_index] = sampling_params.dry_early_exit_match_len
+            self.dry_max_occurrences_cpu[req_index] = (
+                sampling_params.dry_max_occurrences
+            )
+            self.dry_early_exit_match_len_cpu[req_index] = (
+                sampling_params.dry_early_exit_match_len
+            )
             if sampling_params.dry_multiplier > 0:
                 self.dry_reqs.add(req_id)
                 if sampling_params.dry_sequence_breaker_ids:
-                    self.dry_sequence_breaker_ids[req_index] = sampling_params.dry_sequence_breaker_ids
-            self.no_repeat_ngram_size_cpu[req_index] = sampling_params.no_repeat_ngram_size
+                    self.dry_sequence_breaker_ids[req_index] = (
+                        sampling_params.dry_sequence_breaker_ids
+                    )
+            self.no_repeat_ngram_size_cpu[req_index] = (
+                sampling_params.no_repeat_ngram_size
+            )
             if sampling_params.no_repeat_ngram_size > 0:
                 self.no_repeat_ngram_reqs.add(req_id)
             self.frequency_penalties_cpu[req_index] = sampling_params.frequency_penalty
@@ -594,7 +684,9 @@ class InputBatch:
             self.presence_penalties_cpu[req_index] = sampling_params.presence_penalty
             if sampling_params.presence_penalty != 0.0:
                 self.presence_penalties_reqs.add(req_id)
-            self.repetition_penalties_cpu[req_index] = sampling_params.repetition_penalty
+            self.repetition_penalties_cpu[req_index] = (
+                sampling_params.repetition_penalty
+            )
             if sampling_params.repetition_penalty != 1.0:
                 self.repetition_penalties_reqs.add(req_id)
 
@@ -605,7 +697,9 @@ class InputBatch:
 
             if sampling_params.logprobs is not None:
                 self.num_logprobs[req_id] = (
-                    self.vocab_size if sampling_params.logprobs == -1 else sampling_params.logprobs
+                    self.vocab_size
+                    if sampling_params.logprobs == -1
+                    else sampling_params.logprobs
                 )
 
             # Store specific token IDs to compute logprobs for (more efficient)
@@ -631,10 +725,14 @@ class InputBatch:
                     )
                 self.allowed_token_ids_mask_cpu_tensor[req_index] = True
                 # False means we don't fill with -inf.
-                self.allowed_token_ids_mask_cpu_tensor[req_index][sampling_params.allowed_token_ids] = False
+                self.allowed_token_ids_mask_cpu_tensor[req_index][
+                    sampling_params.allowed_token_ids
+                ] = False
 
             if sampling_params.bad_words_token_ids:
-                self.bad_words_token_ids[req_index] = sampling_params.bad_words_token_ids
+                self.bad_words_token_ids[req_index] = (
+                    sampling_params.bad_words_token_ids
+                )
             if sampling_params.logit_bias:
                 self.logit_bias[req_index] = sampling_params.logit_bias
 
@@ -654,7 +752,9 @@ class InputBatch:
 
             self.pooling_params[req_id] = pooling_params
             self.pooling_states[req_id] = pooling_states
-            self.logits_processing_needs_token_ids[req_index] = pooling_params.requires_token_ids
+            self.logits_processing_needs_token_ids[req_index] = (
+                pooling_params.requires_token_ids
+            )
         else:
             raise NotImplementedError("Unrecognized request type")
 
@@ -700,6 +800,7 @@ class InputBatch:
         start_index = self.num_tokens_no_spec[req_index]
         end_token_index = start_index + num_spec_tokens
         self.token_ids_cpu[req_index, start_index:end_token_index] = spec_token_ids
+        self.is_token_ids[req_index, start_index:end_token_index] = True
         cur_spec_token_ids.extend(spec_token_ids)
 
     def remove_request(self, req_id: str) -> int | None:
@@ -760,7 +861,6 @@ class InputBatch:
         self.generators.pop(req_index, None)
         self.num_logprobs.pop(req_id, None)
         self.logprob_token_ids.pop(req_id, None)
-        self.in_progress_prompt_logprobs_cpu.pop(req_id, None)
         if self.prev_req_id_to_index is not None:
             self.prev_req_id_to_index.pop(req_id, None)
 
@@ -816,10 +916,14 @@ class InputBatch:
         #     self.token_ids_cpu[i2, ...], self.token_ids_cpu[i1, ...]
         # instead, we need to temporarily copy the data for one of the indices
         tmp_token_ids = self.token_ids_cpu[i1, :max_active_token_count].copy()
-        self.token_ids_cpu[i1, :max_active_token_count] = self.token_ids_cpu[i2, :max_active_token_count]
+        self.token_ids_cpu[i1, :max_active_token_count] = self.token_ids_cpu[
+            i2, :max_active_token_count
+        ]
         self.token_ids_cpu[i2, :max_active_token_count] = tmp_token_ids
 
-        self.is_token_ids[[i1, i2], :max_active_token_count] = self.is_token_ids[[i2, i1], :max_active_token_count]
+        self.is_token_ids[[i1, i2], :max_active_token_count] = self.is_token_ids[
+            [i2, i1], :max_active_token_count
+        ]
 
         # Swap prompt embeddings if they exist
         embeds_i1 = self.req_prompt_embeds.get(i1)
@@ -883,11 +987,15 @@ class InputBatch:
             self.typical_p_cpu[i2],
             self.typical_p_cpu[i1],
         )
-        self.quadratic_smoothing_factor_cpu[i1], self.quadratic_smoothing_factor_cpu[i2] = (
+        self.quadratic_smoothing_factor_cpu[i1], self.quadratic_smoothing_factor_cpu[
+            i2
+        ] = (
             self.quadratic_smoothing_factor_cpu[i2],
             self.quadratic_smoothing_factor_cpu[i1],
         )
-        self.quadratic_smoothing_curve_cpu[i1], self.quadratic_smoothing_curve_cpu[i2] = (
+        self.quadratic_smoothing_curve_cpu[i1], self.quadratic_smoothing_curve_cpu[
+            i2
+        ] = (
             self.quadratic_smoothing_curve_cpu[i2],
             self.quadratic_smoothing_curve_cpu[i1],
         )
@@ -940,7 +1048,10 @@ class InputBatch:
             self.dry_max_occurrences_cpu[i2],
             self.dry_max_occurrences_cpu[i1],
         )
-        self.dry_early_exit_match_len_cpu[i1], self.dry_early_exit_match_len_cpu[i2] = (
+        (
+            self.dry_early_exit_match_len_cpu[i1],
+            self.dry_early_exit_match_len_cpu[i2],
+        ) = (
             self.dry_early_exit_match_len_cpu[i2],
             self.dry_early_exit_match_len_cpu[i1],
         )
@@ -981,7 +1092,9 @@ class InputBatch:
             )
 
     def _get_active_token_count(self, req_index: int) -> int:
-        return int(self.num_tokens_no_spec[req_index]) + len(self.spec_token_ids[req_index])
+        return int(self.num_tokens_no_spec[req_index]) + len(
+            self.spec_token_ids[req_index]
+        )
 
     def condense(self) -> None:
         """Slide non-empty requests down into lower, empty indices.
@@ -1040,16 +1153,28 @@ class InputBatch:
             )
             self.spec_token_ids[last_req_index].clear()
 
-            self.token_ids_cpu[empty_index, :num_tokens] = self.token_ids_cpu[last_req_index, :num_tokens]
-            self.is_token_ids[empty_index, :num_tokens] = self.is_token_ids[last_req_index, :num_tokens]
+            self.token_ids_cpu[empty_index, :num_tokens] = self.token_ids_cpu[
+                last_req_index, :num_tokens
+            ]
+            self.is_token_ids[empty_index, :num_tokens] = self.is_token_ids[
+                last_req_index, :num_tokens
+            ]
             if last_req_index in self.req_prompt_embeds:
-                self.req_prompt_embeds[empty_index] = self.req_prompt_embeds.pop(last_req_index)
-            self.num_tokens_no_spec[empty_index] = self.num_tokens_no_spec[last_req_index]
+                self.req_prompt_embeds[empty_index] = self.req_prompt_embeds.pop(
+                    last_req_index
+                )
+            self.num_tokens_no_spec[empty_index] = self.num_tokens_no_spec[
+                last_req_index
+            ]
             self.num_prompt_tokens[empty_index] = self.num_prompt_tokens[last_req_index]
-            self.num_computed_tokens_cpu[empty_index] = self.num_computed_tokens_cpu[last_req_index]
+            self.num_computed_tokens_cpu[empty_index] = self.num_computed_tokens_cpu[
+                last_req_index
+            ]
             self.block_table.move_row(last_req_index, empty_index)
 
-            self.request_lora_mapping[empty_index] = self.request_lora_mapping[last_req_index]
+            self.request_lora_mapping[empty_index] = self.request_lora_mapping[
+                last_req_index
+            ]
 
             if self.is_pooling_model:
                 last_req_index -= 1
@@ -1058,7 +1183,9 @@ class InputBatch:
 
             # Autoregressive models require detailed tracking of condense
             # operations to support logitsprocs
-            self.batch_update_builder.moved.append((last_req_index, empty_index, MoveDirectionality.UNIDIRECTIONAL))
+            self.batch_update_builder.moved.append(
+                (last_req_index, empty_index, MoveDirectionality.UNIDIRECTIONAL)
+            )
 
             self.temperature_cpu[empty_index] = self.temperature_cpu[last_req_index]
             self.dynatemp_min_cpu[empty_index] = self.dynatemp_min_cpu[last_req_index]
@@ -1069,38 +1196,64 @@ class InputBatch:
             self.top_a_cpu[empty_index] = self.top_a_cpu[last_req_index]
             self.tfs_cpu[empty_index] = self.tfs_cpu[last_req_index]
             self.eta_cutoff_cpu[empty_index] = self.eta_cutoff_cpu[last_req_index]
-            self.epsilon_cutoff_cpu[empty_index] = self.epsilon_cutoff_cpu[last_req_index]
+            self.epsilon_cutoff_cpu[empty_index] = self.epsilon_cutoff_cpu[
+                last_req_index
+            ]
             self.typical_p_cpu[empty_index] = self.typical_p_cpu[last_req_index]
-            self.quadratic_smoothing_factor_cpu[empty_index] = self.quadratic_smoothing_factor_cpu[last_req_index]
-            self.quadratic_smoothing_curve_cpu[empty_index] = self.quadratic_smoothing_curve_cpu[last_req_index]
+            self.quadratic_smoothing_factor_cpu[empty_index] = (
+                self.quadratic_smoothing_factor_cpu[last_req_index]
+            )
+            self.quadratic_smoothing_curve_cpu[empty_index] = (
+                self.quadratic_smoothing_curve_cpu[last_req_index]
+            )
             self.xtc_threshold_cpu[empty_index] = self.xtc_threshold_cpu[last_req_index]
-            self.xtc_probability_cpu[empty_index] = self.xtc_probability_cpu[last_req_index]
+            self.xtc_probability_cpu[empty_index] = self.xtc_probability_cpu[
+                last_req_index
+            ]
             self.top_nsigma_cpu[empty_index] = self.top_nsigma_cpu[last_req_index]
             self.mirostat_mode_cpu[empty_index] = self.mirostat_mode_cpu[last_req_index]
             self.mirostat_tau_cpu[empty_index] = self.mirostat_tau_cpu[last_req_index]
             self.mirostat_eta_cpu[empty_index] = self.mirostat_eta_cpu[last_req_index]
             self.skew_cpu[empty_index] = self.skew_cpu[last_req_index]
-            self.dry_multiplier_cpu[empty_index] = self.dry_multiplier_cpu[last_req_index]
+            self.dry_multiplier_cpu[empty_index] = self.dry_multiplier_cpu[
+                last_req_index
+            ]
             self.dry_base_cpu[empty_index] = self.dry_base_cpu[last_req_index]
-            self.dry_allowed_length_cpu[empty_index] = self.dry_allowed_length_cpu[last_req_index]
+            self.dry_allowed_length_cpu[empty_index] = self.dry_allowed_length_cpu[
+                last_req_index
+            ]
             self.dry_ranges_cpu[empty_index] = self.dry_ranges_cpu[last_req_index]
             self.dry_max_ngram_cpu[empty_index] = self.dry_max_ngram_cpu[last_req_index]
-            self.dry_max_occurrences_cpu[empty_index] = self.dry_max_occurrences_cpu[last_req_index]
-            self.dry_early_exit_match_len_cpu[empty_index] = self.dry_early_exit_match_len_cpu[last_req_index]
-            self.no_repeat_ngram_size_cpu[empty_index] = self.no_repeat_ngram_size_cpu[last_req_index]
-            self.frequency_penalties_cpu[empty_index] = self.frequency_penalties_cpu[last_req_index]
-            self.presence_penalties_cpu[empty_index] = self.presence_penalties_cpu[last_req_index]
-            self.repetition_penalties_cpu[empty_index] = self.repetition_penalties_cpu[last_req_index]
-            self.num_accepted_tokens_cpu[empty_index] = self.num_accepted_tokens_cpu[last_req_index]
+            self.dry_max_occurrences_cpu[empty_index] = self.dry_max_occurrences_cpu[
+                last_req_index
+            ]
+            self.dry_early_exit_match_len_cpu[empty_index] = (
+                self.dry_early_exit_match_len_cpu[last_req_index]
+            )
+            self.no_repeat_ngram_size_cpu[empty_index] = self.no_repeat_ngram_size_cpu[
+                last_req_index
+            ]
+            self.frequency_penalties_cpu[empty_index] = self.frequency_penalties_cpu[
+                last_req_index
+            ]
+            self.presence_penalties_cpu[empty_index] = self.presence_penalties_cpu[
+                last_req_index
+            ]
+            self.repetition_penalties_cpu[empty_index] = self.repetition_penalties_cpu[
+                last_req_index
+            ]
+            self.num_accepted_tokens_cpu[empty_index] = self.num_accepted_tokens_cpu[
+                last_req_index
+            ]
             generator = self.generators.pop(last_req_index, None)
             if generator is not None:
                 self.generators[empty_index] = generator
 
             # TODO convert these to LogitsProcessors
             if self.allowed_token_ids_mask_cpu_tensor is not None:
-                self.allowed_token_ids_mask_cpu_tensor[empty_index] = self.allowed_token_ids_mask_cpu_tensor[
-                    last_req_index
-                ]
+                self.allowed_token_ids_mask_cpu_tensor[empty_index] = (
+                    self.allowed_token_ids_mask_cpu_tensor[last_req_index]
+                )
 
             bad_words_token_ids = self.bad_words_token_ids.pop(last_req_index, None)
             if bad_words_token_ids is not None:
@@ -1108,7 +1261,9 @@ class InputBatch:
             logit_bias = self.logit_bias.pop(last_req_index, None)
             if logit_bias is not None:
                 self.logit_bias[empty_index] = logit_bias
-            dry_sequence_breaker_ids = self.dry_sequence_breaker_ids.pop(last_req_index, None)
+            dry_sequence_breaker_ids = self.dry_sequence_breaker_ids.pop(
+                last_req_index, None
+            )
             if dry_sequence_breaker_ids is not None:
                 self.dry_sequence_breaker_ids[empty_index] = dry_sequence_breaker_ids
             persistent_data = self.persistent_data.pop(last_req_index, None)
@@ -1146,7 +1301,9 @@ class InputBatch:
     def _make_sampling_metadata(self) -> SamplingMetadata:
         num_reqs = self.num_reqs
         if not self.all_greedy:
-            temperature = copy_slice(self.temperature_cpu_tensor, self.temperature, num_reqs)
+            temperature = copy_slice(
+                self.temperature_cpu_tensor, self.temperature, num_reqs
+            )
         else:
             temperature = None
         if not self.no_dynatemp:
@@ -1192,7 +1349,9 @@ class InputBatch:
         if not self.no_dry:
             copy_slice(self.dry_multiplier_cpu_tensor, self.dry_multiplier, num_reqs)
             copy_slice(self.dry_base_cpu_tensor, self.dry_base, num_reqs)
-            copy_slice(self.dry_allowed_length_cpu_tensor, self.dry_allowed_length, num_reqs)
+            copy_slice(
+                self.dry_allowed_length_cpu_tensor, self.dry_allowed_length, num_reqs
+            )
             copy_slice(self.dry_ranges_cpu_tensor, self.dry_ranges, num_reqs)
             copy_slice(self.dry_max_ngram_cpu_tensor, self.dry_max_ngram, num_reqs)
             copy_slice(
@@ -1216,8 +1375,12 @@ class InputBatch:
             # Since syncing these tensors is expensive only copy them
             # if necessary i.e. if there are requests which require
             # penalties to be applied during sampling.
-            copy_slice(self.frequency_penalties_cpu_tensor, self.frequency_penalties, num_reqs)
-            copy_slice(self.presence_penalties_cpu_tensor, self.presence_penalties, num_reqs)
+            copy_slice(
+                self.frequency_penalties_cpu_tensor, self.frequency_penalties, num_reqs
+            )
+            copy_slice(
+                self.presence_penalties_cpu_tensor, self.presence_penalties, num_reqs
+            )
             copy_slice(
                 self.repetition_penalties_cpu_tensor,
                 self.repetition_penalties,
@@ -1234,28 +1397,40 @@ class InputBatch:
         # step pooling during the sampling/pooling process.
         # Hence copy these tensors only when there are requests which
         # need penalties/step_pooler to be applied.
-        prompt_token_ids_cpu = self._make_prompt_token_ids_cpu_tensor() if needs_prompt_token_ids else None
+        prompt_token_ids_cpu = (
+            self._make_prompt_token_ids_cpu_tensor() if needs_prompt_token_ids else None
+        )
         prompt_token_ids = (
-            prompt_token_ids_cpu.to(device=self.device, non_blocking=True) if prompt_token_ids_cpu is not None else None
+            prompt_token_ids_cpu.to(device=self.device, non_blocking=True)
+            if prompt_token_ids_cpu is not None
+            else None
         )
 
         # Only set output_token_ids if required by the current requests'
         # sampling parameters.
         holder = self.thinking_budget_state_holder
-        thinking_budget_tracks_reqs = holder is not None and holder.has_tracked_requests()
+        thinking_budget_tracks_reqs = (
+            holder is not None and holder.has_tracked_requests()
+        )
         needs_output_token_ids = (
             not self.no_penalties
             or not self.no_dry
             or not self.no_no_repeat_ngram
             or bool(self.bad_words_token_ids)
             or self.logitsprocs_need_output_token_ids
-            or not thinking_budget_tracks_reqs
+            or thinking_budget_tracks_reqs
         )
-        output_token_ids = cast(list[list[int]], self.req_output_token_ids) if needs_output_token_ids else []
+        output_token_ids = (
+            cast(list[list[int]], self.req_output_token_ids)
+            if needs_output_token_ids
+            else []
+        )
         output_token_ids_tensor = None
         token_history_ids, token_history_lens = None, None
         token_history_ids_cpu, token_history_lens_cpu = (
-            self._get_token_history_cpu_views(num_reqs) if not self.no_dry else (None, None)
+            self._get_token_history_cpu_views(num_reqs)
+            if not self.no_dry
+            else (None, None)
         )
 
         allowed_token_ids_mask: torch.Tensor | None = None
@@ -1289,19 +1464,39 @@ class InputBatch:
             top_a=None if self.no_top_a else self.top_a[:num_reqs],
             dry_multiplier=(None if self.no_dry else self.dry_multiplier[:num_reqs]),
             dry_base=(None if self.no_dry else self.dry_base[:num_reqs]),
-            dry_allowed_length=(None if self.no_dry else self.dry_allowed_length[:num_reqs]),
-            dry_sequence_breaker_ids=(None if self.no_dry else self._make_dry_sequence_breaker_ids_tensor(num_reqs)),
+            dry_allowed_length=(
+                None if self.no_dry else self.dry_allowed_length[:num_reqs]
+            ),
+            dry_sequence_breaker_ids=(
+                None
+                if self.no_dry
+                else self._make_dry_sequence_breaker_ids_tensor(num_reqs)
+            ),
             dry_ranges=(None if self.no_dry else self.dry_ranges[:num_reqs]),
             dry_max_ngram=(None if self.no_dry else self.dry_max_ngram[:num_reqs]),
-            dry_max_occurrences=(None if self.no_dry else self.dry_max_occurrences[:num_reqs]),
-            dry_early_exit_match_len=(None if self.no_dry else self.dry_early_exit_match_len[:num_reqs]),
-            no_repeat_ngram_size=(None if self.no_no_repeat_ngram else self.no_repeat_ngram_size[:num_reqs]),
+            dry_max_occurrences=(
+                None if self.no_dry else self.dry_max_occurrences[:num_reqs]
+            ),
+            dry_early_exit_match_len=(
+                None if self.no_dry else self.dry_early_exit_match_len[:num_reqs]
+            ),
+            no_repeat_ngram_size=(
+                None
+                if self.no_no_repeat_ngram
+                else self.no_repeat_ngram_size[:num_reqs]
+            ),
             tfs=None if self.no_tfs else self.tfs[:num_reqs],
             eta_cutoff=(None if self.no_eta_cutoff else self.eta_cutoff[:num_reqs]),
-            epsilon_cutoff=(None if self.no_epsilon_cutoff else self.epsilon_cutoff[:num_reqs]),
+            epsilon_cutoff=(
+                None if self.no_epsilon_cutoff else self.epsilon_cutoff[:num_reqs]
+            ),
             typical_p=(None if self.no_typical_p else self.typical_p[:num_reqs]),
-            quadratic_smoothing_factor=(None if self.no_quadratic else self.quadratic_smoothing_factor[:num_reqs]),
-            quadratic_smoothing_curve=(None if self.no_quadratic else self.quadratic_smoothing_curve[:num_reqs]),
+            quadratic_smoothing_factor=(
+                None if self.no_quadratic else self.quadratic_smoothing_factor[:num_reqs]
+            ),
+            quadratic_smoothing_curve=(
+                None if self.no_quadratic else self.quadratic_smoothing_curve[:num_reqs]
+            ),
             xtc_threshold=(None if self.no_xtc else self.xtc_threshold[:num_reqs]),
             xtc_probability=(None if self.no_xtc else self.xtc_probability[:num_reqs]),
             top_nsigma=(None if self.no_top_nsigma else self.top_nsigma[:num_reqs]),
@@ -1322,15 +1517,31 @@ class InputBatch:
             token_history_lens=token_history_lens,
             token_history_ids_cpu=token_history_ids_cpu,
             token_history_lens_cpu=token_history_lens_cpu,
-            dry_multiplier_cpu=(None if self.no_dry else self.dry_multiplier_cpu_tensor[:num_reqs]),
-            dry_allowed_length_cpu=(None if self.no_dry else self.dry_allowed_length_cpu_tensor[:num_reqs]),
-            dry_sequence_breaker_ids_cpu=(
-                None if self.no_dry else self._make_dry_sequence_breaker_ids_cpu_tensor(num_reqs)
+            dry_multiplier_cpu=(
+                None if self.no_dry else self.dry_multiplier_cpu_tensor[:num_reqs]
             ),
-            dry_ranges_cpu=(None if self.no_dry else self.dry_ranges_cpu_tensor[:num_reqs]),
-            dry_max_ngram_cpu=(None if self.no_dry else self.dry_max_ngram_cpu_tensor[:num_reqs]),
-            dry_max_occurrences_cpu=(None if self.no_dry else self.dry_max_occurrences_cpu_tensor[:num_reqs]),
-            dry_early_exit_match_len_cpu=(None if self.no_dry else self.dry_early_exit_match_len_cpu_tensor[:num_reqs]),
+            dry_allowed_length_cpu=(
+                None if self.no_dry else self.dry_allowed_length_cpu_tensor[:num_reqs]
+            ),
+            dry_sequence_breaker_ids_cpu=(
+                None
+                if self.no_dry
+                else self._make_dry_sequence_breaker_ids_cpu_tensor(num_reqs)
+            ),
+            dry_ranges_cpu=(
+                None if self.no_dry else self.dry_ranges_cpu_tensor[:num_reqs]
+            ),
+            dry_max_ngram_cpu=(
+                None if self.no_dry else self.dry_max_ngram_cpu_tensor[:num_reqs]
+            ),
+            dry_max_occurrences_cpu=(
+                None if self.no_dry else self.dry_max_occurrences_cpu_tensor[:num_reqs]
+            ),
+            dry_early_exit_match_len_cpu=(
+                None
+                if self.no_dry
+                else self.dry_early_exit_match_len_cpu_tensor[:num_reqs]
+            ),
             spec_token_ids=self.spec_token_ids,
             no_penalties=self.no_penalties,
             allowed_token_ids_mask=allowed_token_ids_mask,
@@ -1372,7 +1583,7 @@ class InputBatch:
             (self.num_reqs, max_prompt_len),
             device="cpu",
             dtype=torch.int64,
-            pin_memory=self.pin_memory,
+            pin_memory=PIN_MEMORY,
         )
         prompt_token_ids = prompt_token_ids_cpu_tensor.numpy()
         prompt_token_ids[:] = self.token_ids_cpu[:num_reqs, :max_prompt_len]
@@ -1383,7 +1594,10 @@ class InputBatch:
         return prompt_token_ids_cpu_tensor
 
     def _make_output_token_ids_tensor(self, num_reqs: int) -> torch.Tensor:
-        max_output_len = max((len(ids) for ids in self.req_output_token_ids[:num_reqs] if ids is not None), default=0)
+        max_output_len = max(
+            (len(ids) for ids in self.req_output_token_ids[:num_reqs] if ids is not None),
+            default=0,
+        )
         if max_output_len == 0:
             return torch.empty((num_reqs, 0), device=self.device, dtype=torch.int64)
 
@@ -1392,26 +1606,34 @@ class InputBatch:
             fill_value=self.vocab_size,
             device="cpu",
             dtype=torch.int64,
-            pin_memory=self.pin_memory,
+            pin_memory=PIN_MEMORY,
         )
         for i in range(num_reqs):
             req_output_token_ids = self.req_output_token_ids[i]
             if req_output_token_ids:
-                output_token_ids_cpu_tensor[i, : len(req_output_token_ids)] = torch.tensor(
-                    req_output_token_ids,
-                    device="cpu",
-                    dtype=torch.int64,
+                output_token_ids_cpu_tensor[i, : len(req_output_token_ids)] = (
+                    torch.tensor(
+                        req_output_token_ids,
+                        device="cpu",
+                        dtype=torch.int64,
+                    )
                 )
         return output_token_ids_cpu_tensor.to(device=self.device, non_blocking=True)
 
-    def _get_token_history_cpu_views(self, num_reqs: int) -> tuple[torch.Tensor, torch.Tensor]:
-        max_history_len = int(self.num_tokens_no_spec[:num_reqs].max()) if num_reqs else 0
+    def _get_token_history_cpu_views(
+        self, num_reqs: int
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        max_history_len = (
+            int(self.num_tokens_no_spec[:num_reqs].max()) if num_reqs else 0
+        )
         return (
             self.token_ids_cpu_tensor[:num_reqs, :max_history_len],
             self.num_tokens_no_spec_cpu_tensor[:num_reqs],
         )
 
-    def _make_token_history_tensors(self, num_reqs: int) -> tuple[torch.Tensor, torch.Tensor]:
+    def _make_token_history_tensors(
+        self, num_reqs: int
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         history_lens = torch.as_tensor(
             self.num_tokens_no_spec[:num_reqs],
             device=self.device,
@@ -1428,14 +1650,19 @@ class InputBatch:
             (num_reqs, max_history_len),
             device="cpu",
             dtype=torch.int64,
-            pin_memory=self.pin_memory,
+            pin_memory=PIN_MEMORY,
         )
         token_history = token_history_cpu_tensor.numpy()
         token_history[:] = self.token_ids_cpu[:num_reqs, :max_history_len]
         for i in range(num_reqs):
-            token_history[i, self.num_tokens_no_spec[i] : max_history_len] = self.vocab_size
+            token_history[i, self.num_tokens_no_spec[i] : max_history_len] = (
+                self.vocab_size
+            )
 
-        return token_history_cpu_tensor.to(device=self.device, non_blocking=True), history_lens
+        return (
+            token_history_cpu_tensor.to(device=self.device, non_blocking=True),
+            history_lens,
+        )
 
     def _make_dry_sequence_breaker_ids_tensor(self, num_reqs: int) -> torch.Tensor:
         if not self.dry_sequence_breaker_ids:
@@ -1478,7 +1705,9 @@ class InputBatch:
         prompt_lora_mapping = tuple(req_lora_mapping.repeat(num_sampled_tokens))
         token_lora_mapping = tuple(req_lora_mapping.repeat(num_scheduled_tokens))
 
-        active_lora_requests: set[LoRARequest] = set(self.lora_id_to_lora_request.values())
+        active_lora_requests: set[LoRARequest] = set(
+            self.lora_id_to_lora_request.values()
+        )
 
         return prompt_lora_mapping, token_lora_mapping, active_lora_requests
 
@@ -1534,7 +1763,12 @@ class InputBatch:
             # output placeholders (tokens can be discarded after kv-load
             # failure) or a larger number (async spec decode adds optimistic
             # placeholders that may exceed the actual acceptance count).
-            first_placeholder = req_output_token_ids.index(-1)
+            first_placeholder = len(req_output_token_ids)
+            while (
+                first_placeholder > 0
+                and req_output_token_ids[first_placeholder - 1] == -1
+            ):
+                first_placeholder -= 1
             num_placeholders = len(req_output_token_ids) - first_placeholder
             num_to_replace = min(num_sampled_ids, num_placeholders)
             del new_ids[num_to_replace:]
@@ -1591,7 +1825,10 @@ class InputBatch:
 
     @property
     def no_thinking_budget(self) -> bool:
-        return self.thinking_budget_state_holder is None or len(self.thinking_token_budget_reqs) == 0
+        return (
+            self.thinking_budget_state_holder is None
+            or len(self.thinking_token_budget_reqs) == 0
+        )
 
     @property
     def max_num_logprobs(self) -> int | None:

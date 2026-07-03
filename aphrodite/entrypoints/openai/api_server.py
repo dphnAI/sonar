@@ -13,7 +13,7 @@ import warnings
 from argparse import Namespace
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
 import uvloop
 from fastapi import FastAPI, HTTPException
@@ -22,17 +22,26 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.datastructures import State
 
 import aphrodite.envs as envs
-from aphrodite.config import AphroditeConfig, ModelConfig
+from aphrodite.config import ModelConfig, AphroditeConfig
 from aphrodite.engine.arg_utils import AsyncEngineArgs
 from aphrodite.engine.protocol import EngineClient
 from aphrodite.entrypoints.chat_utils import load_chat_template
 from aphrodite.entrypoints.launcher import serve_http
-from aphrodite.entrypoints.logger import RequestLogger
 from aphrodite.entrypoints.openai.cli_args import make_arg_parser, validate_parsed_serve_args
 from aphrodite.entrypoints.openai.engine.protocol import GenerationError
 from aphrodite.entrypoints.openai.models.protocol import BaseModelPath
 from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.openai.server_utils import (
+from aphrodite.entrypoints.serve.elastic_ep.middleware import ScalingMiddleware
+from aphrodite.entrypoints.serve.sagemaker.api_router import sagemaker_standards_bootstrap
+from aphrodite.entrypoints.serve.tokenize.serving import ServingTokenization
+from aphrodite.entrypoints.serve.utils.api_utils import (
+    cli_env_setup,
+    log_non_default_args,
+    log_version_and_model,
+    process_lora_modules,
+)
+from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
+from aphrodite.entrypoints.serve.utils.server_utils import (
     engine_error_handler,
     exception_handler,
     generation_error_handler,
@@ -42,20 +51,11 @@ from aphrodite.entrypoints.openai.server_utils import (
     log_response,
     validation_exception_handler,
 )
-from aphrodite.entrypoints.sagemaker.api_router import sagemaker_standards_bootstrap
-from aphrodite.entrypoints.serve.elastic_ep.middleware import (
-    ScalingMiddleware,
-)
-from aphrodite.entrypoints.serve.render.serving import OpenAIServingRender
-from aphrodite.entrypoints.serve.tokenize.serving import OpenAIServingTokenization
-from aphrodite.entrypoints.utils import (
-    cli_env_setup,
-    log_non_default_args,
-    log_version_and_model,
-    process_lora_modules,
-)
+from aphrodite.exceptions import APHRODITEValidationError
 from aphrodite.logger import init_logger
 from aphrodite.reasoning import ReasoningParserManager
+from aphrodite.renderers.online_derenderer import OnlineDerenderer
+from aphrodite.renderers.online_renderer import OnlineRenderer
 from aphrodite.tasks import POOLING_TASKS, SupportedTask
 from aphrodite.tool_parsers import ToolParserManager
 from aphrodite.tracing import instrument
@@ -151,7 +151,7 @@ async def build_async_engine_client_from_engine_args(
         yield async_llm
     finally:
         if async_llm:
-            async_llm.shutdown()
+            async_llm.shutdown(timeout=aphrodite_config.shutdown_timeout)
 
 
 def build_app(
@@ -170,7 +170,9 @@ def build_app(
         supported_tasks = _FALLBACK_SUPPORTED_TASKS
 
     if args.disable_fastapi_docs:
-        app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None, lifespan=lifespan)
+        app = FastAPI(
+            openapi_url=None, docs_url=None, redoc_url=None, lifespan=lifespan
+        )
     elif args.enable_offline_docs:
         app = FastAPI(docs_url=None, redoc_url=None, lifespan=lifespan)
     else:
@@ -187,30 +189,23 @@ def build_app(
 
     register_models_api_router(app)
 
-    from aphrodite.entrypoints.sagemaker.api_router import (
+    from aphrodite.entrypoints.serve.sagemaker.api_router import (
         attach_router as register_sagemaker_api_router,
     )
 
     register_sagemaker_api_router(app, supported_tasks, model_config)
 
+    if envs.APHRODITE_SERVER_DEV_MODE:
+        from aphrodite.entrypoints.serve import register_aphrodite_dev_api_routers
+
+        register_aphrodite_dev_api_routers(app)
+
     if "generate" in supported_tasks:
-        from aphrodite.entrypoints.openai.generate.api_router import (
+        from aphrodite.entrypoints.generate.api_router import (
             register_generate_api_routers,
         )
 
         register_generate_api_routers(app)
-
-        from aphrodite.entrypoints.serve.disagg.api_router import (
-            attach_router as attach_disagg_router,
-        )
-
-        attach_disagg_router(app)
-
-        from aphrodite.entrypoints.serve.rlhf.api_router import (
-            attach_router as attach_rlhf_router,
-        )
-
-        attach_rlhf_router(app)
 
         from aphrodite.entrypoints.serve.elastic_ep.api_router import (
             attach_router as elastic_ep_attach_router,
@@ -218,32 +213,17 @@ def build_app(
 
         elastic_ep_attach_router(app)
 
-        from aphrodite.entrypoints.openai.generative_scoring.api_router import (
-            register_generative_scoring_api_router,
-        )
-
-        register_generative_scoring_api_router(app)
-
     if "generate" in supported_tasks or "render" in supported_tasks:
-        from aphrodite.entrypoints.serve.render.api_router import (
-            attach_router as attach_render_router,
+        from aphrodite.entrypoints.scale_out.factories import register_scale_out_api_routers
+
+        register_scale_out_api_routers(app, supported_tasks)
+
+    if "transcription" in supported_tasks or "realtime" in supported_tasks:
+        from aphrodite.entrypoints.speech_to_text.factories import (
+            register_speech_to_text_api_routers,
         )
 
-        attach_render_router(app)
-
-    if "transcription" in supported_tasks:
-        from aphrodite.entrypoints.openai.speech_to_text.api_router import (
-            attach_router as register_speech_to_text_api_router,
-        )
-
-        register_speech_to_text_api_router(app)
-
-    if "realtime" in supported_tasks:
-        from aphrodite.entrypoints.openai.realtime.api_router import (
-            attach_router as register_realtime_api_router,
-        )
-
-        register_realtime_api_router(app)
+        register_speech_to_text_api_routers(app, supported_tasks)
 
     if any(task in POOLING_TASKS for task in supported_tasks):
         from aphrodite.entrypoints.pooling.factories import register_pooling_api_routers
@@ -264,16 +244,17 @@ def build_app(
     app.exception_handler(EngineGenerateError)(engine_error_handler)
     app.exception_handler(EngineDeadError)(engine_error_handler)
     app.exception_handler(GenerationError)(generation_error_handler)
+    app.exception_handler(APHRODITEValidationError)(exception_handler)
     app.exception_handler(Exception)(exception_handler)
 
     # Ensure --api-key option from CLI takes precedence over APHRODITE_API_KEY
     if tokens := [key for key in (args.api_key or [envs.APHRODITE_API_KEY]) if key]:
-        from aphrodite.entrypoints.openai.server_utils import AuthenticationMiddleware
+        from aphrodite.entrypoints.serve.utils.server_utils import AuthenticationMiddleware
 
         app.add_middleware(AuthenticationMiddleware, tokens=tokens)
 
     if args.enable_request_id_headers:
-        from aphrodite.entrypoints.openai.server_utils import XRequestIdMiddleware
+        from aphrodite.entrypoints.serve.utils.server_utils import XRequestIdMiddleware
 
         app.add_middleware(XRequestIdMiddleware)
 
@@ -282,11 +263,11 @@ def build_app(
 
     if "realtime" in supported_tasks:
         # Add WebSocket metrics middleware
-        from aphrodite.entrypoints.openai.realtime.metrics import (
-            WebSocketMetricsMiddleware,
+        from aphrodite.entrypoints.speech_to_text.factories import (
+            add_websocket_metrics_middleware,
         )
 
-        app.add_middleware(WebSocketMetricsMiddleware)
+        add_websocket_metrics_middleware(app)
 
     if envs.APHRODITE_DEBUG_LOG_API_SERVER_RESPONSE:
         logger.warning(
@@ -304,7 +285,9 @@ def build_app(
         elif inspect.iscoroutinefunction(imported):
             app.middleware("http")(imported)
         else:
-            raise ValueError(f"Invalid middleware {middleware}. Must be a function or a class.")
+            raise ValueError(
+                f"Invalid middleware {middleware}. Must be a function or a class."
+            )
 
     app = sagemaker_standards_bootstrap(app)
     return app
@@ -317,6 +300,14 @@ async def init_app_state(
     supported_tasks: tuple["SupportedTask", ...] | None = None,
 ) -> None:
     aphrodite_config = engine_client.aphrodite_config
+
+    if args.tool_call_parser is not None:
+        from aphrodite.parser.metrics import init_parser_metrics
+
+        init_parser_metrics(
+            model_name=cast(str, aphrodite_config.model_config.served_model_name)
+        )
+
     if supported_tasks is None:
         warnings.warn(
             "The 'supported_tasks' parameter was not provided to "
@@ -337,7 +328,9 @@ async def init_app_state(
     else:
         request_logger = None
 
-    base_model_paths = [BaseModelPath(name=name, model_path=args.model) for name in served_model_names]
+    base_model_paths = [
+        BaseModelPath(name=name, model_path=args.model) for name in served_model_names
+    ]
 
     state.engine_client = engine_client
     state.log_stats = not args.disable_log_stats
@@ -346,7 +339,11 @@ async def init_app_state(
     resolved_chat_template = load_chat_template(args.chat_template)
 
     # Merge default_mm_loras into the static lora_modules
-    default_mm_loras = aphrodite_config.lora_config.default_mm_loras if aphrodite_config.lora_config is not None else {}
+    default_mm_loras = (
+        aphrodite_config.lora_config.default_mm_loras
+        if aphrodite_config.lora_config is not None
+        else {}
+    )
     lora_modules = process_lora_modules(args.lora_modules, default_mm_loras)
 
     state.openai_serving_models = OpenAIServingModels(
@@ -356,10 +353,9 @@ async def init_app_state(
     )
     await state.openai_serving_models.init_static_loras()
 
-    state.openai_serving_render = OpenAIServingRender(
+    state.online_renderer = OnlineRenderer(
         model_config=engine_client.model_config,
         renderer=engine_client.renderer,
-        model_registry=state.openai_serving_models.registry,
         request_logger=request_logger,
         chat_template=resolved_chat_template,
         chat_template_content_format=args.chat_template_content_format,
@@ -372,10 +368,24 @@ async def init_app_state(
         log_error_stack=args.log_error_stack,
     )
 
-    state.openai_serving_tokenization = OpenAIServingTokenization(
-        engine_client,
+    state.online_derenderer = OnlineDerenderer(
+        model_config=engine_client.model_config,
+        renderer=engine_client.renderer,
+        request_logger=request_logger,
+        chat_template=resolved_chat_template,
+        chat_template_content_format=args.chat_template_content_format,
+        trust_request_chat_template=args.trust_request_chat_template,
+        enable_auto_tools=args.enable_auto_tool_choice,
+        exclude_tools_when_tool_choice_none=args.exclude_tools_when_tool_choice_none,
+        tool_parser=args.tool_call_parser,
+        reasoning_parser=args.structured_outputs_config.reasoning_parser,
+        default_chat_template_kwargs=args.default_chat_template_kwargs,
+        log_error_stack=args.log_error_stack,
+    )
+
+    state.serving_tokenization = ServingTokenization(
         state.openai_serving_models,
-        state.openai_serving_render,
+        state.online_renderer,
         request_logger=request_logger,
         chat_template=resolved_chat_template,
         chat_template_content_format=args.chat_template_content_format,
@@ -384,27 +394,22 @@ async def init_app_state(
     )
 
     if "generate" in supported_tasks:
-        from aphrodite.entrypoints.openai.generate.api_router import init_generate_state
+        from aphrodite.entrypoints.generate.api_router import init_generate_state
 
-        await init_generate_state(engine_client, state, args, request_logger, supported_tasks)
-
-        from aphrodite.entrypoints.openai.generative_scoring.api_router import (
-            init_generative_scoring_state,
+        await init_generate_state(
+            engine_client, state, args, request_logger, supported_tasks
         )
 
-        await init_generative_scoring_state(engine_client, state, args, request_logger)
+        from aphrodite.entrypoints.scale_out.factories import init_scale_out_state
 
-    if "transcription" in supported_tasks:
-        from aphrodite.entrypoints.openai.speech_to_text.api_router import (
-            init_transcription_state,
+        init_scale_out_state(state, args, engine_client, request_logger)
+
+    if "transcription" in supported_tasks or "realtime" in supported_tasks:
+        from aphrodite.entrypoints.speech_to_text.factories import init_speech_to_text_state
+
+        init_speech_to_text_state(
+            engine_client, state, args, request_logger, supported_tasks
         )
-
-        init_transcription_state(engine_client, state, args, request_logger, supported_tasks)
-
-    if "realtime" in supported_tasks:
-        from aphrodite.entrypoints.openai.realtime.api_router import init_realtime_state
-
-        init_realtime_state(engine_client, state, args, request_logger, supported_tasks)
 
     if any(task in POOLING_TASKS for task in supported_tasks):
         from aphrodite.entrypoints.pooling.factories import init_pooling_state
@@ -429,13 +434,16 @@ async def init_render_app_state(
     """
     from aphrodite.entrypoints.chat_utils import load_chat_template
     from aphrodite.entrypoints.openai.models.serving import OpenAIModelRegistry
-    from aphrodite.entrypoints.serve.render.serving import OpenAIServingRender
     from aphrodite.renderers import renderer_from_config
+    from aphrodite.renderers.online_renderer import OnlineRenderer
 
     served_model_names = args.served_model_name or [args.model]
     model_registry = OpenAIModelRegistry(
         model_config=aphrodite_config.model_config,
-        base_model_paths=[BaseModelPath(name=name, model_path=args.model) for name in served_model_names],
+        base_model_paths=[
+            BaseModelPath(name=name, model_path=args.model)
+            for name in served_model_names
+        ],
     )
 
     if args.enable_log_requests:
@@ -446,10 +454,9 @@ async def init_render_app_state(
     renderer = renderer_from_config(aphrodite_config)
     resolved_chat_template = load_chat_template(args.chat_template)
 
-    state.openai_serving_render = OpenAIServingRender(
+    state.online_renderer = OnlineRenderer(
         model_config=aphrodite_config.model_config,
         renderer=renderer,
-        model_registry=model_registry,
         request_logger=request_logger,
         chat_template=resolved_chat_template,
         chat_template_content_format=args.chat_template_content_format,
@@ -457,15 +464,40 @@ async def init_render_app_state(
         enable_auto_tools=args.enable_auto_tool_choice,
         exclude_tools_when_tool_choice_none=args.exclude_tools_when_tool_choice_none,
         tool_parser=args.tool_call_parser,
-        reasoning_parser=args.structured_outputs_config.reasoning_parser,
+        reasoning_parser=args.reasoning_parser,
+        default_chat_template_kwargs=args.default_chat_template_kwargs,
+        log_error_stack=args.log_error_stack,
+    )
+
+    state.online_derenderer = OnlineDerenderer(
+        model_config=aphrodite_config.model_config,
+        renderer=renderer,
+        request_logger=request_logger,
+        chat_template=resolved_chat_template,
+        chat_template_content_format=args.chat_template_content_format,
+        trust_request_chat_template=args.trust_request_chat_template,
+        enable_auto_tools=args.enable_auto_tool_choice,
+        exclude_tools_when_tool_choice_none=args.exclude_tools_when_tool_choice_none,
+        tool_parser=args.tool_call_parser,
+        reasoning_parser=args.reasoning_parser,
         default_chat_template_kwargs=args.default_chat_template_kwargs,
         log_error_stack=args.log_error_stack,
     )
 
     state.openai_serving_models = model_registry
+    state.serving_tokenization = ServingTokenization(
+        model_registry,
+        state.online_renderer,
+        request_logger=request_logger,
+        chat_template=resolved_chat_template,
+        chat_template_content_format=args.chat_template_content_format,
+        default_chat_template_kwargs=args.default_chat_template_kwargs,
+        trust_request_chat_template=args.trust_request_chat_template,
+    )
 
-    # Expose tokenization via the render handler (no engine required).
-    state.openai_serving_tokenization = state.openai_serving_render
+    from aphrodite.entrypoints.scale_out.factories import init_render_state
+
+    init_render_state(state, request_logger)
 
     state.aphrodite_config = aphrodite_config
     # Disable stats logging — there is no engine to poll.
@@ -499,7 +531,8 @@ def validate_api_server_args(args):
     valid_tool_parses = ToolParserManager.list_registered()
     if args.enable_auto_tool_choice and args.tool_call_parser not in valid_tool_parses:
         raise KeyError(
-            f"invalid tool call parser: {args.tool_call_parser} (chose from {{ {','.join(valid_tool_parses)} }})"
+            f"invalid tool call parser: {args.tool_call_parser} "
+            f"(chose from {{ {','.join(valid_tool_parses)} }})"
         )
 
     valid_reasoning_parsers = ReasoningParserManager.list_registered()
@@ -507,14 +540,14 @@ def validate_api_server_args(args):
         reasoning_parser := args.structured_outputs_config.reasoning_parser
     ) and reasoning_parser not in valid_reasoning_parsers:
         raise KeyError(
-            f"invalid reasoning parser: {reasoning_parser} (chose from {{ {','.join(valid_reasoning_parsers)} }})"
+            f"invalid reasoning parser: {reasoning_parser} "
+            f"(chose from {{ {','.join(valid_reasoning_parsers)} }})"
         )
 
 
 @instrument(span_name="API server setup")
 def setup_server(args):
-    """Validate API server args, set up signal handler, create socket
-    ready to serve."""
+    """Validate API server args and create the server socket."""
 
     log_version_and_model(logger, APHRODITE_VERSION, args.model)
     log_non_default_args(args)
@@ -539,12 +572,6 @@ def setup_server(args):
     # workaround to avoid footguns where uvicorn drops requests with too
     # many concurrent requests active
     set_ulimit()
-
-    def signal_handler(*_) -> None:
-        # Interrupt server on sigterm while initializing
-        raise KeyboardInterrupt("terminated")
-
-    signal.signal(signal.SIGTERM, signal_handler)
 
     if args.uds:
         listen_address = f"unix:{args.uds}"
@@ -652,14 +679,22 @@ async def build_and_serve_renderer(
 async def run_server(args, **uvicorn_kwargs) -> None:
     """Run a single-worker API server."""
 
-    # Add process-specific prefix to stdout and stderr.
-    decorate_logs("APIServer")
+    decorate_logs("APIServer", skip_if_decorated=True)
+
+    # Interrupt initialization if SIGTERM arrives before uvicorn installs its
+    # own signal handlers. Once uvicorn is running it replaces this.
+    def _interrupt_init(*_) -> None:
+        raise KeyboardInterrupt("terminated")
+
+    signal.signal(signal.SIGTERM, _interrupt_init)
 
     listen_address, sock = setup_server(args)
     await run_server_worker(listen_address, sock, args, **uvicorn_kwargs)
 
 
-async def run_server_worker(listen_address, sock, args, client_config=None, **uvicorn_kwargs) -> None:
+async def run_server_worker(
+    listen_address, sock, args, client_config=None, **uvicorn_kwargs
+) -> None:
     """Run a single API server worker."""
 
     if args.tool_parser_plugin and len(args.tool_parser_plugin) > 3:
@@ -672,7 +707,9 @@ async def run_server_worker(listen_address, sock, args, client_config=None, **uv
         args,
         client_config=client_config,
     ) as engine_client:
-        shutdown_task = await build_and_serve(engine_client, listen_address, sock, args, **uvicorn_kwargs)
+        shutdown_task = await build_and_serve(
+            engine_client, listen_address, sock, args, **uvicorn_kwargs
+        )
     # NB: Await server shutdown only after the backend context is exited
     try:
         await shutdown_task
@@ -685,7 +722,9 @@ if __name__ == "__main__":
     # This section should be in sync with aphrodite/entrypoints/cli/main.py for CLI
     # entrypoints.
     cli_env_setup()
-    parser = FlexibleArgumentParser(description="Aphrodite OpenAI-Compatible RESTful API server.")
+    parser = FlexibleArgumentParser(
+        description="Aphrodite OpenAI-Compatible RESTful API server."
+    )
     parser = make_arg_parser(parser)
     args = parser.parse_args()
     validate_parsed_serve_args(args)

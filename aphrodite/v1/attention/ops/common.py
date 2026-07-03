@@ -44,7 +44,11 @@ def _correct_attn_cp_out_kernel(
     num_n_offsets = tl.arange(0, N_ROUNDED)
 
     # shape = [N]
-    lse_offsets = num_n_offsets * lses_stride_N + batch_idx * lses_stride_B + head_idx * lses_stride_H
+    lse_offsets = (
+        num_n_offsets * lses_stride_N
+        + batch_idx * lses_stride_B
+        + head_idx * lses_stride_H
+    )
 
     # calc final lse
     lse = tl.load(lses_ptr + lse_offsets)
@@ -66,10 +70,16 @@ def _correct_attn_cp_out_kernel(
     tl.store(vlse_ptr + lse_offsets, lse)
 
     # shape = [D]
-    output_offsets = batch_idx * outputs_stride_B + head_idx * outputs_stride_H + d_offsets * outputs_stride_D
+    output_offsets = (
+        batch_idx * outputs_stride_B
+        + head_idx * outputs_stride_H
+        + d_offsets * outputs_stride_D
+    )
 
     # correct output
-    lse_offset = lse_idx * lses_stride_N + batch_idx * lses_stride_B + head_idx * lses_stride_H
+    lse_offset = (
+        lse_idx * lses_stride_N + batch_idx * lses_stride_B + head_idx * lses_stride_H
+    )
     lse_tmp = tl.load(lses_ptr + lse_offset)
     lse_finally = lse_tmp - lse
     lse_finally = tl.where(
@@ -80,6 +90,7 @@ def _correct_attn_cp_out_kernel(
     factor = tl.exp(lse_finally) if IS_BASE_E else tl.exp2(lse_finally)
     output = tl.load(outputs_ptr + output_offsets)
     output = output * factor
+    output = tl.where(factor == 0.0, 0.0, output)
 
     tl.store(new_output_ptr + output_offsets, output)
 
@@ -127,7 +138,10 @@ def correct_attn_out(
         lses = lses.squeeze(-1)
     if lses.ndim == 4 and lses.shape[1] == 1:
         lses = lses.squeeze(1)
-    assert lses.ndim == 3, f"expected lses [N,B,H] (optionally with a 1-sized extra dim), got {tuple(lses.shape)}"
+    assert lses.ndim == 3, (
+        f"expected lses [N,B,H] (optionally with a 1-sized extra dim), "
+        f"got {tuple(lses.shape)}"
+    )
 
     B, H, D = out.shape
     N = lses.shape[0]
@@ -140,7 +154,9 @@ def correct_attn_out(
 
     # Allocate LSE with the same B/H strides as `lses` so writes land correctly
     # even when `lses` is a non-contiguous view (e.g., 4-D to 3-D squeeze).
-    lse = torch.empty_strided((B, H), (l_sB, l_sH), device=lses.device, dtype=lses.dtype)
+    lse = torch.empty_strided(
+        (B, H), (l_sB, l_sH), device=lses.device, dtype=lses.dtype
+    )
 
     # Kernel launch config
     grid = (B, H, 1)
@@ -181,7 +197,9 @@ def _cp_lse_common(
         ctx = CPTritonContext()
 
     cp_attn_lse = cp_attn_lse.contiguous()
-    lses = cp_group.all_gather(cp_attn_lse, dim=0).reshape((cp_group.world_size,) + cp_attn_lse.shape)
+    lses = cp_group.all_gather(cp_attn_lse, dim=0).reshape(
+        (cp_group.world_size,) + cp_attn_lse.shape
+    )
     out, lse = correct_attn_out(
         cp_attn_out,
         lses,
@@ -204,7 +222,9 @@ def cp_lse_ag_out_rs(
     cp_attn_out: [ B, H, D ]
     cp_attn_lse: [ B, H ]
     """
-    out, lse = _cp_lse_common(cp_attn_out, cp_attn_lse, cp_group, ctx=ctx, is_lse_base_on_e=is_lse_base_on_e)
+    out, lse = _cp_lse_common(
+        cp_attn_out, cp_attn_lse, cp_group, ctx=ctx, is_lse_base_on_e=is_lse_base_on_e
+    )
     out = cp_group.reduce_scatter(out, dim=1)
 
     if return_lse:
@@ -227,7 +247,9 @@ def cp_lse_ag_out_ar(
     cp_attn_out: [ B, H, D ]
     cp_attn_lse: [ B, H ]
     """
-    out, lse = _cp_lse_common(cp_attn_out, cp_attn_lse, cp_group, ctx=ctx, is_lse_base_on_e=is_lse_base_on_e)
+    out, lse = _cp_lse_common(
+        cp_attn_out, cp_attn_lse, cp_group, ctx=ctx, is_lse_base_on_e=is_lse_base_on_e
+    )
     out = cp_group.all_reduce(out)
 
     if return_lse:

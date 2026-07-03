@@ -1,19 +1,28 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import asyncio
+import time
 from contextlib import ExitStack
 from unittest.mock import MagicMock
 
 import pytest
-from aphrodite.engine.args_tools import AsyncEngineArgs
 
 from aphrodite import SamplingParams
 from aphrodite.assets.image import ImageAsset
-from aphrodite.common.sampling_params import RequestOutputKind
 from aphrodite.config import AphroditeConfig
+from aphrodite.engine.arg_utils import AsyncEngineArgs
+from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    ChatCompletionRequest,
+    ChatCompletionResponse,
+)
+from aphrodite.entrypoints.openai.chat_completion.serving import OpenAIServingChat
+from aphrodite.entrypoints.openai.models.protocol import BaseModelPath
+from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
 from aphrodite.inputs import PromptType
 from aphrodite.outputs import RequestOutput
 from aphrodite.platforms import current_platform
+from aphrodite.sampling_params import RequestOutputKind
 from aphrodite.utils.torch_utils import set_default_torch_num_threads
 from aphrodite.v1.engine.async_llm import AsyncLLM
 from aphrodite.v1.metrics.loggers import (
@@ -31,7 +40,9 @@ TEXT_ENGINE_ARGS = AsyncEngineArgs(
     enforce_eager=True,
 )
 
-VISION_ENGINE_ARGS = AsyncEngineArgs(model="Qwen/Qwen2-VL-2B-Instruct", enforce_eager=True)
+VISION_ENGINE_ARGS = AsyncEngineArgs(
+    model="Qwen/Qwen2-VL-2B-Instruct", enforce_eager=True
+)
 
 TEXT_PROMPT = "Hello my name is Robert and"
 
@@ -70,7 +81,9 @@ async def generate(
         n=n,
         prompt_logprobs=prompt_logprobs,
     )
-    async for out in engine.generate(request_id=request_id, prompt=prompt, sampling_params=sampling_params):
+    async for out in engine.generate(
+        request_id=request_id, prompt=prompt, sampling_params=sampling_params
+    ):
         num_tokens = sum(len(output.token_ids) for output in out.outputs)
         if output_kind == RequestOutputKind.DELTA:
             count += num_tokens
@@ -85,7 +98,9 @@ async def generate(
     return count, request_id
 
 
-@pytest.mark.parametrize("output_kind", [RequestOutputKind.DELTA, RequestOutputKind.FINAL_ONLY])
+@pytest.mark.parametrize(
+    "output_kind", [RequestOutputKind.DELTA, RequestOutputKind.FINAL_ONLY]
+)
 @pytest.mark.parametrize(
     "engine_args,prompt",
     [(TEXT_ENGINE_ARGS, TEXT_PROMPT), (VISION_ENGINE_ARGS, VISION_PROMPT)],
@@ -109,7 +124,13 @@ async def test_load(
         # Create concurrent requests.
         tasks = []
         for request_id in request_ids:
-            tasks.append(asyncio.create_task(generate(engine, request_id, prompt, output_kind, NUM_EXPECTED_TOKENS)))
+            tasks.append(
+                asyncio.create_task(
+                    generate(
+                        engine, request_id, prompt, output_kind, NUM_EXPECTED_TOKENS
+                    )
+                )
+            )
 
         # Confirm that we got all the EXPECTED tokens from the requests.
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
@@ -118,13 +139,16 @@ async def test_load(
         for task in done:
             num_generated_tokens, request_id = await task
             assert num_generated_tokens == NUM_EXPECTED_TOKENS, (
-                f"{request_id} generated {num_generated_tokens} but expected {NUM_EXPECTED_TOKENS}"
+                f"{request_id} generated {num_generated_tokens} but "
+                f"expected {NUM_EXPECTED_TOKENS}"
             )
 
         assert not engine.output_processor.has_unfinished_requests()
 
 
-@pytest.mark.parametrize("output_kind", [RequestOutputKind.DELTA, RequestOutputKind.FINAL_ONLY])
+@pytest.mark.parametrize(
+    "output_kind", [RequestOutputKind.DELTA, RequestOutputKind.FINAL_ONLY]
+)
 @pytest.mark.parametrize(
     "engine_args,prompt",
     [(TEXT_ENGINE_ARGS, TEXT_PROMPT), (VISION_ENGINE_ARGS, VISION_PROMPT)],
@@ -151,9 +175,17 @@ async def test_abort(
         # Create concurrent requests.
         tasks: list[asyncio.Task] = []
         for idx, request_id in enumerate(request_ids):
-            max_tokens = NUM_EXPECTED_TOKENS_LONG if (idx in REQUEST_IDS_TO_ABORT) else NUM_EXPECTED_TOKENS
+            max_tokens = (
+                NUM_EXPECTED_TOKENS_LONG
+                if (idx in REQUEST_IDS_TO_ABORT)
+                else NUM_EXPECTED_TOKENS
+            )
             n = 3 if idx in PARALLEL_SAMPLE_REQ_IDS else 1
-            tasks.append(asyncio.create_task(generate(engine, request_id, prompt, output_kind, max_tokens, n)))
+            tasks.append(
+                asyncio.create_task(
+                    generate(engine, request_id, prompt, output_kind, max_tokens, n)
+                )
+            )
 
         # API server cancels requests when they disconnect.
         for idx in REQUEST_IDS_TO_ABORT:
@@ -172,7 +204,8 @@ async def test_abort(
                 n = 3 if idx in PARALLEL_SAMPLE_REQ_IDS else 1
                 expected_tokens = NUM_EXPECTED_TOKENS * n
                 assert num_generated_tokens == expected_tokens, (
-                    f"{request_id} generated {num_generated_tokens} but expected {expected_tokens}"
+                    f"{request_id} generated {num_generated_tokens} but "
+                    f"expected {expected_tokens}"
                 )
 
         # Make sure all aborted requests were really aborted.
@@ -180,13 +213,17 @@ async def test_abort(
 
         # Confirm we can do another generation.
         request_id = f"request-{REQUEST_IDS_TO_ABORT[0]}"
-        task = asyncio.create_task(generate(engine, request_id, prompt, output_kind, NUM_EXPECTED_TOKENS))
+        task = asyncio.create_task(
+            generate(engine, request_id, prompt, output_kind, NUM_EXPECTED_TOKENS)
+        )
         num_generated_tokens, request_id = await task
         assert num_generated_tokens == NUM_EXPECTED_TOKENS
         assert not engine.output_processor.has_unfinished_requests()
 
 
-@pytest.mark.parametrize("output_kind", [RequestOutputKind.DELTA, RequestOutputKind.FINAL_ONLY])
+@pytest.mark.parametrize(
+    "output_kind", [RequestOutputKind.DELTA, RequestOutputKind.FINAL_ONLY]
+)
 @pytest.mark.asyncio
 async def test_multi_abort(output_kind: RequestOutputKind):
     with ExitStack() as after:
@@ -205,16 +242,28 @@ async def test_multi_abort(output_kind: RequestOutputKind):
         # Create concurrent requests.
         tasks: list[asyncio.Task] = []
         for idx, request_id in enumerate(request_ids):
-            max_tokens = NUM_EXPECTED_TOKENS_LONG if (idx in REQUEST_IDS_TO_ABORT) else NUM_EXPECTED_TOKENS
+            max_tokens = (
+                NUM_EXPECTED_TOKENS_LONG
+                if (idx in REQUEST_IDS_TO_ABORT)
+                else NUM_EXPECTED_TOKENS
+            )
             n = 3 if idx in PARALLEL_SAMPLE_REQ_IDS else 1
-            tasks.append(asyncio.create_task(generate(engine, request_id, TEXT_PROMPT, output_kind, max_tokens, n)))
+            tasks.append(
+                asyncio.create_task(
+                    generate(
+                        engine, request_id, TEXT_PROMPT, output_kind, max_tokens, n
+                    )
+                )
+            )
 
-        # Let requests start
-        await asyncio.sleep(0.5)
+        # Let requests start generating, use a longer sleep to ensure all
+        # requests have exited prefill and produced at least one
+        # decode token before we abort.
+        await asyncio.sleep(1.0)
 
         # Use multi-abort to abort multiple requests at once
         abort_request_ids = [request_ids[i] for i in REQUEST_IDS_TO_ABORT]
-        await engine.abort(abort_request_ids)
+        await engine.abort(abort_request_ids, internal=False)
 
         # Wait for all tasks to complete
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -223,18 +272,25 @@ async def test_multi_abort(output_kind: RequestOutputKind):
         for idx, result in enumerate(results):
             if idx in REQUEST_IDS_TO_ABORT:
                 # Aborted requests should return partial results
-                assert isinstance(result, tuple), f"Request {idx} should have completed with partial results"
+                assert isinstance(result, tuple), (
+                    f"Request {idx} should have completed with partial results"
+                )
                 num_generated_tokens, request_id = result
                 # Should have generated some tokens before abort
-                assert num_generated_tokens > 0, f"Aborted request {request_id} should have generated some tokens"
+                assert num_generated_tokens > 0, (
+                    f"Aborted request {request_id} should have generated some tokens"
+                )
             else:
                 # Non-aborted requests should complete normally
-                assert isinstance(result, tuple), f"Request {idx} should have completed successfully"
+                assert isinstance(result, tuple), (
+                    f"Request {idx} should have completed successfully"
+                )
                 num_generated_tokens, request_id = result
                 n = 3 if idx in PARALLEL_SAMPLE_REQ_IDS else 1
                 expected_tokens = NUM_EXPECTED_TOKENS * n
                 assert num_generated_tokens == expected_tokens, (
-                    f"{request_id} generated {num_generated_tokens} but expected {expected_tokens}"
+                    f"{request_id} generated {num_generated_tokens} but "
+                    f"expected {expected_tokens}"
                 )
 
         # Make sure all aborted requests were cleaned up
@@ -266,7 +322,9 @@ async def test_finished_flag(
         )
         outputs = [
             out
-            async for out in engine.generate(request_id="request-33", prompt=prompt, sampling_params=sampling_params)
+            async for out in engine.generate(
+                request_id="request-33", prompt=prompt, sampling_params=sampling_params
+            )
         ]
 
         # Assert only the last output has the finished flag set
@@ -279,7 +337,9 @@ async def test_finished_flag(
     [(TEXT_ENGINE_ARGS, TEXT_PROMPT), (VISION_ENGINE_ARGS, VISION_PROMPT)],
 )
 @pytest.mark.asyncio
-async def test_mid_stream_cancellation(engine_args: AsyncEngineArgs, prompt: PromptType):
+async def test_mid_stream_cancellation(
+    engine_args: AsyncEngineArgs, prompt: PromptType
+):
     """Test that requests can be cancelled mid-stream."""
     with ExitStack() as after:
         with set_default_torch_num_threads(1):
@@ -311,9 +371,10 @@ async def test_mid_stream_cancellation(engine_args: AsyncEngineArgs, prompt: Pro
         # Wait for all tasks to complete
         results = await asyncio.gather(*tasks)
 
-        # Verify all tasks were cancelled at the expected point
+        # Verify all tasks were cancelled at the expected point.
+        # Uses >= because the cancel check is `count >= cancel_after`.
         for num_generated_tokens, request_id in results:
-            assert num_generated_tokens == NUM_EXPECTED_TOKENS, (
+            assert num_generated_tokens >= NUM_EXPECTED_TOKENS, (
                 f"{request_id} generated {num_generated_tokens} tokens but "
                 f"expected to cancel after {NUM_EXPECTED_TOKENS}"
             )
@@ -323,7 +384,11 @@ async def test_mid_stream_cancellation(engine_args: AsyncEngineArgs, prompt: Pro
 
         # Confirm we can reuse the request id after the cancellations.
         request_id = request_ids[0]
-        task = asyncio.create_task(generate(engine, request_id, prompt, RequestOutputKind.DELTA, NUM_EXPECTED_TOKENS))
+        task = asyncio.create_task(
+            generate(
+                engine, request_id, prompt, RequestOutputKind.DELTA, NUM_EXPECTED_TOKENS
+            )
+        )
         num_generated_tokens, request_id = await task
         assert num_generated_tokens == NUM_EXPECTED_TOKENS
         assert not engine.output_processor.has_unfinished_requests()
@@ -359,7 +424,9 @@ async def test_customize_loggers(monkeypatch):
         await engine.do_log_stats()
 
         stat_loggers = engine.logger_manager.stat_loggers
-        assert len(stat_loggers) == 3  # MockLoggingStatLogger + LoggingStatLogger +  Promethus Logger
+        assert (
+            len(stat_loggers) == 3
+        )  # MockLoggingStatLogger + LoggingStatLogger +  Promethus Logger
         print(f"{stat_loggers=}")
         stat_loggers[0].per_engine_stat_loggers[0].log.assert_called_once()
         assert isinstance(stat_loggers[1], PerEngineStatLoggerAdapter)
@@ -368,15 +435,12 @@ async def test_customize_loggers(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_customize_aggregated_loggers(monkeypatch):
+async def test_customize_aggregated_loggers():
     """Test that we can customize the aggregated loggers.
     If a customized logger is provided at the init, it should
     be added to the default loggers.
     """
-
-    with monkeypatch.context() as m, ExitStack() as after:
-        m.setenv("APHRODITE_USE_V1", "1")
-
+    with ExitStack() as after:
         with set_default_torch_num_threads(1):
             engine = AsyncLLM.from_engine_args(
                 TEXT_ENGINE_ARGS,
@@ -431,6 +495,70 @@ async def test_dp_rank_argument():
                 pass
 
 
+@pytest.mark.asyncio(scope="module")
+async def test_header_dp_rank_argument():
+    with ExitStack() as after:
+        with set_default_torch_num_threads(1):
+            engine = AsyncLLM.from_engine_args(TEXT_ENGINE_ARGS)
+        after.callback(engine.shutdown)
+
+        MODEL_NAME = "test-model"
+        BASE_MODEL_PATHS = [BaseModelPath(name=MODEL_NAME, model_path=MODEL_NAME)]
+
+        # Create models first
+        models = OpenAIServingModels(
+            engine_client=engine,
+            base_model_paths=BASE_MODEL_PATHS,
+        )
+
+        # Create render serving instance (required by OpenAIServingChat)
+        from aphrodite.renderers.online_renderer import OnlineRenderer
+
+        online_renderer = OnlineRenderer(
+            model_config=engine.model_config,
+            renderer=engine.renderer,
+            request_logger=None,
+            chat_template=None,
+            chat_template_content_format="auto",
+        )
+
+        # Create serving chat instance
+        serving_chat = OpenAIServingChat(
+            engine_client=engine,
+            models=models,
+            response_role="assistant",
+            online_renderer=online_renderer,
+            chat_template=None,
+            chat_template_content_format="auto",
+            request_logger=None,
+        )
+        # Create a chat completion request
+        req = ChatCompletionRequest(
+            model=MODEL_NAME,
+            messages=[{"role": "user", "content": TEXT_PROMPT}],
+            max_tokens=100,
+            temperature=1.0,
+            seed=33,
+        )
+        # Test 1: Valid DP rank (0)
+        mock_raw_request = MagicMock()
+        mock_raw_request.headers = {"X-data-parallel-rank": "0"}
+        mock_raw_request.state = MagicMock()
+
+        # Should succeed with valid rank
+        response = await serving_chat.create_chat_completion(req, mock_raw_request)
+        assert isinstance(response, ChatCompletionResponse), (
+            "Expected a ChatCompletionResponse for valid DP rank"
+        )
+
+        # Test 2: Out-of-range DP rank (1)
+        mock_raw_request.headers = {"X-data-parallel-rank": "1"}
+
+        # should raise ValueError for out-of-range rank
+        with pytest.raises(ValueError):
+            await serving_chat.create_chat_completion(req, mock_raw_request)
+
+
 @pytest.mark.asyncio
 async def test_check_health():
     """Test that check_health returns normally for healthy engine
@@ -463,7 +591,9 @@ async def test_check_health():
         await engine.check_health()
 
 
-@pytest.mark.parametrize("output_kind", [RequestOutputKind.DELTA, RequestOutputKind.FINAL_ONLY])
+@pytest.mark.parametrize(
+    "output_kind", [RequestOutputKind.DELTA, RequestOutputKind.FINAL_ONLY]
+)
 @pytest.mark.asyncio
 async def test_abort_final_output(output_kind: RequestOutputKind):
     """Test that abort() returns a final output with correct information."""
@@ -485,13 +615,15 @@ async def test_abort_final_output(output_kind: RequestOutputKind):
         )
 
         outputs: list[RequestOutput] = []
-        generated = asyncio.create_task(collect_outputs(engine, request_id, TEXT_PROMPT, sampling_params, outputs))
+        generated = asyncio.create_task(
+            collect_outputs(engine, request_id, TEXT_PROMPT, sampling_params, outputs)
+        )
 
         # Let it generate some tokens
         await asyncio.sleep(0.5)
 
         # Abort the request
-        await engine.abort(request_id)
+        await engine.abort(request_id, internal=False)
 
         # Wait for generation to complete and return final output
         final_output = await generated
@@ -533,35 +665,353 @@ async def collect_outputs(
 ) -> RequestOutput | None:
     """Helper to collect outputs and return the final one."""
     final_output: RequestOutput | None = None
-    async for output in engine.generate(request_id=request_id, prompt=prompt, sampling_params=sampling_params):
+    async for output in engine.generate(
+        request_id=request_id, prompt=prompt, sampling_params=sampling_params
+    ):
         if not output.finished:
             outputs_list.append(output)
         final_output = output
     return final_output
 
 
+# =============================================================================
+# Pause/Resume Tests
+# =============================================================================
+
+
 @pytest.mark.asyncio
-async def test_kv_cache_properties():
-    """Test that max_concurrency and kv_cache_size_tokens properties are accessible."""
+async def test_pause_resume_basic():
+    """Test basic pause/resume flag behavior and idempotency.
+
+    Tests:
+    - pause_generation sets the paused flag
+    - resume_generation clears the paused flag
+    - calling pause when already paused is a no-op
+    - calling resume when not paused is safe
+    - all pause modes work with no requests in flight
+    - rapid pause/resume cycles don't break the engine
+    """
     with ExitStack() as after:
         with set_default_torch_num_threads(1):
             engine = AsyncLLM.from_engine_args(TEXT_ENGINE_ARGS)
         after.callback(engine.shutdown)
 
-        # Test max_concurrency property
-        max_conc = engine.max_concurrency
-        assert isinstance(max_conc, float)
-        assert max_conc > 0
+        # Initially not paused
+        assert not await engine.is_paused()
 
-        # Test kv_cache_size_tokens property
-        kv_cache_tokens = engine.kv_cache_size_tokens
-        assert isinstance(kv_cache_tokens, int)
-        assert kv_cache_tokens > 0
+        # Resume when not paused should be safe
+        await engine.resume_generation()
+        assert not await engine.is_paused()
 
-        # Test kv_cache_size_tokens_str property
-        kv_cache_tokens_str = engine.kv_cache_size_tokens_str
-        assert isinstance(kv_cache_tokens_str, str)
-        assert "," in kv_cache_tokens_str or len(kv_cache_tokens_str) > 0
-        # Verify the string represents the same number
-        tokens_from_str = int(kv_cache_tokens_str.replace(",", ""))
-        assert tokens_from_str == kv_cache_tokens
+        # Pause sets flag
+        await engine.pause_generation(mode="abort")
+        assert await engine.is_paused()
+
+        # Pause when already paused is a no-op
+        await engine.pause_generation(mode="abort")
+        assert await engine.is_paused()
+
+        # Resume clears flag
+        await engine.resume_generation()
+        assert not await engine.is_paused()
+
+        # Test all modes with no requests in flight
+        for mode in ("abort", "wait", "keep"):
+            await engine.pause_generation(mode=mode)
+            assert await engine.is_paused()
+            await engine.resume_generation()
+            assert not await engine.is_paused()
+
+        # Concurrent pause/resume race conditions - should not deadlock or raise
+        await asyncio.gather(
+            engine.pause_generation(mode="abort"),
+            engine.resume_generation(),
+            engine.pause_generation(mode="abort"),
+            engine.resume_generation(),
+        )
+
+        # Ensure we end in a known state
+        await engine.resume_generation()
+        assert not await engine.is_paused()
+
+        # Engine should still work after all cycles
+        sampling_params = SamplingParams(max_tokens=5)
+        async for out in engine.generate(
+            request_id="post-cycles",
+            prompt=TEXT_PROMPT,
+            sampling_params=sampling_params,
+        ):
+            pass
+        assert out.finished
+
+
+@pytest.mark.asyncio
+async def test_pause_abort():
+    """Test that mode='abort' aborts in-flight requests immediately."""
+    with ExitStack() as after:
+        with set_default_torch_num_threads(1):
+            engine = AsyncLLM.from_engine_args(TEXT_ENGINE_ARGS)
+        after.callback(engine.shutdown)
+
+        # Start a long-running request
+        sampling_params = SamplingParams(max_tokens=1000, ignore_eos=True)
+        outputs: list[RequestOutput] = []
+
+        async def gen():
+            async for out in engine.generate(
+                request_id="test-abort-pause",
+                prompt=TEXT_PROMPT,
+                sampling_params=sampling_params,
+            ):
+                outputs.append(out)
+            return outputs[-1] if outputs else None
+
+        # Start generation task
+        gen_task = asyncio.create_task(gen())
+
+        # Wait for some tokens to be generated
+        while len(outputs) < 3:
+            await asyncio.sleep(0.01)
+
+        # Pause with abort mode
+        await engine.pause_generation(mode="abort")
+
+        # Wait for task to complete (should be aborted)
+        final_output = await gen_task
+
+        # Request should be finished (aborted)
+        assert final_output is not None
+        assert final_output.finished
+        assert final_output.outputs[0].finish_reason == "abort"
+
+        # Also test that new requests are blocked while paused, then resume
+        assert await engine.is_paused()
+
+        request_completed = False
+
+        async def gen_blocked():
+            nonlocal request_completed
+            async for out in engine.generate(
+                request_id="test-blocked",
+                prompt=TEXT_PROMPT,
+                sampling_params=SamplingParams(max_tokens=5),
+            ):
+                pass
+            request_completed = True
+            return out
+
+        # Start a request (should block)
+        gen_task2 = asyncio.create_task(gen_blocked())
+
+        # Wait a bit - request should not have completed
+        await asyncio.sleep(0.3)
+        assert not request_completed, "Request should be blocked while paused"
+
+        # Resume
+        await engine.resume_generation()
+
+        # Now request should complete
+        final_output2 = await asyncio.wait_for(gen_task2, timeout=10.0)
+        assert request_completed
+        assert final_output2.finished
+
+
+@pytest.mark.asyncio
+async def test_pause_then_abort_queued_request():
+    """Test that aborting a request that was submitted while paused (in
+    _paused_adds_queue) aborts it and notifies the client; the request does
+    not run after resume.
+    """
+    with ExitStack() as after:
+        with set_default_torch_num_threads(1):
+            engine = AsyncLLM.from_engine_args(TEXT_ENGINE_ARGS)
+        after.callback(engine.shutdown)
+
+        request_id = "abort-queued-request"
+        sampling_params = SamplingParams(max_tokens=20, ignore_eos=True)
+        outputs: list[RequestOutput] = []
+
+        # Pause first so the next add goes to _paused_adds_queue
+        await engine.pause_generation(mode="keep")
+        assert await engine.is_paused()
+
+        async def gen():
+            async for out in engine.generate(
+                request_id=request_id,
+                prompt=TEXT_PROMPT,
+                sampling_params=sampling_params,
+            ):
+                outputs.append(out)
+            return outputs[-1] if outputs else None
+
+        gen_task = asyncio.create_task(gen())
+
+        # Give the request time to reach the engine and sit in _paused_adds_queue
+        await asyncio.sleep(0.2)
+
+        # Abort the queued request
+        await engine.abort(request_id, internal=False)
+
+        # Resume so the engine can process and deliver the abort output
+        await engine.resume_generation()
+
+        final_output = await asyncio.wait_for(gen_task, timeout=10.0)
+        assert final_output is not None
+        assert final_output.finished
+        assert final_output.outputs[0].finish_reason == "abort"
+        # Request was never run, so no tokens
+        assert len(final_output.outputs[0].token_ids) == 0
+
+
+@pytest.mark.asyncio
+async def test_pause_wait():
+    """Test that mode='wait' waits for in-flight requests to complete."""
+    with ExitStack() as after:
+        with set_default_torch_num_threads(1):
+            engine = AsyncLLM.from_engine_args(TEXT_ENGINE_ARGS)
+        after.callback(engine.shutdown)
+
+        # Start a request - use fewer tokens since wait mode waits for completion
+        sampling_params = SamplingParams(max_tokens=10, ignore_eos=True)
+        got_first_token = asyncio.Event()
+        request_completed = False
+
+        async def gen():
+            nonlocal request_completed
+            async for out in engine.generate(
+                request_id="test-wait",
+                prompt=TEXT_PROMPT,
+                sampling_params=sampling_params,
+            ):
+                got_first_token.set()
+            request_completed = True
+            return out
+
+        # Start generation
+        gen_task = asyncio.create_task(gen())
+
+        # Wait for generation to start (event-driven)
+        await asyncio.wait_for(got_first_token.wait(), timeout=30.0)
+
+        # Pause with wait mode - should wait for request to finish
+        await engine.pause_generation(mode="wait")
+
+        # By now the request should be done (wait mode waits for completion)
+        assert request_completed, "Request should have completed during wait"
+
+        final_output = gen_task.result()
+        assert final_output.finished
+        # Should complete normally, not aborted
+        assert final_output.outputs[0].finish_reason != "eos"
+
+
+@pytest.mark.asyncio
+async def test_pause_keep_single_request():
+    """Test that mode='keep' freezes a single request and resumes with timing gap."""
+    with ExitStack() as after:
+        with set_default_torch_num_threads(1):
+            engine = AsyncLLM.from_engine_args(TEXT_ENGINE_ARGS)
+        after.callback(engine.shutdown)
+
+        sampling_params = SamplingParams(max_tokens=30, ignore_eos=True)
+        token_times: list[tuple[int, float]] = []
+        pause_duration = 5.0
+        pause_token_idx = 0
+
+        async def generator_task():
+            """Generate tokens and record timestamps."""
+            async for output in engine.generate(
+                request_id="test-keep-single",
+                prompt=TEXT_PROMPT,
+                sampling_params=sampling_params,
+            ):
+                token_count = len(output.outputs[0].token_ids)
+                token_times.append((token_count, time.monotonic()))
+            return output
+
+        async def controller_task():
+            """Pause and resume the engine."""
+            nonlocal pause_token_idx
+            # Wait for some tokens (event-driven, handles slow token generation)
+            while len(token_times) < 5:
+                await asyncio.sleep(0.01)
+
+            # Pause with keep mode
+            await engine.pause_generation(mode="keep")
+            pause_token_idx = len(token_times)
+
+            # Sleep while paused
+            await asyncio.sleep(pause_duration)
+
+            # Resume
+            await engine.resume_generation()
+
+        # Run both tasks with timeout for slow generation
+        gen_task = asyncio.create_task(generator_task())
+        ctrl_task = asyncio.create_task(controller_task())
+
+        final_output, _ = await asyncio.wait_for(
+            asyncio.gather(gen_task, ctrl_task), timeout=60.0
+        )
+
+        # Request should complete with all tokens
+        assert final_output.finished
+        assert len(final_output.outputs[0].token_ids) == 30
+
+        # Check the gap at the recorded pause index matches the pause duration
+        pause_gap = (
+            token_times[pause_token_idx][1] - token_times[pause_token_idx - 1][1]
+        )
+        assert pause_gap >= pause_duration * 0.8, (
+            f"Expected gap of ~{pause_duration}s after pause, got {pause_gap:.3f}s"
+        )
+
+
+@pytest.mark.asyncio
+async def test_pause_keep_multi_request():
+    """Test that mode='keep' freezes multiple concurrent requests and all resume."""
+    with ExitStack() as after:
+        with set_default_torch_num_threads(1):
+            engine = AsyncLLM.from_engine_args(TEXT_ENGINE_ARGS)
+        after.callback(engine.shutdown)
+
+        num_requests = 3
+        sampling_params = SamplingParams(max_tokens=10, ignore_eos=True)
+        completed_requests: list[str] = []
+        any_token_generated = asyncio.Event()
+
+        async def gen_multi(request_id: str):
+            async for out in engine.generate(
+                request_id=request_id,
+                prompt=TEXT_PROMPT,
+                sampling_params=sampling_params,
+            ):
+                any_token_generated.set()
+            completed_requests.append(request_id)
+            return out
+
+        # Start multiple requests
+        tasks = [
+            asyncio.create_task(gen_multi(f"req-multi-{i}"))
+            for i in range(num_requests)
+        ]
+
+        # Wait for at least one token across any request (event-driven)
+        await asyncio.wait_for(any_token_generated.wait(), timeout=30.0)
+
+        # Pause with keep mode
+        await engine.pause_generation(mode="keep")
+
+        # Wait while paused
+        await asyncio.sleep(0.5)
+
+        # Resume
+        await engine.resume_generation()
+
+        # All requests should complete
+        results = await asyncio.wait_for(asyncio.gather(*tasks), timeout=60.0)
+
+        assert len(completed_requests) == num_requests
+        for result in results:
+            assert result.finished
+            assert len(result.outputs[0].token_ids) == 10

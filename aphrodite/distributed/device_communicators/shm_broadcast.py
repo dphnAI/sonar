@@ -38,6 +38,21 @@ from aphrodite.utils.network_utils import (
     is_valid_ipv6_address,
 )
 
+logger = init_logger(__name__)
+
+
+SPINLOOP_EXT_ENABLED = False
+if envs.APHRODITE_USE_SPINLOOP_EXT:
+    try:
+        from aphrodite.spinloop import spinloop
+
+        SPINLOOP_EXT_ENABLED = True
+    except ImportError:
+        logger.warning(
+            "spinloop extension could not be loaded, disabling APHRODITE_USE_SPINLOOP_EXT!"
+        )
+SPINLOOP_TIMEOUT_SECONDS = 0.1
+
 if TYPE_CHECKING:
     from _typeshed import SizedBuffer
 
@@ -75,9 +90,6 @@ def memory_fence():
 
 def to_bytes_big(value: int, size: int) -> bytes:
     return value.to_bytes(size, byteorder="big")
-
-
-logger = init_logger(__name__)
 
 
 LONG_WAIT_TIME_LOG_MSG = (
@@ -262,14 +274,18 @@ class ShmRingBuffer:
         self.metadata_size = 1 + n_reader
         self.max_chunk_bytes = max_chunk_bytes
         self.max_chunks = max_chunks
-        self.total_bytes_of_buffer = (self.max_chunk_bytes + self.metadata_size) * self.max_chunks
+        self.total_bytes_of_buffer = (
+            self.max_chunk_bytes + self.metadata_size
+        ) * self.max_chunks
         self.data_offset = 0
         self.metadata_offset = self.max_chunk_bytes * self.max_chunks
 
         if name is None:
             # we are creating a buffer
             self.is_creator = True
-            self.shared_memory = shared_memory.SharedMemory(create=True, size=self.total_bytes_of_buffer)
+            self.shared_memory = shared_memory.SharedMemory(
+                create=True, size=self.total_bytes_of_buffer
+            )
             assert self.shared_memory.buf is not None, "Buffer was not created"
             # initialize the metadata section to 0
             with self.shared_memory.buf[self.metadata_offset :] as metadata_buffer:
@@ -390,7 +406,9 @@ class MessageQueue:
 
             # Create the notification side of the SpinCondition
             local_notify_addr = get_open_zmq_ipc_path()
-            self._spin_condition = SpinCondition(is_reader=False, context=context, notify_address=local_notify_addr)
+            self._spin_condition = SpinCondition(
+                is_reader=False, context=context, notify_address=local_notify_addr
+            )
         else:
             self.buffer = None  # type: ignore
             local_subscribe_addr = None
@@ -534,13 +552,17 @@ class MessageQueue:
         n_warning = 1
         while True:
             with self.buffer.get_metadata(self.current_idx) as metadata_buffer:
-                # Memory fence ensures we see the latest read flags from readers.
-                # Without this, we may read stale flags from our CPU cache and
-                # spin indefinitely even though readers have completed.
-                memory_fence()
-                read_count = sum(metadata_buffer[1:])
-                written_flag = metadata_buffer[0]
-                if written_flag and read_count != self.buffer.n_reader:
+
+                def check():
+                    memory_fence()
+                    read_count = sum(metadata_buffer[1:])
+                    written_flag = metadata_buffer[0]
+                    return not (written_flag and read_count != self.buffer.n_reader)
+
+                if SPINLOOP_EXT_ENABLED and not check():
+                    spinloop(metadata_buffer, check, timeout=SPINLOOP_TIMEOUT_SECONDS)
+
+                if not check():
                     # this block is written and not read by all readers
                     # for writers, `self.current_idx` is the next block to write
                     # if this block is not ready to write,
@@ -556,7 +578,9 @@ class MessageQueue:
 
                     # if we wait for a long time, log a message
                     if elapsed > APHRODITE_RINGBUFFER_WARNING_INTERVAL * n_warning:
-                        logger.info(LONG_WAIT_TIME_LOG_MSG, APHRODITE_RINGBUFFER_WARNING_INTERVAL)
+                        logger.info(
+                            LONG_WAIT_TIME_LOG_MSG, APHRODITE_RINGBUFFER_WARNING_INTERVAL
+                        )
                         n_warning += 1
 
                     continue
@@ -644,16 +668,26 @@ class MessageQueue:
         indefinite: bool = False,
     ):
         assert self._is_local_reader, "Only readers can acquire read"
-        read_timeout = self.ReadTimeoutWithWarnings(timeout=timeout, should_warn=not indefinite)
+        read_timeout = self.ReadTimeoutWithWarnings(
+            timeout=timeout, should_warn=not indefinite
+        )
         with self.buffer.get_metadata(self.current_idx) as metadata_buffer:
             while True:
-                # Memory fence ensures we see the latest writes from the writer.
-                # Without this, we may read stale flags from our CPU cache
-                # and spin indefinitely even though writer has updated them.
-                memory_fence()
-                read_flag = metadata_buffer[self.local_reader_rank + 1]
-                written_flag = metadata_buffer[0]
-                if not written_flag or read_flag:
+
+                def check():
+                    memory_fence()
+                    read_flag = metadata_buffer[self.local_reader_rank + 1]
+                    written_flag = metadata_buffer[0]
+                    return not (not written_flag or read_flag)
+
+                if SPINLOOP_EXT_ENABLED and not check():
+                    spinloop(
+                        metadata_buffer[0 : self.local_reader_rank + 1],
+                        check,
+                        timeout=SPINLOOP_TIMEOUT_SECONDS,
+                    )
+
+                if not check():
                     # this block is either
                     # (1) not written
                     # (2) already read by this reader
@@ -668,7 +702,9 @@ class MessageQueue:
 
                     # if we wait for a long time, log a message
                     if read_timeout.should_warn():
-                        logger.info(LONG_WAIT_TIME_LOG_MSG, APHRODITE_RINGBUFFER_WARNING_INTERVAL)
+                        logger.info(
+                            LONG_WAIT_TIME_LOG_MSG, APHRODITE_RINGBUFFER_WARNING_INTERVAL
+                        )
 
                     continue
                 # found a block that is not read by this reader
@@ -704,7 +740,9 @@ class MessageQueue:
             total_bytes += len(raw_buf) + 4
             return False
 
-        all_buffers[0] = pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL, buffer_callback=oob_callback)
+        all_buffers[0] = pickle.dumps(
+            obj, protocol=pickle.HIGHEST_PROTOCOL, buffer_callback=oob_callback
+        )
         if self.n_local_reader > 0:
             if total_bytes + len(all_buffers[0]) >= self.buffer.max_chunk_bytes:
                 with self.acquire_write(timeout) as buf:
@@ -802,7 +840,13 @@ class MessageQueue:
             The MessageQueue instance for the calling process,
             and a list of handles (only non-empty for the reader process).
         """
-        local_size = current_platform.device_count()
+        from aphrodite.platforms.interface import get_assigned_physical_gpu_ids
+
+        assigned_physical_gpu_ids = get_assigned_physical_gpu_ids()
+        if assigned_physical_gpu_ids is not None:
+            local_size = len(assigned_physical_gpu_ids)
+        else:
+            local_size = current_platform.device_count()
         rank = dist.get_rank()
         same_node = rank // local_size == reader_rank // local_size
         buffer_io = MessageQueue(
@@ -866,7 +910,9 @@ class MessageQueue:
         status = in_the_same_node_as(pg, source_rank=writer_rank)
         if group_rank == writer_rank:
             if external_writer_handle is not None:
-                buffer_io = MessageQueue.create_from_handle(external_writer_handle, group_rank)
+                buffer_io = MessageQueue.create_from_handle(
+                    external_writer_handle, group_rank
+                )
             else:
                 same_node_ranks = [i for i, s in enumerate(status) if s]
                 n_reader = group_world_size - 1
@@ -881,13 +927,17 @@ class MessageQueue:
                 )
             handle = buffer_io.export_handle()
             if isinstance(pg, ProcessGroup):
-                dist.broadcast_object_list([handle], src=global_ranks[writer_rank], group=pg)
+                dist.broadcast_object_list(
+                    [handle], src=global_ranks[writer_rank], group=pg
+                )
             else:
                 pg.broadcast_obj(handle, writer_rank)
         else:
             if isinstance(pg, ProcessGroup):
                 recv = [None]
-                dist.broadcast_object_list(recv, src=global_ranks[writer_rank], group=pg)
+                dist.broadcast_object_list(
+                    recv, src=global_ranks[writer_rank], group=pg
+                )
                 handle = recv[0]  # type: ignore
             else:
                 handle = pg.broadcast_obj(None, writer_rank)

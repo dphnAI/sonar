@@ -5,8 +5,11 @@ from http import HTTPStatus
 from fastapi import APIRouter, Depends, Request
 
 from aphrodite.entrypoints.openai.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.openai.utils import validate_json_request
-from aphrodite.entrypoints.utils import load_aware_call, with_cancellation
+from aphrodite.entrypoints.serve.utils.api_utils import (
+    load_aware_call,
+    validate_json_request,
+    with_cancellation,
+)
 
 from .protocol import PoolingRequest
 from .serving import ServingPooling

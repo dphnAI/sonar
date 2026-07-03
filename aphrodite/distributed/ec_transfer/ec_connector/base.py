@@ -79,6 +79,14 @@ class ECConnectorBase(ABC):
     def is_consumer(self) -> bool:
         return self._is_consumer
 
+    def shutdown(self) -> None:
+        """
+        Shutdown the connector. This is called when the process
+        is shutting down to ensure that all the async operations are
+        completed and the connector is cleaned up properly.
+        """
+        return None
+
     # ==============================
     # Worker-side methods
     # ==============================
@@ -129,7 +137,9 @@ class ECConnectorBase(ABC):
         return
 
     @abstractmethod
-    def start_load_caches(self, encoder_cache: dict[str, torch.Tensor], **kwargs) -> None:
+    def start_load_caches(
+        self, encoder_cache: dict[str, torch.Tensor], **kwargs
+    ) -> None:
         """
         Start loading the cache from the connector into Aphrodite's encoder cache.
 
@@ -145,7 +155,9 @@ class ECConnectorBase(ABC):
         pass
 
     @abstractmethod
-    def save_caches(self, encoder_cache: dict[str, torch.Tensor], mm_hash: str, **kwargs) -> None:
+    def save_caches(
+        self, encoder_cache: dict[str, torch.Tensor], mm_hash: str, **kwargs
+    ) -> None:
         """
         Save the encoder cache to the connector.
 
@@ -160,7 +172,9 @@ class ECConnectorBase(ABC):
         """
         pass
 
-    def get_finished(self, finished_req_ids: set[str]) -> tuple[set[str] | None, set[str] | None]:
+    def get_finished(
+        self, finished_req_ids: set[str]
+    ) -> tuple[set[str] | None, set[str] | None]:
         """
         Notifies worker-side connector ids of requests that have
         finished generating tokens on the worker.
@@ -197,6 +211,23 @@ class ECConnectorBase(ABC):
         """
         pass
 
+    def ensure_cache_available(
+        self, request: "Request", num_computed_tokens: int
+    ) -> bool:
+        """
+        Ensure encoder cache items are available for the given request.
+        May initiate asynchronous transfers for items not yet local.
+
+        Args:
+            request: the request whose multimodal features to check.
+            num_computed_tokens: tokens already covered by cached KV blocks.
+
+        Returns:
+            True if all items are ready or no transfer is needed.
+            False if any items are still in transit (request should be deferred).
+        """
+        return True
+
     @abstractmethod
     def update_state_after_alloc(self, request: "Request", index: int):
         """
@@ -208,7 +239,9 @@ class ECConnectorBase(ABC):
         pass
 
     @abstractmethod
-    def build_connector_meta(self, scheduler_output: SchedulerOutput) -> ECConnectorMetadata:
+    def build_connector_meta(
+        self, scheduler_output: SchedulerOutput
+    ) -> ECConnectorMetadata:
         """
         Build the connector metadata for this step.
 
@@ -230,7 +263,9 @@ class ECConnectorBase(ABC):
         """
         return
 
-    def request_finished(self, request: "Request") -> tuple[bool, dict[str, Any] | None]:
+    def request_finished(
+        self, request: "Request"
+    ) -> tuple[bool, dict[str, Any] | None]:
         """
         Called when a request has finished, before its encoder cache is freed.
 

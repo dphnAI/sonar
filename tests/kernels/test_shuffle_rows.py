@@ -42,7 +42,9 @@ def test_shuffle_rows_basic(num_tokens: int, hidden_size: int, dtype: torch.dtyp
 @pytest.mark.parametrize("num_tokens", [16, 64, 128])
 @pytest.mark.parametrize("hidden_size", [128, 512, 1024])
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
-def test_shuffle_rows_permutation(num_tokens: int, hidden_size: int, dtype: torch.dtype):
+def test_shuffle_rows_permutation(
+    num_tokens: int, hidden_size: int, dtype: torch.dtype
+):
     """Test shuffle_rows with actual permutation."""
     if not current_platform.is_cuda():
         pytest.skip("shuffle_rows requires CUDA")
@@ -81,7 +83,9 @@ def test_shuffle_rows_expansion(num_tokens: int, hidden_size: int):
 
     # Create a mapping that duplicates some tokens (expansion)
     expanded_size = num_tokens * 2
-    dst2src_map = torch.randint(0, num_tokens, (expanded_size,), device="cuda", dtype=torch.int32)
+    dst2src_map = torch.randint(
+        0, num_tokens, (expanded_size,), device="cuda", dtype=torch.int32
+    )
 
     # Test shuffle_rows
     output = shuffle_rows(input_tensor, dst2src_map)
@@ -94,7 +98,9 @@ def test_shuffle_rows_expansion(num_tokens: int, hidden_size: int):
     # Verify that each output row matches the corresponding input row
     for i in range(expanded_size):
         src_idx = dst2src_map[i].item()
-        torch.testing.assert_close(output[i], input_tensor[src_idx], atol=1e-6, rtol=1e-5)
+        torch.testing.assert_close(
+            output[i], input_tensor[src_idx], atol=1e-6, rtol=1e-5
+        )
 
 
 @pytest.mark.parametrize("num_tokens", [16, 64])
@@ -126,7 +132,9 @@ def test_shuffle_rows_random_permutation(num_tokens: int, hidden_size: int):
     # Verify that each output row matches the corresponding input row
     for i in range(num_tokens):
         src_idx = dst2src_map[i].item()
-        torch.testing.assert_close(output[i], input_tensor[src_idx], atol=1e-6, rtol=1e-5)
+        torch.testing.assert_close(
+            output[i], input_tensor[src_idx], atol=1e-6, rtol=1e-5
+        )
 
 
 def test_shuffle_rows_edge_cases():
@@ -184,7 +192,9 @@ def test_shuffle_rows_moe_like_scenario():
     for i in range(batch_size):
         for k in range(topk):
             output_idx = i * topk + k
-            torch.testing.assert_close(output[output_idx], input_tensor[i], atol=1e-6, rtol=1e-5)
+            torch.testing.assert_close(
+                output[output_idx], input_tensor[i], atol=1e-6, rtol=1e-5
+            )
 
 
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.float32])

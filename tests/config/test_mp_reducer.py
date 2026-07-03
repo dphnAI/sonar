@@ -3,9 +3,8 @@
 import sys
 from unittest.mock import patch
 
-from aphrodite.engine.args_tools import AsyncEngineArgs
-
 from aphrodite.config import AphroditeConfig
+from aphrodite.engine.arg_utils import AsyncEngineArgs
 from aphrodite.v1.engine.async_llm import AsyncLLM
 
 
@@ -33,7 +32,9 @@ def test_mp_reducer():
             start_engine_loop=False,
         )
 
-        assert mock_register.called, "multiprocessing.reducer.register should have been called"
+        assert mock_register.called, (
+            "multiprocessing.reducer.register should have been called"
+        )
 
         aphrodite_config_registered = False
         for call_args in mock_register.call_args_list:
@@ -45,6 +46,8 @@ def test_mp_reducer():
                 assert callable(reducer_func), "Reducer function should be callable"
                 break
 
-        assert aphrodite_config_registered, "AphroditeConfig should have been registered to multiprocessing.reducer"
+        assert aphrodite_config_registered, (
+            "AphroditeConfig should have been registered to multiprocessing.reducer"
+        )
 
         async_llm.shutdown()

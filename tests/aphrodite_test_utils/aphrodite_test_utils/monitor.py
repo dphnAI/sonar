@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import contextlib
 import dataclasses
 import sys
@@ -52,9 +53,14 @@ def monitor(
                 sys.settrace(None)
                 # do a measurement
                 current_value = measure_func()
-                if len(monitored_values.values) == 0 or current_value != monitored_values.values[-1]:
+                if (
+                    len(monitored_values.values) == 0
+                    or current_value != monitored_values.values[-1]
+                ):
                     monitored_values.values.append(current_value)
-                    monitored_values.trace_stacks.append("".join(traceback.format_stack()))
+                    monitored_values.trace_stacks.append(
+                        "".join(traceback.format_stack())
+                    )
                 # Re-enable the trace function
                 sys.settrace(_trace_calls)
             except NameError:

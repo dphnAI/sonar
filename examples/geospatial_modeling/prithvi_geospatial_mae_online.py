@@ -13,7 +13,7 @@ import requests
 # - install TerraTorch v1.1 (or later):
 #   pip install terratorch>=v1.1
 # - start aphrodite in serving mode with the below args
-#   --model='christian-pinto/Prithvi-EO-2.0-300M-TL-VLLM'
+#   --model='christian-pinto/Prithvi-EO-2.0-300M-TL-APHRODITE'
 #   --model-impl terratorch
 #   --task embed --trust-remote-code
 #   --skip-tokenizer-init --enforce-eager
@@ -33,7 +33,7 @@ def main():
             "out_data_format": "b64_json",
         },
         "priority": 0,
-        "model": "christian-pinto/Prithvi-EO-2.0-300M-TL-VLLM",
+        "model": "christian-pinto/Prithvi-EO-2.0-300M-TL-APHRODITE",
     }
 
     ret = requests.post(server_endpoint, json=request_payload_url)

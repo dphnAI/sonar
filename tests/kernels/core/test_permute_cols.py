@@ -1,10 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 import torch
 
-from aphrodite._custom_ops import permute_cols
 from tests.kernels.utils import opcheck
+from aphrodite._custom_ops import permute_cols
+
+if not hasattr(torch.ops._C, "permute_cols"):
+    pytest.skip(reason="permute_cols is not supported on ROCm", allow_module_level=True)
 
 
 @pytest.mark.parametrize("shape", [(1, 512), (544, 4096), (67, 8192)])

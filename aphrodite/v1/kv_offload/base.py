@@ -4,22 +4,25 @@
 Core abstractions for KV cache offloading in Aphrodite v1.
 """
 
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
-from collections.abc import Collection, Iterable, Iterator, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, NewType
+from enum import Enum, auto
+from typing import TYPE_CHECKING, Any, NamedTuple, NewType
 
 import numpy as np
 import torch
+from typing_extensions import override
 
 from aphrodite.logger import init_logger
+from aphrodite.v1.core.kv_cache_utils import resolve_kv_cache_block_sizes
 
 if TYPE_CHECKING:
     from aphrodite.config import AphroditeConfig
+    from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.metrics import (
+        OffloadingConnectorStats,
+    )
     from aphrodite.v1.kv_cache_interface import KVCacheConfig
-    from aphrodite.v1.kv_offload.worker.worker import OffloadingHandler
 
 # `OffloadKey` identifies an offloaded block. It combines a block hash with
 # its KV cache group index, encoded as raw bytes to avoid tuple GC overhead.
@@ -46,7 +49,40 @@ def get_offload_group_idx(key: OffloadKey) -> int:
 
 @dataclass
 class ReqContext:
+    req_id: str
     kv_transfer_params: dict[str, Any] | None = None
+
+
+class LookupResult(Enum):
+    """Result of OffloadingManager.lookup()."""
+
+    MISS = auto()
+    HIT = auto()
+    HIT_PENDING = auto()
+    RETRY = auto()
+
+
+class OffloadPolicy(Enum):
+    # Offload only newly-computed blocks as they arrive; prefix-hit
+    # blocks (already offloaded by a prior request) are skipped.
+    BLOCK_LEVEL = "block_level"
+    # Offload all blocks for the request, including prefix hits.
+    # Used by tiers that need the complete KV context for a request.
+    REQUEST_LEVEL = "request_level"
+
+
+@dataclass
+class RequestOffloadingContext:
+    policy: OffloadPolicy = OffloadPolicy.BLOCK_LEVEL
+
+
+class ScheduleEndContext(NamedTuple):
+    """Per-step scheduling info passed to on_schedule_end()."""
+
+    # Request IDs scheduled for the first time this step.
+    new_req_ids: Collection[str]
+    # Request IDs preempted this step.
+    preempted_req_ids: Collection[str]
 
 
 class LoadStoreSpec(ABC):
@@ -82,8 +118,10 @@ class OffloadingEvent:
 
 """
 OffloadingManager class for managing KV data offloading in Aphrodite v1
+
 This class runs in the scheduler, tracks which blocks are offloaded
 and their address.
+
 The class provides the following primitives:
     lookup() - check whether a single block is offloaded and ready.
     prepare_load() - prepare given blocks to be read.
@@ -105,19 +143,51 @@ The class provides the following primitives:
 """
 
 
+@dataclass(frozen=True)
+class OffloadingMetricMetadata:
+    documentation: str
+    labelnames: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class OffloadingCounterMetadata(OffloadingMetricMetadata):
+    pass
+
+
+@dataclass(frozen=True)
+class OffloadingGaugeMetadata(OffloadingMetricMetadata):
+    pass
+
+
+@dataclass(frozen=True)
+class OffloadingHistogramMetadata(OffloadingMetricMetadata):
+    buckets: tuple[float, ...] | None = None
+
+
+@dataclass(frozen=True)
+class OffloadingKVEventsConfig:
+    # Global Aphrodite KV event publishing flag. When false, connector-specific
+    # event capture must stay inert because take_events() is not drained.
+    enable_kv_cache_events: bool
+    # OffloadingConnector opt-in for self-describing BlockStored payloads.
+    # Effective only when enable_kv_cache_events is true.
+    self_describing_kv_events: bool
+
+
 class OffloadingManager(ABC):
     @abstractmethod
-    def lookup(self, key: OffloadKey, req_context: ReqContext) -> bool | None:
+    def lookup(self, key: OffloadKey, req_context: ReqContext) -> LookupResult:
         """
         Checks whether a single block is offloaded and ready to be read.
+
         Args:
             key: the key identifying the block to lookup.
             req_context: per-request context (e.g. kv_transfer_params).
+
         Returns:
-            True if the block is offloaded and ready, False if not,
-            or None if the lookup should be retried later.
-            Returning None will delay the request handling by the Aphrodite
-            scheduler.
+            HIT if the block is offloaded and ready, MISS if not found,
+            HIT_PENDING if found but not yet readable, or RETRY if the
+            lookup should be retried later.
         """
         pass
 
@@ -132,29 +202,35 @@ class OffloadingManager(ABC):
         The given blocks will be protected from eviction until
         complete_load is called.
         It assumes all given blocks are offloaded.
+
         Args:
             keys: the keys identifying the blocks.
             req_context: per-request context (e.g. kv_transfer_params).
+
         Returns:
             A LoadStoreSpec that can be used by a worker to locate and load
             the actual offloaded KV data.
         """
         pass
 
-    def touch(self, keys: Collection[OffloadKey]):
+    def touch(self, keys: Collection[OffloadKey], req_context: ReqContext):
         """
         Mark the given blocks as recently used.
         This could in practice mean moving them to the end of an LRU list.
+
         Args:
             keys: the keys identifying the blocks.
+            req_context: per-request context (e.g. kv_transfer_params).
         """
         return
 
-    def complete_load(self, keys: Collection[OffloadKey]):
+    def complete_load(self, keys: Collection[OffloadKey], req_context: ReqContext):
         """
         Marks previous blocks that were prepared to load as done loading.
+
         Args:
             keys: the keys identifying the blocks.
+            req_context: per-request context (e.g. kv_transfer_params).
         """
         return
 
@@ -168,9 +244,11 @@ class OffloadingManager(ABC):
         Prepare the given blocks to be offloaded.
         The given blocks will be protected from eviction until
         complete_store is called.
+
         Args:
             keys: the keys identifying the blocks.
             req_context: per-request context (e.g. kv_transfer_params).
+
         Returns:
             A PrepareStoreOutput indicating which blocks need storing,
             where to store them (LoadStoreSpec), and list of blocks that
@@ -179,25 +257,90 @@ class OffloadingManager(ABC):
         """
         pass
 
-    def complete_store(self, keys: Collection[OffloadKey], success: bool = True):
+    def complete_store(
+        self,
+        keys: Collection[OffloadKey],
+        req_context: ReqContext,
+        success: bool = True,
+    ):
         """
         Marks blocks which were previously prepared to be stored, as stored.
         Following this call, the blocks become loadable.
-        If if_success is False, blocks that were not marked as stored will be
+        If success is False, blocks that were not marked as stored will be
         removed.
+
         Args:
             keys: the keys identifying the blocks.
+            req_context: per-request context (e.g. kv_transfer_params).
             success: whether the blocks were stored successfully.
+        """
+        return
+
+    @abstractmethod
+    def on_new_request(self, req_context: ReqContext) -> RequestOffloadingContext:
+        """
+        Called when a new request is first seen by the scheduler.
+
+        Returns a RequestOffloadingContext indicating how this request's
+        blocks should be offloaded.
+
+        Args:
+            req_context: per-request context.
+        """
+        pass
+
+    def on_request_finished(self, req_context: ReqContext) -> None:
+        """
+        Called when a request has finished.
+
+        By the time this is called, the scheduler will issue no more
+        submit-side calls for this request, such as prepare_store() and
+        prepare_load(). Completion callbacks for already-submitted transfers
+        (complete_store() and complete_load()) may still arrive afterward.
+
+        This hook does NOT imply the data has been persisted. Asynchronous
+        transfers already submitted for this request may still be in flight.
+        Managers that cascade to lower tiers should delay those tiers'
+        on_request_finished() calls until no more lower-tier submit calls can
+        be issued for this request.
+
+        Args:
+            req_context: per-request context.
         """
         return
 
     def take_events(self) -> Iterable[OffloadingEvent]:
         """
         Take the offloading events from the manager.
+
         Yields:
             New OffloadingEvents collected since the last call.
         """
         return ()
+
+    def on_schedule_end(self, context: ScheduleEndContext) -> None:
+        """Called once at the end of each scheduler step.
+
+        Managers may override this to flush deferred work accumulated
+        during the step (e.g., batched promotions).
+        """
+        return
+
+    def has_pending_work(self) -> bool:
+        """Whether this manager needs the engine to keep stepping.
+
+        While True, on_schedule_end() and get_finished_jobs() continue
+        to be called even when no requests are scheduled.
+        """
+        return False
+
+    def reset_cache(self) -> None:
+        """Evict all tracked blocks and reset internal state."""
+        return
+
+    def get_stats(self) -> "OffloadingConnectorStats | None":
+        """Return collected metrics since last call, or None if disabled."""
+        return None
 
     def shutdown(self) -> None:
         """Shutdown the manager and release any resources."""
@@ -219,11 +362,13 @@ class BlockIDsLoadStoreSpec(LoadStoreSpec, ABC):
 class GPULoadStoreSpec(BlockIDsLoadStoreSpec):
     """
     Spec for loading/storing a KV block to GPU memory.
+
     If there are multiple KV groups, the blocks are expected to be
     ordered by the group index.
     In that case, group_sizes[i] determines the number of blocks
     per the i-th KV group, and thus sum(group_sizes) == len(block_ids).
     group_sizes=None indicates a single KV group.
+
     If block_indices is given, each group (determined by group_sizes) of block IDs
     will correspond to logically contiguous blocks, e.g. blocks 5-10 of a some request.
     block_indices[i] will represent the block index of the first block in group #i.
@@ -248,6 +393,7 @@ class GPULoadStoreSpec(BlockIDsLoadStoreSpec):
         self.block_indices: Sequence[int] = block_indices
 
     @staticmethod
+    @override
     def medium() -> str:
         return "GPU"
 
@@ -256,6 +402,7 @@ class GPULoadStoreSpec(BlockIDsLoadStoreSpec):
 class CanonicalKVCacheTensor:
     """
     A canonicalized KV cache tensor whose first dimension is num_blocks.
+
     For attention backends where the raw tensor has num_blocks at a
     non-leading physical dimension (e.g. FlashAttention's
     (2, num_blocks, ...) layout), the tensor is split so that each
@@ -285,6 +432,7 @@ class CanonicalKVCacheRef:
 class CanonicalKVCaches:
     """
     Canonicalized block-level representation of the KV caches.
+
     Composed of:
         - Unique list of KV cache data tensors,
           each with shape (num_blocks, page_size_in_bytes) and int8 dtype.
@@ -300,10 +448,52 @@ class CanonicalKVCaches:
     group_data_refs: list[list[CanonicalKVCacheRef]]
 
 
+@dataclass
+class TransferResult:
+    job_id: int
+    success: bool
+    transfer_size: int | None = None
+    transfer_time: float | None = None
+
+
+class OffloadingWorker(ABC):
+    """Runs in the worker process. Performs async KV transfers for ONE
+    offloaded medium (e.g. CPU). Direction is explicit via submit_store /
+    submit_load, so there is no (src_medium, dst_medium) routing."""
+
+    @abstractmethod
+    def submit_store(
+        self, job_id: int, src_spec: GPULoadStoreSpec, dst_spec: LoadStoreSpec
+    ) -> bool:
+        """Async GPU -> offloaded medium."""
+
+    @abstractmethod
+    def submit_load(
+        self, job_id: int, src_spec: LoadStoreSpec, dst_spec: GPULoadStoreSpec
+    ) -> bool:
+        """Async offloaded medium -> GPU."""
+
+    @abstractmethod
+    def get_finished(self) -> list[TransferResult]: ...
+
+    @abstractmethod
+    def wait(self, job_ids: set[int]) -> None: ...
+
+    def shutdown(self) -> None:
+        return
+
+
 class OffloadingSpec(ABC):
     """Spec for an offloading connector"""
 
-    def __init__(self, aphrodite_config: AphroditeConfig, kv_cache_config: KVCacheConfig):
+    @classmethod
+    def build_metric_definitions(
+        cls, extra_config: dict[str, Any]
+    ) -> dict[str, "OffloadingMetricMetadata"]:
+        """Return Prometheus metric definitions emitted by this spec."""
+        return {}
+
+    def __init__(self, aphrodite_config: "AphroditeConfig", kv_cache_config: "KVCacheConfig"):
         logger.warning(
             "Initializing OffloadingSpec. This API is experimental and "
             "subject to change in the future as we iterate the design."
@@ -314,13 +504,40 @@ class OffloadingSpec(ABC):
         kv_transfer_config = aphrodite_config.kv_transfer_config
         assert kv_transfer_config is not None
         self.extra_config = kv_transfer_config.kv_connector_extra_config
+        kv_events_config = aphrodite_config.kv_events_config
+        self.kv_events_config = OffloadingKVEventsConfig(
+            enable_kv_cache_events=(
+                kv_events_config is not None and kv_events_config.enable_kv_cache_events
+            ),
+            self_describing_kv_events=bool(
+                self.extra_config.get("self_describing_kv_events", False)
+            ),
+        )
 
-        # block size used by Aphrodite for hashing request tokens for the sake
-        # of enabling prefix caching
-        self.hash_block_size = aphrodite_config.cache_config.block_size
+        # When True, only prompt (prefill) blocks are offloaded; decode-phase
+        # blocks (KV generated after the prompt) are skipped. Useful when prior
+        # turns' generated tokens are dropped before the next turn (e.g.
+        # reasoning models that strip thinking).
+        self.offload_prompt_only: bool = bool(
+            self.extra_config.get("offload_prompt_only", True)
+        )
+
+        parallel_config = aphrodite_config.parallel_config
+        context_parallel_factor = (
+            parallel_config.decode_context_parallel_size
+            * parallel_config.prefill_context_parallel_size
+        )
+
         # gpu block size per group
         self.gpu_block_size: tuple[int, ...] = tuple(
-            kv_cache_group.kv_cache_spec.block_size for kv_cache_group in kv_cache_config.kv_cache_groups
+            kv_cache_group.kv_cache_spec.block_size * context_parallel_factor
+            for kv_cache_group in kv_cache_config.kv_cache_groups
+        )
+
+        # hash_block_size must match what the scheduler uses for
+        # Request.block_hashes (resolved via resolve_kv_cache_block_sizes).
+        _, self.hash_block_size = resolve_kv_cache_block_sizes(
+            kv_cache_config, aphrodite_config
         )
 
         for block_size in self.gpu_block_size:
@@ -358,14 +575,14 @@ class OffloadingSpec(ABC):
         pass
 
     @abstractmethod
-    def get_handlers(
-        self, kv_caches: CanonicalKVCaches
-    ) -> Iterator[tuple[type[LoadStoreSpec], type[LoadStoreSpec], OffloadingHandler]]:
+    def get_worker(self, kv_caches: CanonicalKVCaches) -> OffloadingWorker:
         """
-        Get offloading handlers along with their respective src and dst types.
+        Get an OffloadingWorker that handles async KV transfers for this spec.
+
         Args:
             kv_caches: Canonicalized KV caches.
-        Yields:
-            Tuples of (src_type, dst_type, offloading_handler).
+
+        Returns:
+            An OffloadingWorker instance for this medium.
         """
         pass

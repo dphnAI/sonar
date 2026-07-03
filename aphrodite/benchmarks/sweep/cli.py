@@ -2,7 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import argparse
 
-from aphrodite.entrypoints.utils import APHRODITE_SUBCMD_PARSER_EPILOG
+from aphrodite.entrypoints.serve.utils.api_utils import APHRODITE_SUBCMD_PARSER_EPILOG
+from aphrodite.utils.argparse_utils import FlexibleArgumentParser
 
 from .plot import SweepPlotArgs
 from .plot import main as plot_main
@@ -24,7 +25,7 @@ SUBCOMMANDS = (
 )
 
 
-def add_cli_args(parser: argparse.ArgumentParser):
+def add_cli_args(parser: FlexibleArgumentParser):
     subparsers = parser.add_subparsers(required=True, dest="sweep_type")
 
     for cmd, entrypoint in SUBCOMMANDS:
@@ -35,7 +36,9 @@ def add_cli_args(parser: argparse.ArgumentParser):
         )
         cmd_subparser.set_defaults(dispatch_function=entrypoint)
         cmd.add_cli_args(cmd_subparser)
-        cmd_subparser.epilog = APHRODITE_SUBCMD_PARSER_EPILOG.format(subcmd=f"sweep {cmd.parser_name}")
+        cmd_subparser.epilog = APHRODITE_SUBCMD_PARSER_EPILOG.format(
+            subcmd=f"sweep {cmd.parser_name}"
+        )
 
 
 def main(args: argparse.Namespace):

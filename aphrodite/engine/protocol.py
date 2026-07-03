@@ -6,7 +6,7 @@ from collections.abc import AsyncGenerator, Iterable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from aphrodite.config import AphroditeConfig, ModelConfig
+from aphrodite.config import ModelConfig, AphroditeConfig
 from aphrodite.distributed.weight_transfer.base import (
     WeightTransferInitRequest,
     WeightTransferUpdateRequest,
@@ -64,7 +64,10 @@ class EngineClient(ABC):
     @abstractmethod
     def generate(
         self,
-        prompt: EngineCoreRequest | PromptType | EngineInput | AsyncGenerator[StreamingInput, None],
+        prompt: EngineCoreRequest
+        | PromptType
+        | EngineInput
+        | AsyncGenerator[StreamingInput, None],
         sampling_params: SamplingParams,
         request_id: str,
         *,
@@ -106,6 +109,20 @@ class EngineClient(ABC):
         ...
 
     @abstractmethod
+    async def notify_kv_transfer_request_rejected(
+        self,
+        request_id: str,
+        kv_transfer_params: dict[str, Any],
+        *,
+        data_parallel_rank: int | None = None,
+    ) -> None:
+        """Notify the engine that a KV-transfer request was rejected before
+        engine admission, so connector-side cleanup can run (e.g. free
+        prefill blocks pinned on the P node).
+        """
+        ...
+
+    @abstractmethod
     async def is_tracing_enabled(self) -> bool: ...
 
     @abstractmethod
@@ -137,7 +154,9 @@ class EngineClient(ABC):
         ...
 
     @abstractmethod
-    async def reset_prefix_cache(self, reset_running_requests: bool = False, reset_connector: bool = False) -> bool:
+    async def reset_prefix_cache(
+        self, reset_running_requests: bool = False, reset_connector: bool = False
+    ) -> bool:
         """Reset the prefix cache and optionally any configured connector cache"""
         ...
 
@@ -199,7 +218,9 @@ class EngineClient(ABC):
         """Shutdown the engine with optional timeout."""
         ...
 
-    async def scale_elastic_ep(self, new_data_parallel_size: int, drain_timeout: int = 300) -> None:
+    async def scale_elastic_ep(
+        self, new_data_parallel_size: int, drain_timeout: int = 300
+    ) -> None:
         """Scale the engine"""
         raise NotImplementedError
 
@@ -217,10 +238,20 @@ class EngineClient(ABC):
         """Get supported tasks"""
         raise NotImplementedError
 
-    async def init_weight_transfer_engine(self, init_request: WeightTransferInitRequest) -> None:
+    async def init_weight_transfer_engine(
+        self, init_request: WeightTransferInitRequest
+    ) -> None:
         """Initialize weight transfer for RL training."""
+        raise NotImplementedError
+
+    async def start_weight_update(self) -> None:
+        """Start a new weight update."""
         raise NotImplementedError
 
     async def update_weights(self, request: WeightTransferUpdateRequest) -> None:
         """Batched weight update for RL training."""
+        raise NotImplementedError
+
+    async def finish_weight_update(self) -> None:
+        """Finish the current weight update."""
         raise NotImplementedError

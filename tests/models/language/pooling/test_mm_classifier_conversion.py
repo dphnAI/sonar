@@ -1,18 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 from aphrodite.config.pooler import PoolerConfig
-from aphrodite.platforms import current_platform
 
 
 def test_idefics_multimodal(
     aphrodite_runner,
-    monkeypatch,
 ) -> None:
-    if current_platform.is_rocm():
-        # ROCm Triton FA does not currently support sliding window attention
-        # switch to use ROCm CK FA backend
-        monkeypatch.setenv("APHRODITE_USE_TRITON_FLASH_ATTN", "False")
-
     prompts = [
         "Hello, my name is",
         "The president of the United States is",
@@ -23,7 +17,6 @@ def test_idefics_multimodal(
     with aphrodite_runner(
         model_name="HuggingFaceM4/Idefics3-8B-Llama3",
         runner="pooling",
-        task="classify",
         convert="classify",
         load_format="dummy",
         max_model_len=512,
@@ -39,7 +32,8 @@ def test_idefics_multimodal(
 
 
 def update_config(config):
-    config.text_config.update(
+    text_config = config.get_text_config()
+    text_config.update(
         {
             "architectures": ["Gemma3ForSequenceClassification"],
             "classifier_from_token": ["A", "B", "C", "D", "E"],
@@ -58,13 +52,7 @@ def update_config(config):
 
 def test_gemma_multimodal(
     aphrodite_runner,
-    monkeypatch,
 ) -> None:
-    if current_platform.is_rocm():
-        # ROCm Triton FA does not currently support sliding window attention
-        # switch to use ROCm CK FA backend
-        monkeypatch.setenv("APHRODITE_USE_TRITON_FLASH_ATTN", "False")
-
     messages = [
         {
             "role": "system",
@@ -87,7 +75,7 @@ def test_gemma_multimodal(
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": "https://upload.wikimedia.org/wikipedia/commons/c/c6/Set_of_fourteen_side_chairs_MET_DP110780.jpg"
+                        "url": "https://aphrodite-public-assets.s3.us-west-2.amazonaws.com/multimodal_asset/red_chair.jpg"
                     },
                 },
                 {"type": "text", "text": "A fine 19th century piece of furniture."},
@@ -98,11 +86,10 @@ def test_gemma_multimodal(
     with aphrodite_runner(
         model_name="google/gemma-3-4b-it",
         runner="pooling",
-        task="classify",
         convert="classify",
         load_format="auto",
         hf_overrides=update_config,
-        pooler_config=PoolerConfig(pooling_type="LAST"),
+        pooler_config=PoolerConfig(seq_pooling_type="LAST"),
         max_model_len=512,
         enforce_eager=True,
         tensor_parallel_size=1,
@@ -110,7 +97,7 @@ def test_gemma_multimodal(
         dtype="bfloat16",
     ) as aphrodite_model:
         llm = aphrodite_model.get_llm()
-        prompts = llm.preprocess_chat(messages)
+        prompts = llm._preprocess_chat([messages])
 
         result = llm.classify(prompts)
         assert result[0].outputs.probs[0] > 0.95

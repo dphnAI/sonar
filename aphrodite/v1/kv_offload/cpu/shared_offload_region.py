@@ -7,6 +7,7 @@ import time
 import torch
 
 from aphrodite.logger import init_logger
+from aphrodite.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -18,7 +19,9 @@ def _wait_for_file_size(fd: int, expected_size: int, timeout: float = 30.0) -> N
         if os.fstat(fd).st_size >= expected_size:
             return
         if time.monotonic() > deadline:
-            raise TimeoutError(f"Timed out waiting for mmap file to reach {expected_size} bytes")
+            raise TimeoutError(
+                f"Timed out waiting for mmap file to reach {expected_size} bytes"
+            )
         time.sleep(0.005)
 
 
@@ -33,24 +36,26 @@ class SharedOffloadRegion:
     File path: /dev/shm/aphrodite_offload_{instance_id}.mmap
     """
 
+    BLOCK_SIZE_ALIGNMENT: int = mmap.PAGESIZE
+
     def __init__(
         self,
         instance_id: str,
-        total_size_bytes: int,
         num_blocks: int,
         rank: int | None,
-        num_workers: int,
+        kv_bytes_per_block: int,
         cpu_page_size: int,
     ) -> None:
         self.page_size = mmap.PAGESIZE
+        assert kv_bytes_per_block % self.page_size == 0
 
-        self.total_size_bytes = total_size_bytes
+        self.num_blocks = num_blocks
+        self._row_stride = kv_bytes_per_block
+        self.total_size_bytes = self.num_blocks * self._row_stride
+
         self.mmap_path = f"/dev/shm/aphrodite_offload_{instance_id}.mmap"
         self._creator = False  # set True only if this worker creates the file
-        self.num_blocks = num_blocks
         self.rank = rank
-        # interleaved-layout stride: one row = all workers' data for one block
-        self._row_stride = cpu_page_size * num_workers
         if rank is not None:
             # byte offset to this worker's first slot within each block row
             self._worker_offset = rank * cpu_page_size
@@ -58,7 +63,9 @@ class SharedOffloadRegion:
             self._worker_area_end = (rank + 1) * cpu_page_size
         try:
             # Exclusive create — only one worker succeeds
-            self.fd: int | None = os.open(self.mmap_path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+            self.fd: int | None = os.open(
+                self.mmap_path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600
+            )
             os.ftruncate(self.fd, self.total_size_bytes)
             self._creator = True
             logger.info(
@@ -90,7 +97,9 @@ class SharedOffloadRegion:
                 aligned_offset = (raw_offset // page_size) * page_size
                 end = raw_offset + cpu_page_size
                 aligned_length = end - aligned_offset
-                self.mmap_obj.madvise(_MADV_POPULATE_WRITE, aligned_offset, aligned_length)
+                self.mmap_obj.madvise(
+                    _MADV_POPULATE_WRITE, aligned_offset, aligned_length
+                )
             logger.debug(
                 "MADV_POPULATE_WRITE loop: %d blocks in %.3f s",
                 num_blocks,
@@ -100,7 +109,9 @@ class SharedOffloadRegion:
             # No rank — populate the entire shared region in one call.
             _t0 = time.perf_counter()
             self.mmap_obj.madvise(_MADV_POPULATE_WRITE, 0, self.total_size_bytes)
-            logger.debug("MADV_POPULATE_WRITE entire region: %.3f s", time.perf_counter() - _t0)
+            logger.debug(
+                "MADV_POPULATE_WRITE entire region: %.3f s", time.perf_counter() - _t0
+            )
 
         self._base = torch.frombuffer(memoryview(self.mmap_obj), dtype=torch.int8)
         self._views: list[torch.Tensor] = []
@@ -145,12 +156,31 @@ class SharedOffloadRegion:
         self._views.append(worker_layer_view)
         return worker_layer_view
 
+    def create_kv_memoryview(self) -> memoryview:
+        """Return a zero-copy memoryview over the entire KV buffer.
+
+        Shape: (num_blocks, row_stride_bytes). Secondary tiers address
+        block *b* as ``view[b]``.
+        """
+        kv_tensor = self._base.view(self.num_blocks, self._row_stride)
+        np_arr = kv_tensor.numpy()
+        assert np_arr.ctypes.data == self._base.data_ptr(), (
+            "view()/numpy() created a copy instead of sharing the mmap buffer; "
+            "secondary tiers require zero-copy access to primary KV data"
+        )
+        return memoryview(np_arr)
+
     def cleanup(self) -> None:
         if self.is_pinned and self._base is not None:
-            base_ptr = self._base.data_ptr()
-            result = torch.cuda.cudart().cudaHostUnregister(base_ptr)
-            if result.value != 0:
-                logger.warning("cudaHostUnregister failed for rank=%d (code=%d)", self.rank, result)
+            if current_platform.is_cuda_alike():
+                base_ptr = self._base.data_ptr()
+                result = torch.cuda.cudart().cudaHostUnregister(base_ptr)
+                if result.value != 0:
+                    logger.warning(
+                        "cudaHostUnregister failed for rank=%d (code=%d)",
+                        self.rank,
+                        result,
+                    )
             self.is_pinned = False
         # Release views before _base: each view holds a _base reference and a
         # direct StorageImpl reference.  Freeing views first lets both refcounts
@@ -176,5 +206,7 @@ class SharedOffloadRegion:
                 os.unlink(self.mmap_path)
                 logger.info("Removed mmap file %s", self.mmap_path)
             except Exception:
-                logger.warning("Failed to unlink path %s", self.mmap_path, exc_info=True)
+                logger.warning(
+                    "Failed to unlink path %s", self.mmap_path, exc_info=True
+                )
             self._creator = False

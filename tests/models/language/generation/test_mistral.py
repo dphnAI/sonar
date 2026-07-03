@@ -4,10 +4,13 @@ import copy
 import json
 
 import pytest
-from aphrodite.endpoints.openai.tool_parsers.mistral_tool_parser import MistralToolCall, MistralToolParser
 
-from aphrodite.common.sampling_params import SamplingParams
-from aphrodite.transformers_utils.tokenizer import MistralTokenizer
+from aphrodite.sampling_params import SamplingParams
+from aphrodite.tokenizers.mistral import MistralTokenizer
+from aphrodite.tool_parsers.mistral_tool_parser import (
+    MistralToolCall,
+    MistralToolParser,
+)
 
 from ...utils import check_logprobs_close
 
@@ -43,7 +46,8 @@ TOOLS = [
                 "properties": {
                     "city": {
                         "type": "string",
-                        "description": "The city to find the weather for, e.g. 'San Francisco'",
+                        "description": "The city to find the weather for, e.g. "
+                        "'San Francisco'",
                     },
                     "state": {
                         "type": "string",
@@ -82,7 +86,8 @@ MSGS = [
     {"role": "system", "content": "You are an assistant."},
     {
         "role": "user",
-        "content": "Could you please rewrite the below article? \n\n My English needs improvving, maybe I make errors.",
+        "content": "Could you please rewrite the below article? \n\n My English needs "
+        "improving, maybe I make errors.",
     },
     {
         "role": "assistant",
@@ -93,14 +98,16 @@ MSGS = [
                 "type": "function",
                 "function": {
                     "name": "rewrite",
-                    "arguments": '{"text":"My English needs improvving, maybe I make errors."}',
+                    "arguments": '{"text":"My English needs improving, maybe '
+                    'I make errors."}',
                 },
             }
         ],
     },
     {
         "role": "tool",
-        "content": '{"action":"rewrite","outcome":"My English needs improving, maybe I make errors."}',
+        "content": '{"action":"rewrite","outcome":"My English needs improving, maybe '
+        'I make errors."}',
         "tool_call_id": "bbc5b7ede",
         "name": "rewrite",
     },
@@ -110,7 +117,9 @@ MSGS = [
     },
     {
         "role": "user",
-        "content": ("Can you tell me what the temperate will be in Dallas, in fahrenheit?"),
+        "content": (
+            "Can you tell me what the temperate will be in Dallas, in fahrenheit?"
+        ),
     },
 ]
 
@@ -156,10 +165,14 @@ def test_models(
 ) -> None:
     # TODO(sang): Sliding window should be tested separately.
     with hf_runner(model, dtype=dtype) as hf_model:
-        hf_outputs = hf_model.generate_greedy_logprobs_limit(example_prompts, max_tokens, num_logprobs)
+        hf_outputs = hf_model.generate_greedy_logprobs_limit(
+            example_prompts, max_tokens, num_logprobs
+        )
 
     with aphrodite_runner(model, dtype=dtype, tokenizer_mode="mistral") as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
+            example_prompts, max_tokens, num_logprobs
+        )
 
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
@@ -195,11 +208,13 @@ def test_mistral_format(
     with aphrodite_runner(
         model,
         dtype=dtype,
-        tokenizer_mode="auto",
+        tokenizer_mode="hf",
         load_format="safetensors",
         config_format="hf",
     ) as hf_format_model:
-        hf_format_outputs = hf_format_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
+        hf_format_outputs = hf_format_model.generate_greedy_logprobs(
+            example_prompts, max_tokens, num_logprobs
+        )
 
     check_logprobs_close(
         outputs_0_lst=hf_format_outputs,
@@ -237,7 +252,9 @@ def test_mistral_function_calling(aphrodite_runner, model: str, dtype: str) -> N
         load_format="mistral",
     ) as aphrodite_model:
         msgs = copy.deepcopy(MSGS)
-        outputs = aphrodite_model.llm.chat(msgs, tools=TOOLS, sampling_params=SAMPLING_PARAMS)
+        outputs = aphrodite_model.llm.chat(
+            msgs, tools=TOOLS, sampling_params=SAMPLING_PARAMS
+        )
 
         tokenizer = aphrodite_model.llm.get_tokenizer()
         tool_parser = MistralToolParser(tokenizer)
@@ -251,7 +268,8 @@ def test_mistral_function_calling(aphrodite_runner, model: str, dtype: str) -> N
         assert MistralToolCall.is_valid_id(parsed_message.tool_calls[0].id)
         assert parsed_message.tool_calls[0].function.name == "get_current_weather"
         assert (
-            parsed_message.tool_calls[0].function.arguments == '{"city": "Dallas", "state": "TX", "unit": "fahrenheit"}'
+            parsed_message.tool_calls[0].function.arguments
+            == '{"city": "Dallas", "state": "TX", "unit": "fahrenheit"}'
         )  # noqa
         assert parsed_message.content is None
 
@@ -297,3 +315,38 @@ def test_mistral_function_call_nested_json():
     assert json.loads(parsed.tool_calls[0].function.arguments) == args_dict
     # No additional content outside the tool call should be returned.
     assert parsed.content is None
+
+    # multiple calls
+    multiple_args_dict = [
+        {
+            "city": "Dallas",
+            "state": "TX",
+            "unit": "fahrenheit",
+            "sub_dict": {"foo": "bar", "inner": {"x": 1, "y": 2}},
+        },
+        {},
+        {"a": 0},
+        {"a": 1, "b": "c"},
+    ]
+    names = ["get_current_weather", "get_current_weather_2", "random", "random_2"]
+
+    model_output = "".join(
+        [
+            f"{parser.bot_token}{name}{json.dumps(args)}"
+            for name, args in zip(names, multiple_args_dict)
+        ]
+    )
+
+    parsed = parser.extract_tool_calls(model_output, None)
+
+    # Assertions: the tool call is detected and the full nested JSON is parsed
+    # without truncation.
+    assert parsed.tools_called
+    assert len(parsed.tool_calls) == len(multiple_args_dict)
+
+    for i, tool_call in enumerate(parsed.tool_calls):
+        assert MistralToolCall.is_valid_id(tool_call.id)
+        assert tool_call.function.name == names[i]
+        assert json.loads(tool_call.function.arguments) == multiple_args_dict[i]
+        # No additional content outside the tool call should be returned.
+        assert parsed.content is None

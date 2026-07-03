@@ -74,7 +74,9 @@ class BatchedPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
         if apply_router_weight_on_input:
             topk = topk_ids.size(1)
             # TODO: this only works for topK=1, will need to update for topK>1
-            assert topk == 1, "apply_router_weight_on_input is only implemented for topk=1"
+            assert topk == 1, (
+                "apply_router_weight_on_input is only implemented for topk=1"
+            )
             a1.mul_(topk_weights.to(a1.dtype))
 
         num_tokens, hidden_dim = a1.size()
@@ -96,7 +98,9 @@ class BatchedPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
         )
 
         if quant_config.is_quantized:
-            scale_shape = quant_config.batched_scale_shape(num_local_experts, self.max_num_tokens, hidden_dim)
+            scale_shape = quant_config.batched_scale_shape(
+                num_local_experts, self.max_num_tokens, hidden_dim
+            )
 
             b_a1_scale = torch.empty(scale_shape, dtype=torch.float32, device=a1.device)
         else:
@@ -141,7 +145,9 @@ class BatchedPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
 
         assert b_a1_scale is None or b_a1_scale.ndim == 3
 
-        expert_tokens_meta = mk.ExpertTokensMetadata(expert_num_tokens=tokens_per_expert, expert_num_tokens_cpu=None)
+        expert_tokens_meta = mk.ExpertTokensMetadata(
+            expert_num_tokens=tokens_per_expert, expert_num_tokens_cpu=None
+        )
 
         return b_a1, b_a1_scale, expert_tokens_meta, None, None
 

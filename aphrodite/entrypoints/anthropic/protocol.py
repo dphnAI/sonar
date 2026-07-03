@@ -65,7 +65,7 @@ class AnthropicContentBlock(BaseModel):
 class AnthropicMessage(BaseModel):
     """Message structure"""
 
-    role: Literal["user", "assistant"]
+    role: Literal["user", "assistant", "system"]
     content: str | list[AnthropicContentBlock]
 
 
@@ -75,6 +75,7 @@ class AnthropicTool(BaseModel):
     name: str
     description: str | None = None
     input_schema: dict[str, Any]
+    strict: bool | None = None
     defer_loading: bool | None = None
 
     @field_validator("input_schema")
@@ -100,6 +101,20 @@ class AnthropicToolChoice(BaseModel):
         return self
 
 
+class AnthropicJsonOutputFormat(BaseModel):
+    """JSON output format configuration"""
+
+    json_schema: dict[str, Any] | None = Field(default=None, alias="schema")
+    type: Literal["json_schema"] = "json_schema"
+
+
+class AnthropicOutputConfig(BaseModel):
+    """Configuration options for the model's output, such as the output format."""
+
+    effort: Literal["low", "medium", "high", "xhigh", "max"] | None = None
+    format: AnthropicJsonOutputFormat | None = None
+
+
 class AnthropicMessagesRequest(BaseModel):
     """Anthropic Messages API request"""
 
@@ -107,6 +122,7 @@ class AnthropicMessagesRequest(BaseModel):
     messages: list[AnthropicMessage]
     max_tokens: int
     metadata: dict[str, Any] | None = None
+    output_config: AnthropicOutputConfig | None = None
     stop_sequences: list[str] | None = None
     stream: bool | None = False
     system: str | list[AnthropicContentBlock] | None = None
@@ -124,7 +140,8 @@ class AnthropicMessagesRequest(BaseModel):
     chat_template_kwargs: dict[str, Any] | None = Field(
         default=None,
         description=(
-            "Additional keyword args to pass to the chat template renderer. Will be accessible by the template."
+            "Additional keyword args to pass to the chat template renderer. "
+            "Will be accessible by the template."
         ),
     )
 
@@ -146,14 +163,19 @@ class AnthropicMessagesRequest(BaseModel):
 class AnthropicDelta(BaseModel):
     """Delta for streaming responses"""
 
-    type: Literal["text_delta", "input_json_delta", "thinking_delta", "signature_delta"] | None = None
+    type: (
+        Literal["text_delta", "input_json_delta", "thinking_delta", "signature_delta"]
+        | None
+    ) = None
     text: str | None = None
     thinking: str | None = None
     partial_json: str | None = None
     signature: str | None = None
 
     # Message delta
-    stop_reason: Literal["end_turn", "max_tokens", "stop_sequence", "tool_use"] | None = None
+    stop_reason: (
+        Literal["end_turn", "max_tokens", "stop_sequence", "tool_use"] | None
+    ) = None
     stop_sequence: str | None = None
 
 
@@ -186,12 +208,16 @@ class AnthropicMessagesResponse(BaseModel):
     role: Literal["assistant"] = "assistant"
     content: list[AnthropicContentBlock]
     model: str
-    stop_reason: Literal["end_turn", "max_tokens", "stop_sequence", "tool_use"] | None = None
+    stop_reason: (
+        Literal["end_turn", "max_tokens", "stop_sequence", "tool_use"] | None
+    ) = None
     stop_sequence: str | None = None
     usage: AnthropicUsage | None = None
 
     # Aphrodite-specific fields that are not in Anthropic spec
-    kv_transfer_params: dict[str, Any] | None = Field(default=None, description="KVTransfer parameters.")
+    kv_transfer_params: dict[str, Any] | None = Field(
+        default=None, description="KVTransfer parameters."
+    )
 
     def model_post_init(self, __context):
         if not self.id:
@@ -217,7 +243,8 @@ class AnthropicCountTokensRequest(BaseModel):
     chat_template_kwargs: dict[str, Any] | None = Field(
         default=None,
         description=(
-            "Additional keyword args to pass to the chat template renderer. Will be accessible by the template."
+            "Additional keyword args to pass to the chat template renderer. "
+            "Will be accessible by the template."
         ),
     )
 

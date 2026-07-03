@@ -16,33 +16,45 @@ class CustomRoutingRouter(BaseRouter):
         self,
         top_k: int,
         global_num_experts: int,
-        eplb_state: EplbLayerState,
         custom_routing_function: Callable,
+        eplb_state: EplbLayerState | None = None,
         renormalize: bool = True,
-        enable_eplb: bool = False,
-        indices_type_getter: Callable[[], torch.dtype | None] | None = None,
     ):
         super().__init__(
             top_k=top_k,
             global_num_experts=global_num_experts,
             eplb_state=eplb_state,
-            enable_eplb=enable_eplb,
-            indices_type_getter=indices_type_getter,
         )
         self.custom_routing_function = custom_routing_function
         self.renormalize = renormalize
 
     @property
     def routing_method_type(self) -> RoutingMethodType:
-        from aphrodite.model_executor.models.cohere_moe import token_choice_with_bias
+        from aphrodite.model_executor.models.cohere2_moe import (
+            token_choice_with_bias as cohere2_token_choice_with_bias,
+        )
         from aphrodite.model_executor.models.llama4 import Llama4MoE
+
+        # Cohere (v1) MoE lives in a fork-specific module; recognize its router too.
+        cohere_token_choice_with_bias = None
+        try:
+            from aphrodite.model_executor.models.cohere_moe import (
+                token_choice_with_bias as cohere_token_choice_with_bias,
+            )
+        except ImportError:
+            pass
 
         # NOTE: FLASHINFER_TRTLLM support the Llama4 router.
         if self.custom_routing_function == Llama4MoE.custom_routing_function:
             return RoutingMethodType.Llama4
-        # Cohere MoE uses a sigmoid -> top-k -> renormalize routing function.
-        if self.custom_routing_function == token_choice_with_bias:
-            return RoutingMethodType.SigmoidRenorm
+        # Cohere MoE uses sigmoid -> top-k, optionally followed by renormalize.
+        if self.custom_routing_function in (
+            cohere2_token_choice_with_bias,
+            cohere_token_choice_with_bias,
+        ):
+            if self.renormalize:
+                return RoutingMethodType.SigmoidRenorm
+            return RoutingMethodType.Sigmoid
         return RoutingMethodType.Custom
 
     def _compute_routing(
@@ -61,4 +73,6 @@ class CustomRoutingRouter(BaseRouter):
             renormalize=self.renormalize,
         )
 
-        return topk_weights.to(torch.float32), topk_ids.to(torch.int32 if indices_type is None else indices_type)
+        return topk_weights.to(torch.float32), topk_ids.to(
+            torch.int32 if indices_type is None else indices_type
+        )

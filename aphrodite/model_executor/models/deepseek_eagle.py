@@ -82,7 +82,9 @@ class DeepseekV2Model(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_embeds = self.embed_tokens(input_ids)
 
-        inputs = torch.cat([self.enorm(input_embeds), self.hnorm(hidden_states)], dim=-1)
+        inputs = torch.cat(
+            [self.enorm(input_embeds), self.hnorm(hidden_states)], dim=-1
+        )
         hidden_states = self.fc(inputs)
         residual = None
         for layer in self.layers:
@@ -136,7 +138,9 @@ class DeepseekV2Model(nn.Module):
                 # QKV fusion is optional, fall back to normal
                 # weight loading if it's not enabled
                 # if go with fusion option, then update name
-                if (param_name == "fused_qkv_a_proj") and name_mapped not in params_dict:
+                if (
+                    param_name == "fused_qkv_a_proj"
+                ) and name_mapped not in params_dict:
                     continue
                 else:
                     name = name_mapped
@@ -177,7 +181,9 @@ class DeepseekV2Model(nn.Module):
                         continue
 
                     param = params_dict[name]
-                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
+                    weight_loader = getattr(
+                        param, "weight_loader", default_weight_loader
+                    )
                     weight_loader(param, loaded_weight)
             loaded_params.add(name)
         return loaded_params
@@ -188,10 +194,12 @@ class EagleDeepseekV3ForCausalLM(DeepseekV3ForCausalLM):
         nn.Module.__init__(self)
         self.config = aphrodite_config.speculative_config.draft_model_config.hf_config
         quant_config = aphrodite_config.quant_config
-        target_layer_num = aphrodite_config.model_config.get_num_layers(aphrodite_config.parallel_config)
+        target_layer_num = aphrodite_config.model_config.get_num_layers(
+            aphrodite_config.parallel_config
+        )
         self.model = DeepseekV2Model(
             aphrodite_config=aphrodite_config,
-            prefix="model",
+            prefix=maybe_prefix(prefix, "model"),
             start_layer_id=target_layer_num,
         )
 
@@ -203,7 +211,9 @@ class EagleDeepseekV3ForCausalLM(DeepseekV3ForCausalLM):
         )
 
         logit_scale = getattr(self.config, "logit_scale", 1.0)
-        self.logits_processor = LogitsProcessor(self.config.vocab_size, scale=logit_scale)
+        self.logits_processor = LogitsProcessor(
+            self.config.vocab_size, scale=logit_scale
+        )
 
         # Set MoE hyperparameters
         self.num_moe_layers = self.config.num_hidden_layers
@@ -220,7 +230,9 @@ class EagleDeepseekV3ForCausalLM(DeepseekV3ForCausalLM):
         inputs_embeds: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         if inputs_embeds is not None:
-            raise NotImplementedError(f"{type(self).__name__} does not support multimodal inputs yet.")
+            raise NotImplementedError(
+                f"{type(self).__name__} does not support multimodal inputs yet."
+            )
         return self.model(input_ids, positions, hidden_states)
 
     def compute_logits(

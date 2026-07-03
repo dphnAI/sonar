@@ -32,11 +32,62 @@ def update_eagle3(config_dict: dict, pre_trained_config: dict) -> None:
     pre_trained_config["draft_vocab_size"] = config_dict.get("draft_vocab_size")
     if config_dict.get("target_hidden_size") is not None:
         pre_trained_config["target_hidden_size"] = config_dict["target_hidden_size"]
-    pre_trained_config["norm_before_residual"] = config_dict.get("norm_before_residual", True)
+    pre_trained_config["norm_before_residual"] = config_dict.get(
+        "norm_before_residual", True
+    )
     pre_trained_config["norm_before_fc"] = config_dict.get("norm_before_fc", False)
-    pre_trained_config["architectures"] = ["Eagle3LlamaForCausalLM"]
+    pre_trained_config["fc_norm"] = config_dict.get("fc_norm", False)
+    pre_trained_config["norm_output"] = config_dict.get("norm_output", False)
+    eagle3_arch_map = {
+        "qwen3": "Eagle3Qwen3ForCausalLM",
+        "llama": "Eagle3LlamaForCausalLM",
+    }
+    model_type = pre_trained_config.get("model_type", "llama")
+    if model_type not in eagle3_arch_map:
+        raise ValueError(f"Unsupported model_type {model_type} for Eagle3 speculator")
+    pre_trained_config["architectures"] = [eagle3_arch_map[model_type]]
     if config_dict.get("eagle_aux_hidden_state_layer_ids"):
-        pre_trained_config["eagle_aux_hidden_state_layer_ids"] = config_dict["eagle_aux_hidden_state_layer_ids"]
+        pre_trained_config["eagle_aux_hidden_state_layer_ids"] = config_dict[
+            "eagle_aux_hidden_state_layer_ids"
+        ]
+
+
+@register_speculator("peagle")
+def update_peagle(config_dict: dict, pre_trained_config: dict) -> None:
+    """
+    Apply PEagle (Parallel Eagle) specific configuration transformations to
+    the `dict` used to construct the Transformers PreTrainedConfig.
+
+    PEagle specific fields:
+    - draft_vocab_size: Size of the draft model's vocabulary
+    - target_hidden_size: Hidden size of the target model
+    - norm_before_residual: Whether to apply norm before residual connection
+    - norm_before_fc: Whether to apply RMSNorm before the fc projection
+    - mask_token_id (required): Token ID used for parallel drafting mask
+        placeholders, mapped to pard_token for the proposer
+    - eagle_aux_hidden_state_layer_ids: Layer indices from the target model
+        whose intermediate hidden states are used as auxiliary inputs
+    """
+    pre_trained_config["draft_vocab_size"] = config_dict.get("draft_vocab_size")
+    if config_dict.get("target_hidden_size") is not None:
+        pre_trained_config["target_hidden_size"] = config_dict["target_hidden_size"]
+    pre_trained_config["norm_before_residual"] = config_dict.get(
+        "norm_before_residual", False
+    )
+    pre_trained_config["norm_before_fc"] = config_dict.get("norm_before_fc", False)
+    peagle_arch_map = {
+        "qwen3": "PeagleQwen3ForCausalLM",
+        "llama": "PeagleLlamaForCausalLM",
+    }
+    model_type = pre_trained_config.get("model_type", "llama")
+    if model_type not in peagle_arch_map:
+        raise ValueError(f"Unsupported model_type {model_type} for PEagle speculator")
+    pre_trained_config["architectures"] = [peagle_arch_map[model_type]]
+    pre_trained_config["pard_token"] = config_dict["mask_token_id"]
+    if config_dict.get("eagle_aux_hidden_state_layer_ids"):
+        pre_trained_config["eagle_aux_hidden_state_layer_ids"] = config_dict[
+            "eagle_aux_hidden_state_layer_ids"
+        ]
 
 
 @register_speculator("dflash")
@@ -60,6 +111,10 @@ def update_dflash(config_dict: dict, pre_trained_config: dict) -> None:
     pre_trained_config["draft_vocab_size"] = config_dict.get("draft_vocab_size")
     if config_dict.get("target_hidden_size") is not None:
         pre_trained_config["target_hidden_size"] = config_dict["target_hidden_size"]
+
+    # Propagate sliding-window / interleaved-attention settings (e.g.
+    # Qwen3-Next) so the EAGLE/DFlash draft model builds the correct
+    # attention layer types.
     for key in (
         "layer_types",
         "use_sliding_window",
@@ -69,11 +124,11 @@ def update_dflash(config_dict: dict, pre_trained_config: dict) -> None:
         if key in config_dict:
             pre_trained_config[key] = config_dict[key]
 
-    # TODO: does this need to be shifted by 1 like in gpu_model_runner?
     aux_layer_ids = config_dict["aux_hidden_state_layer_ids"]
     pre_trained_config["eagle_aux_hidden_state_layer_ids"] = aux_layer_ids
 
+    # DFlash configs use different indexing for the target layers, see #40727
     pre_trained_config["dflash_config"] = {
         "mask_token_id": config_dict["mask_token_id"],
-        "target_layer_ids": aux_layer_ids,
+        "target_layer_ids": [i - 1 for i in aux_layer_ids],
     }

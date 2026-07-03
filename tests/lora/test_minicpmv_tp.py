@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 
 import aphrodite
@@ -56,9 +57,8 @@ def do_sample(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> list[str]:
     return generated_texts
 
 
-@pytest.mark.xfail(
-    current_platform.is_rocm(),
-    reason="MiniCPM-V dependency xformers incompatible with ROCm",
+@pytest.mark.skipif(
+    current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests"
 )
 def test_minicpmv_lora(minicpmv_lora_files):
     llm = aphrodite.LLM(
@@ -80,10 +80,8 @@ def test_minicpmv_lora(minicpmv_lora_files):
         assert EXPECTED_OUTPUT[i].startswith(output2[i])
 
 
-@pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
-@pytest.mark.xfail(
-    current_platform.is_rocm(),
-    reason="MiniCPM-V dependency xformers incompatible with ROCm",
+@pytest.mark.skipif(
+    current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests"
 )
 @multi_gpu_test(num_gpus=4)
 def test_minicpmv_tp4_wo_fully_sharded_loras(minicpmv_lora_files):
@@ -102,10 +100,8 @@ def test_minicpmv_tp4_wo_fully_sharded_loras(minicpmv_lora_files):
         assert EXPECTED_OUTPUT[i].startswith(output_tp[i])
 
 
-@pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
-@pytest.mark.xfail(
-    current_platform.is_rocm(),
-    reason="MiniCPM-V dependency xformers incompatible with ROCm",
+@pytest.mark.skipif(
+    current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests"
 )
 @multi_gpu_test(num_gpus=4)
 def test_minicpmv_tp4_fully_sharded_loras(minicpmv_lora_files):

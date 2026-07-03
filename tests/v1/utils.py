@@ -25,7 +25,9 @@ def get_prometheus_metrics(server: RemoteOpenAIServer) -> dict[str, dict[str, fl
         metrics: dict[str, dict[str, float]] = {}
 
         # Regex patterns for Prometheus metrics
-        metric_with_labels = re.compile(r"^([a-zA-Z_:][a-zA-Z0-9_:]*)\{([^}]*)\}\s+([\d\.\-\+e]+)$")
+        metric_with_labels = re.compile(
+            r"^([a-zA-Z_:][a-zA-Z0-9_:]*)\{([^}]*)\}\s+([\d\.\-\+e]+)$"
+        )
         metric_simple = re.compile(r"^([a-zA-Z_:][a-zA-Z0-9_:]*)\s+([\d\.\-\+e]+)$")
 
         for line in response.text.split("\n"):
@@ -104,7 +106,9 @@ def check_request_balancing(server: RemoteOpenAIServer, dp_size: int):
     engine_counts = get_engine_request_counts(metrics)
 
     # Check that multiple engines received requests
-    engines_with_requests = [engine for engine, count in engine_counts.items() if count > 0]
+    engines_with_requests = [
+        engine for engine, count in engine_counts.items() if count > 0
+    ]
     assert len(engines_with_requests) == dp_size, (
         f"Expected requests to be distributed across multiple engines,"
         f" but only engine(s) {engines_with_requests} received "
@@ -116,4 +120,6 @@ def check_request_balancing(server: RemoteOpenAIServer, dp_size: int):
     total_requests = sum(engine_counts.values())
 
     for count in engine_counts.values():
-        assert count > total_requests // (dp_size + 1), f"requests are imbalanced: {engine_counts}"
+        assert count > total_requests // (dp_size + 1), (
+            f"requests are imbalanced: {engine_counts}"
+        )

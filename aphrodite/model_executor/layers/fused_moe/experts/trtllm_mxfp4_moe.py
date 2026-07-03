@@ -40,9 +40,13 @@ class TrtLlmMxfp4ExpertsBase:
 
         self.routing_method_type = moe_config.routing_method
         self.topk = moe_config.experts_per_token
-        self.intermediate_size_per_partition = moe_config.intermediate_size_per_partition
+        self.intermediate_size_per_partition = (
+            moe_config.intermediate_size_per_partition
+        )
         self.hidden_dim = moe_config.hidden_dim
-        self.hidden_dim_unpadded = moe_config.hidden_dim_unpadded or moe_config.hidden_dim
+        self.hidden_dim_unpadded = (
+            moe_config.hidden_dim_unpadded or moe_config.hidden_dim
+        )
         self.local_num_experts = moe_config.num_local_experts
         self.ep_rank = moe_config.moe_parallel_config.ep_rank
 
@@ -75,9 +79,7 @@ class TrtLlmMxfp4ExpertsBase:
         else:
             self.gemm1_clamp_limit = None
 
-        from aphrodite.config import get_current_aphrodite_config
-
-        self.max_capture_size = get_current_aphrodite_config().compilation_config.max_cudagraph_capture_size
+        self.max_capture_size = moe_config.max_capture_size
 
     @staticmethod
     def _supports_current_device() -> bool:
@@ -107,18 +109,14 @@ class TrtLlmMxfp4ExpertsBase:
     def activation_format() -> mk.FusedMoEActivationFormat:
         return mk.FusedMoEActivationFormat.Standard
 
-    def supports_chunking(self) -> bool:
-        return False
-
-    def supports_expert_map(self) -> bool:
-        return False
-
     @property
     def expects_unquantized_inputs(self) -> bool:
         return False
 
 
-class TrtLlmMxfp4ExpertsMonolithic(TrtLlmMxfp4ExpertsBase, mk.FusedMoEExpertsMonolithic):
+class TrtLlmMxfp4ExpertsMonolithic(
+    TrtLlmMxfp4ExpertsBase, mk.FusedMoEExpertsMonolithic
+):
     """
     Monolithic version of the MXFP4 TRTLLM kernel (router + experts).
     Wraps flashinfer.trtllm_fp4_block_scale_moe().
@@ -186,39 +184,36 @@ class TrtLlmMxfp4ExpertsMonolithic(TrtLlmMxfp4ExpertsBase, mk.FusedMoEExpertsMon
             device=hidden_states.device,
         )
 
-        from aphrodite.utils.flashinfer import _is_fi_autotuning, autotune
-
-        with autotune(_is_fi_autotuning):
-            trtllm_fp4_block_scale_moe(
-                routing_logits=router_logits.to(torch.bfloat16),
-                routing_bias=None,
-                hidden_states=x_quant,
-                hidden_states_scale=x_scale,
-                gemm1_weights=w1,
-                gemm1_weights_scale=self.w1_scale,
-                gemm1_bias=self.w1_bias,
-                gemm1_alpha=self.gemm1_alpha,
-                gemm1_beta=self.gemm1_beta,
-                gemm1_clamp_limit=self.gemm1_clamp_limit,
-                gemm2_weights=w2,
-                gemm2_weights_scale=self.w2_scale,
-                gemm2_bias=self.w2_bias,
-                output1_scale_scalar=None,
-                output1_scale_gate_scalar=None,
-                output2_scale_scalar=None,
-                num_experts=global_num_experts,
-                top_k=self.topk,
-                n_group=None,
-                topk_group=None,
-                intermediate_size=self.intermediate_size_per_partition,
-                local_expert_offset=self.ep_rank * self.local_num_experts,
-                local_num_experts=self.local_num_experts,
-                routed_scaling_factor=None,
-                routing_method_type=self.routing_method_type,
-                do_finalize=True,
-                tune_max_num_tokens=max(self.max_capture_size, 1),
-                output=output,
-            )
+        trtllm_fp4_block_scale_moe(
+            routing_logits=router_logits.to(torch.bfloat16),
+            routing_bias=None,
+            hidden_states=x_quant,
+            hidden_states_scale=x_scale,
+            gemm1_weights=w1,
+            gemm1_weights_scale=self.w1_scale,
+            gemm1_bias=self.w1_bias,
+            gemm1_alpha=self.gemm1_alpha,
+            gemm1_beta=self.gemm1_beta,
+            gemm1_clamp_limit=self.gemm1_clamp_limit,
+            gemm2_weights=w2,
+            gemm2_weights_scale=self.w2_scale,
+            gemm2_bias=self.w2_bias,
+            output1_scale_scalar=None,
+            output1_scale_gate_scalar=None,
+            output2_scale_scalar=None,
+            num_experts=global_num_experts,
+            top_k=self.topk,
+            n_group=None,
+            topk_group=None,
+            intermediate_size=self.intermediate_size_per_partition,
+            local_expert_offset=self.ep_rank * self.local_num_experts,
+            local_num_experts=self.local_num_experts,
+            routed_scaling_factor=None,
+            routing_method_type=self.routing_method_type,
+            do_finalize=True,
+            tune_max_num_tokens=max(self.max_capture_size, 1),
+            output=output,
+        )
 
         return output
 
@@ -244,9 +239,6 @@ class TrtLlmMxfp4ExpertsModular(TrtLlmMxfp4ExpertsBase, mk.FusedMoEExpertsModula
     ) -> bool:
         # Modular kernel handles only the expert computation;
         # routing is done externally, so accept any routing method.
-        return True
-
-    def supports_expert_map(self) -> bool:
         return True
 
     def finalize_weight_and_reduce_impl(self) -> mk.TopKWeightAndReduce:
@@ -335,15 +327,13 @@ class TrtLlmMxfp4ExpertsModular(TrtLlmMxfp4ExpertsBase, mk.FusedMoEExpertsModula
             # the TRTLLM C++ kernel supports.
             "routing_method_type": RoutingMethodType.Renormalize,
             "do_finalize": True,
+            "enable_pdl": True,
             "output": output,
             "tune_max_num_tokens": max(self.max_capture_size, 1),
         }
 
         from flashinfer import trtllm_fp4_block_scale_routed_moe
 
-        from aphrodite.utils.flashinfer import _is_fi_autotuning, autotune
-
-        with autotune(_is_fi_autotuning):
-            trtllm_fp4_block_scale_routed_moe(**kwargs)
+        trtllm_fp4_block_scale_routed_moe(**kwargs)
 
         return output

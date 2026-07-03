@@ -1,0 +1,159 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
+from unittest.mock import Mock, patch
+
+import pytest
+import torch
+
+from aphrodite.config import LoadConfig, ModelConfig, SpeculativeConfig, AphroditeConfig
+from aphrodite.model_executor.models.utils import get_draft_quant_config
+from aphrodite.platforms import current_platform
+
+DEVICE_TYPE = current_platform.device_type
+DEVICES = (
+    [f"{DEVICE_TYPE}:{i}" for i in range(min(torch.accelerator.device_count(), 2))]
+    if not current_platform.is_cpu()
+    else ["cpu"]
+)
+
+
+def test_get_draft_quant_config_with_draft_model():
+    mock_draft_model_config = Mock(spec=ModelConfig)
+    mock_load_config = Mock(spec=LoadConfig)
+    mock_speculative_config = Mock(spec=SpeculativeConfig)
+    mock_speculative_config.draft_model_config = mock_draft_model_config
+
+    mock_aphrodite_config = Mock(spec=AphroditeConfig)
+    mock_aphrodite_config.speculative_config = mock_speculative_config
+    mock_aphrodite_config.load_config = mock_load_config
+
+    mock_quant_config = Mock()
+    with patch.object(
+        AphroditeConfig, "get_quantization_config", return_value=mock_quant_config
+    ):
+        result = get_draft_quant_config(mock_aphrodite_config)
+
+        # Verify the function calls get_quantization_config with draft model config
+        AphroditeConfig.get_quantization_config.assert_called_once_with(
+            mock_draft_model_config, mock_load_config
+        )
+        assert result == mock_quant_config
+
+
+def test_get_draft_quant_config_without_draft_model():
+    mock_speculative_config = Mock(spec=SpeculativeConfig)
+    mock_speculative_config.draft_model_config = None
+
+    mock_aphrodite_config = Mock(spec=AphroditeConfig)
+    mock_aphrodite_config.speculative_config = mock_speculative_config
+    mock_aphrodite_config.load_config = Mock(spec=LoadConfig)
+
+    result = get_draft_quant_config(mock_aphrodite_config)
+
+    assert result is None
+
+
+@torch.inference_mode()
+@pytest.mark.parametrize("device", DEVICES)
+def test_fc_layer_quant_config_usage(default_aphrodite_config, dist_init, device) -> None:
+    import torch
+
+    from aphrodite.model_executor.layers.linear import ReplicatedLinear
+
+    if current_platform.is_cuda_alike():
+        torch.accelerator.set_device_index(device)
+
+    torch.set_default_device(device)
+
+    input_size = 256
+    output_size = 128
+
+    fc_no_quant = ReplicatedLinear(
+        input_size=input_size,
+        output_size=output_size,
+        bias=False,
+        params_dtype=torch.float16,
+        quant_config=None,
+        prefix="fc",
+    )
+
+    assert fc_no_quant.quant_config is None
+    assert fc_no_quant.input_size == input_size
+    assert fc_no_quant.output_size == output_size
+
+    mock_quant_config = Mock()
+    fc_with_quant = ReplicatedLinear(
+        input_size=input_size,
+        output_size=output_size,
+        bias=False,
+        params_dtype=torch.float16,
+        quant_config=mock_quant_config,
+        prefix="fc",
+    )
+
+    assert fc_with_quant.quant_config == mock_quant_config
+
+    # Check forward pass
+    x = torch.randn(2, input_size, dtype=torch.float16)
+    output, _ = fc_no_quant(x)
+    assert output.shape == (2, output_size)
+
+
+def test_maybe_remap_kv_scale_name():
+    from aphrodite.model_executor.model_loader.weight_utils import maybe_remap_kv_scale_name
+
+    params_dict = {
+        "layers.0.self_attn.kv_scale": Mock(),
+        "layers.1.self_attn.kv_scale": Mock(),
+    }
+
+    name = "layers.0.self_attn.some_scale"
+    remapped = maybe_remap_kv_scale_name(name, params_dict)
+
+    assert remapped in params_dict or remapped == name or remapped is None
+
+
+def test_eagle3_lm_head_receives_quant_config():
+    """Eagle3LlamaForCausalLM must pass quant_config to ParallelLMHead.
+
+    Without quant_config, quantized lm_head weights (e.g. INT8 per-channel)
+    in Eagle3 drafter checkpoints fail to load because ParallelLMHead doesn't
+    expect weight_packed tensors.
+    """
+    from aphrodite.model_executor.models.llama_eagle3 import Eagle3LlamaForCausalLM
+
+    mock_quant_config = Mock()
+
+    mock_hf_config = Mock()
+    mock_hf_config.draft_vocab_size = 1000
+    mock_hf_config.hidden_size = 256
+    mock_hf_config.vocab_size = 32000
+    mock_hf_config.logit_scale = 1.0
+
+    mock_aphrodite_config = Mock()
+    mock_aphrodite_config.speculative_config.draft_model_config.hf_config = mock_hf_config
+    mock_aphrodite_config.model_config.get_num_layers.return_value = 32
+    mock_aphrodite_config.speculative_config.parallel_drafting = False
+
+    with (
+        patch("aphrodite.model_executor.models.llama_eagle3.LlamaModel") as MockModel,
+        patch("aphrodite.model_executor.models.llama_eagle3.ParallelLMHead") as MockLMHead,
+        patch("aphrodite.model_executor.models.llama_eagle3.LogitsProcessor"),
+        patch(
+            "aphrodite.model_executor.models.llama_eagle3.get_draft_quant_config",
+            return_value=mock_quant_config,
+        ),
+    ):
+        MockModel.return_value.use_aux_hidden_state = True
+
+        Eagle3LlamaForCausalLM(aphrodite_config=mock_aphrodite_config)
+
+        MockLMHead.assert_called_once()
+        call_kwargs = MockLMHead.call_args.kwargs
+        assert "quant_config" in call_kwargs, (
+            "ParallelLMHead must receive quant_config for quantized lm_head weights"
+        )
+        assert call_kwargs["quant_config"] is mock_quant_config, (
+            "ParallelLMHead must receive the draft model's quant_config"
+        )

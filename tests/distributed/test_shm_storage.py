@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import multiprocessing
 import random
 import time
@@ -15,20 +16,24 @@ from aphrodite.distributed.device_communicators.shm_object_storage import (
     SingleWriterShmObjectStorage,
     SingleWriterShmRingBuffer,
 )
-from aphrodite.multimodal.inputs import MultiModalFieldElem, MultiModalKwargsItem, MultiModalSharedField
+from aphrodite.multimodal.inputs import (
+    MultiModalFieldElem,
+    MultiModalKwargsItem,
+    MultiModalSharedField,
+)
 
 
-def _dummy_elem(modality: str, key: str, size: int):
+def _dummy_elem(size: int):
     return MultiModalFieldElem(
-        modality=modality,
-        key=key,
         data=torch.empty((size,), dtype=torch.int8),
-        field=MultiModalSharedField(1),
+        field=MultiModalSharedField(batch_size=1),
     )
 
 
-def _dummy_item(modality: str, size_by_key: dict[str, int]):
-    return MultiModalKwargsItem.from_elems([_dummy_elem(modality, key, size) for key, size in size_by_key.items()])
+def _dummy_item(size_by_key: dict[str, int]):
+    return MultiModalKwargsItem(
+        {key: _dummy_elem(size) for key, size in size_by_key.items()}
+    )
 
 
 class TestSingleWriterShmObjectStorage(unittest.TestCase):
@@ -49,12 +54,12 @@ class TestSingleWriterShmObjectStorage(unittest.TestCase):
     def tearDown(self):
         """Clean up after each test."""
         if self.storage:
-            del self.storage
+            self.storage.close()
 
     def test_minimal_put_get_cycle(self):
         """Test basic put and get operations."""
         key = "test_key"
-        value = _dummy_item("text", {"field1": 10, "field2": 20})
+        value = _dummy_item({"field1": 10, "field2": 20})
 
         # Put operation
         address, monotonic_id = self.storage.put(key, value)
@@ -293,7 +298,9 @@ def run_multiprocess_example():
         # initialize lock for reader processes
         handle.reader_lock = Lock()
         for i in range(storage.n_readers):
-            p = multiprocessing.Process(target=reader_process, args=(i, handle, stored_items))
+            p = multiprocessing.Process(
+                target=reader_process, args=(i, handle, stored_items)
+            )
             processes.append(p)
             p.start()
 

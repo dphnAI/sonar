@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from aphrodite import LLM
-from aphrodite.common.sampling_params import SamplingParams, StructuredOutputsParams
+from aphrodite.sampling_params import SamplingParams, StructuredOutputsParams
 from aphrodite.v1.metrics.reader import Counter, Gauge, Histogram, Metric, Vector
 
 if TYPE_CHECKING:
@@ -79,10 +79,11 @@ def _get_test_sampling_params(
     structured_outputs: bool = False,
 ) -> tuple[list[SamplingParams], list[int]]:
     """Generate random sampling params for a batch."""
+    rng = random.Random(seed)
 
     def get_mostly_n_gt1() -> int:
         r"""Mostly n \in [2,20], ~1/3 n=1"""
-        x = random.randint(0, 28)
+        x = rng.randint(0, 28)
         if x < 10:
             return 1
         else:
@@ -96,7 +97,9 @@ def _get_test_sampling_params(
             top_p=0.95,
             n=n,
             seed=seed,
-            structured_outputs=StructuredOutputsParams(regex="[0-9]+") if structured_outputs else None,
+            structured_outputs=StructuredOutputsParams(regex="[0-9]+")
+            if structured_outputs
+            else None,
         )
         for n in n_list
     ], n_list
@@ -141,7 +144,10 @@ def test_parallel_sampling(aphrodite_model, example_prompts) -> None:
         # Assert unique completions
         if len(completion_counts) != n:
             repeats = {txt: num for (txt, num) in completion_counts.items() if num > 1}
-            raise AssertionError(f"{len(completion_counts)} unique completions; expected {n}. Repeats: {repeats}")
+            raise AssertionError(
+                f"{len(completion_counts)} unique completions; expected"
+                f" {n}. Repeats: {repeats}"
+            )
 
 
 def test_engine_metrics(aphrodite_runner, example_prompts):
@@ -199,7 +205,9 @@ def test_engine_metrics(aphrodite_runner, example_prompts):
         assert request_generation_tokens[0].count == n_prompts
         assert request_generation_tokens[0].sum == total_tokens
 
-        num_accepted_tokens_per_pos = find_metric("aphrodite:spec_decode_num_accepted_tokens_per_pos")
+        num_accepted_tokens_per_pos = find_metric(
+            "aphrodite:spec_decode_num_accepted_tokens_per_pos"
+        )
         assert len(num_accepted_tokens_per_pos) == 1
         assert isinstance(num_accepted_tokens_per_pos[0], Vector)
         assert len(num_accepted_tokens_per_pos[0].values) == 5
@@ -217,43 +225,14 @@ def test_skip_tokenizer_initialization(model: str):
     )
     sampling_params = SamplingParams(prompt_logprobs=True, detokenize=True)
 
-    with pytest.raises(ValueError, match="cannot pass text prompts when"):
+    with pytest.raises(ValueError, match="`skip_tokenizer_init=True`"):
         llm.generate("abc", sampling_params)
 
-    outputs = llm.generate({"prompt_token_ids": [1, 2, 3]}, sampling_params=sampling_params)
+    outputs = llm.generate(
+        {"prompt_token_ids": [1, 2, 3]}, sampling_params=sampling_params
+    )
     assert len(outputs) > 0
     completions = outputs[0].outputs
     assert len(completions) > 0
     assert completions[0].text == ""
     assert completions[0].token_ids
-
-
-def test_kv_cache_properties(aphrodite_runner):
-    """Test that max_concurrency and kv_cache_size_tokens properties are accessible."""
-    with aphrodite_runner(
-        MODEL,
-        dtype=DTYPE,
-        max_model_len=128,
-        enforce_eager=True,
-        gpu_memory_utilization=0.5,
-    ) as aphrodite_model:
-        llm: LLM = aphrodite_model.llm
-        llm_engine = llm.llm_engine
-
-        # Test max_concurrency property
-        max_conc = llm_engine.max_concurrency
-        assert isinstance(max_conc, float)
-        assert max_conc > 0
-
-        # Test kv_cache_size_tokens property
-        kv_cache_tokens = llm_engine.kv_cache_size_tokens
-        assert isinstance(kv_cache_tokens, int)
-        assert kv_cache_tokens > 0
-
-        # Test kv_cache_size_tokens_str property
-        kv_cache_tokens_str = llm_engine.kv_cache_size_tokens_str
-        assert isinstance(kv_cache_tokens_str, str)
-        assert "," in kv_cache_tokens_str or len(kv_cache_tokens_str) > 0
-        # Verify the string represents the same number
-        tokens_from_str = int(kv_cache_tokens_str.replace(",", ""))
-        assert tokens_from_str == kv_cache_tokens

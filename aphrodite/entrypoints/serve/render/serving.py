@@ -11,7 +11,7 @@ from aphrodite.entrypoints.chat_utils import (
     ChatTemplateContentFormatOption,
     ConversationMessage,
 )
-from aphrodite.entrypoints.logger import RequestLogger
+from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
 from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
 from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
 from aphrodite.entrypoints.openai.engine.protocol import (

@@ -57,7 +57,8 @@ class BlockTable:
             # → Each memory block corresponds to 2 kernel blocks
             if block_size % kernel_block_size != 0:
                 raise ValueError(
-                    f"kernel_block_size {kernel_block_size} must divide kv_manager_block_size size {block_size} evenly"
+                    f"kernel_block_size {kernel_block_size} must divide "
+                    f"kv_manager_block_size size {block_size} evenly"
                 )
 
             self.block_size = kernel_block_size
@@ -66,13 +67,19 @@ class BlockTable:
 
         self.max_num_blocks_per_req = max_num_blocks_per_req * self.blocks_per_kv_block
 
-        self.block_table = self._make_buffer(self.max_num_reqs, self.max_num_blocks_per_req, dtype=torch.int32)
+        self.block_table = self._make_buffer(
+            self.max_num_reqs, self.max_num_blocks_per_req, dtype=torch.int32
+        )
         self.num_blocks_per_row = np.zeros(max_num_reqs, dtype=np.int32)
 
-        self.slot_mapping = self._make_buffer(self.max_num_batched_tokens, dtype=torch.int64)
+        self.slot_mapping = self._make_buffer(
+            self.max_num_batched_tokens, dtype=torch.int64
+        )
 
         if self.use_hybrid_blocks:
-            self._kernel_block_arange = np.arange(0, self.blocks_per_kv_block).reshape(1, -1)
+            self._kernel_block_arange = np.arange(0, self.blocks_per_kv_block).reshape(
+                1, -1
+            )
         else:
             self._kernel_block_arange = None
 
@@ -186,7 +193,10 @@ class BlockTable:
         if blocks_per_kv_block == 1:
             return kv_manager_block_ids
 
-        kernel_block_ids = kv_manager_block_ids.reshape(-1, 1) * blocks_per_kv_block + kernel_block_arange
+        kernel_block_ids = (
+            kv_manager_block_ids.reshape(-1, 1) * blocks_per_kv_block
+            + kernel_block_arange
+        )
 
         return kernel_block_ids.reshape(-1)
 
@@ -202,8 +212,12 @@ class BlockTable:
         """Returns the numpy array of the block table."""
         return self.block_table.np
 
-    def _make_buffer(self, *size: int | torch.SymInt, dtype: torch.dtype) -> CpuGpuBuffer:
-        return CpuGpuBuffer(*size, dtype=dtype, device=self.device, pin_memory=self.pin_memory)
+    def _make_buffer(
+        self, *size: int | torch.SymInt, dtype: torch.dtype
+    ) -> CpuGpuBuffer:
+        return CpuGpuBuffer(
+            *size, dtype=dtype, device=self.device, pin_memory=self.pin_memory
+        )
 
 
 class MultiGroupBlockTable:
@@ -232,12 +246,23 @@ class MultiGroupBlockTable:
             # so the block_size which used for calc max_num_blocks_per_req
             # must be multiplied by dcp_world_size.
             total_cp_world_size = get_total_cp_world_size()
-            max_num_blocks = [cdiv(max_model_len, block_size * total_cp_world_size) for block_size in block_sizes]
+            max_num_blocks = [
+                cdiv(max_model_len, block_size * total_cp_world_size)
+                for block_size in block_sizes
+            ]
 
         if len(max_num_blocks) != len(block_sizes):
             raise ValueError(
-                f"max_num_blocks length ({len(max_num_blocks)}) must match block_sizes length ({len(block_sizes)})"
+                f"max_num_blocks length ({len(max_num_blocks)}) "
+                f"must match block_sizes length ({len(block_sizes)})"
             )
+
+        # Align to a multiple of (128 / block_size) as required
+        # by some attention backends such as TRTLLM (#39324)
+        max_num_blocks = [
+            cdiv(n, 128 // bs) * (128 // bs) if bs <= 128 else n
+            for n, bs in zip(max_num_blocks, block_sizes)
+        ]
 
         self.block_tables = [
             BlockTable(
@@ -297,7 +322,7 @@ class MultiGroupBlockTable:
         return self.block_tables[idx]
 
 
-@triton.jit
+@triton.jit(do_not_specialize=["num_tokens", "max_num_tokens"])
 def _compute_slot_mapping_kernel(
     num_tokens,
     max_num_tokens,
@@ -336,13 +361,19 @@ def _compute_slot_mapping_kernel(
         mask = offsets < end_idx
         pos = tl.load(positions_ptr + offsets, mask=mask, other=0)
         block_indices = pos // virtual_block_size
-        block_numbers = tl.load(block_table_ptr + row_offset + block_indices).to(tl.int64)
+        block_numbers = tl.load(block_table_ptr + row_offset + block_indices).to(
+            tl.int64
+        )
 
         virtual_block_offsets = pos - block_indices * virtual_block_size
-        is_local = (virtual_block_offsets // CP_KV_CACHE_INTERLEAVE_SIZE) % TOTAL_CP_WORLD_SIZE == TOTAL_CP_RANK
+        is_local = (
+            virtual_block_offsets // CP_KV_CACHE_INTERLEAVE_SIZE
+        ) % TOTAL_CP_WORLD_SIZE == TOTAL_CP_RANK
         local_block_offsets = (
             virtual_block_offsets // (TOTAL_CP_WORLD_SIZE * CP_KV_CACHE_INTERLEAVE_SIZE)
-        ) * CP_KV_CACHE_INTERLEAVE_SIZE + (virtual_block_offsets % CP_KV_CACHE_INTERLEAVE_SIZE)
+        ) * CP_KV_CACHE_INTERLEAVE_SIZE + (
+            virtual_block_offsets % CP_KV_CACHE_INTERLEAVE_SIZE
+        )
 
         slot_ids = block_numbers * block_size + local_block_offsets
         slot_ids = tl.where(is_local, slot_ids, PAD_ID)

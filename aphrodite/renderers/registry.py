@@ -23,10 +23,8 @@ _APHRODITE_RENDERERS = {
     "deepseek_v32": ("deepseek_v32", "DeepseekV32Renderer"),
     "deepseek_v4": ("deepseek_v4", "DeepseekV4Renderer"),
     "hf": ("hf", "HfRenderer"),
-    "grok2": ("grok2", "Grok2Renderer"),
     "kimi_audio": ("hf", "HfRenderer"),
     "mistral": ("mistral", "MistralRenderer"),
-    "qwen_vl": ("hf", "HfRenderer"),
     "terratorch": ("terratorch", "TerratorchRenderer"),
 }
 
@@ -39,7 +37,8 @@ class RendererRegistry:
     def register(self, renderer_mode: str, module: str, class_name: str) -> None:
         if renderer_mode in self.renderers:
             logger.warning(
-                "%s.%s is already registered for renderer_mode=%r. It is overwritten by the new one.",
+                "%s.%s is already registered for renderer_mode=%r. "
+                "It is overwritten by the new one.",
                 module,
                 class_name,
                 renderer_mode,

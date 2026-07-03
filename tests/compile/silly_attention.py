@@ -31,7 +31,9 @@ def reset_global_counter():
     _global_counter = 0
 
 
-def silly_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, out: torch.Tensor) -> None:
+def silly_attention(
+    q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, out: torch.Tensor
+) -> None:
     """
     Unified attention implementation that depends on
     all inputs and affects the output.
@@ -46,7 +48,9 @@ def silly_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, out: torc
     out.copy_(q + k + v)
 
 
-def silly_attention_fake(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, out: torch.Tensor) -> None:
+def silly_attention_fake(
+    q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, out: torch.Tensor
+) -> None:
     """Fake implementation for testing"""
     return
 

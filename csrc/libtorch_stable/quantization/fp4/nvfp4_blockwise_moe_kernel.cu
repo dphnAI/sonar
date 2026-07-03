@@ -20,7 +20,7 @@
 
 #include <cutlass/arch/arch.h>
 
-#include "cutlass_extensions/common.hpp"
+#include "libtorch_stable/cutlass_extensions/common.hpp"
 
 #include "cute/tensor.hpp"
 #include "cutlass/tensor_ref.h"
@@ -712,7 +712,7 @@ void cutlass_fp4_group_mm(torch::stable::Tensor& output,
 #else
   STD_TORCH_CHECK_NOT_IMPLEMENTED(
       false,
-      "No compiled cutlass_fp4_group_mm kernel, Aphrodite must "
+      "No compiled cutlass_fp4_group_mm kernel, vLLM must "
       "be compiled with ENABLE_NVFP4_SM100 or ENABLE_NVFP4_SM120 for SM100/120 "
       "and CUDA 12.8 or above.");
 #endif

@@ -4,7 +4,7 @@
 # Adapted from
 # https://huggingface.co/Qwen/Qwen2.5-Math-RM-72B/blob/main/modeling_qwen2_rm.py
 # Copyright 2024 The Qwen team.
-# Copyright 2023 The Aphrodite team.
+# Copyright 2023 The vLLM team.
 """Inference-only Qwen2-RM model compatible with HuggingFace weights."""
 
 from collections.abc import Iterable
@@ -28,16 +28,10 @@ class Qwen2RewardBaseModel(nn.Module, SupportsLoRA, SupportsPP):
     is_pooling_model = True
     pooler: Pooler
 
+    hf_to_aphrodite_mapper = Qwen2Model.hf_to_aphrodite_mapper
     packed_modules_mapping = {
-        "qkv_proj": [
-            "q_proj",
-            "k_proj",
-            "v_proj",
-        ],
-        "gate_up_proj": [
-            "gate_proj",
-            "up_proj",
-        ],
+        "qkv_proj": ["q_proj", "k_proj", "v_proj"],
+        "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
@@ -48,7 +42,9 @@ class Qwen2RewardBaseModel(nn.Module, SupportsLoRA, SupportsPP):
         self.config = config
 
         self.quant_config = quant_config
-        self.model = Qwen2Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Qwen2Model(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
+        )
         self.head_dtype = aphrodite_config.model_config.head_dtype
 
         self.score = nn.Sequential(
@@ -68,7 +64,9 @@ class Qwen2RewardBaseModel(nn.Module, SupportsLoRA, SupportsPP):
                 return_bias=False,
             ),
         )
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -80,7 +78,9 @@ class Qwen2RewardBaseModel(nn.Module, SupportsLoRA, SupportsPP):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
+        hidden_states = self.model(
+            input_ids, positions, intermediate_tensors, inputs_embeds
+        )
         hidden_states = hidden_states.to(self.head_dtype)
         logits = self.score(hidden_states)
         return logits

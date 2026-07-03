@@ -1,18 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import math
 import time
 
 import pytest
 
-from aphrodite import PoolingParams
-from aphrodite.common.sampling_params import RequestOutputKind, SamplingParams
-from aphrodite.logprobs import PromptLogprobs, SampleLogprobs
-from aphrodite.outputs import CompletionOutput, RequestOutput
-from aphrodite.transformers_utils.tokenizer import AnyTokenizer
-from aphrodite.v1.engine import EngineCoreRequest
-from aphrodite.v1.engine.output_processor import OutputProcessor, RequestOutputCollector
-from aphrodite.v1.metrics.stats import IterationStats
 from tests.v1.engine.utils import (
     NUM_PROMPT_LOGPROBS_UNDER_TEST,
     NUM_SAMPLE_LOGPROBS_UNDER_TEST,
@@ -20,10 +13,25 @@ from tests.v1.engine.utils import (
     DummyOutputProcessorTestVectors,
     MockEngineCore,
 )
+from aphrodite import PoolingParams
+from aphrodite.logprobs import PromptLogprobs, SampleLogprobs
+from aphrodite.lora.request import LoRARequest
+from aphrodite.outputs import CompletionOutput, RequestOutput
+from aphrodite.sampling_params import RequestOutputKind, SamplingParams
+from aphrodite.tokenizers import TokenizerLike
+from aphrodite.v1.engine import (
+    EngineCoreEvent,
+    EngineCoreEventType,
+    EngineCoreOutputs,
+    EngineCoreRequest,
+    FinishReason,
+)
+from aphrodite.v1.engine.output_processor import OutputProcessor, RequestOutputCollector
+from aphrodite.v1.metrics.stats import IterationStats, SchedulerStats
 
 
 def _ref_convert_id_to_token(
-    tokenizer: AnyTokenizer,
+    tokenizer: TokenizerLike,
     token_id: int,
 ) -> str:
     """Reference impl of logprobs detokenization.
@@ -38,18 +46,26 @@ def _ref_convert_id_to_token(
     return tokenizer.decode([token_id]) or ""
 
 
-@pytest.mark.parametrize("request_output_kind", [RequestOutputKind.DELTA, RequestOutputKind.FINAL_ONLY])
-def test_incremental_detokenization(request_output_kind: RequestOutputKind, dummy_test_vectors):
-    output_processor = OutputProcessor(dummy_test_vectors.tokenizer, log_stats=False)
-    engine_core = MockEngineCore(tokens_list=dummy_test_vectors.generation_tokens)
+@pytest.mark.parametrize(
+    "request_output_kind", [RequestOutputKind.DELTA, RequestOutputKind.FINAL_ONLY]
+)
+@pytest.mark.parametrize("stream_interval", [1, 5, 10])
+def test_incremental_detokenization(
+    request_output_kind: RequestOutputKind,
+    stream_interval: int,
+    dummy_test_vectors,
+):
+    output_processor = OutputProcessor(
+        dummy_test_vectors.tokenizer, log_stats=False, stream_interval=stream_interval
+    )
 
     # Make N requests.
     requests = [
         EngineCoreRequest(
-            request_id=f"request-{idx}",
+            request_id=f"request-{idx}-int",
+            external_req_id=f"request-{idx}",
             prompt_token_ids=prompt_tokens,
             mm_features=None,
-            eos_token_id=None,
             arrival_time=0,
             lora_request=None,
             cache_salt=None,
@@ -65,6 +81,12 @@ def test_incremental_detokenization(request_output_kind: RequestOutputKind, dumm
         )
         for idx, prompt_tokens in enumerate(dummy_test_vectors.prompt_tokens)
     ]
+
+    engine_core = MockEngineCore(
+        tokens_list=dummy_test_vectors.generation_tokens,
+        prompts_list=dummy_test_vectors.prompt_tokens,
+        request_ids=[req.request_id for req in requests],
+    )
 
     # Add requests to the detokenizer.
     for request, prompt in zip(requests, dummy_test_vectors.prompt_strings):
@@ -92,9 +114,18 @@ def test_incremental_detokenization(request_output_kind: RequestOutputKind, dumm
             if request_id not in gen_strings:
                 gen_strings[request_id] = new_text
                 gen_tokens[request_id] = new_tokens
+                if request_output_kind == RequestOutputKind.DELTA:
+                    assert len(new_tokens) == 1, f"{len(new_tokens)=}"
             else:
                 gen_strings[request_id] += new_text
                 gen_tokens[request_id].extend(new_tokens)
+                if (
+                    request_output_kind == RequestOutputKind.DELTA
+                    and not request_output.finished
+                ):
+                    assert len(new_tokens) >= stream_interval, (
+                        f"{len(new_tokens)=}, {stream_interval=}"
+                    )
 
     # Confirmed tracked values matches what we expected.
     for idx, (ref_gen_str, ref_gen_toks) in enumerate(
@@ -130,7 +161,11 @@ def _validate_logprobs(
         ref_prompt_logprobs = dtv.prompt_logprobs[req_idx]
         if num_sample_logprobs is not None:
             # Validate sample logprobs
-            assert logprobs is not None, f"Request {req_id} requires sample logprobs but sample logprobs are None."
+            assert logprobs is not None, (
+                f"Request {req_id} requires sample"
+                " logprobs but sample logprobs are"
+                " None."
+            )
             # Require num sampled tokens to match num
             # sampled logprobs - especially important
             # to check since the detokenizer can cause
@@ -144,22 +179,30 @@ def _validate_logprobs(
                 f" {len_sample_logprobs} sample logprobs."
             )
             ref_cumulative_logprob = 0.0
-            for idx, (sampled_token, pos_logprob_dict) in enumerate(zip(new_tokens, logprobs)):
+            for idx, (sampled_token, pos_logprob_dict) in enumerate(
+                zip(new_tokens, logprobs)
+            ):
                 # Break out the reference log probability value &
                 # logprob token id tensors associated with this
                 # position in the completion. Also break out the
                 # sampled token ranks
-                (ref_pos_logprob_toks, ref_pos_logprob_vals, ref_sampled_token_rank) = ref_logprobs[idx]
+                (ref_pos_logprob_toks, ref_pos_logprob_vals, ref_sampled_token_rank) = (
+                    ref_logprobs[idx]
+                )
                 # For each position in the completion sequence,
                 # ensure the actual sampled token is among the
                 # logprobs
                 assert sampled_token in pos_logprob_dict, (
-                    f"Sampled token {sampled_token} not present in logprob at index {idx}"
+                    f"Sampled token {sampled_token} not"
+                    f" present in logprob at index {idx}"
                 )
 
                 # Validate number of sample logprobs
                 num_lp_toks = len(pos_logprob_dict)
-                assert num_lp_toks == num_sample_logprobs or num_lp_toks == num_sample_logprobs + 1, (
+                assert (
+                    num_lp_toks == num_sample_logprobs
+                    or num_lp_toks == num_sample_logprobs + 1
+                ), (
                     "Valid numbers of sample logprobs are"
                     f" {num_sample_logprobs} or"
                     f" {num_sample_logprobs + 1} but"
@@ -190,7 +233,8 @@ def _validate_logprobs(
                     ref_lp_val = ref_pos_logprob_vals[jdx]
                     ref_tok_id = ref_pos_logprob_toks[jdx]
                     assert ref_tok_id in pos_logprob_dict, (
-                        f"Expected token {ref_tok_id} to be in logprob dict but it is not."
+                        f"Expected token {ref_tok_id} to be"
+                        f" in logprob dict but it is not."
                     )
 
                     # Extract actually-generated logprob
@@ -205,7 +249,9 @@ def _validate_logprobs(
 
                     # Rank must be >= 1
                     assert lp_rank >= 1, (
-                        f"Logprob {lp} has invalid rank {lp_rank} < 1. Logprob dict: {pos_logprob_dict}"
+                        f"Logprob {lp} has invalid"
+                        f" rank {lp_rank} < 1."
+                        f" Logprob dict: {pos_logprob_dict}"
                     )
 
                     # Validate log probability
@@ -216,7 +262,11 @@ def _validate_logprobs(
                         f" expected. Logprob: {lp}"
                     )
 
-                assert rank_one_appears, f"No Logprob has rank 1 in the following Logprob dict: {pos_logprob_dict}"
+                assert rank_one_appears, (
+                    f"No Logprob has rank 1"
+                    " in the following Logprob"
+                    f" dict: {pos_logprob_dict}"
+                )
 
                 # Validate logprobs detokenization
                 for lp_tok in pos_logprob_dict:
@@ -224,12 +274,28 @@ def _validate_logprobs(
                     # the logprob token id at this sequence position
                     decoded_token = pos_logprob_dict[lp_tok].decoded_token
                     ref_decoded_token = _ref_convert_id_to_token(dtv.tokenizer, lp_tok)
-                    assert decoded_token == ref_decoded_token, (
-                        f"Sampled logprob token id {lp_tok} decodes to"
-                        f" {ref_decoded_token} but Logprob decoded"
-                        f" token is {decoded_token} instead"
-                        f" (at position {idx})"
-                    )
+
+                    # With UTF-8 correction logic, tokens ending with "�"
+                    # (incomplete byte sequences) are corrected to either
+                    # empty string or proper UTF-8 characters
+                    if ref_decoded_token.endswith("�"):
+                        # Token needs UTF-8 correction
+                        assert not decoded_token.endswith("�"), (
+                            f"Sampled logprob token id {lp_tok} decodes to"
+                            f" '{ref_decoded_token}' (ends with replacement char)"
+                            f" but corrected decoded token '{decoded_token}'"
+                            f" still ends with replacement char"
+                            f" (at position {idx}). UTF-8 correction should"
+                            f" have removed it."
+                        )
+                    else:
+                        # No correction needed, should match exactly
+                        assert decoded_token == ref_decoded_token, (
+                            f"Sampled logprob token id {lp_tok} decodes to"
+                            f" {ref_decoded_token} but Logprob decoded"
+                            f" token is {decoded_token} instead"
+                            f" (at position {idx})"
+                        )
 
                 ref_cumulative_logprob += pos_logprob_dict[sampled_token].logprob
             # Assert that cumulative logprobs are correct
@@ -242,14 +308,18 @@ def _validate_logprobs(
         if num_prompt_logprobs is not None:
             # Validate prompt logprobs
             assert prompt_logprobs is not None, (
-                f"Request {req_id} requires prompt logprobs but prompt logprobs are None."
+                f"Request {req_id} requires prompt"
+                " logprobs but prompt logprobs are"
+                " None."
             )
             # Require num prompt tokens to match num
             # prompt logprobs
             num_prompt_tokens = len(prompt_token_ids)
             len_prompt_logprobs = len(prompt_logprobs)
             assert num_prompt_tokens == len_prompt_logprobs, (
-                f"Request {req_id} has {num_prompt_tokens} prompt tokens but has {len_prompt_logprobs} prompt logprobs."
+                f"Request {req_id} has {num_prompt_tokens}"
+                " prompt tokens but has"
+                f" {len_prompt_logprobs} prompt logprobs."
             )
             # First prompt logprob is None
             first_plp_dict = prompt_logprobs[0]
@@ -265,8 +335,11 @@ def _validate_logprobs(
                 ref_prompt_logprob_toks,
                 ref_prompt_logprob_vals,
                 ref_prompt_token_ranks,
+                _,
             ) = ref_prompt_logprobs
-            for idx, (prompt_token, pos_logprob_dict) in enumerate(zip(prompt_token_ids[1:], prompt_logprobs[1:])):
+            for idx, (prompt_token, pos_logprob_dict) in enumerate(
+                zip(prompt_token_ids[1:], prompt_logprobs[1:])
+            ):
                 # Break out the reference prompt log prob value
                 # vector, prompt logprob token id vector, and
                 # prompt token rank at the current position.
@@ -288,7 +361,10 @@ def _validate_logprobs(
                 )
                 # Validate number of prompt logprobs
                 num_plp_toks = len(pos_logprob_dict)
-                assert num_plp_toks == num_prompt_logprobs or num_plp_toks == num_prompt_logprobs + 1, (
+                assert (
+                    num_plp_toks == num_prompt_logprobs
+                    or num_plp_toks == num_prompt_logprobs + 1
+                ), (
                     "Valid numbers of prompt logprobs are"
                     f" {num_prompt_logprobs} or"
                     f" {num_prompt_logprobs + 1} but"
@@ -320,7 +396,8 @@ def _validate_logprobs(
                     ref_plp_val = float(ref_pos_prompt_logprob_vals[jdx])
                     ref_tok_id = int(ref_pos_prompt_logprob_toks[jdx])
                     assert ref_tok_id in pos_logprob_dict, (
-                        f"Expected token {ref_tok_id} to be in logprob dict but it is not."
+                        f"Expected token {ref_tok_id} to be"
+                        f" in logprob dict but it is not."
                     )
 
                     # Extract actually-generated logprob
@@ -335,7 +412,9 @@ def _validate_logprobs(
 
                     # Rank must be >= 1
                     assert plp_rank >= 1, (
-                        f"Logprob {plp} has invalid rank {plp_rank} < 1. Logprob dict: {pos_logprob_dict}"
+                        f"Logprob {plp} has invalid"
+                        f" rank {plp_rank} < 1."
+                        f" Logprob dict: {pos_logprob_dict}"
                     )
 
                     # Validate log probability
@@ -346,7 +425,11 @@ def _validate_logprobs(
                         f" expected. Logprob: {plp}"
                     )
 
-                assert rank_one_appears, f"No Logprob has rank 1 in the following Logprob dict: {pos_logprob_dict}"
+                assert rank_one_appears, (
+                    f"No Logprob has rank 1"
+                    " in the following Logprob"
+                    f" dict: {pos_logprob_dict}"
+                )
 
                 # Validate prompt logprob detokenization
                 for plp_tok in pos_logprob_dict:
@@ -354,18 +437,36 @@ def _validate_logprobs(
                     # the logprob token id at this sequence position
                     decoded_token = pos_logprob_dict[plp_tok].decoded_token
                     ref_decoded_token = _ref_convert_id_to_token(dtv.tokenizer, plp_tok)
-                    assert decoded_token == ref_decoded_token, (
-                        f"Prompt logprob token id {plp_tok} decodes to"
-                        f" {ref_decoded_token} but Logprob decoded"
-                        f" token is {decoded_token} instead"
-                        f" (at position {idx})"
-                    )
+
+                    # With UTF-8 correction logic, tokens ending with "�"
+                    # (incomplete byte sequences) are corrected to either
+                    # empty string or proper UTF-8 characters
+                    if ref_decoded_token.endswith("�"):
+                        # Token needs UTF-8 correction
+                        assert not decoded_token.endswith("�"), (
+                            f"Prompt logprob token id {plp_tok} decodes to"
+                            f" '{ref_decoded_token}' (ends with replacement char)"
+                            f" but corrected decoded token '{decoded_token}'"
+                            f" still ends with replacement char"
+                            f" (at position {idx}). UTF-8 correction should"
+                            f" have removed it."
+                        )
+                    else:
+                        # No correction needed, should match exactly
+                        assert decoded_token == ref_decoded_token, (
+                            f"Prompt logprob token id {plp_tok} decodes to"
+                            f" {ref_decoded_token} but Logprob decoded"
+                            f" token is {decoded_token} instead"
+                            f" (at position {idx})"
+                        )
         else:
             # Prompt logprobs disabled for this request
             assert prompt_logprobs is None
 
 
-@pytest.mark.parametrize("request_output_kind", [RequestOutputKind.DELTA, RequestOutputKind.FINAL_ONLY])
+@pytest.mark.parametrize(
+    "request_output_kind", [RequestOutputKind.DELTA, RequestOutputKind.FINAL_ONLY]
+)
 @pytest.mark.parametrize("num_sample_logprobs", [None, NUM_SAMPLE_LOGPROBS_UNDER_TEST])
 @pytest.mark.parametrize("num_prompt_logprobs", [None, NUM_PROMPT_LOGPROBS_UNDER_TEST])
 def test_logprobs_processor(
@@ -375,20 +476,17 @@ def test_logprobs_processor(
     dummy_test_vectors,
 ):
     output_processor = OutputProcessor(dummy_test_vectors.tokenizer, log_stats=False)
-    engine_core = MockEngineCore(
-        tokens_list=dummy_test_vectors.generation_tokens,
-        generated_logprobs_raw=None if num_sample_logprobs is None else dummy_test_vectors.generation_logprobs,
-        prompt_logprobs_raw=None if num_prompt_logprobs is None else dummy_test_vectors.prompt_logprobs,
-    )
 
     # Make N requests.
-    request_id_list = [f"request-{idx}" for idx in range(len(dummy_test_vectors.prompt_strings))]
+    request_id_list = [
+        f"request-{idx}" for idx in range(len(dummy_test_vectors.prompt_strings))
+    ]
     requests = [
         EngineCoreRequest(
-            request_id=request_id_list[idx],
+            request_id=request_id_list[idx] + "-int",
+            external_req_id=request_id_list[idx],
             prompt_token_ids=prompt_tokens,
             mm_features=None,
-            eos_token_id=None,
             arrival_time=0,
             lora_request=None,
             cache_salt=None,
@@ -406,6 +504,18 @@ def test_logprobs_processor(
         )
         for idx, prompt_tokens in enumerate(dummy_test_vectors.prompt_tokens)
     ]
+
+    engine_core = MockEngineCore(
+        tokens_list=dummy_test_vectors.generation_tokens,
+        prompts_list=dummy_test_vectors.prompt_tokens,
+        generated_logprobs_raw=None
+        if num_sample_logprobs is None
+        else dummy_test_vectors.generation_logprobs,
+        prompt_logprobs_raw=None
+        if num_prompt_logprobs is None
+        else dummy_test_vectors.prompt_logprobs,
+        request_ids=[req.request_id for req in requests],
+    )
 
     # Add requests to the detokenizer.
     for request, prompt in zip(requests, dummy_test_vectors.prompt_strings):
@@ -433,7 +543,9 @@ def test_logprobs_processor(
             new_tokens = request_output.outputs[0].token_ids
             prompt_logprobs = request_output.prompt_logprobs
             logprobs = request_output.outputs[0].logprobs
-            gen_cumulative_logprobs[request_id] = request_output.outputs[0].cumulative_logprob
+            gen_cumulative_logprobs[request_id] = request_output.outputs[
+                0
+            ].cumulative_logprob
             if request_id not in gen_logprobs:
                 # Start tracking sample and prompt logprobs for this request
                 gen_tokens[request_id] = new_tokens
@@ -525,13 +637,17 @@ def test_stop_token(
     """
     model_id = dummy_test_vectors.tokenizer.name_or_path
     if model_id != "meta-llama/Llama-3.2-1B":
-        raise AssertionError(f"Test requires meta-llama/Llama-3.2-1B but {model_id} is in use.")
+        raise AssertionError(
+            f"Test requires meta-llama/Llama-3.2-1B but {model_id} is in use."
+        )
     do_logprobs = num_sample_logprobs is not None
     # EOS under test; if False, stop_token_ids under test
     is_eos_test = stop_token_type == "eos_token_id"
     # EOS under test but ignore_eos enabled
     is_eos_ignore_test = is_eos_test and ignore_eos
-    eos_token_id = dummy_test_vectors.tokenizer.eos_token_id if is_eos_test else None  # '<|end_of_text|>'
+    eos_token_id = (
+        dummy_test_vectors.tokenizer.eos_token_id if is_eos_test else None
+    )  # '<|end_of_text|>'
     stop_token_ids = [128009] if not is_eos_test else None  # '<|eot_id|>'
 
     output_processor = OutputProcessor(dummy_test_vectors.tokenizer, log_stats=False)
@@ -546,38 +662,43 @@ def test_stop_token(
         ]
     prompt_string = dummy_test_vectors.prompt_strings[0]
     prompt_tokens = dummy_test_vectors.prompt_tokens[0]
-    engine_core = MockEngineCore(
-        tokens_list=[generation_tokens],
-        generated_logprobs_raw=[generation_logprobs] if do_logprobs else None,
-        prompt_logprobs_raw=None,
-        eos_token_id=eos_token_id,
+
+    sampling_params = SamplingParams(
+        skip_special_tokens=False,
+        spaces_between_special_tokens=False,
+        output_kind=RequestOutputKind.DELTA,
+        stop=[],
         stop_token_ids=stop_token_ids,
+        include_stop_str_in_output=include_stop_str_in_output,
+        logprobs=num_sample_logprobs,
+        prompt_logprobs=None,
         ignore_eos=ignore_eos,
     )
+    sampling_params.update_from_generation_config({}, eos_token_id)
 
     # Make request.
     request_id = "request-0"
     request = EngineCoreRequest(
         request_id=request_id,
+        external_req_id=request_id + "-ext",
         prompt_token_ids=prompt_tokens,
         mm_features=None,
-        eos_token_id=eos_token_id,
         arrival_time=0,
         lora_request=None,
         cache_salt=None,
         data_parallel_rank=None,
-        sampling_params=SamplingParams(
-            skip_special_tokens=False,
-            spaces_between_special_tokens=False,
-            output_kind=RequestOutputKind.DELTA,
-            stop=[],
-            stop_token_ids=stop_token_ids,
-            include_stop_str_in_output=include_stop_str_in_output,
-            logprobs=num_sample_logprobs,
-            prompt_logprobs=None,
-            ignore_eos=ignore_eos,
-        ),
+        sampling_params=sampling_params,
         pooling_params=None,
+    )
+
+    engine_core = MockEngineCore(
+        tokens_list=[generation_tokens],
+        prompts_list=dummy_test_vectors.prompt_tokens,
+        generated_logprobs_raw=[generation_logprobs] if do_logprobs else None,
+        prompt_logprobs_raw=None,
+        eos_token_id=sampling_params.eos_token_id,
+        stop_token_ids=sampling_params.stop_token_ids,
+        request_ids=[request.request_id],
     )
 
     # Add request to the detokenizer.
@@ -628,7 +749,9 @@ def test_stop_token(
         # Validate number of sample logprobs
         num_tokens = len(gen_tokens)
         num_logprobs = len(gen_logprobs)
-        assert num_tokens == num_logprobs, f"Token count ({num_tokens}) != logprobs count ({num_logprobs})"
+        assert num_tokens == num_logprobs, (
+            f"Token count ({num_tokens}) != logprobs count ({num_logprobs})"
+        )
 
     # Check requests are finished
     assert output_processor.get_num_unfinished_requests() == 0
@@ -643,20 +766,17 @@ def test_stop_string(
     dummy_test_vectors,
 ):
     output_processor = OutputProcessor(dummy_test_vectors.tokenizer, log_stats=False)
-    engine_core = MockEngineCore(
-        tokens_list=dummy_test_vectors.generation_tokens,
-        generated_logprobs_raw=dummy_test_vectors.generation_logprobs if num_sample_logprobs else None,
-        prompt_logprobs_raw=None,
-    )
 
     # Make N requests.
-    request_id_list = [f"request-{idx}" for idx in range(len(dummy_test_vectors.prompt_strings))]
+    request_id_list = [
+        f"request-{idx}" for idx in range(len(dummy_test_vectors.prompt_strings))
+    ]
     requests = [
         EngineCoreRequest(
-            request_id=request_id_list[idx],
+            request_id=request_id_list[idx] + "-int",
+            external_req_id=request_id_list[idx],
             prompt_token_ids=prompt_tokens,
             mm_features=None,
-            eos_token_id=None,
             arrival_time=0,
             lora_request=None,
             cache_salt=None,
@@ -674,6 +794,16 @@ def test_stop_string(
         )
         for idx, prompt_tokens in enumerate(dummy_test_vectors.prompt_tokens)
     ]
+
+    engine_core = MockEngineCore(
+        tokens_list=dummy_test_vectors.generation_tokens,
+        prompts_list=dummy_test_vectors.prompt_tokens,
+        generated_logprobs_raw=dummy_test_vectors.generation_logprobs
+        if num_sample_logprobs
+        else None,
+        prompt_logprobs_raw=None,
+        request_ids=[req.request_id for req in requests],
+    )
 
     # Add requests to the detokenizer.
     for request, prompt in zip(requests, dummy_test_vectors.prompt_strings):
@@ -710,7 +840,9 @@ def test_stop_string(
             new_tokens = request_output.outputs[0].token_ids
             prompt_logprobs = request_output.prompt_logprobs
             logprobs = request_output.outputs[0].logprobs
-            gen_cumulative_logprobs[request_id] = request_output.outputs[0].cumulative_logprob
+            gen_cumulative_logprobs[request_id] = request_output.outputs[
+                0
+            ].cumulative_logprob
             if request_id not in gen_strings:
                 gen_strings[request_id] = new_text
                 gen_tokens[request_id] = new_tokens
@@ -727,10 +859,15 @@ def test_stop_string(
                     plp.extend(prompt_logprobs)
 
     # Confirmed tracked values matches what we expected.
-    for idx, (ref_gen_str, stop_str) in enumerate(zip(dummy_test_vectors.generation_strings, STOP_STRINGS)):
-        # Request should be aborted.
+    for idx, (ref_gen_str, stop_str) in enumerate(
+        zip(dummy_test_vectors.generation_strings, STOP_STRINGS)
+    ):
+        # Request should be aborted (check internal ID in abort list).
+        internal_request_id = f"request-{idx}-int"
+        assert internal_request_id in aborted
+
+        # Use external ID for collecting outputs
         request_id = f"request-{idx}"
-        assert request_id in aborted
 
         # Collected values that were generated.
         gen_str = gen_strings[request_id]
@@ -763,16 +900,15 @@ def test_stop_string(
 
 def test_iteration_stats(dummy_test_vectors):
     output_processor = OutputProcessor(dummy_test_vectors.tokenizer, log_stats=True)
-    engine_core = MockEngineCore(dummy_test_vectors.generation_tokens)
     engine_core_timestamp = time.monotonic()
 
     # Make N requests.
     requests = [
         EngineCoreRequest(
             request_id=f"request-{idx}",
+            external_req_id=f"request-{idx}-ext",
             prompt_token_ids=prompt_tokens,
             mm_features=None,
-            eos_token_id=None,
             arrival_time=0,
             lora_request=None,
             cache_salt=None,
@@ -783,6 +919,12 @@ def test_iteration_stats(dummy_test_vectors):
         for idx, prompt_tokens in enumerate(dummy_test_vectors.prompt_tokens)
     ]
 
+    engine_core = MockEngineCore(
+        dummy_test_vectors.generation_tokens,
+        dummy_test_vectors.prompt_tokens,
+        request_ids=[req.request_id for req in requests],
+    )
+
     # Add all requests except one to the OutputProcessor.
     num_active = len(dummy_test_vectors.generation_tokens) - 1
     for request in requests[:num_active]:
@@ -790,16 +932,21 @@ def test_iteration_stats(dummy_test_vectors):
     inactive_request = requests[num_active]
 
     # First iteration has 2 prefills.
-    outputs = engine_core.get_outputs()[:num_active]
+    outputs = engine_core.get_outputs(num_active)
     iteration_stats = IterationStats()
     output_processor.process_outputs(outputs, engine_core_timestamp, iteration_stats)
-    total_prompt_tokens = sum([len(prompt_tokens) for prompt_tokens in dummy_test_vectors.prompt_tokens[:num_active]])
+    total_prompt_tokens = sum(
+        [
+            len(prompt_tokens)
+            for prompt_tokens in dummy_test_vectors.prompt_tokens[:num_active]
+        ]
+    )
 
     assert iteration_stats.num_prompt_tokens == total_prompt_tokens
     assert iteration_stats.num_generation_tokens == num_active
 
     # Just decodes in this step.
-    outputs = engine_core.get_outputs()[:num_active]
+    outputs = engine_core.get_outputs(num_active)
     iteration_stats = IterationStats()
     output_processor.process_outputs(outputs, engine_core_timestamp, iteration_stats)
 
@@ -809,7 +956,7 @@ def test_iteration_stats(dummy_test_vectors):
     # Add a new request - prefill and 2 decodes in this step.
     output_processor.add_request(inactive_request, None)
     num_active += 1
-    outputs = engine_core.get_outputs()[:num_active]
+    outputs = engine_core.get_outputs(num_active)
     iteration_stats = IterationStats()
     output_processor.process_outputs(outputs, engine_core_timestamp, iteration_stats)
     total_prompt_tokens = len(dummy_test_vectors.prompt_tokens[num_active - 1])
@@ -818,12 +965,181 @@ def test_iteration_stats(dummy_test_vectors):
     assert iteration_stats.num_generation_tokens == num_active
 
     # Just decodes in this step.
-    outputs = engine_core.get_outputs()[:num_active]
+    outputs = engine_core.get_outputs(num_active)
     iteration_stats = IterationStats()
     output_processor.process_outputs(outputs, engine_core_timestamp, iteration_stats)
 
     assert iteration_stats.num_prompt_tokens == 0
     assert iteration_stats.num_generation_tokens == num_active
+
+
+@pytest.mark.parametrize("log_stats", [True, False])
+def test_lora_request_tracking(log_stats: bool, dummy_test_vectors):
+    """Test LoRA request lifecycle tracking through waiting -> running -> finished."""
+    output_processor = OutputProcessor(
+        dummy_test_vectors.tokenizer, log_stats=log_stats
+    )
+    engine_core_timestamp = time.monotonic()
+
+    # Create LoRA requests
+    lora1 = LoRARequest(lora_name="lora-1", lora_int_id=1, lora_path="/path/to/lora1")
+    lora2 = LoRARequest(lora_name="lora-2", lora_int_id=2, lora_path="/path/to/lora2")
+
+    # Create requests with different LoRA adapters:
+    # - request-0: lora-1
+    # - request-1: lora-2
+    # - request-2: None (no LoRA)
+    lora_assignments = [lora1, lora2, None]
+    requests = [
+        EngineCoreRequest(
+            request_id=f"request-{idx}-int",
+            external_req_id=f"request-{idx}",
+            prompt_token_ids=prompt_tokens,
+            mm_features=None,
+            arrival_time=0,
+            lora_request=lora_assignments[idx],
+            cache_salt=None,
+            data_parallel_rank=None,
+            sampling_params=SamplingParams(),
+            pooling_params=None,
+        )
+        for idx, prompt_tokens in enumerate(dummy_test_vectors.prompt_tokens)
+    ]
+
+    engine_core = MockEngineCore(
+        dummy_test_vectors.generation_tokens,
+        dummy_test_vectors.prompt_tokens,
+        request_ids=[req.request_id for req in requests],
+    )
+
+    # Add all requests to the OutputProcessor
+    for request in requests:
+        output_processor.add_request(request, None)
+
+    # First iteration: process outputs with QUEUED events
+    outputs = EngineCoreOutputs(
+        outputs=engine_core.get_outputs(), scheduler_stats=SchedulerStats()
+    )
+    for output in outputs.outputs:
+        output.events = [
+            EngineCoreEvent.new_event(EngineCoreEventType.QUEUED, engine_core_timestamp)
+        ]
+
+    iteration_stats = IterationStats() if log_stats else None
+    output_processor.process_outputs(
+        outputs.outputs, engine_core_timestamp, iteration_stats
+    )
+    output_processor.update_scheduler_stats(outputs.scheduler_stats)
+
+    if log_stats:
+        # Verify waiting counts
+        assert outputs.scheduler_stats.waiting_lora_adapters.get("lora-1") == 1
+        assert outputs.scheduler_stats.waiting_lora_adapters.get("lora-2") == 1
+        assert outputs.scheduler_stats.running_lora_adapters.get("lora-1") == 0
+        assert outputs.scheduler_stats.running_lora_adapters.get("lora-2") == 0
+        # Verify internal state
+        assert len(output_processor.lora_states.requests) == 2
+        assert "lora-1" in output_processor.lora_states.requests
+        assert "lora-2" in output_processor.lora_states.requests
+    else:
+        # When log_stats=False, no tracking should occur
+        assert iteration_stats is None
+        assert len(output_processor.lora_states.requests) == 0
+
+    # Second iteration: process outputs with SCHEDULED events
+    outputs = EngineCoreOutputs(
+        outputs=engine_core.get_outputs(), scheduler_stats=SchedulerStats()
+    )
+    for output in outputs.outputs:
+        output.events = [
+            EngineCoreEvent.new_event(
+                EngineCoreEventType.SCHEDULED, engine_core_timestamp
+            )
+        ]
+
+    iteration_stats = IterationStats() if log_stats else None
+    output_processor.process_outputs(
+        outputs.outputs, engine_core_timestamp, iteration_stats
+    )
+    output_processor.update_scheduler_stats(outputs.scheduler_stats)
+
+    if log_stats:
+        # Verify running counts
+        assert outputs.scheduler_stats.waiting_lora_adapters.get("lora-1") == 0
+        assert outputs.scheduler_stats.waiting_lora_adapters.get("lora-2") == 0
+        assert outputs.scheduler_stats.running_lora_adapters.get("lora-1") == 1
+        assert outputs.scheduler_stats.running_lora_adapters.get("lora-2") == 1
+    else:
+        assert iteration_stats is None
+        assert len(output_processor.lora_states.requests) == 0
+
+    # Third iteration: finish request-0 (lora-1)
+    outputs = EngineCoreOutputs(
+        outputs=engine_core.get_outputs(), scheduler_stats=SchedulerStats()
+    )
+    # Find and mark request-0-int as finished (it uses lora-1)
+    for output in outputs.outputs:
+        if output.request_id == "request-0-int":
+            output.finish_reason = FinishReason.LENGTH
+            break
+
+    iteration_stats = IterationStats() if log_stats else None
+    output_processor.process_outputs(
+        outputs.outputs, engine_core_timestamp, iteration_stats
+    )
+    output_processor.update_scheduler_stats(outputs.scheduler_stats)
+
+    if log_stats:
+        # lora-1 should be removed since no requests remain
+        assert "lora-1" not in output_processor.lora_states.requests
+        # lora-2 should still be running
+        assert outputs.scheduler_stats.running_lora_adapters.get("lora-2") == 1
+        assert len(output_processor.lora_states.requests) == 1
+    else:
+        assert len(output_processor.lora_states.requests) == 0
+
+    # Fourth iteration: finish request-1 (lora-2)
+    outputs = EngineCoreOutputs(
+        outputs=engine_core.get_outputs(), scheduler_stats=SchedulerStats()
+    )
+    # Find and mark request-1-int as finished (it uses lora-2)
+    for output in outputs.outputs:
+        if output.request_id == "request-1-int":
+            output.finish_reason = FinishReason.LENGTH
+            break
+
+    iteration_stats = IterationStats() if log_stats else None
+    output_processor.process_outputs(
+        outputs.outputs, engine_core_timestamp, iteration_stats
+    )
+    output_processor.update_scheduler_stats(outputs.scheduler_stats)
+
+    if log_stats:
+        # lora-2 should be removed since no requests remain
+        assert "lora-2" not in output_processor.lora_states.requests
+        assert len(outputs.scheduler_stats.running_lora_adapters) == 0
+        assert len(output_processor.lora_states.requests) == 0
+    else:
+        assert len(output_processor.lora_states.requests) == 0
+
+    # Finish the last request (no LoRA)
+    outputs = EngineCoreOutputs(
+        outputs=engine_core.get_outputs(), scheduler_stats=SchedulerStats()
+    )
+    # Find and mark request-2-int as finished (it has no LoRA)
+    for output in outputs.outputs:
+        if output.request_id == "request-2-int":
+            output.finish_reason = FinishReason.LENGTH
+            break
+
+    iteration_stats = IterationStats() if log_stats else None
+    output_processor.process_outputs(
+        outputs.outputs, engine_core_timestamp, iteration_stats
+    )
+    output_processor.update_scheduler_stats(outputs.scheduler_stats)
+
+    # Verify all requests are finished
+    assert output_processor.get_num_unfinished_requests() == 0
 
 
 @pytest.mark.asyncio
@@ -853,7 +1169,9 @@ async def test_request_output_collector():
             for idx in range(NUM_REQS)
         ]
 
-    collector = RequestOutputCollector(RequestOutputKind.DELTA)
+    collector = RequestOutputCollector(
+        RequestOutputKind.DELTA, request_id="my-request-id-int"
+    )
 
     # CASE 1: Put then get.
     outputs = make_outputs()
@@ -909,7 +1227,9 @@ async def test_request_output_collector():
 @pytest.mark.asyncio
 async def test_cumulative_output_collector_n():
     """Test collector correctly handles multiple outputs by index."""
-    collector = RequestOutputCollector(RequestOutputKind.CUMULATIVE)
+    collector = RequestOutputCollector(
+        RequestOutputKind.CUMULATIVE, request_id="my-request-id-int"
+    )
     outputs = [
         RequestOutput(
             request_id="my-request-id",
@@ -988,14 +1308,15 @@ async def test_cumulative_output_collector_n():
 
 
 @pytest.mark.parametrize("runner", ["generate", "pooling"])
-def test_abort_requests(runner: str, dummy_test_vectors):
+@pytest.mark.parametrize("abort_by", ["internal", "external"])
+def test_abort_requests(runner: str, abort_by: str, dummy_test_vectors):
     output_processor = OutputProcessor(dummy_test_vectors.tokenizer, log_stats=True)
     requests = [
         EngineCoreRequest(
             request_id=f"request-{idx}",
+            external_req_id=f"external-{idx}",
             prompt_token_ids=prompt_tokens,
             mm_features=None,
-            eos_token_id=None,
             arrival_time=0,
             lora_request=None,
             cache_salt=None,
@@ -1011,8 +1332,13 @@ def test_abort_requests(runner: str, dummy_test_vectors):
             output_kind = request.sampling_params.output_kind
         else:
             output_kind = request.pooling_params.output_kind
-        queue = RequestOutputCollector(output_kind=output_kind)
+        queue = RequestOutputCollector(
+            output_kind=output_kind, request_id=request.request_id
+        )
         output_processor.add_request(request, None, queue=queue)
 
     for request in requests:
-        output_processor.abort_requests([request.request_id])
+        if abort_by == "internal":
+            output_processor.abort_requests([request.request_id], internal=True)
+        else:
+            output_processor.abort_requests([request.external_req_id], internal=False)

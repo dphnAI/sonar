@@ -3,14 +3,18 @@
 """Test that we handle a startup Error and shutdown."""
 
 import pytest
-from aphrodite.engine.args_tools import AsyncEngineArgs
 
+from tests.conftest import AphroditeRunner
+from tests.utils import create_new_process_for_each_test, wait_for_gpu_memory_to_clear
+from tests.v1.shutdown.utils import (
+    SHUTDOWN_TEST_THRESHOLD_BYTES,
+    SHUTDOWN_TEST_TIMEOUT_SEC,
+)
 from aphrodite import LLM, SamplingParams
-from aphrodite.common.sampling_params import RequestOutputKind
-from aphrodite.utils.torch_utils import cuda_device_count_stateless
+from aphrodite.engine.arg_utils import AsyncEngineArgs
+from aphrodite.platforms import current_platform
+from aphrodite.sampling_params import RequestOutputKind
 from aphrodite.v1.engine.async_llm import AsyncLLM
-from tests.utils import wait_for_gpu_memory_to_clear
-from tests.v1.shutdown.utils import SHUTDOWN_TEST_THRESHOLD_BYTES, SHUTDOWN_TEST_TIMEOUT_SEC
 
 MODELS = ["hmellor/tiny-random-LlamaForCausalLM"]
 
@@ -20,7 +24,9 @@ MODELS = ["hmellor/tiny-random-LlamaForCausalLM"]
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("tensor_parallel_size", [2, 1])
 @pytest.mark.parametrize("send_one_request", [False, True])
-async def test_async_llm_delete(model: str, tensor_parallel_size: int, send_one_request: bool) -> None:
+async def test_async_llm_delete(
+    model: str, tensor_parallel_size: int, send_one_request: bool
+) -> None:
     """Test that AsyncLLM frees GPU memory upon deletion.
     AsyncLLM always uses an MP client.
 
@@ -29,10 +35,12 @@ async def test_async_llm_delete(model: str, tensor_parallel_size: int, send_one_
       tensor_parallel_size: degree of tensor parallelism
       send_one_request: send one request to engine before deleting
     """
-    if cuda_device_count_stateless() < tensor_parallel_size:
+    if current_platform.device_count() < tensor_parallel_size:
         pytest.skip(reason="Not enough CUDA devices")
 
-    engine_args = AsyncEngineArgs(model=model, enforce_eager=True, tensor_parallel_size=tensor_parallel_size)
+    engine_args = AsyncEngineArgs(
+        model=model, enforce_eager=True, tensor_parallel_size=tensor_parallel_size
+    )
 
     # Instantiate AsyncLLM; make request to complete any deferred
     # initialization; then delete instance
@@ -41,7 +49,9 @@ async def test_async_llm_delete(model: str, tensor_parallel_size: int, send_one_
         async for _ in async_llm.generate(
             "Hello my name is",
             request_id="abc",
-            sampling_params=SamplingParams(max_tokens=1, output_kind=RequestOutputKind.DELTA),
+            sampling_params=SamplingParams(
+                max_tokens=1, output_kind=RequestOutputKind.DELTA
+            ),
         ):
             pass
     del async_llm
@@ -74,7 +84,7 @@ def test_llm_delete(
       enable_multiprocessing: enable workers in separate process(es)
       send_one_request: send one request to engine before deleting
     """
-    if cuda_device_count_stateless() < tensor_parallel_size:
+    if current_platform.device_count() < tensor_parallel_size:
         pytest.skip(reason="Not enough CUDA devices")
 
     with monkeypatch.context() as m:
@@ -83,13 +93,43 @@ def test_llm_delete(
 
         # Instantiate LLM; make request to complete any deferred
         # initialization; then delete instance
-        llm = LLM(model=model, enforce_eager=True, tensor_parallel_size=tensor_parallel_size)
+        llm = LLM(
+            model=model, enforce_eager=True, tensor_parallel_size=tensor_parallel_size
+        )
         if send_one_request:
-            llm.generate("Hello my name is", sampling_params=SamplingParams(max_tokens=1))
+            llm.generate(
+                "Hello my name is", sampling_params=SamplingParams(max_tokens=1)
+            )
         del llm
 
         # Confirm all the processes are cleaned up.
         wait_for_gpu_memory_to_clear(
             devices=list(range(tensor_parallel_size)),
+            threshold_bytes=SHUTDOWN_TEST_THRESHOLD_BYTES,
+        )
+
+
+@create_new_process_for_each_test("fork" if current_platform.is_cuda() else "spawn")
+@pytest.mark.timeout(SHUTDOWN_TEST_TIMEOUT_SEC)
+@pytest.mark.parametrize("model", MODELS)
+@pytest.mark.parametrize("send_one_request", [False, True])
+def test_llm_delete_inprocess(
+    monkeypatch,
+    model: str,
+    send_one_request: bool,
+) -> None:
+    """Test that AphroditeRunner frees GPU memory in in-process (no MP) mode."""
+    with monkeypatch.context() as m:
+        m.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+
+        with AphroditeRunner(model) as aphrodite_model:
+            if send_one_request:
+                aphrodite_model.generate(
+                    ["Hello my name is"],
+                    SamplingParams(max_tokens=1),
+                )
+
+        wait_for_gpu_memory_to_clear(
+            devices=[0],
             threshold_bytes=SHUTDOWN_TEST_THRESHOLD_BYTES,
         )

@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
+from typing import Any
+
 import pytest
+import torch
 from transformers import SiglipModel
 
-from ....conftest import IMAGE_ASSETS, AphroditeRunner, HfRunner, PromptImageInput
+from ....conftest import IMAGE_ASSETS, HfRunner, PromptImageInput, AphroditeRunner
 from ...utils import check_embeddings_close
 
 HF_TEXT_PROMPTS = [
@@ -18,7 +22,12 @@ HF_IMAGE_PROMPTS = IMAGE_ASSETS.prompts(
     }
 )
 
-MODELS = ["google/siglip-base-patch16-224", "google/siglip2-base-patch16-224"]
+MODELS = [
+    "google/siglip-base-patch16-224",
+    "google/siglip2-base-patch16-224",
+    # Different image embedding dim than text_config.hidden_size
+    "google/siglip2-giant-opt-patch16-384",
+]
 
 
 def _run_test(
@@ -29,14 +38,29 @@ def _run_test(
     model: str,
     *,
     dtype: str,
+    tokenization_kwargs: dict[str, Any] | None = None,
+    attention_config: dict[str, Any] | None = None,
 ) -> None:
+    if tokenization_kwargs is None:
+        tokenization_kwargs = {}
+
     with aphrodite_runner(
-        model, runner="pooling", dtype=dtype, enforce_eager=True, max_model_len=64
+        model,
+        runner="pooling",
+        dtype=dtype,
+        enforce_eager=True,
+        max_model_len=64,
+        gpu_memory_utilization=0.7,
+        attention_config=attention_config,
     ) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.embed(input_texts, images=input_images)
+        aphrodite_outputs = aphrodite_model.embed(
+            input_texts, images=input_images, tokenization_kwargs=tokenization_kwargs
+        )
 
     with hf_runner(model, dtype=dtype, auto_cls=SiglipModel) as hf_model:
-        all_inputs = hf_model.get_inputs(input_texts, images=input_images)
+        all_inputs = hf_model.get_inputs(
+            input_texts, images=input_images, tokenization_kwargs=tokenization_kwargs
+        )
 
         all_outputs = []
         for inputs in all_inputs:
@@ -45,12 +69,15 @@ def _run_test(
             if "pixel_values" in inputs:
                 pooled_output = hf_model.model.get_image_features(
                     pixel_values=inputs.pixel_values,
-                ).squeeze(0)
+                )
             else:
                 pooled_output = hf_model.model.get_text_features(
                     input_ids=inputs.input_ids,
-                ).squeeze(0)
+                )
 
+            if not isinstance(pooled_output, torch.Tensor):
+                pooled_output = pooled_output.pooler_output
+            pooled_output = pooled_output.squeeze(0)
             all_outputs.append(pooled_output.tolist())
 
         hf_outputs = all_outputs
@@ -69,6 +96,7 @@ def test_models_text(
     hf_runner,
     aphrodite_runner,
     image_assets,
+    siglip_attention_config,
     model: str,
     dtype: str,
 ) -> None:
@@ -83,6 +111,11 @@ def test_models_text(
         input_images,  # type: ignore
         model,
         dtype=dtype,
+        tokenization_kwargs={
+            "padding": "max_length",
+            "max_length": 64,
+        },  # siglip2 was trained with this padding setting.
+        attention_config=siglip_attention_config,
     )
 
 
@@ -92,10 +125,13 @@ def test_models_image(
     hf_runner,
     aphrodite_runner,
     image_assets,
+    siglip_attention_config,
     model: str,
     dtype: str,
 ) -> None:
-    input_texts_images = [(text, asset.pil_image) for text, asset in zip(HF_IMAGE_PROMPTS, image_assets)]
+    input_texts_images = [
+        (text, asset.pil_image) for text, asset in zip(HF_IMAGE_PROMPTS, image_assets)
+    ]
     input_texts = [text for text, _ in input_texts_images]
     input_images = [image for _, image in input_texts_images]
 
@@ -106,6 +142,7 @@ def test_models_image(
         input_images,
         model,
         dtype=dtype,
+        attention_config=siglip_attention_config,
     )
 
 
@@ -114,6 +151,7 @@ def test_models_image(
 def test_models_text_image_no_crash(
     aphrodite_runner,
     image_assets,
+    siglip_attention_config,
     model: str,
     dtype: str,
 ) -> None:
@@ -126,6 +164,8 @@ def test_models_text_image_no_crash(
         dtype=dtype,
         enforce_eager=True,
         max_model_len=64,
+        gpu_memory_utilization=0.7,
+        attention_config=siglip_attention_config,
     ) as aphrodite_model:
         with pytest.raises(ValueError, match="not both"):
             aphrodite_model.embed(texts, images=images)

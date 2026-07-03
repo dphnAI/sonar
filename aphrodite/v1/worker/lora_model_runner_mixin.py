@@ -83,13 +83,17 @@ class LoRAModelRunnerMixin:
         prompt_lora_mapping: tuple[int, ...]  # of size np.sum(num_sampled_tokens)
         token_lora_mapping: tuple[int, ...]  # of size np.sum(num_scheduled_tokens)
         lora_requests: set[LoRARequest]
-        prompt_lora_mapping, token_lora_mapping, lora_requests = input_batch.make_lora_inputs(
-            num_scheduled_tokens, num_sampled_tokens
+        prompt_lora_mapping, token_lora_mapping, lora_requests = (
+            input_batch.make_lora_inputs(num_scheduled_tokens, num_sampled_tokens)
         )
-        return self._set_active_loras(prompt_lora_mapping, token_lora_mapping, lora_requests, mapping_type)
+        return self._set_active_loras(
+            prompt_lora_mapping, token_lora_mapping, lora_requests, mapping_type
+        )
 
     @contextmanager
-    def maybe_setup_dummy_loras(self, lora_config: LoRAConfig | None, remove_lora: bool = True):
+    def maybe_setup_dummy_loras(
+        self, lora_config: LoRAConfig | None, remove_lora: bool = True
+    ):
         if lora_config is None:
             yield
         else:
@@ -97,8 +101,12 @@ class LoRAModelRunnerMixin:
             assert self.lora_manager is not None, "LoRA is not enabled"
 
             num_loras = lora_config.max_loras
-            lora_warmup_rank: int = lora_config.max_lora_rank if lora_config.max_lora_rank < 8 else 8
-            lora_warmup_rank = self.lora_manager.get_dummy_lora_warmup_rank(lora_warmup_rank)
+            lora_warmup_rank: int = (
+                lora_config.max_lora_rank if lora_config.max_lora_rank < 8 else 8
+            )
+            lora_warmup_rank = self.lora_manager.get_dummy_lora_warmup_rank(
+                lora_warmup_rank
+            )
             # Make dummy lora requests
             lora_requests: set[LoRARequest] = {
                 LoRARequest(
@@ -188,10 +196,14 @@ class LoRAModelRunnerMixin:
                         list(range(1, effective_num_loras + 1)),
                         dtype=np.int32,
                     )
-                    prompt_lora_mapping = cycle_values[np.arange(num_reqs, dtype=np.int32) % len(cycle_values)]
+                    prompt_lora_mapping = cycle_values[
+                        np.arange(num_reqs, dtype=np.int32) % len(cycle_values)
+                    ]
                 else:
                     # Use 1 to effective_num_loras (1-indexed lora IDs)
-                    prompt_lora_mapping = (np.arange(num_reqs, dtype=np.int32) % effective_num_loras) + 1
+                    prompt_lora_mapping = (
+                        np.arange(num_reqs, dtype=np.int32) % effective_num_loras
+                    ) + 1
             else:
                 # No LoRA active - use 0 for all tokens (original behavior)
                 prompt_lora_mapping = np.zeros(num_reqs, dtype=np.int32)

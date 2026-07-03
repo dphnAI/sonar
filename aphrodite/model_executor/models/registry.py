@@ -6,6 +6,7 @@ Whenever you add an architecture to this page, please also update
 """
 
 import importlib
+import importlib.util
 import json
 import os
 import pickle
@@ -31,9 +32,7 @@ from aphrodite.config import (
 from aphrodite.logger import init_logger
 from aphrodite.logging_utils import logtime
 from aphrodite.tasks import ScoreType
-from aphrodite.transformers_utils.dynamic_module import (
-    try_get_class_from_dynamic_module,
-)
+from aphrodite.transformers_utils.dynamic_module import try_get_class_from_dynamic_module
 from aphrodite.utils.hashing import safe_hash
 
 if TYPE_CHECKING:
@@ -73,24 +72,18 @@ _TEXT_GENERATION_MODELS = {
     # [Decoder-only]
     "AfmoeForCausalLM": ("afmoe", "AfmoeForCausalLM"),
     "ApertusForCausalLM": ("apertus", "ApertusForCausalLM"),
-    "AquilaModel": ("llama", "LlamaForCausalLM"),
-    "AquilaForCausalLM": ("llama", "LlamaForCausalLM"),  # AquilaChat2
     "ArceeForCausalLM": ("arcee", "ArceeForCausalLM"),
     "ArcticForCausalLM": ("arctic", "ArcticForCausalLM"),
     "AXK1ForCausalLM": ("AXK1", "AXK1ForCausalLM"),
-    # baichuan-7b, upper case 'C' in the class name
-    "BaiChuanForCausalLM": ("baichuan", "BaiChuanForCausalLM"),
-    # baichuan-13b, lower case 'c' in the class name
-    "BaichuanForCausalLM": ("baichuan", "BaichuanForCausalLM"),
     "BailingMoeForCausalLM": ("bailing_moe", "BailingMoeForCausalLM"),
     "BailingMoeV2ForCausalLM": ("bailing_moe", "BailingMoeV2ForCausalLM"),
     "BailingMoeV2_5ForCausalLM": ("bailing_moe_linear", "BailingMoeV25ForCausalLM"),
-    "BambaForCausalLM": ("bamba", "BambaForCausalLM"),
     "BloomForCausalLM": ("bloom", "BloomForCausalLM"),
     "ChatGLMModel": ("chatglm", "ChatGLMForCausalLM"),
     "ChatGLMForConditionalGeneration": ("chatglm", "ChatGLMForCausalLM"),
     "CohereForCausalLM": ("commandr", "CohereForCausalLM"),
     "Cohere2ForCausalLM": ("commandr", "CohereForCausalLM"),
+    "Cohere2MoeForCausalLM": ("cohere2_moe", "Cohere2MoeForCausalLM"),
     "CohereMoeForCausalLM": ("cohere_moe", "CohereMoeForCausalLM"),
     "CwmForCausalLM": ("llama", "LlamaForCausalLM"),
     "DbrxForCausalLM": ("dbrx", "DbrxForCausalLM"),
@@ -99,8 +92,7 @@ _TEXT_GENERATION_MODELS = {
     "DeepseekV2ForCausalLM": ("deepseek_v2", "DeepseekV2ForCausalLM"),
     "DeepseekV3ForCausalLM": ("deepseek_v2", "DeepseekV3ForCausalLM"),
     "DeepseekV32ForCausalLM": ("deepseek_v2", "DeepseekV3ForCausalLM"),
-    "DeepseekV4ForCausalLM": ("deepseek_v4", "DeepseekV4ForCausalLM"),
-    "Dots1ForCausalLM": ("dots1", "Dots1ForCausalLM"),
+    "DeepseekV4ForCausalLM": ("aphrodite.models.deepseek_v4", "DeepseekV4ForCausalLM"),
     "Ernie4_5ForCausalLM": ("ernie45", "Ernie4_5ForCausalLM"),
     "Ernie4_5_MoeForCausalLM": ("ernie45_moe", "Ernie4_5_MoeForCausalLM"),
     "ExaoneForCausalLM": ("exaone", "ExaoneForCausalLM"),
@@ -125,7 +117,6 @@ _TEXT_GENERATION_MODELS = {
     "GlmMoeDsaForCausalLM": ("deepseek_v2", "GlmMoeDsaForCausalLM"),
     "GptOssForCausalLM": ("gpt_oss", "GptOssForCausalLM"),
     "GPT2LMHeadModel": ("gpt2", "GPT2LMHeadModel"),
-    "GPTBigCodeForCausalLM": ("gpt_bigcode", "GPTBigCodeForCausalLM"),
     "GPTJForCausalLM": ("gpt_j", "GPTJForCausalLM"),
     "GPTNeoXForCausalLM": ("gpt_neox", "GPTNeoXForCausalLM"),
     "GraniteForCausalLM": ("granite", "GraniteForCausalLM"),
@@ -133,21 +124,17 @@ _TEXT_GENERATION_MODELS = {
     "GraniteMoeHybridForCausalLM": ("granitemoehybrid", "GraniteMoeHybridForCausalLM"),
     "GraniteMoeSharedForCausalLM": ("granitemoeshared", "GraniteMoeSharedForCausalLM"),
     "GritLM": ("gritlm", "GritLM"),
-    "Grok1ModelForCausalLM": ("grok1", "GrokForCausalLM"),
-    "Grok1ForCausalLM": ("grok1", "GrokForCausalLM"),
+    "HrmTextForCausalLM": ("hrm_text", "HrmTextForCausalLM"),
     "HunYuanMoEV1ForCausalLM": ("hunyuan_v1", "HunYuanMoEV1ForCausalLM"),
     "HunYuanDenseV1ForCausalLM": ("hunyuan_v1", "HunYuanDenseV1ForCausalLM"),
     "HYV3ForCausalLM": ("hy_v3", "HYV3ForCausalLM"),
     "HCXVisionForCausalLM": ("hyperclovax_vision", "HCXVisionForCausalLM"),
     "HCXVisionV2ForCausalLM": ("hyperclovax_vision_v2", "HCXVisionV2ForCausalLM"),
     "HyperCLOVAXForCausalLM": ("hyperclovax", "HyperCLOVAXForCausalLM"),
-    "InternLMForCausalLM": ("llama", "LlamaForCausalLM"),
     "InternLM2ForCausalLM": ("internlm2", "InternLM2ForCausalLM"),
-    "InternLM2VEForCausalLM": ("internlm2_ve", "InternLM2VEForCausalLM"),
     "InternLM3ForCausalLM": ("llama", "LlamaForCausalLM"),
     "IQuestCoderForCausalLM": ("llama", "LlamaForCausalLM"),
     "IQuestLoopCoderForCausalLM": ("iquest_loopcoder", "IQuestLoopCoderForCausalLM"),
-    "JAISLMHeadModel": ("jais", "JAISLMHeadModel"),
     "Jais2ForCausalLM": ("jais2", "Jais2ForCausalLM"),
     "JambaForCausalLM": ("jamba", "JambaForCausalLM"),
     "KimiLinearForCausalLM": ("kimi_linear", "KimiLinearForCausalLM"),
@@ -161,12 +148,14 @@ _TEXT_GENERATION_MODELS = {
     "LongcatFlashForCausalLM": ("longcat_flash", "LongcatFlashForCausalLM"),
     "MambaForCausalLM": ("mamba", "MambaForCausalLM"),
     "Mamba2ForCausalLM": ("mamba2", "Mamba2ForCausalLM"),
+    "MellumForCausalLM": ("mellum", "MellumForCausalLM"),
     "MiniCPMForCausalLM": ("minicpm", "MiniCPMForCausalLM"),
     "MiniCPM3ForCausalLM": ("minicpm3", "MiniCPM3ForCausalLM"),
-    "MiniMaxForCausalLM": ("minimax_text_01", "MiniMaxText01ForCausalLM"),
-    "MiniMaxText01ForCausalLM": ("minimax_text_01", "MiniMaxText01ForCausalLM"),
-    "MiniMaxM1ForCausalLM": ("minimax_text_01", "MiniMaxText01ForCausalLM"),
     "MiniMaxM2ForCausalLM": ("minimax_m2", "MiniMaxM2ForCausalLM"),
+    "MiniMaxM3SparseForCausalLM": (
+        "aphrodite.models.minimax_m3",
+        "MiniMaxM3SparseForCausalLM",
+    ),
     "Ministral3ForCausalLM": ("mistral", "MistralForCausalLM"),
     "MistralForCausalLM": ("mistral", "MistralForCausalLM"),
     "MistralLarge3ForCausalLM": ("mistral_large_3", "MistralLarge3ForCausalLM"),
@@ -198,7 +187,6 @@ _TEXT_GENERATION_MODELS = {
     "PhiMoEForCausalLM": ("phimoe", "PhiMoEForCausalLM"),
     "Plamo2ForCausalLM": ("plamo2", "Plamo2ForCausalLM"),
     "Plamo3ForCausalLM": ("plamo3", "Plamo3ForCausalLM"),
-    "QWenLMHeadModel": ("qwen", "QWenLMHeadModel"),
     "Qwen2ForCausalLM": ("qwen2", "Qwen2ForCausalLM"),
     "Qwen2MoeForCausalLM": ("qwen2_moe", "Qwen2MoeForCausalLM"),
     "Qwen3ForCausalLM": ("qwen3", "Qwen3ForCausalLM"),
@@ -212,13 +200,11 @@ _TEXT_GENERATION_MODELS = {
     "Step3p5ForCausalLM": ("step3p5", "Step3p5ForCausalLM"),
     "StableLMEpochForCausalLM": ("stablelm", "StablelmForCausalLM"),
     "StableLmForCausalLM": ("stablelm", "StablelmForCausalLM"),
-    "Starcoder2ForCausalLM": ("starcoder2", "Starcoder2ForCausalLM"),
     "SolarForCausalLM": ("solar", "SolarForCausalLM"),
     "TeleChatForCausalLM": ("telechat2", "TeleChat2ForCausalLM"),
     "TeleChat2ForCausalLM": ("telechat2", "TeleChat2ForCausalLM"),
     "TeleChat3ForCausalLM": ("llama", "LlamaForCausalLM"),
     "TeleFLMForCausalLM": ("teleflm", "TeleFLMForCausalLM"),
-    "XverseForCausalLM": ("llama", "LlamaForCausalLM"),
     "Zamba2ForCausalLM": ("zamba2", "Zamba2ForCausalLM"),
 }
 
@@ -226,7 +212,6 @@ _EMBEDDING_MODELS = {
     # [Text-only]
     "BertModel": ("bert", "BertEmbeddingModel"),
     "BertSpladeSparseEmbeddingModel": ("bert", "BertSpladeSparseEmbeddingModel"),
-    "ErnieModel": ("ernie", "ErnieEmbeddingModel"),
     "BgeM3EmbeddingModel": ("roberta", "BgeM3EmbeddingModel"),
     "DeciLMForCausalLM": ("nemotron_nas", "DeciLMForCausalLM"),
     "Gemma2Model": ("gemma2", "Gemma2ForCausalLM"),
@@ -301,10 +286,13 @@ _REWARD_MODELS = {
 
 _TOKEN_CLASSIFICATION_MODELS = {
     "BertForTokenClassification": ("bert", "BertForTokenClassification"),
-    "ErnieForTokenClassification": ("ernie", "ErnieForTokenClassification"),
     "ModernBertForTokenClassification": (
         "modernbert",
         "ModernBertForTokenClassification",
+    ),
+    "OpenAIPrivacyFilterForTokenClassification": (
+        "openai_privacy_filter",
+        "OpenAIPrivacyFilterForTokenClassification",
     ),
     "Qwen3ASRForcedAlignerForTokenClassification": (
         "qwen3_asr_forced_aligner",
@@ -315,7 +303,6 @@ _TOKEN_CLASSIFICATION_MODELS = {
 _SEQUENCE_CLASSIFICATION_MODELS = {
     "BertForSequenceClassification": ("bert", "BertForSequenceClassification"),
     "GPT2ForSequenceClassification": ("gpt2", "GPT2ForSequenceClassification"),
-    "ErnieForSequenceClassification": ("ernie", "ErnieForSequenceClassification"),
     "GteNewForSequenceClassification": (
         "bert_with_rope",
         "GteNewForSequenceClassification",
@@ -349,14 +336,6 @@ _MULTIMODAL_MODELS = {
         "audioflamingo3",
         "AudioFlamingo3ForConditionalGeneration",
     ),
-    "MusicFlamingoForConditionalGeneration": (
-        "musicflamingo",
-        "MusicFlamingoForConditionalGeneration",
-    ),
-    "AyaVisionForConditionalGeneration": (
-        "aya_vision",
-        "AyaVisionForConditionalGeneration",
-    ),
     "BagelForConditionalGeneration": ("bagel", "BagelForConditionalGeneration"),
     "BeeForConditionalGeneration": ("bee", "BeeForConditionalGeneration"),
     "Blip2ForConditionalGeneration": ("blip2", "Blip2ForConditionalGeneration"),
@@ -370,9 +349,11 @@ _MULTIMODAL_MODELS = {
         "cohere2_vision",
         "Cohere2VisionForConditionalGeneration",
     ),
+    "Cosmos3ForConditionalGeneration": ("cosmos3", "Cosmos3ForConditionalGeneration"),
     "DeepseekVLV2ForCausalLM": ("deepseek_vl2", "DeepseekVLV2ForCausalLM"),
     "DeepseekOCRForCausalLM": ("deepseek_ocr", "DeepseekOCRForCausalLM"),
     "DeepseekOCR2ForCausalLM": ("deepseek_ocr2", "DeepseekOCR2ForCausalLM"),
+    "UnlimitedOCRForCausalLM": ("unlimited_ocr", "UnlimitedOCRForCausalLM"),
     "DotsOCRForCausalLM": ("dots_ocr", "DotsOCRForCausalLM"),
     "Eagle2_5_VLForConditionalGeneration": (
         "eagle2_5_vl",
@@ -405,7 +386,15 @@ _MULTIMODAL_MODELS = {
         "gemma3n_mm",
         "Gemma3nForConditionalGeneration",
     ),
+    "DiffusionGemmaForBlockDiffusion": (
+        "diffusion_gemma",
+        "DiffusionGemmaForConditionalGeneration",
+    ),
     "Gemma4ForConditionalGeneration": ("gemma4_mm", "Gemma4ForConditionalGeneration"),
+    "Gemma4UnifiedForConditionalGeneration": (
+        "gemma4_unified",
+        "Gemma4UnifiedForConditionalGeneration",
+    ),
     "GlmAsrForConditionalGeneration": ("glmasr", "GlmAsrForConditionalGeneration"),
     "GLM4VForCausalLM": ("glm4v", "GLM4VForCausalLM"),
     "Glm4vForConditionalGeneration": ("glm4_1v", "Glm4vForConditionalGeneration"),
@@ -414,6 +403,10 @@ _MULTIMODAL_MODELS = {
     "GraniteSpeechForConditionalGeneration": (
         "granite_speech",
         "GraniteSpeechForConditionalGeneration",
+    ),
+    "GraniteSpeechPlusForConditionalGeneration": (
+        "granite_speech_plus",
+        "GraniteSpeechPlusForConditionalGeneration",
     ),
     "Granite4VisionForConditionalGeneration": (
         "granite4_vision",
@@ -436,6 +429,10 @@ _MULTIMODAL_MODELS = {
     "InternS1ProForConditionalGeneration": (
         "interns1_pro",
         "InternS1ProForConditionalGeneration",
+    ),
+    "InternS2PreviewForConditionalGeneration": (
+        "interns2_preview",
+        "InternS2PreviewForConditionalGeneration",
     ),
     "Idefics3ForConditionalGeneration": (
         "idefics3",
@@ -471,15 +468,18 @@ _MULTIMODAL_MODELS = {
         "llava_onevision",
         "LlavaOnevisionForConditionalGeneration",
     ),
-    "MantisForConditionalGeneration": ("llava", "MantisForConditionalGeneration"),
     "MiDashengLMModel": ("midashenglm", "MiDashengLMModel"),
     "MiMoV2OmniForCausalLM": ("mimo_v2_omni", "MiMoV2OmniForCausalLM"),
-    "MiniMaxVL01ForConditionalGeneration": (
-        "minimax_vl_01",
-        "MiniMaxVL01ForConditionalGeneration",
+    "MiniMaxM3SparseForConditionalGeneration": (
+        "aphrodite.models.minimax_m3",
+        "MiniMaxM3SparseForConditionalGeneration",
     ),
     "MiniCPMO": ("minicpmo", "MiniCPMO"),
     "MiniCPMV": ("minicpmv", "MiniCPMV"),
+    "MiniCPMV4_6ForConditionalGeneration": (
+        "minicpmv4_6",
+        "MiniCPMV4_6ForConditionalGeneration",
+    ),
     "Mistral3ForConditionalGeneration": (
         "mistral3",
         "Mistral3ForConditionalGeneration",
@@ -487,6 +487,7 @@ _MULTIMODAL_MODELS = {
     "MolmoForCausalLM": ("molmo", "MolmoForCausalLM"),
     "Molmo2ForConditionalGeneration": ("molmo2", "Molmo2ForConditionalGeneration"),
     "Moondream3ForCausalLM": ("moondream3", "Moondream3ForCausalLM"),
+    "MossAudioModel": ("moss_audio", "MossAudioModel"),
     "HfMoondream": ("moondream3", "Moondream3ForCausalLM"),
     "NemotronH_Nano_VL_V2": ("nano_nemotron_vl", "NemotronH_Nano_VL_V2"),
     "NemotronH_Nano_Omni_Reasoning_V3": ("nano_nemotron_vl", "NemotronH_Nano_VL_V2"),
@@ -497,6 +498,7 @@ _MULTIMODAL_MODELS = {
         "openpangu_vl",
         "OpenPanguVLForConditionalGeneration",
     ),
+    "OpenVLAForActionPrediction": ("openvla", "OpenVLAForActionPrediction"),
     "Ovis": ("ovis", "Ovis"),
     "Ovis2_5": ("ovis2_5", "Ovis2_5"),
     "Ovis2_6ForCausalLM": ("ovis2_5", "Ovis2_5"),
@@ -513,7 +515,10 @@ _MULTIMODAL_MODELS = {
     "Phi4ForCausalLMV": ("phi4siglip", "Phi4ForCausalLMV"),
     "Phi4MMForCausalLM": ("phi4mm", "Phi4MMForCausalLM"),
     "PixtralForConditionalGeneration": ("pixtral", "PixtralForConditionalGeneration"),
-    "QwenVLForConditionalGeneration": ("qwen_vl", "QwenVLForConditionalGeneration"),
+    "QianfanOCRForConditionalGeneration": (
+        "qianfan_ocr",
+        "QianfanOCRForConditionalGeneration",
+    ),
     "Qwen2VLForConditionalGeneration": ("qwen2_vl", "Qwen2VLForConditionalGeneration"),
     "Qwen2_5_VLForConditionalGeneration": (
         "qwen2_5_vl",
@@ -555,11 +560,7 @@ _MULTIMODAL_MODELS = {
     "SmolVLMForConditionalGeneration": ("smolvlm", "SmolVLMForConditionalGeneration"),
     "StepVLForConditionalGeneration": ("step_vl", "StepVLForConditionalGeneration"),
     "Step3VLForConditionalGeneration": ("step3_vl", "Step3VLForConditionalGeneration"),
-    "TarsierForConditionalGeneration": ("tarsier", "TarsierForConditionalGeneration"),
-    "Tarsier2ForConditionalGeneration": (
-        "qwen2_vl",
-        "Tarsier2ForConditionalGeneration",
-    ),
+    "Step3p7ForConditionalGeneration": ("step3p7", "Step3p7ForConditionalGeneration"),
     "UltravoxModel": ("ultravox", "UltravoxModel"),
     "VoxtralForConditionalGeneration": ("voxtral", "VoxtralForConditionalGeneration"),
     "VoxtralRealtimeGeneration": ("voxtral_realtime", "VoxtralRealtimeGeneration"),
@@ -580,15 +581,20 @@ _SPECULATIVE_DECODING_MODELS = {
     "MiMoMTPModel": ("mimo_mtp", "MiMoMTP"),
     "MiMoV2MTPModel": ("mimo_v2_mtp", "MiMoV2MTP"),
     "MiMoV2OmniMTPModel": ("mimo_v2_mtp", "MiMoV2OmniMTP"),
+    "EagleCohereForCausalLM": ("cohere_eagle", "EagleCohereForCausalLM"),
     "EagleLlamaForCausalLM": ("llama_eagle", "EagleLlamaForCausalLM"),
     "EagleLlama4ForCausalLM": ("llama4_eagle", "EagleLlama4ForCausalLM"),
     "EagleMiniCPMForCausalLM": ("minicpm_eagle", "EagleMiniCPMForCausalLM"),
     "DFlashDraftModel": ("qwen3_dflash", "DFlashQwen3ForCausalLM"),
+    "PEagleDraftModel": ("llama_eagle3", "Eagle3LlamaForCausalLM"),
+    "PeagleLlamaForCausalLM": ("llama_eagle3", "Eagle3LlamaForCausalLM"),
     "Eagle3LlamaForCausalLM": ("llama_eagle3", "Eagle3LlamaForCausalLM"),
     "Eagle3MiniMaxM2ForCausalLM": ("llama_eagle3", "Eagle3LlamaForCausalLM"),
     "LlamaForCausalLMEagle3": ("llama_eagle3", "Eagle3LlamaForCausalLM"),
     "Eagle3Qwen2_5vlForCausalLM": ("llama_eagle3", "Eagle3LlamaForCausalLM"),
     "Eagle3Qwen3vlForCausalLM": ("llama_eagle3", "Eagle3LlamaForCausalLM"),
+    "Eagle3Qwen3ForCausalLM": ("qwen3_eagle3", "Eagle3Qwen3ForCausalLM"),
+    "PeagleQwen3ForCausalLM": ("qwen3_eagle3", "Eagle3Qwen3ForCausalLM"),
     "EagleMistralForCausalLM": ("mistral_eagle", "EagleMistralForCausalLM"),
     "EagleMistralLarge3ForCausalLM": (
         "mistral_large_3_eagle",
@@ -598,7 +604,9 @@ _SPECULATIVE_DECODING_MODELS = {
     "Eagle3DeepseekV3ForCausalLM": ("deepseek_eagle3", "Eagle3DeepseekV2ForCausalLM"),
     "EagleDeepSeekMTPModel": ("deepseek_eagle", "EagleDeepseekV3ForCausalLM"),
     "DeepSeekMTPModel": ("deepseek_mtp", "DeepSeekMTP"),
-    "DeepSeekV4MTPModel": ("deepseek_v4_mtp", "DeepSeekV4MTP"),
+    "DeepSeekV4MTPModel": ("aphrodite.models.deepseek_v4", "DeepSeekV4MTP"),
+    "MiniMaxM3MTP": ("aphrodite.models.minimax_m3", "MiniMaxM3MTP"),
+    "Gemma4MTPModel": ("gemma4_mtp", "Gemma4MTP"),
     "ErnieMTPModel": ("ernie_mtp", "ErnieMTP"),
     "ExaoneMoeMTP": ("exaone_moe_mtp", "ExaoneMoeMTP"),
     "Exaone4_5_MTP": ("exaone4_5_mtp", "Exaone4_5_MTP"),
@@ -621,7 +629,9 @@ _SPECULATIVE_DECODING_MODELS = {
 
 _TRANSFORMERS_SUPPORTED_MODELS = {
     # Text generation models
+    "GPTBigCodeForCausalLM": ("transformers", "TransformersForCausalLM"),
     "SmolLM3ForCausalLM": ("transformers", "TransformersForCausalLM"),
+    "Starcoder2ForCausalLM": ("transformers", "TransformersForCausalLM"),
     # Multimodal models
     "Emu3ForConditionalGeneration": (
         "transformers",
@@ -688,10 +698,36 @@ _PREVIOUSLY_SUPPORTED_MODELS = {
     "Phi3SmallForCausalLM": "0.9.2",
     "Phi4FlashForCausalLM": "0.10.2",
     "Phi4MultimodalForCausalLM": "0.12.0",
+    "JAISLMHeadModel": "0.22.0",
+    "ErnieModel": "0.23.0",
+    "ErnieForSequenceClassification": "0.23.0",
+    "ErnieForTokenClassification": "0.23.0",
+    "InternLM2VEForCausalLM": "0.23.0",
+    "QWenLMHeadModel": "0.23.0",
+    "QwenVLForConditionalGeneration": "0.23.0",
+    "InternLMForCausalLM": "0.23.0",
     # encoder-decoder models except whisper
     # have been removed for V0 deprecation.
     "DonutForConditionalGeneration": "0.10.2",
     "MllamaForConditionalGeneration": "0.10.2",
+    "XverseForCausalLM": "0.23.0",
+    "Dots1ForCausalLM": "0.23.0",
+    "BambaForCausalLM": "0.23.0",
+    "MiniMaxForCausalLM": "0.23.0",
+    "MiniMaxText01ForCausalLM": "0.23.0",
+    "MiniMaxM1ForCausalLM": "0.23.0",
+    "MiniMaxVL01ForConditionalGeneration": "0.23.0",
+    "BaiChuanForCausalLM": "0.23.0",
+    "BaichuanForCausalLM": "0.23.0",
+    "AquilaModel": "0.24.0",
+    "AquilaForCausalLM": "0.24.0",
+    "Grok1ModelForCausalLM": "0.24.0",
+    "Grok1ForCausalLM": "0.24.0",
+    "TarsierForConditionalGeneration": "0.24.0",
+    "Tarsier2ForConditionalGeneration": "0.23.0",  # last version with Transformers v4
+    "MantisForConditionalGeneration": "0.24.0",
+    "MusicFlamingoForConditionalGeneration": "0.24.0",
+    "AyaVisionForConditionalGeneration": "0.24.0",
 }
 
 _OOT_SUPPORTED_MODELS = {
@@ -735,16 +771,22 @@ class _ModelInfo:
             attn_type=get_attn_type(model),
             score_type=get_score_type(model),
             supports_multimodal=supports_multimodal(model),
-            supports_multimodal_raw_input_only=supports_multimodal_raw_input_only(model),
+            supports_multimodal_raw_input_only=supports_multimodal_raw_input_only(
+                model
+            ),
             requires_raw_input_tokens=requires_raw_input_tokens(model),
-            supports_multimodal_encoder_tp_data=supports_multimodal_encoder_tp_data(model),
+            supports_multimodal_encoder_tp_data=supports_multimodal_encoder_tp_data(
+                model
+            ),
             supports_pp=supports_pp(model),
             has_inner_state=has_inner_state(model),
             is_attention_free=is_attention_free(model),
             is_hybrid=is_hybrid(model),
             supports_mamba_prefix_caching=supports_mamba_prefix_caching(model),
             supports_transcription=supports_transcription(model),
-            supports_transcription_only=(supports_transcription(model) and model.supports_transcription_only),
+            supports_transcription_only=(
+                supports_transcription(model) and model.supports_transcription_only
+            ),
             has_noops=has_noops(model),
         )
 
@@ -799,6 +841,25 @@ class _LazyRegisteredModel(_BaseRegisteredModel):
         cls_name = f"{self.module_name}-{self.class_name}".replace(".", "-")
         return f"{cls_name}.json"
 
+    @staticmethod
+    def _get_modelinfo_module_hash(model_path: Path) -> str:
+        if model_path.name == "__init__.py":
+            # Package entry points often re-export classes implemented in
+            # submodules, so include the package contents in the cache key.
+            module_paths = sorted(model_path.parent.rglob("*.py"))
+            root_path = model_path.parent
+        else:
+            module_paths = [model_path]
+            root_path = model_path.parent
+
+        hasher = safe_hash(b"", usedforsecurity=False)
+        for path in module_paths:
+            hasher.update(path.relative_to(root_path).as_posix().encode("utf-8"))
+            hasher.update(b"\0")
+            hasher.update(path.read_bytes())
+            hasher.update(b"\0")
+        return hasher.hexdigest()
+
     def _load_modelinfo_from_cache(self, module_hash: str) -> _ModelInfo | None:
         try:
             try:
@@ -850,12 +911,22 @@ class _LazyRegisteredModel(_BaseRegisteredModel):
 
     @logtime(logger=logger, msg="Registry inspect model class")
     def inspect_model_cls(self) -> _ModelInfo:
-        model_path = Path(__file__).parent / f"{self.module_name.split('.')[-1]}.py"
+        # Modules registered with a non-default location (e.g. the
+        # hardware-isolated ``aphrodite.models.<name>`` layout) live outside
+        # ``aphrodite/model_executor/models``. Resolve the module spec directly
+        # so the file-hash cache stays warm for them.
+        if self.module_name.startswith("aphrodite.model_executor.models."):
+            model_path = Path(__file__).parent / f"{self.module_name.split('.')[-1]}.py"
+        else:
+            try:
+                spec = importlib.util.find_spec(self.module_name)
+            except (ImportError, ValueError):
+                spec = None
+            model_path = Path(spec.origin) if spec is not None and spec.origin else None
         module_hash = None
 
-        if model_path.exists():
-            with open(model_path, "rb") as f:
-                module_hash = safe_hash(f.read(), usedforsecurity=False).hexdigest()
+        if model_path is not None and model_path.exists():
+            module_hash = self._get_modelinfo_module_hash(model_path)
 
             mi = self._load_modelinfo_from_cache(module_hash)
             if mi is not None:
@@ -873,8 +944,12 @@ class _LazyRegisteredModel(_BaseRegisteredModel):
                 )
 
         # Performed in another process to avoid initializing CUDA
-        mi = _run_in_subprocess(lambda: _ModelInfo.from_model_cls(self.load_model_cls()))
-        logger.debug("Loaded model info for class %s.%s", self.module_name, self.class_name)
+        mi = _run_in_subprocess(
+            lambda: _ModelInfo.from_model_cls(self.load_model_cls())
+        )
+        logger.debug(
+            "Loaded model info for class %s.%s", self.module_name, self.class_name
+        )
 
         # save cache file
         if module_hash is not None:
@@ -943,8 +1018,9 @@ class _ModelRegistry:
             raise TypeError(msg)
 
         if model_arch in self.models:
-            logger.warning(
-                "Model architecture %s is already registered, and will be overwritten by the new model class %s.",
+            logger.debug(
+                "Model architecture %s is already registered, and will be "
+                "overwritten by the new model class %s.",
                 model_arch,
                 model_cls,
             )
@@ -959,7 +1035,10 @@ class _ModelRegistry:
         elif isinstance(model_cls, type) and issubclass(model_cls, nn.Module):
             model = _RegisteredModel.from_model_cls(model_cls)
         else:
-            msg = f"`model_cls` should be a string or PyTorch model class, not a {type(model_arch)}"
+            msg = (
+                "`model_cls` should be a string or PyTorch model class, "
+                f"not a {type(model_arch)}"
+            )
             raise TypeError(msg)
 
         self.models[model_arch] = model
@@ -969,7 +1048,8 @@ class _ModelRegistry:
 
         if any(arch in all_supported_archs for arch in architectures):
             raise ValueError(
-                f"Model architectures {architectures} failed to be inspected. Please check the logs for more details."
+                f"Model architectures {architectures} failed "
+                "to be inspected. Please check the logs for more details."
             )
 
         for arch in architectures:
@@ -1016,7 +1096,9 @@ class _ModelRegistry:
         if architecture in _TRANSFORMERS_BACKEND_MODELS:
             return architecture
 
-        auto_map: dict[str, str] = getattr(model_config.hf_config, "auto_map", None) or dict()
+        auto_map: dict[str, str] = (
+            getattr(model_config.hf_config, "auto_map", None) or dict()
+        )
 
         # Make sure that config class is always initialized before model class,
         # otherwise the model class won't be able to access the config class,
@@ -1033,6 +1115,7 @@ class _ModelRegistry:
                         module,
                         model_config.model,
                         revision=model_config.revision,
+                        code_revision=model_config.code_revision,
                         trust_remote_code=model_config.trust_remote_code,
                         warn_on_fail=False,
                     )
@@ -1046,6 +1129,7 @@ class _ModelRegistry:
                         module,
                         model_config.model,
                         revision=model_config.revision,
+                        code_revision=model_config.code_revision,
                         trust_remote_code=model_config.trust_remote_code,
                         warn_on_fail=True,
                     )
@@ -1067,7 +1151,10 @@ class _ModelRegistry:
             if model_config.model_impl != "transformers":
                 return None
 
-            raise ValueError(f"The Transformers implementation of {architecture!r} is not compatible with Aphrodite.")
+            raise ValueError(
+                f"The Transformers implementation of {architecture!r} "
+                "is not compatible with Aphrodite."
+            )
 
         return model_config._get_transformers_backend_cls()
 
@@ -1137,7 +1224,10 @@ class _ModelRegistry:
                 return (model_info, arch)
 
         # Fallback to transformers impl (before resolving runner_type)
-        if all(arch not in self.models for arch in architectures) and model_config.model_impl == "auto":
+        if (
+            all(arch not in self.models for arch in architectures)
+            and model_config.model_impl == "auto"
+        ):
             arch = self._try_resolve_transformers(architectures[0], model_config)
             if arch is not None:
                 model_info = self._try_inspect_model_cls(arch)
@@ -1188,7 +1278,10 @@ class _ModelRegistry:
                 return (model_cls, arch)
 
         # Fallback to transformers impl (before resolving runner_type)
-        if all(arch not in self.models for arch in architectures) and model_config.model_impl == "auto":
+        if (
+            all(arch not in self.models for arch in architectures)
+            and model_config.model_impl == "auto"
+        ):
             arch = self._try_resolve_transformers(architectures[0], model_config)
             if arch is not None:
                 model_cls = self._try_load_model_cls(arch)
@@ -1286,10 +1379,19 @@ class _ModelRegistry:
         return model_cls.supports_transcription_only
 
 
+def _resolve_module_name(mod_relname: str) -> str:
+    # Allow registry entries to point at fully-qualified module paths (e.g.
+    # ``aphrodite.models.deepseek_v4``) for models that live outside the legacy
+    # ``aphrodite.model_executor.models`` flat layout.
+    if mod_relname.startswith("aphrodite."):
+        return mod_relname
+    return f"aphrodite.model_executor.models.{mod_relname}"
+
+
 ModelRegistry = _ModelRegistry(
     {
         model_arch: _LazyRegisteredModel(
-            module_name=f"aphrodite.model_executor.models.{mod_relname}",
+            module_name=_resolve_module_name(mod_relname),
             class_name=cls_name,
         )
         for model_arch, (mod_relname, cls_name) in _APHRODITE_MODELS.items()
@@ -1312,14 +1414,18 @@ def _run_in_subprocess(fn: Callable[[], _T]) -> _T:
 
         # cannot use `sys.executable __file__` here because the script
         # contains relative imports
-        returned = subprocess.run(_SUBPROCESS_COMMAND, input=input_bytes, capture_output=True)
+        returned = subprocess.run(
+            _SUBPROCESS_COMMAND, input=input_bytes, capture_output=True
+        )
 
         # check if the subprocess is successful
         try:
             returned.check_returncode()
         except Exception as e:
             # wrap raised exception to provide more information
-            raise RuntimeError(f"Error raised in subprocess:\n{returned.stderr.decode()}") from e
+            raise RuntimeError(
+                f"Error raised in subprocess:\n{returned.stderr.decode()}"
+            ) from e
 
         with open(output_filepath, "rb") as f:
             return pickle.load(f)

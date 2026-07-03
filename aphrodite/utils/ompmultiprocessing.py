@@ -40,11 +40,14 @@ class OMPProcessManager:
 
         assert not (self.use_iomp and self.use_gomp)
 
-        # at least reserve 1/local_world_size(for ARM) core for scheduler
+        # at least reserve 1/local_world_size(for ARM/RISC-V) core for scheduler
         # proc as always use MP executor
         # TODO: make scheduler proc sleep when idle
         self.reserve_cpu_num = (
-            self.local_world_size if current_platform.get_cpu_architecture() == CpuArchEnum.ARM else 1
+            self.local_world_size
+            if current_platform.get_cpu_architecture()
+            in (CpuArchEnum.ARM, CpuArchEnum.RISCV)
+            else 1
         )
         # reserve at one more core for nixl_connector under p/d case
         if config.kv_transfer_config:
@@ -76,16 +79,16 @@ class OMPProcessManager:
         if self.use_iomp:
             # set IOMP envs
             cpu_list_str = ",".join(cpu_list)
-            envs_dict["KMP_AFFINITY"] = f"granularity=fine,explicit,proclist=[{cpu_list_str}]"
+            envs_dict["KMP_AFFINITY"] = (
+                f"granularity=fine,explicit,proclist=[{cpu_list_str}]"
+            )
             # The time(milliseconds) that a thread should wait after
             # completing the execution of a parallel region, before sleeping.
-            envs_dict["KMP_BLOCKTIME"] = "1"
+            # A value of 5 masks thread underutilization.
+            # Set to 1 when debugging thread utilization issues.
+            envs_dict["KMP_BLOCKTIME"] = "5"
             # Prevents the CPU to run into low performance state
             envs_dict["KMP_TPAUSE"] = "0"
-            # Provides fine granularity parallelism
-            envs_dict["KMP_FORKJOIN_BARRIER_PATTERN"] = "dist,dist"
-            envs_dict["KMP_PLAIN_BARRIER_PATTERN"] = "dist,dist"
-            envs_dict["KMP_REDUCTION_BARRIER_PATTERN"] = "dist,dist"
         elif self.use_gomp:
             # set GOMP envs
             # likes '0 1 2 ...'
@@ -133,9 +136,11 @@ class OMPProcessManager:
                 )
             elif cpu_arch in (CpuArchEnum.X86, CpuArchEnum.S390X):
                 # For x86/S390X SMT-2, use 1 logical CPU per physical core
-                cpu_list, reserve_list = self._get_autobind_cpu_ids(lambda cpus: cpus[-1:])
-            elif cpu_arch == CpuArchEnum.ARM:
-                # For AArch64, no SMT, use all logical CPU
+                cpu_list, reserve_list = self._get_autobind_cpu_ids(
+                    lambda cpus: cpus[-1:]
+                )
+            elif cpu_arch in (CpuArchEnum.ARM, CpuArchEnum.RISCV):
+                # For AArch64 / RISC-V, no SMT, use all logical CPUs
                 cpu_list, reserve_list = self._get_autobind_cpu_ids(lambda cpus: cpus)
             else:
                 cpu_list, reserve_list = [], []
@@ -151,10 +156,14 @@ class OMPProcessManager:
                 local_dp_rank = self.local_dp_rank
                 world_size = self.local_world_size
                 # Rank mapping [DP, PP, TP]
-                omp_cpuids_list = omp_cpuids_list[local_dp_rank * world_size : (local_dp_rank + 1) * world_size]
+                omp_cpuids_list = omp_cpuids_list[
+                    local_dp_rank * world_size : (local_dp_rank + 1) * world_size
+                ]
 
             assert len(omp_cpuids_list) == self.local_world_size, (
-                f"Given number of CPU id list {omp_cpuids_list} doesn't match local world size {self.local_world_size}."
+                "Given "
+                f"number of CPU id list {omp_cpuids_list} doesn't match "
+                f"local world size {self.local_world_size}."
             )
 
             # parse CPU list strings like "5,2-4" to [5, 2, 3, 4]
@@ -163,9 +172,15 @@ class OMPProcessManager:
             # skip
             self.cpu_lists = []
 
-        msg = "OpenMP thread binding info: \n"
-        for i in range(self.local_world_size):
-            msg += f"\tlocal_rank={i}, core ids={self.cpu_lists[i]}\n"
+        msg = (
+            "OpenMP thread binding info: \n"
+            f"\tAPHRODITE_CPU_OMP_THREADS_BIND={aphrodite_mask!r}, "
+            f"auto_setup={self.auto_setup}, skip_setup={self.skip_setup}\n"
+            f"\tlocal_world_size={self.local_world_size}, "
+            f"reserve_cpu_num={self.reserve_cpu_num}\n"
+        )
+        for i, cpus in enumerate(self.cpu_lists):
+            msg += f"\tlocal_rank={i}, core ids={cpus}\n"
         msg += f"\treserved_cpus={self.reserved_cpu_list}"
         logger.info(msg)
 
@@ -189,7 +204,9 @@ class OMPProcessManager:
         logical_cpu_list = cr_utils.get_allowed_cpu_list()
 
         local_world_size = self.local_world_size
-        assert len(allowed_numa_nodes) >= local_world_size or self.simulate_multi_node, (
+        assert (
+            len(allowed_numa_nodes) >= local_world_size or self.simulate_multi_node
+        ), (
             f"Not enough allowed NUMA nodes to bind threads of "
             f"{local_world_size} local CPUWorkers. "
             f"Allowed NUMA nodes are {allowed_numa_nodes}. "
@@ -203,15 +220,25 @@ class OMPProcessManager:
         for local_rank in range(self.local_world_size):
             if not self.simulate_multi_node:
                 selected_numa_node = allowed_numa_nodes[local_rank]
-                selected_logical_cpu_list = [x for x in logical_cpu_list if x.numa_node == selected_numa_node]
+                selected_logical_cpu_list = [
+                    x for x in logical_cpu_list if x.numa_node == selected_numa_node
+                ]
             else:
                 world_size_across_dp = self.local_world_size * self.internal_dp_size
                 assert len(logical_cpu_list) >= world_size_across_dp
-                selected_logical_cpu_list = sorted(logical_cpu_list, key=lambda x: x.numa_node)
-                sim_cpu_num_per_node = len(selected_logical_cpu_list) // world_size_across_dp
+                selected_logical_cpu_list = sorted(
+                    logical_cpu_list, key=lambda x: x.numa_node
+                )
+                sim_cpu_num_per_node = (
+                    len(selected_logical_cpu_list) // world_size_across_dp
+                )
                 assert self.local_dp_rank is not None
-                start_idx = (local_rank + self.local_world_size * self.local_dp_rank) * sim_cpu_num_per_node
-                selected_logical_cpu_list = selected_logical_cpu_list[start_idx : (start_idx + sim_cpu_num_per_node)]
+                start_idx = (
+                    local_rank + self.local_world_size * self.local_dp_rank
+                ) * sim_cpu_num_per_node
+                selected_logical_cpu_list = selected_logical_cpu_list[
+                    start_idx : (start_idx + sim_cpu_num_per_node)
+                ]
 
             # Select logical CPUs on same physical cores via cpu_selector
             core_to_cpus: dict[int, list[LogicalCPUInfo]] = {}
@@ -225,7 +252,9 @@ class OMPProcessManager:
                 selected_logical_cpu_list.extend(cpu_selector(cpu_list))
 
             # sort selected cores based on core id
-            selected_logical_cpu_list = sorted(selected_logical_cpu_list, key=lambda x: x.id)
+            selected_logical_cpu_list = sorted(
+                selected_logical_cpu_list, key=lambda x: x.id
+            )
 
             cpu_lists_of_ranks.append(selected_logical_cpu_list)
             total_cpu_num += len(selected_logical_cpu_list)
@@ -233,13 +262,17 @@ class OMPProcessManager:
         # Reserve CPUs for other processes
         if total_cpu_num <= self.reserve_cpu_num:
             logger.warning(
-                "Selected CPU core number (%s) should be greater than reserved CPU core number (%s).",
+                "Selected CPU core number (%s) "
+                "should be greater than reserved CPU core "
+                "number (%s).",
                 total_cpu_num,
                 self.reserve_cpu_num,
             )
             return cpu_lists_of_ranks, []
 
-        reserve_num_per_rank = [self.reserve_cpu_num // self.local_world_size] * self.local_world_size
+        reserve_num_per_rank = [
+            self.reserve_cpu_num // self.local_world_size
+        ] * self.local_world_size
         # last rank first
         for i in range(
             self.local_world_size - 1,

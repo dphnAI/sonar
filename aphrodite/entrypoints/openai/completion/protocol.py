@@ -18,6 +18,8 @@ from aphrodite.entrypoints.openai.engine.protocol import (
     StreamOptions,
     StructuralTagResponseFormat,
     UsageInfo,
+    validate_structural_tag_response_format,
+    validate_structured_outputs_structural_tag,
 )
 from aphrodite.exceptions import APHRODITEValidationError
 from aphrodite.logger import init_logger
@@ -29,6 +31,7 @@ from aphrodite.sampling_params import (
     RequestOutputKind,
     SamplingParams,
     StructuredOutputsParams,
+    ThinkingTokenBudget,
 )
 from aphrodite.utils import random_uuid
 
@@ -65,7 +68,13 @@ class CompletionRequest(OpenAIBaseModel):
     # Ordered by official OpenAI API documentation
     # https://platform.openai.com/docs/api-reference/completions/create
     model: str | None = None
-    prompt: list[Annotated[int, Field(ge=0)]] | list[list[Annotated[int, Field(ge=0)]]] | str | list[str] | None = None
+    prompt: (
+        list[Annotated[int, Field(ge=0)]]
+        | list[list[Annotated[int, Field(ge=0)]]]
+        | str
+        | list[str]
+        | None
+    ) = None
     echo: bool | None = False
     frequency_penalty: float | None = 0.0
     logit_bias: dict[str, float] | None = None
@@ -86,15 +95,7 @@ class CompletionRequest(OpenAIBaseModel):
     use_beam_search: bool = False
     top_k: int | None = None
     min_p: float | None = None
-    top_a: float | None = 0.0
-    tfs: float | None = 1.0
-    eta_cutoff: float | None = 0.0
-    epsilon_cutoff: float | None = 0.0
-    typical_p: float | None = 1.0
-    smoothing_factor: float | None = 0.0
-    smoothing_curve: float | None = 1.0
     repetition_penalty: float | None = None
-    no_repeat_ngram_size: int | None = 0
     length_penalty: float = 1.0
     stop_token_ids: list[int] | None = []
     include_stop_str_in_output: bool = False
@@ -103,6 +104,25 @@ class CompletionRequest(OpenAIBaseModel):
     skip_special_tokens: bool = True
     spaces_between_special_tokens: bool = True
     truncate_prompt_tokens: Annotated[int, Field(ge=-1, le=_INT64_MAX)] | None = None
+    truncation_side: Literal["left", "right"] | None = Field(
+        default=None,
+        description=(
+            "Which side to truncate from when truncate_prompt_tokens is active. "
+            "'right' keeps the first N tokens. "
+            "'left' keeps the last N tokens."
+        ),
+    )
+    allowed_token_ids: list[int] | None = None
+    prompt_logprobs: int | None = None
+    # Aphrodite extra sampler params
+    top_a: float | None = 0.0
+    tfs: float | None = 1.0
+    eta_cutoff: float | None = 0.0
+    epsilon_cutoff: float | None = 0.0
+    typical_p: float | None = 1.0
+    smoothing_factor: float | None = 0.0
+    smoothing_curve: float | None = 1.0
+    no_repeat_ngram_size: int | None = 0
     temperature_last: bool | None = False
     xtc_threshold: float | None = 0.1
     xtc_probability: float | None = 0.0
@@ -122,15 +142,16 @@ class CompletionRequest(OpenAIBaseModel):
     mirostat_mode: int | None = 0
     mirostat_tau: float | None = 0.0
     mirostat_eta: float | None = 0.0
-    allowed_token_ids: list[int] | None = None
-    prompt_logprobs: int | None = None
     # --8<-- [end:completion-sampling-params]
 
     # --8<-- [start:completion-extra-params]
     prompt_embeds: bytes | list[bytes] | None = None
     add_special_tokens: bool = Field(
         default=True,
-        description=("If true (the default), special tokens (e.g. BOS) will be added to the prompt."),
+        description=(
+            "If true (the default), special tokens (e.g. BOS) will be added to "
+            "the prompt."
+        ),
     )
     response_format: AnyResponseFormat | None = Field(
         default=None,
@@ -181,6 +202,21 @@ class CompletionRequest(OpenAIBaseModel):
             "need to map generated text back to input tokens."
         ),
     )
+    return_token_offsets: bool | None = Field(
+        default=False,
+        description=(
+            "If true, return char-level (start, end) offsets for each "
+            "token relative to the tokenized source string in the "
+            "`token_offsets` field of the rendered response. Only "
+            "supported on the `/v1/completions/render` and "
+            "`/v1/chat/completions/render` endpoints; ignored on regular "
+            "generation endpoints. Honored only for Fast (Rust-backed) "
+            "tokenizers; otherwise `token_offsets` is null. For chat "
+            "requests, offsets are relative to the templated prompt "
+            "string (after applying the chat template). Multimodal "
+            "inputs and pre-tokenized inputs always yield null."
+        ),
+    )
 
     cache_salt: str | None = Field(
         default=None,
@@ -202,7 +238,10 @@ class CompletionRequest(OpenAIBaseModel):
     aphrodite_xargs: dict[str, str | int | float] | None = Field(
         default=None,
         validation_alias=AliasChoices("aphrodite_xargs", "aphrodite_xargs"),
-        description=("Additional request parameters with string or numeric values, used by custom extensions."),
+        description=(
+            "Additional request parameters with string or "
+            "numeric values, used by custom extensions."
+        ),
     )
 
     repetition_detection: RepetitionDetectionParams | None = Field(
@@ -215,6 +254,15 @@ class CompletionRequest(OpenAIBaseModel):
         "can detect such behavior and terminate early, saving time and tokens.",
     )
 
+    thinking_token_budget: ThinkingTokenBudget = Field(
+        default=None,
+        description=(
+            "Maximum number of tokens allowed for thinking operations "
+            "(reasoning models). Non-negative integer sets the limit; "
+            "-1 means unlimited (treated as unset)."
+        ),
+    )
+
     # --8<-- [end:completion-extra-params]
 
     def build_tok_params(self, model_config: ModelConfig) -> TokenizeParams:
@@ -222,10 +270,12 @@ class CompletionRequest(OpenAIBaseModel):
             max_total_tokens=model_config.max_model_len,
             max_output_tokens=self.max_tokens or 0,
             truncate_prompt_tokens=self.truncate_prompt_tokens,
+            truncation_side=self.truncation_side,
             add_special_tokens=self.add_special_tokens,
             needs_detokenization=bool(self.echo and not self.return_token_ids),
             max_total_tokens_param="max_model_len",
             max_output_tokens_param="max_tokens",
+            return_token_offsets=bool(self.return_token_offsets),
         )
 
     # Default sampling parameters for completion requests
@@ -273,13 +323,33 @@ class CompletionRequest(OpenAIBaseModel):
                 self._DEFAULT_SAMPLING_PARAMS["repetition_penalty"],
             )
         if (temperature := self.temperature) is None:
-            temperature = default_sampling_params.get("temperature", self._DEFAULT_SAMPLING_PARAMS["temperature"])
+            temperature = default_sampling_params.get(
+                "temperature", self._DEFAULT_SAMPLING_PARAMS["temperature"]
+            )
         if (top_p := self.top_p) is None:
-            top_p = default_sampling_params.get("top_p", self._DEFAULT_SAMPLING_PARAMS["top_p"])
+            top_p = default_sampling_params.get(
+                "top_p", self._DEFAULT_SAMPLING_PARAMS["top_p"]
+            )
         if (top_k := self.top_k) is None:
-            top_k = default_sampling_params.get("top_k", self._DEFAULT_SAMPLING_PARAMS["top_k"])
+            top_k = default_sampling_params.get(
+                "top_k", self._DEFAULT_SAMPLING_PARAMS["top_k"]
+            )
         if (min_p := self.min_p) is None:
-            min_p = default_sampling_params.get("min_p", self._DEFAULT_SAMPLING_PARAMS["min_p"])
+            min_p = default_sampling_params.get(
+                "min_p", self._DEFAULT_SAMPLING_PARAMS["min_p"]
+            )
+
+        # Merge server-default stop_token_ids (e.g., model-specific tokens
+        # like </call> for gpt-oss) with any request-specified ones
+        stop_token_ids = self.stop_token_ids
+        default_stop_ids = default_sampling_params.get("stop_token_ids")
+        if default_stop_ids:
+            if not stop_token_ids:
+                stop_token_ids = list(default_stop_ids)
+            else:
+                stop_token_ids = list(
+                    dict.fromkeys([*stop_token_ids, *default_stop_ids])
+                )
 
         prompt_logprobs = self.prompt_logprobs
         if prompt_logprobs is None and self.echo:
@@ -316,9 +386,7 @@ class CompletionRequest(OpenAIBaseModel):
                 self.structured_outputs = (
                     StructuredOutputsParams(**structured_outputs_kwargs)
                     if self.structured_outputs is None
-                    else replace(  # type: ignore[type-var]
-                        self.structured_outputs, **structured_outputs_kwargs
-                    )
+                    else replace(self.structured_outputs, **structured_outputs_kwargs)
                 )
 
         extra_args: dict[str, Any] = self.aphrodite_xargs if self.aphrodite_xargs else {}
@@ -330,25 +398,40 @@ class CompletionRequest(OpenAIBaseModel):
             presence_penalty=self.presence_penalty,
             frequency_penalty=self.frequency_penalty,
             repetition_penalty=repetition_penalty,
-            no_repeat_ngram_size=self.no_repeat_ngram_size,
             temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            min_p=min_p,
+            seed=self.seed,
+            stop=self.stop,
+            stop_token_ids=stop_token_ids,
+            logprobs=self.logprobs,
+            ignore_eos=self.ignore_eos,
+            max_tokens=max_tokens if not echo_without_generation else 1,
+            min_tokens=self.min_tokens,
+            prompt_logprobs=prompt_logprobs,
+            skip_special_tokens=self.skip_special_tokens,
+            spaces_between_special_tokens=self.spaces_between_special_tokens,
+            include_stop_str_in_output=self.include_stop_str_in_output,
+            output_kind=RequestOutputKind.DELTA
+            if self.stream
+            else RequestOutputKind.FINAL_ONLY,
+            structured_outputs=self.structured_outputs,
+            logit_bias=self.logit_bias,
+            allowed_token_ids=self.allowed_token_ids,
+            # Aphrodite extra sampler params
+            no_repeat_ngram_size=self.no_repeat_ngram_size,
             dynatemp_min=self.dynatemp_min,
             dynatemp_max=self.dynatemp_max,
             dynatemp_exponent=self.dynatemp_exponent,
             temperature_last=self.temperature_last,
-            top_p=top_p,
-            top_k=top_k,
             top_a=self.top_a,
-            min_p=min_p,
             tfs=self.tfs,
             eta_cutoff=self.eta_cutoff,
             epsilon_cutoff=self.epsilon_cutoff,
             typical_p=self.typical_p,
             smoothing_factor=self.smoothing_factor,
             smoothing_curve=self.smoothing_curve,
-            seed=self.seed,
-            stop=self.stop,
-            stop_token_ids=self.stop_token_ids,
             xtc_threshold=self.xtc_threshold,
             xtc_probability=self.xtc_probability,
             dry_multiplier=self.dry_multiplier,
@@ -364,21 +447,10 @@ class CompletionRequest(OpenAIBaseModel):
             mirostat_mode=self.mirostat_mode,
             mirostat_tau=self.mirostat_tau,
             mirostat_eta=self.mirostat_eta,
-            logprobs=self.logprobs,
-            ignore_eos=self.ignore_eos,
-            max_tokens=max_tokens if not echo_without_generation else 1,
-            min_tokens=self.min_tokens,
-            prompt_logprobs=prompt_logprobs,
-            skip_special_tokens=self.skip_special_tokens,
-            spaces_between_special_tokens=self.spaces_between_special_tokens,
-            include_stop_str_in_output=self.include_stop_str_in_output,
-            output_kind=RequestOutputKind.DELTA if self.stream else RequestOutputKind.FINAL_ONLY,
-            structured_outputs=self.structured_outputs,
-            logit_bias=self.logit_bias,
-            allowed_token_ids=self.allowed_token_ids,
             extra_args=extra_args or None,
             skip_clone=True,  # Created fresh per request, safe to skip clone
             repetition_detection=self.repetition_detection,
+            thinking_token_budget=self.thinking_token_budget,
         )
 
     @model_validator(mode="before")
@@ -388,13 +460,23 @@ class CompletionRequest(OpenAIBaseModel):
 
     @model_validator(mode="before")
     @classmethod
+    def normalize_null_max_tokens(cls, data):
+        if isinstance(data, dict) and data.get("max_tokens") is None:
+            data = data.copy()
+            data["max_tokens"] = cls.model_fields["max_tokens"].default
+        return data
+
+    @model_validator(mode="before")
+    @classmethod
     def validate_response_format(cls, data):
         response_format = data.get("response_format")
         if response_format is None:
             return data
 
         rf_type = (
-            response_format.get("type") if isinstance(response_format, dict) else getattr(response_format, "type", None)
+            response_format.get("type")
+            if isinstance(response_format, dict)
+            else getattr(response_format, "type", None)
         )
 
         if rf_type == "json_schema":
@@ -405,9 +487,13 @@ class CompletionRequest(OpenAIBaseModel):
             )
             if json_schema is None:
                 raise APHRODITEValidationError(
-                    "When response_format type is 'json_schema', the 'json_schema' field must be provided.",
+                    "When response_format type is 'json_schema', the "
+                    "'json_schema' field must be provided.",
                     parameter="response_format",
                 )
+
+        if rf_type == "structural_tag":
+            validate_structural_tag_response_format(response_format)
 
         return data
 
@@ -422,15 +508,21 @@ class CompletionRequest(OpenAIBaseModel):
         # as a StructuredOutputsParams dataclass instance.
         is_dataclass = isinstance(structured_outputs_kwargs, StructuredOutputsParams)
         count = sum(
-            (getattr(structured_outputs_kwargs, k, None) if is_dataclass else structured_outputs_kwargs.get(k))
+            (
+                getattr(structured_outputs_kwargs, k, None)
+                if is_dataclass
+                else structured_outputs_kwargs.get(k)
+            )
             is not None
             for k in ("json", "regex", "choice")
         )
         if count > 1:
             raise APHRODITEValidationError(
-                "You can only use one kind of constraints for structured outputs ('json', 'regex' or 'choice').",
+                "You can only use one kind of constraints for structured "
+                "outputs ('json', 'regex' or 'choice').",
                 parameter="structured_outputs",
             )
+        validate_structured_outputs_structural_tag(structured_outputs_kwargs)
         return data
 
     @model_validator(mode="before")
@@ -476,18 +568,28 @@ class CompletionRequest(OpenAIBaseModel):
         prompt_embeds = data.get("prompt_embeds")
 
         prompt_is_empty = prompt is None or (isinstance(prompt, str) and prompt == "")
-        embeds_is_empty = prompt_embeds is None or (isinstance(prompt_embeds, list) and len(prompt_embeds) == 0)
+        embeds_is_empty = prompt_embeds is None or (
+            isinstance(prompt_embeds, list) and len(prompt_embeds) == 0
+        )
 
         if prompt_is_empty and embeds_is_empty:
-            raise ValueError("Either prompt or prompt_embeds must be provided and non-empty.")
+            raise APHRODITEValidationError(
+                "Either prompt or prompt_embeds must be provided and non-empty.",
+                parameter="prompt",
+            )
 
         return data
 
     @model_validator(mode="before")
     @classmethod
     def check_cache_salt_support(cls, data):
-        if data.get("cache_salt") is not None and (not isinstance(data["cache_salt"], str) or not data["cache_salt"]):
-            raise ValueError("Parameter 'cache_salt' must be a non-empty string if provided.")
+        if data.get("cache_salt") is not None and (
+            not isinstance(data["cache_salt"], str) or not data["cache_salt"]
+        ):
+            raise APHRODITEValidationError(
+                "Parameter 'cache_salt' must be a non-empty string if provided.",
+                parameter="cache_salt",
+            )
         return data
 
 
@@ -514,6 +616,16 @@ class CompletionResponseChoice(OpenAIBaseModel):
     token_ids: list[int] | None = None  # For response
     prompt_logprobs: list[dict[int, Logprob] | None] | None = None
     prompt_token_ids: list[int] | None = None  # For prompt
+    # Per-token expert routing decisions, base64-encoded ``.npy`` bytes
+    # (numpy serialization). Shape after decode:
+    #   (num_tokens - 1, num_layers, num_experts_per_tok)  dtype uint8/uint16
+    # ``num_tokens - 1`` because the last sampled token has not been
+    # forwarded yet and therefore has no routing data.
+    # Decode:
+    #   np.load(io.BytesIO(base64.b64decode(s)))
+    # ``None`` if (a) the request was aborted before any forward pass,
+    # or (b) ``enable_return_routed_experts`` is off server-side.
+    routed_experts: str | None = None
 
 
 class CompletionResponse(OpenAIBaseModel):
@@ -527,7 +639,9 @@ class CompletionResponse(OpenAIBaseModel):
     usage: UsageInfo
 
     # Aphrodite-specific fields that are not in OpenAI spec
-    kv_transfer_params: dict[str, Any] | None = Field(default=None, description="KVTransfer parameters.")
+    kv_transfer_params: dict[str, Any] | None = Field(
+        default=None, description="KVTransfer parameters."
+    )
 
 
 class CompletionResponseStreamChoice(OpenAIBaseModel):

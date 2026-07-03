@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-import base64
+
 import os
 from tempfile import NamedTemporaryFile
 from typing import Any, cast
 
 import cv2
+import pybase64 as base64
 import pytest
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
@@ -130,7 +131,9 @@ def test_generate_mm_item_invalid_config(video_dataset: RandomMultiModalDataset)
 
 
 @pytest.mark.benchmark
-def test_sample_with_video_buckets(video_dataset: RandomMultiModalDataset, hf_tokenizer: PreTrainedTokenizerBase):
+def test_sample_with_video_buckets(
+    video_dataset: RandomMultiModalDataset, hf_tokenizer: PreTrainedTokenizerBase
+):
     """Test sampling with video bucket configurations."""
     # Configure bucket with video probability > 0
     bucket_config = {
@@ -183,7 +186,9 @@ def test_sample_with_video_buckets(video_dataset: RandomMultiModalDataset, hf_to
 
 
 @pytest.mark.benchmark
-def test_sample_video_only_buckets(video_dataset: RandomMultiModalDataset, hf_tokenizer: PreTrainedTokenizerBase):
+def test_sample_video_only_buckets(
+    video_dataset: RandomMultiModalDataset, hf_tokenizer: PreTrainedTokenizerBase
+):
     """Test sampling with only video buckets."""
     bucket_config = {
         (64, 64, 8): 1.0,  # Only videos
@@ -219,7 +224,9 @@ def test_sample_video_only_buckets(video_dataset: RandomMultiModalDataset, hf_to
 
 
 @pytest.mark.benchmark
-def test_sample_respects_video_limits(video_dataset: RandomMultiModalDataset, hf_tokenizer: PreTrainedTokenizerBase):
+def test_sample_respects_video_limits(
+    video_dataset: RandomMultiModalDataset, hf_tokenizer: PreTrainedTokenizerBase
+):
     """Test that sampling respects video limits per prompt."""
     bucket_config = {
         (64, 64, 8): 1.0,  # Only videos

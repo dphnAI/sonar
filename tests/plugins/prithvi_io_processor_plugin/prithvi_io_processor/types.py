@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 from typing import Any, Literal, TypedDict
 
 import albumentations
@@ -37,9 +38,6 @@ class ImagePrompt(BaseModel):
     """
 
 
-MultiModalPromptType = ImagePrompt
-
-
 class ImageRequestOutput(BaseModel):
     """
     The output data of an image request to Aphrodite.
@@ -53,4 +51,3 @@ class ImageRequestOutput(BaseModel):
     type: Literal["path", "b64_json"]
     format: str
     data: str
-    request_id: str | None = None

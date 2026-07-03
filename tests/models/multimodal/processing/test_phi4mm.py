@@ -32,7 +32,7 @@ def test_processor_override(
 ):
     """Ensure Phi4MMMultiModalProcessor handles dynamic_hd properly."""
     # Avoid initializing CUDA early
-    from aphrodite.modeling.models.phi4mm import _IMAGE_PLACEHOLDER_TOKEN_ID
+    from aphrodite.model_executor.models.phi4mm import _IMAGE_PLACEHOLDER_TOKEN_ID
 
     ctx = build_model_context(
         model_id,
@@ -51,8 +51,14 @@ def test_processor_override(
     dummy_image = image_assets[0].pil_image.resize(dummy_image_size)
     mm_data = {"image": [dummy_image] * num_imgs}
 
-    processed_inputs = processor.apply(prompt, mm_data, hf_processor_mm_kwargs)
+    processed_inputs = processor(
+        prompt,
+        mm_items=processor.info.parse_mm_data(mm_data),
+        hf_processor_mm_kwargs=hf_processor_mm_kwargs,
+    )
 
     # Ensure we have the right number of placeholders per num_crops size
-    img_tok_count = processed_inputs["prompt_token_ids"].count(_IMAGE_PLACEHOLDER_TOKEN_ID)
+    img_tok_count = processed_inputs["prompt_token_ids"].count(
+        _IMAGE_PLACEHOLDER_TOKEN_ID
+    )
     assert img_tok_count == expected_toks_per_img * num_imgs

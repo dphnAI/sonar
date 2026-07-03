@@ -24,7 +24,7 @@ class AsyncOutput(AsyncModelRunnerOutput):
         self.model_runner_output = model_runner_output
         self.sampler_output = sampler_output
         self.num_sampled_tokens = num_sampled_tokens
-        self.copy_event = torch.cuda.Event()
+        self.copy_event = torch.Event()
 
         with stream(copy_stream, main_stream):
             copy_stream.wait_stream(main_stream)
@@ -32,7 +32,9 @@ class AsyncOutput(AsyncModelRunnerOutput):
             self.sampled_token_ids = async_copy_to_np(sampler_output.sampled_token_ids)
             self.logprobs_tensors: LogprobsTensors | None = None
             if sampler_output.logprobs_tensors is not None:
-                self.logprobs_tensors = sampler_output.logprobs_tensors.to_cpu_nonblocking()
+                self.logprobs_tensors = (
+                    sampler_output.logprobs_tensors.to_cpu_nonblocking()
+                )
             self.num_nans: np.ndarray | None = None
             if sampler_output.num_nans is not None:
                 self.num_nans = async_copy_to_np(sampler_output.num_nans)
@@ -79,7 +81,7 @@ class AsyncPoolingOutput(AsyncModelRunnerOutput):
         self.model_runner_output = model_runner_output
         self.pooler_output = pooler_output
         self.is_valid = is_valid
-        self.copy_event = torch.cuda.Event()
+        self.copy_event = torch.Event()
 
         with stream(copy_stream, main_stream):
             copy_stream.wait_stream(main_stream)

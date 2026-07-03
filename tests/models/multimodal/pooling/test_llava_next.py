@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 import torch.nn.functional as F
 from transformers import AutoModelForImageTextToText
 
 from aphrodite.platforms import current_platform
 
-from ....conftest import IMAGE_ASSETS, AphroditeRunner, HfRunner, PromptImageInput
+from ....conftest import IMAGE_ASSETS, HfRunner, PromptImageInput, AphroditeRunner
 from ....utils import large_gpu_test
 from ...utils import check_embeddings_close
 
@@ -26,9 +27,7 @@ pytestmark = pytest.mark.skipif(
     reason="Llava Next model uses op that is only supported in CUDA",
 )
 
-llama3_template = (
-    "<|start_header_id|>user<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n \n"  # noqa: E501
-)
+llama3_template = "<|start_header_id|>user<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n \n"  # noqa: E501
 
 HF_TEXT_PROMPTS = [
     # T -> X
@@ -42,9 +41,13 @@ HF_TEXT_PROMPTS = [
 HF_IMAGE_PROMPTS = IMAGE_ASSETS.prompts(
     {
         # I -> X
-        "stop_sign": llama3_template.format("<image>\nSummary above image in one word: "),
+        "stop_sign": llama3_template.format(
+            "<image>\nSummary above image in one word: "
+        ),
         # I -> X
-        "cherry_blossom": llama3_template.format("<image>\nSummary above image in one word: "),
+        "cherry_blossom": llama3_template.format(
+            "<image>\nSummary above image in one word: "
+        ),
     }
 )
 
@@ -69,13 +72,17 @@ def _run_test(
     ) as aphrodite_model:
         aphrodite_outputs = aphrodite_model.embed(input_texts, images=input_images)
 
-    with hf_runner(model, dtype=dtype, auto_cls=AutoModelForImageTextToText) as hf_model:
+    with hf_runner(
+        model, dtype=dtype, auto_cls=AutoModelForImageTextToText
+    ) as hf_model:
         # Patch the issue where generation_config.json is missing
         hf_model.processor.patch_size = hf_model.model.config.vision_config.patch_size
 
         # Patch the issue where image_token_id
         # exceeds the maximum allowed vocab size
-        hf_model.model.resize_token_embeddings(hf_model.model.language_model.vocab_size + 1)
+        hf_model.model.resize_token_embeddings(
+            hf_model.model.model.language_model.vocab_size + 1
+        )
 
         all_inputs = hf_model.get_inputs(input_texts, images=input_images)
 
@@ -136,7 +143,9 @@ def test_models_image(
     model: str,
     dtype: str,
 ) -> None:
-    input_texts_images = [(text, asset.pil_image) for text, asset in zip(HF_IMAGE_PROMPTS, image_assets)]
+    input_texts_images = [
+        (text, asset.pil_image) for text, asset in zip(HF_IMAGE_PROMPTS, image_assets)
+    ]
     input_texts = [text for text, _ in input_texts_images]
     input_images = [image for _, image in input_texts_images]
 

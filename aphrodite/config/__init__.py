@@ -1,18 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-# NOTE: Keep this import block near the end. `aphrodite.config.aphrodite`
-# depends on other config modules, including `speculative`, which imports
-# `LoadConfig` from the package namespace. Reordering this block upward can
-# reintroduce a package-init circular import.
-from aphrodite.config.aphrodite import (  # noqa: E402
-    AphroditeConfig,
-    get_cached_compilation_config,
-    get_current_aphrodite_config,
-    get_current_aphrodite_config_or_none,
-    get_layers_from_aphrodite_config,
-    set_current_aphrodite_config,
-)
 from aphrodite.config.attention import AttentionConfig
 from aphrodite.config.cache import CacheConfig
 from aphrodite.config.compilation import (
@@ -22,6 +10,7 @@ from aphrodite.config.compilation import (
     PassConfig,
 )
 from aphrodite.config.device import DeviceConfig
+from aphrodite.config.diffusion import DiffusionConfig
 from aphrodite.config.ec_transfer import ECTransferConfig
 from aphrodite.config.kernel import KernelConfig
 from aphrodite.config.kv_events import KVEventsConfig
@@ -60,6 +49,14 @@ from aphrodite.config.utils import (
     replace,
     update_config,
 )
+from aphrodite.config.aphrodite import (
+    AphroditeConfig,
+    get_cached_compilation_config,
+    get_current_aphrodite_config,
+    get_current_aphrodite_config_or_none,
+    get_layers_from_aphrodite_config,
+    set_current_aphrodite_config,
+)
 from aphrodite.config.weight_transfer import WeightTransferConfig
 
 # __all__ should only contain classes and functions.
@@ -76,6 +73,8 @@ __all__ = [
     "PassConfig",
     # From aphrodite.config.device
     "DeviceConfig",
+    # From aphrodite.config.diffusion
+    "DiffusionConfig",
     # From aphrodite.config.ec_transfer
     "ECTransferConfig",
     # From aphrodite.config.kernel

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 # flake8: noqa
 """Tests fp8 models against ground truth generation
 Note: these tests will only pass on L4 GPU.
@@ -7,11 +8,9 @@ Note: these tests will only pass on L4 GPU.
 
 import pytest
 
-from aphrodite.attention.utils.fa_utils import flash_attn_supports_fp8
-from aphrodite.platforms import current_platform
-from aphrodite.utils import STR_BACKEND_ENV_VAR
 from tests.quantization.utils import is_quant_method_supported
-
+from aphrodite.platforms import current_platform
+from aphrodite.v1.attention.backends.fa_utils import get_flash_attn_version
 from ..utils import check_logprobs_close
 
 
@@ -69,12 +68,19 @@ def test_models(
     if kv_cache_dtype == "fp8_e5m2" and current_platform.is_rocm():
         pytest.skip(f"{kv_cache_dtype} is currently not supported on ROCm/HIP.")
 
-    if not flash_attn_supports_fp8():
-        pytest.skip(f"{kv_cache_dtype} is not supported on this GPU type with {backend} attention.")
+    if not (
+        current_platform.is_xpu()
+        or (
+            get_flash_attn_version() == 3
+            and current_platform.is_device_capability_family(90)
+        )
+    ):
+        pytest.skip(
+            f"{kv_cache_dtype} is not supported on this GPU type with {backend} attention."
+        )
 
     with monkeypatch.context() as m:
         m.setenv("TOKENIZERS_PARALLELISM", "true")
-        m.setenv(STR_BACKEND_ENV_VAR, backend)
 
         MAX_MODEL_LEN = 1024
         NUM_LOG_PROBS = 8
@@ -85,8 +91,11 @@ def test_models(
             tensor_parallel_size=tensor_parallel_size,
             enforce_eager=enforce_eager,
             kv_cache_dtype="auto",
+            attention_config={"backend": backend},
         ) as aphrodite_model:
-            baseline_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, NUM_LOG_PROBS)
+            baseline_outputs = aphrodite_model.generate_greedy_logprobs(
+                example_prompts, max_tokens, NUM_LOG_PROBS
+            )
 
         with aphrodite_runner(
             test_model,
@@ -94,8 +103,11 @@ def test_models(
             tensor_parallel_size=tensor_parallel_size,
             enforce_eager=enforce_eager,
             kv_cache_dtype=kv_cache_dtype,
+            attention_config={"backend": backend},
         ) as aphrodite_model:
-            test_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, NUM_LOG_PROBS)
+            test_outputs = aphrodite_model.generate_greedy_logprobs(
+                example_prompts, max_tokens, NUM_LOG_PROBS
+            )
 
         check_logprobs_close(
             outputs_0_lst=baseline_outputs,
@@ -145,7 +157,9 @@ def test_cpu_models(
             dtype="bfloat16",
             kv_cache_dtype="auto",
         ) as aphrodite_model:
-            baseline_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, NUM_LOG_PROBS)
+            baseline_outputs = aphrodite_model.generate_greedy_logprobs(
+                example_prompts, max_tokens, NUM_LOG_PROBS
+            )
 
         with aphrodite_runner(
             test_model,
@@ -153,7 +167,9 @@ def test_cpu_models(
             dtype="bfloat16",
             kv_cache_dtype=kv_cache_dtype,
         ) as aphrodite_model:
-            test_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, NUM_LOG_PROBS)
+            test_outputs = aphrodite_model.generate_greedy_logprobs(
+                example_prompts, max_tokens, NUM_LOG_PROBS
+            )
 
         check_logprobs_close(
             outputs_0_lst=baseline_outputs,

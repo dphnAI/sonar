@@ -23,8 +23,8 @@ from aphrodite.model_executor.layers.linear import (
     RowParallelLinear,
 )
 from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 
+from .utils import AutoWeightsLoader, WeightsMapper, maybe_prefix
 from .vision import (
     is_vit_use_data_parallel,
     resolve_visual_encoder_outputs,
@@ -61,7 +61,8 @@ class Siglip2VisionEmbeddings(nn.Module):
             (1, total_tokens, embed_dim) packed embeddings.
         """
         assert spatial_shapes.device.type == "cpu", (
-            "Expected `spatial_shapes` on CPU to avoid device-to-host sync in variable-length packing."
+            "Expected `spatial_shapes` on CPU to avoid device-to-host sync in "
+            "variable-length packing."
         )
 
         if pixel_values_packed.dim() == 3:
@@ -207,12 +208,20 @@ class Siglip2Attention(nn.Module):
         cu_seqlens: torch.Tensor,
         max_seqlen: int | torch.Tensor,
     ) -> torch.Tensor:
-        qkv, _ = self.qkv_proj(hidden_states)  # batch_size, q_len, 3 * num_heads_per_partition * head_dim
+        qkv, _ = self.qkv_proj(
+            hidden_states
+        )  # batch_size, q_len, 3 * num_heads_per_partition * head_dim
         bsz, q_len, _ = qkv.shape
         query_states, key_states, value_states = qkv.chunk(3, dim=-1)
-        query_states = query_states.view(bsz, q_len, self.num_heads_per_partition, self.head_dim)
-        key_states = key_states.view(bsz, q_len, self.num_heads_per_partition, self.head_dim)
-        value_states = value_states.view(bsz, q_len, self.num_heads_per_partition, self.head_dim)
+        query_states = query_states.view(
+            bsz, q_len, self.num_heads_per_partition, self.head_dim
+        )
+        key_states = key_states.view(
+            bsz, q_len, self.num_heads_per_partition, self.head_dim
+        )
+        value_states = value_states.view(
+            bsz, q_len, self.num_heads_per_partition, self.head_dim
+        )
 
         # Use unified MultiHeadAttention implementation
         out = self.attn(
@@ -448,6 +457,14 @@ class Siglip2VisionTransformer(nn.Module):
 
 
 class Siglip2Model(torch.nn.Module):
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_stacked={
+            ".q_proj": (".qkv_proj", "q"),
+            ".k_proj": (".qkv_proj", "k"),
+            ".v_proj": (".qkv_proj", "v"),
+        }
+    )
+
     def __init__(
         self,
         config: Siglip2VisionConfig,
@@ -463,7 +480,7 @@ class Siglip2Model(torch.nn.Module):
             quant_config=quant_config,
             num_hidden_layers_override=num_hidden_layers_override,
             require_post_norm=require_post_norm,
-            prefix=f"{prefix}.vision_model",
+            prefix=maybe_prefix(prefix, "vision_model"),
         )
 
     def forward(
@@ -491,39 +508,21 @@ class Siglip2Model(torch.nn.Module):
         )
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            # (param_name, shard_name, shard_id)
-            ("qkv_proj", "q_proj", "q"),
-            ("qkv_proj", "k_proj", "k"),
-            ("qkv_proj", "v_proj", "v"),
-        ]
-        params_dict = dict(self.named_parameters())
-        loaded_params: set[str] = set()
+        skip_prefixes = []
+        if self.vision_model.post_layernorm is None:
+            skip_prefixes.append("vision_model.post_layernorm.")
+        loader = AutoWeightsLoader(self, skip_prefixes=skip_prefixes)
+
+        # Drop layers omitted by num_hidden_layers_override.
         layer_count = len(self.vision_model.encoder.layers)
 
-        for name, loaded_weight in weights:
-            # post_layernorm is optional in Siglip2Model
-            if name.startswith("vision_model.post_layernorm") and self.vision_model.post_layernorm is None:
-                continue
-
-            # omit layers when num_hidden_layers_override is set
-            if name.startswith("vision_model.encoder.layers"):
-                layer_idx = int(name.split(".")[3])
-                if layer_idx >= layer_count:
+        def _filter(ws):
+            for n, w in ws:
+                if (
+                    n.startswith("vision_model.encoder.layers.")
+                    and int(n.split(".")[3]) >= layer_count
+                ):
                     continue
+                yield n, w
 
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                if weight_name not in name:
-                    continue
-                name = name.replace(weight_name, param_name)
-
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
+        return loader.load_weights(_filter(weights), mapper=self.hf_to_aphrodite_mapper)

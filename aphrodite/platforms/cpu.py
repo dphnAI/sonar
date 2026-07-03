@@ -14,6 +14,7 @@ from aphrodite.logger import init_logger
 from aphrodite.utils.cpu_resource_utils import (
     DEVICE_CONTROL_ENV_VAR,
     get_memory_node_info,
+    get_visible_memory_node,
 )
 from aphrodite.utils.mem_constants import GiB_bytes
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
@@ -54,9 +55,16 @@ class CpuPlatform(Platform):
     @property
     def supported_dtypes(self) -> list[torch.dtype]:
         if self.get_cpu_architecture() == CpuArchEnum.POWERPC:
-            return [torch.bfloat16, torch.float32]
-        elif self.get_cpu_architecture() == CpuArchEnum.ARM and sys.platform.startswith("darwin"):
-            if subprocess.check_output(["sysctl -n hw.optional.arm.FEAT_BF16"], shell=True).strip() == b"1":
+            return [torch.bfloat16, torch.float32, torch.float16]
+        elif self.get_cpu_architecture() == CpuArchEnum.ARM and sys.platform.startswith(
+            "darwin"
+        ):
+            if (
+                subprocess.check_output(
+                    ["sysctl -n hw.optional.arm.FEAT_BF16"], shell=True
+                ).strip()
+                == b"1"
+            ):
                 return [torch.bfloat16, torch.float16, torch.float32]
             return [torch.float16, torch.float32]
         elif self.get_cpu_architecture() == CpuArchEnum.RISCV:
@@ -118,7 +126,8 @@ class CpuPlatform(Platform):
 
         if cache_config.block_size % 32 != 0:
             logger.warning(
-                "CPU backend prefers block_size is multiples of 32, otherwise the performance is not optimized."
+                "CPU backend prefers block_size is multiples of 32, "
+                "otherwise the performance is not optimized."
             )
 
         # Lagecy setting
@@ -132,15 +141,20 @@ class CpuPlatform(Platform):
         scheduler_config.async_scheduling = False
 
         parallel_config = aphrodite_config.parallel_config
-        # OMP requires the MP executor to function correctly, UniProc is not
-        # supported as it is not possible to set the OMP environment correctly
-        if parallel_config.distributed_executor_backend == "uni":
+        if (
+            os.environ.get("APHRODITE_ENABLE_V1_MULTIPROCESSING", "1") == "1"
+            and parallel_config.distributed_executor_backend == "uni"
+        ):
+            # OMP requires the MP executor to function correctly, UniProc
+            # is not supported as it is not possible to set the OMP
+            # environment correctly
             parallel_config.distributed_executor_backend = "mp"
+
         if parallel_config.worker_cls == "auto":
             parallel_config.worker_cls = "aphrodite.v1.worker.cpu_worker.CPUWorker"
         # Disable DBO
         if parallel_config.enable_dbo:
-            logger.warning("Dual-Batch Overlap is not supported on CPU, disabled.")
+            logger.warning_once("Dual-Batch Overlap is not supported on CPU, disabled.")
             parallel_config.enable_dbo = False
 
         # Note: workaround for v1 gpu_model_runner
@@ -184,6 +198,18 @@ class CpuPlatform(Platform):
             and "-gelu" not in compilation_config.custom_ops
         ):
             compilation_config.custom_ops.append("+gelu")
+        if (
+            cls.get_cpu_architecture() == CpuArchEnum.ARM
+            and "+gelu_tanh" not in compilation_config.custom_ops
+            and "-gelu_tanh" not in compilation_config.custom_ops
+        ):
+            compilation_config.custom_ops.append("+gelu_tanh")
+        if (
+            cls.get_cpu_architecture() == CpuArchEnum.ARM
+            and "+gelu_and_mul" not in compilation_config.custom_ops
+            and "-gelu_and_mul" not in compilation_config.custom_ops
+        ):
+            compilation_config.custom_ops.append("+gelu_and_mul")
 
         aphrodite_config.profiler_config.torch_profiler_dump_cuda_time_total = False
 
@@ -208,13 +234,22 @@ class CpuPlatform(Platform):
         # Avoid inductor generates num_thread() and breaks the thread binding
         os.environ["TORCHINDUCTOR_CPP_DYNAMIC_THREADS"] = "1"
 
+        # For efficient conv state memory access
+        if torch.cpu._is_amx_tile_supported():
+            os.environ["APHRODITE_SSM_CONV_STATE_LAYOUT"] = "SD"
+
         ld_preload_str = os.getenv("LD_PRELOAD", "")
         cpu_architecture = Platform.get_cpu_architecture()
 
         if (
             platform.system() == "Linux"
-            and cpu_architecture in (CpuArchEnum.ARM, CpuArchEnum.POWERPC, CpuArchEnum.X86)
-            and not ("libomp" in ld_preload_str or "libgomp" in ld_preload_str or "libiomp" in ld_preload_str)
+            and cpu_architecture
+            in (CpuArchEnum.ARM, CpuArchEnum.POWERPC, CpuArchEnum.X86)
+            and not (
+                "libomp" in ld_preload_str
+                or "libgomp" in ld_preload_str
+                or "libiomp" in ld_preload_str
+            )
         ):
             # We need to LD_PRELOAD PyTorch's libgomp, otherwise only
             # one core will be properly utilized when we thread-bind
@@ -233,7 +268,9 @@ class CpuPlatform(Platform):
             ]
             pytorch_libgomp_so_candidates = []
             for torch_libs in torch_libs_paths:
-                pytorch_libgomp_so_candidates.extend(glob.glob(os.path.join(torch_libs, "libgomp*.so*")))
+                pytorch_libgomp_so_candidates.extend(
+                    glob.glob(os.path.join(torch_libs, "libgomp*.so*"))
+                )
             if pytorch_libgomp_so_candidates:
                 pytorch_libgomp_so = pytorch_libgomp_so_candidates[0]
                 if ld_preload_str:
@@ -251,7 +288,9 @@ class CpuPlatform(Platform):
             aphrodite_pkg = os.path.dirname(os.path.dirname(__file__))
             tcmalloc_so = None
             for pattern in ("libtcmalloc_minimal*.so*", "libtcmalloc.so*"):
-                tcmalloc_so_candidates = glob.glob(os.path.join(aphrodite_pkg, "libs", pattern))
+                tcmalloc_so_candidates = glob.glob(
+                    os.path.join(aphrodite_pkg, "libs", pattern)
+                )
                 if tcmalloc_so_candidates:
                     tcmalloc_so = tcmalloc_so_candidates[0]
                     break
@@ -263,11 +302,14 @@ class CpuPlatform(Platform):
                     ld_preload_str = tcmalloc_so
                 os.environ["LD_PRELOAD"] = ld_preload_str
 
-        os.environ["LOCAL_WORLD_SIZE"] = str(aphrodite_config.parallel_config.tensor_parallel_size)
+        os.environ["LOCAL_WORLD_SIZE"] = str(
+            aphrodite_config.parallel_config.tensor_parallel_size
+        )
 
         if model_config is not None and model_config.use_mla:
-            logger.info(
-                "MLA is enabled on a non-GPU platform; forcing chunked prefill and prefix caching to be disabled."
+            logger.info_once(
+                "MLA is enabled on a non-GPU platform; forcing chunked "
+                "prefill and prefix caching to be disabled."
             )
             aphrodite_config.scheduler_config.enable_chunked_prefill = False
             aphrodite_config.scheduler_config.max_num_batched_tokens = max(
@@ -277,9 +319,16 @@ class CpuPlatform(Platform):
 
     @classmethod
     def update_block_size_for_backend(cls, aphrodite_config: "AphroditeConfig") -> None:
-        # TODO: CPU still sets block_size in check_and_update_config.
-        # Move that logic here so block_size is chosen by the backend.
-        pass
+        model_config = aphrodite_config.model_config
+        if model_config is None or not model_config.is_hybrid:
+            return
+
+        # reconcile attention and mamba page sizes
+        backend_cls = cls._find_non_ssm_backend(aphrodite_config)
+        if backend_cls is None:
+            return
+
+        cls._align_hybrid_block_size(aphrodite_config, backend_cls)
 
     @classmethod
     def discover_numa_topology(cls) -> list[list[int]]:
@@ -363,6 +412,10 @@ class CpuPlatform(Platform):
         return True
 
     @classmethod
+    def num_compute_units(cls, device_id: int = 0) -> int:
+        return torch.get_num_threads()
+
+    @classmethod
     def import_kernels(cls) -> None:
         if Platform.get_cpu_architecture() in (CpuArchEnum.X86,):
             # Note: The lib name is _C_AVX2/AVX512, but the module name is _C.
@@ -430,9 +483,14 @@ class CpuPlatform(Platform):
         isa = _get_attn_isa(dtype, block_size, head_size)
         block_offsets = torch.arange(block_size, device="cpu", dtype=torch.long)
         num_blocks = len(block_ids)
-        slot_mapping = (block_offsets.reshape(1, block_size) + indices.reshape(num_blocks, 1) * block_size).flatten()
+        slot_mapping = (
+            block_offsets.reshape(1, block_size)
+            + indices.reshape(num_blocks, 1) * block_size
+        ).flatten()
         if key_cache.dtype == torch.uint8:
-            raise NotImplementedError("FP8 KV cache is not yet supported with KV transfer on CPU")
+            raise NotImplementedError(
+                "FP8 KV cache is not yet supported with KV transfer on CPU"
+            )
         cpu_attn_reshape_and_cache(
             key,
             value,
@@ -441,3 +499,15 @@ class CpuPlatform(Platform):
             slot_mapping,
             isa,
         )
+
+    @classmethod
+    def get_current_memory_usage(
+        cls, device: torch.types.Device | None = None
+    ) -> float:
+        allowed_mem_node_list = get_visible_memory_node()
+        mem_status_list = [get_memory_node_info(i) for i in allowed_mem_node_list]
+        memory_usage = 0
+        for s in mem_status_list:
+            memory_usage += s.total_memory - s.available_memory
+
+        return memory_usage

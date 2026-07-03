@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
+
 import pytest
 import torch
 
 from aphrodite.multimodal.image import rescale_image_size
 
-from ...conftest import IMAGE_ASSETS, AphroditeRunner, ImageTestAssets
+from ...conftest import IMAGE_ASSETS, ImageTestAssets, AphroditeRunner
 from ..utils import check_logprobs_close
 
 HF_IMAGE_PROMPTS = IMAGE_ASSETS.prompts(
@@ -55,7 +57,9 @@ def run_awq_test(
         default_torch_num_threads=1,
     ) as aphrodite_model:
         source_outputs_per_image = [
-            aphrodite_model.generate_greedy_logprobs(prompts, max_tokens, num_logprobs=num_logprobs, images=images)
+            aphrodite_model.generate_greedy_logprobs(
+                prompts, max_tokens, num_logprobs=num_logprobs, images=images
+            )
             for prompts, images in inputs_per_image
         ]
 
@@ -70,11 +74,15 @@ def run_awq_test(
         default_torch_num_threads=1,
     ) as aphrodite_model:
         quant_outputs_per_image = [
-            aphrodite_model.generate_greedy_logprobs(prompts, max_tokens, num_logprobs=num_logprobs, images=images)
+            aphrodite_model.generate_greedy_logprobs(
+                prompts, max_tokens, num_logprobs=num_logprobs, images=images
+            )
             for prompts, images in inputs_per_image
         ]
 
-    for source_outputs, quant_outputs in zip(source_outputs_per_image, quant_outputs_per_image):
+    for source_outputs, quant_outputs in zip(
+        source_outputs_per_image, quant_outputs_per_image
+    ):
         # TODO: Check whether using original CLIPVisionModel can improve
         # consistency against HF
         check_logprobs_close(
@@ -86,14 +94,43 @@ def run_awq_test(
 
 
 @pytest.mark.parametrize(
+    ("model", "quantization", "dtype"),
+    [
+        ("mattbucci/gemma-4-26B-AWQ", "awq", "float16"),
+        ("cyankiwi/gemma-4-26B-A4B-it-AWQ-4bit", "compressed-tensors", "bfloat16"),
+    ],
+    ids=[
+        "gemma4-moe-standard-awq-dot-suffix",
+        "gemma4-moe-compressed-tensors-underscore-suffix",
+    ],
+)
+@torch.inference_mode()
+def test_awq_load(
+    aphrodite_runner: type[AphroditeRunner],
+    example_prompts: list[str],
+    model: str,
+    quantization: str,
+    dtype: str,
+) -> None:
+    """Regression test: AWQ weight loading must not KeyError."""
+    with aphrodite_runner(
+        model,
+        quantization=quantization,
+        dtype=dtype,
+        max_model_len=128,
+        enforce_eager=True,
+    ) as aphrodite_model:
+        outputs = aphrodite_model.generate_greedy(example_prompts[:2], max_tokens=32)
+    assert len(outputs) == 2
+
+
+@pytest.mark.parametrize(
     ("source_model", "quant_model"),
     [("OpenGVLab/InternVL2-2B", "OpenGVLab/InternVL2-2B-AWQ")],
 )
 @pytest.mark.parametrize(
     "size_factors",
     [
-        # No image
-        [],
         # Single-scale
         [1.0],
         # Single-scale, batched

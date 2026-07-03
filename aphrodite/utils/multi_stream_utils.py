@@ -20,8 +20,8 @@ class EventType(Enum):
 def maybe_execute_in_parallel(
     fn0: Callable[[], Any],
     fn1: Callable[[], Any],
-    event0: torch.cuda.Event,
-    event1: torch.cuda.Event,
+    event0: torch.Event,
+    event1: torch.Event,
     aux_stream: torch.cuda.Stream | None = None,
 ) -> tuple[Any, Any]:
     """Run two functions potentially in parallel on separate CUDA streams.
@@ -61,21 +61,24 @@ def maybe_execute_in_parallel(
 def execute_in_parallel(
     default_fn: Callable[[], Any],
     aux_fns: list[Callable[[], Any] | None],
-    start_event: torch.cuda.Event,
-    done_events: list[torch.cuda.Event],
+    start_event: torch.Event,
+    done_events: list[torch.Event],
     aux_streams: list[torch.cuda.Stream] | None = None,
     enable: bool = False,
 ) -> tuple[Any, list[Any]]:
     """Run default_fn on the current stream and aux_fns concurrently on
     aux_streams.
+
     Generalizes maybe_execute_in_parallel to N aux callables. Slots where
     aux_fns[i] is None are skipped (no stream switch, no event record); their
     corresponding entry in the returned aux_results list is None.
+
     start_event fans out from the current stream to every launched aux stream;
     done_events[i] is recorded after aux_fns[i] so the current stream joins
     before returning. Falls back to sequential execution on the current stream
     when aux_streams is None or enable is False; in that case default_fn runs
     first, then aux_fns in order.
+
     Args:
         default_fn: Callable for the default (current) stream.
         aux_fns: Per-aux callables; entries may be None to skip.
@@ -89,6 +92,7 @@ def execute_in_parallel(
             so callers that pass aux_streams must also pass enable=True
             (typically gated by an env var) to actually overlap. When False,
             execution falls back to sequential on the current stream.
+
     Returns:
         Tuple of (default_result, aux_results) where aux_results[i] is the
         result of aux_fns[i] (or None when skipped).
@@ -104,7 +108,7 @@ def execute_in_parallel(
     )
 
     aux_results = [None] * len(aux_fns)
-    pending: list[torch.cuda.Event] = []
+    pending: list[torch.Event] = []
 
     start_event.record()
     for i, fn in enumerate(aux_fns):

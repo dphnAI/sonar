@@ -141,7 +141,7 @@ if(FLASH_MLA_ARCHS)
         SRCS "${FlashMLA_Extension_SOURCES}"
         CUDA_ARCHS "${FLASH_MLA_ARCHS}")
 
-    define_gpu_extension_target(
+    define_extension_target(
         _flashmla_C
         DESTINATION aphrodite
         LANGUAGE ${APHRODITE_GPU_LANG}
@@ -161,7 +161,7 @@ if(FLASH_MLA_ARCHS)
         $<$<COMPILE_LANGUAGE:CXX>:-std=c++20>
         $<$<COMPILE_LANGUAGE:CUDA>:-std=c++20>)
 
-    define_gpu_extension_target(
+    define_extension_target(
         _flashmla_extension_C
         DESTINATION aphrodite
         LANGUAGE ${APHRODITE_GPU_LANG}
@@ -183,3 +183,4 @@ else()
     add_custom_target(_flashmla_C)
     add_custom_target(_flashmla_extension_C)
 endif()
+

@@ -34,7 +34,7 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
+from aphrodite.config import CacheConfig, AphroditeConfig, get_current_aphrodite_config
 from aphrodite.distributed import (
     get_ep_group,
     get_pp_group,
@@ -43,7 +43,12 @@ from aphrodite.distributed import (
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import FusedMoE, GateLinear
+from aphrodite.model_executor.layers.fused_moe import (
+    FusedMoE,
+    GateLinear,
+    fused_moe_make_expert_params_mapping,
+)
+from aphrodite.model_executor.layers.hpc import HpcRopeNorm, QkNormPolicy
 from aphrodite.model_executor.layers.layernorm import RMSNorm
 from aphrodite.model_executor.layers.linear import (
     MergedColumnParallelLinear,
@@ -64,7 +69,7 @@ from aphrodite.model_executor.model_loader.weight_utils import (
 from aphrodite.sequence import IntermediateTensors
 from aphrodite.transformers_utils.configs.hy_v3 import HYV3Config
 
-from .interfaces import SupportsLoRA, SupportsPP
+from .interfaces import MixtureOfExperts, SupportsLoRA, SupportsPP
 from .utils import (
     AutoWeightsLoader,
     PPMissingLayer,
@@ -105,7 +110,9 @@ class HYV3FeedForward(nn.Module):
             prefix=f"{prefix}.down_proj",
         )
         if hidden_act != "silu":
-            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu is supported for now.")
+            raise ValueError(
+                f"Unsupported activation: {hidden_act}. Only silu is supported for now."
+            )
         self.act_fn = SiluAndMul()
 
     def forward(self, x):
@@ -131,7 +138,8 @@ class HYV3MoEFused(nn.Module):
         self.n_routed_experts = config.num_experts
         if self.tp_size > config.num_experts:
             raise ValueError(
-                f"Tensor parallel size {self.tp_size} is greater than the number of experts {config.num_experts}."
+                f"Tensor parallel size {self.tp_size} is greater than "
+                f"the number of experts {config.num_experts}."
             )
         top_k = config.num_experts_per_tok
         intermediate_size = config.expert_hidden_dim
@@ -145,7 +153,9 @@ class HYV3MoEFused(nn.Module):
         self.n_physical_experts = self.n_logical_experts + self.n_redundant_experts
         self.n_local_physical_experts = self.n_physical_experts // self.ep_size
         self.physical_expert_start = self.ep_rank * self.n_local_physical_experts
-        self.physical_expert_end = self.physical_expert_start + self.n_local_physical_experts
+        self.physical_expert_end = (
+            self.physical_expert_start + self.n_local_physical_experts
+        )
         self.gate = GateLinear(
             config.hidden_size,
             config.num_experts,
@@ -202,7 +212,9 @@ class HYV3MoEFused(nn.Module):
         # router_logits: (num_tokens, n_experts)
         router_logits, _ = self.gate(hidden_states)
 
-        final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=router_logits)
+        final_hidden_states = self.experts(
+            hidden_states=hidden_states, router_logits=router_logits
+        )
         return final_hidden_states.view(orig_shape)
 
 
@@ -223,6 +235,7 @@ class HYV3Attention(nn.Module):
         dual_chunk_attention_config: dict[str, Any] | None = None,
     ) -> None:
         super().__init__()
+        self.dtype = torch.get_default_dtype()
         self.hidden_size = hidden_size
         tp_size = get_tensor_model_parallel_world_size()
         self.total_num_heads = num_heads
@@ -265,11 +278,18 @@ class HYV3Attention(nn.Module):
             quant_config=quant_config,
             prefix=f"{prefix}.o_proj",
         )
+        # When the HPC fused RoPE+QK-Norm path is enabled, the RoPE cos/sin
+        # cache must be float32 to match the HPC kernel's expectations.
+        kv_cache_dtype = cache_config.cache_dtype if cache_config else "auto"
+        rope_support = HpcRopeNorm.support(
+            self.num_heads, self.num_kv_heads, self.head_dim, kv_cache_dtype
+        )
         self.rotary_emb = get_rope(
             self.head_dim,
             max_position=max_position_embeddings,
             rope_parameters=rope_parameters,
             is_neox_style=True,
+            dtype=torch.float32 if rope_support else torch.get_default_dtype(),
         )
         self.attn = Attention(
             self.num_heads,
@@ -284,6 +304,27 @@ class HYV3Attention(nn.Module):
             self.q_norm = RMSNorm(self.head_dim, rms_norm_eps)
             self.k_norm = RMSNorm(self.head_dim, rms_norm_eps)
 
+        # HPC fused RoPE + QK-Norm + KV-Cache-Write (+ optional FP8 Q quant).
+        # HunYuan V3 applies QK-Norm *before* RoPE, so NORM_THEN_ROPE.
+        self.hpc_rope_norm: HpcRopeNorm | None = None
+        if rope_support:
+            self.hpc_rope_norm = HpcRopeNorm(
+                num_heads=self.num_heads,
+                num_kv_heads=self.num_kv_heads,
+                head_dim=self.head_dim,
+                cos_sin_cache=self.rotary_emb.cos_sin_cache,
+                use_qk_norm=self.use_qk_norm,
+                fallback_qnorm=self.q_norm if self.use_qk_norm else None,
+                fallback_knorm=self.k_norm if self.use_qk_norm else None,
+                kv_cache_dtype=kv_cache_dtype,
+                layer_name=self.attn.layer_name,
+                qk_norm_policy=QkNormPolicy.NORM_THEN_ROPE,
+            )
+            # FP8 Q is produced by HpcRopeNorm, so the attention layer must not
+            # re-quantize the query.
+            if self.hpc_rope_norm.use_fp8 and hasattr(self.attn, "query_quant"):
+                self.attn.query_quant = None
+
     def forward(
         self,
         positions: torch.Tensor,
@@ -292,16 +333,28 @@ class HYV3Attention(nn.Module):
         qkv, _ = self.qkv_proj(hidden_states)
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
         output_shape = None
-        if self.use_qk_norm:
-            q_by_head = q.view(*q.shape[:-1], q.shape[-1] // self.head_dim, self.head_dim)
-            q_by_head = self.q_norm(q_by_head)
-            q = q_by_head.view(q.shape)
+        if self.hpc_rope_norm is not None:
+            # HPC handles QK-Norm + RoPE + KV-cache write (+ optional FP8 Q
+            # quant) internally and returns the processed query. K/V are
+            # written into the paged cache by the fused op.
+            q = self.hpc_rope_norm(qkv, self.attn.layer_name)
+            q = q.view(-1, self.num_heads * self.head_dim)
+            attn_output = self.attn(q, k, v, output_shape, self.dtype)
+        else:
+            if self.use_qk_norm:
+                q_by_head = q.view(
+                    *q.shape[:-1], q.shape[-1] // self.head_dim, self.head_dim
+                )
+                q_by_head = self.q_norm(q_by_head)
+                q = q_by_head.view(q.shape)
 
-            k_by_head = k.view(*k.shape[:-1], k.shape[-1] // self.head_dim, self.head_dim)
-            k_by_head = self.k_norm(k_by_head)
-            k = k_by_head.view(k.shape)
-        q, k = self.rotary_emb(positions, q, k)
-        attn_output = self.attn(q, k, v, output_shape)
+                k_by_head = k.view(
+                    *k.shape[:-1], k.shape[-1] // self.head_dim, self.head_dim
+                )
+                k_by_head = self.k_norm(k_by_head)
+                k = k_by_head.view(k.shape)
+            q, k = self.rotary_emb(positions, q, k)
+            attn_output = self.attn(q, k, v, output_shape)
         attn_output = attn_output.view(q.shape[0], -1)
         output, _ = self.o_proj(attn_output)
         return output
@@ -346,7 +399,9 @@ class HYV3DecoderLayer(nn.Module):
             )
             self.block_type = "feedforward"
         else:
-            self.mlp = HYV3MoEFused(config=config, quant_config=quant_config, prefix=f"{prefix}.mlp")
+            self.mlp = HYV3MoEFused(
+                config=config, quant_config=quant_config, prefix=f"{prefix}.mlp"
+            )
             self.block_type = "moe"
 
     def forward(
@@ -375,7 +430,7 @@ class HYV3DecoderLayer(nn.Module):
 
 
 @support_torch_compile
-class HYV3Model(nn.Module):
+class HYV3Model(nn.Module, MixtureOfExperts):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
 
@@ -412,7 +467,6 @@ class HYV3Model(nn.Module):
         )
 
         # Set MoE hyperparameters
-        self.expert_weights = []
         self.num_expert_groups = 1
         self.moe_layers = []
         example_layer = None
@@ -432,7 +486,9 @@ class HYV3Model(nn.Module):
         self.num_moe_layers = len(self.moe_layers)
         self.num_logical_experts = getattr(example_layer, "n_logical_experts", None)
         self.num_physical_experts = getattr(example_layer, "n_physical_experts", None)
-        self.num_local_physical_experts = getattr(example_layer, "n_local_physical_experts", None)
+        self.num_local_physical_experts = getattr(
+            example_layer, "n_local_physical_experts", None
+        )
         self.num_routed_experts = getattr(example_layer, "n_routed_experts", None)
         self.num_redundant_experts = getattr(example_layer, "n_redundant_experts", None)
 
@@ -459,7 +515,7 @@ class HYV3Model(nn.Module):
     def get_expert_mapping(self) -> list[tuple[str, str, int, str]]:
         # Params for weights, fp8 weight scales, fp8 activation scales
         # (param_name, weight_name, expert_id, shard_id)
-        return FusedMoE.make_expert_params_mapping(
+        return fused_moe_make_expert_params_mapping(
             self,
             ckpt_gate_proj_name="gate_proj",
             ckpt_down_proj_name="down_proj",
@@ -485,10 +541,14 @@ class HYV3Model(nn.Module):
             hidden_states = intermediate_tensors["hidden_states"]
             residual = intermediate_tensors["residual"]
 
-        for idx, layer in enumerate(islice(self.layers, self.start_layer, self.end_layer)):
+        for idx, layer in enumerate(
+            islice(self.layers, self.start_layer, self.end_layer)
+        ):
             hidden_states, residual = layer(positions, hidden_states, residual, idx=idx)
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
+            return IntermediateTensors(
+                {"hidden_states": hidden_states, "residual": residual}
+            )
 
         hidden_states = hidden_states + residual
         residual = hidden_states
@@ -511,13 +571,6 @@ class HYV3Model(nn.Module):
         loaded_params: set[str] = set()
         for name, loaded_weight in weights:
             if self.config.tie_word_embeddings and "lm_head.weight" in name:
-                continue
-            if self.quant_config is not None and (scale_name := self.quant_config.get_cache_scale(name)):
-                param = params_dict[scale_name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                loaded_weight = loaded_weight if loaded_weight.dim() == 0 else loaded_weight[0]
-                weight_loader(param, loaded_weight)
-                loaded_params.add(scale_name)
                 continue
             if "scale" in name:
                 # Remapping the name of FP8 kv-scale.
@@ -595,9 +648,14 @@ class HYV3Model(nn.Module):
         return loaded_params
 
 
-def get_spec_layer_idx_from_weight_name(config: PretrainedConfig, weight_name: str) -> int | None:
+def get_spec_layer_idx_from_weight_name(
+    config: PretrainedConfig, weight_name: str
+) -> int | None:
     # HYV3MTP is enabled only when num_nextn_predict_layers is greater than 1
-    if hasattr(config, "num_nextn_predict_layers") and config.num_nextn_predict_layers > 0:
+    if (
+        hasattr(config, "num_nextn_predict_layers")
+        and config.num_nextn_predict_layers > 0
+    ):
         layer_idx = config.num_hidden_layers
         for i in range(config.num_nextn_predict_layers):
             if weight_name.startswith(f"model.layers.{layer_idx + i}."):
@@ -622,7 +680,9 @@ class HYV3ForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
         eplb_config = parallel_config.eplb_config
         self.num_redundant_experts = eplb_config.num_redundant_experts
 
-        self.model = HYV3Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = HYV3Model(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
+        )
         self.lm_head = ParallelLMHead(
             config.vocab_size,
             config.hidden_size,
@@ -632,7 +692,9 @@ class HYV3ForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
         if self.config.tie_word_embeddings:
             self.lm_head.weight = self.model.embed_tokens.weight
         self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -644,7 +706,9 @@ class HYV3ForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
+        hidden_states = self.model(
+            input_ids, positions, intermediate_tensors, inputs_embeds
+        )
 
         return hidden_states
 

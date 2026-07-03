@@ -107,11 +107,12 @@ RUN apt-get update -y \
         sudo \
         python3-pip \
         libibverbs-dev \
-        # Upgrade to GCC 10 to avoid https://gcc.gnu.org/bugzilla/show_bug.cgi?id=92519
-        # as it was causing spam when compiling the CUTLASS kernels
-        gcc-10 \
-        g++-10 \
-    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 110 --slave /usr/bin/g++ g++ /usr/bin/g++-10 \
+        # GCC >= 11.3 is required for PyTorch's C++20 headers (CMakeLists.txt enforces
+        # it). gcc-11 also avoids the CUTLASS-kernel warning spam from
+        # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=92519
+        gcc-11 \
+        g++-11 \
+    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 110 --slave /usr/bin/g++ g++ /usr/bin/g++-11 \
     # Install python dev headers if available (needed for cmake FindPython on Ubuntu 24.04
     # which ships cmake 3.28 and requires Development.SABIModule; silently skipped on
     # Ubuntu 20.04/22.04 where python3.x-dev is not available without a PPA)
@@ -232,7 +233,7 @@ ARG PYTORCH_CUDA_INDEX_BASE_URL
 ARG PYTORCH_NIGHTLY
 
 # Install build dependencies
-COPY requirements/build.txt requirements/build.txt
+COPY requirements/build/cuda.txt requirements/build/cuda.txt
 COPY use_existing_torch.py use_existing_torch.py
 COPY --from=base /workspace/torch_lib_versions.txt torch_lib_versions.txt
 
@@ -247,13 +248,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     if [ "${PYTORCH_NIGHTLY}" = "1" ]; then \
         echo "Installing build requirements without torch..." \
         && python3 use_existing_torch.py --prefix \
-        && uv pip install --python /opt/venv/bin/python3 -r requirements/build.txt \
+        && uv pip install --python /opt/venv/bin/python3 -r requirements/build/cuda.txt \
         && echo "Installing torch nightly..." \
         && uv pip install --python /opt/venv/bin/python3 $(cat torch_lib_versions.txt | grep -i "^torch=" | xargs) --pre \
         --index-url ${PYTORCH_CUDA_INDEX_BASE_URL}/nightly/cu$(echo $CUDA_VERSION | cut -d. -f1,2 | tr -d '.'); \
     else \
         echo "Installing build requirements..." \
-        && uv pip install --python /opt/venv/bin/python3 -r requirements/build.txt \
+        && uv pip install --python /opt/venv/bin/python3 -r requirements/build/cuda.txt \
         --extra-index-url ${PYTORCH_CUDA_INDEX_BASE_URL}/cu$(echo $CUDA_VERSION | cut -d. -f1,2 | tr -d '.'); \
     fi
 
@@ -274,9 +275,6 @@ ENV APHRODITE_VERSION_OVERRIDE=${APHRODITE_VERSION_OVERRIDE}
 ENV MAX_JOBS=${max_jobs}
 ENV NVCC_THREADS=${nvcc_threads}
 ENV CMAKE_BUILD_TYPE=Release
-
-# Skip adding +precompiled suffix to version (preserves git-derived version)
-ENV APHRODITE_SKIP_PRECOMPILED_VERSION_SUFFIX=1
 
 # Use existing torch for nightly builds
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -599,12 +597,6 @@ ENV HF_HUB_DOWNLOAD_TIMEOUT 60
 
 # Copy in the v1 package for testing (it isn't distributed yet)
 COPY aphrodite/v1 /usr/local/lib/python${PYTHON_VERSION}/dist-packages/aphrodite/v1
-
-# Source code is used in the `python_only_compile.sh` test
-# We hide it inside `src/` so that this source code
-# will not be imported by other tests
-RUN mkdir src
-RUN mv aphrodite src/aphrodite
 #################### TEST IMAGE ####################
 
 #################### OPENAI API SERVER ####################

@@ -45,8 +45,13 @@ class FlashInferCuteDSLBatchedExperts(mk.FusedMoEExpertsModular):
             max_num_tokens=max_num_tokens,
             num_dispatchers=num_dispatchers,
         )
-        assert quant_config.quant_dtype == "nvfp4", "Only nvfp4 quantization are currently supported."
+        assert quant_config.quant_dtype == "nvfp4", (
+            "Only nvfp4 quantization are currently supported."
+        )
         self.out_dtype = moe_config.in_dtype
+        self.use_deep_ep_ll_nvfp4_dispatch = (
+            envs.APHRODITE_DEEPEPLL_NVFP4_DISPATCH and moe_config.use_deepep_ll_kernels
+        )
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         layer.w13_weight_scale_2.data.mul_(layer.w13_input_scale)
@@ -59,7 +64,11 @@ class FlashInferCuteDSLBatchedExperts(mk.FusedMoEExpertsModular):
     @staticmethod
     def _supports_current_device() -> bool:
         p = current_platform
-        return p.is_cuda() and p.is_device_capability_family(100) and has_flashinfer_cutedsl_grouped_gemm_nt_masked()
+        return (
+            p.is_cuda()
+            and p.is_device_capability_family(100)
+            and has_flashinfer_cutedsl_grouped_gemm_nt_masked()
+        )
 
     @staticmethod
     def _supports_no_act_and_mul() -> bool:
@@ -82,9 +91,6 @@ class FlashInferCuteDSLBatchedExperts(mk.FusedMoEExpertsModular):
     @staticmethod
     def _supports_parallel_config(moe_parallel_config: FusedMoEParallelConfig) -> bool:
         return True
-
-    def supports_expert_map(self) -> bool:
-        return False
 
     def finalize_weight_and_reduce_impl(self) -> mk.TopKWeightAndReduce:
         # Let PrepareAndFinalize::finalize() decide the impl.
@@ -120,7 +126,7 @@ class FlashInferCuteDSLBatchedExperts(mk.FusedMoEExpertsModular):
 
         # We use global_num_experts due to how moe_align_block_size handles
         # expert_maps.
-        K_dim = K * 2 if envs.APHRODITE_DEEPEPLL_NVFP4_DISPATCH else K
+        K_dim = K * 2 if self.use_deep_ep_ll_nvfp4_dispatch else K
         output_shape = (local_num_experts, M, K_dim)
         workspace2 = (local_num_experts, M, N)
         workspace1 = output_shape
@@ -144,7 +150,9 @@ class FlashInferCuteDSLBatchedExperts(mk.FusedMoEExpertsModular):
         expert_tokens_meta: mk.ExpertTokensMetadata | None,
         apply_router_weight_on_input: bool | None,
     ):
-        assert self.quant_dtype == "nvfp4", "Only nvfp4 quantization are currently supported."
+        assert self.quant_dtype == "nvfp4", (
+            "Only nvfp4 quantization are currently supported."
+        )
         # Ensure w1_scale and w2_scale are not None before calling view
         assert self.w1_scale is not None and self.w2_scale is not None, (
             "w1_scale and w2_scale must not be None for FlashInferExperts"
@@ -155,9 +163,13 @@ class FlashInferCuteDSLBatchedExperts(mk.FusedMoEExpertsModular):
         assert self.w1_scale.ndim == 3
         assert self.w2_scale.ndim == 3
 
-        input_global_scale = None if envs.APHRODITE_DEEPEPLL_NVFP4_DISPATCH else self.a1_gscale
+        input_global_scale = (
+            None if self.use_deep_ep_ll_nvfp4_dispatch else self.a1_gscale
+        )
         flashinfer_hidden_states = (
-            (hidden_states, a1q_scale) if envs.APHRODITE_DEEPEPLL_NVFP4_DISPATCH else hidden_states
+            (hidden_states, a1q_scale)
+            if self.use_deep_ep_ll_nvfp4_dispatch
+            else hidden_states
         )
         flashinfer_cutedsl_moe_masked(
             hidden_states=flashinfer_hidden_states,
@@ -226,17 +238,29 @@ def flashinfer_cutedsl_moe_masked(
 
     # === Assertions on dtypes ===
     assert w1.dtype == torch.uint8, f"w1 must be uint8, got {w1.dtype}"
-    assert w1_blockscale.dtype == torch.float8_e4m3fn, f"w1_blockscale must be float8_e4m3fn, got {w1_blockscale.dtype}"
-    assert w1_alpha.dtype == torch.float32, f"w1_alpha must be float32, got {w1_alpha.dtype}"
+    assert w1_blockscale.dtype == torch.float8_e4m3fn, (
+        f"w1_blockscale must be float8_e4m3fn, got {w1_blockscale.dtype}"
+    )
+    assert w1_alpha.dtype == torch.float32, (
+        f"w1_alpha must be float32, got {w1_alpha.dtype}"
+    )
     assert w2.dtype == torch.uint8, f"w2 must be uint8, got {w2.dtype}"
-    assert a2_global_scale.dtype == torch.float32, f"a2_global_scale must be float32, got {a2_global_scale.dtype}"
-    assert w2_blockscale.dtype == torch.float8_e4m3fn, f"w2_blockscale must be float8_e4m3fn, got {w2_blockscale.dtype}"
-    assert w2_alpha.dtype == torch.float32, f"w2_alpha must be float32, got {w2_alpha.dtype}"
+    assert a2_global_scale.dtype == torch.float32, (
+        f"a2_global_scale must be float32, got {a2_global_scale.dtype}"
+    )
+    assert w2_blockscale.dtype == torch.float8_e4m3fn, (
+        f"w2_blockscale must be float8_e4m3fn, got {w2_blockscale.dtype}"
+    )
+    assert w2_alpha.dtype == torch.float32, (
+        f"w2_alpha must be float32, got {w2_alpha.dtype}"
+    )
 
     # === Assertions on shapes ===
     n = w2.shape[-1] * 2  # intermediate dimension
     if isinstance(hidden_states, tuple):
-        assert input_global_scale is None, "input_global_scale is needed when input needs quant"
+        assert input_global_scale is None, (
+            "input_global_scale is needed when input needs quant"
+        )
 
         aq = hidden_states[0].view(torch.uint8)
         aq_sf = hidden_states[1].view(torch.float8_e4m3fn)
@@ -261,15 +285,23 @@ def flashinfer_cutedsl_moe_masked(
         )
 
     assert w1.shape[-2] == 2 * n, f"w1 last-2 dim must be 2*n, got {w1.shape}"
-    assert w1.shape[-1] * 2 == k, f"w1 last dim * 2 must equal k, got {w1.shape[-1]} vs k={k}"
+    assert w1.shape[-1] * 2 == k, (
+        f"w1 last dim * 2 must equal k, got {w1.shape[-1]} vs k={k}"
+    )
     assert w2.shape[-2:] == (
         k,
         n // 2,
     ), f"w2 shape mismatch, got {w2.shape[-2:]}, expected {(k, n // 2)}"
 
-    assert w1_alpha.shape == (num_experts,), f"w1_alpha must be (l,), got {w1_alpha.shape}"
-    assert a2_global_scale.shape == (num_experts,), f"a2_global_scale must be (l,), got {a2_global_scale.shape}"
-    assert w2_alpha.shape == (num_experts,), f"w2_alpha must be (l,), got {w2_alpha.shape}"
+    assert w1_alpha.shape == (num_experts,), (
+        f"w1_alpha must be (l,), got {w1_alpha.shape}"
+    )
+    assert a2_global_scale.shape == (num_experts,), (
+        f"a2_global_scale must be (l,), got {a2_global_scale.shape}"
+    )
+    assert w2_alpha.shape == (num_experts,), (
+        f"w2_alpha must be (l,), got {w2_alpha.shape}"
+    )
 
     workspace = workspace.permute(1, 2, 0)  # requirement of kernel
     sf_vec_size = 16

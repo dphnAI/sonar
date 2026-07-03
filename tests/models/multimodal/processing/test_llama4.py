@@ -5,7 +5,6 @@
 import pytest
 
 from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.transformers_utils.tokenizer import encode_tokens
 
 from ....conftest import ImageTestAssets
 from ...utils import build_model_context
@@ -42,11 +41,19 @@ def test_processor_override(
         + "<|image|>" * num_imgs
         + "<|eot|><|header_start|>assistant<|header_end|>"
     )
-    mm_data = {"image": [image_assets[(i % len(image_assets))].pil_image for i in range(num_imgs)]}
+    mm_data = {
+        "image": [
+            image_assets[(i % len(image_assets))].pil_image for i in range(num_imgs)
+        ]
+    }
     if tokenized_prompt:
-        prompt = encode_tokens(tokenizer, prompt)
+        prompt = tokenizer.encode(prompt)
 
-    processed_inputs = processor.apply(prompt, mm_data, mm_processor_kwargs)
+    processed_inputs = processor(
+        prompt,
+        mm_items=processor.info.parse_mm_data(mm_data),
+        hf_processor_mm_kwargs=mm_processor_kwargs,
+    )
     mm_data = processed_inputs["mm_kwargs"].get_data()
 
     # place holder replacements
@@ -61,7 +68,10 @@ def test_processor_override(
             num_x_separators += (tiles_x - 1) * tiles_y
             num_y_separators += tiles_y
     assert prompt_token_ids.count(vocab[hf_processor.tile_token]) == num_x_separators
-    assert prompt_token_ids.count(vocab[hf_processor.tile_global_token]) == num_y_separators
+    assert (
+        prompt_token_ids.count(vocab[hf_processor.tile_global_token])
+        == num_y_separators
+    )
 
     # image token offsets
     img_locs = processed_inputs["mm_placeholders"].get("image", [])
@@ -72,5 +82,8 @@ def test_processor_override(
 
     # patch sizes and masks
     num_patches_per_chunk = processor.info.get_patch_per_chunk(config.vision_config)
-    assert prompt_token_ids.count(config.image_token_index) == sum(mm_data["patches_per_image"]) * num_patches_per_chunk
+    assert (
+        prompt_token_ids.count(config.image_token_index)
+        == sum(mm_data["patches_per_image"]) * num_patches_per_chunk
+    )
     assert len(mm_data["pixel_values"]) == sum(mm_data["patches_per_image"])

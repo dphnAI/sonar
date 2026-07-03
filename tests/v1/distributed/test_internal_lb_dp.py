@@ -12,9 +12,9 @@ import pytest
 import pytest_asyncio
 import requests
 
-from aphrodite.platforms import current_platform
-from tests.utils import RemoteOpenAIServer
+from tests.utils import ROCM_ENV_OVERRIDES, RemoteOpenAIServer
 from tests.v1.utils import check_request_balancing
+from aphrodite.platforms import current_platform
 
 MODEL_NAME = "ibm-research/PowerMoE-3b"
 
@@ -25,6 +25,84 @@ TP_SIZE = int(os.getenv("TP_SIZE", "1"))
 
 # Number of nodes to simulate
 NUM_NODES = 2
+
+
+async def _make_completion_request(
+    client: openai.AsyncOpenAI,
+    model_name: str,
+) -> openai.types.Completion:
+    """Make a single completion request and validate the response.
+
+    Uses temperature=1.0 to ensure diverse outputs across concurrent
+    requests for realistic load balancer testing.
+    """
+    completion = await client.completions.create(
+        model=model_name,
+        prompt="Hello, my name is",
+        max_tokens=5,
+        temperature=1.0,
+    )
+
+    assert completion.id is not None, (
+        f"Expected non-None completion id. usage={completion.usage!r}"
+    )
+    assert completion.choices is not None and len(completion.choices) == 1, (
+        f"Expected 1 choice, got "
+        f"{len(completion.choices) if completion.choices else 'None'}"
+    )
+
+    choice = completion.choices[0]
+    # With temperature=1.0, the model may emit a stop token immediately,
+    # producing empty text with finish_reason='stop'. This is valid
+    # model behavior - the test's purpose is load balancing, not output
+    # quality.
+    assert choice.finish_reason in ("length", "stop"), (
+        f"Expected finish_reason 'length' or 'stop', "
+        f"got {choice.finish_reason!r}. text={choice.text!r}"
+    )
+    if choice.finish_reason == "length":
+        assert len(choice.text) >= 1, (
+            f"Expected non-empty text with finish_reason='length', got {choice.text!r}"
+        )
+
+    assert completion.usage.prompt_tokens > 0, (
+        f"Expected positive prompt_tokens, got {completion.usage.prompt_tokens}"
+    )
+    assert completion.usage.total_tokens > 0, (
+        f"Expected positive total_tokens, got {completion.usage.total_tokens}"
+    )
+    return completion
+
+
+async def _run_request_bursts(
+    client: openai.AsyncOpenAI,
+    model_name: str,
+    num_requests: int = 200,
+    num_bursts: int = 2,
+):
+    """Send multiple bursts of completion requests and validate all succeed."""
+    for burst in range(num_bursts):
+        all_tasks = []
+        for _ in range(num_requests):
+            all_tasks.append(
+                asyncio.create_task(_make_completion_request(client, model_name))
+            )
+            await asyncio.sleep(0.01)
+
+        results = await asyncio.gather(*all_tasks, return_exceptions=True)
+        assert len(results) == num_requests, (
+            f"Burst {burst}: expected {num_requests} results, got {len(results)}"
+        )
+
+        for result in results:
+            if isinstance(result, BaseException):
+                raise result
+
+        assert all(completion is not None for completion in results), (
+            f"Burst {burst}: some completions were None"
+        )
+
+        await asyncio.sleep(0.5)
 
 
 class MultinodeInternalLBServerManager:
@@ -46,7 +124,9 @@ class MultinodeInternalLBServerManager:
         self.tp_size = tp_size
         self.api_server_count = api_server_count
         self.base_server_args = base_server_args
-        self.servers: list[tuple[RemoteOpenAIServer, list[str]] | None] = [None] * (dp_size // dp_per_node)
+        self.servers: list[tuple[RemoteOpenAIServer, list[str]] | None] = [None] * (
+            dp_size // dp_per_node
+        )
         self.server_threads: list[threading.Thread] = []
 
     def __enter__(self) -> list[tuple[RemoteOpenAIServer, list[str]]]:
@@ -106,6 +186,7 @@ class MultinodeInternalLBServerManager:
                         auto_port=False,
                         env_dict={
                             "APHRODITE_SERVER_DEV_MODE": "1",
+                            **ROCM_ENV_OVERRIDES,
                             current_platform.device_control_env_var: ",".join(
                                 str(current_platform.device_id_to_physical_device_id(i))
                                 for i in range(r, r + gpus_per_node)
@@ -114,7 +195,10 @@ class MultinodeInternalLBServerManager:
                     )
                     server.__enter__()
                     if r == 0:
-                        print(f"Head node (rank {r}) started successfully with {self.api_server_count} API servers")
+                        print(
+                            f"Head node (rank {r}) started successfully with "
+                            f"{self.api_server_count} API servers"
+                        )
                     else:
                         print(f"Headless node (rank {r}) started successfully")
                     self.servers[sidx] = (server, sargs)
@@ -123,7 +207,9 @@ class MultinodeInternalLBServerManager:
                     traceback.print_exc()
                     raise
 
-            thread = threading.Thread(target=start_server, args=(server_idx, rank, server_args))
+            thread = threading.Thread(
+                target=start_server, args=(server_idx, rank, server_args)
+            )
             thread.start()
 
             self.server_threads.append(thread)
@@ -142,13 +228,13 @@ class MultinodeInternalLBServerManager:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Stop all server instances."""
-        while self.servers:
-            if server := self.servers.pop():
-                try:
-                    server[0].__exit__(exc_type, exc_val, exc_tb)
-                except Exception as e:
-                    print(f"Error stopping server: {e}")
-                    traceback.print_exc()
+        servers = [entry[0] for entry in self.servers if entry is not None]
+        self.servers.clear()
+        try:
+            RemoteOpenAIServer.shutdown_many(servers)
+        except Exception as e:
+            print(f"Error stopping servers: {e}")
+            traceback.print_exc()
 
 
 class APIOnlyServerManager:
@@ -222,11 +308,15 @@ class APIOnlyServerManager:
                     auto_port=False,
                     env_dict={
                         "APHRODITE_SERVER_DEV_MODE": "1",
+                        **ROCM_ENV_OVERRIDES,
                         # No GPUs needed for API-only server
                     },
                 )
                 server.__enter__()
-                print(f"API-only server started successfully with {self.api_server_count} API servers")
+                print(
+                    f"API-only server started successfully with "
+                    f"{self.api_server_count} API servers"
+                )
                 self.servers[0] = (server, api_server_args)
             except Exception as e:
                 print(f"Failed to start API-only server: {e}")
@@ -239,14 +329,18 @@ class APIOnlyServerManager:
                     engines_server_args,
                     auto_port=False,
                     env_dict={
+                        **ROCM_ENV_OVERRIDES,
                         current_platform.device_control_env_var: ",".join(
                             str(current_platform.device_id_to_physical_device_id(i))
                             for i in range(self.dp_size * self.tp_size)
-                        )
+                        ),
                     },
                 )
                 server.__enter__()
-                print(f"Headless engines server started successfully with {self.dp_size} engines")
+                print(
+                    f"Headless engines server started successfully with "
+                    f"{self.dp_size} engines"
+                )
                 self.servers[1] = (server, engines_server_args)
             except Exception as e:
                 print(f"Failed to start headless engines server: {e}")
@@ -276,13 +370,13 @@ class APIOnlyServerManager:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Stop both server instances."""
-        while self.servers:
-            if server := self.servers.pop():
-                try:
-                    server[0].__exit__(exc_type, exc_val, exc_tb)
-                except Exception as e:
-                    print(f"Error stopping server: {e}")
-                    traceback.print_exc()
+        servers = [entry[0] for entry in self.servers if entry is not None]
+        self.servers.clear()
+        try:
+            RemoteOpenAIServer.shutdown_many(servers)
+        except Exception as e:
+            print(f"Error stopping servers: {e}")
+            traceback.print_exc()
 
 
 @pytest.fixture(scope="module")
@@ -324,7 +418,9 @@ def servers(server_manager):
 def api_only_servers(request, default_server_args):
     """Fixture for API-only server + headless engines configuration."""
     api_server_count = request.param
-    with APIOnlyServerManager(MODEL_NAME, DP_SIZE, api_server_count, default_server_args, TP_SIZE) as server_list:
+    with APIOnlyServerManager(
+        MODEL_NAME, DP_SIZE, api_server_count, default_server_args, TP_SIZE
+    ) as server_list:
         yield server_list
 
 
@@ -380,62 +476,21 @@ async def test_multinode_dp_completion(
     servers: list[tuple[RemoteOpenAIServer, list[str]]],
     model_name: str,
 ) -> None:
-    async def make_request():
-        completion = await client.completions.create(
-            model=model_name, prompt="Hello, my name is", max_tokens=5, temperature=1.0
-        )
-
-        assert completion.id is not None
-        assert completion.choices is not None and len(completion.choices) == 1
-
-        choice = completion.choices[0]
-        # The exact number of tokens can vary slightly with temperature=1.0,
-        # so we check for a reasonable minimum length.
-        assert len(choice.text) >= 1
-        # Finish reason might not always be 'length' if the model finishes early
-        # or due to other reasons, especially with high temperature.
-        # So, we'll accept 'length' or 'stop'.
-        assert choice.finish_reason in ("length", "stop")
-
-        # Token counts can also vary, so we check they are positive.
-        assert completion.usage.completion_tokens > 0
-        assert completion.usage.prompt_tokens > 0
-        assert completion.usage.total_tokens > 0
-        return completion
-
     # Test single request
-    result = await make_request()
+    result = await _make_completion_request(client, model_name)
     assert result is not None
     print("Multi-node internal LB handled single completion request successfully")
 
     await asyncio.sleep(0.5)
 
-    # Send multiple requests - internal LB should distribute across DP ranks
-    num_requests = 200
-    all_tasks = []
-    for _ in range(num_requests):
-        all_tasks.append(asyncio.create_task(make_request()))
-        await asyncio.sleep(0.01)
-
-    results = await asyncio.gather(*all_tasks)
-    assert len(results) == num_requests
-    assert all(completion is not None for completion in results)
-
-    await asyncio.sleep(0.5)
-
-    # Second burst of requests
-    all_tasks = []
-    for _ in range(num_requests):
-        all_tasks.append(asyncio.create_task(make_request()))
-        await asyncio.sleep(0.01)
-
-    results = await asyncio.gather(*all_tasks)
-    assert len(results) == num_requests
-    assert all(completion is not None for completion in results)
+    # Send multiple bursts - internal LB should distribute across DP ranks
+    await _run_request_bursts(client, model_name)
 
     _, server_args = servers[0]
     api_server_count = (
-        server_args.count("--api-server-count") and server_args[server_args.index("--api-server-count") + 1] or 1
+        server_args.count("--api-server-count")
+        and server_args[server_args.index("--api-server-count") + 1]
+        or 1
     )
     print(
         f"Successfully completed multi-node internal LB test with "
@@ -485,9 +540,13 @@ async def test_multinode_dp_completion_streaming(
         # finish reason should only return in the last block for OpenAI API
         assert finish_reason_count == 1, "Finish reason should appear exactly once."
         assert last_chunk is not None, "Stream should have yielded at least one chunk."
-        assert last_chunk.choices[0].finish_reason == "length", "Finish reason should be 'length'."
+        assert last_chunk.choices[0].finish_reason == "length", (
+            "Finish reason should be 'length'."
+        )
         # Check that the combined text matches the non-streamed version.
-        assert "".join(chunks) == single_output, "Streamed output should match non-streamed output."
+        assert "".join(chunks) == single_output, (
+            "Streamed output should match non-streamed output."
+        )
         return True  # Indicate success for this request
 
     # Test single streaming request
@@ -523,7 +582,9 @@ async def test_multinode_dp_completion_streaming(
 
     _, server_args = servers[0]
     api_server_count = (
-        server_args.count("--api-server-count") and server_args[server_args.index("--api-server-count") + 1] or 1
+        server_args.count("--api-server-count")
+        and server_args[server_args.index("--api-server-count") + 1]
+        or 1
     )
     print(
         f"Successfully completed multi-node internal LB streaming test with "
@@ -547,59 +608,16 @@ async def test_api_only_multinode_dp_completion(
 ) -> None:
     """Test API-only server with all engines on separate headless server."""
 
-    async def make_request():
-        completion = await api_only_client.completions.create(
-            model=model_name, prompt="Hello, my name is", max_tokens=5, temperature=1.0
-        )
-
-        assert completion.id is not None
-        assert completion.choices is not None and len(completion.choices) == 1
-
-        choice = completion.choices[0]
-        # The exact number of tokens can vary slightly with temperature=1.0,
-        # so we check for a reasonable minimum length.
-        assert len(choice.text) >= 1
-        # Finish reason might not always be 'length' if the model finishes
-        # early or due to other reasons, especially with high temperature.
-        # So, we'll accept 'length' or 'stop'.
-        assert choice.finish_reason in ("length", "stop")
-
-        # Token counts can also vary, so we check they are positive.
-        assert completion.usage.completion_tokens > 0
-        assert completion.usage.prompt_tokens > 0
-        assert completion.usage.total_tokens > 0
-        return completion
-
     # Test single request
-    result = await make_request()
+    result = await _make_completion_request(api_only_client, model_name)
     assert result is not None
     print("API-only server handled single completion request successfully")
 
     await asyncio.sleep(0.5)
 
-    # Send multiple requests - should be distributed across engines on
+    # Send multiple bursts - should be distributed across engines on
     # headless server
-    num_requests = 200
-    all_tasks = []
-    for _ in range(num_requests):
-        all_tasks.append(asyncio.create_task(make_request()))
-        await asyncio.sleep(0.01)
-
-    results = await asyncio.gather(*all_tasks)
-    assert len(results) == num_requests
-    assert all(completion is not None for completion in results)
-
-    await asyncio.sleep(0.5)
-
-    # Second burst of requests
-    all_tasks = []
-    for _ in range(num_requests):
-        all_tasks.append(asyncio.create_task(make_request()))
-        await asyncio.sleep(0.01)
-
-    results = await asyncio.gather(*all_tasks)
-    assert len(results) == num_requests
-    assert all(completion is not None for completion in results)
+    await _run_request_bursts(api_only_client, model_name)
 
     api_server, api_server_args = api_only_servers[0]
     api_server_count = (
@@ -656,9 +674,13 @@ async def test_api_only_multinode_dp_completion_streaming(
         # finish reason should only return in the last block for OpenAI API
         assert finish_reason_count == 1, "Finish reason should appear exactly once."
         assert last_chunk is not None, "Stream should have yielded at least one chunk."
-        assert last_chunk.choices[0].finish_reason == "length", "Finish reason should be 'length'."
+        assert last_chunk.choices[0].finish_reason == "length", (
+            "Finish reason should be 'length'."
+        )
         # Check that the combined text matches the non-streamed version.
-        assert "".join(chunks) == single_output, "Streamed output should match non-streamed output."
+        assert "".join(chunks) == single_output, (
+            "Streamed output should match non-streamed output."
+        )
         return True  # Indicate success for this request
 
     # Test single streaming request

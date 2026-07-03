@@ -65,12 +65,18 @@ class DeviceConfig:
             elif isinstance(self.device, torch.device):
                 self.device_type = self.device.type
 
-        # Some device types require processing inputs on CPU. Metal is an
-        # MLX-backed platform, but Aphrodite tensors still flow through CPU/MPS
-        # compatible paths rather than a torch "metal" device.
-        if self.device_type in ["tpu"]:
+        # Some platforms require processing inputs on CPU.
+        from aphrodite.platforms import current_platform
+
+        if (
+            current_platform.uses_host_device_handling()
+            and self.device_type == current_platform.device_type
+        ):
             self.device = None
         elif self.device_type == "metal":
+            # Metal is an MLX-backed platform, but Aphrodite tensors still flow
+            # through CPU/MPS compatible paths rather than a torch "metal"
+            # device.
             self.device = torch.device("cpu")
         else:
             # Set device with device type

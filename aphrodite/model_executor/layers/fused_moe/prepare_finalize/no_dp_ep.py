@@ -21,14 +21,16 @@ def _quantize_input(
     if defer_input_quant:
         return a1, None
 
-    input_sf = quant_config.a1_gscale if quant_config.use_nvfp4_w4a4 else quant_config.a1_scale
+    input_sf = (
+        quant_config.a1_gscale if quant_config.use_nvfp4_w4a4 else quant_config.a1_scale
+    )
     a1q, a1q_scale = moe_kernel_quantize_input(
         a1,
         input_sf,
         quant_dtype=quant_config.quant_dtype,
         per_act_token_quant=quant_config.per_act_token_quant,
         block_shape=quant_config.block_shape,
-        is_fp4_scale_swizzled=quant_config.is_nvfp4_scale_swizzled,
+        is_scale_swizzled=quant_config.is_scale_swizzled,
         mx_alignment=quant_config.mx_alignment,
     )
 
@@ -66,8 +68,9 @@ class MoEPrepareAndFinalizeNoDPEPModular(mk.FusedMoEPrepareAndFinalizeModular):
         if apply_router_weight_on_input:
             topk = topk_ids.size(1)
             # TODO: this only works for topK=1, will need to update for topK>1
-            assert topk == 1, "apply_router_weight_on_input is only implemented for topk=1"
-            # Note: do not use inplace for shared experts overlap
+            assert topk == 1, (
+                "apply_router_weight_on_input is only implemented for topk=1"
+            )
             a1 = a1 * topk_weights.to(a1.dtype)
 
         a1q, a1q_scale = _quantize_input(a1, quant_config, defer_input_quant)
@@ -131,4 +134,8 @@ class MoEPrepareAndFinalizeNoDPEPMonolithic(mk.FusedMoEPrepareAndFinalizeMonolit
 def make_moe_prepare_and_finalize_no_dp_ep(
     use_monolithic: bool,
 ) -> MoEPrepareAndFinalizeNoDPEPModular | MoEPrepareAndFinalizeNoDPEPMonolithic:
-    return MoEPrepareAndFinalizeNoDPEPMonolithic() if use_monolithic else MoEPrepareAndFinalizeNoDPEPModular()
+    return (
+        MoEPrepareAndFinalizeNoDPEPMonolithic()
+        if use_monolithic
+        else MoEPrepareAndFinalizeNoDPEPModular()
+    )

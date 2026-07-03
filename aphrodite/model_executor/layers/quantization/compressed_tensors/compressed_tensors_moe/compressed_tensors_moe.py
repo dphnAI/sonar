@@ -7,8 +7,10 @@ from compressed_tensors import CompressionFormat
 from compressed_tensors.quantization import (
     ActivationOrdering,
     QuantizationStrategy,
+    QuantizationType,
 )
 
+from aphrodite.config import get_current_aphrodite_config
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.fused_moe import (
     FusedMoEMethodBase,
@@ -32,17 +34,25 @@ class CompressedTensorsMoEMethod(FusedMoEMethodBase):
         layer: torch.nn.Module,
         layer_name: str,
     ) -> FusedMoEMethodBase:
-        # FusedMoE was made by combining multiple Linears so need to
+        # RoutedExperts was made by combining multiple Linears so need to
         # make sure quantization config for Linear can target it
         quant_config._add_fused_moe_to_target_scheme_map()
-        unfused_names = [layer_name + proj_name for proj_name in [".0.gate_proj", ".0.up_proj", ".0.down_proj"]]
+        unfused_names = [
+            layer_name + proj_name
+            for proj_name in [".0.gate_proj", ".0.up_proj", ".0.down_proj"]
+        ]
         # TODO: refactor this to use expert_mapping and check all layer numbers
-        all_scheme_dicts = [quant_config.get_scheme_dict(layer, name) for name in unfused_names]
+        all_scheme_dicts = [
+            quant_config.get_scheme_dict(layer, name) for name in unfused_names
+        ]
         scheme_dict = all_scheme_dicts.pop()
 
         # multiple schemes found
         if not all([cur_dict == scheme_dict for cur_dict in all_scheme_dicts]):
-            raise ValueError("All MoE projections need to have same quantization scheme but found multiple")
+            raise ValueError(
+                "All MoE projections need to have same "
+                "quantization scheme but found multiple"
+            )
 
         if scheme_dict is None:  # ignored layer
             return UnquantizedFusedMoEMethod(layer.moe_config)
@@ -72,7 +82,8 @@ class CompressedTensorsMoEMethod(FusedMoEMethodBase):
             group_size = weight_quant.group_size or -1
 
             valid_format_and_bits = (
-                weight_quant.num_bits in WNA16_SUPPORTED_BITS and format == CompressionFormat.pack_quantized.value
+                weight_quant.num_bits in WNA16_SUPPORTED_BITS
+                and format == CompressionFormat.pack_quantized.value
             )
 
             if not valid_format_and_bits:
@@ -80,41 +91,90 @@ class CompressedTensorsMoEMethod(FusedMoEMethodBase):
                     "For Fused MoE layers, only format: ",
                     f"{CompressionFormat.pack_quantized.value} ",
                     f" and bits: {WNA16_SUPPORTED_BITS} is supported ",
-                    f"but got format: {CompressionFormat.pack_quantized.value}  and bits: {weight_quant.num_bits}",
+                    f"but got format: {CompressionFormat.pack_quantized.value} "
+                    f" and bits: {weight_quant.num_bits}",
                 )
 
             # Prefer to use the MarlinMoE kernel when it is supported.
-            if not check_moe_marlin_supports_layer(layer, group_size) or current_platform.is_rocm():
+            is_actorder = (
+                weight_quant.strategy == QuantizationStrategy.GROUP
+                and weight_quant.actorder
+                in (ActivationOrdering.GROUP, ActivationOrdering.DYNAMIC)
+            )
+            if (
+                not check_moe_marlin_supports_layer(
+                    layer, group_size, allow_tile_padding=not is_actorder
+                )
+                or current_platform.is_rocm()
+            ):
+                if is_actorder:
+                    raise ValueError(
+                        "WNA16MoE is not supported with actorder=group/dynamic."
+                    )
+
+                # Native ROCm HIP kernels (RDNA3, etc.)
+                if current_platform.is_rocm():
+                    from . import rocm_moe_rdna
+
+                    if rocm_moe_rdna.is_supported(weight_quant):
+                        return rocm_moe_rdna.make_method(
+                            weight_quant, input_quant, layer.moe_config
+                        )
+                    from aphrodite.platforms.rocm import on_gfx950
+
+                    aphrodite_config = get_current_aphrodite_config()
+                    is_lora_disabled = aphrodite_config.lora_config is None
+                    moe_backend = aphrodite_config.kernel_config.moe_backend
+                    if (
+                        weight_quant.strategy == QuantizationStrategy.GROUP
+                        and weight_quant.type == QuantizationType.INT
+                        and group_size == 32
+                        and weight_quant.num_bits == 4
+                        and is_lora_disabled
+                        and on_gfx950()
+                        and moe_backend == "flydsl"
+                    ):
+                        from .compressed_tensors_moe_w4a16_flydsl import (
+                            CompressedTensorsW4A16FlydslMoEMethod,
+                        )
+
+                        logger.info_once("Using CompressedTensorsW4A16FlydslMoEMethod")
+                        return CompressedTensorsW4A16FlydslMoEMethod(
+                            weight_quant, input_quant, layer.moe_config
+                        )
                 from .compressed_tensors_moe_wna16 import (
                     CompressedTensorsWNA16MoEMethod,
                 )
 
-                if weight_quant.strategy == QuantizationStrategy.GROUP and weight_quant.actorder in (
-                    ActivationOrdering.GROUP,
-                    ActivationOrdering.DYNAMIC,
-                ):
-                    raise ValueError("WNA16MoE is not supported with actorder=group/dynamic.")
                 logger.info_once("Using CompressedTensorsWNA16MoEMethod")
-                return CompressedTensorsWNA16MoEMethod(weight_quant, input_quant, layer.moe_config)
+                return CompressedTensorsWNA16MoEMethod(
+                    weight_quant, input_quant, layer.moe_config
+                )
             else:
                 from .compressed_tensors_moe_wna16_marlin import (
                     CompressedTensorsWNA16MarlinMoEMethod,
                 )
 
                 logger.info_once("Using CompressedTensorsWNA16MarlinMoEMethod")
-                return CompressedTensorsWNA16MarlinMoEMethod(weight_quant, input_quant, layer.moe_config)
+                return CompressedTensorsWNA16MarlinMoEMethod(
+                    weight_quant, input_quant, layer.moe_config
+                )
         elif quant_config._is_nvfp4_format(weight_quant):
             from .compressed_tensors_moe_w4a4_nvfp4 import (
                 CompressedTensorsW4A4Nvfp4MoEMethod,
             )
 
-            _is_valid_nvfp4_activations = quant_config._is_nvfp4_format(input_quant) or input_quant is None
+            _is_valid_nvfp4_activations = (
+                quant_config._is_nvfp4_format(input_quant) or input_quant is None
+            )
             if not _is_valid_nvfp4_activations:
                 raise ValueError(
                     "For NVFP4 weights, input quantization must also be NVFP4 format ",
                     f"or None for NVFP4A16, found {input_quant}",
                 )
-            return CompressedTensorsW4A4Nvfp4MoEMethod(layer.moe_config, layer_name, use_a16=(input_quant is None))
+            return CompressedTensorsW4A4Nvfp4MoEMethod(
+                layer.moe_config, layer_name, use_a16=(input_quant is None)
+            )
         elif (
             quant_config._is_fp8_w8a8_sm90(weight_quant, input_quant)
             or quant_config._is_fp8_w8a8_sm100(weight_quant, input_quant)
@@ -124,25 +184,35 @@ class CompressedTensorsMoEMethod(FusedMoEMethodBase):
                 CompressedTensorsW8A8Fp8MoEMethod,
             )
 
-            return CompressedTensorsW8A8Fp8MoEMethod(weight_quant, input_quant, layer.moe_config)
+            return CompressedTensorsW8A8Fp8MoEMethod(
+                weight_quant, input_quant, layer.moe_config
+            )
         elif quant_config._is_dynamic_token_w8a8(weight_quant, input_quant):
             from .compressed_tensors_moe_w8a8_int8 import (
                 CompressedTensorsW8A8Int8MoEMethod,
             )
 
-            return CompressedTensorsW8A8Int8MoEMethod(weight_quant, input_quant, layer.moe_config)
+            return CompressedTensorsW8A8Int8MoEMethod(
+                weight_quant, input_quant, layer.moe_config
+            )
         elif quant_config._is_fp8_w4a8_sm90(weight_quant, input_quant):
             from .compressed_tensors_moe_w4a8_fp8 import (
                 CompressedTensorsW4A8Fp8MoEMethod,
             )
 
             logger.info_once("Using CompressedTensorsW4A8Fp8MoEMethod")
-            return CompressedTensorsW4A8Fp8MoEMethod(weight_quant, input_quant, layer.moe_config)
+            return CompressedTensorsW4A8Fp8MoEMethod(
+                weight_quant, input_quant, layer.moe_config
+            )
         elif quant_config._is_dynamic_token_w4a8_int(weight_quant, input_quant):
             from .compressed_tensors_moe_w4a8_int8 import (
                 CompressedTensorsW4A8Int8MoEMethod,
             )
 
-            return CompressedTensorsW4A8Int8MoEMethod(weight_quant, input_quant, layer.moe_config)
+            return CompressedTensorsW4A8Int8MoEMethod(
+                weight_quant, input_quant, layer.moe_config
+            )
         else:
-            raise RuntimeError(f"Unsupported FusedMoe scheme: {weight_quant}, {input_quant}")
+            raise RuntimeError(
+                f"Unsupported FusedMoe scheme: {weight_quant}, {input_quant}"
+            )

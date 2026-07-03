@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 from abc import ABC, abstractmethod
+from copy import copy
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, NamedTuple, TypeAlias
 
@@ -63,7 +64,9 @@ class LogprobsTensors(NamedTuple):
             self.logprob_token_ids.cpu().numpy(),
             self.logprobs.cpu().numpy(),
             self.selected_token_ranks.cpu().numpy(),
-            cu_num_generated_tokens if cu_num_generated_tokens is not None else self.cu_num_generated_tokens,
+            cu_num_generated_tokens
+            if cu_num_generated_tokens is not None
+            else self.cu_num_generated_tokens,
         )
 
     def to_cpu_nonblocking(self) -> "LogprobsTensors":
@@ -78,7 +81,9 @@ class LogprobsTensors(NamedTuple):
 
     def filter(self, mask: torch.Tensor) -> "LogprobsTensors":
         """Filter the logprobs tensors with the given bool mask."""
-        assert self.cu_num_generated_tokens is None, "filter can't be used with cu_num_generated_tokens"
+        assert self.cu_num_generated_tokens is None, (
+            "filter can't be used with cu_num_generated_tokens"
+        )
         return LogprobsTensors(
             self.logprob_token_ids[mask],
             self.logprobs[mask],
@@ -86,17 +91,90 @@ class LogprobsTensors(NamedTuple):
         )
 
     @staticmethod
-    def empty_cpu(num_positions: int, num_tokens_per_position: int) -> "LogprobsTensors":
+    def empty_cpu(
+        num_positions: int, num_tokens_per_position: int
+    ) -> "LogprobsTensors":
         """Create empty LogprobsTensors on CPU."""
 
-        logprob_token_ids = torch.empty((num_positions, num_tokens_per_position), dtype=torch.int32, device="cpu")
+        logprob_token_ids = torch.empty(
+            (num_positions, num_tokens_per_position), dtype=torch.int32, device="cpu"
+        )
         logprobs = torch.empty_like(logprob_token_ids, dtype=torch.float32)
-        selected_token_ranks = torch.empty(num_positions, dtype=torch.int32, device="cpu")
+        selected_token_ranks = torch.empty(
+            num_positions, dtype=torch.int32, device="cpu"
+        )
         return LogprobsTensors(
             logprob_token_ids=logprob_token_ids,
             logprobs=logprobs,
             selected_token_ranks=selected_token_ranks,
         )
+
+
+class RoutedExpertsTensors(NamedTuple):
+    """Device-side snapshot of routed experts data, pending async D2H.
+
+    Produced by :class:`GPUModelRunner` at the end of each async-scheduled
+    step. The copy stream waits on the default stream, then issues
+    non-blocking D2H via :meth:`to_cpu_nonblocking` into a pinned CPU
+    buffer; :class:`AsyncGPUModelRunnerOutput.get_output` synchronizes
+    the copy before the scheduler reads it.
+
+    Sliced to ``total_num_scheduled_tokens`` (step-level, across all
+    requests — NOT per-request). Both ``routing_data`` and
+    ``slot_mapping`` must be private clones when sourced from shared
+    capturer / prepare-input buffers, so the next forward pass /
+    ``_prepare_inputs`` on the default stream does not race with a
+    D2H still pending on the copy stream.
+    """
+
+    # (num_scheduled_tokens, num_layers, num_experts_per_tok)
+    routing_data: torch.Tensor
+    # (num_scheduled_tokens,)
+    slot_mapping: torch.Tensor
+
+    def to_cpu_nonblocking(self) -> "RoutedExpertsTensors":
+        """Issue non-blocking D2H on the current stream.
+
+        NOTE: ``non_blocking=True`` only delivers true overlap when the
+        CPU target is pinned. The current fallback here allocates a
+        new pageable CPU tensor per call, which silently degrades to a
+        synchronous copy; acceptable because the sync happens on the
+        dedicated copy stream, not the default stream.
+        """
+        if self.routing_data.device.type == "cpu":
+            return self
+        return RoutedExpertsTensors(
+            self.routing_data.to("cpu", non_blocking=True),
+            self.slot_mapping.to("cpu", non_blocking=True),
+        )
+
+    def tolists(self) -> "RoutedExpertsLists":
+        """Convert to the numpy-backed form consumed by the scheduler.
+
+        ``.cpu()`` is a no-op when the tensor is already on CPU, so this
+        is cheap for the post-D2H case; for raw device tensors it will
+        synchronously block, which is only reached in tests.
+        """
+        return RoutedExpertsLists(
+            self.routing_data.cpu().numpy(),
+            self.slot_mapping.cpu().numpy(),
+        )
+
+
+class RoutedExpertsLists(NamedTuple):
+    """CPU-side routed experts, the form :meth:`RoutedExpertsManager.store_batch`
+    consumes.
+
+    Batched per scheduler step: the leading dim is the number of tokens
+    scheduled across all requests in this step (``total_num_scheduled_tokens``),
+    not per-request tokens. ``slot_mapping[i]`` tells the scheduler which
+    physical KV-cache slot row ``i`` of ``routing_data`` belongs to.
+    """
+
+    # (num_scheduled_tokens, num_layers, num_experts_per_tok)
+    routing_data: np.ndarray
+    # (num_scheduled_tokens,)
+    slot_mapping: np.ndarray
 
 
 # [num_reqs, <dynamic>]
@@ -174,7 +252,9 @@ class ModelRunnerOutput:
     # [prompt_len, num_prompt_logprobs]
     # [prompt_len, num_prompt_logprobs]
     # [prompt_len]
-    prompt_logprobs_dict: dict[str, LogprobsTensors | None] = field(default_factory=dict)
+    prompt_logprobs_dict: dict[str, LogprobsTensors | None] = field(
+        default_factory=dict
+    )
 
     # [num_reqs, hidden_size]
     pooler_output: list[torch.Tensor | None] | None = None
@@ -188,6 +268,30 @@ class ModelRunnerOutput:
 
     # information related to cudagraph execution
     cudagraph_stats: CUDAGraphStat | None = None
+
+    # Per-step routed experts data captured by the worker.
+    # ``routing_data`` shape: (num_scheduled_tokens, num_layers,
+    #                         num_experts_per_tok); expert IDs as uint8/uint16.
+    # ``slot_mapping`` shape: (num_scheduled_tokens,); physical KV-cache
+    #                         slot for each row of routing_data.
+    # ``num_scheduled_tokens`` is step-level (total across all requests
+    # in this step), not per-request. The scheduler persists this into
+    # its slot buffer via ``slot_buffer[slot_mapping] = routing_data``.
+    # ``None`` when ``enable_return_routed_experts`` is off.
+    routed_experts: RoutedExpertsLists | None = None
+
+    @staticmethod
+    def with_kv_conn_output_only(
+        kv_connector_output: KVConnectorOutput | None,
+    ) -> "ModelRunnerOutput":
+        """Return ModelRunnerOutput containing the provided KVConnectorOutput,
+        otherwise empty. Returns None if kv_connector_output is passed as None.
+        """
+        if kv_connector_output is None or kv_connector_output.is_empty():
+            return EMPTY_MODEL_RUNNER_OUTPUT
+        output = copy(EMPTY_MODEL_RUNNER_OUTPUT)
+        output.kv_connector_output = kv_connector_output
+        return output
 
 
 # ModelRunnerOutput wrapper for async scheduling.

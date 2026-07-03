@@ -17,7 +17,7 @@ from torch import nn
 from transformers import Zamba2Config
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
+from aphrodite.config import CacheConfig, ModelConfig, AphroditeConfig
 from aphrodite.distributed import get_tensor_model_parallel_world_size
 from aphrodite.model_executor.layers.activation import GeluAndMul
 from aphrodite.model_executor.layers.attention import Attention
@@ -43,7 +43,6 @@ from aphrodite.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 from aphrodite.sequence import IntermediateTensors
 
 from .interfaces import HasInnerState, IsHybrid, SupportsMambaPrefixCaching
@@ -145,7 +144,9 @@ class Zamba2Attention(nn.Module):
         self.qkv_size = self.attention_hidden_size // tp_size
         self.scale = (self.attention_head_dim / 2) ** -0.5
 
-        if (self.attention_head_dim * self.total_num_attention_heads) != self.attention_hidden_size:
+        if (
+            self.attention_head_dim * self.total_num_attention_heads
+        ) != self.attention_hidden_size:
             raise ValueError(
                 f"attention_hidden_size must be divisible by"
                 f" num_attention_heads"
@@ -176,7 +177,11 @@ class Zamba2Attention(nn.Module):
 
         # Initialize attention blocks with proper indexing
         self.dpa_list = nn.ModuleList([])
-        j = bare_block_idx * (self.num_hybrid_layers + config.num_mem_blocks - 1) // config.num_mem_blocks
+        j = (
+            bare_block_idx
+            * (self.num_hybrid_layers + config.num_mem_blocks - 1)
+            // config.num_mem_blocks
+        )
         for block_idx in range(self.num_hybrid_layers):
             if block_idx % config.num_mem_blocks == bare_block_idx:
                 dpa = Attention(
@@ -274,7 +279,9 @@ class Zamba2Attention(nn.Module):
             value_states = value_states + v_lora_output
 
         if self.config.use_mem_rope:
-            query_states, key_states = self.rotary_emb(position_ids, query_states, key_states)
+            query_states, key_states = self.rotary_emb(
+                position_ids, query_states, key_states
+            )
 
         y = self.dpa_list[block_idx](query_states, key_states, value_states)
         y, _ = self.o_proj(y)
@@ -331,7 +338,10 @@ class Zamba2MLP(nn.Module):
 
         # Only allow GELU activations
         if config.hidden_act != "gelu":
-            raise ValueError(f"Only GELU activation is supported (got `hidden_act`: {config.hidden_act})")
+            raise ValueError(
+                f"Only GELU activation is supported "
+                f"(got `hidden_act`: {config.hidden_act})"
+            )
         self.act_fn = GeluAndMul()
 
         # Initialize adapter layers
@@ -457,7 +467,9 @@ class Zamba2AttentionDecoderLayer(nn.Module):
         # (which is the output of the previous (mamba) layer).
         # The concatenated tensor is then used as input of the pre-attention
         # RMSNorm (see fig. 2 in https://arxiv.org/pdf/2405.16712).
-        hidden_states = torch.concatenate([hidden_states, original_hidden_states], dim=-1)
+        hidden_states = torch.concatenate(
+            [hidden_states, original_hidden_states], dim=-1
+        )
 
         # Layer norm before attention
         hidden_states = self.input_layernorm(hidden_states)
@@ -690,7 +702,10 @@ class Zamba2Model(nn.Module):
         )
 
         # Map hybrid layer indices to block indices
-        layer2block_map = {layer_idx: block_idx for block_idx, layer_idx in enumerate(config.hybrid_layer_ids)}
+        layer2block_map = {
+            layer_idx: block_idx
+            for block_idx, layer_idx in enumerate(config.hybrid_layer_ids)
+        }
 
         # Create cyclic iterator of transformer blocks
         blocks = cycle(
@@ -788,34 +803,6 @@ class Zamba2Model(nn.Module):
         hidden_states = self.final_layernorm(hidden_states)
         return hidden_states
 
-    def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            # (param_name, shard_name, shard_id)
-            ("qkv_proj", "q_proj", "q"),
-            ("qkv_proj", "k_proj", "k"),
-            ("qkv_proj", "v_proj", "v"),
-        ]
-
-        params_dict = dict(self.named_parameters())
-        loaded_params: set[str] = set()
-        for chkpt_weight_name, loaded_weight in weights:
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                if weight_name not in chkpt_weight_name:
-                    continue
-                chkpt_weight_name = chkpt_weight_name.replace(weight_name, param_name)
-                param = params_dict[chkpt_weight_name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                if chkpt_weight_name not in params_dict:
-                    continue
-                param = params_dict[chkpt_weight_name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(chkpt_weight_name)
-        return loaded_params
-
 
 class Zamba2ForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsMambaPrefixCaching):
     """Zamba2 model with causal language modeling head.
@@ -833,7 +820,12 @@ class Zamba2ForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsMambaPrefixC
             "A_log": "A",
             "0.weight": "A.weight",
             "1.weight": "B.weight",
-        }
+        },
+        orig_to_new_stacked={
+            ".self_attn.q_proj": (".self_attn.qkv_proj", "q"),
+            ".self_attn.k_proj": (".self_attn.qkv_proj", "k"),
+            ".self_attn.v_proj": (".self_attn.qkv_proj", "v"),
+        },
     )
 
     @classmethod
@@ -904,7 +896,9 @@ class Zamba2ForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsMambaPrefixC
         self.model_config = aphrodite_config.model_config
 
         # Initialize core model
-        self.model = Zamba2Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Zamba2Model(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
+        )
 
         # Initialize language modeling head
         self.lm_head = ParallelLMHead(

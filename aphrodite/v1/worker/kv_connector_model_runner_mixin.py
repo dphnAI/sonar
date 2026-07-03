@@ -4,7 +4,6 @@
 Define KV connector functionality mixin for model runners.
 """
 
-import copy
 from collections.abc import Generator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from typing import TYPE_CHECKING
@@ -20,7 +19,6 @@ from aphrodite.logger import init_logger
 from aphrodite.v1.attention.backend import AttentionBackend
 from aphrodite.v1.kv_cache_interface import AttentionSpec, KVCacheConfig
 from aphrodite.v1.outputs import (
-    EMPTY_MODEL_RUNNER_OUTPUT,
     KVConnectorOutput,
     ModelRunnerOutput,
 )
@@ -47,12 +45,7 @@ class KVConnectorModelRunnerMixin:
         ):
             pass
 
-        if kv_connector_output.is_empty():
-            return EMPTY_MODEL_RUNNER_OUTPUT
-
-        output = copy.copy(EMPTY_MODEL_RUNNER_OUTPUT)
-        output.kv_connector_output = kv_connector_output
-        return output
+        return ModelRunnerOutput.with_kv_conn_output_only(kv_connector_output)
 
     @staticmethod
     def maybe_get_kv_connector_output(
@@ -60,7 +53,9 @@ class KVConnectorModelRunnerMixin:
         defer_finalize: bool = False,
     ) -> AbstractContextManager[KVConnectorOutput | None]:
         return (
-            KVConnectorModelRunnerMixin._get_kv_connector_output(scheduler_output, defer_finalize=defer_finalize)
+            KVConnectorModelRunnerMixin._get_kv_connector_output(
+                scheduler_output, defer_finalize=defer_finalize
+            )
             if has_kv_transfer_group()
             else nullcontext()
         )
@@ -104,8 +99,8 @@ class KVConnectorModelRunnerMixin:
             if wait_for_save and not defer_finalize:
                 kv_connector.wait_for_save()
 
-            output.finished_sending, output.finished_recving = kv_connector.get_finished(
-                scheduler_output.finished_req_ids
+            output.finished_sending, output.finished_recving = (
+                kv_connector.get_finished(scheduler_output.finished_req_ids)
             )
             output.invalid_block_ids = kv_connector.get_block_ids_with_load_errors()
 
@@ -119,7 +114,6 @@ class KVConnectorModelRunnerMixin:
     @staticmethod
     def use_uniform_kv_cache(
         attn_groups: list[list[AttentionGroup]],
-        cache_dtype: CacheDType,
     ) -> bool:
         """
         Determines whether a uniform KV layout should be used.
@@ -133,9 +127,9 @@ class KVConnectorModelRunnerMixin:
             have the same page size.
         2. A KV connector is configured, and the KV connector instance prefers
             to use this layout (prefer_cross_layer_blocks() returns True)
-        2. The flash attention backend supports this layout
-            (get_kv_cache_stride_order(True) includes a placement for a
-            num_layers dimension)
+        3. The attention backend indexes KV by the block stride
+            (kv_cache_spec.indexes_kv_by_block_stride), i.e. num_blocks is the
+            outermost physical dim so per-block all-layers data is contiguous.
 
         Note that the actual placement of the num_layers dimensions
         in the unified layers tensors will be determined by the attention
@@ -145,7 +139,6 @@ class KVConnectorModelRunnerMixin:
 
         Args:
             attn_groups: The list of attention groups for this model
-            cache_dtype: The KV cache dtype
         Returns:
             True if we should use a uniform KV cache layout.
         """
@@ -162,28 +155,7 @@ class KVConnectorModelRunnerMixin:
         kv_cache_spec = attn_group.kv_cache_spec
         if not isinstance(kv_cache_spec, AttentionSpec):
             return False
-
-        attn_backend = attn_group.backend
-        kv_cache_shape = attn_backend.get_kv_cache_shape(
-            1234,
-            kv_cache_spec.block_size,
-            kv_cache_spec.num_kv_heads,
-            kv_cache_spec.head_size,
-            cache_dtype_str=cache_dtype,
-        )
-
-        try:
-            kv_cache_stride_order = attn_backend.get_kv_cache_stride_order(include_num_layers_dimension=True)
-        except (AttributeError, NotImplementedError):
-            return False
-
-        # check that attention backend includes a layers dimension
-        if len(kv_cache_stride_order) != len(kv_cache_shape) + 1:
-            return False
-
-        # stride_order[0] == 0 means num_layers stays first in physical
-        # layout (identity permutation), so cross-layer is unsupported.
-        return kv_cache_stride_order[0] != 0
+        return kv_cache_spec.indexes_kv_by_block_stride
 
     @staticmethod
     def allocate_uniform_kv_caches(
@@ -216,7 +188,9 @@ class KVConnectorModelRunnerMixin:
         kv_cache_spec = attn_group.kv_cache_spec
         assert isinstance(kv_cache_spec, AttentionSpec)
 
-        tensor_sizes = set(kv_cache_tensor.size for kv_cache_tensor in kv_cache_config.kv_cache_tensors)
+        tensor_sizes = set(
+            kv_cache_tensor.size for kv_cache_tensor in kv_cache_config.kv_cache_tensors
+        )
         assert len(tensor_sizes) == 1
         tensor_size = tensor_sizes.pop()
 
@@ -244,7 +218,9 @@ class KVConnectorModelRunnerMixin:
         kv_cache_shape = (num_layers,) + kv_cache_shape
 
         try:
-            kv_cache_stride_order = attn_backend.get_kv_cache_stride_order(include_num_layers_dimension=True)
+            kv_cache_stride_order = attn_backend.get_kv_cache_stride_order(
+                include_num_layers_dimension=True
+            )
             assert len(kv_cache_stride_order) == len(kv_cache_shape)
         except (AttributeError, NotImplementedError):
             kv_cache_stride_order = tuple(range(len(kv_cache_shape)))
@@ -255,11 +231,15 @@ class KVConnectorModelRunnerMixin:
 
         # allocate one contiguous buffer for all layers
         cross_layers_kv_cache = (
-            torch.zeros(total_size, dtype=torch.int8, device=device).view(kv_cache_spec.dtype).view(kv_cache_shape)
+            torch.zeros(total_size, dtype=torch.int8, device=device)
+            .view(kv_cache_spec.dtype)
+            .view(kv_cache_shape)
         )
 
         # Maintain original KV shape view.
-        inv_order = [kv_cache_stride_order.index(i) for i in range(len(kv_cache_stride_order))]
+        inv_order = [
+            kv_cache_stride_order.index(i) for i in range(len(kv_cache_stride_order))
+        ]
         permuted_kv_cache = cross_layers_kv_cache.permute(*inv_order)
 
         kv_caches = {}

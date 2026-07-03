@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import ClassVar
 
+from aphrodite.utils.argparse_utils import FlexibleArgumentParser
 from aphrodite.utils.import_utils import PlaceholderModule
 
 from .param_sweep import ParameterSweep, ParameterSweepItem
@@ -203,7 +204,9 @@ def _comb_is_valid(
     link_vars: list[tuple[str, str]],
 ) -> bool:
     return all(
-        serve_key in serve_comb and bench_key in bench_comb and serve_comb[serve_key] == bench_comb[bench_key]
+        serve_key in serve_comb
+        and bench_key in bench_comb
+        and serve_comb[serve_key] == bench_comb[bench_key]
         for serve_key, bench_key in link_vars
     )
 
@@ -322,7 +325,9 @@ class SweepServeArgs:
     def from_cli_args(cls, args: argparse.Namespace):
         serve_cmd = shlex.split(args.serve_cmd)
         bench_cmd = shlex.split(args.bench_cmd)
-        after_bench_cmd = [] if args.after_bench_cmd is None else shlex.split(args.after_bench_cmd)
+        after_bench_cmd = (
+            [] if args.after_bench_cmd is None else shlex.split(args.after_bench_cmd)
+        )
 
         if args.serve_params:
             serve_params = ParameterSweep.read_json(args.serve_params)
@@ -364,7 +369,7 @@ class SweepServeArgs:
         )
 
     @classmethod
-    def add_cli_args(cls, parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    def add_cli_args(cls, parser: FlexibleArgumentParser) -> FlexibleArgumentParser:
         parser.add_argument(
             "--serve-cmd",
             type=str,
@@ -387,7 +392,8 @@ class SweepServeArgs:
         parser.add_argument(
             "--show-stdout",
             action="store_true",
-            help="If set, logs the standard output of subcommands. Useful for debugging but can be quite spammy.",
+            help="If set, logs the standard output of subcommands. "
+            "Useful for debugging but can be quite spammy.",
         )
         parser.add_argument(
             "--server-ready-timeout",
@@ -450,7 +456,8 @@ class SweepServeArgs:
         parser.add_argument(
             "--dry-run",
             action="store_true",
-            help="If set, prints the commands to run, then exits without executing them.",
+            help="If set, prints the commands to run, "
+            "then exits without executing them.",
         )
         parser.add_argument(
             "--resume",
@@ -496,7 +503,8 @@ class SweepServeArgs:
             print(f"Experiment has been saved at: {experiment_dir}")
         except BaseException as exc:
             raise RuntimeError(
-                "The script was terminated early. Use `--resume` to continue the script from its last checkpoint."
+                "The script was terminated early. Use `--resume` "
+                "to continue the script from its last checkpoint."
             ) from exc
 
 
@@ -524,7 +532,7 @@ def main(args: argparse.Namespace):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=SweepServeArgs.parser_help)
+    parser = FlexibleArgumentParser(description=SweepServeArgs.parser_help)
     SweepServeArgs.add_cli_args(parser)
 
     main(parser.parse_args())

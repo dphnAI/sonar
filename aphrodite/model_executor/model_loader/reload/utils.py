@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 from inspect import BoundArguments
 
 import torch
@@ -37,14 +38,22 @@ def get_layer_size(layer: torch.nn.Module) -> int:
     """
     from .meta import SKIP_TENSORS
 
-    return sum(tensor.numel() for name, tensor in get_layer_tensors(layer).items() if name not in SKIP_TENSORS)
+    return sum(
+        tensor.numel()
+        for name, tensor in get_layer_tensors(layer).items()
+        if name not in SKIP_TENSORS
+    )
 
 
 def has_device_tensors(bound_args: BoundArguments) -> bool:
     """
     Return True if the loaded weights exist on an accelerator device
-    :param bound_args: args to load weights
-    :return: True if weights are on accelerator device
+
+    Args:
+        bound_args: args to load weights
+
+    Returns:
+        True if weights are on accelerator device
     """
     return any(
         isinstance(value, torch.Tensor) and value.device.type not in ("meta", "cpu")
@@ -55,8 +64,12 @@ def has_device_tensors(bound_args: BoundArguments) -> bool:
 def get_info_size(info: LayerReloadingInfo) -> int:
     """
     Calculate the number of bytes used by loaded weights for a given layer
-    :param info: layerwise info to get size of
-    :return: number of bytes used by loaded weights
+
+    Args:
+        info: layerwise info to get size of
+
+    Returns:
+        number of bytes used by loaded weights
     """
     return sum(
         value.nbytes

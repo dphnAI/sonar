@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 from aphrodite.v1.metrics.loggers import StatLoggerBase
 
 
@@ -17,7 +18,9 @@ class DummyStatLogger(StatLoggerBase):
         self.engine_initialized = False
 
     def record(self, scheduler_stats, iteration_stats, mm_cache_stats, engine_idx):
-        self.recorded.append((scheduler_stats, iteration_stats, mm_cache_stats, engine_idx))
+        self.recorded.append(
+            (scheduler_stats, iteration_stats, mm_cache_stats, engine_idx)
+        )
 
     def log(self):
         self.logged = True

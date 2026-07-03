@@ -4,7 +4,7 @@
 # Adapted from
 # https://github.com/huggingface/transformers/blob/main/src/transformers/models/Glm4v/modeling_Glm4v.py
 # Copyright 2026 The ZhipuAI Team.
-# Copyright 2026 The Aphrodite team.
+# Copyright 2026 The vLLM team.
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 # All rights reserved.
 #
@@ -98,10 +98,18 @@ class GlmOcrVisionAttention(nn.Module):
         super().__init__()
         # Per attention head and per partition values.
         use_data_parallel = is_vit_use_data_parallel()
-        self.tp_size = 1 if use_data_parallel else get_tensor_model_parallel_world_size()
-        self.tp_rank = 0 if use_data_parallel else parallel_state.get_tensor_model_parallel_rank()
-        self.hidden_size_per_attention_head = dist_utils.divide(projection_size, num_heads)
-        self.num_attention_heads_per_partition = dist_utils.divide(num_heads, self.tp_size)
+        self.tp_size = (
+            1 if use_data_parallel else get_tensor_model_parallel_world_size()
+        )
+        self.tp_rank = (
+            0 if use_data_parallel else parallel_state.get_tensor_model_parallel_rank()
+        )
+        self.hidden_size_per_attention_head = dist_utils.divide(
+            projection_size, num_heads
+        )
+        self.num_attention_heads_per_partition = dist_utils.divide(
+            num_heads, self.tp_size
+        )
 
         self.head_dim = embed_dim // num_heads
 
@@ -309,7 +317,9 @@ class GlmOcrVisionTransformer(Glm4vVisionTransformer):
             kernel_size=vision_config.spatial_merge_size,
             stride=vision_config.spatial_merge_size,
         )
-        self.post_layernorm = RMSNorm(vision_config.hidden_size, eps=vision_config.rms_norm_eps)
+        self.post_layernorm = RMSNorm(
+            vision_config.hidden_size, eps=vision_config.rms_norm_eps
+        )
 
         self.attn_backend = get_vit_attn_backend(
             head_size=head_dim,
@@ -329,11 +339,13 @@ class GlmOcrVisionTransformer(Glm4vVisionTransformer):
         x = self.patch_embed(x)
 
         # compute position embedding
-        rotary_pos_emb_cos, rotary_pos_emb_sin, image_type_ids = self.rot_pos_emb(grid_thw)
-        # compute cu_seqlens
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0, dtype=torch.int32
+        rotary_pos_emb_cos, rotary_pos_emb_sin, image_type_ids = self.rot_pos_emb(
+            grid_thw
         )
+        # compute cu_seqlens
+        cu_seqlens = torch.repeat_interleave(
+            grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]
+        ).cumsum(dim=0, dtype=torch.int32)
         cu_seqlens = torch.cat([cu_seqlens.new_zeros(1), cu_seqlens])
         cu_seqlens = cu_seqlens.to(self.device, non_blocking=True)
 

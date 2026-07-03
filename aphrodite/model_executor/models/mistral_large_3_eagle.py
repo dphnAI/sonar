@@ -29,7 +29,9 @@ logger = init_logger(__name__)
 
 @support_torch_compile
 class EagleMistralLarge3Model(DeepseekV2Model):
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", start_layer_id: int = 0):
+    def __init__(
+        self, *, aphrodite_config: AphroditeConfig, prefix: str = "", start_layer_id: int = 0
+    ):
         nn.Module.__init__(self)
 
         config = copy.deepcopy(aphrodite_config.model_config.hf_config)
@@ -73,6 +75,16 @@ class EagleMistralLarge3Model(DeepseekV2Model):
         )
         self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.aux_hidden_state_layers: tuple[int, ...] = ()
+
+        # Needed by load_weights
+        qk_nope_head_dim = getattr(config, "qk_nope_head_dim", 0)
+        qk_rope_head_dim = getattr(config, "qk_rope_head_dim", 0)
+        self.use_mha = config.model_type == "deepseek" or all(
+            dim == 0 for dim in (qk_nope_head_dim, qk_rope_head_dim)
+        )
+        self.num_redundant_experts = (
+            aphrodite_config.parallel_config.eplb_config.num_redundant_experts
+        )
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
             ["hidden_states", "residual"], config.hidden_size
         )
@@ -87,7 +99,9 @@ class EagleMistralLarge3Model(DeepseekV2Model):
         if inputs_embeds is None:
             inputs_embeds = self.embed_input_ids(input_ids)
         inputs_embeds = self.fc(torch.cat((inputs_embeds, hidden_states), dim=-1))
-        output = super().forward(input_ids, positions, intermediate_tensors=None, inputs_embeds=inputs_embeds)
+        output = super().forward(
+            input_ids, positions, intermediate_tensors=None, inputs_embeds=inputs_embeds
+        )
         assert isinstance(output, torch.Tensor)
         return output
 
@@ -100,14 +114,18 @@ class EagleMistralLarge3ForCausalLM(MistralLarge3ForCausalLM):
     }
 
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        target_layer_num = aphrodite_config.model_config.get_num_layers(aphrodite_config.parallel_config)
+        target_layer_num = aphrodite_config.model_config.get_num_layers(
+            aphrodite_config.parallel_config
+        )
         aphrodite_config.model_config = aphrodite_config.speculative_config.draft_model_config
         # draft model quantization config may differ from target model
         self.quant_config = AphroditeConfig.get_quantization_config(
             aphrodite_config.speculative_config.draft_model_config, aphrodite_config.load_config
         )
         aphrodite_config.quant_config = self.quant_config
-        self.model_cls = partial(EagleMistralLarge3Model, start_layer_id=target_layer_num)
+        self.model_cls = partial(
+            EagleMistralLarge3Model, start_layer_id=target_layer_num
+        )
         super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
 
     def get_language_model(self) -> torch.nn.Module:

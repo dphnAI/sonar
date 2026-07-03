@@ -6,6 +6,7 @@ from collections.abc import Callable
 import torch
 from compressed_tensors.quantization import ActivationOrdering
 
+from aphrodite.distributed.utils import verify_group_size_divides_partition
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.kernels.linear import (
     MPLinearLayerConfig,
@@ -52,11 +53,14 @@ class CompressedTensorsW4A8Fp8(CompressedTensorsScheme):
         self.has_g_idx = actorder == ActivationOrdering.GROUP
 
         if self.group_size != 128 or self.strategy != "group":
-            raise ValueError("W4A8 kernels require group quantization with group size 128")
+            raise ValueError(
+                "W4A8 kernels require group quantization with group size 128"
+            )
 
         if num_bits not in W4A8_SUPPORTED_TYPES_MAP:
             raise ValueError(
-                f"Unsupported num_bits = {num_bits}. Supported num_bits = {W4A8_SUPPORTED_TYPES_MAP.keys()}"
+                f"Unsupported num_bits = {num_bits}. "
+                f"Supported num_bits = {W4A8_SUPPORTED_TYPES_MAP.keys()}"
             )
 
         self.quant_type = W4A8_SUPPORTED_TYPES_MAP[num_bits]
@@ -102,12 +106,14 @@ class CompressedTensorsW4A8Fp8(CompressedTensorsScheme):
         # If group_size is -1, we are in channelwise case.
         group_size = self.group_size if self.group_size != -1 else input_size
         row_parallel = input_size != input_size_per_partition
-        partition_scales = not marlin_repeat_scales_on_all_ranks(self.has_g_idx, self.group_size, row_parallel)
+        partition_scales = not marlin_repeat_scales_on_all_ranks(
+            self.has_g_idx, self.group_size, row_parallel
+        )
 
         scales_and_zp_size = input_size // group_size
 
         if partition_scales:
-            assert input_size_per_partition % group_size == 0
+            verify_group_size_divides_partition(input_size_per_partition, group_size)
             scales_and_zp_size = input_size_per_partition // group_size
 
         weight = PackedAphroditeParameter(
@@ -138,11 +144,15 @@ class CompressedTensorsW4A8Fp8(CompressedTensorsScheme):
         if not partition_scales:
             weight_scale = ChannelQuantScaleParameter(output_dim=0, **weight_scale_args)
         else:
-            weight_scale = GroupQuantScaleParameter(output_dim=0, input_dim=1, **weight_scale_args)
+            weight_scale = GroupQuantScaleParameter(
+                output_dim=0, input_dim=1, **weight_scale_args
+            )
 
         # A 2D array defining the original shape of the weights
         # before packing
-        weight_shape = BaseAphroditeParameter(data=torch.empty(2, dtype=torch.int64), weight_loader=weight_loader)
+        weight_shape = BaseAphroditeParameter(
+            data=torch.empty(2, dtype=torch.int64), weight_loader=weight_loader
+        )
 
         layer.register_parameter("weight_packed", weight)
         layer.register_parameter("weight_scale", weight_scale)
@@ -161,5 +171,7 @@ class CompressedTensorsW4A8Fp8(CompressedTensorsScheme):
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         self.kernel.process_weights_after_loading(layer)
 
-    def apply_weights(self, layer: torch.nn.Module, x: torch.Tensor, bias: torch.Tensor | None) -> torch.Tensor:
+    def apply_weights(
+        self, layer: torch.nn.Module, x: torch.Tensor, bias: torch.Tensor | None
+    ) -> torch.Tensor:
         return self.kernel.apply_weights(layer, x, bias)

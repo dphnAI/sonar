@@ -19,9 +19,9 @@ from aphrodite.model_executor.layers.linear import (
     RowParallelLinear,
 )
 from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 
 from .interfaces import SupportsQuant
+from .utils import AutoWeightsLoader, WeightsMapper
 
 
 def get_blip_patch_grid_length(*, image_size: int, patch_size: int) -> int:
@@ -30,7 +30,9 @@ def get_blip_patch_grid_length(*, image_size: int, patch_size: int) -> int:
 
 
 def get_blip_num_patches(*, image_size: int, patch_size: int) -> int:
-    grid_length = get_blip_patch_grid_length(image_size=image_size, patch_size=patch_size)
+    grid_length = get_blip_patch_grid_length(
+        image_size=image_size, patch_size=patch_size
+    )
     return grid_length * grid_length
 
 
@@ -53,15 +55,21 @@ class BlipVisionEmbeddings(nn.Module):
             stride=self.patch_size,
         )
 
-        self.num_patches = get_blip_num_patches(image_size=self.image_size, patch_size=self.patch_size)
+        self.num_patches = get_blip_num_patches(
+            image_size=self.image_size, patch_size=self.patch_size
+        )
         self.num_positions = self.num_patches + 1
 
-        self.position_embedding = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
+        self.position_embedding = nn.Parameter(
+            torch.randn(1, self.num_positions, self.embed_dim)
+        )
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
         target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+        patch_embeds = self.patch_embedding(
+            pixel_values.to(dtype=target_dtype)
+        )  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
@@ -122,7 +130,11 @@ class BlipAttention(nn.Module):
         )
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def forward(
         self,
@@ -256,6 +268,14 @@ class BlipVisionModel(nn.Module, SupportsQuant):
     main_input_name = "pixel_values"
     packed_modules_mapping = {"qkv_proj": ["q_proj", "k_proj", "v_proj"]}
 
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_stacked={
+            ".q_proj": (".qkv", "q"),
+            ".k_proj": (".qkv", "k"),
+            ".v_proj": (".qkv", "v"),
+        }
+    )
+
     def __init__(
         self,
         config: BlipVisionConfig,
@@ -288,7 +308,9 @@ class BlipVisionModel(nn.Module, SupportsQuant):
             require_post_norm = len(self.encoder.layers) == num_hidden_layers
 
         if require_post_norm:
-            self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+            self.post_layernorm = nn.LayerNorm(
+                config.hidden_size, eps=config.layer_norm_eps
+            )
         else:
             self.post_layernorm = None
 
@@ -302,38 +324,18 @@ class BlipVisionModel(nn.Module, SupportsQuant):
         return self.post_layernorm(hidden_states)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            # (param_name, shard_name, shard_id)
-            ("qkv_proj", "q_proj", "q"),
-            ("qkv_proj", "k_proj", "k"),
-            ("qkv_proj", "v_proj", "v"),
-        ]
-        params_dict = dict(self.named_parameters())
-        loaded_params: set[str] = set()
-        layer_count = len(self.encoder.layers)
+        skip_prefixes: list[str] = []
+        if self.post_layernorm is None:
+            skip_prefixes.append("post_layernorm.")
+        loader = AutoWeightsLoader(self, skip_prefixes=skip_prefixes)
 
-        for name, loaded_weight in weights:
-            # post_layernorm is not needed in BlipVisionModel
-            if name.startswith("post_layernorm") and self.post_layernorm is None:
-                continue
-
-            # omit layers when num_hidden_layers_override is set
-            if name.startswith("encoder.layers"):
-                layer_idx = int(name.split(".")[2])
-                if layer_idx >= layer_count:
+        # omit layers when num_hidden_layers_override is set
+        def _filter(ws):
+            for name, weight in ws:
+                if name.startswith("encoder.layers.") and int(
+                    name.split(".")[2]
+                ) >= len(self.encoder.layers):
                     continue
+                yield name, weight
 
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                if weight_name not in name:
-                    continue
-                name = name.replace(weight_name, param_name)
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
+        return loader.load_weights(_filter(weights), mapper=self.hf_to_aphrodite_mapper)

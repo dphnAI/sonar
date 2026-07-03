@@ -1,5 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
+
+# NOTE To avoid overloading the CI pipeline, this test script will not
+# be triggered on CI and is primarily intended for local testing and verification.
+
+import pytest
+
 import aphrodite
 from aphrodite.lora.request import LoRARequest
 
@@ -37,7 +44,9 @@ def generate_and_test(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> None:
         PROMPT_TEMPLATE.format(
             context="Which poll resource provided the most number of candidate information?"  # noqa: E501
         ),
-        PROMPT_TEMPLATE.format(context="Return the poll resource associated with the most candidates."),
+        PROMPT_TEMPLATE.format(
+            context="Return the poll resource associated with the most candidates."
+        ),
     ]
     sampling_params = aphrodite.SamplingParams(temperature=0, max_tokens=64)
     outputs = llm.generate(
@@ -68,6 +77,7 @@ def test_qwen3moe_lora(qwen3moe_lora_files):
         enforce_eager=True,
         trust_remote_code=True,
         enable_chunked_prefill=True,
+        enable_mixed_moe_lora_format=True,
     )
 
     generate_and_test(llm, qwen3moe_lora_files, lora_id=1)
@@ -75,16 +85,18 @@ def test_qwen3moe_lora(qwen3moe_lora_files):
 
 
 @multi_gpu_test(num_gpus=2)
-def test_qwen3moe_lora_tp2(qwen3moe_lora_files):
+@pytest.mark.parametrize("ep", [False, True])
+@pytest.mark.parametrize("enable_mixed_moe_lora_format", [False, True])
+def test_qwen3moe_lora_tp2(ep, qwen3moe_lora_files, enable_mixed_moe_lora_format):
     llm = aphrodite.LLM(
         MODEL_PATH,
         max_model_len=1024,
         enable_lora=True,
         max_loras=4,
-        enforce_eager=True,
         trust_remote_code=True,
-        enable_chunked_prefill=True,
+        enable_expert_parallel=ep,
         tensor_parallel_size=2,
+        enable_mixed_moe_lora_format=enable_mixed_moe_lora_format,
     )
 
     generate_and_test(llm, qwen3moe_lora_files, lora_id=1)
@@ -92,16 +104,18 @@ def test_qwen3moe_lora_tp2(qwen3moe_lora_files):
 
 
 @multi_gpu_test(num_gpus=4)
-def test_qwen3moe_lora_tp4(qwen3moe_lora_files):
+@pytest.mark.parametrize("ep", [False, True])
+@pytest.mark.parametrize("enable_mixed_moe_lora_format", [False, True])
+def test_qwen3moe_lora_tp4(ep, qwen3moe_lora_files, enable_mixed_moe_lora_format):
     llm = aphrodite.LLM(
         MODEL_PATH,
         max_model_len=1024,
         enable_lora=True,
         max_loras=4,
-        enforce_eager=True,
         trust_remote_code=True,
-        enable_chunked_prefill=True,
+        enable_expert_parallel=ep,
         tensor_parallel_size=4,
+        enable_mixed_moe_lora_format=enable_mixed_moe_lora_format,
     )
 
     generate_and_test(llm, qwen3moe_lora_files, lora_id=1)

@@ -18,12 +18,7 @@ from transformers import (
 from transformers.models.whisper.modeling_whisper import sinusoids
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import (
-    AphroditeConfig,
-    CacheConfig,
-    ModelConfig,
-    SpeechToTextConfig,
-)
+from aphrodite.config import CacheConfig, ModelConfig, SpeechToTextConfig, AphroditeConfig
 from aphrodite.config.multimodal import BaseDummyOptions
 from aphrodite.config.speech_to_text import SpeechToTextParams
 from aphrodite.distributed import get_tensor_model_parallel_world_size
@@ -49,7 +44,6 @@ from aphrodite.model_executor.layers.linear import (
 from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
 from aphrodite.model_executor.layers.quantization import QuantizationConfig
 from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 from aphrodite.model_executor.models.whisper_utils import (
     ISO639_1_SUPPORTED_LANGS,
 )
@@ -463,17 +457,15 @@ class WhisperDecoderLayer(nn.Module):
 
 class WhisperEncoder(nn.Module):
     def __init__(
-        self,
-        *,
-        aphrodite_config: AphroditeConfig,
-        prefix: str = "",
-        init_in_fp32: bool = False,
+        self, *, aphrodite_config: AphroditeConfig, prefix: str = "", init_in_fp32: bool = False
     ):
         super().__init__()
         config = aphrodite_config.model_config.hf_config
         embed_dim = config.d_model
 
-        self.pos_embed_type = WhisperPosEmbedType(getattr(config, "pos_embed", "sinusoidal"))
+        self.pos_embed_type = WhisperPosEmbedType(
+            getattr(config, "pos_embed", "sinusoidal")
+        )
         self.num_mel_bins = config.num_mel_bins
         self.max_source_positions = config.max_source_positions
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
@@ -484,7 +476,9 @@ class WhisperEncoder(nn.Module):
         self.total_stride = self.conv1.stride[0] * self.conv2.stride[0]
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.encoder_layers,
-            lambda prefix: WhisperEncoderLayer(aphrodite_config=aphrodite_config, prefix=f"{prefix}.layers"),
+            lambda prefix: WhisperEncoderLayer(
+                aphrodite_config=aphrodite_config, prefix=f"{prefix}.layers"
+            ),
             prefix=f"{prefix}.layers",
         )
         self.layer_norm = nn.LayerNorm(config.d_model)
@@ -498,16 +492,22 @@ class WhisperEncoder(nn.Module):
                 f"for non-causal models, but got {self.pos_embed_type}"
             )
 
-        maybe_fp32_init_ctx = set_default_torch_dtype(torch.float32) if init_in_fp32 else nullcontext()
+        maybe_fp32_init_ctx = (
+            set_default_torch_dtype(torch.float32) if init_in_fp32 else nullcontext()
+        )
 
         with (
             torch.no_grad(),
             maybe_fp32_init_ctx,
         ):
             self.embed_positions = nn.Embedding(self.max_source_positions, embed_dim)
-            self.embed_positions.weight.copy_(sinusoids(*self.embed_positions.weight.shape))
+            self.embed_positions.weight.copy_(
+                sinusoids(*self.embed_positions.weight.shape)
+            )
 
-    def forward(self, input_features: torch.Tensor | list[torch.Tensor]) -> torch.Tensor:
+    def forward(
+        self, input_features: torch.Tensor | list[torch.Tensor]
+    ) -> torch.Tensor:
         hidden_states = []
         input_is_batched = False
         for features in input_features:
@@ -515,7 +515,9 @@ class WhisperEncoder(nn.Module):
             embeds = nn.functional.gelu(self.conv2(embeds))
 
             embeds = embeds.transpose(-1, -2)
-            embeds = (embeds + self.embed_positions.weight[: embeds.size(-2), :]).to(embeds.dtype)
+            embeds = (embeds + self.embed_positions.weight[: embeds.size(-2), :]).to(
+                embeds.dtype
+            )
 
             hidden_states.append(embeds)
             input_is_batched = embeds.ndim > 2
@@ -544,11 +546,17 @@ class WhisperDecoder(nn.Module):
         self.max_source_positions = config.max_source_positions
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
-        self.embed_positions = WhisperPositionalEmbedding(self.max_target_positions, config.d_model)
+        self.embed_tokens = nn.Embedding(
+            config.vocab_size, config.d_model, self.padding_idx
+        )
+        self.embed_positions = WhisperPositionalEmbedding(
+            self.max_target_positions, config.d_model
+        )
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.decoder_layers,
-            lambda prefix: WhisperDecoderLayer(aphrodite_config=aphrodite_config, prefix=f"{prefix}.layers"),
+            lambda prefix: WhisperDecoderLayer(
+                aphrodite_config=aphrodite_config, prefix=f"{prefix}.layers"
+            ),
             prefix=f"{prefix}.layers",
         )
         self.layer_norm = nn.LayerNorm(config.d_model)
@@ -579,8 +587,12 @@ class WhisperDecoder(nn.Module):
 class WhisperModel(nn.Module):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
-        self.encoder = WhisperEncoder(aphrodite_config=aphrodite_config, prefix=f"{prefix}.encoder")
-        self.decoder = WhisperDecoder(aphrodite_config=aphrodite_config, prefix=f"{prefix}.decoder")
+        self.encoder = WhisperEncoder(
+            aphrodite_config=aphrodite_config, prefix=f"{prefix}.encoder"
+        )
+        self.decoder = WhisperDecoder(
+            aphrodite_config=aphrodite_config, prefix=f"{prefix}.decoder"
+        )
 
     def forward(
         self,
@@ -603,42 +615,6 @@ class WhisperModel(nn.Module):
         if input_features is None:
             return None
         return self.encoder(input_features)
-
-    def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            # (param_name, shard_name, shard_id)
-            (".self_attn.qkv_proj", ".self_attn.q_proj", "q"),
-            (".self_attn.qkv_proj", ".self_attn.k_proj", "k"),
-            (".self_attn.qkv_proj", ".self_attn.v_proj", "v"),
-            # MergedColumnParallelLinear uses integer indices (0, 1)
-            (".encoder_attn.kv_proj", ".encoder_attn.k_proj", 0),
-            (".encoder_attn.kv_proj", ".encoder_attn.v_proj", 1),
-        ]
-        params_dict = dict(self.named_parameters())
-        loaded_params: set[str] = set()
-        for name, loaded_weight in weights:
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                if weight_name not in name:
-                    continue
-                name = name.replace(weight_name, param_name)
-                # Skip loading extra bias for GPTQ models.
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                # Skip loading extra bias for GPTQ models.
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
 
 
 class WhisperProcessingInfo(BaseProcessingInfo):
@@ -741,7 +717,9 @@ class WhisperMultiModalProcessor(EncDecMultiModalProcessor[WhisperProcessingInfo
         # `truncation` and `max_length` must be removed when audio data
         # is present, otherwise the feature extractor interprets
         # `max_length` as raw audio samples and truncates the audio.
-        tok_kwargs = {k: v for k, v in tok_kwargs.items() if k not in ("truncation", "max_length")}
+        tok_kwargs = {
+            k: v for k, v in tok_kwargs.items() if k not in ("truncation", "max_length")
+        }
         processed_outputs = super()._call_hf_processor(
             prompt=prompt,
             mm_data=mm_data,
@@ -792,7 +770,17 @@ class WhisperForConditionalGeneration(
         "kv_proj": ["k_proj", "v_proj"],
     }
 
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_substr={".fc1.": ".mlp.fc1.", ".fc2.": ".mlp.fc2."})
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_substr={".fc1.": ".mlp.fc1.", ".fc2.": ".mlp.fc2."},
+        orig_to_new_stacked={
+            # weight_name: (param_name, shard_id)
+            ".self_attn.q_proj": (".self_attn.qkv_proj", "q"),
+            ".self_attn.k_proj": (".self_attn.qkv_proj", "k"),
+            ".self_attn.v_proj": (".self_attn.qkv_proj", "v"),
+            ".encoder_attn.k_proj": (".encoder_attn.kv_proj", 0),
+            ".encoder_attn.v_proj": (".encoder_attn.kv_proj", 1),
+        },
+    )
 
     # Whisper only supports audio-conditioned generation.
     supports_transcription_only = True
@@ -823,7 +811,9 @@ class WhisperForConditionalGeneration(
         request_prompt = stt_params.request_prompt
 
         if language is None:
-            raise ValueError("Language must be specified when creating the Whisper prompt")
+            raise ValueError(
+                "Language must be specified when creating the Whisper prompt"
+            )
 
         decoder_text = (
             f"<|prev|>{request_prompt}" if request_prompt else ""
@@ -847,7 +837,10 @@ class WhisperForConditionalGeneration(
         Used with ``SamplingParams.allowed_token_ids`` to constrain
         language detection to only produce valid language tokens.
         """
-        token_ids = [tokenizer.convert_tokens_to_ids(f"<|{lang_code}|>") for lang_code in cls.supported_languages]
+        token_ids = [
+            tokenizer.convert_tokens_to_ids(f"<|{lang_code}|>")
+            for lang_code in cls.supported_languages
+        ]
         return token_ids
 
     @classmethod
@@ -899,7 +892,9 @@ class WhisperForConditionalGeneration(
         raise ValueError("Only audio modality is supported")
 
     @classmethod
-    def get_speech_to_text_config(cls, model_config: ModelConfig, task_type: str) -> SpeechToTextConfig:
+    def get_speech_to_text_config(
+        cls, model_config: ModelConfig, task_type: str
+    ) -> SpeechToTextConfig:
         processor = cached_processor_from_config(model_config)
 
         return SpeechToTextConfig(

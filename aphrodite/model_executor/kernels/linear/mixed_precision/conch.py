@@ -43,6 +43,12 @@ class ConchLinearKernel(MPLinearKernel):
             )
             return False, error_msg
 
+        if c.has_g_idx:
+            return (
+                False,
+                "Activation reordering (g_idx) is not supported by ConchLinearKernel",
+            )
+
         if find_spec("conch") is None:
             error_msg = (
                 "conch-triton-kernels is not installed, please "
@@ -87,7 +93,9 @@ class ConchLinearKernel(MPLinearKernel):
 
             # Unpack using vectorized bitwise ops
             # shifts = [0, size_bits, 2*size_bits, ...] for each packed position
-            shifts = torch.arange(0, 32, size_bits, dtype=torch.int32, device=packed.device)
+            shifts = torch.arange(
+                0, 32, size_bits, dtype=torch.int32, device=packed.device
+            )
             # packed: [N//pack_factor, K//G] -> [N//pack_factor, K//G, 1]
             # shifts: [pack_factor] -> [1, 1, pack_factor]
             # Result: [N//pack_factor, K//G, pack_factor]

@@ -2,13 +2,17 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """FlashInfer backend for MLA prefill."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import torch
 
 import aphrodite.envs as envs
-from aphrodite.v1.attention.backends.mla.prefill.base import MLAPrefillBackend
+from aphrodite.v1.attention.backends.mla.prefill.base import (
+    MLADimensions,
+    MLAPrefillBackend,
+)
 from aphrodite.v1.attention.backends.utils import (
+    PerLayerParameters,
     get_per_layer_parameters,
     infer_global_hyperparameters,
 )
@@ -32,7 +36,13 @@ _DEFAULT_NUM_CHUNKS = 32
 class FlashInferPrefillBackend(MLAPrefillBackend):
     """FlashInfer backend for MLA prefill."""
 
-    requires_r1_mla_dimensions = True
+    supported_mla_dimensions: ClassVar[list[MLADimensions]] = [
+        MLADimensions(
+            qk_nope_head_dim=128,
+            qk_rope_head_dim=64,
+            v_head_dim=128,
+        ),
+    ]
 
     @staticmethod
     def get_name() -> str:
@@ -62,8 +72,6 @@ class FlashInferPrefillBackend(MLAPrefillBackend):
         qk_rope_head_dim: int,
         v_head_dim: int,
         aphrodite_config: "AphroditeConfig",
-        device: torch.device,
-        layer_names: list[str] | None = None,
     ) -> None:
         super().__init__(
             num_heads=num_heads,
@@ -73,21 +81,13 @@ class FlashInferPrefillBackend(MLAPrefillBackend):
             qk_rope_head_dim=qk_rope_head_dim,
             v_head_dim=v_head_dim,
             aphrodite_config=aphrodite_config,
-            device=device,
-            layer_names=layer_names,
         )
 
         self._prefill_main: BatchPrefillWithRaggedKVCacheWrapper | None = None
         self._prefill_chunks: list[BatchPrefillWithRaggedKVCacheWrapper] = []
-        if layer_names is None:
-            raise ValueError("FlashInferPrefillBackend requires layer_names to initialize global hyperparameters.")
-
-        from aphrodite.model_executor.layers.attention.mla_attention import (
-            MLACommonImpl,
-        )
-
-        self._global_hyperparameters = infer_global_hyperparameters(
-            get_per_layer_parameters(aphrodite_config, layer_names, MLACommonImpl)  # type: ignore[type-abstract]
+        self._global_hyperparameters: PerLayerParameters | None = None
+        (self._workspace_buffer,) = current_workspace_manager().get_simultaneous(
+            ((envs.APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE,), torch.uint8),
         )
 
     def _ensure_chunks(
@@ -98,28 +98,54 @@ class FlashInferPrefillBackend(MLAPrefillBackend):
         if len(self._prefill_chunks) < num_chunks:
             for _ in range(len(self._prefill_chunks), num_chunks):
                 self._prefill_chunks.append(
-                    BatchPrefillWithRaggedKVCacheWrapper(workspace_buffer, "NHD", backend="cutlass")
+                    BatchPrefillWithRaggedKVCacheWrapper(
+                        workspace_buffer, "NHD", backend="cutlass"
+                    )
                 )
+
+    def _resolve_global_hyperparameters(self) -> PerLayerParameters:
+        if self._global_hyperparameters is not None:
+            return self._global_hyperparameters
+
+        from aphrodite.model_executor.layers.attention.mla_attention import (
+            MLAAttention,
+            MLACommonImpl,
+        )
+
+        forward_context = self.aphrodite_config.compilation_config.static_forward_context
+        layer_names = [
+            name
+            for name, layer in forward_context.items()
+            if isinstance(layer, MLAAttention)
+        ]
+
+        self._global_hyperparameters = infer_global_hyperparameters(
+            get_per_layer_parameters(
+                self.aphrodite_config,
+                layer_names,
+                MLACommonImpl,  # type: ignore[type-abstract]
+            )
+        )
+        return self._global_hyperparameters
 
     def prepare_metadata(
         self,
         prefill_metadata: "MLACommonPrefillMetadata",
     ) -> None:
+        global_hyperparameters = self._resolve_global_hyperparameters()
         qo_indptr = prefill_metadata.query_start_loc
         has_context = prefill_metadata.chunked_context is not None
-        (workspace_buffer,) = current_workspace_manager().get_simultaneous(
-            ((envs.APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE,), torch.uint8),
-        )
-
         if self._prefill_main is None:
-            self._prefill_main = BatchPrefillWithRaggedKVCacheWrapper(workspace_buffer, "NHD", backend="cutlass")
-            self._ensure_chunks(_DEFAULT_NUM_CHUNKS, workspace_buffer)
+            self._prefill_main = BatchPrefillWithRaggedKVCacheWrapper(
+                self._workspace_buffer, "NHD", backend="cutlass"
+            )
+            self._ensure_chunks(_DEFAULT_NUM_CHUNKS, self._workspace_buffer)
 
         if has_context:
             chunked_context = prefill_metadata.chunked_context
             assert chunked_context is not None
             num_chunks = chunked_context.cu_seq_lens.shape[0]
-            self._ensure_chunks(num_chunks, workspace_buffer)
+            self._ensure_chunks(num_chunks, self._workspace_buffer)
 
         num_qo_heads = self.num_heads
         num_kv_heads = num_qo_heads
@@ -137,9 +163,9 @@ class FlashInferPrefillBackend(MLAPrefillBackend):
             head_dim_qk=head_dim_qk,
             head_dim_vo=head_dim_vo,
             causal=True,
-            sm_scale=self._global_hyperparameters.sm_scale,
-            window_left=self._global_hyperparameters.window_left,
-            logits_soft_cap=self._global_hyperparameters.logits_soft_cap,
+            sm_scale=global_hyperparameters.sm_scale,
+            window_left=global_hyperparameters.window_left,
+            logits_soft_cap=global_hyperparameters.logits_soft_cap,
             q_data_type=prefill_metadata.q_data_type,
             o_data_type=prefill_metadata.output_dtype,
         )
@@ -158,9 +184,9 @@ class FlashInferPrefillBackend(MLAPrefillBackend):
                     head_dim_qk=head_dim_qk,
                     head_dim_vo=head_dim_vo,
                     causal=False,
-                    sm_scale=self._global_hyperparameters.sm_scale,
-                    window_left=self._global_hyperparameters.window_left,
-                    logits_soft_cap=self._global_hyperparameters.logits_soft_cap,
+                    sm_scale=global_hyperparameters.sm_scale,
+                    window_left=global_hyperparameters.window_left,
+                    logits_soft_cap=global_hyperparameters.logits_soft_cap,
                     q_data_type=prefill_metadata.q_data_type,
                     o_data_type=prefill_metadata.output_dtype,
                 )
@@ -171,6 +197,8 @@ class FlashInferPrefillBackend(MLAPrefillBackend):
         k: torch.Tensor,
         v: torch.Tensor,
         return_softmax_lse: bool,
+        out: torch.Tensor | None = None,
+        output_scale: torch.Tensor | None = None,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         assert self._prefill_main is not None
 

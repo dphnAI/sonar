@@ -26,7 +26,9 @@ from .ScaledMMLinearKernel import (
 
 class TritonInt8ScaledMMLinearKernel(CutlassInt8ScaledMMLinearKernel):
     @classmethod
-    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
+    def is_supported(
+        cls, compute_capability: int | None = None
+    ) -> tuple[bool, str | None]:
         if current_platform.is_cuda_alike():
             return True, None
         return False, "requires ROCm or CUDA."
@@ -125,9 +127,13 @@ class TritonInt8ScaledMMLinearKernel(CutlassInt8ScaledMMLinearKernel):
         w_q, w_s, i_s, i_zp, azp_adj = self._get_layer_params(layer)
 
         symmetric = azp_adj is None
-        x_q, x_s, x_zp = ops.scaled_int8_quant(x.contiguous(), i_s, i_zp, symmetric=symmetric)
+        x_q, x_s, x_zp = ops.scaled_int8_quant(
+            x.contiguous(), i_s, i_zp, symmetric=symmetric
+        )
 
-        out = triton_scaled_mm(x_q, w_q, scale_a=x_s, scale_b=w_s, out_dtype=x.dtype, bias=bias)
+        out = triton_scaled_mm(
+            x_q, w_q, scale_a=x_s, scale_b=w_s, out_dtype=x.dtype, bias=bias
+        )
 
         if azp_adj is not None:
             # Asymmetric quantization: subtract the zero-point correction.
@@ -153,8 +159,8 @@ class TritonInt8ScaledMMLinearKernel(CutlassInt8ScaledMMLinearKernel):
 class TritonFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
     @classmethod
     def is_supported(cls, compute_capability=None):
-        if not current_platform.is_cuda_alike():
-            return False, "only cuda like devices are supported."
+        if not (current_platform.is_cuda_alike() or current_platform.is_xpu()):
+            return False, "only CUDA-alike and XPU devices are supported."
         return True, None
 
     def apply_block_scaled_mm(
@@ -189,7 +195,9 @@ def _w8a8_triton_block_scaled_mm_func(
         w8a8_triton_block_scaled_mm,
     )
 
-    return w8a8_triton_block_scaled_mm(qx, weight, x_scale, weight_scale, block_size, output_dtype)
+    return w8a8_triton_block_scaled_mm(
+        qx, weight, x_scale, weight_scale, block_size, output_dtype
+    )
 
 
 def _w8a8_triton_block_scaled_mm_fake(
@@ -200,7 +208,9 @@ def _w8a8_triton_block_scaled_mm_fake(
     block_size: list[int],
     output_dtype: torch.dtype,
 ) -> torch.Tensor:
-    return torch.empty((qx.size(0), weight.size(0)), dtype=output_dtype, device=qx.device)
+    return torch.empty(
+        (qx.size(0), weight.size(0)), dtype=output_dtype, device=qx.device
+    )
 
 
 direct_register_custom_op(

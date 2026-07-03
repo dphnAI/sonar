@@ -571,8 +571,7 @@ class CustomAllreduce {
         force_2stage = true;
       } else {
         throw std::runtime_error(
-            "Invalid APHRODITE_CUSTOM_ALLREDUCE_ALGO: " +
-            std::string(env_algo) +
+            "Invalid APHRODITE_CUSTOM_ALLREDUCE_ALGO: " + std::string(env_algo) +
             ". Valid values: 1stage, oneshot, 2stage, twoshot");
       }
     }
@@ -627,7 +626,7 @@ class CustomAllreduce {
 /**
  * To inspect PTX/SASS, copy paste this header file to compiler explorer and
  add a template instantiation:
- * template void aphrodite::CustomAllreduce::allreduce<half>(cudaStream_t, half
- *, half *, int, int, int);
+ * template void aphrodite::CustomAllreduce::allreduce<half>(cudaStream_t, half *,
+ half *, int, int, int);
 */
 }  // namespace aphrodite

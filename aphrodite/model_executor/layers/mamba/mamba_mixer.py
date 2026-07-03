@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from typing import NamedTuple, cast
+from typing import NamedTuple
 
 import torch
 from torch import nn
@@ -31,9 +31,7 @@ from aphrodite.model_executor.layers.mamba.ops.causal_conv1d import (
     causal_conv1d_update,
 )
 from aphrodite.model_executor.layers.mamba.ops.mamba_ssm import selective_scan_fn
-from aphrodite.model_executor.layers.mamba.ops.ssu_dispatch import (
-    selective_state_update,
-)
+from aphrodite.model_executor.layers.mamba.ops.ssu_dispatch import selective_state_update
 from aphrodite.model_executor.utils import set_weight_attrs
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import (
@@ -42,7 +40,9 @@ from aphrodite.utils.torch_utils import (
     _resolve_layer_name,
     direct_register_custom_op,
 )
+from aphrodite.v1.attention.backend import AttentionMetadata
 from aphrodite.v1.attention.backends.mamba1_attn import Mamba1AttentionMetadata
+from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
 
 
 # Adapted from transformers.models.mamba.modeling_mamba.MambaMixer
@@ -128,7 +128,11 @@ class MambaMixer(MambaBase, PluggableLayer):
         def weight_loader(param: Parameter, loaded_weight: torch.Tensor):
             tp_rank = get_tensor_model_parallel_rank()
             tp_size = get_tensor_model_parallel_world_size()
-            param.data.copy_(loaded_weight.data.split(loaded_weight.shape[0] // tp_size, dim=0)[tp_rank])
+            param.data.copy_(
+                loaded_weight.data.split(loaded_weight.shape[0] // tp_size, dim=0)[
+                    tp_rank
+                ]
+            )
 
         def A_weight_loader(param: Parameter, loaded_weight: torch.Tensor):
             weight_loader(param, -torch.exp(loaded_weight.float()))
@@ -195,7 +199,9 @@ class MambaMixer(MambaBase, PluggableLayer):
         self.cache_config = cache_config
         self.prefix = prefix
 
-    def _ssm_transform(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _ssm_transform(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # LoRA kernel requires contiguous tensor.
         # ROCm: Non-contiguous tensors cause incorrect GEMM
         # results when batch > 1.
@@ -260,15 +266,19 @@ class MambaMixer(MambaBase, PluggableLayer):
         mamba_block_size = self.cache_config.mamba_block_size
         is_mamba_cache_all = self.cache_config.mamba_cache_mode == "all"
 
-        attn_metadata: Mamba1AttentionMetadata | None = None
+        attn_metadata: AttentionMetadata | None = None
         if attn_metadata_raw is not None:
             assert isinstance(attn_metadata_raw, dict)
-            attn_metadata = cast(Mamba1AttentionMetadata, attn_metadata_raw[self.prefix])
+            attn_metadata = attn_metadata_raw[self.prefix]
             assert isinstance(attn_metadata, Mamba1AttentionMetadata)
             query_start_loc_p = attn_metadata.query_start_loc_p
             state_indices_tensor_p = attn_metadata.state_indices_tensor_p
             state_indices_tensor_d = attn_metadata.state_indices_tensor_d
-            conv_state = self.kv_cache[0] if is_conv_state_dim_first() else self.kv_cache[0].transpose(-1, -2)
+            conv_state = (
+                self.kv_cache[0]
+                if is_conv_state_dim_first()
+                else self.kv_cache[0].transpose(-1, -2)
+            )
             ssm_state = self.kv_cache[1]
             has_initial_states_p = attn_metadata.has_initial_states_p
             cu_chunk_seqlen_p = attn_metadata.cu_chunk_seqlen_p
@@ -278,7 +288,9 @@ class MambaMixer(MambaBase, PluggableLayer):
         projected_states = self.in_proj(hidden_states)[0].transpose(-2, -1)
         hidden_states_BC, gate = projected_states.chunk(2, dim=-2)
 
-        conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
+        conv_weights = self.conv1d.weight.view(
+            self.conv1d.weight.size(0), self.conv1d.weight.size(2)
+        )
 
         if attn_metadata is None:
             # V1 profile run
@@ -305,18 +317,24 @@ class MambaMixer(MambaBase, PluggableLayer):
         gate_d = prefill_decode_split.gate_d
 
         if is_mamba_cache_all:
-            block_idx_last_computed_token_d, block_idx_last_computed_token_p = torch.split(
-                attn_metadata.block_idx_last_computed_token,
-                [num_decodes, num_prefills],
-                dim=0,
+            block_idx_last_computed_token_d, block_idx_last_computed_token_p = (
+                torch.split(
+                    attn_metadata.block_idx_last_computed_token,
+                    [num_decodes, num_prefills],
+                    dim=0,
+                )
             )
-            block_idx_last_scheduled_token_d, block_idx_last_scheduled_token_p = torch.split(
-                attn_metadata.block_idx_last_scheduled_token,
-                [num_decodes, num_prefills],
-                dim=0,
+            block_idx_last_scheduled_token_d, block_idx_last_scheduled_token_p = (
+                torch.split(
+                    attn_metadata.block_idx_last_scheduled_token,
+                    [num_decodes, num_prefills],
+                    dim=0,
+                )
             )
 
-            block_idx_first_scheduled_token_p = attn_metadata.block_idx_first_scheduled_token_p
+            block_idx_first_scheduled_token_p = (
+                attn_metadata.block_idx_first_scheduled_token_p
+            )
             num_computed_tokens_p = attn_metadata.num_computed_tokens_p
         else:
             block_idx_last_computed_token_d = None
@@ -344,9 +362,12 @@ class MambaMixer(MambaBase, PluggableLayer):
                 initial_state_idx=block_idx_last_computed_token_p,
                 num_computed_tokens=num_computed_tokens_p,
                 block_size_to_align=mamba_block_size,
+                metadata=attn_metadata,
             )
             # 3. State Space Model sequence transformations.
-            discrete_time_step_p, B_p, C_p = self._ssm_transform(conv_out_p.transpose(-2, -1))
+            discrete_time_step_p, B_p, C_p = self._ssm_transform(
+                conv_out_p.transpose(-2, -1)
+            )
             time_proj_bias = self._time_proj_bias()
 
             # 4. Perform the recurrence y ← SSM(A, B, C, Δ)(x)
@@ -400,7 +421,9 @@ class MambaMixer(MambaBase, PluggableLayer):
             ).transpose(0, 1)
 
             # 3. State Space Model sequence transformation.
-            discrete_time_step_d, B_d, C_d = self._ssm_transform(conv_out_d.transpose(-2, -1))
+            discrete_time_step_d, B_d, C_d = self._ssm_transform(
+                conv_out_d.transpose(-2, -1)
+            )
             time_proj_bias = self._time_proj_bias()
 
             # 4. Perform the recurrence y ← SSM(A, B, C, Δ)(x)
@@ -424,7 +447,9 @@ class MambaMixer(MambaBase, PluggableLayer):
 
             ssm_outputs.insert(0, scan_outputs_d)
 
-        scan_outputs_combined = ssm_outputs[0] if len(ssm_outputs) == 1 else torch.cat(ssm_outputs, dim=-1)
+        scan_outputs_combined = (
+            ssm_outputs[0] if len(ssm_outputs) == 1 else torch.cat(ssm_outputs, dim=-1)
+        )
 
         # 5. Final output projection
         if self.is_lora_enabled:  # Lora kernel requires contiguous tensor.
@@ -453,8 +478,8 @@ class MambaMixer(MambaBase, PluggableLayer):
         )
 
     @property
-    def mamba_type(self) -> str:
-        return "mamba1"
+    def mamba_type(self) -> MambaAttentionBackendEnum:
+        return MambaAttentionBackendEnum.MAMBA1
 
     def _time_proj_bias(self) -> torch.Tensor | None:
         if hasattr(self.dt_proj, "bias") and self.dt_proj.bias is not None:
@@ -483,7 +508,9 @@ def split_batch_to_prefill_and_decode(
         [num_decode_tokens, num_prefill_tokens],
         dim=-1,
     )
-    gate_d, gate_p = torch.split(gate[..., :num_actual_tokens], [num_decode_tokens, num_prefill_tokens], dim=-1)
+    gate_d, gate_p = torch.split(
+        gate[..., :num_actual_tokens], [num_decode_tokens, num_prefill_tokens], dim=-1
+    )
 
     return PrefillDecodeSplit(
         hidden_states_BC_p=hidden_states_BC_p,

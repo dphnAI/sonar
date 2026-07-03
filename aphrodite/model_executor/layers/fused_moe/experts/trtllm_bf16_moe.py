@@ -11,6 +11,9 @@ from aphrodite.model_executor.layers.fused_moe.config import (
     FusedMoEQuantConfig,
     RoutingMethodType,
 )
+from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
+    activation_to_flashinfer_int,
+)
 from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
 )
@@ -31,7 +34,9 @@ class TrtLlmBf16Experts(mk.FusedMoEExpertsMonolithic):
         super().__init__(moe_config, quant_config)
         self.routing_method_type = moe_config.routing_method
         self.topk = moe_config.experts_per_token
-        self.intermediate_size_per_partition = moe_config.intermediate_size_per_partition
+        self.intermediate_size_per_partition = (
+            moe_config.intermediate_size_per_partition
+        )
         self.hidden_dim = moe_config.hidden_dim
         self.local_num_experts = moe_config.num_local_experts
         self.ep_rank = moe_config.moe_parallel_config.ep_rank
@@ -44,12 +49,16 @@ class TrtLlmBf16Experts(mk.FusedMoEExpertsMonolithic):
     def _supports_current_device() -> bool:
         """Supports only Blackwell-family GPUs."""
         p = current_platform
-        return p.is_cuda() and p.is_device_capability_family(100) and has_flashinfer_trtllm_fused_moe()
+        return (
+            p.is_cuda()
+            and p.is_device_capability_family(100)
+            and has_flashinfer_trtllm_fused_moe()
+        )
 
     @staticmethod
     def _supports_no_act_and_mul() -> bool:
-        """BF16 kernels do not support non-gated MoE"""
-        return False
+        """BF16 kernels support non-gated MoE via RELU2_NO_MUL."""
+        return True
 
     @staticmethod
     def _supports_quant_scheme(
@@ -61,7 +70,8 @@ class TrtLlmBf16Experts(mk.FusedMoEExpertsMonolithic):
 
     @staticmethod
     def _supports_activation(activation: MoEActivation) -> bool:
-        return activation in [MoEActivation.SILU]
+        """Supports SiLU (gated) and RELU^2 (non-gated) activations."""
+        return activation in [MoEActivation.SILU, MoEActivation.RELU2_NO_MUL]
 
     @staticmethod
     def _supports_routing_method(
@@ -74,6 +84,8 @@ class TrtLlmBf16Experts(mk.FusedMoEExpertsMonolithic):
             RoutingMethodType.Llama4,
             RoutingMethodType.Renormalize,
             RoutingMethodType.RenormalizeNaive,
+            RoutingMethodType.SigmoidRenorm,
+            RoutingMethodType.Sigmoid,
         ]
 
     @staticmethod
@@ -82,7 +94,8 @@ class TrtLlmBf16Experts(mk.FusedMoEExpertsMonolithic):
     ) -> bool:
         """Monolithic kernel so only use with naive DP/EP and TP."""
         return (
-            not moe_parallel_config.use_all2all_kernels or moe_parallel_config.use_ag_rs_all2all_kernels
+            not moe_parallel_config.use_all2all_kernels
+            or moe_parallel_config.use_ag_rs_all2all_kernels
         ) and not moe_parallel_config.enable_eplb
 
     @staticmethod
@@ -91,12 +104,6 @@ class TrtLlmBf16Experts(mk.FusedMoEExpertsMonolithic):
         routing_method: RoutingMethodType,
     ) -> bool:
         return True
-
-    def supports_chunking(self) -> bool:
-        return False
-
-    def supports_expert_map(self) -> bool:
-        return False
 
     @property
     def expects_unquantized_inputs(self) -> bool:
@@ -120,6 +127,8 @@ class TrtLlmBf16Experts(mk.FusedMoEExpertsMonolithic):
     ) -> torch.Tensor:
         import flashinfer
 
+        assert activation in [MoEActivation.SILU, MoEActivation.RELU2_NO_MUL]
+
         return flashinfer.fused_moe.trtllm_bf16_moe(
             routing_logits=router_logits,
             routing_bias=e_score_correction_bias,
@@ -133,5 +142,7 @@ class TrtLlmBf16Experts(mk.FusedMoEExpertsMonolithic):
             intermediate_size=self.intermediate_size_per_partition,
             local_expert_offset=self.ep_rank * self.local_num_experts,
             local_num_experts=self.local_num_experts,
+            routed_scaling_factor=routed_scaling_factor,
             routing_method_type=self.routing_method_type,
+            activation_type=activation_to_flashinfer_int(activation),
         )

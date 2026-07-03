@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 from transformers import AutoTokenizer
 
@@ -38,7 +39,6 @@ def test_min_tokens_with_stop(min_tokens: int, stop: str, truth: str):
         mm_features=None,
         sampling_params=params,
         pooling_params=None,
-        eos_token_id=None,
         arrival_time=0.0,
         lora_request=None,
         cache_salt=None,

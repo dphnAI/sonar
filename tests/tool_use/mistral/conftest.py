@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 import pytest_asyncio
 from huggingface_hub import snapshot_download
 
-from aphrodite.platforms import current_platform
 from tests.utils import RemoteOpenAIServer
+from aphrodite.platforms import current_platform
 
 from .utils import ARGS, CONFIGS, ServerConfig
 
@@ -16,7 +17,9 @@ def server_config(request):
     config = CONFIGS[request.param]
 
     if current_platform.is_rocm() and not config.get("supports_rocm", True):
-        pytest.skip("The {} model can't be tested on the ROCm platform".format(config["model"]))
+        pytest.skip(
+            "The {} model can't be tested on the ROCm platform".format(config["model"])
+        )
 
     # download model and tokenizer using transformers
     snapshot_download(config["model"])
@@ -28,7 +31,9 @@ def server_config(request):
 def server(request, server_config: ServerConfig):
     model = server_config["model"]
     args_for_model = server_config["arguments"]
-    with RemoteOpenAIServer(model, ARGS + args_for_model, max_wait_seconds=480) as server:
+    with RemoteOpenAIServer(
+        model, ARGS + args_for_model, max_wait_seconds=480
+    ) as server:
         yield server
 
 

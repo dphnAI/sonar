@@ -3,7 +3,7 @@
 
 # Adapted from
 # https://github.com/huggingface/transformers/blob/v4.28.0/src/transformers/models/llama/modeling_llama.py
-# Copyright 2023 The Aphrodite team.
+# Copyright 2023 The vLLM team.
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -172,12 +172,18 @@ class Resampler2_5(BaseResampler):
         self.max_size = max_size
         self._set_2d_pos_cache(self.max_size)
 
-    def _set_2d_pos_cache(self, max_size: tuple[int, int], device: torch.types.Device = "cpu") -> None:
-        pos_embed_arr = get_2d_sincos_pos_embed(self.embed_dim, max_size, version=(2, 5))
+    def _set_2d_pos_cache(
+        self, max_size: tuple[int, int], device: torch.types.Device = "cpu"
+    ) -> None:
+        pos_embed_arr = get_2d_sincos_pos_embed(
+            self.embed_dim, max_size, version=(2, 5)
+        )
         pos_embed = torch.from_numpy(pos_embed_arr).float().to(device)
         self.register_buffer("pos_embed", pos_embed, persistent=False)
 
-    def _adjust_pos_cache(self, tgt_sizes: torch.Tensor, device: torch.types.Device) -> None:
+    def _adjust_pos_cache(
+        self, tgt_sizes: torch.Tensor, device: torch.types.Device
+    ) -> None:
         max_h = tgt_sizes[:, 0].max().item()
         max_w = tgt_sizes[:, 1].max().item()
         assert isinstance(max_h, int) and isinstance(max_w, int)
@@ -203,16 +209,22 @@ class Resampler2_5(BaseResampler):
         max_patch_len = patch_len.max().item()
         assert isinstance(max_patch_len, int)
 
-        key_padding_mask = torch.zeros((bs, max_patch_len), dtype=torch.bool, device=device)
+        key_padding_mask = torch.zeros(
+            (bs, max_patch_len), dtype=torch.bool, device=device
+        )
 
         pos_embed = []
         for i in range(bs):
             tgt_h, tgt_w = tgt_sizes[i].tolist()
-            pos_embed.append(self.pos_embed[:tgt_h, :tgt_w, :].reshape((tgt_h * tgt_w, -1)).to(dtype))  # patches * D
+            pos_embed.append(
+                self.pos_embed[:tgt_h, :tgt_w, :]
+                .reshape((tgt_h * tgt_w, -1))
+                .to(device=device, dtype=dtype)
+            )  # patches * D
             key_padding_mask[i, patch_len[i] :] = True
-        pos_embed = torch.nn.utils.rnn.pad_sequence(pos_embed, batch_first=True, padding_value=0.0).permute(
-            1, 0, 2
-        )  # BLD => L * B * D
+        pos_embed = torch.nn.utils.rnn.pad_sequence(
+            pos_embed, batch_first=True, padding_value=0.0
+        ).permute(1, 0, 2)  # BLD => L * B * D
         x, _ = self.kv_proj(x)  # B * L * D
         x = self.ln_kv(x).permute(1, 0, 2)  # L * B * D
 
@@ -261,7 +273,9 @@ class Resampler4_5(Resampler2_5):
         self._set_temporal_pos_cache(self.max_temporal_size)
         self.apply(self._init_weights)
 
-    def get_1d_sincos_pos_embed_from_temporal_size(self, embed_dim: int, pos: np.ndarray):
+    def get_1d_sincos_pos_embed_from_temporal_size(
+        self, embed_dim: int, pos: np.ndarray
+    ):
         """
         embed_dim: output dimension for each position
         pos: a list of positions to be encoded: size (M,)
@@ -281,16 +295,24 @@ class Resampler4_5(Resampler2_5):
         emb = np.concatenate([emb_sin, emb_cos], axis=1)  # (M, D)
         return emb
 
-    def _set_temporal_pos_cache(self, max_temporal_size: int, device: torch.types.Device = "cpu") -> None:
+    def _set_temporal_pos_cache(
+        self, max_temporal_size: int, device: torch.types.Device = "cpu"
+    ) -> None:
         temporal_size = np.arange(max_temporal_size, dtype=np.float32)
         pos_embed = (
-            torch.from_numpy(self.get_1d_sincos_pos_embed_from_temporal_size(self.embed_dim, temporal_size))
+            torch.from_numpy(
+                self.get_1d_sincos_pos_embed_from_temporal_size(
+                    self.embed_dim, temporal_size
+                )
+            )
             .float()
             .to(device)
         )
         self.register_buffer("temporal_pos_embed", pos_embed, persistent=False)
 
-    def _adjust_temporal_pos_cache(self, max_temporal_size: int, device: torch.types.Device = "cpu"):
+    def _adjust_temporal_pos_cache(
+        self, max_temporal_size: int, device: torch.types.Device = "cpu"
+    ):
         if max_temporal_size > self.max_temporal_size:
             self.max_temporal_size = max_temporal_size
             self._set_temporal_pos_cache(self.max_temporal_size, device)
@@ -335,7 +357,9 @@ class Resampler4_5(Resampler2_5):
         max_patch_len = patch_len.max().item()
         assert isinstance(max_patch_len, int)
 
-        key_padding_mask = torch.zeros((bs, max_patch_len), dtype=torch.bool, device=device)
+        key_padding_mask = torch.zeros(
+            (bs, max_patch_len), dtype=torch.bool, device=device
+        )
 
         x, _ = self.kv_proj(x)  # B * L * D
         x = self.ln_kv(x).permute(1, 0, 2)  # L * B * D
@@ -347,16 +371,24 @@ class Resampler4_5(Resampler2_5):
             tgt_h, tgt_w = tgt_sizes[i]
             if temporal_pos_emb:
                 if temporal_ids_flatten[i] == -1:
-                    pos_embed_temporal.append(torch.zeros(self.embed_dim, dtype=dtype, device=device))
+                    pos_embed_temporal.append(
+                        torch.zeros(self.embed_dim, dtype=dtype, device=device)
+                    )
                 else:
-                    pos_embed_temporal.append(self.temporal_pos_embed[temporal_ids_flatten[i]].to(dtype))  # D
+                    pos_embed_temporal.append(
+                        self.temporal_pos_embed[temporal_ids_flatten[i]].to(dtype)
+                    )  # D
 
-            pos_embed_2d.append(self.pos_embed[:tgt_h, :tgt_w, :].reshape((tgt_h * tgt_w, -1)).to(dtype))  # patches * D
+            pos_embed_2d.append(
+                self.pos_embed[:tgt_h, :tgt_w, :]
+                .reshape((tgt_h * tgt_w, -1))
+                .to(device=device, dtype=dtype)
+            )  # patches * D
             key_padding_mask[i, patch_len[i] :] = True
 
-        pos_embed_2d = torch.nn.utils.rnn.pad_sequence(pos_embed_2d, batch_first=True, padding_value=0.0).permute(
-            1, 0, 2
-        )  # BLD => L * B * D
+        pos_embed_2d = torch.nn.utils.rnn.pad_sequence(
+            pos_embed_2d, batch_first=True, padding_value=0.0
+        ).permute(1, 0, 2)  # BLD => L * B * D
 
         k = x + pos_embed_2d
         v = x
@@ -372,18 +404,24 @@ class Resampler4_5(Resampler2_5):
                 end = start + len(tp)
                 # L * (end-start) * D -> (end-start) * L * D
                 # -> 1 * L*(end-start) * D
-                merge_k.append(k[:, start:end, :].permute(1, 0, 2).reshape(-1, self.embed_dim))
-                merge_v.append(v[:, start:end, :].permute(1, 0, 2).reshape(-1, self.embed_dim))
-                merge_key_padding_mask.append(key_padding_mask[start:end, :].reshape(-1, 1))
+                merge_k.append(
+                    k[:, start:end, :].permute(1, 0, 2).reshape(-1, self.embed_dim)
+                )
+                merge_v.append(
+                    v[:, start:end, :].permute(1, 0, 2).reshape(-1, self.embed_dim)
+                )
+                merge_key_padding_mask.append(
+                    key_padding_mask[start:end, :].reshape(-1, 1)
+                )
 
                 start = end
 
-            k = torch.nn.utils.rnn.pad_sequence(merge_k, batch_first=True, padding_value=0.0).permute(
-                1, 0, 2
-            )  # L*(end-start)
-            v = torch.nn.utils.rnn.pad_sequence(merge_v, batch_first=True, padding_value=0.0).permute(
-                1, 0, 2
-            )  # L*(end-start)
+            k = torch.nn.utils.rnn.pad_sequence(
+                merge_k, batch_first=True, padding_value=0.0
+            ).permute(1, 0, 2)  # L*(end-start)
+            v = torch.nn.utils.rnn.pad_sequence(
+                merge_v, batch_first=True, padding_value=0.0
+            ).permute(1, 0, 2)  # L*(end-start)
             key_padding_mask = torch.nn.utils.rnn.pad_sequence(
                 merge_key_padding_mask, batch_first=True, padding_value=True
             ).squeeze(-1)
@@ -509,11 +547,20 @@ class MiniCPMVProcessingInfo(BaseProcessingInfo):
     def get_hf_processor(self, **kwargs: object):
         hf_processor = self.ctx.get_hf_processor(**kwargs)
 
+        from aphrodite.transformers_utils.processors.minicpmv import MiniCPMVProcessor
+
+        vendored_processor = MiniCPMVProcessor(
+            image_processor=hf_processor.image_processor,
+            tokenizer=hf_processor.tokenizer,
+        )
+        hf_processor = vendored_processor
+
         # NumPy arrays are considered as Iterable but not Sequence in
         # https://github.com/huggingface/transformers/blob/main/src/transformers/image_transforms.py#L428
         image_processor = hf_processor.image_processor  # type: ignore
-        for attr in ("mean", "std"):
-            val = getattr(image_processor, attr)
+        # transformers v5+ renamed `mean`/`std` -> `image_mean`/`image_std`
+        for attr in ("mean", "std", "image_mean", "image_std"):
+            val = getattr(image_processor, attr, None)
             if isinstance(val, np.ndarray):
                 setattr(image_processor, attr, val.tolist())
 
@@ -589,6 +636,7 @@ class MiniCPMVProcessingInfo(BaseProcessingInfo):
             image_size,
             max_slice_nums=max_slice_nums,
         )
+
         if grid is None:
             ncols = nrows = 0
         else:
@@ -648,7 +696,9 @@ class MiniCPMVProcessingInfo(BaseProcessingInfo):
 
         max_image_tokens = self.get_max_image_tokens() * max_images
         max_total_frames = self.get_max_video_frames(seq_len - max_image_tokens)
-        max_frames_per_video = min(max_total_frames // max(max_videos, 1), _MAX_FRAMES_PER_VIDEO)
+        max_frames_per_video = min(
+            max_total_frames // max(max_videos, 1), _MAX_FRAMES_PER_VIDEO
+        )
 
         return max(max_frames_per_video, 1)
 
@@ -677,7 +727,9 @@ class MiniCPMVDummyInputsBuilder(BaseDummyInputsBuilder[_I]):
 
         image_width, image_height = self.info.get_image_size_with_most_features()
         video_width, video_height = self.info.get_video_frame_size_with_most_features()
-        num_video_frames = self.info.get_num_frames_with_most_features(seq_len, mm_counts)
+        num_video_frames = self.info.get_num_frames_with_most_features(
+            seq_len, mm_counts
+        )
 
         image_overrides = mm_options.get("image")
         video_overrides = mm_options.get("video")
@@ -729,7 +781,9 @@ class MiniCPMVMultiModalProcessor(BaseMultiModalProcessor[_I]):
             return {}
 
         mm_items = self.info.parse_mm_data({"image": images}, validate=False)
-        parsed_images = mm_items.get_items("image", (MiniCPMVImageEmbeddingItems, ImageProcessorItems))
+        parsed_images = mm_items.get_items(
+            "image", (MiniCPMVImageEmbeddingItems, ImageProcessorItems)
+        )
 
         if isinstance(parsed_images, MiniCPMVImageEmbeddingItems):
             image_inputs = {}
@@ -754,13 +808,17 @@ class MiniCPMVMultiModalProcessor(BaseMultiModalProcessor[_I]):
             return {}
 
         mm_items = self.info.parse_mm_data({"video": videos}, validate=False)
-        parsed_videos = mm_items.get_items("video", (MiniCPMVVideoEmbeddingItems, VideoProcessorItems))
+        parsed_videos = mm_items.get_items(
+            "video", (MiniCPMVVideoEmbeddingItems, VideoProcessorItems)
+        )
 
         if isinstance(parsed_videos, MiniCPMVVideoEmbeddingItems):
             video_inputs = {}
         else:
             video_inputs = self._base_call_hf_processor(
-                prompts=[self.info.image_pattern * len(video) for video in parsed_videos],
+                prompts=[
+                    self.info.image_pattern * len(video) for video in parsed_videos
+                ],
                 mm_data={"images": list(parsed_videos)},
                 mm_kwargs={
                     **mm_kwargs,
@@ -795,7 +853,7 @@ class MiniCPMVMultiModalProcessor(BaseMultiModalProcessor[_I]):
         out_keys: set[str],
     ) -> dict[str, NestedTensors]:
         # This processor supports zipping prompt and mm_data together
-        if self.info.get_model_version() in {(2, 6), (4, 0), (4, 5)}:
+        if self.info.get_model_version() in {(2, 6), (4, 0), (4, 5), (4, 6)}:
             inputs = super()._call_hf_processor(
                 prompt=prompts,  # type: ignore
                 mm_data=mm_data,
@@ -862,13 +920,17 @@ class MiniCPMVMultiModalProcessor(BaseMultiModalProcessor[_I]):
         additional_placeholders = []
         tokenizer = self.info.get_tokenizer()
         for modality, pattern in placeholders:
-            sub_pattern = tokenizer.decode(tokenizer.encode(pattern, add_special_tokens=False))
+            sub_pattern = tokenizer.decode(
+                tokenizer.encode(pattern, add_special_tokens=False)
+            )
             if sub_pattern != pattern:
                 additional_placeholders.append((modality, sub_pattern))
         placeholders += additional_placeholders
 
         def get_image_replacement(item_idx: int):
-            images = mm_items.get_items("image", (MiniCPMVImageEmbeddingItems, ImageProcessorItems))
+            images = mm_items.get_items(
+                "image", (MiniCPMVImageEmbeddingItems, ImageProcessorItems)
+            )
 
             image_size = images.get_image_size(item_idx)
 
@@ -878,7 +940,9 @@ class MiniCPMVMultiModalProcessor(BaseMultiModalProcessor[_I]):
             )
 
         def get_video_replacement(item_idx: int):
-            videos = mm_items.get_items("video", (MiniCPMVVideoEmbeddingItems, VideoProcessorItems))
+            videos = mm_items.get_items(
+                "video", (MiniCPMVVideoEmbeddingItems, VideoProcessorItems)
+            )
 
             frame_size = videos.get_frame_size(item_idx)
             num_frames = videos.get_num_frames(item_idx)
@@ -894,7 +958,9 @@ class MiniCPMVMultiModalProcessor(BaseMultiModalProcessor[_I]):
         }
 
         return [
-            PromptReplacement(modality=modality, target=pattern, replacement=get_replacement[modality])
+            PromptReplacement(
+                modality=modality, target=pattern, replacement=get_replacement[modality]
+            )
             for modality, pattern in placeholders
         ]
 
@@ -919,10 +985,15 @@ class MiniCPMVMultiModalProcessor(BaseMultiModalProcessor[_I]):
             if version == (2, 0) or version == (2, 5):
                 im_start = image_processor.im_start_token
                 im_end = image_processor.im_end_token
-            else:
+            elif hasattr(image_processor, "im_id_start"):
                 im_start = image_processor.im_id_start
                 im_end = image_processor.im_id_end
+            else:
+                # transformers v5.7+ keeps im_id tokens on the tokenizer.
+                im_start = getattr(tokenizer, "image_id_start_token", "<image_id>")
+                im_end = getattr(tokenizer, "image_id_end_token", "</image_id>")
 
+            embed_text = getattr(tokenizer, "image_token", "<unk>")
             new_update = new_update.with_content(
                 PromptUpdateDetails.select_text(
                     text.replace(
@@ -930,7 +1001,7 @@ class MiniCPMVMultiModalProcessor(BaseMultiModalProcessor[_I]):
                         f"{im_start}{new_item_idx}{im_end}",
                         1,
                     ),
-                    "<unk>",
+                    embed_text,
                 )
             )
 
@@ -977,11 +1048,19 @@ class MiniCPMVBaseModel(nn.Module, SupportsMultiModal, SupportsPP):
         self.version = get_version_by_config(self.config)
 
         with self._mark_language_model(aphrodite_config):
-            self.llm = self.init_llm(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "llm"))
+            self.llm = self.init_llm(
+                aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "llm")
+            )
 
         with self._mark_tower_model(aphrodite_config, {"image", "video"}):
-            self.vpm = self.init_vision_module(config, quant_config, prefix=maybe_prefix(prefix, "vpm"))
-            self.vision_dim = self.vpm.embed_dim if self.version == (2, 0) else self.vpm.embeddings.embed_dim
+            self.vpm = self.init_vision_module(
+                config, quant_config, prefix=maybe_prefix(prefix, "vpm")
+            )
+            self.vision_dim = (
+                self.vpm.embed_dim
+                if self.version == (2, 0)
+                else self.vpm.embeddings.embed_dim
+            )
             self.embed_dim = self.config.hidden_size
 
             self.resampler = self.init_resampler(
@@ -1037,9 +1116,17 @@ class MiniCPMVBaseModel(nn.Module, SupportsMultiModal, SupportsPP):
         # Preserve the order of modalities if there are multiple of them
         # from the order of kwargs.
         for input_key in kwargs:
-            if input_key in ("pixel_values", "image_embeds") and "images" not in modalities:
-                modalities["images"] = self._parse_and_validate_vision_input("images", **kwargs)
-            if input_key in ("video_pixel_values", "video_embeds") and "videos" not in modalities:
+            if (
+                input_key in ("pixel_values", "image_embeds")
+                and "images" not in modalities
+            ):
+                modalities["images"] = self._parse_and_validate_vision_input(
+                    "images", **kwargs
+                )
+            if (
+                input_key in ("video_pixel_values", "video_embeds")
+                and "videos" not in modalities
+            ):
                 modalities["videos"] = self._parse_and_validate_vision_input(
                     "videos", **{k.removeprefix("video_"): v for k, v in kwargs.items()}
                 )
@@ -1119,7 +1206,9 @@ class MiniCPMVBaseModel(nn.Module, SupportsMultiModal, SupportsPP):
         """
         Get the module prefix in multimodal models
         """
-        return MultiModelKeys.from_string_field(language_model="llm", connector="resampler", tower_model="vpm")
+        return MultiModelKeys.from_string_field(
+            language_model="llm", connector="resampler", tower_model="vpm"
+        )
 
     def init_llm(
         self,
@@ -1186,7 +1275,10 @@ class MiniCPMV2_0(MiniCPMVBaseModel):
 
         model = model.to(dtype=torch.get_default_dtype())
 
-        if isinstance(model, timm.models.VisionTransformer) and model.attn_pool is not None:
+        if (
+            isinstance(model, timm.models.VisionTransformer)
+            and model.attn_pool is not None
+        ):
             model.attn_pool = torch.nn.Identity()
 
         if self.config.drop_vision_last_layer:
@@ -1226,7 +1318,9 @@ class MiniCPMV2_0(MiniCPMVBaseModel):
         for pixel_value in pixel_values:
             H, W = pixel_value[0].shape[-2:]
             tgt_size = (math.ceil(H / P_h), math.ceil(W / P_w))
-            vision_embedding = self.vpm.forward_features(pixel_value.unsqueeze(0).type(dtype))
+            vision_embedding = self.vpm.forward_features(
+                pixel_value.unsqueeze(0).type(dtype)
+            )
 
             if num_prefix_tokens > 0:
                 vision_embedding = vision_embedding[:, num_prefix_tokens:]
@@ -1593,7 +1687,9 @@ class MiniCPMV4_5(MiniCPMVBaseModel, SupportsLoRA):
         dtype = pixel_values[0].dtype
 
         all_pixel_values = torch.zeros((B, 3, P, L), dtype=dtype, device=device)
-        all_temporal_ids = None if temporal_ids is None else flatten_2d_lists(temporal_ids)
+        all_temporal_ids = (
+            None if temporal_ids is None else flatten_2d_lists(temporal_ids)
+        )
         for i, pixel_values_item in enumerate(pixel_values):
             L_item = pixel_values_item.shape[-1]
             all_pixel_values[i, ..., :L_item] = pixel_values_item
@@ -1655,8 +1751,13 @@ class MiniCPMV(MiniCPMVBaseModel, SupportsMultiModal, SupportsLoRA):
         # Dispatch class based on version
         instance_cls = _SUPPORT_VERSION.get(version)
         if instance_cls is None:
-            supported_versions = ", ".join([f"{v[0]}.{v[1]}" for v in sorted(_SUPPORT_VERSION.keys())])
-            raise ValueError(f"Currently, MiniCPMV only supports versions {supported_versions}. Got version: {version}")
+            supported_versions = ", ".join(
+                [f"{v[0]}.{v[1]}" for v in sorted(_SUPPORT_VERSION.keys())]
+            )
+            raise ValueError(
+                f"Currently, MiniCPMV only supports versions "
+                f"{supported_versions}. Got version: {version}"
+            )
 
         # quant_config references base class members,
         # so update values before init is called

@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-import pytest
-from aphrodite.engine.args_tools import EngineArgs
 
-from aphrodite.common.sampling_params import SamplingParams
+import pytest
+
+from aphrodite.engine.arg_utils import EngineArgs
+from aphrodite.sampling_params import SamplingParams
 from aphrodite.v1.core.sched.scheduler import Scheduler
 from aphrodite.v1.engine.llm_engine import LLMEngine
 
 
 class DummyV1Scheduler(Scheduler):
-    def schedule(self):
+    def schedule(self, throttle_prefills: bool = False):
         raise Exception("Exception raised by DummyV1Scheduler")
 
 

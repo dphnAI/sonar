@@ -122,7 +122,9 @@ def should_nccl_symm_mem_allreduce(world_size: int, input_tensor: torch.Tensor) 
         return False
 
     tensor_size = input_tensor.nbytes
-    custom_ar_range = NCCL_SYMM_MEM_ALL_REDUCE_CONFIG["custom_ar_preferred_ranges"].get(world_size)
+    custom_ar_range = NCCL_SYMM_MEM_ALL_REDUCE_CONFIG["custom_ar_preferred_ranges"].get(
+        world_size
+    )
 
     if custom_ar_range is not None:
         lower_bound, upper_bound = custom_ar_range
@@ -130,6 +132,18 @@ def should_nccl_symm_mem_allreduce(world_size: int, input_tensor: torch.Tensor) 
         # Use custom_AR (not symm_mem) for mid-range sizes
         return tensor_size <= lower_bound or tensor_size >= upper_bound
     return world_size > NCCL_SYMM_MEM_ALL_REDUCE_CONFIG["always_use_above_world_size"]
+
+
+def should_nccl_symm_mem_ag_rs() -> bool:
+    """Check whether NCCL symmetric memory should be used for
+    AllGather / ReduceScatter collectives."""
+    from aphrodite.distributed.device_communicators.pynccl_allocator import (
+        is_symmetric_memory_enabled,
+    )
+
+    if envs.APHRODITE_BATCH_INVARIANT:
+        return False
+    return is_symmetric_memory_enabled()
 
 
 def producer(
@@ -281,7 +295,8 @@ def can_actually_p2p(
         b = result_queue.get()
         if a != b:
             logger.warning(
-                "Two processes do not agree on the P2P access status on %d -> %d, treat as disabled.",
+                "Two processes do not agree on the P2P access"
+                " status on %d -> %d, treat as disabled.",
                 src,
                 tgt,
             )
@@ -317,21 +332,41 @@ def gpu_p2p_access_check(src: int, tgt: int) -> bool:
 
     is_distributed = dist.is_initialized()
 
-    num_dev = current_platform.device_count()
-    cuda_visible_devices = envs.CUDA_VISIBLE_DEVICES
-    if cuda_visible_devices is None:
-        cuda_visible_devices = ",".join(str(i) for i in range(num_dev))
+    from aphrodite.platforms.interface import get_assigned_physical_gpu_ids
 
-    path = os.path.join(envs.APHRODITE_CACHE_ROOT, f"gpu_p2p_access_cache_for_{cuda_visible_devices}.json")
+    assigned_physical_gpu_ids = get_assigned_physical_gpu_ids()
+    if assigned_physical_gpu_ids is not None:
+        # Key by the ordered list: the cache stores directed local-index
+        # pairs, so permutations of the same set are distinct mappings.
+        cache_key = ",".join(str(i) for i in assigned_physical_gpu_ids)
+        num_dev = len(assigned_physical_gpu_ids)
+    else:
+        num_dev = current_platform.device_count()
+        cuda_visible_devices = envs.CUDA_VISIBLE_DEVICES
+        cache_key = cuda_visible_devices or ",".join(str(i) for i in range(num_dev))
+
+    path = os.path.join(
+        envs.APHRODITE_CACHE_ROOT, f"gpu_p2p_access_cache_for_{cache_key}.json"
+    )
     os.makedirs(os.path.dirname(path), exist_ok=True)
     from aphrodite.distributed.parallel_state import get_world_group
 
-    if (not is_distributed or get_world_group().local_rank == 0) and (not os.path.exists(path)):
+    if (not is_distributed or get_world_group().local_rank == 0) and (
+        not os.path.exists(path)
+    ):
         # only the local master process (with local_rank == 0) can
         #  enter this block to calculate the cache
         logger.info("generating GPU P2P access cache in %s", path)
         cache: dict[str, bool] = {}
-        ids = list(range(num_dev))
+        # The probe subprocesses inherit this process's device-control env
+        # var, so they must be given visible ordinals, not physical IDs.
+        if assigned_physical_gpu_ids is not None:
+            ids = [
+                current_platform.logical_device_id_to_visible_device_id(local)
+                for local in range(num_dev)
+            ]
+        else:
+            ids = list(range(num_dev))
         # batch of all pairs of GPUs
         batch_src, batch_tgt = zip(*list(product(ids, ids)))
         # NOTE: we use `subprocess` rather than `multiprocessing` here
@@ -346,7 +381,9 @@ def gpu_p2p_access_check(src: int, tgt: int) -> bool:
         # because the subprocess might produce logging output
         with tempfile.NamedTemporaryFile() as output_file:
             input_bytes = pickle.dumps((batch_src, batch_tgt, output_file.name))
-            returned = subprocess.run([sys.executable, __file__], input=input_bytes, capture_output=True)
+            returned = subprocess.run(
+                [sys.executable, __file__], input=input_bytes, capture_output=True
+            )
             # check if the subprocess is successful
             try:
                 returned.check_returncode()
@@ -359,8 +396,11 @@ def gpu_p2p_access_check(src: int, tgt: int) -> bool:
                 ) from e
             with open(output_file.name, "rb") as f:
                 result = pickle.load(f)
+        # Cache entries must be keyed by local indices (0..N-1) because
+        # gpu_p2p_access_check() is called with local ranks.
+        id_to_local = {device_id: local for local, device_id in enumerate(ids)}
         for _i, _j, r in zip(batch_src, batch_tgt, result):
-            cache[f"{_i}->{_j}"] = r
+            cache[f"{id_to_local[_i]}->{id_to_local[_j]}"] = r
         with open(path, "w") as f:
             json.dump(cache, f, indent=4)
     if is_distributed:

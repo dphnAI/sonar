@@ -1,21 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 import torch
-from aphrodite.modeling.layers.activation import SiluAndMul
-from aphrodite.modeling.layers.fused_moe import fused_experts, fused_topk
 
-from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
-from aphrodite.platforms import current_platform
 from tests.kernels.moe.utils import make_test_quant_config
-from tests.kernels.quant_utils import native_per_token_group_quant_int8, native_w8a8_block_matmul
+from tests.kernels.quant_utils import (
+    native_per_token_group_quant_int8,
+    native_w8a8_block_matmul,
+)
+from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
+from aphrodite.model_executor.layers.activation import SiluAndMul
+from aphrodite.model_executor.layers.fused_moe import fused_experts, fused_topk
+from aphrodite.platforms import current_platform
 
 if current_platform.get_device_capability() < (7, 0):
     pytest.skip("INT8 Triton requires CUDA 7.0 or higher", allow_module_level=True)
 
 aphrodite_config = AphroditeConfig()
-aphrodite_config.scheduler_config.max_num_seqs = 128
-aphrodite_config.scheduler_config.max_model_len = 8192
 
 DTYPES = [torch.bfloat16]
 
@@ -75,7 +77,9 @@ def torch_w8a8_block_int8_moe(a, w1, w2, w1_s, w2_s, score, topk, block_shape):
             out[mask] = native_w8a8_block_matmul(
                 act_out_q, w2[i], act_out_s, w2_s[i], block_shape, output_dtype=a.dtype
             )
-    return (out.view(B, -1, w2.shape[1]) * topk_weight.view(B, -1, 1).to(out.dtype)).sum(dim=1)
+    return (
+        out.view(B, -1, w2.shape[1]) * topk_weight.view(B, -1, 1).to(out.dtype)
+    ).sum(dim=1)
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -112,7 +116,9 @@ def test_w8a8_block_int8_fused_moe(M, N, K, E, topk, block_size, dtype, seed):
 
     # Set the context to avoid lots of warning spam.
     with set_current_aphrodite_config(aphrodite_config):
-        out = fused_experts(a, w1, w2, topk_weights, topk_ids, quant_config=quant_config)
+        out = fused_experts(
+            a, w1, w2, topk_weights, topk_ids, quant_config=quant_config
+        )
         ref_out = torch_w8a8_block_int8_moe(
             a,
             w1,

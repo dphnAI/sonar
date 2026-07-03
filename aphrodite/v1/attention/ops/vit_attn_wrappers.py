@@ -12,6 +12,8 @@ latencies by ~7% (see qwen2_5_vl for example usage)
 To use these ops, you must have a recent version of PyTorch installed (>= 2.4.0)
 """
 
+from typing import Any
+
 import einops
 import torch
 import torch.nn.functional as F
@@ -31,9 +33,11 @@ def flash_attn_maxseqlen_wrapper(
     cu_seqlens: torch.Tensor | None = None,
     max_seqlen: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    kwargs = {}
+    kwargs: dict[str, Any] = {}
     if is_rocm_aiter:
         from aiter import flash_attn_varlen_func
+
+        kwargs["window_size"] = (-1, -1)
     else:
         from aphrodite.v1.attention.backends.fa_utils import flash_attn_varlen_func
 
@@ -42,7 +46,9 @@ def flash_attn_maxseqlen_wrapper(
 
     q_len = q.size(1)
     if cu_seqlens is None:
-        cu_seqlens = torch.arange(0, (batch_size + 1) * q_len, step=q_len, dtype=torch.int32, device=q.device)
+        cu_seqlens = torch.arange(
+            0, (batch_size + 1) * q_len, step=q_len, dtype=torch.int32, device=q.device
+        )
     max_seqlen = q_len if max_seqlen is None else max_seqlen.item()
 
     q, k, v = (einops.rearrange(x, "b s ... -> (b s) ...") for x in [q, k, v])
@@ -121,7 +127,9 @@ def triton_attn_wrapper(
 
     q_len = q.size(1)
     if cu_seqlens is None:
-        cu_seqlens = torch.arange(0, (batch_size + 1) * q_len, step=q_len, dtype=torch.int32, device=q.device)
+        cu_seqlens = torch.arange(
+            0, (batch_size + 1) * q_len, step=q_len, dtype=torch.int32, device=q.device
+        )
     max_seqlen = q_len if max_seqlen is None else max_seqlen.item()
 
     q, k, v = (einops.rearrange(x, "b s ... -> (b s) ...") for x in [q, k, v])
@@ -195,7 +203,9 @@ def apply_sdpa(
     (batch_size x seq_len x num_heads x head_size)
     """
     q, k, v = (einops.rearrange(x, "b s h d -> b h s d") for x in [q, k, v])
-    output = F.scaled_dot_product_attention(q, k, v, dropout_p=0.0, scale=scale, enable_gqa=enable_gqa)
+    output = F.scaled_dot_product_attention(
+        q, k, v, dropout_p=0.0, scale=scale, enable_gqa=enable_gqa
+    )
     output = einops.rearrange(output, "b h s d -> b s h d ")
     return output
 
@@ -259,7 +269,9 @@ def vit_torch_sdpa_wrapper(
     cu_seqlens: torch.Tensor | None = None,
     enable_gqa: bool = False,
 ) -> torch.Tensor:
-    return torch.ops.aphrodite.torch_sdpa_wrapper(q, k, v, scale, cu_seqlens, enable_gqa=enable_gqa)
+    return torch.ops.aphrodite.torch_sdpa_wrapper(
+        q, k, v, scale, cu_seqlens, enable_gqa=enable_gqa
+    )
 
 
 def flashinfer_wrapper(

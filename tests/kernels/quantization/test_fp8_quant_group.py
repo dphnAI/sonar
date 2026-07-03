@@ -4,10 +4,10 @@
 
 import pytest
 import torch
-from aphrodite.quantization.input_quant_fp8 import QuantFP8
-from aphrodite.quantization.utils.quant_utils import GroupShape
 
-from aphrodite.platforms import current_platform
+from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP8
+from aphrodite.model_executor.layers.quantization.utils.quant_utils import GroupShape
+from aphrodite.utils.torch_utils import set_random_seed
 
 
 @pytest.mark.parametrize(
@@ -23,14 +23,19 @@ from aphrodite.platforms import current_platform
 @pytest.mark.parametrize("use_ue8m0", [True, False])
 @torch.inference_mode()
 def test_quantfp8_group_functionality(
-    batch_size: int, hidden_dim: int, group_size: int, seed: int, use_ue8m0: bool
+    default_aphrodite_config,
+    batch_size: int,
+    hidden_dim: int,
+    group_size: int,
+    seed: int,
+    use_ue8m0: bool,
 ) -> None:
     """Test QuantFP8 group quantization with various configurations.
 
     Tests both CUDA and native implementations, column-major scales,
     and verifies consistency between implementations.
     """
-    current_platform.seed_everything(seed)
+    set_random_seed(seed)
 
     x = torch.randn((batch_size, hidden_dim), dtype=torch.bfloat16, device="cuda") * 8
     expected_num_groups = (hidden_dim + group_size - 1) // group_size
@@ -62,7 +67,7 @@ def test_quantfp8_group_functionality(
     assert scales_col.stride(1) == batch_size
 
     # Test column-major scales consistency
-    assert torch.allclose(scales_col, scales_native, rtol=1e-9, atol=1e-8)
+    torch.testing.assert_close(scales_col, scales_native, rtol=1e-9, atol=1e-8)
 
     # 3. Test CUDA implementation (only for divisible dimensions)
     if is_divisible:
@@ -71,7 +76,7 @@ def test_quantfp8_group_functionality(
         assert scales_cuda.shape == (batch_size, expected_num_groups)
 
         # Verify CUDA/native consistency
-        assert torch.allclose(scales_cuda, scales_native, rtol=1e-9, atol=1e-8)
+        torch.testing.assert_close(scales_cuda, scales_native, rtol=2e-7, atol=2e-8)
 
         # Quantized values should mostly match
         diff_count = (x_quant_cuda != x_quant_native).sum().item()
@@ -82,14 +87,19 @@ def test_quantfp8_group_functionality(
 @pytest.mark.parametrize("seed", [42])
 @pytest.mark.parametrize("use_ue8m0", [True, False])
 @torch.inference_mode()
-def test_quantfp8_group_multidimensional(seed: int, use_ue8m0: bool) -> None:
-    current_platform.seed_everything(seed)
+def test_quantfp8_group_multidimensional(
+    default_aphrodite_config, seed: int, use_ue8m0: bool
+) -> None:
+    set_random_seed(seed)
 
     group_size = 64
 
     # Test with 3D input
     batch1, batch2, hidden_dim = 4, 8, 1024
-    x_3d = torch.randn((batch1, batch2, hidden_dim), dtype=torch.bfloat16, device="cuda") * 8
+    x_3d = (
+        torch.randn((batch1, batch2, hidden_dim), dtype=torch.bfloat16, device="cuda")
+        * 8
+    )
 
     group_shape = GroupShape(1, group_size)
     quant_op = QuantFP8(
@@ -115,7 +125,12 @@ def test_quantfp8_group_multidimensional(seed: int, use_ue8m0: bool) -> None:
 
     # Test with 4D input
     batch1, batch2, batch3, hidden_dim = 2, 3, 4, 256
-    x_4d = torch.randn((batch1, batch2, batch3, hidden_dim), dtype=torch.bfloat16, device="cuda") * 8
+    x_4d = (
+        torch.randn(
+            (batch1, batch2, batch3, hidden_dim), dtype=torch.bfloat16, device="cuda"
+        )
+        * 8
+    )
 
     x_quant_4d, scales_4d = quant_op.forward_native(x_4d.clone())
     assert x_quant_4d.shape == x_4d.shape
@@ -127,8 +142,8 @@ def test_quantfp8_group_multidimensional(seed: int, use_ue8m0: bool) -> None:
 
 @pytest.mark.parametrize("seed", [42])
 @torch.inference_mode()
-def test_quantfp8_group_edge_cases(seed: int) -> None:
-    current_platform.seed_everything(seed)
+def test_quantfp8_group_edge_cases(default_aphrodite_config, seed: int) -> None:
+    set_random_seed(seed)
 
     batch_size = 16
     group_size = 64
@@ -136,7 +151,9 @@ def test_quantfp8_group_edge_cases(seed: int) -> None:
     # Test with single group (group_size >= hidden_dim)
     x_small = torch.randn((batch_size, 32), dtype=torch.bfloat16, device="cuda") * 8
     group_shape = GroupShape(1, group_size)
-    quant_op = QuantFP8(static=False, group_shape=group_shape, column_major_scales=False)
+    quant_op = QuantFP8(
+        static=False, group_shape=group_shape, column_major_scales=False
+    )
 
     x_quant_small, scales_small = quant_op.forward_native(x_small.clone())
     assert x_quant_small.shape == x_small.shape

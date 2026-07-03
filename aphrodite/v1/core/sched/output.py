@@ -65,7 +65,9 @@ class NewRequestData:
         )
 
     def __repr__(self) -> str:
-        prompt_embeds_shape = self.prompt_embeds.shape if self.prompt_embeds is not None else None
+        prompt_embeds_shape = (
+            self.prompt_embeds.shape if self.prompt_embeds is not None else None
+        )
         return (
             f"NewRequestData("
             f"req_id={self.req_id},"
@@ -82,9 +84,15 @@ class NewRequestData:
 
     # Version of __repr__ with the prompt data obfuscated
     def anon_repr(self) -> str:
-        prompt_token_ids_len = len(self.prompt_token_ids) if self.prompt_token_ids is not None else None
-        prompt_embeds_shape = self.prompt_embeds.shape if self.prompt_embeds is not None else None
-        prefill_token_ids_len = len(self.prefill_token_ids) if self.prefill_token_ids is not None else None
+        prompt_token_ids_len = (
+            len(self.prompt_token_ids) if self.prompt_token_ids is not None else None
+        )
+        prompt_embeds_shape = (
+            self.prompt_embeds.shape if self.prompt_embeds is not None else None
+        )
+        prefill_token_ids_len = (
+            len(self.prefill_token_ids) if self.prefill_token_ids is not None else None
+        )
         return (
             f"NewRequestData("
             f"req_id={self.req_id},"
@@ -110,8 +118,8 @@ class CachedRequestData:
     # NOTE(woosuk): new_token_ids is only used for pipeline parallelism.
     # When PP is not used, new_token_ids will be empty.
     new_token_ids: list[list[int]]
-    # For requests not scheduled in the last step, propagate the token ids to the
-    # connector. Won't contain requests that were scheduled in the prior step.
+    # MRV1-only: For requests not scheduled in the last step, propagate the token ids
+    # to the connector. Won't contain requests scheduled in the prior step.
     all_token_ids: dict[str, list[int]]
     new_block_ids: list[tuple[list[int], ...] | None]
     num_computed_tokens: list[int]
@@ -120,7 +128,9 @@ class CachedRequestData:
     # Version of dataclass repr with token IDs obfuscated.
     def anon_repr(self) -> str:
         new_token_ids_lens = [len(toks) for toks in self.new_token_ids]
-        all_token_ids_lens = {req_id: len(toks) for req_id, toks in self.all_token_ids.items()}
+        all_token_ids_lens = {
+            req_id: len(toks) for req_id, toks in self.all_token_ids.items()
+        }
         return (
             f"CachedRequestData("
             f"req_ids={self.req_ids},"
@@ -229,6 +239,10 @@ class SchedulerOutput:
     # The worker zeros the corresponding GPU memory before the blocks are used,
     # preventing stale NaN/data from corrupting attention or SSM computation.
     new_block_ids_to_zero: list[int] | None = None
+
+    # Dynamic speculative decoding: optimal K chosen by scheduler.
+    # Number of spec tokens to schedule for the next step.
+    num_spec_tokens_to_schedule: int = 0
 
     @classmethod
     def make_empty(cls) -> "SchedulerOutput":

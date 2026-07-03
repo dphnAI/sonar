@@ -17,7 +17,7 @@
 #include <torch/csrc/stable/tensor.h>
 #include "libtorch_stable/torch_utils.h"
 #include "libtorch_stable/dispatch_utils.h"
-#include "cuda_vec_utils.cuh"
+#include "../../cuda_vec_utils.cuh"
 
 #include <cuda_runtime_api.h>
 #include <cuda_runtime.h>
@@ -25,7 +25,7 @@
 #include <cuda_fp8.h>
 
 #include "cuda_utils.h"
-#include "launch_bounds_utils.h"
+#include "libtorch_stable/launch_bounds_utils.h"
 
 // Define before including nvfp4_utils.cuh so the header
 // can use this macro during compilation.
@@ -146,8 +146,7 @@ void silu_and_mul_nvfp4_quant_sm1xxa(
 
   int num_packed_cols = int(n / CVT_FP4_ELTS_PER_THREAD);
 
-  int grid_y =
-      aphrodite::div_round_up(num_packed_cols, static_cast<int>(block.x));
+  int grid_y = aphrodite::div_round_up(num_packed_cols, static_cast<int>(block.x));
   int grid_x = std::min(
       int(m), std::max(1, (multiProcessorCount * numBlocksPerSM) / grid_y));
   dim3 grid(grid_x, grid_y);
@@ -156,10 +155,9 @@ void silu_and_mul_nvfp4_quant_sm1xxa(
       input.scalar_type(), "silu_and_mul_nvfp4_quant_kernel", [&] {
         using cuda_type = aphrodite::CUDATypeConverter<scalar_t>::Type;
         auto input_ptr = static_cast<cuda_type const*>(input.data_ptr());
-        aphrodite::silu_mul_cvt_fp16_to_fp4<cuda_type>
-            <<<grid, block, 0, stream>>>(
-                m, n, num_packed_cols, input_ptr, input_sf_ptr,
-                reinterpret_cast<uint32_t*>(output_ptr),
-                reinterpret_cast<uint32_t*>(sf_out));
+        aphrodite::silu_mul_cvt_fp16_to_fp4<cuda_type><<<grid, block, 0, stream>>>(
+            m, n, num_packed_cols, input_ptr, input_sf_ptr,
+            reinterpret_cast<uint32_t*>(output_ptr),
+            reinterpret_cast<uint32_t*>(sf_out));
       });
 }

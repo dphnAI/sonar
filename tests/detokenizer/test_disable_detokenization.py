@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
-from aphrodite.endpoints.llm import LLM
 
-from aphrodite.common.sampling_params import SamplingParams
+from aphrodite.entrypoints.llm import LLM
+from aphrodite.sampling_params import SamplingParams
 
 
-@pytest.mark.skip_v1
 @pytest.mark.parametrize("model", ["distilbert/distilgpt2"])
 def test_computed_prefix_blocks(model: str):
     # This test checks if the engine generates completions both with and

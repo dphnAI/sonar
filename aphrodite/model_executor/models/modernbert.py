@@ -8,7 +8,7 @@ from transformers import ModernBertConfig
 from transformers.activations import ACT2FN
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, ModelConfig
+from aphrodite.config import ModelConfig, AphroditeConfig
 from aphrodite.distributed import get_tensor_model_parallel_world_size
 from aphrodite.model_executor.layers.attention import (
     EncoderOnlyAttention,
@@ -36,8 +36,14 @@ class ModernBertEmbeddings(nn.Module):
     def __init__(self, config: ModernBertConfig):
         super().__init__()
         self.config = config
-        self.tok_embeddings = VocabParallelEmbedding(config.vocab_size, config.hidden_size)
-        eps = getattr(config, "norm_eps", None) or getattr(config, "layer_norm_eps", None) or 1e-5
+        self.tok_embeddings = VocabParallelEmbedding(
+            config.vocab_size, config.hidden_size
+        )
+        eps = (
+            getattr(config, "norm_eps", None)
+            or getattr(config, "layer_norm_eps", None)
+            or 1e-5
+        )
         self.norm = nn.LayerNorm(config.hidden_size, eps=eps, bias=config.norm_bias)
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
@@ -56,7 +62,13 @@ class ModernBertEmbeddings(nn.Module):
 
 
 class ModernBertAttention(nn.Module):
-    def __init__(self, config: ModernBertConfig, layer_id: int | None = None, prefix: str = ""):
+    def __init__(
+        self,
+        config: ModernBertConfig,
+        layer_id: int | None = None,
+        prefix: str = "",
+        dtype: torch.dtype | None = None,
+    ):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -82,14 +94,18 @@ class ModernBertAttention(nn.Module):
             rope_parameters = config.rope_parameters[layer_type]
             sliding_window: int | None = None
             if layer_type == "sliding_attention":
-                sliding_window = config.local_attention // 2
+                # Treats the local attention boundary as inclusive
+                sliding_window = config.sliding_window + 1
         else:
             # Transformers v4
             sliding_window = None
             if layer_id % config.global_attn_every_n_layers != 0:
+                # ModernBertConfig does not expose sliding_window
                 sliding_window = config.local_attention // 2
                 rope_theta = (
-                    config.local_rope_theta if config.local_rope_theta is not None else config.global_rope_theta
+                    config.local_rope_theta
+                    if config.local_rope_theta is not None
+                    else config.global_rope_theta
                 )
             else:
                 rope_theta = config.global_rope_theta
@@ -99,7 +115,7 @@ class ModernBertAttention(nn.Module):
             head_size=self.head_dim,
             max_position=config.max_position_embeddings,
             rope_parameters=rope_parameters,
-            dtype=torch.float16,
+            dtype=dtype,
         )
         self.attn = EncoderOnlyAttention(
             self.num_heads,
@@ -133,8 +149,10 @@ class ModernBertMLP(nn.Module):
     def __init__(self, config: ModernBertConfig, prefix: str = ""):
         super().__init__()
         self.config = config
-        self.Wi = nn.Linear(config.hidden_size, int(config.intermediate_size) * 2, bias=config.mlp_bias)
-        self.act = nn.GELU()
+        self.Wi = nn.Linear(
+            config.hidden_size, int(config.intermediate_size) * 2, bias=config.mlp_bias
+        )
+        self.act = ACT2FN[config.hidden_activation]
         self.Wo = RowParallelLinear(
             config.intermediate_size,
             config.hidden_size,
@@ -148,15 +166,30 @@ class ModernBertMLP(nn.Module):
 
 
 class ModernBertLayer(nn.Module):
-    def __init__(self, config: ModernBertConfig, prefix: str = "", layer_id: int | None = None):
+    def __init__(
+        self,
+        config: ModernBertConfig,
+        prefix: str = "",
+        layer_id: int | None = None,
+        dtype: torch.dtype | None = None,
+    ):
         super().__init__()
         self.config = config
         if layer_id == 0:
             self.attn_norm = nn.Identity()
         else:
-            self.attn_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
-        self.attn = ModernBertAttention(config=config, layer_id=layer_id, prefix=f"{prefix}.attn")
-        self.mlp_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
+            self.attn_norm = nn.LayerNorm(
+                config.hidden_size, eps=config.norm_eps, bias=config.norm_bias
+            )
+        self.attn = ModernBertAttention(
+            config=config,
+            layer_id=layer_id,
+            prefix=f"{prefix}.attn",
+            dtype=dtype,
+        )
+        self.mlp_norm = nn.LayerNorm(
+            config.hidden_size, eps=config.norm_eps, bias=config.norm_bias
+        )
         self.mlp = ModernBertMLP(config, prefix=f"{prefix}.mlp")
 
     def forward(
@@ -164,7 +197,9 @@ class ModernBertLayer(nn.Module):
         hidden_states: torch.Tensor,
         position_ids: torch.Tensor,
     ) -> torch.Tensor:
-        attn_outputs = self.attn(hidden_states=self.attn_norm(hidden_states), position_ids=position_ids)
+        attn_outputs = self.attn(
+            hidden_states=self.attn_norm(hidden_states), position_ids=position_ids
+        )
         hidden_states = hidden_states + attn_outputs
         mlp_output = self.mlp(self.mlp_norm(hidden_states))
         hidden_states = hidden_states + mlp_output
@@ -175,12 +210,14 @@ class ModernBertEncoderLayer(nn.Module):
     def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
         config = aphrodite_config.model_config.hf_config
+        dtype = aphrodite_config.model_config.dtype
         self.layers = nn.ModuleList(
             [
                 ModernBertLayer(
                     config=config,
                     layer_id=layer_id,
                     prefix=f"{prefix}.layers.{layer_id}",
+                    dtype=dtype,
                 )
                 for layer_id in range(config.num_hidden_layers)
             ]
@@ -199,7 +236,9 @@ class ModernBertEncoderLayer(nn.Module):
 @support_torch_compile
 @default_pooling_type(seq_pooling_type="CLS")
 class ModernBertModel(nn.Module):
-    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_prefix={"layers.": "encoder_layer.layers."})
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_prefix={"layers.": "encoder_layer.layers."}
+    )
 
     def __init__(
         self,
@@ -210,8 +249,12 @@ class ModernBertModel(nn.Module):
         config = aphrodite_config.model_config.hf_config
         self.config = config
         self.embeddings = ModernBertEmbeddings(config)
-        self.encoder_layer = ModernBertEncoderLayer(aphrodite_config, prefix=f"{prefix}.encoder_layer")
-        self.final_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
+        self.encoder_layer = ModernBertEncoderLayer(
+            aphrodite_config, prefix=f"{prefix}.encoder_layer"
+        )
+        self.final_norm = nn.LayerNorm(
+            config.hidden_size, eps=config.norm_eps, bias=config.norm_bias
+        )
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.embeddings.embed_input_ids(input_ids)
@@ -239,7 +282,9 @@ class ModernBertModel(nn.Module):
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
         else:
-            hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
+            hidden_states = self.embeddings(
+                input_ids=input_ids, inputs_embeds=inputs_embeds
+            )
 
         outputs = self.encoder_layer(
             hidden_states=hidden_states,
@@ -299,7 +344,9 @@ class ModernBertForSequenceClassification(nn.Module, SupportsCrossEncoding):
         config = aphrodite_config.model_config.hf_config
 
         self.config = config
-        self.model = ModernBertModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "modernbert"))
+        self.model = ModernBertModel(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "modernbert")
+        )
         self.classifier = nn.Linear(
             config.hidden_size,
             config.num_labels,
@@ -362,7 +409,9 @@ class ModernBertPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=config.classifier_bias)
+        self.dense = nn.Linear(
+            config.hidden_size, config.hidden_size, bias=config.classifier_bias
+        )
         self.act = ACT2FN[config.classifier_activation]
         self.norm = nn.LayerNorm(
             config.hidden_size,
@@ -384,9 +433,13 @@ class ModernBertForTokenClassification(nn.Module):
         config = aphrodite_config.model_config.hf_config
         self.head_dtype = aphrodite_config.model_config.head_dtype
         self.num_labels = config.num_labels
-        self.model = ModernBertModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "modernbert"))
+        self.model = ModernBertModel(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "modernbert")
+        )
         self.head = ModernBertPredictionHead(config)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels, dtype=self.head_dtype)
+        self.classifier = nn.Linear(
+            config.hidden_size, config.num_labels, dtype=self.head_dtype
+        )
 
         pooler_config = aphrodite_config.model_config.pooler_config
         assert pooler_config is not None

@@ -17,9 +17,10 @@ from aphrodite.entrypoints.anthropic.protocol import (
 )
 from aphrodite.entrypoints.anthropic.serving import AnthropicServingMessages
 from aphrodite.entrypoints.openai.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.openai.utils import validate_json_request
-from aphrodite.entrypoints.utils import (
+from aphrodite.entrypoints.serve.utils.api_utils import (
     load_aware_call,
+    sanitize_message,
+    validate_json_request,
     with_cancellation,
 )
 from aphrodite.logger import init_logger
@@ -40,7 +41,9 @@ def translate_error_response(response: ErrorResponse) -> JSONResponse:
             message=response.error.message,
         )
     )
-    return JSONResponse(status_code=response.error.code, content=anthropic_error.model_dump())
+    return JSONResponse(
+        status_code=response.error.code, content=anthropic_error.model_dump()
+    )
 
 
 @router.post(
@@ -58,8 +61,10 @@ def translate_error_response(response: ErrorResponse) -> JSONResponse:
 async def create_messages(request: AnthropicMessagesRequest, raw_request: Request):
     handler = messages(raw_request)
     if handler is None:
-        base_server = raw_request.app.state.openai_serving_tokenization
-        error = base_server.create_error_response(NotImplementedError("The model does not support Messages API"))
+        base_server = raw_request.app.state.serving_tokenization
+        error = base_server.create_error_response(
+            NotImplementedError("The model does not support Messages API")
+        )
         return translate_error_response(error)
 
     try:
@@ -71,7 +76,7 @@ async def create_messages(request: AnthropicMessagesRequest, raw_request: Reques
             content=AnthropicErrorResponse(
                 error=AnthropicError(
                     type="internal_error",
-                    message=str(e),
+                    message=sanitize_message(str(e)),
                 )
             ).model_dump(),
         )
@@ -97,13 +102,15 @@ async def create_messages(request: AnthropicMessagesRequest, raw_request: Reques
         HTTPStatus.INTERNAL_SERVER_ERROR.value: {"model": AnthropicErrorResponse},
     },
 )
-@load_aware_call
 @with_cancellation
+@load_aware_call
 async def count_tokens(request: AnthropicCountTokensRequest, raw_request: Request):
     handler = messages(raw_request)
     if handler is None:
-        base_server = raw_request.app.state.openai_serving_tokenization
-        error = base_server.create_error_response(NotImplementedError("The model does not support Messages API"))
+        base_server = raw_request.app.state.serving_tokenization
+        error = base_server.create_error_response(
+            NotImplementedError("The model does not support Messages API")
+        )
         return translate_error_response(error)
 
     try:
@@ -115,7 +122,7 @@ async def count_tokens(request: AnthropicCountTokensRequest, raw_request: Reques
             content=AnthropicErrorResponse(
                 error=AnthropicError(
                     type="internal_error",
-                    message=str(e),
+                    message=sanitize_message(str(e)),
                 )
             ).model_dump(),
         )

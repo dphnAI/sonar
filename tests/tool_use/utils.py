@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 from copy import deepcopy
 from typing import Any
 
@@ -18,7 +19,9 @@ class ServerConfig(TypedDict, total=False):
     extended: bool | None  # tests do not run in CI automatically
 
 
-def patch_system_prompt(messages: list[dict[str, Any]], system_prompt: str) -> list[dict[str, Any]]:
+def patch_system_prompt(
+    messages: list[dict[str, Any]], system_prompt: str
+) -> list[dict[str, Any]]:
     new_messages = deepcopy(messages)
     if new_messages[0]["role"] == "system":
         new_messages[0]["content"] = system_prompt
@@ -27,7 +30,9 @@ def patch_system_prompt(messages: list[dict[str, Any]], system_prompt: str) -> l
     return new_messages
 
 
-def ensure_system_prompt(messages: list[dict[str, Any]], config: ServerConfig) -> list[dict[str, Any]]:
+def ensure_system_prompt(
+    messages: list[dict[str, Any]], config: ServerConfig
+) -> list[dict[str, Any]]:
     prompt = config.get("system_prompt")
     if prompt:
         return patch_system_prompt(messages, prompt)
@@ -37,6 +42,8 @@ def ensure_system_prompt(messages: list[dict[str, Any]], config: ServerConfig) -
 
 # universal args for all models go here. also good if you need to test locally
 # and change type or KV cache quantization or something.
+SEED = 42
+
 ARGS: list[str] = [
     "--enable-auto-tool-choice",
     "--max-model-len",
@@ -118,11 +125,17 @@ CONFIGS: dict[str, ServerConfig] = {
         "supports_parallel": True,
         "extended": True,
     },
-    "mistral": {
+    "mistral-7b": {
         "model": "mistralai/Mistral-7B-Instruct-v0.3",
         "arguments": [
             "--enforce-eager",
             "--no-enable-prefix-caching",
+            "--tokenizer_mode",
+            "hf",
+            "--load_format",
+            "hf",
+            "--config_format",
+            "hf",
             "--tool-call-parser",
             "mistral",
             "--chat-template",
@@ -134,22 +147,49 @@ CONFIGS: dict[str, ServerConfig] = {
         "call the tool. Otherwise, answer the user's query directly "
         "without calling a tool. DO NOT CALL A TOOL THAT IS IRRELEVANT "
         "to the user's question - just respond to it normally.",
+        "supports_parallel": True,
     },
-    # V1 Test: Passing locally but failing in CI. This runs the
-    # V0 Engine because of CPU offloading. Need to debug why.
+    "mistral-small-3.2": {
+        "model": "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+        "arguments": [
+            "--enforce-eager",
+            "--no-enable-prefix-caching",
+            "--tool-call-parser",
+            "mistral",
+            "--tokenizer-mode",
+            "mistral",
+            "--config-format",
+            "mistral",
+            "--load-format",
+            "mistral",
+            "--tensor-parallel-size",
+            "4",
+            '--ignore-patterns="consolidated.safetensors"',
+        ],
+        "system_prompt": "You are a helpful assistant with access to tools. If a tool"
+        " that you have would be helpful to answer a user query, "
+        "call the tool. Otherwise, answer the user's query directly "
+        "without calling a tool. DO NOT CALL A TOOL THAT IS IRRELEVANT "
+        "to the user's question - just respond to it normally.",
+        "supports_parallel": True,
+        "extended": True,
+    },
+    # FIXME: This test currently fails, need to debug why.
     # "granite20b": {
-    #     "model":
-    #     "mbayser/granite-20b-functioncalling-FP8-KV",
+    #     "model": "mbayser/granite-20b-functioncalling-FP8-KV",
     #     "arguments": [
-    #         "--tool-call-parser", "granite-20b-fc", "--chat-template",
-    #         str(APHRODITE_PATH /
-    #             "examples/tool_chat_template_granite_20b_fc.jinja"),
-    #         "--max_num_seqs", "1", "--enforce-eager", "--cpu-offload-gb", "20"
+    #         "--tool-call-parser",
+    #         "granite-20b-fc",
+    #         "--chat-template",
+    #         str(APHRODITE_PATH / "examples/tool_chat_template_granite_20b_fc.jinja"),
+    #         "--max_num_seqs",
+    #         "1",
+    #         "--enforce-eager",
+    #         "--cpu-offload-gb",
+    #         "20",
     #     ],
-    #     "supports_parallel":
-    #     False,
-    #     "supports_rocm":
-    #     False,
+    #     "supports_parallel": False,
+    #     "supports_rocm": False,
     # },
     "granite-3.0-8b": {
         "model": "ibm-granite/granite-3.0-8b-instruct",
@@ -161,6 +201,10 @@ CONFIGS: dict[str, ServerConfig] = {
             "--chat-template",
             str(APHRODITE_PATH / "examples/tool_chat_template_granite.jinja"),
         ],
+        "system_prompt": "You are a helpful AI assistant with access to tools. "
+        "Use two-letter US state abbreviations in weather tool arguments. "
+        "When a tool is required to answer the user query, respond with "
+        "<|tool_call|> followed by a JSON list of tools used.",
     },
     "granite-3.1-8b": {
         "model": "ibm-granite/granite-3.1-8b-instruct",
@@ -209,7 +253,8 @@ WEATHER_TOOL: ChatCompletionToolParam = {
             "properties": {
                 "city": {
                     "type": "string",
-                    "description": "The city to find the weather for, e.g. 'San Francisco'",
+                    "description": "The city to find the weather for, "
+                    "e.g. 'San Francisco'",
                 },
                 "state": {
                     "type": "string",
@@ -270,7 +315,8 @@ MESSAGES_WITH_TOOL_RESPONSE: list[ChatCompletionMessageParam] = [
                 "type": "function",
                 "function": {
                     "name": WEATHER_TOOL["function"]["name"],
-                    "arguments": '{"city": "Dallas", "state": "TX", "unit": "fahrenheit"}',
+                    "arguments": '{"city": "Dallas", "state": "TX", '
+                    '"unit": "fahrenheit"}',
                 },
             }
         ],
@@ -278,21 +324,24 @@ MESSAGES_WITH_TOOL_RESPONSE: list[ChatCompletionMessageParam] = [
     {
         "role": "tool",
         "tool_call_id": "chatcmpl-tool-03e6481b146e408e9523d9c956696295",
-        "content": "The weather in Dallas is 98 degrees fahrenheit, with partlycloudy skies and a low chance of rain.",
+        "content": "The weather in Dallas is 98 degrees fahrenheit, with partly"
+        "cloudy skies and a low chance of rain.",
     },
 ]
 
 MESSAGES_ASKING_FOR_PARALLEL_TOOLS: list[ChatCompletionMessageParam] = [
     {
         "role": "user",
-        "content": "What is the weather in Dallas, Texas and Orlando, Florida in Fahrenheit?",
+        "content": "What is the weather in Dallas, Texas and Orlando, Florida in "
+        "Fahrenheit?",
     }
 ]
 
 MESSAGES_WITH_PARALLEL_TOOL_RESPONSE: list[ChatCompletionMessageParam] = [
     {
         "role": "user",
-        "content": "What is the weather in Dallas, Texas and Orlando, Florida in Fahrenheit?",
+        "content": "What is the weather in Dallas, Texas and Orlando, Florida in "
+        "Fahrenheit?",
     },
     {
         "role": "assistant",
@@ -302,7 +351,8 @@ MESSAGES_WITH_PARALLEL_TOOL_RESPONSE: list[ChatCompletionMessageParam] = [
                 "type": "function",
                 "function": {
                     "name": WEATHER_TOOL["function"]["name"],
-                    "arguments": '{"city": "Dallas", "state": "TX", "unit": "fahrenheit"}',
+                    "arguments": '{"city": "Dallas", "state": "TX", '
+                    '"unit": "fahrenheit"}',
                 },
             },
             {
@@ -310,7 +360,8 @@ MESSAGES_WITH_PARALLEL_TOOL_RESPONSE: list[ChatCompletionMessageParam] = [
                 "type": "function",
                 "function": {
                     "name": WEATHER_TOOL["function"]["name"],
-                    "arguments": '{"city": "Orlando", "state": "Fl", "unit": "fahrenheit"}',
+                    "arguments": '{"city": "Orlando", "state": "Fl", '
+                    '"unit": "fahrenheit"}',
                 },
             },
         ],
@@ -324,6 +375,7 @@ MESSAGES_WITH_PARALLEL_TOOL_RESPONSE: list[ChatCompletionMessageParam] = [
     {
         "role": "tool",
         "tool_call_id": "chatcmpl-tool-d027061e1bd21cda48bee7da829c1f5b",
-        "content": "The weather in Orlando FL is 78 degrees fahrenheit with clearskies.",
+        "content": "The weather in Orlando FL is 78 degrees fahrenheit with clear"
+        "skies.",
     },
 ]

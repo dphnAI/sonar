@@ -13,7 +13,6 @@ from mistral_common.protocol.instruct.request import (
 from mistral_common.protocol.instruct.request import (
     ReasoningEffort,
 )
-from mistral_common.protocol.instruct.tool_calls import Function, Tool
 from mistral_common.protocol.instruct.validator import ValidationMode
 from mistral_common.tokens.tokenizers.base import (
     SpecialTokenPolicy,
@@ -32,20 +31,12 @@ from mistral_common.tokens.tokenizers.sentencepiece import (
 )
 from mistral_common.tokens.tokenizers.tekken import Tekkenizer
 from pydantic import ValidationError
+from transformers.tokenization_mistral_common import MistralCommonBackend
 
 from aphrodite.entrypoints.chat_utils import ChatCompletionMessageParam
 from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
 from aphrodite.logger import init_logger
 from aphrodite.tokenizers.protocol import TokenizerLike
-
-try:
-    # Transformers v5
-    from transformers.tokenization_mistral_common import MistralCommonBackend
-except ImportError:
-    # Transformers v4
-    from transformers.tokenization_mistral_common import (
-        MistralCommonTokenizer as MistralCommonBackend,
-    )
 
 if TYPE_CHECKING:
     import llguidance
@@ -54,42 +45,18 @@ if TYPE_CHECKING:
 logger = init_logger(__name__)
 
 
-def _pop_unallowed_keys_and_warn(dictionary: dict[str, Any], allowed_keys: set[str], err_dict_name: str):
+def _pop_unallowed_keys_and_warn(
+    dictionary: dict[str, Any], allowed_keys: set[str], err_dict_name: str
+):
     keys = list(dictionary.keys())
     for key in keys:
         if key not in allowed_keys:
             dictionary.pop(key)
             logger.warning_once(
-                f"'{key=}' is not supported by mistral-common for {err_dict_name}. It has been popped from the object."
+                f"'{key=}' is not supported by mistral-common "
+                f"for {err_dict_name}. It has been popped from the "
+                "object."
             )
-
-
-# TODO(juliendenize): remove this once OpenAI API is better supported by
-# `mistral-common`.
-def adapt_inplace_to_mistral_tool(
-    tool: dict[str, Any],
-) -> dict[str, Any]:
-    tools_fields = set(Tool.model_fields.keys())
-    function_fields = set(Function.model_fields.keys())
-
-    # The Mistral client, in comparison to the OpenAI client, requires the
-    # "parameters" dict and the "description" string to be present
-    # even if they are empty.
-    if function := tool.get("function"):
-        if function.get("parameters") is None:
-            function["parameters"] = {}
-        if function.get("description") is None:
-            function["description"] = ""
-
-        _pop_unallowed_keys_and_warn(
-            dictionary=function,
-            allowed_keys=function_fields,
-            err_dict_name="function",
-        )
-
-    _pop_unallowed_keys_and_warn(dictionary=tool, allowed_keys=tools_fields, err_dict_name="tools")
-
-    return tool
 
 
 def maybe_serialize_tool_calls(request: "MistralChatCompletionRequest"):
@@ -161,14 +128,16 @@ def truncate_tool_call_ids(request: "MistralChatCompletionRequest"):
                 request.messages[i]["tool_call_id"] = tool_call_id
 
 
-def _prepare_apply_chat_template_tools_and_messages(
+def _validate_apply_chat_template_args(
     messages: list["ChatCompletionMessageParam"],
-    tools: list[dict[str, Any]] | None = None,
     continue_final_message: bool = False,
     add_generation_prompt: bool = False,
-) -> tuple[list["ChatCompletionMessageParam"], list[dict[str, Any]] | None]:
+) -> None:
     if add_generation_prompt and continue_final_message:
-        raise ValueError("Cannot set both `add_generation_prompt` and `continue_final_message` to True.")
+        raise ValueError(
+            "Cannot set both `add_generation_prompt` and "
+            "`continue_final_message` to True."
+        )
 
     last_message = cast(dict[str, Any], messages[-1])
     # add_generation_prompt is directly handled by the tokenizer but we
@@ -182,25 +151,19 @@ def _prepare_apply_chat_template_tools_and_messages(
             "using `continue_final_message` instead."
         )
     if continue_final_message and last_message["role"] != "assistant":
-        raise ValueError("Cannot set `continue_final_message` to True when the last message is not from the assistant.")
-
-    # mistral-common requires AssistantMessage content to be string [1].
-    #
-    # [1]: https://github.com/mistralai/mistral-common/blob/f4a06998b75ed78bbf5aaf569590b772ea26c9f6/src/mistral_common/protocol/instruct/messages.py#L80
-    for message in messages:
-        # Remove reasoning as unsupported by Mistral
-        _ = message.pop("reasoning", None)  # type: ignore
-
-    tools = [adapt_inplace_to_mistral_tool(tool=tool) for tool in tools] if tools is not None else None
-
-    return messages, tools
+        raise ValueError(
+            "Cannot set `continue_final_message` to True when "
+            "the last message is not from the assistant."
+        )
 
 
 def validate_request_params(request: "ChatCompletionRequest"):
     if request.chat_template is not None or request.chat_template_kwargs is not None:
         raise ValueError("chat_template is not supported for Mistral tokenizers.")
 
-    if request.reasoning_effort and request.reasoning_effort not in list(ReasoningEffort):
+    if request.reasoning_effort and request.reasoning_effort not in list(
+        ReasoningEffort
+    ):
         raise ValueError(
             f"reasoning_effort={request.reasoning_effort} is not supported by "
             "Mistral models. Supported values are: "
@@ -219,7 +182,9 @@ def _tekken_token_to_id(tokenizer: "Tekkenizer", t: str | bytes) -> int:
         t_str = t_bytes.decode("utf-8")
         if t_str in tokenizer._special_tokens_reverse_vocab:
             return tokenizer._special_tokens_reverse_vocab[t_str]
-        logger.warning("Failed to convert token %s to id, replacing with <unk>", t_bytes)
+        logger.warning(
+            "Failed to convert token %s to id, replacing with <unk>", t_bytes
+        )
         return tokenizer.unk_id
 
 
@@ -273,7 +238,8 @@ class MistralTokenizer(TokenizerLike):
 
         # Reverse order to ensure that the lowest token id is kept.
         self._vocab_dict = {
-            self.convert_ids_to_tokens([i], skip_special_tokens=False)[0]: i for i in range(self.vocab_size - 1, -1, -1)
+            self.convert_ids_to_tokens([i], skip_special_tokens=False)[0]: i
+            for i in range(self.vocab_size - 1, -1, -1)
         }
         # Sort the dict for convenience
         self._vocab_dict = dict(sorted(self._vocab_dict.items(), key=lambda x: x[1]))
@@ -293,7 +259,10 @@ class MistralTokenizer(TokenizerLike):
         return [i for i in range(len(self._vocab)) if self.tokenizer.is_special(i)]
 
     def _get_special_tokens(self, all_special_ids: list[int]) -> list[str]:
-        return [self.tokenizer.decode([i], special_token_policy=SpecialTokenPolicy.KEEP) for i in all_special_ids]
+        return [
+            self.tokenizer.decode([i], special_token_policy=SpecialTokenPolicy.KEEP)
+            for i in all_special_ids
+        ]
 
     def num_special_tokens_to_add(self) -> int:
         return len(self.encode(""))
@@ -358,7 +327,9 @@ class MistralTokenizer(TokenizerLike):
         max_length: int | None = None,
     ) -> "BatchEncoding":
         if text_pair is not None:
-            raise ValueError("`text_pair` is not supported by `MistralTokenizer.__call__`.")
+            raise ValueError(
+                "`text_pair` is not supported by `MistralTokenizer.__call__`."
+            )
 
         encoded = self.transformers_tokenizer(
             text=text,
@@ -423,8 +394,8 @@ class MistralTokenizer(TokenizerLike):
         if self.version >= 15:
             version_kwargs["reasoning_effort"] = kwargs.get("reasoning_effort")
 
-        messages, tools = _prepare_apply_chat_template_tools_and_messages(
-            messages, tools, continue_final_message, add_generation_prompt
+        _validate_apply_chat_template_args(
+            messages, continue_final_message, add_generation_prompt
         )
 
         return self.transformers_tokenizer.apply_chat_template(
@@ -440,16 +411,24 @@ class MistralTokenizer(TokenizerLike):
             **version_kwargs,
         )
 
-    def decode(self, ids: Sequence[int] | int, skip_special_tokens: bool = False) -> str:
+    def decode(
+        self, ids: Sequence[int] | int, skip_special_tokens: bool = False
+    ) -> str:
         # TODO(juliendenize): once https://github.com/huggingface/transformers/pull/41962
         # is in, directly call self.transformers_tokenizer.decode(...).
         if isinstance(ids, int):
             ids = [ids]
 
-        return self.transformers_tokenizer.decode(ids, skip_special_tokens=skip_special_tokens)
+        return self.transformers_tokenizer.decode(
+            ids, skip_special_tokens=skip_special_tokens
+        )
 
-    def batch_decode(self, ids: list[list[int]] | list[int], skip_special_tokens: bool = False) -> str:
-        return self.transformers_tokenizer.batch_decode(ids, skip_special_tokens=skip_special_tokens)
+    def batch_decode(
+        self, ids: list[list[int]] | list[int], skip_special_tokens: bool = False
+    ) -> str:
+        return self.transformers_tokenizer.batch_decode(
+            ids, skip_special_tokens=skip_special_tokens
+        )
 
     @overload
     def convert_tokens_to_ids(self, tokens: str) -> int: ...
@@ -468,7 +447,11 @@ class MistralTokenizer(TokenizerLike):
         }
         if self.is_tekken:
             assert isinstance(self.tokenizer, Tekkenizer), type(self.tokenizer)
-            tokens = [t for t in tokens if (t in to_decode_special_tokens or t not in self._special_tokens_set)]
+            tokens = [
+                t
+                for t in tokens
+                if (t in to_decode_special_tokens or t not in self._special_tokens_set)
+            ]
 
             if any(isinstance(t, bytes) for t in tokens):
                 # we need to encode and decode all tokens again
@@ -481,7 +464,9 @@ class MistralTokenizer(TokenizerLike):
         else:
             # make sure certain special tokens like Tool calls are
             # not decoded
-            assert isinstance(self.tokenizer, SentencePieceTokenizer), type(self.tokenizer)
+            assert isinstance(self.tokenizer, SentencePieceTokenizer), type(
+                self.tokenizer
+            )
 
             regular_tokens: list[str] = []
             decoded_list: list[str] = []
@@ -490,14 +475,20 @@ class MistralTokenizer(TokenizerLike):
             for token in tokens:
                 if token in to_decode_special_tokens:
                     if regular_tokens:
-                        decoded_list.append(self.tokenizer.decode(regular_tokens, SpecialTokenPolicy.IGNORE))
+                        decoded_list.append(
+                            self.tokenizer.decode(
+                                regular_tokens, SpecialTokenPolicy.IGNORE
+                            )
+                        )
                         regular_tokens = []
                     decoded_list.append(token)
                 else:
                     regular_tokens.append(token)
 
             if regular_tokens:
-                decoded_list.append(self.tokenizer.decode(regular_tokens, SpecialTokenPolicy.IGNORE))
+                decoded_list.append(
+                    self.tokenizer.decode(regular_tokens, SpecialTokenPolicy.IGNORE)
+                )
             decoded = "".join(decoded_list)
 
         return decoded
@@ -519,7 +510,11 @@ class MistralTokenizer(TokenizerLike):
             if self.instruct.END_THINK:
                 non_skip_special_tokens_ids.add(self.instruct.END_THINK)
 
-        ids_kept = [i for i in ids if i in non_skip_special_tokens_ids or not self._is_special_token_id(i)]
+        ids_kept = [
+            i
+            for i in ids
+            if i in non_skip_special_tokens_ids or not self._is_special_token_id(i)
+        ]
 
         # We filtered unwanted special tokens so we can decode the rest.
         tokens = [self.tokenizer.id_to_piece(token_id) for token_id in ids_kept]

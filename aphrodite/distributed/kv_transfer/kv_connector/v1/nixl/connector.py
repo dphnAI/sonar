@@ -1,6 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""NixlConnector – thin facade that delegates to scheduler / worker."""
+"""NIXL connector facades.
+
+This module hosts the thin facade classes that Aphrodite's KV-connector layer
+instantiates. Almost all the real work lives in the per-mode scheduler
+and worker classes; the connector classes here only forward calls.
+
+* :class:`NixlBaseConnector` – common logic shared by pull and push.
+* :class:`NixlPullConnector` – pull-based (READ) KV transfer.
+* :class:`NixlPushConnector` – push-based (WRITE) KV transfer.
+* ``NixlConnector`` – backward-compatible alias for :class:`NixlPullConnector`.
+"""
 
 from typing import TYPE_CHECKING, Any
 
@@ -28,15 +38,21 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import (
 from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
     NixlConnectorMetadata,
 )
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.scheduler import (
-    NixlConnectorScheduler,
+from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.pull_scheduler import (
+    NixlPullConnectorScheduler,
+)
+from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.pull_worker import (
+    NixlPullConnectorWorker,
+)
+from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_scheduler import (
+    NixlPushConnectorScheduler,
+)
+from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_worker import (
+    NixlPushConnectorWorker,
 )
 from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.stats import (
     NixlKVConnectorStats,
     NixlPromMetrics,
-)
-from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
-    NixlConnectorWorker,
 )
 from aphrodite.forward_context import ForwardContext
 from aphrodite.logger import init_logger
@@ -44,8 +60,15 @@ from aphrodite.v1.attention.backend import AttentionBackend, AttentionMetadata
 from aphrodite.v1.attention.backends.utils import get_kv_cache_layout
 from aphrodite.v1.core.sched.output import SchedulerOutput
 from aphrodite.v1.kv_cache_interface import MambaSpec
+from aphrodite.v1.outputs import KVConnectorOutput
 
 if TYPE_CHECKING:
+    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler import (
+        NixlBaseConnectorScheduler,
+    )
+    from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker import (
+        NixlBaseConnectorWorker,
+    )
     from aphrodite.v1.core.kv_cache_manager import KVCacheBlocks
     from aphrodite.v1.kv_cache_interface import KVCacheConfig
     from aphrodite.v1.request import Request
@@ -53,10 +76,17 @@ if TYPE_CHECKING:
 logger = init_logger(__name__)
 
 
-class NixlConnector(KVConnectorBase_V1, SupportsHMA):
+class NixlBaseConnector(KVConnectorBase_V1, SupportsHMA):
+    """Base connector with common logic shared by pull and push modes."""
+
     @property
     def prefer_cross_layer_blocks(self) -> bool:
-        if any([isinstance(group.kv_cache_spec, MambaSpec) for group in self.kv_cache_config.kv_cache_groups]):
+        if any(
+            [
+                isinstance(group.kv_cache_spec, MambaSpec)
+                for group in self.kv_cache_config.kv_cache_groups
+            ]
+        ):
             # Hybrid SSM models do not yet support cross-layer layout
             return False
 
@@ -74,7 +104,10 @@ class NixlConnector(KVConnectorBase_V1, SupportsHMA):
             return False
 
         extra_config = self.kv_transfer_config.kv_connector_extra_config
-        return str(extra_config.get("enable_cross_layers_blocks", "False")).lower() == "true"
+        return (
+            str(extra_config.get("enable_cross_layers_blocks", "False")).lower()
+            == "true"
+        )
 
     def __init__(
         self,
@@ -85,17 +118,21 @@ class NixlConnector(KVConnectorBase_V1, SupportsHMA):
         super().__init__(aphrodite_config, role, kv_cache_config)
         assert aphrodite_config.kv_transfer_config is not None
         assert aphrodite_config.kv_transfer_config.engine_id is not None
+
+        if aphrodite_config.kv_transfer_config.kv_role == "kv_both":
+            logger.warning_once(
+                "Using kv_role='kv_both' with NixlConnector is deprecated "
+                "and will be removed in a future release. Please set "
+                "kv_role='kv_producer' for prefill instances and "
+                "kv_role='kv_consumer' for decode instances. "
+            )
+
         self.kv_cache_config = kv_cache_config
         self.engine_id: EngineId = aphrodite_config.kv_transfer_config.engine_id
         self.kv_transfer_config = aphrodite_config.kv_transfer_config
-        if role == KVConnectorRole.SCHEDULER:
-            self.connector_scheduler: NixlConnectorScheduler | None = NixlConnectorScheduler(
-                aphrodite_config, self.engine_id, kv_cache_config
-            )
-            self.connector_worker: NixlConnectorWorker | None = None
-        elif role == KVConnectorRole.WORKER:
-            self.connector_scheduler = None
-            self.connector_worker = NixlConnectorWorker(aphrodite_config, self.engine_id, kv_cache_config)
+        # Subclasses must set self.connector_scheduler and self.connector_worker
+        self.connector_scheduler: NixlBaseConnectorScheduler | None = None
+        self.connector_worker: NixlBaseConnectorWorker | None = None
 
     ############################################################
     # Class Methods
@@ -103,7 +140,10 @@ class NixlConnector(KVConnectorBase_V1, SupportsHMA):
     @classmethod
     def get_required_kvcache_layout(cls, aphrodite_config: AphroditeConfig):
         if aphrodite_config.model_config is None:
-            logger.warning_once("Unable to detect current APHRODITE config. Fallback to default kv cache layout.")
+            logger.warning_once(
+                "Unable to detect current APHRODITE config. "
+                "Fallback to default kv cache layout."
+            )
             return None
         use_mla = aphrodite_config.model_config.use_mla
         if use_mla:
@@ -111,20 +151,30 @@ class NixlConnector(KVConnectorBase_V1, SupportsHMA):
             # as the layout should not matter in that case,
             # which fallback to the default behavior.
             return None
-        logger.info_once("NixlConnector setting KV cache layout to HND for better xfer performance.")
+        logger.info_once(
+            "NixlConnector setting KV cache layout to HND for better xfer performance."
+        )
         return "HND"
 
     ############################################################
     # Scheduler Side Methods
     ############################################################
 
-    def get_num_new_matched_tokens(self, request: "Request", num_computed_tokens: int) -> tuple[int | None, bool]:
+    def get_num_new_matched_tokens(
+        self, request: "Request", num_computed_tokens: int
+    ) -> tuple[int | None, bool]:
         assert self.connector_scheduler is not None
-        return self.connector_scheduler.get_num_new_matched_tokens(request, num_computed_tokens)
+        return self.connector_scheduler.get_num_new_matched_tokens(
+            request, num_computed_tokens
+        )
 
-    def update_state_after_alloc(self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int):
+    def update_state_after_alloc(
+        self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int
+    ):
         assert self.connector_scheduler is not None
-        return self.connector_scheduler.update_state_after_alloc(request, blocks, num_external_tokens)
+        return self.connector_scheduler.update_state_after_alloc(
+            request, blocks, num_external_tokens
+        )
 
     def build_connector_meta(
         self,
@@ -132,6 +182,14 @@ class NixlConnector(KVConnectorBase_V1, SupportsHMA):
     ) -> KVConnectorMetadata:
         assert self.connector_scheduler is not None
         return self.connector_scheduler.build_connector_meta(scheduler_output)
+
+    def on_new_request(self, request: "Request") -> None:
+        assert self.connector_scheduler is not None
+        self.connector_scheduler.on_new_request(request)
+
+    def update_connector_output(self, connector_output: KVConnectorOutput):
+        assert self.connector_scheduler is not None
+        self.connector_scheduler.update_connector_output(connector_output)
 
     def request_finished(
         self,
@@ -149,7 +207,9 @@ class NixlConnector(KVConnectorBase_V1, SupportsHMA):
         assert self.connector_scheduler is not None
         return self.connector_scheduler.request_finished(request, block_ids)
 
-    def set_xfer_handshake_metadata(self, metadata: dict[int, KVConnectorHandshakeMetadata]) -> None:
+    def set_xfer_handshake_metadata(
+        self, metadata: dict[int, KVConnectorHandshakeMetadata]
+    ) -> None:
         """
         Set the KV connector handshake metadata for this connector.
 
@@ -166,7 +226,9 @@ class NixlConnector(KVConnectorBase_V1, SupportsHMA):
         assert self.connector_worker is not None
         self.connector_worker.register_kv_caches(kv_caches)
 
-    def register_cross_layers_kv_cache(self, kv_cache: torch.Tensor, attn_backend: type[AttentionBackend]):
+    def register_cross_layers_kv_cache(
+        self, kv_cache: torch.Tensor, attn_backend: type[AttentionBackend]
+    ):
         assert self.connector_worker is not None
         self.connector_worker.register_cross_layers_kv_caches(kv_cache)
 
@@ -190,8 +252,14 @@ class NixlConnector(KVConnectorBase_V1, SupportsHMA):
         return self.connector_worker.get_kv_connector_stats()
 
     @classmethod
-    def build_kv_connector_stats(cls, data: dict[str, Any] | None = None) -> KVConnectorStats | None:
-        return NixlKVConnectorStats(data=data) if data is not None else NixlKVConnectorStats()
+    def build_kv_connector_stats(
+        cls, data: dict[str, Any] | None = None
+    ) -> KVConnectorStats | None:
+        return (
+            NixlKVConnectorStats(data=data)
+            if data is not None
+            else NixlKVConnectorStats()
+        )
 
     @classmethod
     def build_prom_metrics(
@@ -201,12 +269,9 @@ class NixlConnector(KVConnectorBase_V1, SupportsHMA):
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ) -> KVConnectorPromMetrics:
-        return NixlPromMetrics(aphrodite_config, metric_types, labelnames, per_engine_labelvalues)
-
-    def start_load_kv(self, forward_context: "ForwardContext", **kwargs) -> None:
-        assert self.connector_worker is not None
-        assert isinstance(self._connector_metadata, NixlConnectorMetadata)
-        self.connector_worker.start_load_kv(self._connector_metadata)
+        return NixlPromMetrics(
+            aphrodite_config, metric_types, labelnames, per_engine_labelvalues
+        )
 
     def wait_for_layer_load(self, layer_name: str) -> None:
         """NixlConnector does not do layerwise saving."""
@@ -228,6 +293,11 @@ class NixlConnector(KVConnectorBase_V1, SupportsHMA):
         if self.connector_worker.use_host_buffer and self.connector_worker.copy_blocks:
             self.connector_worker.save_kv_to_host(self._connector_metadata)
 
+    def has_pending_push_work(self) -> bool:
+        if self.connector_scheduler is not None:
+            return self.connector_scheduler.has_pending_push_work()
+        return False
+
     def shutdown(self):
         if self.connector_worker is not None:
             self.connector_worker.shutdown()
@@ -246,3 +316,79 @@ class NixlConnector(KVConnectorBase_V1, SupportsHMA):
         """
         assert self.connector_worker is not None
         return self.connector_worker.xfer_handshake_metadata
+
+
+class NixlPullConnector(NixlBaseConnector):
+    """Pull-based (READ) NIXL KV transfer connector."""
+
+    def __init__(
+        self,
+        aphrodite_config: AphroditeConfig,
+        role: KVConnectorRole,
+        kv_cache_config: "KVCacheConfig",
+    ):
+        super().__init__(aphrodite_config, role, kv_cache_config)
+        if role == KVConnectorRole.SCHEDULER:
+            self.connector_scheduler = NixlPullConnectorScheduler(
+                aphrodite_config, self.engine_id, kv_cache_config
+            )
+            self.connector_worker = None
+        elif role == KVConnectorRole.WORKER:
+            self.connector_scheduler = None
+            self.connector_worker = NixlPullConnectorWorker(
+                aphrodite_config, self.engine_id, kv_cache_config
+            )
+
+    def start_load_kv(self, forward_context: "ForwardContext", **kwargs) -> None:
+        assert self.connector_worker is not None
+        assert isinstance(self.connector_worker, NixlPullConnectorWorker)
+        assert isinstance(self._connector_metadata, NixlConnectorMetadata)
+        self.connector_worker.start_load_kv(self._connector_metadata)
+
+
+class NixlPushConnector(NixlBaseConnector):
+    """Push-based (WRITE) NIXL KV transfer connector."""
+
+    def __init__(
+        self,
+        aphrodite_config: AphroditeConfig,
+        role: KVConnectorRole,
+        kv_cache_config: "KVCacheConfig",
+    ):
+        super().__init__(aphrodite_config, role, kv_cache_config)
+        self.connector_scheduler: NixlPushConnectorScheduler | None = None
+        self.connector_worker: NixlPushConnectorWorker | None = None
+        if role == KVConnectorRole.SCHEDULER:
+            self.connector_scheduler = NixlPushConnectorScheduler(
+                aphrodite_config, self.engine_id, kv_cache_config
+            )
+        elif role == KVConnectorRole.WORKER:
+            self.connector_worker = NixlPushConnectorWorker(
+                aphrodite_config, self.engine_id, kv_cache_config
+            )
+        else:
+            raise ValueError(f"Unsupported KVConnectorRole: {role}")
+
+    def start_load_kv(self, forward_context: "ForwardContext", **kwargs) -> None:
+        """Drive push processing on the worker.
+
+        The worker enqueues registrations / finished blocks for the
+        background ``nixl-push-writer`` thread; the writer issues the
+        WRITE transfers and polls NIXL notifs without further
+        engine-thread involvement.
+        """
+        assert self.connector_worker is not None
+        assert isinstance(self._connector_metadata, NixlConnectorMetadata)
+        self.connector_worker.start_load_kv(self._connector_metadata)
+
+
+# Backward compatibility: NixlConnector is the pull-based connector.
+NixlConnector = NixlPullConnector
+
+
+__all__ = [
+    "NixlBaseConnector",
+    "NixlConnector",
+    "NixlPullConnector",
+    "NixlPushConnector",
+]

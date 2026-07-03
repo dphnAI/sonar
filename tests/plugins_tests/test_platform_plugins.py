@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 import torch
 
@@ -16,7 +17,7 @@ def test_platform_plugins():
     example_file = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(current_file))),
         "examples",
-        "offline_inference/basic/basic.py",
+        "basic/offline_inference/basic.py",
     )
     runpy.run_path(example_file)
 
@@ -30,10 +31,10 @@ def test_platform_plugins():
     )
 
 
-def test_oot_custom_op(monkeypatch: pytest.MonkeyPatch):
+def test_oot_custom_op(default_aphrodite_config, monkeypatch: pytest.MonkeyPatch):
     # simulate workload by running an example
     load_general_plugins()
-    from aphrodite.modeling.layers.rotary_embedding import RotaryEmbedding
+    from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
 
     layer = RotaryEmbedding(16, 16, 16, 16, True, torch.float16)
     assert layer.__class__.__name__ == "DummyRotaryEmbedding", (
@@ -41,5 +42,6 @@ def test_oot_custom_op(monkeypatch: pytest.MonkeyPatch):
         "possibly because the custom op is not registered correctly."
     )
     assert hasattr(layer, "addition_config"), (
-        "Expected DummyRotaryEmbedding to have an 'addition_config' attribute, which is set by the custom op."
+        "Expected DummyRotaryEmbedding to have an 'addition_config' attribute, "
+        "which is set by the custom op."
     )

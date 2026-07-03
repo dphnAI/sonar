@@ -3,7 +3,7 @@
 
 # Adapted from
 # https://github.com/huggingface/transformers/blob/main/src/transformers/models/olmo2/modeling_olmo2.py
-# Copyright 2024 The Aphrodite team.
+# Copyright 2024 The vLLM team.
 # Copyright 2024 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -52,12 +52,11 @@ from aphrodite.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 from aphrodite.model_executor.models.interfaces import SupportsLoRA, SupportsPP
 from aphrodite.model_executor.models.utils import (
     AutoWeightsLoader,
+    WeightsMapper,
     extract_layer_index,
-    is_pp_missing_parameter,
     make_empty_intermediate_tensors_factory,
     make_layers,
     maybe_prefix,
@@ -85,7 +84,9 @@ class Olmo2Attention(nn.Module):
         assert self.total_num_heads % self.tp_size == 0
 
         self.num_heads = self.total_num_heads // self.tp_size
-        self.total_num_kv_heads = self.config.num_key_value_heads or self.total_num_heads
+        self.total_num_kv_heads = (
+            self.config.num_key_value_heads or self.total_num_heads
+        )
         if self.total_num_kv_heads >= self.tp_size:
             assert self.total_num_kv_heads % self.tp_size == 0
         else:
@@ -119,9 +120,9 @@ class Olmo2Attention(nn.Module):
 
         layer_idx = extract_layer_index(prefix)
         sliding_window = None
-        if (layer_types := getattr(self.config, "layer_types", None)) is not None and layer_types[
-            layer_idx
-        ] == "sliding_attention":
+        if (
+            layer_types := getattr(self.config, "layer_types", None)
+        ) is not None and layer_types[layer_idx] == "sliding_attention":
             sliding_window = self.config.sliding_window
 
         self.attn = Attention(
@@ -156,7 +157,9 @@ class Olmo2Attention(nn.Module):
             prefix=f"{prefix}.o_proj",
         )
 
-    def _apply_qk_norm(self, q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def _apply_qk_norm(
+        self, q: torch.Tensor, k: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         if self.tp_size > 1:
             q = tensor_model_parallel_all_gather(q.contiguous())
             k = tensor_model_parallel_all_gather(k.contiguous())
@@ -239,15 +242,21 @@ class Olmo2DecoderLayer(nn.Module):
         config = aphrodite_config.model_config.hf_config
         assert isinstance(config, (Olmo2Config, Olmo3Config))
         # Attention block.
-        self.self_attn = Olmo2Attention(aphrodite_config=aphrodite_config, prefix=f"{prefix}.self_attn")
+        self.self_attn = Olmo2Attention(
+            aphrodite_config=aphrodite_config, prefix=f"{prefix}.self_attn"
+        )
 
         # MLP block.
         self.mlp = Olmo2MLP(aphrodite_config=aphrodite_config, prefix=f"{prefix}.mlp")
 
         # LayerNorm
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
-        self.post_feedforward_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
     def forward(
         self,
@@ -304,7 +313,8 @@ class Olmo2Model(nn.Module):
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
         """
-        :param input_ids: A tensor of shape `(batch_size, seq_len)`.
+        Args:
+            input_ids: A tensor of shape `(batch_size, seq_len)`.
         """
         if get_pp_group().is_first_rank:
             if inputs_embeds is not None:
@@ -332,58 +342,25 @@ class Olmo2Model(nn.Module):
         hidden_states = self.norm(hidden_states)
         return hidden_states
 
-    def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            # (param_name, shard_name, shard_id)
-            ("qkv_proj", "q_proj", "q"),
-            ("qkv_proj", "k_proj", "k"),
-            ("qkv_proj", "v_proj", "v"),
-            ("gate_up_proj", "gate_proj", 0),
-            ("gate_up_proj", "up_proj", 1),
-        ]
-
-        params_dict = dict(self.named_parameters(remove_duplicate=False))
-        loaded_params: set[str] = set()
-        for name, loaded_weight in weights:
-            if is_pp_missing_parameter(name, self):
-                continue
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                if weight_name not in name:
-                    continue
-                name = name.replace(weight_name, param_name)
-                # Skip loading extra bias for GPTQ models.
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-                param = params_dict[name]
-                weight_loader = param.weight_loader  # type: ignore
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                # Skip loading extra bias for GPTQ models.
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
-
 
 class Olmo2ForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
     """
     Extremely barebones HF model wrapper.
     """
 
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_stacked={
+            # weight_name: (param_name, shard_id)
+            ".q_proj": (".qkv_proj", "q"),
+            ".k_proj": (".qkv_proj", "k"),
+            ".v_proj": (".qkv_proj", "v"),
+            ".gate_proj": (".gate_up_proj", 0),
+            ".up_proj": (".gate_up_proj", 1),
+        }
+    )
     packed_modules_mapping = {
-        "qkv_proj": [
-            "q_proj",
-            "k_proj",
-            "v_proj",
-        ],
-        "gate_up_proj": [
-            "gate_proj",
-            "up_proj",
-        ],
+        "qkv_proj": ["q_proj", "k_proj", "v_proj"],
+        "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
@@ -391,7 +368,9 @@ class Olmo2ForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
         config = aphrodite_config.model_config.hf_config
         assert isinstance(config, (Olmo2Config, Olmo3Config))
         self.config = config
-        self.model = Olmo2Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Olmo2Model(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
+        )
         if config.tie_word_embeddings:
             self.lm_head = self.model.embed_tokens
         else:
@@ -402,7 +381,9 @@ class Olmo2ForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
                 prefix=maybe_prefix(prefix, "lm_head"),
             )
         self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -432,6 +413,8 @@ class Olmo2ForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
         loader = AutoWeightsLoader(
             self,
-            skip_prefixes=(["lm_head.weight"] if self.config.tie_word_embeddings else None),
+            skip_prefixes=(
+                ["lm_head.weight"] if self.config.tie_word_embeddings else None
+            ),
         )
-        return loader.load_weights(weights)
+        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)

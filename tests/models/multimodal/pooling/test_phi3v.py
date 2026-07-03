@@ -1,15 +1,26 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
+import torch
 import torch.nn.functional as F
+import transformers.utils
 from PIL import Image
 
 from aphrodite.assets.base import get_aphrodite_public_assets
 from aphrodite.assets.image import VLM_IMAGES_DIR
+from aphrodite.config import ModelConfig
+from aphrodite.multimodal import MULTIMODAL_REGISTRY
 
-from ....conftest import IMAGE_ASSETS, AphroditeRunner, HfRunner, PromptImageInput
+from ....conftest import IMAGE_ASSETS, HfRunner, PromptImageInput, AphroditeRunner
 from ....utils import large_gpu_test
 from ...utils import check_embeddings_close
+
+# BC for method that was deleted in Transformers v5.
+# Only needed for generating the HF reference.
+transformers.utils.is_flash_attn_greater_or_equal_2_10 = (
+    lambda: transformers.utils.is_flash_attn_greater_or_equal("2.1.0")
+)
 
 HF_TEXT_PROMPTS = [
     # T -> X
@@ -29,7 +40,20 @@ HF_IMAGE_PROMPTS = IMAGE_ASSETS.prompts(
 
 MODELS = ["TIGER-Lab/VLM2Vec-Full"]
 
+SPECIAL_TOKEN_IMAGE_PROMPT = (
+    "\n<s><|user|>\n <|image_1|>\n\t <s>"
+    "Represent the given image for classification<|end|>"
+    "\n<|assistant|>\n"
+)
 
+
+def _get_cherry_blossom_image() -> Image.Image:
+    return Image.open(
+        get_aphrodite_public_assets(filename="cherry_blossom.jpg", s3_prefix=VLM_IMAGES_DIR)
+    )
+
+
+@torch.inference_mode()
 def _run_test(
     hf_runner: type[HfRunner],
     aphrodite_runner: type[AphroditeRunner],
@@ -43,7 +67,9 @@ def _run_test(
     # Aphrodite needs a fresh new process without cuda initialization.
     # if we run HF first, the cuda initialization will be done and it
     # will hurt multiprocessing backend with fork method (the default method).
-    with aphrodite_runner(model, runner="pooling", dtype=dtype, enforce_eager=True) as aphrodite_model:
+    with aphrodite_runner(
+        model, runner="pooling", dtype=dtype, enforce_eager=True
+    ) as aphrodite_model:
         aphrodite_outputs = aphrodite_model.embed(input_texts, images=input_images)
 
     # use eager mode for hf runner, since phi3_v didn't work with flash_attn
@@ -110,14 +136,9 @@ def test_models_image(
     model: str,
     dtype: str,
 ) -> None:
-    input_texts_images = [(text, asset.pil_image) for text, asset in zip(HF_IMAGE_PROMPTS, image_assets)]
-    # add cases for special_tokens
-    input_texts_images.append(
-        (
-            "\n<s><|user|>\n <|image_1|>\n\t <s>Represent the given image for classification<|end|>\n<|assistant|>\n",
-            Image.open(get_aphrodite_public_assets(filename="cherry_blossom.jpg", s3_prefix=VLM_IMAGES_DIR)),
-        )
-    )
+    input_texts_images = [
+        (text, asset.pil_image) for text, asset in zip(HF_IMAGE_PROMPTS, image_assets)
+    ]
     input_texts = [text for text, _ in input_texts_images]
     input_images = [image for _, image in input_texts_images]
 
@@ -129,3 +150,48 @@ def test_models_image(
         model,
         dtype=dtype,
     )
+
+
+@pytest.mark.core_model
+@pytest.mark.parametrize("model", MODELS)
+@pytest.mark.parametrize("dtype", ["half"])
+def test_models_image_special_tokens_processing(
+    model: str,
+    dtype: str,
+) -> None:
+    model_config = ModelConfig(
+        model,
+        runner="pooling",
+        trust_remote_code=True,
+        dtype=dtype,
+        max_model_len=1024,
+    )
+    processor = MULTIMODAL_REGISTRY.create_processor(model_config)
+    image = _get_cherry_blossom_image()
+
+    processed_inputs = processor(
+        SPECIAL_TOKEN_IMAGE_PROMPT,
+        mm_items=processor.info.parse_mm_data({"image": image}),
+        hf_processor_mm_kwargs={},
+    )
+
+    hf_processor = processor.info.get_hf_processor()
+    hf_inputs = hf_processor(
+        SPECIAL_TOKEN_IMAGE_PROMPT,
+        images=image,
+        return_tensors="pt",
+    )
+
+    image_token_id = hf_processor.get_special_image_token_id()
+    hf_prompt_token_ids = [
+        image_token_id if token_id < 0 else token_id
+        for token_id in hf_inputs["input_ids"][0].tolist()
+    ]
+
+    prompt_token_ids = processed_inputs["prompt_token_ids"]
+
+    assert prompt_token_ids == hf_prompt_token_ids
+    assert prompt_token_ids.count(image_token_id) == hf_prompt_token_ids.count(
+        image_token_id
+    )
+    assert prompt_token_ids.count(image_token_id) > 0

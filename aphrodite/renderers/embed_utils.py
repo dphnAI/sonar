@@ -42,7 +42,8 @@ def safe_load_prompt_embeds(
         tensor = tensor.squeeze(0)
     if tensor.dim() != 2:
         raise APHRODITEValidationError(
-            f"`prompt_embeds` must be a 2D tensor of shape (num_tokens, hidden_size); got shape {tuple(tensor.shape)}.",
+            "`prompt_embeds` must be a 2D tensor of shape "
+            f"(num_tokens, hidden_size); got shape {tuple(tensor.shape)}.",
             parameter="prompt_embeds",
         )
 

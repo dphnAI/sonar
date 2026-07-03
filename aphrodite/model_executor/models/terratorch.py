@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-# Copyright 2025 The Aphrodite team.
+# Copyright 2025 The vLLM team.
 # Copyright 2025 IBM.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -141,7 +141,9 @@ class TerratorchProcessingInfo(BaseProcessingInfo):
 class TerratorchInputBuilder(BaseDummyInputsBuilder[TerratorchProcessingInfo]):
     def __init__(self, info: TerratorchProcessingInfo):
         super().__init__(info)
-        self.dummy_data_generator = DummyDataGenerator(self.info.get_hf_config().to_dict()["pretrained_cfg"])
+        self.dummy_data_generator = DummyDataGenerator(
+            self.info.get_hf_config().to_dict()["pretrained_cfg"]
+        )
 
     def get_dummy_text(self, mm_counts: Mapping[str, int]) -> str:
         return ""
@@ -157,7 +159,9 @@ class TerratorchInputBuilder(BaseDummyInputsBuilder[TerratorchProcessingInfo]):
 
         if mm_options:
             logger.warning(
-                "Configurable multimodal profiling options are not supported for Terratorch. They are ignored for now."
+                "Configurable multimodal profiling "
+                "options are not supported for Terratorch. "
+                "They are ignored for now."
             )
 
         return self.dummy_data_generator.get_dummy_mm_data()
@@ -196,7 +200,10 @@ class TerratorchMultiModalProcessor(BaseMultiModalProcessor[TerratorchProcessing
         with timing_ctx.record("apply_hf_processor"):
             _, passthrough_data = self._get_hf_mm_data(mm_items)
             mm_processed_data = BatchFeature(
-                {k: torch.as_tensor(v).unsqueeze(0) for k, v in passthrough_data.items()},
+                {
+                    k: torch.as_tensor(v).unsqueeze(0)
+                    for k, v in passthrough_data.items()
+                },
                 tensor_type="pt",
             )
 
@@ -296,7 +303,9 @@ class Terratorch(nn.Module, IsAttentionFree, SupportsMultiModal):
                             if "_timm_module." in name:
                                 name = name.replace("_timm_module.", "")
                             buffer = model_buffers[name]
-                            weight_loader = getattr(buffer, "weight_loader", default_weight_loader)
+                            weight_loader = getattr(
+                                buffer, "weight_loader", default_weight_loader
+                            )
                             weight_loader(buffer, weight)
                             loaded_buffers.append(name)
                         else:

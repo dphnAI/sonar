@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 # Copyright 2025 The ZhipuAI Team.
-# Copyright 2023 The Aphrodite team.
+# Copyright 2023 The vLLM team.
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -32,8 +32,9 @@ import torch
 from torch import nn
 from transformers.models.glm4_moe import Glm4MoeConfig
 
+from aphrodite._aiter_ops import rocm_aiter_ops
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
+from aphrodite.config import CacheConfig, AphroditeConfig, get_current_aphrodite_config
 from aphrodite.distributed import (
     get_ep_group,
     get_pp_group,
@@ -105,7 +106,9 @@ class Glm4MoeMLP(nn.Module):
             prefix=f"{prefix}.down_proj",
         )
         if hidden_act != "silu":
-            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu is supported for now.")
+            raise ValueError(
+                f"Unsupported activation: {hidden_act}. Only silu is supported for now."
+            )
         self.act_fn = SiluAndMul()
 
     def forward(self, x):
@@ -134,7 +137,10 @@ class Glm4MoE(nn.Module):
         self.n_shared_experts: int = config.n_shared_experts
 
         if config.hidden_act != "silu":
-            raise ValueError(f"Unsupported activation: {config.hidden_act}. Only silu is supported for now.")
+            raise ValueError(
+                f"Unsupported activation: {config.hidden_act}. "
+                "Only silu is supported for now."
+            )
         # NOTE In the transformers implementation, the gate isn't an nn.Linear,
         # so we cannot use ReplicatedLinear here.
         # See: https://github.com/huggingface/transformers/blob/v4.55.1/src/transformers/models/glm4_moe/modeling_glm4_moe.py#L260
@@ -144,7 +150,9 @@ class Glm4MoE(nn.Module):
             bias=False,
             dtype=torch.float32,
         )
-        self.gate.e_score_correction_bias = nn.Parameter(torch.empty(config.n_routed_experts, dtype=torch.float32))
+        self.gate.e_score_correction_bias = nn.Parameter(
+            torch.empty(config.n_routed_experts, dtype=torch.float32)
+        )
 
         # Load balancing settings.
         aphrodite_config = get_current_aphrodite_config()
@@ -157,9 +165,20 @@ class Glm4MoE(nn.Module):
         self.n_local_physical_experts = self.n_physical_experts // self.ep_size
 
         self.physical_expert_start = self.ep_rank * self.n_local_physical_experts
-        self.physical_expert_end = self.physical_expert_start + self.n_local_physical_experts
+        self.physical_expert_end = (
+            self.physical_expert_start + self.n_local_physical_experts
+        )
 
-        if config.n_shared_experts is not None:
+        # AITER fused shared-expert (FSE) gate; mirrors the deepseek_v2.py
+        # pattern (see Glm4MoE / FusedMoE wiring there).
+        self.is_rocm_aiter_moe_enabled = rocm_aiter_ops.is_fused_moe_enabled()
+        self.is_fusion_moe_shared_experts_enabled = (
+            rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
+        )
+
+        if config.n_shared_experts is None or self.is_fusion_moe_shared_experts_enabled:
+            self.shared_experts = None
+        else:
             intermediate_size = config.moe_intermediate_size * config.n_shared_experts
             self.shared_experts = Glm4MoeMLP(
                 hidden_size=config.hidden_size,
@@ -169,8 +188,6 @@ class Glm4MoE(nn.Module):
                 reduce_results=False,
                 prefix=f"{prefix}.shared_experts",
             )
-        else:
-            self.shared_experts = None
 
         self.experts = FusedMoE(
             shared_experts=self.shared_experts,
@@ -185,12 +202,18 @@ class Glm4MoE(nn.Module):
             topk_group=config.topk_group,
             prefix=f"{prefix}.experts",
             scoring_func="sigmoid",
+            # aiter applies routed_scaling_factor internally; see deepseek_v2.py.
             routed_scaling_factor=self.routed_scaling_factor,
-            apply_routed_scale_to_output=True,
+            apply_routed_scale_to_output=not self.is_rocm_aiter_moe_enabled,
             e_score_correction_bias=self.gate.e_score_correction_bias,
             enable_eplb=self.enable_eplb,
             num_redundant_experts=self.n_redundant_experts,
             router_logits_dtype=torch.float32,
+            n_shared_experts=(
+                config.n_shared_experts
+                if self.is_fusion_moe_shared_experts_enabled
+                else None
+            ),
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -200,7 +223,9 @@ class Glm4MoE(nn.Module):
         # router_logits: (num_tokens, n_experts)
         router_logits = self.gate(hidden_states.to(dtype=torch.float32))
 
-        final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=router_logits)
+        final_hidden_states = self.experts(
+            hidden_states=hidden_states, router_logits=router_logits
+        )
         return final_hidden_states.view(num_tokens, hidden_dim)
 
 
@@ -289,8 +314,12 @@ class Glm4MoeAttention(nn.Module):
         qkv, _ = self.qkv_proj(hidden_states)
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
         if self.use_qk_norm:
-            q = self.q_norm(q.reshape(-1, self.num_heads, self.head_dim)).reshape(q.shape)
-            k = self.k_norm(k.reshape(-1, self.num_kv_heads, self.head_dim)).reshape(k.shape)
+            q = self.q_norm(q.reshape(-1, self.num_heads, self.head_dim)).reshape(
+                q.shape
+            )
+            k = self.k_norm(k.reshape(-1, self.num_kv_heads, self.head_dim)).reshape(
+                k.shape
+            )
 
         q, k = self.rotary_emb(positions, q, k)
         attn_output = self.attn(q, k, v)
@@ -330,7 +359,10 @@ class Glm4MoeDecoderLayer(nn.Module):
             use_qk_norm=config.use_qk_norm,
         )
 
-        if config.n_routed_experts is not None and layer_idx >= config.first_k_dense_replace:
+        if (
+            config.n_routed_experts is not None
+            and layer_idx >= config.first_k_dense_replace
+        ):
             self.mlp = Glm4MoE(
                 config=config,
                 quant_config=quant_config,
@@ -347,7 +379,9 @@ class Glm4MoeDecoderLayer(nn.Module):
             )
 
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
         self.routed_scaling_factor = config.routed_scaling_factor
 
     def forward(
@@ -439,7 +473,9 @@ class Glm4MoeModel(nn.Module):
             hidden_states, residual = layer(positions, hidden_states, residual)
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
+            return IntermediateTensors(
+                {"hidden_states": hidden_states, "residual": residual}
+            )
 
         hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
@@ -447,15 +483,25 @@ class Glm4MoeModel(nn.Module):
     def get_expert_mapping(self) -> list[tuple[str, str, int, str]]:
         # Params for weights, fp8 weight scales, fp8 activation scales
         # (param_name, weight_name, expert_id, shard_id)
+        # FSE widens the mapping by n_shared_experts slots; see deepseek_v2.py.
+        num_experts = self.config.n_routed_experts
+        if (
+            rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
+            and self.config.n_shared_experts
+        ):
+            num_experts += self.config.n_shared_experts
         return fused_moe_make_expert_params_mapping(
             self,
             ckpt_gate_proj_name="gate_proj",
             ckpt_down_proj_name="down_proj",
             ckpt_up_proj_name="up_proj",
-            num_experts=self.config.n_routed_experts,
+            num_experts=num_experts,
         )
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
+        rocm_aiter_moe_shared_expert_enabled = (
+            rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
+        )
         stacked_params_mapping = [
             # (param_name, shard_name, shard_id)
             ("qkv_proj", "q_proj", "q"),
@@ -472,6 +518,11 @@ class Glm4MoeModel(nn.Module):
             spec_layer = get_spec_layer_idx_from_weight_name(self.config, name)
             if spec_layer is not None:
                 continue
+
+            is_fusion_moe_shared_experts_layer = (
+                rocm_aiter_moe_shared_expert_enabled and ("mlp.shared_experts" in name)
+            )
+
             for param_name, weight_name, shard_id in stacked_params_mapping:
                 # Skip non-stacked layers and experts (experts handled below).
                 if weight_name not in name:
@@ -484,74 +535,132 @@ class Glm4MoeModel(nn.Module):
                 # for mlp.experts[0].gate_gate_up_proj, which breaks load.
                 if ("mlp.experts." in name) and name not in params_dict:
                     continue
+                if is_fusion_moe_shared_experts_layer:
+                    continue
+
                 name = name.replace(weight_name, param_name)
                 # Skip loading extra bias for GPTQ models.
                 if name.endswith(".bias") and name not in params_dict:
+                    continue
+
+                name = maybe_remap_kv_scale_name(name, params_dict)
+                if name is None:
                     continue
                 if is_pp_missing_parameter(name, self):
                     continue
 
                 param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
+                weight_loader = getattr(param, "weight_loader", default_weight_loader)
+                if weight_loader == default_weight_loader:
+                    weight_loader(param, loaded_weight)
+                else:
+                    weight_loader(param, loaded_weight, shard_id)
                 break
             else:
                 is_expert_weight = False
-                for mapping in expert_params_mapping:
-                    param_name, weight_name, expert_id, shard_id = mapping
-                    if weight_name not in name:
-                        continue
 
-                    # Anyway, this is an expert weight and should not be
-                    # attempted to load as other weights later
-                    is_expert_weight = True
-
-                    # Do not modify `name` since the loop may continue here
-                    # Instead, create a new variable
-                    name_mapped = name.replace(weight_name, param_name)
-
-                    if is_pp_missing_parameter(name_mapped, self):
-                        continue
-
-                    param = params_dict[name_mapped]
-                    # We should ask the weight loader to return success or not
-                    # here since otherwise we may skip experts with other
-                    # available replicas.
-                    weight_loader = typing.cast(Callable[..., bool], param.weight_loader)
-                    success = weight_loader(
-                        param,
-                        loaded_weight,
-                        name_mapped,
-                        shard_id=shard_id,
-                        expert_id=expert_id,
-                        return_success=True,
+                # FSE: split a widened mlp.shared_experts tensor into
+                # n_shared_experts chunks; see deepseek_v2.py for details.
+                num_chunks = 1
+                split_dim = 0
+                chunk_size = 0
+                if is_fusion_moe_shared_experts_layer:
+                    num_chunks = getattr(self.config, "n_shared_experts", 1) or 1
+                    split_dim = (
+                        1
+                        if ("down_proj.weight" in name and loaded_weight.ndim > 1)
+                        else 0
                     )
-                    if success:
-                        name = name_mapped
-                        break
-                else:
-                    if is_expert_weight:
-                        # We've checked that this is an expert weight
-                        # However it's not mapped locally to this rank
-                        # So we simply skip it
-                        continue
+                    total = loaded_weight.shape[split_dim]
+                    if total % num_chunks != 0:
+                        raise ValueError(
+                            f"FSE shared-expert weight {name} has dim "
+                            f"{total} along axis {split_dim} which is not "
+                            f"divisible by n_shared_experts={num_chunks}."
+                        )
+                    chunk_size = total // num_chunks
 
-                    # Skip loading extra bias for GPTQ models.
-                    if name.endswith(".bias") and name not in params_dict:
-                        continue
+                for j in range(num_chunks):
+                    chunk_name = name
+                    weight_to_load = loaded_weight
 
-                    # Remapping the name of FP8 kv-scale.
-                    name = maybe_remap_kv_scale_name(name, params_dict)
-                    if name is None:
-                        continue
+                    if is_fusion_moe_shared_experts_layer:
+                        chunk_slice = slice(j * chunk_size, (j + 1) * chunk_size)
+                        if loaded_weight.ndim == 1:
+                            weight_to_load = loaded_weight[chunk_slice]
+                        elif split_dim == 0:
+                            weight_to_load = loaded_weight[chunk_slice, :]
+                        else:
+                            weight_to_load = loaded_weight[:, chunk_slice]
+                        # Synthesize an expert-style name for expert mapping.
+                        chunk_name = name.replace(
+                            "mlp.shared_experts",
+                            f"mlp.experts.{self.config.n_routed_experts + j}",
+                        )
 
-                    if is_pp_missing_parameter(name, self):
-                        continue
+                    for mapping in expert_params_mapping:
+                        param_name, weight_name, expert_id, shard_id = mapping
+                        if weight_name not in chunk_name:
+                            continue
 
-                    param = params_dict[name]
-                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                    weight_loader(param, loaded_weight)
-            loaded_params.add(name)
+                        # Anyway, this is an expert weight and should not be
+                        # attempted to load as other weights later
+                        is_expert_weight = True
+
+                        # Do not modify `name` since the loop may continue here
+                        # Instead, create a new variable
+                        name_mapped = chunk_name.replace(weight_name, param_name)
+
+                        if is_pp_missing_parameter(name_mapped, self):
+                            continue
+
+                        param = params_dict[name_mapped]
+                        # We should ask the weight loader to return success
+                        # or not here since otherwise we may skip experts
+                        # with other available replicas.
+                        weight_loader = typing.cast(
+                            Callable[..., bool], param.weight_loader
+                        )
+                        success = weight_loader(
+                            param,
+                            weight_to_load,
+                            name_mapped,
+                            shard_id=shard_id,
+                            expert_id=expert_id,
+                            return_success=True,
+                        )
+                        if success:
+                            if not is_fusion_moe_shared_experts_layer:
+                                name = name_mapped
+                            else:
+                                loaded_params.add(name_mapped)
+                            break
+                    else:
+                        if is_expert_weight:
+                            # We've checked that this is an expert weight
+                            # However it's not mapped locally to this rank
+                            # So we simply skip it
+                            continue
+
+                        # Skip loading extra bias for GPTQ models.
+                        if name.endswith(".bias") and name not in params_dict:
+                            continue
+
+                        # Remapping the name of FP8 kv-scale.
+                        name = maybe_remap_kv_scale_name(name, params_dict)
+                        if name is None:
+                            continue
+
+                        if is_pp_missing_parameter(name, self):
+                            continue
+
+                        param = params_dict[name]
+                        weight_loader = getattr(
+                            param, "weight_loader", default_weight_loader
+                        )
+                        weight_loader(param, loaded_weight)
+            if name is not None and not is_fusion_moe_shared_experts_layer:
+                loaded_params.add(name)
 
         return loaded_params
 
@@ -605,7 +714,9 @@ class Glm4MoeForCausalLM(nn.Module, SupportsPP, SupportsLoRA, Glm4MixtureOfExper
         quant_config = aphrodite_config.quant_config
         self.config = config
         self.quant_config = quant_config
-        self.model = Glm4MoeModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Glm4MoeModel(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
+        )
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
@@ -616,9 +727,9 @@ class Glm4MoeForCausalLM(nn.Module, SupportsPP, SupportsLoRA, Glm4MixtureOfExper
         else:
             self.lm_head = PPMissingLayer()
         self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
-        self.expert_weights = []
-
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
         # Set MoE hyperparameters
         self.num_moe_layers = config.num_hidden_layers - config.first_k_dense_replace
         self.num_expert_groups = config.n_group
@@ -650,7 +761,9 @@ class Glm4MoeForCausalLM(nn.Module, SupportsPP, SupportsLoRA, Glm4MixtureOfExper
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
+        hidden_states = self.model(
+            input_ids, positions, intermediate_tensors, inputs_embeds
+        )
         return hidden_states
 
     def compute_logits(
@@ -668,8 +781,12 @@ class Glm4MoeForCausalLM(nn.Module, SupportsPP, SupportsLoRA, Glm4MixtureOfExper
         return self.model.get_expert_mapping()
 
 
-def get_spec_layer_idx_from_weight_name(config: Glm4MoeConfig, weight_name: str) -> int | None:
-    if hasattr(config, "num_nextn_predict_layers") and (config.num_nextn_predict_layers > 0):
+def get_spec_layer_idx_from_weight_name(
+    config: Glm4MoeConfig, weight_name: str
+) -> int | None:
+    if hasattr(config, "num_nextn_predict_layers") and (
+        config.num_nextn_predict_layers > 0
+    ):
         layer_idx = config.num_hidden_layers
         for i in range(config.num_nextn_predict_layers):
             if f"layers.{layer_idx + i}." in weight_name:

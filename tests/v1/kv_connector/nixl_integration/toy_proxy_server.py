@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import argparse
 import itertools
 import logging
@@ -29,7 +30,14 @@ async def lifespan(app: FastAPI):
         prefiller_base_url = f"http://{host}:{port}/v1"
         app.state.prefill_clients.append(
             {
-                "client": httpx.AsyncClient(timeout=None, base_url=prefiller_base_url),
+                "client": httpx.AsyncClient(
+                    timeout=None,
+                    base_url=prefiller_base_url,
+                    limits=httpx.Limits(
+                        max_connections=None,
+                        max_keepalive_connections=None,
+                    ),
+                ),
                 "host": host,
                 "port": port,
                 "id": i,
@@ -41,7 +49,14 @@ async def lifespan(app: FastAPI):
         decoder_base_url = f"http://{host}:{port}/v1"
         app.state.decode_clients.append(
             {
-                "client": httpx.AsyncClient(timeout=None, base_url=decoder_base_url),
+                "client": httpx.AsyncClient(
+                    timeout=None,
+                    base_url=decoder_base_url,
+                    limits=httpx.Limits(
+                        max_connections=None,
+                        max_keepalive_connections=None,
+                    ),
+                ),
                 "host": host,
                 "port": port,
                 "id": i,
@@ -86,17 +101,25 @@ def parse_args():
         nargs="+",
         default=["localhost"],
     )
-    parser.add_argument("--prefiller-ports", "--prefiller-port", type=int, nargs="+", default=[8100])
+    parser.add_argument(
+        "--prefiller-ports", "--prefiller-port", type=int, nargs="+", default=[8100]
+    )
 
     # For decoder instances
-    parser.add_argument("--decoder-hosts", "--decoder-host", type=str, nargs="+", default=["localhost"])
-    parser.add_argument("--decoder-ports", "--decoder-port", type=int, nargs="+", default=[8200])
+    parser.add_argument(
+        "--decoder-hosts", "--decoder-host", type=str, nargs="+", default=["localhost"]
+    )
+    parser.add_argument(
+        "--decoder-ports", "--decoder-port", type=int, nargs="+", default=[8200]
+    )
 
     args = parser.parse_args()
 
     # Validate and pair hosts with ports
     if len(args.prefiller_hosts) != len(args.prefiller_ports):
-        raise ValueError("Number of prefiller hosts must match number of prefiller ports")
+        raise ValueError(
+            "Number of prefiller hosts must match number of prefiller ports"
+        )
 
     if len(args.decoder_hosts) != len(args.decoder_ports):
         raise ValueError("Number of decoder hosts must match number of decoder ports")
@@ -129,7 +152,9 @@ def get_next_client(app, service_type: str):
         raise ValueError(f"Unknown service type: {service_type}")
 
 
-async def send_request_to_service(client_info: dict, endpoint: str, req_data: dict, request_id: str):
+async def send_request_to_service(
+    client_info: dict, endpoint: str, req_data: dict, request_id: str
+):
     """
     Send a request to a service using a client from the pool.
     """
@@ -148,18 +173,33 @@ async def send_request_to_service(client_info: dict, endpoint: str, req_data: di
         req_data["max_completion_tokens"] = 1
     if "stream_options" in req_data:
         del req_data["stream_options"]
+    # These args are not supported for P
+    min_tokens = req_data.pop("min_tokens", None)
+    min_completion_tokens = req_data.pop("min_completion_tokens", None)
     headers = {
         "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}",
         "X-Request-Id": request_id,
     }
 
-    response = await client_info["client"].post(endpoint, json=req_data, headers=headers)
+    response = await client_info["client"].post(
+        endpoint, json=req_data, headers=headers
+    )
     response.raise_for_status()
+
+    # read/consume the response body to release the connection
+    # otherwise, it would http.ReadError
+    await response.aread()
+
+    # Add back the min_tokens and min_completion_tokens so D can use them
+    req_data["min_tokens"] = min_tokens
+    req_data["min_completion_tokens"] = min_completion_tokens
 
     return response
 
 
-async def stream_service_response(client_info: dict, endpoint: str, req_data: dict, request_id: str):
+async def stream_service_response(
+    client_info: dict, endpoint: str, req_data: dict, request_id: str
+):
     """
     Asynchronously stream response from a service using a client from the pool.
     """
@@ -168,7 +208,9 @@ async def stream_service_response(client_info: dict, endpoint: str, req_data: di
         "X-Request-Id": request_id,
     }
 
-    async with client_info["client"].stream("POST", endpoint, json=req_data, headers=headers) as response:
+    async with client_info["client"].stream(
+        "POST", endpoint, json=req_data, headers=headers
+    ) as response:
         response.raise_for_status()
         async for chunk in response.aiter_bytes():
             yield chunk
@@ -183,10 +225,13 @@ async def _handle_completions(api: str, request: Request):
         prefill_client_info = get_next_client(request.app, "prefill")
 
         # Send request to prefill service
-        response = await send_request_to_service(prefill_client_info, api, req_data, request_id)
+        response = await send_request_to_service(
+            prefill_client_info, api, req_data, request_id
+        )
 
         # Extract the needed fields
         response_json = response.json()
+        await response.aclose()  # CRITICAL: Release connection back to pool
         kv_transfer_params = response_json.get("kv_transfer_params", {})
         if kv_transfer_params:
             req_data["kv_transfer_params"] = kv_transfer_params
@@ -198,7 +243,9 @@ async def _handle_completions(api: str, request: Request):
 
         # Stream response from decode service
         async def generate_stream():
-            async for chunk in stream_service_response(decode_client_info, api, req_data, request_id=request_id):
+            async for chunk in stream_service_response(
+                decode_client_info, api, req_data, request_id=request_id
+            ):
                 yield chunk
 
         return StreamingResponse(generate_stream(), media_type="application/json")

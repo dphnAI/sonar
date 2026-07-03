@@ -1,7 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
-from aphrodite.modeling.layers.fused_moe.layer import determine_expert_map
+
+from aphrodite.model_executor.layers.fused_moe.expert_map_manager import (
+    determine_expert_map,
+)
 
 
 def verify_round_robin_pattern(expert_map, ep_rank, ep_size, global_num_experts):
@@ -69,7 +73,9 @@ def test_expert_placement_various_sizes(expert_placement_strategy, world_size):
 
     for test_global_experts, test_ep_size in test_cases:
         # Ensure ep_size matches world_size
-        assert test_ep_size == world_size, f"ep_size {test_ep_size} must equal world_size {world_size}"
+        assert test_ep_size == world_size, (
+            f"ep_size {test_ep_size} must equal world_size {world_size}"
+        )
 
         # Test each rank
         for ep_rank in range(world_size):
@@ -96,11 +102,14 @@ def test_expert_placement_various_sizes(expert_placement_strategy, world_size):
 
             if test_expert_map is not None:
                 assert test_expert_map.shape == (test_global_experts,), (
-                    f"Expected expert map shape ({test_global_experts},), got {test_expert_map.shape}"
+                    f"Expected expert map shape ({test_global_experts},), "
+                    f"got {test_expert_map.shape}"
                 )
 
                 # Verify round_robin pattern for this test case
-                verify_round_robin_pattern(test_expert_map, ep_rank, test_ep_size, test_global_experts)
+                verify_round_robin_pattern(
+                    test_expert_map, ep_rank, test_ep_size, test_global_experts
+                )
 
 
 @pytest.mark.parametrize("expert_placement_strategy", ["round_robin"])

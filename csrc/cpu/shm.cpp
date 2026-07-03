@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#ifdef __aarch64__
+#if defined(__aarch64__) || defined(__powerpc64__)
   #include <atomic>
 #endif
 
@@ -38,7 +38,7 @@ struct KernelVecType<c10::Half> {
 };
 
 struct ThreadSHMContext {
-#ifdef __aarch64__
+#if defined(__aarch64__) || defined(__powerpc64__)
   // memory model is weaker on AArch64, so we use atomic variables for
   // consumer (load-acquire) and producer (store-release) to make sure
   // that a stamp cannot be ready before the corresponding data is ready.
@@ -75,7 +75,7 @@ struct ThreadSHMContext {
     TORCH_CHECK(group_size <= MAX_SHM_RANK_NUM);
     TORCH_CHECK((size_t)this % 64 == 0);
     TORCH_CHECK((size_t)thread_shm_ptr % 64 == 0);
-#ifdef __aarch64__
+#if defined(__aarch64__) || defined(__powerpc64__)
     _curr_thread_stamp[0].store(1, std::memory_order_relaxed);
     _curr_thread_stamp[1].store(1, std::memory_order_relaxed);
     _ready_thread_stamp[0].store(0, std::memory_order_relaxed);
@@ -124,7 +124,7 @@ struct ThreadSHMContext {
   }
 
   char get_curr_stamp(int idx) const {
-#ifdef __aarch64__
+#if defined(__aarch64__) || defined(__powerpc64__)
     return _curr_thread_stamp[idx].load(std::memory_order_acquire);
 #else
     return _curr_thread_stamp[idx];
@@ -132,7 +132,7 @@ struct ThreadSHMContext {
   }
 
   char get_ready_stamp(int idx) const {
-#ifdef __aarch64__
+#if defined(__aarch64__) || defined(__powerpc64__)
     return _ready_thread_stamp[idx].load(std::memory_order_acquire);
 #else
     return _ready_thread_stamp[idx];
@@ -140,7 +140,7 @@ struct ThreadSHMContext {
   }
 
   void next_stamp() {
-#ifdef __aarch64__
+#if defined(__aarch64__) || defined(__powerpc64__)
     _curr_thread_stamp[local_stamp_buffer_idx].fetch_add(
         1, std::memory_order_release);
 #else
@@ -150,7 +150,7 @@ struct ThreadSHMContext {
   }
 
   void commit_ready_stamp() {
-#ifdef __aarch64__
+#if defined(__aarch64__) || defined(__powerpc64__)
     _ready_thread_stamp[local_stamp_buffer_idx].store(
         _curr_thread_stamp[local_stamp_buffer_idx].load(
             std::memory_order_relaxed),
@@ -186,8 +186,10 @@ struct ThreadSHMContext {
         break;
       }
       ++_spinning_count;
-#ifdef __aarch64__
+#if defined(__aarch64__)
       __asm__ __volatile__("yield");
+#elif defined(__powerpc64__)
+      __asm__ __volatile__("or 1,1,1");
 #else
       _mm_pause();
 #endif  // __aarch64__
@@ -810,32 +812,29 @@ void shm_all_gather(int64_t handle, const torch::Tensor& data,
   TORCH_CHECK_EQ(output_elem_num % input_elem_num, 0);
   const int world_size = output_elem_num / input_elem_num;
 
-  APHRODITE_DISPATCH_FLOATING_TYPES(
-      data.scalar_type(), "shm_all_gather_impl", [&] {
-        CPU_KERNEL_GUARD_IN(shm_all_gather_impl)
-        auto ctx = SHMManager::get_singleton_instance(handle)->get_shm_ctx();
-        TORCH_CHECK_EQ(ctx->group_size, world_size);
+  APHRODITE_DISPATCH_FLOATING_TYPES(data.scalar_type(), "shm_all_gather_impl", [&] {
+    CPU_KERNEL_GUARD_IN(shm_all_gather_impl)
+    auto ctx = SHMManager::get_singleton_instance(handle)->get_shm_ctx();
+    TORCH_CHECK_EQ(ctx->group_size, world_size);
 
-        scalar_t* output_ptrs[MAX_SHM_RANK_NUM] = {nullptr};
-        for (int i = 0; i < world_size; ++i) {
-          output_ptrs[i] = output.data_ptr<scalar_t>() + i * input_elem_num;
-        }
-        shm_gather_impl(ctx, data.data_ptr<scalar_t>(), data.numel(),
-                        output_ptrs, ctx->rank);
-        CPU_KERNEL_GUARD_OUT(shm_all_gather_impl)
-      });
+    scalar_t* output_ptrs[MAX_SHM_RANK_NUM] = {nullptr};
+    for (int i = 0; i < world_size; ++i) {
+      output_ptrs[i] = output.data_ptr<scalar_t>() + i * input_elem_num;
+    }
+    shm_gather_impl(ctx, data.data_ptr<scalar_t>(), data.numel(), output_ptrs,
+                    ctx->rank);
+    CPU_KERNEL_GUARD_OUT(shm_all_gather_impl)
+  });
 }
 
 void shm_allreduce(int64_t handle, torch::Tensor& data) {
   TORCH_CHECK(data.is_contiguous())
-  APHRODITE_DISPATCH_FLOATING_TYPES(
-      data.scalar_type(), "shm_allreduce_sum", [&] {
-        CPU_KERNEL_GUARD_IN(shm_allreduce_sum)
-        shm_allreduce_sum(
-            SHMManager::get_singleton_instance(handle)->get_shm_ctx(),
-            data.data_ptr<scalar_t>(), data.numel());
-        CPU_KERNEL_GUARD_OUT(shm_allreduce_sum)
-      });
+  APHRODITE_DISPATCH_FLOATING_TYPES(data.scalar_type(), "shm_allreduce_sum", [&] {
+    CPU_KERNEL_GUARD_IN(shm_allreduce_sum)
+    shm_allreduce_sum(SHMManager::get_singleton_instance(handle)->get_shm_ctx(),
+                      data.data_ptr<scalar_t>(), data.numel());
+    CPU_KERNEL_GUARD_OUT(shm_allreduce_sum)
+  });
 }
 
 void shm_send_tensor_list(int64_t handle,

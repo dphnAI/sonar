@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import traceback
 import unittest
 
 import numpy as np
 
-from aphrodite.distributed.device_communicators.shm_object_storage import SingleWriterShmRingBuffer
+from aphrodite.distributed.device_communicators.shm_object_storage import (
+    SingleWriterShmRingBuffer,
+)
 
 
 class TestSingleWriterShmRingBuffer(unittest.TestCase):
@@ -19,21 +22,27 @@ class TestSingleWriterShmRingBuffer(unittest.TestCase):
     def tearDown(self):
         """Clean up after tests"""
         if self.ring_buffer:
-            del self.ring_buffer
+            self.ring_buffer.close()
 
     def test_buffer_opening(self):
         """Test opening an existing buffer"""
         # First create a buffer
-        self.ring_buffer = SingleWriterShmRingBuffer(data_buffer_size=self.buffer_size, create=True)
+        self.ring_buffer = SingleWriterShmRingBuffer(
+            data_buffer_size=self.buffer_size, create=True
+        )
 
         # Then open it with another instance
         reader_buffer = SingleWriterShmRingBuffer(*self.ring_buffer.handle())
         self.assertFalse(reader_buffer.is_writer)
-        self.assertEqual(reader_buffer.shared_memory.name, self.ring_buffer.shared_memory.name)
+        self.assertEqual(
+            reader_buffer.shared_memory.name, self.ring_buffer.shared_memory.name
+        )
 
     def test_buffer_access(self):
         """Test accessing allocated buffers"""
-        self.ring_buffer = SingleWriterShmRingBuffer(data_buffer_size=self.buffer_size, create=True)
+        self.ring_buffer = SingleWriterShmRingBuffer(
+            data_buffer_size=self.buffer_size, create=True
+        )
 
         size = 100
         address, monotonic_id = self.ring_buffer.allocate_buf(size)
@@ -54,7 +63,9 @@ class TestSingleWriterShmRingBuffer(unittest.TestCase):
     def test_memory_error_on_full_buffer(self):
         """Test that MemoryError is raised when buffer is full"""
         small_buffer_size = 200
-        self.ring_buffer = SingleWriterShmRingBuffer(data_buffer_size=small_buffer_size, create=True)
+        self.ring_buffer = SingleWriterShmRingBuffer(
+            data_buffer_size=small_buffer_size, create=True
+        )
 
         # Fill up the buffer
         self.ring_buffer.allocate_buf(100)
@@ -67,7 +78,9 @@ class TestSingleWriterShmRingBuffer(unittest.TestCase):
     def test_allocation_and_free(self):
         """Test allocation and freeing of buffers"""
         small_buffer_size = 200
-        self.ring_buffer = SingleWriterShmRingBuffer(data_buffer_size=small_buffer_size, create=True)
+        self.ring_buffer = SingleWriterShmRingBuffer(
+            data_buffer_size=small_buffer_size, create=True
+        )
 
         size = 80
         # Write some data
@@ -84,7 +97,9 @@ class TestSingleWriterShmRingBuffer(unittest.TestCase):
 
     def test_clear_buffer(self):
         """Test clearing the buffer"""
-        self.ring_buffer = SingleWriterShmRingBuffer(data_buffer_size=self.buffer_size, create=True)
+        self.ring_buffer = SingleWriterShmRingBuffer(
+            data_buffer_size=self.buffer_size, create=True
+        )
 
         # Allocate some buffers
         for _ in range(3):
@@ -105,7 +120,9 @@ class TestSingleWriterShmRingBuffer(unittest.TestCase):
         ring = SingleWriterShmRingBuffer(data_buffer_size=buffer_size, create=True)
 
         # tracking allocations for assertions
-        allocated_bitmap = np.zeros((buffer_size,), dtype=np.bool_)  # addr -> is_allocated
+        allocated_bitmap = np.zeros(
+            (buffer_size,), dtype=np.bool_
+        )  # addr -> is_allocated
         allocation_map = dict()  # monotonic_id -> (addr, size)
 
         def count_allocated(bitmap) -> int:
@@ -126,7 +143,9 @@ class TestSingleWriterShmRingBuffer(unittest.TestCase):
 
             addr, size = allocation_map.pop(id)
             addr = addr % buffer_size
-            self.assertEqual(count_allocated(allocated_bitmap[addr : addr + size]), size)
+            self.assertEqual(
+                count_allocated(allocated_bitmap[addr : addr + size]), size
+            )
 
             allocated_bitmap[addr : addr + size] = False
 

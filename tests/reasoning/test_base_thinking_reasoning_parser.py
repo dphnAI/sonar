@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
-from aphrodite.endpoints.openai.protocol import ChatCompletionRequest
 from transformers import AutoTokenizer
 
-from aphrodite.reasoning.basic_parsers import BaseThinkingReasoningParser
 from tests.reasoning.utils import run_reasoning_extraction
+from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from aphrodite.reasoning.basic_parsers import BaseThinkingReasoningParser
 
 
 # Create a concrete test implementation of BaseThinkingReasoningParser
@@ -81,7 +82,9 @@ class TestBaseThinkingReasoningParserInit:
             def end_token(self) -> str:
                 return "<missing:end>"
 
-        with pytest.raises(RuntimeError, match="could not locate think start/end tokens"):
+        with pytest.raises(
+            RuntimeError, match="could not locate think start/end tokens"
+        ):
             MissingTokenParser(test_tokenizer)
 
     def test_initialization_with_empty_tokens(self, test_tokenizer):
@@ -96,7 +99,9 @@ class TestBaseThinkingReasoningParserInit:
             def end_token(self) -> str:
                 return ""
 
-        with pytest.raises(ValueError, match="start_token and end_token must be defined"):
+        with pytest.raises(
+            ValueError, match="start_token and end_token must be defined"
+        ):
             EmptyTokenParser(test_tokenizer)
 
 
@@ -107,7 +112,7 @@ class TestBaseThinkingReasoningParserMethods:
         """Test the is_reasoning_end method."""
         parser = TestThinkingReasoningParser(test_tokenizer)
         end_token_id = parser.end_token_id
-
+        start_token_id = parser.start_token_id
         # Test with end token present
         assert parser.is_reasoning_end([1, 2, end_token_id, 4]) is True
 
@@ -116,6 +121,68 @@ class TestBaseThinkingReasoningParserMethods:
 
         # Test with empty list
         assert parser.is_reasoning_end([]) is False
+
+        # Test with interleaved thinking
+        assert parser.is_reasoning_end([1, start_token_id, 2, end_token_id]) is True
+        assert parser.is_reasoning_end([1, start_token_id, 2, 3]) is False
+        assert (
+            parser.is_reasoning_end(
+                [1, start_token_id, 2, end_token_id, 2, 2, start_token_id]
+            )
+            is False
+        )
+
+    def test_is_reasoning_end_streaming(self, test_tokenizer):
+        """Test the is_reasoning_end_streaming method."""
+        parser = TestThinkingReasoningParser(test_tokenizer)
+        end_token_id = parser.end_token_id
+        start_token_id = parser.start_token_id
+
+        assert (
+            parser.is_reasoning_end_streaming([1, 2, end_token_id], [end_token_id])
+            is True
+        )
+        assert parser.is_reasoning_end_streaming([1, 2, 3, 4], [4]) is False
+        assert parser.is_reasoning_end_streaming([], []) is False
+        assert (
+            parser.is_reasoning_end_streaming(
+                [1, start_token_id, 2, end_token_id], [end_token_id]
+            )
+            is True
+        )
+        assert (
+            parser.is_reasoning_end_streaming([1, start_token_id, 2, 3], [3]) is False
+        )
+        assert (
+            parser.is_reasoning_end_streaming(
+                [1, start_token_id, 2, end_token_id, 2, start_token_id, 2],
+                [2],
+            )
+            is False
+        )
+        assert (
+            parser.is_reasoning_end_streaming(
+                [1, start_token_id, 2, end_token_id, 2, 2], [2]
+            )
+            is False
+        )
+
+    def test_count_reasoning_tokens(self, test_tokenizer):
+        """Count tokens between start/end markers."""
+        parser = TestThinkingReasoningParser(test_tokenizer)
+        start = parser.start_token_id
+        end = parser.end_token_id
+        token_ids = [0, start, 11, 12, end, 99]
+        assert parser.count_reasoning_tokens(token_ids) == 2
+
+    def test_count_reasoning_tokens_nested(self, test_tokenizer):
+        """Ensure nested thinking spans count all inner tokens safely."""
+        parser = TestThinkingReasoningParser(test_tokenizer)
+        s = parser.start_token_id
+        e = parser.end_token_id
+        token_ids = [s, 1, s, 2, e, 3, e]
+        # Tokens 1,2,3 are inside reasoning (depth>0) => 3 tokens
+        assert parser.count_reasoning_tokens(token_ids) == 3
 
     def test_extract_content_ids(self, test_tokenizer):
         """Test the extract_content_ids method."""
@@ -146,57 +213,57 @@ class TestBaseThinkingReasoningParserMethods:
 class TestBaseThinkingReasoningParserExtraction:
     """Test reasoning content extraction methods."""
 
-    def test_extract_reasoning_content_with_both_tokens(self, test_tokenizer):
+    def test_extract_reasoning_with_both_tokens(self, test_tokenizer):
         """Test extraction when both start and end tokens are present."""
         parser = TestThinkingReasoningParser(test_tokenizer)
         request = ChatCompletionRequest(messages=[], model="test-model")
 
         model_output = "<test:think>This is reasoning</test:think>This is content"
-        reasoning, content = parser.extract_reasoning_content(model_output, request)
+        reasoning, content = parser.extract_reasoning(model_output, request)
 
         assert reasoning == "This is reasoning"
         assert content == "This is content"
 
-    def test_extract_reasoning_content_only_end_token(self, test_tokenizer):
+    def test_extract_reasoning_only_end_token(self, test_tokenizer):
         """Test extraction when only end token is present."""
         parser = TestThinkingReasoningParser(test_tokenizer)
         request = ChatCompletionRequest(messages=[], model="test-model")
 
         model_output = "This is reasoning</test:think>This is content"
-        reasoning, content = parser.extract_reasoning_content(model_output, request)
+        reasoning, content = parser.extract_reasoning(model_output, request)
 
         assert reasoning == "This is reasoning"
         assert content == "This is content"
 
-    def test_extract_reasoning_content_no_end_token(self, test_tokenizer):
+    def test_extract_reasoning_no_end_token(self, test_tokenizer):
         """Test extraction when no end token is present."""
         parser = TestThinkingReasoningParser(test_tokenizer)
         request = ChatCompletionRequest(messages=[], model="test-model")
 
         model_output = "This is just content"
-        reasoning, content = parser.extract_reasoning_content(model_output, request)
+        reasoning, content = parser.extract_reasoning(model_output, request)
 
         assert reasoning == "This is just content"
         assert content is None
 
-    def test_extract_reasoning_content_empty_output(self, test_tokenizer):
+    def test_extract_reasoning_empty_output(self, test_tokenizer):
         """Test extraction with empty output."""
         parser = TestThinkingReasoningParser(test_tokenizer)
         request = ChatCompletionRequest(messages=[], model="test-model")
 
         model_output = ""
-        reasoning, content = parser.extract_reasoning_content(model_output, request)
+        reasoning, content = parser.extract_reasoning(model_output, request)
 
         assert reasoning == ""
         assert content is None
 
-    def test_extract_reasoning_content_only_tokens(self, test_tokenizer):
+    def test_extract_reasoning_only_tokens(self, test_tokenizer):
         """Test extraction with only tokens and no content."""
         parser = TestThinkingReasoningParser(test_tokenizer)
         request = ChatCompletionRequest(messages=[], model="test-model")
 
         model_output = "<test:think></test:think>"
-        reasoning, content = parser.extract_reasoning_content(model_output, request)
+        reasoning, content = parser.extract_reasoning(model_output, request)
 
         assert reasoning == ""
         assert content is None
@@ -223,7 +290,9 @@ class TestBaseThinkingReasoningParserStreaming:
             "answer",
         ]
 
-        reasoning, content = run_reasoning_extraction(parser, model_output, streaming=streaming)
+        reasoning, content = run_reasoning_extraction(
+            parser, model_output, streaming=streaming
+        )
 
         assert reasoning == "Some reasoning content"
         assert content == "Final answer"

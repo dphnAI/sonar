@@ -11,10 +11,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from pydantic import Field, TypeAdapter, field_validator
 
 import aphrodite.envs as envs
-from aphrodite.compilation.passes.inductor_pass import (
-    CallableInductorPass,
-    InductorPass,
-)
+from aphrodite.compilation.passes.inductor_pass import CallableInductorPass, InductorPass
 from aphrodite.config.utils import (
     Range,
     config,
@@ -137,10 +134,10 @@ class PassConfig:
     """Enable async TP."""
     fuse_allreduce_rms: bool = None  # type: ignore[assignment]
     """Enable flashinfer allreduce fusion."""
-    fuse_minimax_qk_norm: bool = None  # type: ignore[assignment]
-    """Enable fused allreduce+RMSNorm for MiniMax QK norm."""
-    enable_qk_norm_rope_fusion: bool = False
+    enable_qk_norm_rope_fusion: bool = None  # type: ignore[assignment]
     """Enable fused Q/K RMSNorm + RoPE pass."""
+    fuse_rope_kvcache_cat_mla: bool = None  # type: ignore[assignment]
+    """Enable fused MLA KV cache update with RoPE."""
 
     # ROCm/AITER specific fusions
     fuse_act_padding: bool = None  # type: ignore[assignment]
@@ -189,7 +186,7 @@ class PassConfig:
         """
 
         MiB = 1024 * 1024
-        FI_SUPPORTED_WORLD_SIZES = [2, 4, 8]
+        FI_SUPPORTED_WORLD_SIZES = [2, 4, 8, 16]
         if world_size not in FI_SUPPORTED_WORLD_SIZES:
             return None
         max_size_mb = self.fi_allreduce_fusion_max_size_mb
@@ -231,6 +228,7 @@ class PassConfig:
         "fuse_act_padding",
         "fuse_mla_dual_rms_norm",
         "fuse_rope_kvcache",
+        "fuse_rope_kvcache_cat_mla",
         mode="wrap",
     )
     @classmethod
@@ -251,7 +249,8 @@ class PassConfig:
                 )
             if self.fuse_attn_quant:
                 logger.warning_once(
-                    "Fusion enabled but reshape elimination disabled. Attention + quant (fp8) fusion might not work"
+                    "Fusion enabled but reshape elimination disabled. "
+                    "Attention + quant (fp8) fusion might not work"
                 )
             if self.fuse_allreduce_rms:
                 logger.warning_once(
@@ -260,25 +259,41 @@ class PassConfig:
                 )
             if self.fuse_act_padding:
                 logger.warning_once(
-                    "Fusion enabled but reshape elimination disabled. RMSNorm + padding fusion might not work"
+                    "Fusion enabled but reshape elimination disabled. "
+                    "RMSNorm + padding fusion might not work"
                 )
-        if self.enable_qk_norm_rope_fusion and not current_platform.is_cuda_alike():
+        if self.enable_qk_norm_rope_fusion and not (
+            current_platform.is_cuda_alike() or current_platform.is_xpu()
+        ):
             logger.warning_once(
                 "QK Norm + RoPE fusion enabled but the current platform is not "
-                "CUDA or ROCm. The fusion will be disabled."
+                "CUDA, ROCm or XPU. The fusion will be disabled."
             )
             self.enable_qk_norm_rope_fusion = False
         if self.fuse_act_padding and not current_platform.is_rocm():
             logger.warning_once(
-                "Padding fusion enabled but the current platform is not ROCm. The fusion will be disabled."
+                "Padding fusion enabled but the current platform is not ROCm. "
+                "The fusion will be disabled."
             )
             self.fuse_act_padding = False
         if self.fuse_mla_dual_rms_norm and not current_platform.is_rocm():
-            logger.warning_once("MLA dual RMS norm fusion requires ROCm/AITER. The fusion will be disabled.")
+            logger.warning_once(
+                "MLA dual RMS norm fusion requires ROCm/AITER. "
+                "The fusion will be disabled."
+            )
             self.fuse_mla_dual_rms_norm = False
         if self.fuse_rope_kvcache and not current_platform.is_rocm():
-            logger.warning_once("KV cache fusion currently only enabled on ROCm. The fusion will be disabled.")
+            logger.warning_once(
+                "KV cache fusion currently only enabled on ROCm. "
+                "The fusion will be disabled."
+            )
             self.fuse_rope_kvcache = False
+        if self.fuse_rope_kvcache_cat_mla and not current_platform.is_cuda_alike():
+            logger.warning_once(
+                "MLA KV cache update with RoPE fusion enabled but the "
+                "current platform is not CUDA or ROCm. The fusion will be disabled."
+            )
+            self.fuse_rope_kvcache_cat_mla = False
 
     def log_enabled_passes(self) -> None:
         """
@@ -294,7 +309,9 @@ class PassConfig:
         ]
 
         if enabled_fusions:
-            logger.info_once("Enabled custom fusions: %s", ", ".join(enabled_fusions), scope="global")
+            logger.info_once(
+                "Enabled custom fusions: %s", ", ".join(enabled_fusions), scope="global"
+            )
 
 
 class DynamicShapesType(str, enum.Enum):
@@ -672,7 +689,9 @@ class CompilationConfig:
     greatly increase startup time with limited performance benefit.
     """
 
-    dynamic_shapes_config: DynamicShapesConfig = field(default_factory=DynamicShapesConfig)
+    dynamic_shapes_config: DynamicShapesConfig = field(
+        default_factory=DynamicShapesConfig
+    )
     """Configuration for dynamic shapes options"""
 
     local_cache_dir: str = field(default=None, init=False)  # type: ignore
@@ -733,13 +752,14 @@ class CompilationConfig:
         "aphrodite::short_conv",
         "aphrodite::linear_attention",
         "aphrodite::plamo2_mamba_mixer",
-        "aphrodite::gdn_attention_core",
+        "aphrodite::qwen_gdn_attention_core",
         "aphrodite::gdn_attention_core_xpu",
         "aphrodite::olmo_hybrid_gdn_full_forward",
         "aphrodite::kda_attention",
         "aphrodite::sparse_attn_indexer",
         "aphrodite::rocm_aiter_sparse_attn_indexer",
         "aphrodite::deepseek_v4_attention",
+        "aphrodite::hpc_rope_norm_forward",
     ]
 
     def compute_hash(self) -> str:
@@ -796,7 +816,9 @@ class CompilationConfig:
         if pass_config_exclude:
             exclude["pass_config"] = pass_config_exclude
 
-        config = TypeAdapter(CompilationConfig).dump_python(self, exclude=exclude, exclude_unset=True)
+        config = TypeAdapter(CompilationConfig).dump_python(
+            self, exclude=exclude, exclude_unset=True
+        )
 
         return str(config)
 
@@ -843,7 +865,10 @@ class CompilationConfig:
     @classmethod
     def validate_compile_cache_save_format(cls, value: str) -> str:
         if value not in ("binary", "unpacked"):
-            raise ValueError(f"compile_cache_save_format must be 'binary' or 'unpacked', got: {value}")
+            raise ValueError(
+                f"compile_cache_save_format must be 'binary' or 'unpacked', "
+                f"got: {value}"
+            )
         return value
 
     @field_validator(
@@ -901,7 +926,9 @@ class CompilationConfig:
         for k, v in self.inductor_passes.items():
             if not isinstance(v, str):
                 assert callable(v), f"pass {k} should be callable or a qualified name"
-                self.inductor_compile_config[k] = v if isinstance(v, InductorPass) else CallableInductorPass(v)
+                self.inductor_compile_config[k] = (
+                    v if isinstance(v, InductorPass) else CallableInductorPass(v)
+                )
                 continue
 
             # resolve function from qualified name
@@ -909,13 +936,21 @@ class CompilationConfig:
             module = ".".join(names[:-1])
             func_name = names[-1]
             func = __import__(module).__dict__[func_name]
-            self.inductor_compile_config[k] = func if isinstance(func, InductorPass) else CallableInductorPass(func)
+            self.inductor_compile_config[k] = (
+                func if isinstance(func, InductorPass) else CallableInductorPass(func)
+            )
 
-        if self.pass_config.enable_qk_norm_rope_fusion and "+rotary_embedding" not in self.custom_ops:
+        if (
+            self.pass_config.enable_qk_norm_rope_fusion
+            and "+rotary_embedding" not in self.custom_ops
+        ):
             # TODO(zhuhaoran): support rope native forward match and remove this.
             # Linked issue: https://github.com/vllm-project/vllm/issues/28042
             self.custom_ops.append("+rotary_embedding")
-        if self.pass_config.fuse_rope_kvcache and "+rotary_embedding" not in self.custom_ops:
+        if (
+            self.pass_config.fuse_rope_kvcache
+            and "+rotary_embedding" not in self.custom_ops
+        ):
             # TODO(Rohan138): support rope native forward match and remove this.
             # Linked issue: https://github.com/vllm-project/vllm/issues/28042
             self.custom_ops.append("+rotary_embedding")
@@ -932,7 +967,9 @@ class CompilationConfig:
             self.inductor_compile_config["combo_kernels"] = True
             self.inductor_compile_config["benchmark_combo_kernel"] = True
 
-        if self.use_inductor_graph_partition and not is_torch_equal_or_newer("2.9.0.dev"):
+        if self.use_inductor_graph_partition and not is_torch_equal_or_newer(
+            "2.9.0.dev"
+        ):
             raise ValueError(
                 "use_inductor_graph_partition is only "
                 "supported with torch>=2.9.0.dev. Set "
@@ -955,17 +992,36 @@ class CompilationConfig:
             "eager",
             "inductor",
         ]:
-            raise ValueError(f"Invalid backend for piecewise compilation: {self.backend}")
+            raise ValueError(
+                f"Invalid backend for piecewise compilation: {self.backend}"
+            )
 
         # Validate encoder CUDA graph configuration
-        if self.cudagraph_mm_encoder and self.encoder_cudagraph_max_vision_items_per_batch < 0:
-            raise ValueError("encoder_cudagraph_max_vision_items_per_batch must be non-negative (0 = auto-infer)")
+        if (
+            self.cudagraph_mm_encoder
+            and self.encoder_cudagraph_max_vision_items_per_batch < 0
+        ):
+            raise ValueError(
+                "encoder_cudagraph_max_vision_items_per_batch must be "
+                "non-negative (0 = auto-infer)"
+            )
         if (
             self.cudagraph_mm_encoder
             and self.encoder_cudagraph_max_frames_per_batch is not None
             and self.encoder_cudagraph_max_frames_per_batch < 0
         ):
-            raise ValueError("encoder_cudagraph_max_frames_per_batch must be non-negative (None = auto-infer)")
+            raise ValueError(
+                "encoder_cudagraph_max_frames_per_batch must be "
+                "non-negative (None = auto-infer)"
+            )
+
+        if self.encoder_cudagraph_token_budgets and any(
+            b <= 0 for b in self.encoder_cudagraph_token_budgets
+        ):
+            raise ValueError(
+                f"All encoder_cudagraph_token_budgets must be positive, "
+                f"got {self.encoder_cudagraph_token_budgets}"
+            )
 
         if self.backend == "":
             self.backend = current_platform.get_compile_backend()
@@ -1027,7 +1083,8 @@ class CompilationConfig:
             for x in self.compile_sizes:
                 if isinstance(x, str):
                     assert x == "cudagraph_capture_sizes", (
-                        f"Unrecognized size type in compile_sizes, expect 'cudagraph_capture_sizes', got {x}"
+                        "Unrecognized size type in compile_sizes, "
+                        f"expect 'cudagraph_capture_sizes', got {x}"
                     )
                     computed_compile_sizes.extend(self.cudagraph_capture_sizes)
                 else:
@@ -1040,7 +1097,9 @@ class CompilationConfig:
         if self.cudagraph_capture_sizes:
             assert self.cudagraph_capture_sizes[-1] == self.max_cudagraph_capture_size
 
-    def set_splitting_ops_for_v1(self, all2all_backend: str, data_parallel_size: int = 1):
+    def set_splitting_ops_for_v1(
+        self, all2all_backend: str, data_parallel_size: int = 1
+    ):
         # To compatible with OOT hardware plugin platform (for example aphrodite-ascend)
         # which currently only supports sequence parallelism in eager mode.
         if self.mode != CompilationMode.APHRODITE_COMPILE:
@@ -1086,7 +1145,9 @@ class CompilationConfig:
                     self.cudagraph_mode == CUDAGraphMode.PIECEWISE
                     or self.cudagraph_mode == CUDAGraphMode.FULL_AND_PIECEWISE
                 ):
-                    logger.warning_once("Using piecewise cudagraph with empty splitting_ops")
+                    logger.warning_once(
+                        "Using piecewise cudagraph with empty splitting_ops"
+                    )
                 if self.cudagraph_mode == CUDAGraphMode.PIECEWISE:
                     logger.warning_once(
                         "Piecewise compilation with empty splitting_ops does not "
@@ -1139,7 +1200,7 @@ class CompilationConfig:
                 "are optimized for prefill and are incompatible with CUDA Graphs. "
                 "In order to use CUDA Graphs for decode-optimized workloads, "
                 "use --all2all-backend with another option, such as "
-                "deepep_low_latency or allgather_reducescatter."
+                "deepep_low_latency, nixl_ep, or allgather_reducescatter."
             )
             self.cudagraph_mode = CUDAGraphMode.NONE
 
@@ -1164,7 +1225,9 @@ class CompilationConfig:
         )
 
     def splitting_ops_contain_attention(self) -> bool:
-        return self.splitting_ops is not None and all(op in self.splitting_ops for op in self._attention_ops)
+        return self.splitting_ops is not None and all(
+            op in self.splitting_ops for op in self._attention_ops
+        )
 
     def splitting_ops_contain_kv_cache_update(self) -> bool:
         # when using Dynamo partition while splitting ops is None
@@ -1185,7 +1248,9 @@ class CompilationConfig:
             "aphrodite::unified_kv_cache_update",
             "aphrodite::unified_mla_kv_cache_update",
         ]
-        return self.splitting_ops is not None and all(op in self.splitting_ops for op in kv_cache_update_ops)
+        return self.splitting_ops is not None and all(
+            op in self.splitting_ops for op in kv_cache_update_ops
+        )
 
     def is_attention_compiled_piecewise(self) -> bool:
         if not self.splitting_ops_contain_attention():
@@ -1218,7 +1283,9 @@ class CompilationConfig:
             if op in {"all", "none"}:
                 continue
 
-            assert op[0] in {"+", "-"}, "Invalid custom op syntax (should be checked during init)"
+            assert op[0] in {"+", "-"}, (
+                "Invalid custom op syntax (should be checked during init)"
+            )
 
             # check if op name exists in model
             op_name = op[1:]
@@ -1267,7 +1334,10 @@ class CompilationConfig:
             return CUDAGraphMode.NONE
 
         # Check cudagraph for mixed batch is supported
-        if cudagraph_mode.mixed_mode() == CUDAGraphMode.FULL and min_cg_support != AttentionCGSupport.ALWAYS:
+        if (
+            cudagraph_mode.mixed_mode() == CUDAGraphMode.FULL
+            and min_cg_support != AttentionCGSupport.ALWAYS
+        ):
             msg = (
                 f"CUDAGraphMode.{cudagraph_mode.name} is not supported "
                 f"with {min_cg_attn_backend} backend (support: "
@@ -1275,7 +1345,10 @@ class CompilationConfig:
             )
             if min_cg_support == AttentionCGSupport.NEVER:
                 # if not supported any full cudagraphs, just raise it.
-                msg += "; please try cudagraph_mode=PIECEWISE, and make sure compilation mode is APHRODITE_COMPILE"
+                msg += (
+                    "; please try cudagraph_mode=PIECEWISE, and "
+                    "make sure compilation mode is APHRODITE_COMPILE"
+                )
                 raise ValueError(msg)
 
             # attempt to resolve the full cudagraph related mode
@@ -1288,19 +1361,29 @@ class CompilationConfig:
             logger.warning(msg)
 
         # check that if we are doing decode full-cudagraphs it is supported
-        if cudagraph_mode.decode_mode() == CUDAGraphMode.FULL and min_cg_support == AttentionCGSupport.NEVER:
+        if (
+            cudagraph_mode.decode_mode() == CUDAGraphMode.FULL
+            and min_cg_support == AttentionCGSupport.NEVER
+        ):
             msg = (
                 f"CUDAGraphMode.{cudagraph_mode.name} is not supported "
                 f"with {min_cg_attn_backend} backend (support: "
                 f"{min_cg_support})"
             )
             if self.mode == CompilationMode.APHRODITE_COMPILE and (
-                self.splitting_ops_contain_attention() or self.use_inductor_graph_partition
+                self.splitting_ops_contain_attention()
+                or self.use_inductor_graph_partition
             ):
-                msg += "; setting cudagraph_mode=PIECEWISE because attention is compiled piecewise"
+                msg += (
+                    "; setting cudagraph_mode=PIECEWISE because "
+                    "attention is compiled piecewise"
+                )
                 cudagraph_mode = CUDAGraphMode.PIECEWISE
             else:
-                msg += "; setting cudagraph_mode=NONE because attention is not compiled piecewise"
+                msg += (
+                    "; setting cudagraph_mode=NONE because "
+                    "attention is not compiled piecewise"
+                )
                 cudagraph_mode = CUDAGraphMode.NONE
             logger.warning(msg)
 
@@ -1326,7 +1409,10 @@ class CompilationConfig:
 
         # double check that we can support full cudagraph if they are requested
         # even after automatic downgrades
-        if cudagraph_mode.has_full_cudagraphs() and min_cg_support == AttentionCGSupport.NEVER:
+        if (
+            cudagraph_mode.has_full_cudagraphs()
+            and min_cg_support == AttentionCGSupport.NEVER
+        ):
             raise ValueError(
                 f"CUDAGraphMode.{cudagraph_mode.name} is not "
                 f"supported with {min_cg_attn_backend} backend ("
@@ -1340,7 +1426,10 @@ class CompilationConfig:
         # https://github.com/vllm-project/vllm/issues/28207#issuecomment-3504004536
         # Will be removed in the near future when we have separate cudagraph capture
         # sizes for decode and mixed prefill-decode.
-        if cudagraph_mode.decode_mode() == CUDAGraphMode.FULL and uniform_decode_query_len > 1:
+        if (
+            cudagraph_mode.decode_mode() == CUDAGraphMode.FULL
+            and uniform_decode_query_len > 1
+        ):
             self.adjust_cudagraph_sizes_for_spec_decode(
                 uniform_decode_query_len,
                 tensor_parallel_size,
@@ -1373,11 +1462,16 @@ class CompilationConfig:
         self.cudagraph_mode = cudagraph_mode
         return cudagraph_mode
 
-    def adjust_cudagraph_sizes_for_spec_decode(self, uniform_decode_query_len: int, tensor_parallel_size: int):
+    def adjust_cudagraph_sizes_for_spec_decode(
+        self, uniform_decode_query_len: int, tensor_parallel_size: int
+    ):
         multiple_of = uniform_decode_query_len
         if tensor_parallel_size > 1 and self.pass_config.enable_sp:
             multiple_of = max(uniform_decode_query_len, tensor_parallel_size)
-            if multiple_of % uniform_decode_query_len != 0 or multiple_of % tensor_parallel_size != 0:
+            if (
+                multiple_of % uniform_decode_query_len != 0
+                or multiple_of % tensor_parallel_size != 0
+            ):
                 raise ValueError(
                     f"Can't determine cudagraph shapes that are both a "
                     f"multiple of {uniform_decode_query_len} "
@@ -1420,7 +1514,4 @@ class CompilationConfig:
         if self.compile_ranges_endpoints is None:
             return []
         endpoints = sorted(set(self.compile_ranges_endpoints))
-        return [
-            Range(s + 1, e)  # type: ignore[call-arg]
-            for s, e in zip([0] + endpoints[:-1], endpoints)
-        ]
+        return [Range(s + 1, e) for s, e in zip([0] + endpoints[:-1], endpoints)]

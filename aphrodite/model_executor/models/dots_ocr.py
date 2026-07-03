@@ -32,7 +32,6 @@ from aphrodite.model_executor.layers.quantization import QuantizationConfig
 from aphrodite.model_executor.layers.rotary_embedding.common import (
     ApplyRotaryEmb,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 from aphrodite.model_executor.models.interfaces import (
     MultiModalEmbeddings,
     SupportsLoRA,
@@ -167,7 +166,9 @@ class VisionRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        seq = torch.arange(
+            seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype
+        )
         freqs = torch.outer(seq, self.inv_freq)
         return freqs
 
@@ -233,10 +234,14 @@ class DotsVisionAttention(nn.Module):
         use_data_parallel = is_vit_use_data_parallel()
 
         self.embed_dim = dim
-        self.tp_size = 1 if use_data_parallel else get_tensor_model_parallel_world_size()
+        self.tp_size = (
+            1 if use_data_parallel else get_tensor_model_parallel_world_size()
+        )
         self.tp_rank = 0 if use_data_parallel else get_tensor_model_parallel_rank()
         self.hidden_size_per_attention_head = dist_utils.divide(dim, num_heads)
-        self.num_attention_heads_per_partition = dist_utils.divide(num_heads, self.tp_size)
+        self.num_attention_heads_per_partition = dist_utils.divide(
+            num_heads, self.tp_size
+        )
         # qkv/proj follow Qwen2-VL style; bias controlled by arg
         self.qkv = QKVParallelLinear(
             hidden_size=dim,
@@ -348,36 +353,6 @@ class DotsSwiGLUFFN(nn.Module):
         x = self.act_fn(x)
         x, _ = self.fc2(x)
         return x
-
-    def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            ("fc13", "fc1", 0),
-            ("fc13", "fc3", 1),
-        ]
-        params_dict = dict(self.named_parameters())
-        loaded_params: set[str] = set()
-        for name, loaded_weight in weights:
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                if weight_name not in name:
-                    continue
-                name = name.replace(weight_name, param_name)
-                # Skip loading extra bias for GPTQ models.
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                # Skip loading extra bias for GPTQ models.
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
 
 
 class DotsPatchEmbed(nn.Module):
@@ -491,7 +466,11 @@ class DotsVisionTransformer(nn.Module):
         )
         self.out_hidden_size = config.hidden_size
         # Keep blocks for compatibility with other vision towers
-        num_layers = config.num_hidden_layers if num_hidden_layers_override is None else num_hidden_layers_override
+        num_layers = (
+            config.num_hidden_layers
+            if num_hidden_layers_override is None
+            else num_hidden_layers_override
+        )
         self.blocks = nn.ModuleList(
             [
                 DotsVisionBlock(
@@ -567,7 +546,9 @@ class DotsVisionTransformer(nn.Module):
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
         return max_seqlen
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: list[list[int]]) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, grid_thw: list[list[int]]
+    ) -> torch.Tensor:
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
 
         # Convert grid_thw to tensor (always expecting list format now)
@@ -575,7 +556,9 @@ class DotsVisionTransformer(nn.Module):
         hidden_states = hidden_states.to(self.dtype)
         hidden_states = self.patch_embed(hidden_states, grid_thw)
 
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+        cu_seqlens = torch.repeat_interleave(
+            grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]
+        ).cumsum(
             dim=0,
             dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
         )
@@ -607,6 +590,10 @@ class DotsOCRForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA
         orig_to_new_substr={
             ".attn.qkv_proj.": ".attn.qkv.",
             ".attn.out_proj.": ".attn.proj.",
+        },
+        orig_to_new_stacked={
+            ".fc1.": (".fc13.", 0),
+            ".fc3.": (".fc13.", 1),
         },
         orig_to_new_prefix={
             "lm_head.": "language_model.lm_head.",
@@ -662,9 +649,13 @@ class DotsOCRForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA
                 architectures=["Qwen2ForCausalLM"],
             )
 
-        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.language_model.make_empty_intermediate_tensors
+        )
 
-    def _parse_and_validate_image_input(self, **kwargs: object) -> DotsOCRImageInputs | None:
+    def _parse_and_validate_image_input(
+        self, **kwargs: object
+    ) -> DotsOCRImageInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         image_embeds = kwargs.pop("image_embeds", None)
         image_grid_thw = kwargs.pop("image_grid_thw", None)
@@ -686,7 +677,9 @@ class DotsOCRForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA
                 image_grid_thw=image_grid_thw,
             )
 
-    def _process_image_input(self, image_input: DotsOCRImageInputs) -> tuple[torch.Tensor, ...]:
+    def _process_image_input(
+        self, image_input: DotsOCRImageInputs
+    ) -> tuple[torch.Tensor, ...]:
         grid_thw = image_input["image_grid_thw"]
         assert grid_thw.ndim == 2
         grid_thw_list = grid_thw.tolist()
@@ -704,11 +697,16 @@ class DotsOCRForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA
                     rope_type="rope_3d",
                 )
             else:
-                image_embeds = self.vision_tower(pixel_values, grid_thw_list)[:, : self.config.hidden_size]
+                image_embeds = self.vision_tower(pixel_values, grid_thw_list)[
+                    :, : self.config.hidden_size
+                ]
 
         # Split concatenated embeddings for each image item.
         merge_size = self.vision_tower.spatial_merge_size
-        sizes = (torch.tensor(grid_thw_list, dtype=torch.long).prod(-1) // (merge_size * merge_size)).tolist()
+        sizes = (
+            torch.tensor(grid_thw_list, dtype=torch.long).prod(-1)
+            // (merge_size * merge_size)
+        ).tolist()
 
         return image_embeds.split(sizes)
 

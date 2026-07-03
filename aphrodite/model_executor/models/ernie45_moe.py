@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 # Copyright 2025 The Baidu team.
-# Copyright 2023 The Aphrodite team.
+# Copyright 2023 The vLLM team.
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -33,7 +33,7 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
+from aphrodite.config import CacheConfig, AphroditeConfig, get_current_aphrodite_config
 from aphrodite.distributed import (
     get_ep_group,
     get_pp_group,
@@ -44,6 +44,7 @@ from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.model_executor.layers.attention import Attention
 from aphrodite.model_executor.layers.fused_moe import (
     FusedMoE,
+    MoERunner,
     fused_moe_make_expert_params_mapping,
 )
 from aphrodite.model_executor.layers.layernorm import RMSNorm
@@ -109,7 +110,9 @@ class Ernie4_5_MoeMLP(nn.Module):
             prefix=f"{prefix}.down_proj",
         )
         if hidden_act != "silu":
-            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu is supported for now.")
+            raise ValueError(
+                f"Unsupported activation: {hidden_act}. Only silu is supported for now."
+            )
         self.act_fn = SiluAndMul()
 
     def forward(self, x):
@@ -150,12 +153,15 @@ class Ernie4_5_MoeMoE(nn.Module):
         self.n_physical_experts = self.n_logical_experts + self.n_redundant_experts
         self.n_local_physical_experts = self.n_physical_experts // self.ep_size
         self.physical_expert_start = self.ep_rank * self.n_local_physical_experts
-        self.physical_expert_end = self.physical_expert_start + self.n_local_physical_experts
+        self.physical_expert_end = (
+            self.physical_expert_start + self.n_local_physical_experts
+        )
         self.has_shared_experts = getattr(config, "moe_num_shared_experts", 0) > 0
 
         if self.tp_size > config.moe_num_experts:
             raise ValueError(
-                f"Tensor parallel size {self.tp_size} is greater than the number of experts {config.moe_num_experts}."
+                f"Tensor parallel size {self.tp_size} is greater than "
+                f"the number of experts {config.moe_num_experts}."
             )
 
         self.gate = ReplicatedLinear(
@@ -167,10 +173,14 @@ class Ernie4_5_MoeMoE(nn.Module):
             prefix=f"{prefix}.gate",
         )
 
-        self.gate.e_score_correction_bias = nn.Parameter(torch.empty(config.moe_num_experts, dtype=torch.float32))
+        self.gate.e_score_correction_bias = nn.Parameter(
+            torch.empty(config.moe_num_experts, dtype=torch.float32)
+        )
 
         if self.has_shared_experts:
-            intermediate_size = config.moe_intermediate_size * config.moe_num_shared_experts
+            intermediate_size = (
+                config.moe_intermediate_size * config.moe_num_shared_experts
+            )
             self.shared_experts = Ernie4_5_MoeMLP(
                 hidden_size=config.hidden_size,
                 intermediate_size=intermediate_size,
@@ -204,7 +214,9 @@ class Ernie4_5_MoeMoE(nn.Module):
 
         router_logits, _ = self.gate(hidden_states.to(dtype=torch.float32))
 
-        final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=router_logits)
+        final_hidden_states = self.experts(
+            hidden_states=hidden_states, router_logits=router_logits
+        )
 
         return final_hidden_states.view(orig_shape)
 
@@ -334,7 +346,9 @@ class Ernie4_5_MoeDecoderLayer(nn.Module):
         # MoE
         moe_num_experts = getattr(config, "moe_num_experts", 0)
         moe_layer_start_index = getattr(config, "moe_layer_start_index", 0)
-        moe_layer_end_index = getattr(config, "moe_layer_end_index", config.num_hidden_layers - 1)
+        moe_layer_end_index = getattr(
+            config, "moe_layer_end_index", config.num_hidden_layers - 1
+        )
         moe_layer_interval = getattr(config, "moe_layer_interval", 1)
         use_moe = getattr(config, "use_moe", moe_num_experts > 0)
 
@@ -361,7 +375,9 @@ class Ernie4_5_MoeDecoderLayer(nn.Module):
             )
 
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
     def forward(
         self,
@@ -462,7 +478,9 @@ class Ernie4_5_MoeModel(nn.Module):
             hidden_states, residual = layer(positions, hidden_states, residual)
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
+            return IntermediateTensors(
+                {"hidden_states": hidden_states, "residual": residual}
+            )
 
         hidden_states, _ = self.norm(hidden_states, residual)
 
@@ -513,7 +531,9 @@ class Ernie4_5_MoeModel(nn.Module):
                     continue
                 name = name.replace(weight_name, param_name)
                 # Skip loading extra bias for GPTQ models.
-                if (name.endswith(".bias") or name.endswith("_bias")) and name not in params_dict:
+                if (
+                    name.endswith(".bias") or name.endswith("_bias")
+                ) and name not in params_dict:
                     continue
                 # Skip layers on other devices.
                 if is_pp_missing_parameter(name, self):
@@ -551,7 +571,9 @@ class Ernie4_5_MoeModel(nn.Module):
                     # We should ask the weight loader to return success or not
                     # here since otherwise we may skip experts with other
                     # available replicas.
-                    weight_loader = typing.cast(Callable[..., bool], param.weight_loader)
+                    weight_loader = typing.cast(
+                        Callable[..., bool], param.weight_loader
+                    )
                     success = weight_loader(
                         param,
                         loaded_weight,
@@ -571,7 +593,9 @@ class Ernie4_5_MoeModel(nn.Module):
                         continue
 
                     # Skip loading extra bias for GPTQ models.
-                    if (name.endswith(".bias") or name.endswith("_bias")) and name not in params_dict:
+                    if (
+                        name.endswith(".bias") or name.endswith("_bias")
+                    ) and name not in params_dict:
                         continue
                     # Skip layers on other devices.
                     if is_pp_missing_parameter(name, self):
@@ -582,7 +606,9 @@ class Ernie4_5_MoeModel(nn.Module):
                         continue
 
                     param = params_dict[name]
-                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
+                    weight_loader = getattr(
+                        param, "weight_loader", default_weight_loader
+                    )
                     weight_loader(param, loaded_weight)
             loaded_params.add(name)
         return loaded_params
@@ -609,7 +635,9 @@ class Ernie4_5_MoeForCausalLM(nn.Module, SupportsPP, SupportsLoRA, MixtureOfExpe
         quant_config = aphrodite_config.quant_config
         self.config = config
         self.quant_config = quant_config
-        self.model = Ernie4_5_MoeModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Ernie4_5_MoeModel(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
+        )
 
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
@@ -624,9 +652,9 @@ class Ernie4_5_MoeForCausalLM(nn.Module, SupportsPP, SupportsLoRA, MixtureOfExpe
         if self.config.tie_word_embeddings:
             self.lm_head.weight = self.model.embed_tokens.weight
         self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
-
-        self.expert_weights = []
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
 
         # Set MoE hyperparameters
         moe_layers_indices = [
@@ -641,7 +669,7 @@ class Ernie4_5_MoeForCausalLM(nn.Module, SupportsPP, SupportsLoRA, MixtureOfExpe
         self.num_moe_layers = len(moe_layers_indices)
         self.num_expert_groups = 1
 
-        self.moe_layers: list[FusedMoE] = []
+        self.moe_layers: list[MoERunner] = []
         example_moe = None
         for layer in self.model.layers:
             if isinstance(layer, PPMissingLayer):
@@ -695,7 +723,9 @@ class Ernie4_5_MoeForCausalLM(nn.Module, SupportsPP, SupportsLoRA, MixtureOfExpe
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
+        hidden_states = self.model(
+            input_ids, positions, intermediate_tensors, inputs_embeds
+        )
         return hidden_states
 
     def compute_logits(

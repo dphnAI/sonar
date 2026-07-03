@@ -3,7 +3,7 @@
 
 # Adapted from
 # https://github.com/huggingface/transformers/blob/main/src/transformers/models/Glm4v/modeling_Glm4v.py
-# Copyright 2025 The Aphrodite team.
+# Copyright 2025 The vLLM team.
 # Copyright 2025 The ZhipuAI Team.
 # Copyright 2025 The HuggingFace Inc. team.
 # All rights reserved.
@@ -36,7 +36,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import transformers
 from einops import rearrange
+from packaging.version import Version
 from transformers import BatchFeature, Glm4vProcessor
 from transformers.models.glm4v.configuration_glm4v import (
     Glm4vTextConfig,
@@ -74,7 +76,6 @@ from aphrodite.model_executor.layers.rotary_embedding import get_rope
 from aphrodite.model_executor.layers.rotary_embedding.common import (
     ApplyRotaryEmb,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 from aphrodite.model_executor.models.module_mapping import MultiModelKeys
 from aphrodite.multimodal import MULTIMODAL_REGISTRY
 from aphrodite.multimodal.inputs import (
@@ -95,10 +96,12 @@ from aphrodite.multimodal.processing import (
 from aphrodite.sequence import IntermediateTensors
 from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphReplayBuffers
 
 from ..layers.activation import SiluAndMul
 from .interfaces import (
     MultiModalEmbeddings,
+    SupportsEncoderCudaGraph,
     SupportsLoRA,
     SupportsMRoPE,
     SupportsMultiModal,
@@ -121,6 +124,15 @@ logger = init_logger(__name__)
 
 # For profile run
 _MAX_FRAMES_PER_VIDEO = 600
+
+TRANSFORMERS_WITH_GA = Version(transformers.__version__) >= Version("5.10.0.dev0")
+
+
+def _to_video_metadata(metadata: Mapping[str, Any]) -> VideoMetadata:
+    return VideoMetadata(
+        **{k: metadata[k] for k in metadata if k != "do_sample_frames"}
+    )
+
 
 # === Vision Inputs === #
 
@@ -243,8 +255,12 @@ def all_gather_interleave(local_tensor, hidden_size: int, tp_size: int):
         group=parallel_state.get_tp_group().device_group,
     )
 
-    gathered_tensors_split = [torch.split(tensor, hidden_size // tp_size, -1) for tensor in gathered_tensors]
-    ordered_tensors = [tensor for pair in zip(*gathered_tensors_split) for tensor in pair]
+    gathered_tensors_split = [
+        torch.split(tensor, hidden_size // tp_size, -1) for tensor in gathered_tensors
+    ]
+    ordered_tensors = [
+        tensor for pair in zip(*gathered_tensors_split) for tensor in pair
+    ]
     result_tensor = torch.cat(ordered_tensors, dim=-1)
     return result_tensor
 
@@ -261,10 +277,18 @@ class Glm4vVisionAttention(nn.Module):
         super().__init__()
         # Per attention head and per partition values.
         use_data_parallel = is_vit_use_data_parallel()
-        self.tp_size = 1 if use_data_parallel else get_tensor_model_parallel_world_size()
-        self.tp_rank = 0 if use_data_parallel else parallel_state.get_tensor_model_parallel_rank()
-        self.hidden_size_per_attention_head = dist_utils.divide(projection_size, num_heads)
-        self.num_attention_heads_per_partition = dist_utils.divide(num_heads, self.tp_size)
+        self.tp_size = (
+            1 if use_data_parallel else get_tensor_model_parallel_world_size()
+        )
+        self.tp_rank = (
+            0 if use_data_parallel else parallel_state.get_tensor_model_parallel_rank()
+        )
+        self.hidden_size_per_attention_head = dist_utils.divide(
+            projection_size, num_heads
+        )
+        self.num_attention_heads_per_partition = dist_utils.divide(
+            num_heads, self.tp_size
+        )
 
         self.qkv = QKVParallelLinear(
             hidden_size=embed_dim,
@@ -499,7 +523,9 @@ class Glm4vVisionEmbeddings(nn.Module):
             persistent=False,
         )
 
-    def forward(self, embeddings, lengths, image_shapes, h_coords, w_coords) -> torch.Tensor:
+    def forward(
+        self, embeddings, lengths, image_shapes, h_coords, w_coords
+    ) -> torch.Tensor:
         pos_embed_weight = self.position_embedding.weight
         hidden_size = pos_embed_weight.shape[1]
         total_seq = h_coords.shape[0]
@@ -510,13 +536,17 @@ class Glm4vVisionEmbeddings(nn.Module):
 
         # Handle empty sequence case
         if total_seq == 0:
-            adapted_pos_embed = torch.empty(0, hidden_size, device=device, dtype=pos_embed_weight.dtype)
+            adapted_pos_embed = torch.empty(
+                0, hidden_size, device=device, dtype=pos_embed_weight.dtype
+            )
         else:
             # Convert inputs to tensors if needed
             if isinstance(lengths, list):
                 lengths = torch.tensor(lengths, device=device, dtype=torch.long)
             if not isinstance(image_shapes, torch.Tensor):
-                image_shapes = torch.tensor(image_shapes, device=device, dtype=torch.long)
+                image_shapes = torch.tensor(
+                    image_shapes, device=device, dtype=torch.long
+                )
 
             # Prepare 2D position embedding
             orig_size_sq = pos_embed_weight.shape[0]
@@ -541,15 +571,19 @@ class Glm4vVisionEmbeddings(nn.Module):
                     shape_idx = i % image_shapes.shape[0]
                     target_h_list.append(image_shapes[shape_idx, 1].repeat(lengths[i]))
                     target_w_list.append(image_shapes[shape_idx, 2].repeat(lengths[i]))
-                target_h = torch.cat(target_h_list).to(device=device, dtype=torch.float32)
-                target_w = torch.cat(target_w_list).to(device=device, dtype=torch.float32)
+                target_h = torch.cat(target_h_list).to(
+                    device=device, dtype=torch.float32
+                )
+                target_w = torch.cat(target_w_list).to(
+                    device=device, dtype=torch.float32
+                )
             else:
-                target_h = torch.cat([image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]).to(
-                    device=device, dtype=torch.float32
-                )
-                target_w = torch.cat([image_shapes[i, 2].repeat(lengths[i]) for i in range(len(lengths))]).to(
-                    device=device, dtype=torch.float32
-                )
+                target_h = torch.cat(
+                    [image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]
+                ).to(device=device, dtype=torch.float32)
+                target_w = torch.cat(
+                    [image_shapes[i, 2].repeat(lengths[i]) for i in range(len(lengths))]
+                ).to(device=device, dtype=torch.float32)
 
             # Normalize coordinates to [-1, 1] range for grid_sample
             h_coords = h_coords.to(device=device, dtype=torch.float32)
@@ -570,8 +604,12 @@ class Glm4vVisionEmbeddings(nn.Module):
             )
 
             # Reshape and convert back to original dtype
-            adapted_pos_embed_fp32 = interpolated_embed_fp32.squeeze(0).squeeze(-1).permute(1, 0)
-            adapted_pos_embed = adapted_pos_embed_fp32.to(pos_embed_weight.dtype).to(embeddings.device)
+            adapted_pos_embed_fp32 = (
+                interpolated_embed_fp32.squeeze(0).squeeze(-1).permute(1, 0)
+            )
+            adapted_pos_embed = adapted_pos_embed_fp32.to(pos_embed_weight.dtype).to(
+                embeddings.device
+            )
 
         # Add adapted position encoding to embeddings
         embeddings = embeddings + adapted_pos_embed
@@ -579,6 +617,16 @@ class Glm4vVisionEmbeddings(nn.Module):
 
 
 class Glm4vVisionTransformer(nn.Module):
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_stacked={
+            ".attn.q.": (".attn.qkv.", "q"),
+            ".attn.k.": (".attn.qkv.", "k"),
+            ".attn.v.": (".attn.qkv.", "v"),
+            ".gate_proj": (".gate_up_proj", 0),
+            ".up_proj": (".gate_up_proj", 1),
+        }
+    )
+
     def __init__(
         self,
         text_config: Glm4vTextConfig,
@@ -588,6 +636,11 @@ class Glm4vVisionTransformer(nn.Module):
         prefix: str = "",
     ) -> None:
         super().__init__()
+
+        use_data_parallel = is_vit_use_data_parallel()
+        self.tp_size = (
+            1 if use_data_parallel else get_tensor_model_parallel_world_size()
+        )
 
         patch_size = vision_config.patch_size
         temporal_patch_size = vision_config.temporal_patch_size
@@ -637,14 +690,18 @@ class Glm4vVisionTransformer(nn.Module):
         )
         self.embeddings = Glm4vVisionEmbeddings(vision_config)
 
-        self.post_conv_layernorm = RMSNorm(vision_config.hidden_size, eps=vision_config.rms_norm_eps)
+        self.post_conv_layernorm = RMSNorm(
+            vision_config.hidden_size, eps=vision_config.rms_norm_eps
+        )
         self.downsample = Conv2dLayer(
             in_channels=vision_config.hidden_size,
             out_channels=vision_config.out_hidden_size,
             kernel_size=vision_config.spatial_merge_size,
             stride=vision_config.spatial_merge_size,
         )
-        self.post_layernorm = RMSNorm(vision_config.hidden_size, eps=vision_config.rms_norm_eps)
+        self.post_layernorm = RMSNorm(
+            vision_config.hidden_size, eps=vision_config.rms_norm_eps
+        )
 
         self.attn_backend = get_vit_attn_backend(
             head_size=head_dim,
@@ -659,7 +716,9 @@ class Glm4vVisionTransformer(nn.Module):
     def device(self) -> torch.device:
         return self.patch_embed.proj.weight.device
 
-    def rot_pos_emb(self, grid_thw: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def rot_pos_emb(
+        self, grid_thw: list[list[int]]
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         pos_ids = []
         for t, h, w in grid_thw:
             hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
@@ -686,11 +745,12 @@ class Glm4vVisionTransformer(nn.Module):
             )
             pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
         pos_ids = torch.cat(pos_ids, dim=0)
-        max_grid_size = grid_thw[:, 1:].max()
+        max_grid_size = max(max(h, w) for _, h, w in grid_thw)
 
         # Use pre-computed cos_sin_cache from RotaryEmbedding
         cos, sin = self.rotary_pos_emb.get_cos_sin(max_grid_size)
 
+        pos_ids = pos_ids.to(cos.device, non_blocking=True)
         cos_combined = cos[pos_ids].flatten(1)
         sin_combined = sin[pos_ids].flatten(1)
         return cos_combined, sin_combined, pos_ids
@@ -708,41 +768,192 @@ class Glm4vVisionTransformer(nn.Module):
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
         return max_seqlen
 
+    def pos_embeds_interpolate(self, grid_thw: list[list[int]]) -> torch.Tensor:
+        """Pre-compute absolute position embeddings for all input samples.
+        The original `self.embeddings` fused token embeddings and position embeddings
+        in one call, which prevented preparing position embeddings as static metadata
+        required by CUDA graph capture / replay. This method decouples the two by
+        feeding an all-zero token tensor to `self.embeddings`. The module therefore only
+        performs bicubic interpolation based on the coordinates and returns pure
+        position embeddings. These are cached in `prepare_encoder_metadata` and later
+        added to the patch tokens in `forward` via `x = x + pos_embeds`, keeping the
+        forward graph compatible with CUDA graph replay. Coordinate generation matches
+        `rot_pos_emb` exactly to guarantee spatial alignment.
+        """
+
+        device = self.embeddings.position_embedding.weight.device
+        dtype = self.dtype
+        all_embeds = []
+
+        for t, h, w in grid_thw:
+            # Use the same coordinate generation logic as rot_pos_emb
+            # to ensure consistent positional embedding interpolation
+            h_coords = torch.arange(h).unsqueeze(1).expand(-1, w)
+            w_coords = torch.arange(w).unsqueeze(0).expand(h, -1)
+            h_coords = (
+                h_coords.reshape(
+                    h // self.spatial_merge_size,
+                    self.spatial_merge_size,
+                    w // self.spatial_merge_size,
+                    self.spatial_merge_size,
+                )
+                .permute(0, 2, 1, 3)
+                .flatten()
+            )
+            w_coords = (
+                w_coords.reshape(
+                    h // self.spatial_merge_size,
+                    self.spatial_merge_size,
+                    w // self.spatial_merge_size,
+                    self.spatial_merge_size,
+                )
+                .permute(0, 2, 1, 3)
+                .flatten()
+            )
+
+            lengths = [h * w] * t
+            image_shapes = torch.tensor([[t, h, w]], device=device)
+
+            h_coords_repeated = h_coords.repeat(t)
+            w_coords_repeated = w_coords.repeat(t)
+
+            embeds = self.embeddings(
+                embeddings=torch.zeros(
+                    h * w * t, self.hidden_size, device=device, dtype=dtype
+                ),
+                lengths=lengths,
+                image_shapes=image_shapes,
+                h_coords=h_coords_repeated,
+                w_coords=w_coords_repeated,
+            )
+            all_embeds.append(embeds)
+
+        return torch.cat(all_embeds, dim=0).to(dtype)
+
+    def prepare_encoder_metadata(
+        self,
+        grid_thw_list: list[list[int]],
+        *,
+        max_batch_size: int | None = None,
+        max_frames_per_batch: int | None = None,
+        max_seqlen_override: int | None = None,
+        device: torch.device | None = None,
+    ) -> dict[str, torch.Tensor | None]:
+        """Compute encoder metadata from grid_thw_list.
+
+        Shared by the eager forward path, CUDA graph capture, and
+        CUDA graph replay to avoid duplicated implementation.
+
+        Args:
+            grid_thw_list: Grid configurations as list of [t, h, w].
+            max_batch_size: If set, pad cu_seqlens to this size
+                (needed for CUDA graph capture/replay).
+            max_frames_per_batch: If set, overrides max_batch_size for
+                cu_seqlens padding. For video inputs each item contributes
+                T attention sequences (frames); this sizes the buffer to
+                the total frame budget so video replays never overflow.
+            max_seqlen_override: If set, use this value for max_seqlen
+                instead of computing from cu_seqlens (needed for CUDA
+                graph capture to cover worst-case replay scenarios).
+            device: Device to place tensors on. Defaults to self.device.
+        """
+        if device is None:
+            device = self.device
+
+        metadata: dict[str, torch.Tensor | None] = {}
+
+        # Positional embeddings
+        metadata["pos_embeds"] = self.pos_embeds_interpolate(grid_thw_list)
+        rotary_cos, rotary_sin, _ = self.rot_pos_emb(grid_thw_list)
+        metadata["rotary_pos_emb_cos"] = rotary_cos
+        metadata["rotary_pos_emb_sin"] = rotary_sin
+
+        # cu_seqlens from grid_thw
+        grid_thw_np = np.array(grid_thw_list, dtype=np.int32)
+        patches_per_frame = grid_thw_np[:, 1] * grid_thw_np[:, 2]
+        cu_seqlens = np.repeat(patches_per_frame, grid_thw_np[:, 0]).cumsum(
+            dtype=np.int32
+        )
+        cu_seqlens = np.concatenate([np.zeros(1, dtype=np.int32), cu_seqlens])
+
+        # Pad cu_seqlens to the required number of sequences.
+        # For videos each item contributes T frames = T attention sequences,
+        # so the total can exceed max_batch_size. max_frames_per_batch
+        # overrides the pad target when set.
+        pad_to = (
+            max_frames_per_batch if max_frames_per_batch is not None else max_batch_size
+        )
+        if pad_to is not None:
+            num_seqs = len(cu_seqlens) - 1
+            if num_seqs < pad_to:
+                cu_seqlens = np.concatenate(
+                    [
+                        cu_seqlens,
+                        np.full(
+                            pad_to - num_seqs,
+                            cu_seqlens[-1],
+                            dtype=np.int32,
+                        ),
+                    ]
+                )
+
+        # sequence_lengths (backend-specific)
+        metadata["sequence_lengths"] = MMEncoderAttention.maybe_compute_seq_lens(
+            self.attn_backend, cu_seqlens, device
+        )
+
+        # max_seqlen
+        if max_seqlen_override is not None:
+            max_seqlen_val = max_seqlen_override
+        else:
+            max_seqlen_val = MMEncoderAttention.compute_max_seqlen(
+                self.attn_backend, cu_seqlens
+            )
+        # Keep max_seqlen on CPU: attention wrappers call .item() on it,
+        # and having it on GPU would capture a wasteful D2H copy in CUDA
+        # graphs without changing behavior (the scalar is baked at capture).
+        metadata["max_seqlen"] = torch.tensor(max_seqlen_val, dtype=torch.int32)
+
+        # Recompute cu_seqlens (backend-specific transformation)
+        metadata["cu_seqlens"] = MMEncoderAttention.maybe_recompute_cu_seqlens(
+            self.attn_backend,
+            cu_seqlens,
+            self.hidden_size,
+            self.tp_size,
+            device,
+        )
+
+        return metadata
+
     def forward(
         self,
         x: torch.Tensor,
         grid_thw: torch.Tensor | list[list[int]],
+        *,
+        encoder_metadata: dict[str, torch.Tensor] | None = None,
     ) -> torch.Tensor:
-        if isinstance(grid_thw, list):
-            grid_thw = torch.tensor(grid_thw, dtype=torch.int32)
+        if encoder_metadata is None:
+            if not isinstance(grid_thw, list):
+                grid_thw = grid_thw.tolist()
+            encoder_metadata = self.prepare_encoder_metadata(grid_thw)
 
         # patchify
         x = x.to(device=self.device, dtype=self.dtype)
         x = self.patch_embed(x)
         x = self.post_conv_layernorm(x)
 
-        # compute position embedding
-        rotary_pos_emb_cos, rotary_pos_emb_sin, image_type_ids = self.rot_pos_emb(grid_thw)
-        # compute cu_seqlens
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0, dtype=torch.int32
-        )
-        cu_seqlens = torch.cat([cu_seqlens.new_zeros(1), cu_seqlens])
-        # pre-compute max_seqlen for attn mask to reduce cuMemcpy operations
-        max_seqlen = self.compute_attn_mask_seqlen(cu_seqlens)
-        seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
-        cu_seqlens = cu_seqlens.to(self.device, non_blocking=True)
-        x = self.embeddings(x, seqlens, grid_thw, image_type_ids[:, 0], image_type_ids[:, 1])
+        pos_embeds = encoder_metadata["pos_embeds"]
+        x = x + pos_embeds
 
         # transformers
         x = x.unsqueeze(1)
         for blk in self.blocks:
             x = blk(
                 x,
-                cu_seqlens=cu_seqlens,
-                rotary_pos_emb_cos=rotary_pos_emb_cos,
-                rotary_pos_emb_sin=rotary_pos_emb_sin,
-                max_seqlen=max_seqlen,
+                cu_seqlens=encoder_metadata["cu_seqlens"],
+                rotary_pos_emb_cos=encoder_metadata["rotary_pos_emb_cos"],
+                rotary_pos_emb_sin=encoder_metadata["rotary_pos_emb_sin"],
+                max_seqlen=encoder_metadata["max_seqlen"],
             )
 
         # adapter
@@ -756,33 +967,8 @@ class Glm4vVisionTransformer(nn.Module):
         return x
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            # (param_name, shard_name, shard_id)
-            ("attn.qkv.", "attn.q.", "q"),
-            ("attn.qkv.", "attn.k.", "k"),
-            ("attn.qkv.", "attn.v.", "v"),
-            ("gate_up_proj", "gate_proj", 0),
-            ("gate_up_proj", "up_proj", 1),
-        ]
-        params_dict = dict(self.named_parameters(remove_duplicate=False))
-        loaded_params: set[str] = set()
-
-        for name, loaded_weight in weights:
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                if weight_name not in name:
-                    continue
-                name = name.replace(weight_name, param_name)
-
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
+        loader = AutoWeightsLoader(self)
+        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
 
 
 class Glm4vProcessingInfo(BaseProcessingInfo):
@@ -794,6 +980,46 @@ class Glm4vProcessingInfo(BaseProcessingInfo):
 
     def get_video_processor(self, **kwargs: object) -> Glm4vVideoProcessor:
         return self.get_hf_processor(**kwargs).video_processor
+
+    def get_mm_max_tokens_per_item(
+        self,
+        seq_len: int,
+        mm_counts: Mapping[str, int],
+    ) -> Mapping[str, int] | None:
+        processor = self.get_hf_processor()
+        if isinstance(processor, Glm4vProcessor):
+            return None
+
+        result: dict[str, int] = {}
+
+        if mm_counts.get("image", 0) > 0:
+            result["image"] = self.get_max_image_tokens()
+
+        if mm_counts.get("video", 0) > 0:
+            video_processor = self.get_video_processor()
+            max_pixels = video_processor.size["longest_edge"]
+
+            vision_config = self.get_hf_config().vision_config
+            temporal_patch_size = vision_config.temporal_patch_size
+            patch_size = vision_config.patch_size
+            merge_size = vision_config.spatial_merge_size
+
+            max_vision_tokens = max_pixels // (
+                temporal_patch_size * patch_size**2 * merge_size**2
+            )
+
+            # GLMGA supports up to 640 frames (max_frames).
+            max_grid_t = 640 // temporal_patch_size
+
+            tokenizer = self.get_tokenizer()
+            max_ts_tokens = max(
+                len(tokenizer.encode(f"{t:.1f} seconds", add_special_tokens=False))
+                for t in range(min(max_grid_t, 300))
+            )
+
+            result["video"] = max_vision_tokens + max_grid_t * (2 + max_ts_tokens) + 2
+
+        return result
 
     def get_data_parser(self):
         return MultiModalDataParser(
@@ -817,7 +1043,9 @@ class Glm4vProcessingInfo(BaseProcessingInfo):
         temporal_patch_size = vision_config.temporal_patch_size
         if do_resize:
             resized_height, resized_width = smart_resize(
-                num_frames=num_frames if num_frames > temporal_patch_size else temporal_patch_size,
+                num_frames=num_frames
+                if num_frames > temporal_patch_size
+                else temporal_patch_size,
                 height=image_height,
                 width=image_width,
                 factor=patch_size * merge_size,
@@ -931,11 +1159,15 @@ class Glm4vProcessingInfo(BaseProcessingInfo):
 
         max_image_tokens = self.get_max_image_tokens() * max_images
         max_total_frames = self._get_max_video_frames(seq_len - max_image_tokens)
-        max_frames_per_video = min(max_total_frames // max(max_videos, 1), _MAX_FRAMES_PER_VIDEO)
+        max_frames_per_video = min(
+            max_total_frames // max(max_videos, 1), _MAX_FRAMES_PER_VIDEO
+        )
 
         return max(max_frames_per_video, 1)
 
-    def _get_video_second_idx_glm4v(self, metadata: dict[str, Any], total_frames: int) -> list[int]:
+    def _get_video_second_idx_glm4v(
+        self, metadata: dict[str, Any], total_frames: int
+    ) -> list[int]:
         video_processor = self.get_video_processor()
 
         video_fps = metadata.get("fps", video_processor.fps)
@@ -960,8 +1192,13 @@ class Glm4vProcessingInfo(BaseProcessingInfo):
                 if num_samples >= meta_frames:
                     frame_indices = list(range(meta_frames))
                 else:
-                    target_seconds = np.linspace(0, duration, num_samples, endpoint=True)
-                    frame_indices = [min(max_frame_idx, int(math.ceil(t * video_fps))) for t in target_seconds]
+                    target_seconds = np.linspace(
+                        0, duration, num_samples, endpoint=True
+                    )
+                    frame_indices = [
+                        min(max_frame_idx, int(math.ceil(t * video_fps)))
+                        for t in target_seconds
+                    ]
 
         seen, uniq = set(), []
         for idx in frame_indices:
@@ -979,7 +1216,9 @@ class Glm4vProcessingInfo(BaseProcessingInfo):
             selected_timestamps.append(timestamps_list[idx])
         return selected_timestamps
 
-    def _get_video_second_idx_glm46v(self, metadata: dict[str, Any], total_frames: int) -> list[int]:
+    def _get_video_second_idx_glm46v(
+        self, metadata: dict[str, Any], total_frames: int
+    ) -> list[int]:
         video_processor = self.get_video_processor()
 
         video_fps = metadata["fps"]
@@ -1012,7 +1251,9 @@ class Glm4vProcessingInfo(BaseProcessingInfo):
             max_second = int(duration)
 
             if meta_frames < extract_t:
-                frame_indices = np.linspace(0, meta_frames - 1, extract_t, dtype=int).tolist()
+                frame_indices = np.linspace(
+                    0, meta_frames - 1, extract_t, dtype=int
+                ).tolist()
             else:
                 frame_indices = []
                 current_second = 0.0
@@ -1031,7 +1272,9 @@ class Glm4vProcessingInfo(BaseProcessingInfo):
                     start, end = frame_indices[0], frame_indices[-1]
                 frame_indices = np.linspace(start, end, extract_t, dtype=int).tolist()
             elif len(frame_indices) > extract_t:
-                frame_indices = np.linspace(0, meta_frames - 1, extract_t, dtype=int).tolist()
+                frame_indices = np.linspace(
+                    0, meta_frames - 1, extract_t, dtype=int
+                ).tolist()
 
         seen, uniq = set(), []
         for idx in frame_indices:
@@ -1050,12 +1293,83 @@ class Glm4vProcessingInfo(BaseProcessingInfo):
             selected_timestamps.append(timestamps_list[idx])
         return selected_timestamps
 
+    def _is_glmga_model(self, processor: object) -> bool:
+        """Detect GLMGA variant via its Glmga sub-processors."""
+        for attr in ("image_processor", "video_processor"):
+            sub = getattr(processor, attr, None)
+            if sub and "Glmga" in type(sub).__name__:
+                return True
+        return False
+
+    def _get_video_second_idx_glmga(
+        self, metadata: dict[str, Any], total_frames: int
+    ) -> list[int]:
+        """Fixed fps=2 frame selection matching GlmgaVideoProcessor.sample_frames."""
+        video_processor = self.get_video_processor()
+
+        video_fps = metadata["fps"]
+        meta_frames = metadata.get("total_num_frames", total_frames)
+        max_frame_idx = meta_frames - 1
+        duration = metadata.get("duration", round(max_frame_idx / video_fps) + 1)
+
+        do_sample_frames = metadata.get("do_sample_frames", True)
+        if not do_sample_frames:
+            frame_indices = metadata["frames_indices"]
+        else:
+            target_fps = 2
+            max_frames = getattr(video_processor, "max_frames", 640)
+            extract_t = int(duration * target_fps)
+            extract_t = min(extract_t, max_frames)
+
+            duration_per_frame = 1 / video_fps
+            timestamps = [i * duration_per_frame for i in range(meta_frames)]
+
+            if meta_frames < extract_t:
+                frame_indices = [
+                    math.floor(i * meta_frames / extract_t) for i in range(extract_t)
+                ]
+            else:
+                frame_indices = []
+                current_second = 0.0
+                inv_fps = 1 / target_fps
+                for frame_index in range(meta_frames):
+                    if timestamps[frame_index] >= current_second:
+                        current_second += inv_fps
+                        frame_indices.append(frame_index)
+                        if current_second >= duration - inv_fps:
+                            break
+
+            if len(frame_indices) < extract_t:
+                if len(frame_indices) == 0:
+                    start, end = 0, max(meta_frames - 1, 0)
+                else:
+                    start, end = frame_indices[0], frame_indices[-1]
+                frame_indices = np.linspace(start, end, extract_t, dtype=int).tolist()
+            elif len(frame_indices) > extract_t:
+                frame_indices = np.linspace(
+                    0, meta_frames - 1, extract_t, dtype=int
+                ).tolist()
+
+        seen, uniq = set(), []
+        for idx in frame_indices:
+            if idx not in seen:
+                seen.add(idx)
+                uniq.append(idx)
+
+        if len(uniq) & 1:
+            uniq.append(uniq[-1])
+
+        frame_indices = uniq
+        full_second_idxs = [int(idx / video_fps) for idx in frame_indices]
+        timestamps_list = full_second_idxs[::2]
+        return list(timestamps_list)
+
     def _construct_video_placeholder(
         self,
         video_array: np.ndarray,
         metadata: dict[str, Any],
         grid_thw: torch.Tensor,
-    ) -> str:
+    ) -> list[int]:
         hf_processor = self.get_hf_processor()
         tokenizer = self.get_tokenizer()
         image_processor = hf_processor.image_processor
@@ -1068,21 +1382,35 @@ class Glm4vProcessingInfo(BaseProcessingInfo):
         merge_length = image_processor.merge_size**2
 
         assert isinstance(grid_thw, torch.Tensor)
-        timestamps = (
-            self._get_video_second_idx_glm4v(metadata, len(video_array))
-            if isinstance(hf_processor, Glm4vProcessor)
-            else self._get_video_second_idx_glm46v(metadata, len(video_array))
-        )
 
-        timestamp_format = "{}" if isinstance(hf_processor, Glm4vProcessor) else "{:.1f} seconds"
-        frames_idx_token = [tokenizer.encode(timestamp_format.format(i), add_special_tokens=False) for i in timestamps]
+        if isinstance(hf_processor, Glm4vProcessor):
+            timestamps = self._get_video_second_idx_glm4v(metadata, len(video_array))
+        elif self._is_glmga_model(hf_processor):
+            timestamps = self._get_video_second_idx_glmga(metadata, len(video_array))
+        else:
+            timestamps = self._get_video_second_idx_glm46v(metadata, len(video_array))
+
+        timestamp_format = (
+            "{}" if isinstance(hf_processor, Glm4vProcessor) else "{:.1f} seconds"
+        )
+        frames_idx_token = [
+            tokenizer.encode(timestamp_format.format(i), add_special_tokens=False)
+            for i in timestamps
+        ]
         T, H, W = grid_thw
         num_tokens_per_frame = int(H * W) // merge_length
         placeholder = []
         placeholder.append(bov_token_id)
+        # Glm46VProcessor uses image_token_id for video frame embeddings;
+        # Glm4vProcessor uses video_token_id.
+        frame_embed_token_id = (
+            hf_processor.video_token_id
+            if isinstance(hf_processor, Glm4vProcessor) or not TRANSFORMERS_WITH_GA
+            else hf_processor.image_token_id
+        )
         for frame_idx in frames_idx_token:
             placeholder.append(boi_token_id)
-            placeholder.extend([hf_processor.video_token_id] * num_tokens_per_frame)
+            placeholder.extend([frame_embed_token_id] * num_tokens_per_frame)
             placeholder.append(eoi_token_id)
             placeholder.extend(frame_idx)
         placeholder.append(eov_token_id)
@@ -1119,7 +1447,9 @@ class Glm4vDummyInputsBuilder(BaseDummyInputsBuilder[Glm4vProcessingInfo]):
         num_videos = mm_counts.get("video", 0)
 
         target_width, target_height = self.info.get_image_size_with_most_features()
-        target_num_frames = self.info.get_num_frames_with_most_features(seq_len, mm_counts)
+        target_num_frames = self.info.get_num_frames_with_most_features(
+            seq_len, mm_counts
+        )
 
         image_overrides = mm_options.get("image")
         video_overrides = mm_options.get("video")
@@ -1180,6 +1510,47 @@ class Glm4vDummyInputsBuilder(BaseDummyInputsBuilder[Glm4vProcessingInfo]):
 
 
 class Glm4vMultiModalProcessor(BaseMultiModalProcessor[Glm4vProcessingInfo]):
+    @staticmethod
+    def _get_direct_path_inputs(
+        mm_data: Mapping[str, object],
+        mm_kwargs: Mapping[str, object],
+    ) -> tuple[Mapping[str, object], Mapping[str, object]]:
+        prepared_data = dict(mm_data)
+        prepared_kwargs = dict(mm_kwargs)
+
+        videos = prepared_data.get("videos")
+        if not (isinstance(videos, list) and len(videos) > 0):
+            return prepared_data, prepared_kwargs
+
+        hf_videos = []
+        hf_video_metadata = []
+        for item in videos:
+            if isinstance(item, tuple) and len(item) == 2:
+                video_array, metadata = item
+                hf_videos.append(video_array)
+                if isinstance(metadata, VideoMetadata):
+                    hf_video_metadata.append(metadata)
+                elif isinstance(metadata, Mapping):
+                    hf_video_metadata.append(_to_video_metadata(metadata))
+                    if "do_sample_frames" in metadata:
+                        prepared_kwargs["do_sample_frames"] = metadata[
+                            "do_sample_frames"
+                        ]
+                elif metadata is not None:
+                    raise TypeError(
+                        "Video metadata must be a mapping or VideoMetadata, "
+                        f"got {type(metadata)}"
+                    )
+            else:
+                hf_videos.append(item)
+
+        prepared_data["videos"] = hf_videos
+        if hf_video_metadata:
+            prepared_data["video_metadata"] = hf_video_metadata
+            prepared_kwargs["return_metadata"] = True
+
+        return prepared_data, prepared_kwargs
+
     def _call_hf_processor(
         self,
         prompt: str,
@@ -1188,12 +1559,37 @@ class Glm4vMultiModalProcessor(BaseMultiModalProcessor[Glm4vProcessingInfo]):
         tok_kwargs: Mapping[str, object],
     ) -> BatchFeature:
         mm_data = dict(mm_data)
+        if not mm_data:
+            tokenizer = self.info.get_tokenizer()
+            prompt_ids = tokenizer.encode(prompt, add_special_tokens=False)
+            return BatchFeature(dict(input_ids=[prompt_ids]), tensor_type="pt")
+
         processor = self.info.get_hf_processor(**mm_kwargs)
 
-        # GLM-4.1V use `image_token_id` as video placeholder, we need to
-        # replace it with `video_token_id` for video processing. So we
-        # separate video processing from image processing.
-        if "videos" in mm_data and isinstance(mm_data["videos"], list) and len(mm_data["videos"]) > 0:
+        # Glm46VProcessor and GLMGA handle image/video placeholders together
+        # via the direct path. Only Glm4vProcessor (GLM-4.1V) needs the
+        # split-video path because it uses image_token_id as the video
+        # placeholder.  The direct path requires transformers >= 5.5.0
+        # (Glm46VProcessor / GlmgaVideoProcessor support).
+        use_direct_path = (
+            not isinstance(processor, Glm4vProcessor) and TRANSFORMERS_WITH_GA
+        )
+        if use_direct_path:
+            prepared_data, prepared_kwargs = self._get_direct_path_inputs(
+                mm_data, mm_kwargs
+            )
+            return super()._call_hf_processor(
+                prompt=prompt,
+                mm_data=prepared_data,
+                mm_kwargs=prepared_kwargs,
+                tok_kwargs=tok_kwargs,
+            )
+
+        if (
+            "videos" in mm_data
+            and isinstance(mm_data["videos"], list)
+            and len(mm_data["videos"]) > 0
+        ):
             video_grid_thw_lst = []
             pixel_values_videos_lst = []
             for item in mm_data.pop("videos", []):
@@ -1201,15 +1597,13 @@ class Glm4vMultiModalProcessor(BaseMultiModalProcessor[Glm4vProcessingInfo]):
 
                 # don't update mm_kwargs inplace
                 video_mm_kwargs = dict(**mm_kwargs)
-                video_mm_kwargs["do_sample_frames"] = metadata.get("do_sample_frames", True)
+                video_mm_kwargs["do_sample_frames"] = metadata.get(
+                    "do_sample_frames", True
+                )
 
                 video_mm_data = dict()
                 video_mm_data["videos"] = [[video_array]]
-
-                unuse_metadata = ["do_sample_frames"]
-                video_mm_data["video_metadata"] = [
-                    [VideoMetadata(**{k: metadata[k] for k in metadata if k not in unuse_metadata})]
-                ]
+                video_mm_data["video_metadata"] = [[_to_video_metadata(metadata)]]
 
                 video_outputs = super()._call_hf_processor(
                     prompt="<|begin_of_video|><|video|><|end_of_video|>",
@@ -1218,7 +1612,9 @@ class Glm4vMultiModalProcessor(BaseMultiModalProcessor[Glm4vProcessingInfo]):
                     tok_kwargs=tok_kwargs,
                 )
                 input_ids = video_outputs.pop("input_ids")
-                input_ids[input_ids == processor.image_token_id] = processor.video_token_id
+                input_ids[input_ids == processor.image_token_id] = (
+                    processor.video_token_id
+                )
                 video_placeholder = processor.tokenizer.batch_decode(input_ids)[0]
                 prompt = prompt.replace(
                     "<|begin_of_video|><|video|><|end_of_video|>",
@@ -1252,7 +1648,9 @@ class Glm4vMultiModalProcessor(BaseMultiModalProcessor[Glm4vProcessingInfo]):
         hf_inputs: BatchFeature,
         hf_processor_mm_kwargs: Mapping[str, object],
     ) -> Mapping[str, MultiModalFieldConfig]:
-        return _create_qwen2vl_field_factory(self.info.get_hf_config().vision_config.spatial_merge_size)(hf_inputs)
+        return _create_qwen2vl_field_factory(
+            self.info.get_hf_config().vision_config.spatial_merge_size
+        )(hf_inputs)
 
     def _get_prompt_updates(
         self,
@@ -1279,11 +1677,29 @@ class Glm4vMultiModalProcessor(BaseMultiModalProcessor[Glm4vProcessingInfo]):
             assert isinstance(grid_thw, torch.Tensor)
 
             video, metadata = mm_items["video"][item_idx]
-            placeholder = self.info._construct_video_placeholder(video, metadata, grid_thw)
+            placeholder = self.info._construct_video_placeholder(
+                video, metadata, grid_thw
+            )
             return PromptUpdateDetails.select_token_id(
                 placeholder,
                 embed_token_id=hf_processor.video_token_id,
             )
+
+        def get_video_replacement_glm46v(item_idx: int):
+            out_item = out_mm_kwargs["video"][item_idx]
+            grid_thw = out_item["video_grid_thw"].data
+            assert isinstance(grid_thw, torch.Tensor)
+
+            video, metadata = mm_items["video"][item_idx]
+            placeholder = self.info._construct_video_placeholder(
+                video, metadata, grid_thw
+            )
+            return PromptUpdateDetails.select_token_id(
+                placeholder,
+                embed_token_id=hf_processor.image_token_id,
+            )
+
+        is_glm46v = not isinstance(hf_processor, Glm4vProcessor)
 
         return [
             PromptReplacement(
@@ -1294,7 +1710,11 @@ class Glm4vMultiModalProcessor(BaseMultiModalProcessor[Glm4vProcessingInfo]):
             PromptReplacement(
                 modality="video",
                 target="<|begin_of_video|><|video|><|end_of_video|>",
-                replacement=get_video_replacement_glm4v,
+                replacement=(
+                    get_video_replacement_glm46v
+                    if is_glm46v and TRANSFORMERS_WITH_GA
+                    else get_video_replacement_glm4v
+                ),
             ),
         ]
 
@@ -1304,7 +1724,14 @@ class Glm4vMultiModalProcessor(BaseMultiModalProcessor[Glm4vProcessingInfo]):
     info=Glm4vProcessingInfo,
     dummy_inputs=Glm4vDummyInputsBuilder,
 )
-class Glm4vForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA, SupportsPP, SupportsMRoPE):
+class Glm4vForConditionalGeneration(
+    nn.Module,
+    SupportsMultiModal,
+    SupportsEncoderCudaGraph,
+    SupportsLoRA,
+    SupportsPP,
+    SupportsMRoPE,
+):
     packed_modules_mapping = {
         "qkv_proj": [
             "q_proj",
@@ -1341,8 +1768,12 @@ class Glm4vForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
         multimodal_config = aphrodite_config.model_config.multimodal_config
 
         self.config = config
+        self.model_config = aphrodite_config.model_config
         self.multimodal_config = multimodal_config
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
+        self.is_multimodal_pruning_enabled = (
+            multimodal_config.is_multimodal_pruning_enabled()
+        )
 
         with self._mark_tower_model(aphrodite_config, {"image", "video"}):
             self.visual = Glm4vVisionTransformer(
@@ -1353,7 +1784,7 @@ class Glm4vForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
                 prefix=maybe_prefix(prefix, "visual"),
             )
 
-        if config.model_type in ("glm4v", "glm_ocr"):
+        if config.model_type in ("glm4v", "glm_ocr", "glmga"):
             architectures = ["Glm4ForCausalLM"]
         elif config.model_type == "glm4v_moe":
             architectures = ["Glm4MoeForCausalLM"]
@@ -1368,9 +1799,13 @@ class Glm4vForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
                 architectures=architectures,
             )
 
-        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.language_model.make_empty_intermediate_tensors
+        )
 
-    def _parse_and_validate_image_input(self, **kwargs: object) -> Glm4vImageInputs | None:
+    def _parse_and_validate_image_input(
+        self, **kwargs: object
+    ) -> Glm4vImageInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         image_embeds = kwargs.pop("image_embeds", None)
         image_grid_thw = kwargs.pop("image_grid_thw", None)
@@ -1392,7 +1827,9 @@ class Glm4vForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
                 image_grid_thw=image_grid_thw,
             )
 
-    def _parse_and_validate_video_input(self, **kwargs: object) -> Glm4vVideoInputs | None:
+    def _parse_and_validate_video_input(
+        self, **kwargs: object
+    ) -> Glm4vVideoInputs | None:
         pixel_values_videos = kwargs.pop("pixel_values_videos", None)
         video_embeds = kwargs.pop("video_embeds", None)
         video_grid_thw = kwargs.pop("video_grid_thw", None)
@@ -1414,7 +1851,9 @@ class Glm4vForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
                 video_grid_thw=video_grid_thw,
             )
 
-    def _process_image_input(self, image_input: Glm4vImageInputs) -> tuple[torch.Tensor, ...]:
+    def _process_image_input(
+        self, image_input: Glm4vImageInputs
+    ) -> tuple[torch.Tensor, ...]:
         grid_thw = image_input["image_grid_thw"]
         assert grid_thw.ndim == 2
 
@@ -1433,14 +1872,18 @@ class Glm4vForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
         sizes = (grid_thw.prod(-1) // merge_size // merge_size).tolist()
         return image_embeds.split(sizes)
 
-    def _process_video_input(self, video_input: Glm4vVideoInputs) -> tuple[torch.Tensor, ...]:
+    def _process_video_input(
+        self, video_input: Glm4vVideoInputs
+    ) -> tuple[torch.Tensor, ...]:
         grid_thw = video_input["video_grid_thw"]
         assert grid_thw.ndim == 2
 
         if video_input["type"] == "video_embeds":
             video_embeds = video_input["video_embeds"].type(self.visual.dtype)
         else:
-            pixel_values_videos = video_input["pixel_values_videos"].type(self.visual.dtype)
+            pixel_values_videos = video_input["pixel_values_videos"].type(
+                self.visual.dtype
+            )
             if self.use_data_parallel:
                 return run_dp_sharded_mrope_vision_model(
                     self.visual,
@@ -1456,16 +1899,298 @@ class Glm4vForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
         sizes = (grid_thw.prod(-1) // merge_size // merge_size).tolist()
         return video_embeds.split(sizes)
 
+    # -- SupportsEncoderCudaGraph protocol methods --
+
+    def get_encoder_cudagraph_config(self):
+        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+            EncoderCudaGraphConfig,
+        )
+
+        # When EVS pruning is enabled, embed_multimodal post-processes both
+        # image and video embeddings (mrope positions are appended for image,
+        # prune+append for video). The encoder CUDA graph path bypasses that
+        # post-process, producing inconsistent embedding formats vs eager. So
+        # disable CUDA graph for all modalities when pruning is on.
+        modalities = [] if self.is_multimodal_pruning_enabled else ["image", "video"]
+
+        # Compute max_frames_per_video for budget sizing.
+        max_frames = self.get_max_frames_per_video() if "video" in modalities else 1
+
+        return EncoderCudaGraphConfig(
+            modalities=modalities,
+            buffer_keys=[
+                "pixel_values",
+                "pos_embeds",
+                "rotary_pos_emb_cos",
+                "rotary_pos_emb_sin",
+                "cu_seqlens",
+                "max_seqlen",
+                "sequence_lengths",
+            ],
+            out_hidden_size=self.visual.out_hidden_size,
+            max_frames_per_video=max_frames,
+        )
+
+    def get_input_modality(
+        self,
+        mm_kwargs: dict[str, Any],
+    ) -> str:
+        if "image_grid_thw" in mm_kwargs:
+            return "image"
+        elif "video_grid_thw" in mm_kwargs:
+            return "video"
+        raise AssertionError("This line should be unreachable.")
+
+    def get_max_frames_per_video(self) -> int:
+        mm_registry = MULTIMODAL_REGISTRY
+        info = mm_registry.get_processing_info(self.model_config)
+        max_frames_per_video = info.get_num_frames_with_most_features(
+            seq_len=self.model_config.max_model_len,
+            mm_counts={"video": self.multimodal_config.get_limit_per_prompt("video")},
+        )
+        # Small 'max_frames_per_video' will cause 'tensor mismatch' in PR#43403
+        # 16 is the default 'num_frames' of '_get_vision_info'
+        return max(max_frames_per_video, 16)
+
+    def get_encoder_cudagraph_budget_range(
+        self,
+        aphrodite_config,
+    ) -> tuple[int, int]:
+        # Min: estimated smallest possible encoder input.
+        # 224x224 image → 16x16 patches (patch_size=14)
+        #                 spatial_merge_size=2 → 8x8 = 64 tokens
+        min_budget = 64
+        # Max: capped by max_num_batched_tokens
+        max_budget = min(
+            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            aphrodite_config.model_config.max_model_len,
+        )
+        return (min_budget, max_budget)
+
+    def _get_pixel_values_by_modality(
+        self,
+        mm_kwargs: dict[str, Any],
+    ) -> torch.Tensor:
+        if self.get_input_modality(mm_kwargs) == "image":
+            pixel_values = mm_kwargs["pixel_values"]
+        else:
+            pixel_values = mm_kwargs["pixel_values_videos"]
+        return pixel_values
+
+    def _get_grid_thw_by_modality(
+        self,
+        mm_kwargs: dict[str, Any],
+    ) -> list[tuple[int, int, int]]:
+        grid_thw_key = f"{self.get_input_modality(mm_kwargs)}_grid_thw"
+        grid_thw = mm_kwargs[grid_thw_key]
+        if not isinstance(grid_thw, list):
+            grid_thw = grid_thw.tolist()
+        return grid_thw
+
+    def get_encoder_cudagraph_item_specs(
+        self,
+        mm_kwargs: dict[str, Any],
+    ):
+        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
+
+        m = self.visual.spatial_merge_size
+        grid_thw = self._get_grid_thw_by_modality(mm_kwargs)
+        return [
+            EncoderItemSpec(
+                input_size=t * h * w,
+                output_tokens=t * (h // m) * (w // m),
+            )
+            for t, h, w in grid_thw
+        ]
+
+    def select_encoder_cudagraph_items(
+        self,
+        mm_kwargs: dict[str, Any],
+        indices: list[int],
+    ) -> dict[str, Any]:
+        grid_thw = self._get_grid_thw_by_modality(mm_kwargs)
+        pixel_values = self._get_pixel_values_by_modality(mm_kwargs)
+
+        if len(indices) == 0:
+            if self.get_input_modality(mm_kwargs) == "image":
+                return {
+                    "pixel_values": pixel_values[:0],
+                    "image_grid_thw": [],
+                }
+            else:
+                return {
+                    "pixel_values_videos": pixel_values[:0],
+                    "video_grid_thw": [],
+                }
+
+        # Compute cumulative patch offsets for slicing pixel_values
+        patches_per_item = [t * h * w for t, h, w in grid_thw]
+        cum_patches = [0]
+        for p in patches_per_item:
+            cum_patches.append(cum_patches[-1] + p)
+
+        selected_pv = torch.cat(
+            [pixel_values[cum_patches[i] : cum_patches[i + 1]] for i in indices]
+        )
+        selected_grid = [grid_thw[i] for i in indices]
+
+        if self.get_input_modality(mm_kwargs) == "image":
+            return {
+                "pixel_values": selected_pv,
+                "image_grid_thw": selected_grid,
+            }
+        else:
+            return {
+                "pixel_values_videos": selected_pv,
+                "video_grid_thw": selected_grid,
+            }
+
+    def prepare_encoder_cudagraph_capture_inputs(
+        self,
+        token_budget: int,
+        max_batch_size: int,
+        max_frames_per_batch: int,
+        device: torch.device,
+        dtype: torch.dtype,
+        path: str = "default",
+    ):
+        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+            EncoderCudaGraphCaptureInputs,
+        )
+
+        spatial_merge_size = self.visual.spatial_merge_size
+        per_mm_item_output = token_budget // max_batch_size
+
+        frames_per_item = max_frames_per_batch // max_batch_size
+        if frames_per_item > 1:
+            # Build the capture grid using a video-format layout so that
+            # cu_seqlens is sized for video replays from the start.
+            # cu_seqlens has one entry per attention sequence (one per frame),
+            # so using T > 1 per item makes the buffer large enough without
+            # relying solely on padding.
+            # Ceiling ensures frames_per_item * tokens_per_frame >= per_mm_item_output
+            # so the pixel_values buffer covers any valid single-item replay.
+            tokens_per_frame = (
+                per_mm_item_output + frames_per_item - 1
+            ) // frames_per_item
+            # Video-format grid_config (T=frames_per_item).
+            grid_config = [
+                [
+                    frames_per_item,
+                    spatial_merge_size,
+                    tokens_per_frame * spatial_merge_size,
+                ]
+                for _ in range(max_batch_size)
+            ]
+        else:
+            # Image-format grid_config (T=1).
+            grid_config = [
+                [1, spatial_merge_size, per_mm_item_output * spatial_merge_size]
+                for _ in range(max_batch_size)
+            ]
+
+        # Create dummy pixel_values
+        patch_embed = self.visual.patch_embed
+        in_channels = patch_embed.proj.in_channels
+        patch_size = patch_embed.patch_size
+        temporal_patch_size = patch_embed.temporal_patch_size
+        total_patches = sum(t * h * w for t, h, w in grid_config)
+        flattened_patch_size = (
+            in_channels * temporal_patch_size * patch_size * patch_size
+        )
+        dummy_pixel_values = torch.randn(
+            total_patches, flattened_patch_size, device=device, dtype=dtype
+        )
+
+        # Override max_seqlen with a safe upper bound for capture.
+        # max_seqlen.item() gets baked into the CUDA graph (not replayed),
+        # so the capture value must cover any replay scenario.
+        # Worst case: 1 item consuming the full budget ->
+        # seq_len = token_budget * spatial_merge_size^2.
+        metadata = self.visual.prepare_encoder_metadata(
+            grid_config,
+            max_batch_size=max_batch_size,
+            max_frames_per_batch=max_frames_per_batch,
+            max_seqlen_override=token_budget * (spatial_merge_size**2),
+            device=device,
+        )
+
+        # Just use image-modality dummy input_buffer for capturing, since it's also
+        # compatible for video inputs (has the same shape: [num_patches, C*T*P*P]).
+        values = metadata | {
+            "pixel_values": dummy_pixel_values,
+        }
+
+        return EncoderCudaGraphCaptureInputs(
+            values=values,
+        )
+
+    def prepare_encoder_cudagraph_replay_buffers(
+        self,
+        mm_kwargs: dict[str, Any],
+        max_batch_size: int,
+        max_frames_per_batch: int,
+        path: str = "default",
+    ):
+        modality = self.get_input_modality(mm_kwargs)
+        grid_thw_list = self._get_grid_thw_by_modality(mm_kwargs)
+
+        if modality == "image":
+            metadata = self.visual.prepare_encoder_metadata(
+                grid_thw_list,
+                max_batch_size=max_batch_size,
+            )
+        elif modality == "video":
+            metadata = self.visual.prepare_encoder_metadata(
+                grid_thw_list,
+                max_frames_per_batch=max_frames_per_batch,
+            )
+        else:
+            raise AssertionError("This line should be unreachable.")
+
+        values = metadata | {
+            "pixel_values": self._get_pixel_values_by_modality(mm_kwargs),
+        }
+        return EncoderCudaGraphReplayBuffers(values=values)
+
+    def encoder_cudagraph_forward(
+        self,
+        values: dict[str, torch.Tensor],
+        path: str = "default",
+    ) -> torch.Tensor:
+        pixel_values = values.pop("pixel_values")
+        metadata = values
+        return self.visual(pixel_values, None, encoder_metadata=metadata)
+
+    def encoder_eager_forward(
+        self,
+        mm_kwargs: dict[str, Any],
+        path: str = "default",
+    ) -> torch.Tensor:
+        pixel_values = self._get_pixel_values_by_modality(mm_kwargs)
+        grid_thw = self._get_grid_thw_by_modality(mm_kwargs)
+        return self.visual(pixel_values, grid_thw)
+
     def _parse_and_validate_multimodal_inputs(self, **kwargs: object) -> dict:
         mm_input_by_modality = {}
 
         # Preserve the order of modalities if there are multiple of them
         # from the order of kwargs.
         for input_key in kwargs:
-            if input_key in ("pixel_values", "image_embeds") and "image" not in mm_input_by_modality:
-                mm_input_by_modality["image"] = self._parse_and_validate_image_input(**kwargs)
-            if input_key in ("pixel_values_videos", "video_embeds") and "video" not in mm_input_by_modality:
-                mm_input_by_modality["video"] = self._parse_and_validate_video_input(**kwargs)
+            if (
+                input_key in ("pixel_values", "image_embeds")
+                and "image" not in mm_input_by_modality
+            ):
+                mm_input_by_modality["image"] = self._parse_and_validate_image_input(
+                    **kwargs
+                )
+            if (
+                input_key in ("pixel_values_videos", "video_embeds")
+                and "video" not in mm_input_by_modality
+            ):
+                mm_input_by_modality["video"] = self._parse_and_validate_video_input(
+                    **kwargs
+                )
         return mm_input_by_modality
 
     def embed_multimodal(self, **kwargs: object) -> MultiModalEmbeddings | None:
@@ -1489,23 +2214,33 @@ class Glm4vForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
                 multimodal_embeddings += tuple(video_embeddings)
         return multimodal_embeddings
 
-    def iter_mm_grid_thw(self, mm_features: list[MultiModalFeatureSpec]) -> Iterator[tuple[int, int, int, int]]:
+    def iter_mm_grid_thw(
+        self, mm_features: list[MultiModalFeatureSpec]
+    ) -> Iterator[tuple[int, int, int, int]]:
         hf_config = self.config
         spatial_merge_size = hf_config.vision_config.spatial_merge_size
         for mm_feature in sorted(mm_features, key=lambda f: f.mm_position.offset):
-            offset = mm_feature.mm_position.offset
+            embed_ranges = mm_feature.mm_position.extract_embeds_range()
             if mm_feature.modality == "image":
                 t, h, w = mm_feature.data["image_grid_thw"].data.tolist()
                 assert t == 1, f"Image must have 1 frame, got {t}"
+                assert len(embed_ranges) == 1
+                offset, end = embed_ranges[0]
+                assert end - offset + 1 == h * w // spatial_merge_size**2
                 yield offset, t, h // spatial_merge_size, w // spatial_merge_size
             elif mm_feature.modality == "video":
                 t, h, w = mm_feature.data["video_grid_thw"].data.tolist()
-                yield (
-                    offset,
-                    t,
-                    h // spatial_merge_size,
-                    w // spatial_merge_size,
-                )
+                llm_grid_h = h // spatial_merge_size
+                llm_grid_w = w // spatial_merge_size
+                num_tokens_per_frame = llm_grid_h * llm_grid_w
+
+                if len(embed_ranges) == t:
+                    for offset, end in embed_ranges:
+                        assert end - offset + 1 == num_tokens_per_frame
+                        yield offset, 1, llm_grid_h, llm_grid_w
+                else:
+                    offset = mm_feature.mm_position.offset
+                    yield offset, t, llm_grid_h, llm_grid_w
             else:
                 raise ValueError(f"Unsupported modality: {mm_feature.modality}")
 
@@ -1524,15 +2259,21 @@ class Glm4vForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA,
         ) in self.iter_mm_grid_thw(mm_features):
             text_len = offset - st
             st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-            llm_pos_ids_list.append(np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx)
-            grid_indices = np.indices((llm_grid_t, llm_grid_h, llm_grid_w)).reshape(3, -1)
+            llm_pos_ids_list.append(
+                np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx
+            )
+            grid_indices = np.indices((llm_grid_t, llm_grid_h, llm_grid_w)).reshape(
+                3, -1
+            )
             llm_pos_ids_list.append(grid_indices + text_len + st_idx)
             st = offset + llm_grid_t * llm_grid_h * llm_grid_w
 
         if st < len(input_tokens):
             text_len = len(input_tokens) - st
             st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-            llm_pos_ids_list.append(np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx)
+            llm_pos_ids_list.append(
+                np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx
+            )
 
         llm_positions = np.concatenate(llm_pos_ids_list, axis=1).reshape(3, -1)
         mrope_position_delta = (llm_positions.max() + 1 - len(input_tokens)).item()

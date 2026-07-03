@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import multiprocessing as mp
 import os
 import tempfile
@@ -8,8 +9,9 @@ from unittest.mock import patch
 
 import pytest
 import torch
-from aphrodite.engine.args_tools import EngineArgs
 
+from aphrodite.config import set_current_aphrodite_config
+from aphrodite.engine.arg_utils import EngineArgs
 from aphrodite.utils.mem_utils import MemorySnapshot
 from aphrodite.v1.worker.gpu_worker import Worker, init_worker_distributed_environment
 
@@ -80,7 +82,9 @@ def worker_process(
         # Apply minimal patches to track operation order
         init_patch = patch(
             "aphrodite.v1.worker.gpu_worker.init_worker_distributed_environment",
-            side_effect=make_operation_tracker("init_distributed", original_init_worker),
+            side_effect=make_operation_tracker(
+                "init_distributed", original_init_worker
+            ),
         )
         memory_patch = patch.object(
             MemorySnapshot,
@@ -92,7 +96,12 @@ def worker_process(
             side_effect=make_operation_tracker("nccl_all_reduce", original_all_reduce),
         )
 
-        with init_patch, memory_patch, all_reduce_patch:
+        with (
+            init_patch,
+            memory_patch,
+            all_reduce_patch,
+            set_current_aphrodite_config(aphrodite_config),
+        ):
             # Initialize device (this is where we test the order)
             worker.init_device()
 
@@ -107,7 +116,10 @@ def worker_process(
         raise
 
 
-@pytest.mark.skipif(torch.cuda.device_count() < 2, reason="Need at least 2 GPUs for tensor parallelism")
+@pytest.mark.skipif(
+    torch.accelerator.device_count() < 2,
+    reason="Need at least 2 GPUs for tensor parallelism",
+)
 def test_init_distributed_is_called_before_memory_snapshot():
     """Test that distributed env is setup before memory snapshot.
 

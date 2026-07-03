@@ -6,9 +6,10 @@ import hashlib
 import importlib.metadata
 import os
 import tempfile
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from typing import TYPE_CHECKING, TypeVar
 
-import numpy as np
 import regex as re
 import torch
 from cachetools import LRUCache
@@ -16,7 +17,7 @@ from cachetools import LRUCache
 import aphrodite.envs as envs
 from aphrodite.logger import init_logger
 from aphrodite.utils.import_utils import LazyLoader
-from aphrodite.utils.platform_utils import is_pin_memory_available
+from aphrodite.utils.torch_utils import PIN_MEMORY, async_tensor_h2d
 from aphrodite.v1.core.sched.output import GrammarOutput, SchedulerOutput
 
 if TYPE_CHECKING:
@@ -31,12 +32,54 @@ else:
     xgr = LazyLoader("xgr", globals(), "xgrammar")
     oc = LazyLoader("oc", globals(), "outlines_core")
     file_utils = LazyLoader("file_utils", globals(), "transformers.file_utils")
-    convert_slow_tokenizer = LazyLoader("convert_slow_tokenizer", globals(), "transformers.convert_slow_tokenizer")
+    convert_slow_tokenizer = LazyLoader(
+        "convert_slow_tokenizer", globals(), "transformers.convert_slow_tokenizer"
+    )
 
 
 logger = init_logger(__name__)
 
+_T = TypeVar("_T")
+
 CACHE = None
+
+
+def compile_regex_with_timeout(fn: Callable[[str], _T], pattern: str) -> _T:
+    """Run a regex compilation callable with a timeout.
+
+    Prevents ReDoS attacks where adversarial regex patterns (e.g. nested
+    quantifiers like ``(a+)+b``) cause exponential DFA state-space explosion,
+    hanging the inference worker indefinitely.
+
+    Args:
+        fn: Single-argument callable that takes the pattern and performs
+            the regex compilation.
+        pattern: The regex pattern string, passed to *fn* and included in
+            timeout error messages.
+
+    Raises:
+        ValueError: If compilation exceeds the configured timeout.
+    """
+    timeout = envs.APHRODITE_REGEX_COMPILATION_TIMEOUT_S
+    if timeout <= 0:
+        return fn(pattern)
+
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(fn, pattern)
+    try:
+        result = future.result(timeout=timeout)
+    except TimeoutError:
+        future.cancel()
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise ValueError(
+            f"Regex compilation timed out after {timeout}s. "
+            "The pattern may be too complex or contain constructs that "
+            "cause exponential state-space explosion (e.g. nested "
+            f"quantifiers). Pattern: {pattern[:200]}"
+        ) from None
+    else:
+        executor.shutdown(wait=False)
+        return result
 
 
 def apply_grammar_bitmask(
@@ -79,11 +122,13 @@ def apply_grammar_bitmask(
     out_indices = []
 
     # Reorder the bitmask to match the order of the requests in the batch.
-    sorted_bitmask = np.full(
-        shape=(logits.shape[0], grammar_bitmask.shape[1]),
-        fill_value=-1,
-        dtype=grammar_bitmask.dtype,
+    sorted_bitmask_tensor = torch.full(
+        (logits.shape[0], grammar_bitmask.shape[1]),
+        -1,
+        dtype=torch.from_numpy(grammar_bitmask[:0]).dtype,
+        pin_memory=PIN_MEMORY,
     )
+    sorted_bitmask = sorted_bitmask_tensor.numpy()
     cumulative_index = 0
     for req_id in grammar_output.structured_output_request_ids:
         num_spec_tokens = len(spec_tokens.get(req_id, ()))
@@ -94,8 +139,8 @@ def apply_grammar_bitmask(
                 out_indices.append(bitmask_index)
         cumulative_index += 1 + num_spec_tokens
 
-    # Copy async to device as tensor.
-    grammar_bitmask = torch.from_numpy(sorted_bitmask).to(logits.device, non_blocking=True)
+    # Copy async to device.
+    grammar_bitmask = sorted_bitmask_tensor.to(logits.device, non_blocking=True)
 
     # If the length of out indices and the logits have the same shape
     # we don't need to pass indices to the kernel,
@@ -108,9 +153,9 @@ def apply_grammar_bitmask(
             # xgrammar expects a python list of indices but it will actually work with
             # a tensor. If we copy the tensor ourselves here we can do it in a
             # non_blocking manner and there should be no cpu sync within xgrammar.
-            pin_memory = is_pin_memory_available()
-            index_tensor = torch.tensor(out_indices, dtype=torch.int32, device="cpu", pin_memory=pin_memory)
-            index_tensor = index_tensor.to(logits.device, non_blocking=True)
+            index_tensor = async_tensor_h2d(
+                out_indices, dtype=torch.int32, device=logits.device
+            )
 
         xgr.apply_token_bitmask_inplace(logits, grammar_bitmask, indices=index_tensor)
         return
@@ -205,13 +250,19 @@ def _reduced_vocabulary(tokenizer: TokenizerLike) -> dict[bytes, list[int]]:
     """
     eos_token_id = tokenizer.eos_token_id
 
-    unicode_to_bytes = {v: k for k, v in convert_slow_tokenizer.bytes_to_unicode().items()}
+    unicode_to_bytes = {
+        v: k for k, v in convert_slow_tokenizer.bytes_to_unicode().items()
+    }
 
     def convert_token_to_string(token: str) -> str:
         string = tokenizer.convert_tokens_to_string([token])
 
         # A hack to handle missing spaces to HF's Llama tokenizers
-        if type(token) is str and token.startswith(file_utils.SPIECE_UNDERLINE) or token == "<0x20>":
+        if (
+            type(token) is str
+            and token.startswith(file_utils.SPIECE_UNDERLINE)
+            or token == "<0x20>"
+        ):
             return " " + string
 
         return string
@@ -242,7 +293,10 @@ def _reduced_vocabulary(tokenizer: TokenizerLike) -> dict[bytes, list[int]]:
                     # GPT2 tokenizers: map each byte back using unicode_to_bytes
                     byte_vals = [unicode_to_bytes.get(c) for c in token]
                     if None in byte_vals:
-                        raise RuntimeError(f"Cannot convert token `{token}` ({token_idx}) to bytes: {token_str}")
+                        raise RuntimeError(
+                            f"Cannot convert token `{token}`"
+                            f" ({token_idx}) to bytes: {token_str}"
+                        )
                     # safe to ignore, since if None in byte_vals,
                     # an error is thrown.
                     token_bytes = bytes(byte_vals)  # type: ignore[arg-type]
@@ -263,7 +317,9 @@ def get_outlines_vocabulary(tokenizer: TokenizerLike) -> oc.Vocabulary:
         return tokenizer._outlines_vocabulary  # type: ignore
 
     reduced_vocab = _reduced_vocabulary(tokenizer)
-    vocabulary = OutlinesVocabulary(oc.Vocabulary(tokenizer.eos_token_id, reduced_vocab))
+    vocabulary = OutlinesVocabulary(
+        oc.Vocabulary(tokenizer.eos_token_id, reduced_vocab)
+    )
     tokenizer._outlines_vocabulary = vocabulary  # type: ignore
 
     return vocabulary
@@ -363,7 +419,10 @@ def convert_lark_to_ebnf(grammar_str: str) -> str:
                 if name == "start":
                     first_rule = "start"
             except IndexError as e:
-                raise ValueError(f"Invalid rule format on line {line_num}. Expected 'rule_name: definition'") from e
+                raise ValueError(
+                    f"Invalid rule format on line {line_num}. "
+                    "Expected 'rule_name: definition'"
+                ) from e
 
     if not defined_rules:
         raise ValueError("No valid rules found in grammar")
@@ -383,7 +442,9 @@ def convert_lark_to_ebnf(grammar_str: str) -> str:
             if ":" in line and not line.startswith("|"):
                 # Save previous rule if exists
                 if current_rule:
-                    output_lines.append(f"{current_rule} ::= {' | '.join(current_definition)}")
+                    output_lines.append(
+                        f"{current_rule} ::= {' | '.join(current_definition)}"
+                    )
 
                 # Process new rule
                 name, definition = line.split(":", 1)
@@ -396,10 +457,15 @@ def convert_lark_to_ebnf(grammar_str: str) -> str:
 
             elif line.startswith("|"):
                 if not current_rule:
-                    raise ValueError(f"Alternative '|' on line {line_num} without a preceding rule definition")
+                    raise ValueError(
+                        f"Alternative '|' on line {line_num} "
+                        "without a preceding rule definition"
+                    )
 
                 alt_def = line[1:].strip()
-                check_quotes(alt_def, f"alternative for rule '{current_rule}'", line_num)
+                check_quotes(
+                    alt_def, f"alternative for rule '{current_rule}'", line_num
+                )
                 alt_def = re.sub(r"'([^']*)'", r'"\1"', alt_def)
                 referenced_rules.update(extract_references(alt_def))
                 current_definition.append(alt_def)
@@ -414,7 +480,9 @@ def convert_lark_to_ebnf(grammar_str: str) -> str:
     # Validate all rules are defined
     undefined_rules = referenced_rules - defined_rules - {"root"}
     if undefined_rules:
-        raise ValueError(f"Referenced rules are not defined: {', '.join(sorted(undefined_rules))}")
+        raise ValueError(
+            f"Referenced rules are not defined: {', '.join(sorted(undefined_rules))}"
+        )
 
     return "\n".join(output_lines)
 

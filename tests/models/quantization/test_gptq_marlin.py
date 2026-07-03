@@ -1,10 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Compares the outputs of gptq vs gptq_marlin.
+"""Tests AutoGPTQ (GPTQ with Marlin kernels) output correctness.
 
-Note: GPTQ and Marlin do not have bitwise correctness.
-As a result, in this test, we just confirm that the top selected tokens of the
-Marlin/GPTQ models are in the top 5 selections of each other.
 Note: Marlin internally uses locks to synchronize the threads. This can
 result in very slight nondeterminism for Marlin. As a result, we re-run the test
 up to 3 times to see if we pass.
@@ -13,10 +10,10 @@ up to 3 times to see if we pass.
 import os
 
 import pytest
-from aphrodite.modeling.layers.rotary_embedding import _ROPE_DICT
 
-from aphrodite.platforms import current_platform
 from tests.quantization.utils import is_quant_method_supported
+from aphrodite.model_executor.layers.rotary_embedding import _ROPE_DICT
+from aphrodite.platforms import current_platform
 
 from ..utils import check_logprobs_close
 
@@ -36,8 +33,10 @@ MODELS = [
 
 @pytest.mark.flaky(reruns=3)
 @pytest.mark.skipif(
-    not is_quant_method_supported("gptq_marlin") or current_platform.is_rocm() or not current_platform.is_cuda(),
-    reason="gptq_marlin is not supported on this GPU type.",
+    not is_quant_method_supported("auto_gptq")
+    or current_platform.is_rocm()
+    or not current_platform.is_cuda(),
+    reason="auto_gptq is not supported on this GPU type.",
 )
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("dtype", ["half", "bfloat16"])
@@ -62,7 +61,9 @@ def test_models(
         max_model_len=MAX_MODEL_LEN,
         tensor_parallel_size=1,
     ) as gptq_marlin_model:
-        gptq_marlin_outputs = gptq_marlin_model.generate_greedy_logprobs(example_prompts[:-1], max_tokens, num_logprobs)
+        gptq_marlin_outputs = gptq_marlin_model.generate_greedy_logprobs(
+            example_prompts[:-1], max_tokens, num_logprobs
+        )
     _ROPE_DICT.clear()  # clear rope cache to avoid rope dtype error
 
     # Run gptq.
@@ -77,7 +78,9 @@ def test_models(
         max_model_len=MAX_MODEL_LEN,
         tensor_parallel_size=1,
     ) as gptq_model:
-        gptq_outputs = gptq_model.generate_greedy_logprobs(example_prompts[:-1], max_tokens, num_logprobs)
+        gptq_outputs = gptq_model.generate_greedy_logprobs(
+            example_prompts[:-1], max_tokens, num_logprobs
+        )
 
     check_logprobs_close(
         outputs_0_lst=gptq_outputs,

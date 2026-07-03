@@ -1,14 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Test the functionality of the Transformers backend."""
+"""Test the functionality of the Transformers modeling backend."""
 
 from typing import Any
 
 import pytest
 
-from aphrodite.platforms import current_platform
-
-from ..conftest import AphroditeRunner, HfRunner
+from ..conftest import HfRunner, AphroditeRunner
 from ..utils import multi_gpu_test, prep_prompts
 from .registry import HF_EXAMPLE_MODELS
 from .utils import check_embeddings_close, check_logprobs_close
@@ -59,10 +57,6 @@ def check_implementation(
     )
 
 
-@pytest.mark.skipif(
-    current_platform.is_rocm(),
-    reason="Llama-3.2-1B-Instruct, Ilama-3.2-1B produce memory access fault.",
-)
 @pytest.mark.parametrize(
     "model,model_impl",
     [
@@ -84,9 +78,14 @@ def test_models(
     installed = Version(transformers.__version__)
     required = Version("5.0.0")
     if model == "allenai/OLMoE-1B-7B-0924" and installed < required:
-        pytest.skip(f"MoE models with the Transformers backend require transformers>={required}, but got {installed}")
+        pytest.skip(
+            "MoE models with the Transformers modeling backend require "
+            f"transformers>={required}, but got {installed}"
+        )
 
-    check_implementation(hf_runner, aphrodite_runner, example_prompts, model, model_impl=model_impl)
+    check_implementation(
+        hf_runner, aphrodite_runner, example_prompts, model, model_impl=model_impl
+    )
 
 
 def test_hybrid_attention(aphrodite_runner: type[AphroditeRunner]) -> None:
@@ -130,6 +129,7 @@ def test_distributed(
                 "quantization": "bitsandbytes",
             },
         ),
+        ("unsloth/tinyllama-bnb-4bit", {}),
     ],
 )
 @pytest.mark.parametrize("max_tokens", [32])
@@ -142,9 +142,6 @@ def test_quantization(
     max_tokens: int,
     num_logprobs: int,
 ) -> None:
-    if current_platform.is_rocm() and quantization_kwargs.get("quantization", "") == "bitsandbytes":
-        pytest.skip("bitsandbytes quantization is currently not supported in rocm.")
-
     with aphrodite_runner(
         model,
         model_impl="auto",
@@ -197,7 +194,9 @@ def test_embed_loading(aphrodite_runner, model):
         assert model_config.using_transformers_backend()
 
 
-@pytest.mark.parametrize("arch", ["TransformersEmbeddingModel", "TransformersForSequenceClassification"])
+@pytest.mark.parametrize(
+    "arch", ["TransformersEmbeddingModel", "TransformersForSequenceClassification"]
+)
 def test_pooling(hf_runner, aphrodite_runner, example_prompts, arch):
     model = get_model(arch)
 

@@ -6,6 +6,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
+from aphrodite.platforms import current_platform
 from aphrodite.utils.import_utils import has_triton_kernels
 
 if not has_triton_kernels():
@@ -14,10 +15,8 @@ if not has_triton_kernels():
         allow_module_level=True,
     )
 
+import triton_kernels.matmul_ogs_details.opt_flags as opt_flags
 import triton_kernels.swiglu
-from aphrodite.modeling.layers.fused_moe.config import FusedMoEQuantConfig
-from aphrodite.modeling.layers.fused_moe.gpt_oss_triton_kernels_moe import triton_kernel_moe_forward
-from aphrodite.modeling.layers.utils import shuffle_weight
 from triton_kernels.matmul_ogs import FlexCtx, PrecisionConfig
 from triton_kernels.numerics import InFlexData
 from triton_kernels.numerics_details.mxfp import downcast_to_mxfp, upcast_from_mxfp
@@ -25,7 +24,13 @@ from triton_kernels.tensor import FP4, convert_layout, wrap_torch_tensor
 from triton_kernels.tensor_details import layout
 from triton_kernels.testing import assert_close
 
+from aphrodite.model_executor.layers.fused_moe.config import mxfp4_w4a16_moe_quant_config
+from aphrodite.model_executor.layers.fused_moe.experts.gpt_oss_triton_kernels_moe import (
+    triton_kernel_moe_forward,
+)
 from aphrodite.utils.math_utils import round_up
+
+from .utils import shuffle_weight
 
 
 def deshuffle(w: torch.Tensor):
@@ -39,7 +44,8 @@ def deshuffle(w: torch.Tensor):
 def init_compute_data(M, K, N, E, a_dtype: str, w_dtype: str, num_warps: int):
     randbits = [torch.randperm(E) for _ in range(M)]
     x_list = [
-        (-1) ** i * ((16384 + ((i * 512) % 4096) + bits).to(torch.int16).view(torch.bfloat16))
+        (-1) ** i
+        * ((16384 + ((i * 512) % 4096) + bits).to(torch.int16).view(torch.bfloat16))
         for i, bits in enumerate(randbits)
     ]
     exp_data = torch.stack(x_list).to(device="cuda")  # simulating gate_output (M, E)
@@ -87,10 +93,18 @@ def init_compute_data(M, K, N, E, a_dtype: str, w_dtype: str, num_warps: int):
     if w_dtype != "mx4":
         pytest.skip("NYI")
     else:  # quantize to mx4
-        # careful on the padding here, the activation padding need to be
-        # multiple of 64, the actual engine is not implemented
-        w1_bottom_pad = round_up(w1_tri.shape[1], 64) - w1_tri.shape[1]
-        w1_right_pad = round_up(w1_tri.shape[2], 128) - w1_tri.shape[2]
+        # Padding alignment depends on the platform.  On CDNA4 the scale
+        # swizzle requires SCALE_K % 8 == 0 (K % 256) and
+        # SCALE_N % 32 == 0 (2*N % 512), matching the production
+        # alignment in mxfp4_round_up_hidden_size_and_intermediate_size.
+        # On CUDA (Hopper) the scale layout pads internally, so the
+        # original 64/128 alignment is sufficient.
+        if current_platform.is_rocm():
+            k_align, n2_align = 256, 512
+        else:
+            k_align, n2_align = 64, 128
+        w1_bottom_pad = round_up(w1_tri.shape[1], k_align) - w1_tri.shape[1]
+        w1_right_pad = round_up(w1_tri.shape[2], n2_align) - w1_tri.shape[2]
 
         w2_bottom_pad = w1_right_pad // 2
         w2_right_pad = w1_bottom_pad
@@ -110,14 +124,20 @@ def init_compute_data(M, K, N, E, a_dtype: str, w_dtype: str, num_warps: int):
             value=0,
         )
 
-        w1_bias_tri = F.pad(w1_bias_tri, (0, w1_right_pad, 0, 0), mode="constant", value=0)
-        w2_bias_tri = F.pad(w2_bias_tri, (0, w2_right_pad, 0, 0), mode="constant", value=0)
+        w1_bias_tri = F.pad(
+            w1_bias_tri, (0, w1_right_pad, 0, 0), mode="constant", value=0
+        )
+        w2_bias_tri = F.pad(
+            w2_bias_tri, (0, w2_right_pad, 0, 0), mode="constant", value=0
+        )
 
         x_tri = F.pad(x_tri, (0, x_pad, 0, 0), mode="constant", value=0)
 
         w_layout, w_layout_opts = layout.make_default_matmul_mxfp4_w_layout(mx_axis=1)
-        w_scale_layout, w_scale_layout_opts = layout.make_default_matmul_mxfp4_w_scale_layout(
-            mx_axis=1, num_warps=num_warps
+        w_scale_layout, w_scale_layout_opts = (
+            layout.make_default_matmul_mxfp4_w_scale_layout(
+                mx_axis=1, num_warps=num_warps
+            )
         )
 
         w1_tri, w1_scale_tri = downcast_to_mxfp(w1_tri, torch.uint8, axis=1)
@@ -126,22 +146,30 @@ def init_compute_data(M, K, N, E, a_dtype: str, w_dtype: str, num_warps: int):
         w2_tri, w2_scale_tri = downcast_to_mxfp(w2_tri, torch.uint8, axis=1)
         w2 = upcast_from_mxfp(w2_tri, w2_scale_tri, torch.bfloat16, axis=1)
 
-        w1_tri = convert_layout(wrap_torch_tensor(w1_tri, FP4), w_layout, **w_layout_opts)
+        w1_tri = convert_layout(
+            wrap_torch_tensor(w1_tri, FP4), w_layout, **w_layout_opts
+        )
         w1_scale_tri = convert_layout(
             wrap_torch_tensor(w1_scale_tri),
             w_scale_layout,
             **w_scale_layout_opts,
         )
 
-        w2_tri = convert_layout(wrap_torch_tensor(w2_tri, FP4), w_layout, **w_layout_opts)
+        w2_tri = convert_layout(
+            wrap_torch_tensor(w2_tri, FP4), w_layout, **w_layout_opts
+        )
         w2_scale_tri = convert_layout(
             wrap_torch_tensor(w2_scale_tri),
             w_scale_layout,
             **w_scale_layout_opts,
         )
 
-        pc1 = PrecisionConfig(weight_scale=w1_scale_tri, flex_ctx=FlexCtx(rhs_data=InFlexData()))
-        pc2 = PrecisionConfig(weight_scale=w2_scale_tri, flex_ctx=FlexCtx(rhs_data=InFlexData()))
+        pc1 = PrecisionConfig(
+            weight_scale=w1_scale_tri, flex_ctx=FlexCtx(rhs_data=InFlexData())
+        )
+        pc2 = PrecisionConfig(
+            weight_scale=w2_scale_tri, flex_ctx=FlexCtx(rhs_data=InFlexData())
+        )
 
         # tucuate so the rest can run properly
         w1 = w1[..., :K, : 2 * N]
@@ -184,7 +212,7 @@ class ModelConfig:
     sliding_window: int = 128
     initial_context_length: int = 4096
     rope_theta: float = 150000.0
-    rope_scaling_factor: float = 32.0
+    rope_parameters_factor: float = 32.0
     rope_ntk_alpha: float = 1.0
     rope_ntk_beta: float = 32.0
 
@@ -252,7 +280,12 @@ class Case:
 )
 @pytest.mark.parametrize("num_token", [2])
 @pytest.mark.parametrize("tp", [1, 2, 4, 8])
-def test_equiv(num_token, a_dtype, w_dtype, tp):
+def test_equiv(num_token, a_dtype, w_dtype, tp, workspace_init):
+    from triton_kernels.tensor_details import layout
+
+    if not hasattr(layout, "make_default_matmul_mxfp4_w_layout"):
+        pytest.skip("make_default_matmul_mxfp4_w_layout not available")
+
     M = num_token
     E = ModelConfig.num_experts
     K = ModelConfig.hidden_size
@@ -276,12 +309,24 @@ def test_equiv(num_token, a_dtype, w_dtype, tp):
         pc2,
     ) = init_compute_data(M, K, N, E, a_dtype, w_dtype, num_warps=8)
 
-    quant_config = FusedMoEQuantConfig.make(
-        w1_bias=w1_bias_tri,
-        w2_bias=w2_bias_tri,
-        w1_scale=pc1,
-        w2_scale=pc2,
-    )
+    if current_platform.is_device_capability_family(100):
+        constraints = {
+            "is_persistent": True,
+        }
+        opt_flags.update_opt_flags_constraints(constraints)
+
+    if a_dtype == "bf16" and w_dtype == "mx4":
+        quant_config = mxfp4_w4a16_moe_quant_config(
+            w1_scale=pc1,
+            w2_scale=pc2,
+            w1_bias=w1_bias_tri,
+            w2_bias=w2_bias_tri,
+        )
+    else:
+        raise NotImplementedError(
+            f"Quantization configuration for activation={a_dtype} and weight={w_dtype} "
+            f"has not been implemented."
+        )
 
     out_triton_monolithic = triton_kernel_moe_forward(
         hidden_states=x_tri,

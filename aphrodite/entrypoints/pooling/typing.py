@@ -20,8 +20,10 @@ from .classify.protocol import (
 from .embed.protocol import (
     CohereEmbedRequest,
     EmbeddingBytesResponse,
+    EmbeddingChatInputRequest,
     EmbeddingChatRequest,
     EmbeddingCompletionRequest,
+    EmbeddingRequest,
     EmbeddingResponse,
 )
 from .pooling.protocol import (
@@ -35,13 +37,25 @@ from .scoring.protocol import ScoringRequest, ScoringResponse
 from .scoring.typing import ScoringData
 
 PoolingCompletionLikeRequest: TypeAlias = (
-    EmbeddingCompletionRequest | ClassificationCompletionRequest | PoolingCompletionRequest
+    EmbeddingCompletionRequest
+    | ClassificationCompletionRequest
+    | PoolingCompletionRequest
 )
 
-PoolingChatLikeRequest: TypeAlias = EmbeddingChatRequest | ClassificationChatRequest | PoolingChatRequest
+PoolingChatLikeRequest: TypeAlias = (
+    EmbeddingChatRequest
+    | EmbeddingChatInputRequest
+    | ClassificationChatRequest
+    | PoolingChatRequest
+)
 
 AnyPoolingRequest: TypeAlias = (
-    PoolingCompletionLikeRequest | PoolingChatLikeRequest | IOProcessorRequest | ScoringRequest | CohereEmbedRequest
+    EmbeddingRequest
+    | PoolingCompletionLikeRequest
+    | PoolingChatLikeRequest
+    | IOProcessorRequest
+    | ScoringRequest
+    | CohereEmbedRequest
 )
 
 AnyPoolingResponse: TypeAlias = (
@@ -54,6 +68,12 @@ AnyPoolingResponse: TypeAlias = (
 )
 
 PoolingRequestT = TypeVar("PoolingRequestT", bound=AnyPoolingRequest)
+
+
+@dataclass(kw_only=True)
+class ChunkedEmbeddingMetadata:
+    prompt_index: int
+    chunk_index: int
 
 
 @dataclass(kw_only=True)
@@ -70,11 +90,14 @@ class PoolingServeContext(Generic[PoolingRequestT]):
     engine_inputs: Sequence[EngineInput] | None = None
     prompt_request_ids: list[str] | None = None
 
-    result_generator: AsyncGenerator[tuple[int, PoolingRequestOutput], None] | None = None
+    result_generator: AsyncGenerator[tuple[int, PoolingRequestOutput], None] | None = (
+        None
+    )
     final_res_batch: list[PoolingRequestOutput] = field(default_factory=list)
 
     ## for Long Text Embedding with Chunked Processing
     original_engine_inputs: Sequence[EngineInput] | None = None
+    chunked_embedding_metadata: list[ChunkedEmbeddingMetadata] | None = None
 
     ## for bi-encoder & late-interaction
     n_queries: int | None = None

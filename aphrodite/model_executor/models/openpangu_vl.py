@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2025 Huawei Technologies Co., Ltd. All Rights Reserved.
 # Adapted from aphrodite/model_executor/models/qwen2_5_vl.py
-# Copyright 2025 The Aphrodite team.
+# Copyright 2025 The vLLM team.
 # Copyright 2025 The Qwen Team.
 #
 # This file is a part of the aphrodite-ascend project.
@@ -44,8 +44,7 @@ from aphrodite.model_executor.layers.linear import (
     RowParallelLinear,
 )
 from aphrodite.model_executor.layers.quantization import QuantizationConfig
-from aphrodite.model_executor.layers.quantization.gptq import GPTQConfig
-from aphrodite.model_executor.layers.quantization.gptq_marlin import GPTQMarlinConfig
+from aphrodite.model_executor.layers.quantization.auto_gptq import AutoGPTQConfig
 from aphrodite.model_executor.layers.rotary_embedding.common import ApplyRotaryEmb
 from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 from aphrodite.model_executor.models.interfaces import (
@@ -97,10 +96,14 @@ class OpenPanguVisionAttention(nn.Module):
         prefix: str = "",
     ) -> None:
         super().__init__()
-        self.hidden_size_per_attention_head = dist_utils.divide(projection_size, num_heads)
+        self.hidden_size_per_attention_head = dist_utils.divide(
+            projection_size, num_heads
+        )
         self.tp_size = parallel_state.get_tensor_model_parallel_world_size()
         self.tp_rank = parallel_state.get_tensor_model_parallel_rank()
-        self.num_attention_heads_per_partition = dist_utils.divide(num_heads, self.tp_size)
+        self.num_attention_heads_per_partition = dist_utils.divide(
+            num_heads, self.tp_size
+        )
 
         self.qkv = QKVParallelLinear(
             hidden_size=embed_dim,
@@ -139,7 +142,9 @@ class OpenPanguVisionAttention(nn.Module):
         q, k, v = x.chunk(3, dim=1)
 
         q, k, v = (
-            rearrange(x, "s (b n d) -> b s n d", d=self.hidden_size_per_attention_head, b=1).contiguous()
+            rearrange(
+                x, "s (b n d) -> b s n d", d=self.hidden_size_per_attention_head, b=1
+            ).contiguous()
             for x in (q, k, v)
         )
         qk_concat = torch.cat([q, k], dim=0)
@@ -154,7 +159,9 @@ class OpenPanguVisionAttention(nn.Module):
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
         )
-        context_layer = rearrange(context_layer, "b s h d -> s (b h d)", b=1).contiguous()
+        context_layer = rearrange(
+            context_layer, "b s h d -> s (b h d)", b=1
+        ).contiguous()
         output, bias = self.proj(context_layer)
         if bias is not None:
             output = output + bias
@@ -254,7 +261,9 @@ class OpenPanguVisionBlock(nn.Module):
         cos: torch.Tensor,
         sin: torch.Tensor,
     ) -> torch.Tensor:
-        hidden_states = hidden_states + self.attn(self.norm1(hidden_states), cu_seqlens=cu_seqlens, cos=cos, sin=sin)
+        hidden_states = hidden_states + self.attn(
+            self.norm1(hidden_states), cu_seqlens=cu_seqlens, cos=cos, sin=sin
+        )
         hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
         return hidden_states
 
@@ -262,7 +271,9 @@ class OpenPanguVisionBlock(nn.Module):
 class OpenPanguVisionRotaryEmbedding(nn.Module):
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
-        self.inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        self.inv_freq = 1.0 / (
+            theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim)
+        )
         self._seq_len_cached = 0
         self._freqs_cached = None
 
@@ -270,13 +281,19 @@ class OpenPanguVisionRotaryEmbedding(nn.Module):
         if seqlen > self._seq_len_cached:
             seqlen *= 2
             self._seq_len_cached = seqlen
-            seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+            seq = torch.arange(
+                seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype
+            )
             freqs = torch.outer(seq, self.inv_freq)
             self._freqs_cached = freqs
 
     def forward(self, seqlen: int) -> torch.Tensor:
         self.update_freqs_cache(seqlen)
-        return self._freqs_cached[:seqlen] if self._freqs_cached is not None else self._freqs_cached
+        return (
+            self._freqs_cached[:seqlen]
+            if self._freqs_cached is not None
+            else self._freqs_cached
+        )
 
 
 class OpenPanguVisionPatchEmbed(nn.Module):
@@ -291,7 +308,9 @@ class OpenPanguVisionPatchEmbed(nn.Module):
         self.patch_size = patch_size
         self.temporal_patch_size = temporal_patch_size
         self.hidden_size = hidden_size
-        self.input_size = self.patch_size * self.patch_size * in_channels * self.temporal_patch_size
+        self.input_size = (
+            self.patch_size * self.patch_size * in_channels * self.temporal_patch_size
+        )
 
         kernel_size = (temporal_patch_size, patch_size, patch_size)
         self.proj = nn.Conv3d(
@@ -388,7 +407,9 @@ class OpenPanguVisionTransformer(nn.Module):
         if self.attn_backend not in {
             AttentionBackendEnum.FLASH_ATTN,
         }:
-            raise RuntimeError(f"Pangu-VL does not support {self.attn_backend} backend now.")
+            raise RuntimeError(
+                f"Pangu-VL does not support {self.attn_backend} backend now."
+            )
         self.rotary_pos_emb = OpenPanguVisionRotaryEmbedding(head_dim // 2)
         self.patch_embed = OpenPanguVisionPatchEmbed(
             patch_size=vision_config.patch_size,
@@ -413,9 +434,13 @@ class OpenPanguVisionTransformer(nn.Module):
         )
         self.tp_size = parallel_state.get_tensor_model_parallel_world_size()
         self.tp_rank = parallel_state.get_tensor_model_parallel_rank()
-        self.hidden_size_per_attention_head = dist_utils.divide(self.hidden_size, self.num_heads)
+        self.hidden_size_per_attention_head = dist_utils.divide(
+            self.hidden_size, self.num_heads
+        )
 
-        self.select_layer = getattr(vision_config, "mm_unit_vision_select_layer", [-1, -3])
+        self.select_layer = getattr(
+            vision_config, "mm_unit_vision_select_layer", [-1, -3]
+        )
         self.select_index = [vision_config.depth + i for i in self.select_layer]
         self.select_index = self.select_index[::-1]
         self.select_layer = [-1 * (i + 1) for i in range(len(self.select_index))]
@@ -489,12 +514,16 @@ class OpenPanguVisionTransformer(nn.Module):
         window_index: list = []
         cu_window_seqlens: list = [0]
         window_index_id = 0
-        vit_merger_window_size = self.window_size // self.spatial_merge_size // self.patch_size
+        vit_merger_window_size = (
+            self.window_size // self.spatial_merge_size // self.patch_size
+        )
 
         for grid_t, grid_h, grid_w in grid_thw:
             llm_grid_h = grid_h // self.spatial_merge_size
             llm_grid_w = grid_w // self.spatial_merge_size
-            index = torch.arange(grid_t * llm_grid_h * llm_grid_w).reshape(grid_t, llm_grid_h, llm_grid_w)
+            index = torch.arange(grid_t * llm_grid_h * llm_grid_w).reshape(
+                grid_t, llm_grid_h, llm_grid_w
+            )
             pad_h = vit_merger_window_size - llm_grid_h % vit_merger_window_size
             pad_w = vit_merger_window_size - llm_grid_w % vit_merger_window_size
             num_windows_h = (llm_grid_h + pad_h) // vit_merger_window_size
@@ -517,7 +546,9 @@ class OpenPanguVisionTransformer(nn.Module):
             index_padded = index_padded.reshape(-1)
             index_new = index_padded[index_padded != -100]
             window_index.append(index_new + window_index_id)
-            cu_seqlens_tmp = seqlens.cumsum(0) * self.spatial_merge_unit + cu_window_seqlens[-1]
+            cu_seqlens_tmp = (
+                seqlens.cumsum(0) * self.spatial_merge_unit + cu_window_seqlens[-1]
+            )
             cu_window_seqlens.extend(cu_seqlens_tmp.tolist())
             window_index_id += (grid_t * llm_grid_h * llm_grid_w).item()
         window_index = torch.cat(window_index, dim=0)
@@ -530,7 +561,9 @@ class OpenPanguVisionTransformer(nn.Module):
     ) -> torch.Tensor:
         # compute cu_seqlens
         cu_seqlens = (
-            torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).to(torch.int32).to(x.device)
+            torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0])
+            .to(torch.int32)
+            .to(x.device)
         )
         cu_seqlens = torch.cumsum(cu_seqlens, dim=0, dtype=torch.int32)
         cu_seqlens = F.pad(cu_seqlens, (1, 0), "constant", 0)
@@ -550,7 +583,9 @@ class OpenPanguVisionTransformer(nn.Module):
         x = x.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
         x = x[window_index, :, :]
         x = x.reshape(seq_len, -1)
-        rotary_pos_emb = rotary_pos_emb.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
+        rotary_pos_emb = rotary_pos_emb.reshape(
+            seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1
+        )
         rotary_pos_emb = rotary_pos_emb[window_index, :, :]
         rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
 
@@ -744,14 +779,18 @@ class OpenPanguVLMultiModalProcessor(Qwen2_5_VLMultiModalProcessor):
             if not isinstance(grid_thw, torch.Tensor):
                 raise TypeError("Expected 'grid_thw' to be a Tensor")
             if modality == "image":
-                image_token_id_total = [image_token_id] * (int(grid_thw.prod()) // merge_length)
+                image_token_id_total = [image_token_id] * (
+                    int(grid_thw.prod()) // merge_length
+                )
                 return image_token_id_total
             else:
                 # When modality is video
                 grid_t, grid_h, grid_w = grid_thw
                 video_seq_length_per_time = (grid_h * grid_w).item() // merge_length
                 video_token_id_per_time = (
-                    [vision_start_token_id] + [video_token_id] * video_seq_length_per_time + [vision_end_token_id]
+                    [vision_start_token_id]
+                    + [video_token_id] * video_seq_length_per_time
+                    + [vision_end_token_id]
                 )
                 video_token_id_total = video_token_id_per_time * grid_t.item()
                 video_token_id_middle = video_token_id_total[1:-1]
@@ -764,7 +803,9 @@ class OpenPanguVLMultiModalProcessor(Qwen2_5_VLMultiModalProcessor):
             PromptReplacement(
                 modality=modality,
                 target=[placeholder[modality]],
-                replacement=partial(get_replacement_openpangu_vision, modality=modality),
+                replacement=partial(
+                    get_replacement_openpangu_vision, modality=modality
+                ),
             )
             for modality in ("image", "video")
         ]
@@ -779,7 +820,9 @@ class OpenPanguVLDummyInputsBuilder(Qwen2_5_VLDummyInputsBuilder):
     info=OpenPanguVLProcessingInfo,
     dummy_inputs=OpenPanguVLDummyInputsBuilder,
 )
-class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA, SupportsPP, SupportsMRoPE):
+class OpenPanguVLForConditionalGeneration(
+    nn.Module, SupportsMultiModal, SupportsLoRA, SupportsPP, SupportsMRoPE
+):
     hf_to_aphrodite_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.language_model.": "language_model.model.",
@@ -813,11 +856,13 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
         with self._mark_language_model(aphrodite_config):
             self.language_model = init_aphrodite_registered_model(
                 aphrodite_config=aphrodite_config,
-                prefix=maybe_prefix("openpangu", "language_model"),
+                prefix=maybe_prefix(prefix, "openpangu.language_model"),
                 architectures=["PanguEmbeddedForCausalLM"],
             )
 
-        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.language_model.make_empty_intermediate_tensors
+        )
         self._parse_preprocess_params(config.vision_config)
 
     def _parse_preprocess_params(self, vision_config):
@@ -837,11 +882,13 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
         self.image_std = tuple(image_processor.image_std)
 
     def _maybe_ignore_quant_config(self, quant_config: QuantizationConfig):
-        if isinstance(quant_config, (GPTQConfig, GPTQMarlinConfig)):
+        if isinstance(quant_config, AutoGPTQConfig):
             return None
         return quant_config
 
-    def _validate_and_reshape_mm_tensor(self, mm_input: object, name: str) -> torch.Tensor:
+    def _validate_and_reshape_mm_tensor(
+        self, mm_input: object, name: str
+    ) -> torch.Tensor:
         if not isinstance(mm_input, (torch.Tensor, list)):
             raise ValueError(f"Incorrect type of {name}. Got type: {type(mm_input)}")
         if isinstance(mm_input, torch.Tensor):
@@ -849,7 +896,9 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
                 return mm_input
             if mm_input.ndim != 3:
                 raise ValueError(
-                    f"{name} should be 2D or batched 3D tensor. Got ndim: {mm_input.ndim} (shape={mm_input.shape})"
+                    f"{name} should be 2D or batched 3D tensor. "
+                    f"Got ndim: {mm_input.ndim} "
+                    f"(shape={mm_input.shape})"
                 )
             return torch.concat(list(mm_input))
         else:
@@ -864,11 +913,18 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
             return None
 
         if pixel_values is not None:
-            pixel_values = self._validate_and_reshape_mm_tensor(pixel_values, "image pixel values")
-            image_grid_thw = self._validate_and_reshape_mm_tensor(image_grid_thw, "image grid_thw")
+            pixel_values = self._validate_and_reshape_mm_tensor(
+                pixel_values, "image pixel values"
+            )
+            image_grid_thw = self._validate_and_reshape_mm_tensor(
+                image_grid_thw, "image grid_thw"
+            )
 
             if not isinstance(pixel_values, (torch.Tensor, list)):
-                raise ValueError(f"Incorrect type of image pixel values. Got type: {type(pixel_values)}")
+                raise ValueError(
+                    "Incorrect type of image pixel values. "
+                    f"Got type: {type(pixel_values)}"
+                )
 
             return OpenPanguVLImagePixelInputs(
                 type="pixel_values",
@@ -877,11 +933,18 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
             )
 
         if image_embeds is not None:
-            image_embeds = self._validate_and_reshape_mm_tensor(image_embeds, "image embeds")
-            image_grid_thw = self._validate_and_reshape_mm_tensor(image_grid_thw, "image grid_thw")
+            image_embeds = self._validate_and_reshape_mm_tensor(
+                image_embeds, "image embeds"
+            )
+            image_grid_thw = self._validate_and_reshape_mm_tensor(
+                image_grid_thw, "image grid_thw"
+            )
 
             if not isinstance(image_embeds, torch.Tensor):
-                raise ValueError(f"Incorrect type of image embeddings. Got type: {type(image_embeds)}")
+                raise ValueError(
+                    "Incorrect type of image embeddings. "
+                    f"Got type: {type(image_embeds)}"
+                )
             return OpenPanguVLImageEmbeddingInputs(
                 type="image_embeds",
                 image_embeds=image_embeds,
@@ -897,8 +960,12 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
             return None
 
         if pixel_values_videos is not None:
-            pixel_values_videos = self._validate_and_reshape_mm_tensor(pixel_values_videos, "video pixel values")
-            video_grid_thw = self._validate_and_reshape_mm_tensor(video_grid_thw, "video grid_thw")
+            pixel_values_videos = self._validate_and_reshape_mm_tensor(
+                pixel_values_videos, "video pixel values"
+            )
+            video_grid_thw = self._validate_and_reshape_mm_tensor(
+                video_grid_thw, "video grid_thw"
+            )
 
             return OpenPanguVLVideoPixelInputs(
                 type="pixel_values_videos",
@@ -907,11 +974,18 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
             )
 
         if video_embeds is not None:
-            video_embeds = self._validate_and_reshape_mm_tensor(video_embeds, "video embeds")
-            video_grid_thw = self._validate_and_reshape_mm_tensor(video_grid_thw, "video grid_thw")
+            video_embeds = self._validate_and_reshape_mm_tensor(
+                video_embeds, "video embeds"
+            )
+            video_grid_thw = self._validate_and_reshape_mm_tensor(
+                video_grid_thw, "video grid_thw"
+            )
 
             if not isinstance(video_embeds, torch.Tensor):
-                raise ValueError(f"Incorrect type of video embeddings. Got type: {type(video_embeds)}")
+                raise ValueError(
+                    "Incorrect type of video embeddings. "
+                    f"Got type: {type(video_embeds)}"
+                )
             return OpenPanguVLVideoEmbeddingInputs(
                 type="video_embeds",
                 video_embeds=video_embeds,
@@ -921,10 +995,20 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
     def _parse_and_validate_multimodal_inputs(self, **kwargs: object) -> dict:
         mm_input_by_modality = {}
         for input_key in kwargs:
-            if input_key in ("pixel_values", "image_embeds") and "image" not in mm_input_by_modality:
-                mm_input_by_modality["image"] = self._parse_and_validate_image_input(**kwargs)
-            if input_key in ("pixel_values_videos", "video_embeds") and "video" not in mm_input_by_modality:
-                mm_input_by_modality["video"] = self._parse_and_validate_video_input(**kwargs)
+            if (
+                input_key in ("pixel_values", "image_embeds")
+                and "image" not in mm_input_by_modality
+            ):
+                mm_input_by_modality["image"] = self._parse_and_validate_image_input(
+                    **kwargs
+                )
+            if (
+                input_key in ("pixel_values_videos", "video_embeds")
+                and "video" not in mm_input_by_modality
+            ):
+                mm_input_by_modality["video"] = self._parse_and_validate_video_input(
+                    **kwargs
+                )
         return mm_input_by_modality
 
     def embed_multimodal(self, **kwargs: object) -> MultiModalEmbeddings | None:
@@ -939,12 +1023,16 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
             if modality == "image":
                 vision_embeddings = self._process_image_input(multimodal_input)
                 multimodal_embeddings = (
-                    multimodal_embeddings if not vision_embeddings else (multimodal_embeddings + vision_embeddings)
+                    multimodal_embeddings
+                    if not vision_embeddings
+                    else (multimodal_embeddings + vision_embeddings)
                 )
             if modality == "video":
                 video_embeddings = self._process_video_input(multimodal_input)
                 multimodal_embeddings = (
-                    multimodal_embeddings if not video_embeddings else (multimodal_embeddings + video_embeddings)
+                    multimodal_embeddings
+                    if not video_embeddings
+                    else (multimodal_embeddings + video_embeddings)
                 )
         return multimodal_embeddings
 
@@ -973,7 +1061,9 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
         else:
             pixel_values = image_input["pixel_values"].type(self.visual.dtype)
             # rescale and normalize
-            pixel_values = pixel_values.reshape(-1, self.channel, self.patch_size, self.patch_size)
+            pixel_values = pixel_values.reshape(
+                -1, self.channel, self.patch_size, self.patch_size
+            )
             pixel_values = rescale_and_normalize(
                 pixel_values,
                 self.do_rescale,
@@ -982,7 +1072,9 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
                 self.image_mean,
                 self.image_std,
             )
-            pixel_values = pixel_values.reshape(-1, self.channel * self.patch_size * self.patch_size)
+            pixel_values = pixel_values.reshape(
+                -1, self.channel * self.patch_size * self.patch_size
+            )
             image_embeds = self.visual(pixel_values, grid_thw=grid_thw)
 
         # Split concatenated embeddings for each image item.
@@ -998,7 +1090,9 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
         if video_input["type"] == "video_embeds":
             video_embeds = video_input["video_embeds"].type(self.visual.dtype)
         else:
-            pixel_values_videos = video_input["pixel_values_videos"].type(self.visual.dtype)
+            pixel_values_videos = video_input["pixel_values_videos"].type(
+                self.visual.dtype
+            )
             video_embeds = self.visual(pixel_values_videos, grid_thw=grid_thw)
 
         # Split concatenated embeddings for each video item.
@@ -1056,7 +1150,9 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
 
         raise ValueError("Only image or video modality is supported")
 
-    def iter_mm_grid_thw(self, mm_features: list[MultiModalFeatureSpec]) -> Iterator[tuple[str, int, int, int, int]]:
+    def iter_mm_grid_thw(
+        self, mm_features: list[MultiModalFeatureSpec]
+    ) -> Iterator[tuple[str, int, int, int, int]]:
         spatial_merge_size = self.config.vision_config.spatial_merge_size
         for mm_feature in sorted(mm_features, key=lambda f: f.mm_position.offset):
             offset = mm_feature.mm_position.offset
@@ -1100,13 +1196,25 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
         ) in self.iter_mm_grid_thw(mm_features):
             text_len = offset - st
             st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-            llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
+            llm_pos_ids_list.append(
+                torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx
+            )
             if modality == "video":
                 eot_bot_pos = torch.full((3, 1), 0, dtype=torch.long)
                 offset_pos = max(llm_grid_h, llm_grid_w)
                 current_pos = text_len + st_idx
-                grid_h = torch.arange(llm_grid_h).view(-1, 1).expand(-1, llm_grid_w).flatten()
-                grid_w = torch.arange(llm_grid_w).view(1, -1).expand(llm_grid_h, -1).flatten()
+                grid_h = (
+                    torch.arange(llm_grid_h)
+                    .view(-1, 1)
+                    .expand(-1, llm_grid_w)
+                    .flatten()
+                )
+                grid_w = (
+                    torch.arange(llm_grid_w)
+                    .view(1, -1)
+                    .expand(llm_grid_h, -1)
+                    .flatten()
+                )
                 frame_pos = torch.stack(
                     [
                         torch.full_like(grid_h, 0, dtype=torch.long),  # t
@@ -1121,17 +1229,41 @@ class OpenPanguVLForConditionalGeneration(nn.Module, SupportsMultiModal, Support
                     llm_pos_ids_list.append(eot_bot_pos + current_pos + 1)
                     llm_pos_ids_list.append(frame_pos + current_pos + 2)
                     current_pos += 2
-                st = offset + llm_grid_t * llm_grid_h * llm_grid_w + (llm_grid_t - 1) * 2
+                st = (
+                    offset + llm_grid_t * llm_grid_h * llm_grid_w + (llm_grid_t - 1) * 2
+                )
             else:
-                t_index = (torch.arange(llm_grid_t).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w)).long().flatten()
-                h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(llm_grid_t, -1, llm_grid_w).flatten()
-                w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(llm_grid_t, llm_grid_h, -1).flatten()
-                llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + text_len + st_idx)
+                t_index = (
+                    (
+                        torch.arange(llm_grid_t)
+                        .view(-1, 1)
+                        .expand(-1, llm_grid_h * llm_grid_w)
+                    )
+                    .long()
+                    .flatten()
+                )
+                h_index = (
+                    torch.arange(llm_grid_h)
+                    .view(1, -1, 1)
+                    .expand(llm_grid_t, -1, llm_grid_w)
+                    .flatten()
+                )
+                w_index = (
+                    torch.arange(llm_grid_w)
+                    .view(1, 1, -1)
+                    .expand(llm_grid_t, llm_grid_h, -1)
+                    .flatten()
+                )
+                llm_pos_ids_list.append(
+                    torch.stack([t_index, h_index, w_index]) + text_len + st_idx
+                )
                 st = offset + llm_grid_t * llm_grid_h * llm_grid_w
         if st < len(input_tokens):
             st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
             text_len = len(input_tokens) - st
-            llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
+            llm_pos_ids_list.append(
+                torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx
+            )
         llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
         mrope_position_delta = (llm_positions.max() + 1 - len(input_tokens)).item()
         return llm_positions, mrope_position_delta

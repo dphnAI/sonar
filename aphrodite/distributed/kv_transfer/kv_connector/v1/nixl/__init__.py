@@ -2,13 +2,34 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """NIXL KV-cache transfer connector (disaggregated prefill / decode)."""
 
+from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler import (
+    NixlBaseConnectorScheduler,
+)
+from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker import (
+    NixlBaseConnectorWorker,
+)
 from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.connector import (
+    NixlBaseConnector,
     NixlConnector,
+    NixlPullConnector,
+    NixlPushConnector,
 )
 from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.metadata import (
     NixlAgentMetadata,
     NixlConnectorMetadata,
     NixlHandshakePayload,
+)
+from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.pull_scheduler import (
+    NixlPullConnectorScheduler,
+)
+from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.pull_worker import (
+    NixlPullConnectorWorker,
+)
+from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_scheduler import (
+    NixlPushConnectorScheduler,
+)
+from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.push_worker import (
+    NixlPushConnectorWorker,
 )
 from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.scheduler import (
     NixlConnectorScheduler,
@@ -22,10 +43,19 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.worker import (
 
 __all__ = [
     "NixlAgentMetadata",
+    "NixlBaseConnector",
+    "NixlBaseConnectorScheduler",
+    "NixlBaseConnectorWorker",
     "NixlConnector",
     "NixlConnectorMetadata",
     "NixlConnectorScheduler",
     "NixlConnectorWorker",
     "NixlHandshakePayload",
     "NixlKVConnectorStats",
+    "NixlPullConnector",
+    "NixlPullConnectorScheduler",
+    "NixlPullConnectorWorker",
+    "NixlPushConnector",
+    "NixlPushConnectorScheduler",
+    "NixlPushConnectorWorker",
 ]

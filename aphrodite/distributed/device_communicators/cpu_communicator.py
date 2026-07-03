@@ -32,6 +32,7 @@ class CpuCommunicator(DeviceCommunicatorBase):
             (
                 current_platform.get_cpu_architecture() == CpuArchEnum.X86
                 or current_platform.get_cpu_architecture() == CpuArchEnum.ARM
+                or current_platform.get_cpu_architecture() == CpuArchEnum.POWERPC
             )
             and hasattr(torch.ops._C, "init_shm_manager")
             and (unique_name.startswith("tp") or unique_name.startswith("pp"))
@@ -54,7 +55,8 @@ class CpuCommunicator(DeviceCommunicatorBase):
                 "allgather_reducescatter",
             ):  # type: ignore[has-type]
                 logger.warning(
-                    "`%s` all2all manager is not supported on CPU. Falling back to `allgather_reducescatter` manager.",
+                    "`%s` all2all manager is not supported on CPU. "
+                    "Falling back to `allgather_reducescatter` manager.",
                     self.all2all_backend,  # type: ignore[has-type]
                 )
             from .all2all import AgRsAll2AllManager
@@ -80,14 +82,18 @@ class CpuCommunicator(DeviceCommunicatorBase):
         self.dist_module.all_reduce(input_, group=self.device_group)
         return input_
 
-    def gather(self, input_: torch.Tensor, dst: int = 0, dim: int = -1) -> torch.Tensor | None:
+    def gather(
+        self, input_: torch.Tensor, dst: int = 0, dim: int = -1
+    ) -> torch.Tensor | None:
         """
         NOTE: We assume that the input tensor is on the same device across
         all the ranks.
         NOTE: `dst` is the local rank of the destination rank.
         """
         world_size = self.world_size
-        assert -input_.dim() <= dim < input_.dim(), f"Invalid dim ({dim}) for input tensor with shape {input_.size()}"
+        assert -input_.dim() <= dim < input_.dim(), (
+            f"Invalid dim ({dim}) for input tensor with shape {input_.size()}"
+        )
         if dim < 0:
             # Convert negative dim to positive.
             dim += input_.dim()
@@ -99,7 +105,9 @@ class CpuCommunicator(DeviceCommunicatorBase):
             gather_list = None
 
         # Gather.
-        self.dist_module.gather(input_, gather_list, dst=self.ranks[dst], group=self.device_group)
+        self.dist_module.gather(
+            input_, gather_list, dst=self.ranks[dst], group=self.device_group
+        )
 
         if self.rank_in_group == dst:
             output_tensor = torch.cat(gather_list, dim=dim)
@@ -117,15 +125,21 @@ class CpuCommunicator(DeviceCommunicatorBase):
         # torch.compile . see https://github.com/pytorch/pytorch/issues/138795
         output_size = (input_size[0] * self.world_size,) + input_size[1:]
         # Allocate output tensor.
-        output_tensor = torch.empty(output_size, dtype=input_.dtype, device=input_.device)
+        output_tensor = torch.empty(
+            output_size, dtype=input_.dtype, device=input_.device
+        )
         # All-gather.
-        self.dist_module.all_gather_into_tensor(output_tensor, input_, group=self.device_group)
+        self.dist_module.all_gather_into_tensor(
+            output_tensor, input_, group=self.device_group
+        )
 
         # Reshape
         output_tensor = output_tensor.reshape((self.world_size,) + input_size)
         output_tensor = output_tensor.movedim(0, dim)
         output_tensor = output_tensor.reshape(
-            input_size[:dim] + (self.world_size * input_size[dim],) + input_size[dim + 1 :]
+            input_size[:dim]
+            + (self.world_size * input_size[dim],)
+            + input_size[dim + 1 :]
         )
         return output_tensor
 
@@ -136,7 +150,8 @@ class CpuCommunicator(DeviceCommunicatorBase):
     ) -> None:
         if not self.supports_tensor_dict:
             raise NotImplementedError(
-                "CpuCommunicator does not support tensor dict fastpath with torch.distributed backend."
+                "CpuCommunicator does not support tensor dict fastpath with "
+                "torch.distributed backend."
             )
         return self.dist_module.send_tensor_dict(tensor_dict, dst)
 
@@ -146,7 +161,8 @@ class CpuCommunicator(DeviceCommunicatorBase):
     ) -> dict[str, torch.Tensor | Any]:
         if not self.supports_tensor_dict:
             raise NotImplementedError(
-                "CpuCommunicator does not support tensor dict fastpath with torch.distributed backend."
+                "CpuCommunicator does not support tensor dict fastpath with "
+                "torch.distributed backend."
             )
         return self.dist_module.recv_tensor_dict(src)
 
@@ -156,7 +172,10 @@ class CpuCommunicator(DeviceCommunicatorBase):
         router_logits: torch.Tensor,
         is_sequence_parallel: bool = False,
         extra_tensors: list[torch.Tensor] | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, list[torch.Tensor]]:
+    ) -> (
+        tuple[torch.Tensor, torch.Tensor]
+        | tuple[torch.Tensor, torch.Tensor, list[torch.Tensor]]
+    ):
         """
         Dispatch the hidden states and router logits to the appropriate device.
         This is a no-op in the base class.
@@ -194,7 +213,9 @@ class CpuCommunicator(DeviceCommunicatorBase):
             extra_tensors=extra_tensors,
         )
 
-    def combine(self, hidden_states: torch.Tensor, is_sequence_parallel: bool = False) -> torch.Tensor:
+    def combine(
+        self, hidden_states: torch.Tensor, is_sequence_parallel: bool = False
+    ) -> torch.Tensor:
         """
         Combine the hidden states and router logits from the appropriate device.
         This is a no-op in the base class.
@@ -250,7 +271,9 @@ class _CPUSHMDistributed:
 
         return handle
 
-    def all_reduce(self, input: torch.Tensor, group: ProcessGroup | None = None) -> None:
+    def all_reduce(
+        self, input: torch.Tensor, group: ProcessGroup | None = None
+    ) -> None:
         torch.ops._C.shm_allreduce(self.handle, input)
 
     def gather(
@@ -288,7 +311,9 @@ class _CPUSHMDistributed:
             if not isinstance(v, torch.Tensor):
                 raise RuntimeError("CpuCommunicator only supports sending tensors.")
             size_list.append(v.size())
-        key_size_tensor = torch.frombuffer(pickle.dumps([key_list, size_list]), dtype=torch.uint8)
+        key_size_tensor = torch.frombuffer(
+            pickle.dumps([key_list, size_list]), dtype=torch.uint8
+        )
         value_list.append(key_size_tensor)
 
         torch.ops._C.shm_send_tensor_list(self.handle, value_list, dst)

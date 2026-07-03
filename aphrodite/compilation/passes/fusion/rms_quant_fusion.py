@@ -16,6 +16,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
     ScaleDesc,
+    get_fp8_min_max,
     kFp8Dynamic64Sym,
     kFp8Dynamic128Sym,
     kFp8DynamicTensorSym,
@@ -26,10 +27,9 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
 )
 from aphrodite.platforms import current_platform
 
-from ..aphrodite_inductor_pass import AphroditeInductorPass, AphroditePatternMatcherPass
 from ..inductor_pass import enable_fake_mode
+from ..aphrodite_inductor_pass import AphroditeInductorPass, AphroditePatternMatcherPass
 from .matcher_utils import (
-    MatcherFusedAddRMSNorm,
     MatcherQuantFP8,
 )
 
@@ -39,6 +39,7 @@ FP4_DTYPE = torch.uint8
 
 
 _RMS_NORM_OP = torch.ops.aphrodite_ir.rms_norm.default
+_FUSED_ADD_RMS_NORM_OP = torch.ops.aphrodite_ir.fused_add_rms_norm.default
 
 
 # TODO: extend rmsnorm quant kernels to support mixed input/weight dtypes,
@@ -49,25 +50,38 @@ def _rms_input_weight_dtype_match(match: pm.Match) -> bool:
         if node.target == _RMS_NORM_OP:
             # rms_norm(x, weight, epsilon, variance_size)
             x, weight = node.args[0], node.args[1]
-            if isinstance(x, fx.Node) and isinstance(weight, fx.Node):
-                return x.meta["val"].dtype == weight.meta["val"].dtype
+        elif node.target == _FUSED_ADD_RMS_NORM_OP:
+            # fused_add_rms_norm(x, residual, weight, epsilon, variance_size)
+            x, weight = node.args[0], node.args[2]
+        else:
+            continue
+        if isinstance(x, fx.Node) and isinstance(weight, fx.Node):
+            return x.meta["val"].dtype == weight.meta["val"].dtype
     return True
 
 
 def empty_bf16(*args: Any, **kwargs: Any) -> torch.Tensor:
-    return torch.empty(*args, **kwargs, dtype=torch.bfloat16, device="cuda")
+    return torch.empty(
+        *args, **kwargs, dtype=torch.bfloat16, device=current_platform.device_type
+    )
 
 
 def empty_fp32(*args: Any, **kwargs: Any) -> torch.Tensor:
-    return torch.empty(*args, **kwargs, dtype=torch.float32, device="cuda")
+    return torch.empty(
+        *args, **kwargs, dtype=torch.float32, device=current_platform.device_type
+    )
 
 
 def empty_i32(*args: Any, **kwargs: Any) -> torch.Tensor:
-    return torch.empty(*args, **kwargs, dtype=torch.int32, device="cuda")
+    return torch.empty(
+        *args, **kwargs, dtype=torch.int32, device=current_platform.device_type
+    )
 
 
 def empty_i64(*args: Any, **kwargs: Any) -> torch.Tensor:
-    return torch.empty(*args, **kwargs, dtype=torch.int64, device="cuda")
+    return torch.empty(
+        *args, **kwargs, dtype=torch.int64, device=current_platform.device_type
+    )
 
 
 RMS_ADD_OP = torch.ops._C.fused_add_rms_norm.default
@@ -77,11 +91,11 @@ QUANT_OPS: dict[QuantKey, OpOverload] = {
     kFp8DynamicTensorSym: torch.ops._C.dynamic_scaled_fp8_quant.default,  # noqa: E501
     kFp8DynamicTokenSym: torch.ops._C.dynamic_per_token_scaled_fp8_quant.default,  # noqa: E501
 }
-if current_platform.is_cuda() and hasattr(torch.ops._C, "scaled_fp4_quant"):
-    QUANT_OPS[kNvfp4Dynamic] = torch.ops._C.scaled_fp4_quant.out
-if current_platform.is_cuda():
+if hasattr(torch.ops._C, "per_token_group_fp8_quant"):
     QUANT_OPS[kFp8Dynamic128Sym] = torch.ops._C.per_token_group_fp8_quant.default  # noqa: E501
     QUANT_OPS[kFp8Dynamic64Sym] = torch.ops._C.per_token_group_fp8_quant.default  # noqa: E501
+if current_platform.is_cuda() and hasattr(torch.ops._C, "scaled_fp4_quant"):
+    QUANT_OPS[kNvfp4Dynamic] = torch.ops._C.scaled_fp4_quant.out
 
 
 class FusedRMSQuantKey(NamedTuple):
@@ -95,18 +109,37 @@ class FusedRMSQuantKey(NamedTuple):
     fused_add: bool
 
     def __str__(self) -> str:
-        return f"FusedQuantKey({self.quant}, with{'' if self.fused_add else 'out'} residual)"
+        return (
+            f"FusedQuantKey({self.quant}, with"
+            f"{'' if self.fused_add else 'out'} residual)"
+        )
 
 
 FUSED_OPS: dict[FusedRMSQuantKey, OpOverload] = {
-    FusedRMSQuantKey(kFp8StaticTensorSym, False): torch.ops._C.rms_norm_static_fp8_quant.default,  # noqa: E501
-    FusedRMSQuantKey(kFp8StaticTensorSym, True): torch.ops._C.fused_add_rms_norm_static_fp8_quant.default,  # noqa: E501
-    FusedRMSQuantKey(kFp8DynamicTokenSym, False): torch.ops._C.rms_norm_dynamic_per_token_quant.default,  # noqa: E501
-    FusedRMSQuantKey(kFp8DynamicTokenSym, True): torch.ops._C.rms_norm_dynamic_per_token_quant.default,  # noqa: E501
-    FusedRMSQuantKey(kFp8Dynamic128Sym, False): torch.ops._C.rms_norm_per_block_quant.default,  # noqa: E501
-    FusedRMSQuantKey(kFp8Dynamic128Sym, True): torch.ops._C.rms_norm_per_block_quant.default,  # noqa: E501
-    FusedRMSQuantKey(kFp8Dynamic64Sym, False): torch.ops._C.rms_norm_per_block_quant.default,  # noqa: E501
-    FusedRMSQuantKey(kFp8Dynamic64Sym, True): torch.ops._C.rms_norm_per_block_quant.default,  # noqa: E501
+    FusedRMSQuantKey(
+        kFp8StaticTensorSym, False
+    ): torch.ops._C.rms_norm_static_fp8_quant.default,  # noqa: E501
+    FusedRMSQuantKey(
+        kFp8StaticTensorSym, True
+    ): torch.ops._C.fused_add_rms_norm_static_fp8_quant.default,  # noqa: E501
+    FusedRMSQuantKey(
+        kFp8DynamicTokenSym, False
+    ): torch.ops._C.rms_norm_dynamic_per_token_quant.default,  # noqa: E501
+    FusedRMSQuantKey(
+        kFp8DynamicTokenSym, True
+    ): torch.ops._C.rms_norm_dynamic_per_token_quant.default,  # noqa: E501
+    FusedRMSQuantKey(
+        kFp8Dynamic128Sym, False
+    ): torch.ops._C.rms_norm_per_block_quant.default,  # noqa: E501
+    FusedRMSQuantKey(
+        kFp8Dynamic128Sym, True
+    ): torch.ops._C.rms_norm_per_block_quant.default,  # noqa: E501
+    FusedRMSQuantKey(
+        kFp8Dynamic64Sym, False
+    ): torch.ops._C.rms_norm_per_block_quant.default,  # noqa: E501
+    FusedRMSQuantKey(
+        kFp8Dynamic64Sym, True
+    ): torch.ops._C.rms_norm_per_block_quant.default,  # noqa: E501
 }
 
 
@@ -127,9 +160,6 @@ class RMSNormQuantPattern:
         assert key in FUSED_OPS, f"unsupported fused rmsnorm+quant op for {key}"
         self.FUSED_OP = FUSED_OPS[key]
 
-        if key.fused_add:
-            self.rmsnorm_matcher = MatcherFusedAddRMSNorm(epsilon)
-
         self.quant_matcher = MatcherQuantFP8(
             key.quant,
             has_col_major_scales=has_col_major_scales,
@@ -139,21 +169,31 @@ class RMSNormQuantPattern:
 
 
 class RMSNormStaticQuantPattern(RMSNormQuantPattern):
-    def __init__(self, epsilon: float, quant_dtype: torch.dtype, symmetric: bool = True) -> None:
+    def __init__(
+        self, epsilon: float, quant_dtype: torch.dtype, symmetric: bool = True
+    ) -> None:
         fused_key = FusedRMSQuantKey(
             fused_add=False,
-            quant=QuantKey(dtype=quant_dtype, scale=kStaticTensorScale, symmetric=symmetric),
+            quant=QuantKey(
+                dtype=quant_dtype, scale=kStaticTensorScale, symmetric=symmetric
+            ),
         )
         super().__init__(epsilon, fused_key)
 
     def register(self, pm_pass: PatternMatcherPass) -> None:
         # Cannot use methods, as the self argument affects tracing
-        def pattern(input: torch.Tensor, weight: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
+        def pattern(
+            input: torch.Tensor, weight: torch.Tensor, scale: torch.Tensor
+        ) -> torch.Tensor:
             result_rms = aphrodite.ir.ops.rms_norm(input, weight, self.epsilon)
             return self.quant_matcher(result_rms, scale)[0]
 
-        def replacement(input: torch.Tensor, weight: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
-            result = torch.empty(input.shape, device=input.device, dtype=self.quant_dtype)
+        def replacement(
+            input: torch.Tensor, weight: torch.Tensor, scale: torch.Tensor
+        ) -> torch.Tensor:
+            result = torch.empty(
+                input.shape, device=input.device, dtype=self.quant_dtype
+            )
             at = auto_functionalized(
                 self.FUSED_OP,
                 result=result,
@@ -184,10 +224,14 @@ class RMSNormStaticQuantPattern(RMSNormQuantPattern):
 
 
 class FusedAddRMSNormStaticQuantPattern(RMSNormQuantPattern):
-    def __init__(self, epsilon: float, quant_dtype: torch.dtype, symmetric: bool = True) -> None:
+    def __init__(
+        self, epsilon: float, quant_dtype: torch.dtype, symmetric: bool = True
+    ) -> None:
         key = FusedRMSQuantKey(
             fused_add=True,
-            quant=QuantKey(dtype=quant_dtype, scale=kStaticTensorScale, symmetric=symmetric),
+            quant=QuantKey(
+                dtype=quant_dtype, scale=kStaticTensorScale, symmetric=symmetric
+            ),
         )
         super().__init__(epsilon, key)
 
@@ -198,7 +242,9 @@ class FusedAddRMSNormStaticQuantPattern(RMSNormQuantPattern):
             residual: torch.Tensor,
             scale: torch.Tensor,
         ) -> tuple[torch.Tensor, torch.Tensor]:
-            result_rms, residual = self.rmsnorm_matcher(input, weight, residual)
+            result_rms, residual = aphrodite.ir.ops.fused_add_rms_norm(
+                input, residual, weight, self.epsilon
+            )
             result, _ = self.quant_matcher(result_rms, scale)
 
             return result, residual
@@ -228,8 +274,9 @@ class FusedAddRMSNormStaticQuantPattern(RMSNormQuantPattern):
             return at[1], at[2]
 
         inputs = [
-            # input, weight, residual
-            *self.rmsnorm_matcher.inputs(),
+            empty_bf16(5, 16),  # input
+            empty_bf16(16),  # weight
+            empty_bf16(5, 16),  # residual
             self.quant_matcher.inputs()[1],  # scale
         ]
 
@@ -278,16 +325,16 @@ class FusedAddRMSNormGroupQuantPattern(RMSNormQuantPattern):
             residual: torch.Tensor,
             scale: torch.Tensor,
         ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-            result_rms, residual = self.rmsnorm_matcher(input, weight, residual)
+            result_rms, residual = aphrodite.ir.ops.fused_add_rms_norm(
+                input, residual, weight, self.epsilon
+            )
             result = torch.empty(
                 result_rms.shape,
                 device=result_rms.device,
                 dtype=self.quant_matcher.quant_key.dtype,
             )
             assert scale is not None
-            finfo = torch.finfo(self.quant_matcher.quant_key.dtype)
-            fp8_min = finfo.min
-            fp8_max = finfo.max
+            fp8_min, fp8_max = get_fp8_min_max()
 
             _, result, scale = auto_functionalized(
                 self.quant_matcher.QUANT_OP,
@@ -333,12 +380,17 @@ class FusedAddRMSNormGroupQuantPattern(RMSNormQuantPattern):
             # result, residual, scale
             return at[1], at[3], at[2]
 
-        scale = self.quant_matcher.empty_f32(1, 1)
+        inputs = [
+            empty_bf16(5, 16),  # input
+            empty_bf16(16),  # weight
+            empty_bf16(5, 16),  # residual
+            self.quant_matcher.empty_f32(1, 1),  # scale
+        ]
 
         pm.register_replacement(
             pattern,
             replacement,
-            self.rmsnorm_matcher.inputs() + [scale],
+            inputs,
             pm.fwd_only,
             pm_pass,
             extra_check=_rms_input_weight_dtype_match,
@@ -383,9 +435,7 @@ class RMSNormGroupQuantPattern(RMSNormQuantPattern):
                 dtype=self.quant_matcher.quant_key.dtype,
             )
             assert scale is not None
-            finfo = torch.finfo(self.quant_matcher.quant_key.dtype)
-            fp8_min = finfo.min
-            fp8_max = finfo.max
+            fp8_min, fp8_max = get_fp8_min_max()
 
             _, result, scale = auto_functionalized(
                 self.quant_matcher.QUANT_OP,
@@ -457,12 +507,16 @@ class RMSNormDynamicQuantPattern(RMSNormQuantPattern):
         super().__init__(epsilon, key)
 
     def register(self, pm_pass: PatternMatcherPass) -> None:
-        def pattern(input: torch.Tensor, weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        def pattern(
+            input: torch.Tensor, weight: torch.Tensor
+        ) -> tuple[torch.Tensor, torch.Tensor]:
             result_rms = aphrodite.ir.ops.rms_norm(input, weight, self.epsilon)
             # result, scale
             return self.quant_matcher(result_rms)  # type: ignore[no-any-return]
 
-        def replacement(input: torch.Tensor, weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        def replacement(
+            input: torch.Tensor, weight: torch.Tensor
+        ) -> tuple[torch.Tensor, torch.Tensor]:
             # In case we're matching native rms-norm, conversions might be
             # optimized out. We convert here just to be safe.
             input = input.to(dtype=self.model_dtype)
@@ -515,7 +569,9 @@ class FusedAddRMSNormDynamicQuantPattern(RMSNormQuantPattern):
         def pattern(
             input: torch.Tensor, weight: torch.Tensor, residual: torch.Tensor
         ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-            result_rms, residual = self.rmsnorm_matcher(input, weight, residual)
+            result_rms, residual = aphrodite.ir.ops.fused_add_rms_norm(
+                input, residual, weight, self.epsilon
+            )
             result, scale = self.quant_matcher(result_rms)
 
             return result, residual, scale
@@ -543,10 +599,16 @@ class FusedAddRMSNormDynamicQuantPattern(RMSNormQuantPattern):
             # result, residual, scale
             return at[1], at[3], at[2]
 
+        inputs = [
+            empty_bf16(5, 16),  # input
+            empty_bf16(16),  # weight
+            empty_bf16(5, 16),  # residual
+        ]
+
         pm.register_replacement(
             pattern,
             replacement,
-            self.rmsnorm_matcher.inputs(),
+            inputs,
             pm.fwd_only,
             pm_pass,
             extra_check=_rms_input_weight_dtype_match,
@@ -563,48 +625,53 @@ class RMSNormQuantFusionPass(AphroditePatternMatcherPass):
     def __init__(self, config: AphroditeConfig) -> None:
         super().__init__(config)
 
-        self.patterns: PatternMatcherPass = PatternMatcherPass(pass_name="rmsnorm_quant_fusion_pass")
+        self.patterns: PatternMatcherPass = PatternMatcherPass(
+            pass_name="rmsnorm_quant_fusion_pass"
+        )
 
         # Make sure fused add patterns are before simple rms norm,
         # as the latter is a subset of the former in torch ops
         for epsilon in [1e-5, 1e-6]:
             # Fuse fused_add_rms_norm + static fp8 quant
-            FusedAddRMSNormStaticQuantPattern(epsilon, FP8_DTYPE).register(self.patterns)
+            FusedAddRMSNormStaticQuantPattern(epsilon, FP8_DTYPE).register(
+                self.patterns
+            )
 
             # Fuse rms_norm + static fp8 quant
             RMSNormStaticQuantPattern(epsilon, FP8_DTYPE).register(self.patterns)
 
             # Fuse fused_add_rms_norm + dynamic per-token fp8 quant
-            FusedAddRMSNormDynamicQuantPattern(epsilon, FP8_DTYPE).register(self.patterns)
+            FusedAddRMSNormDynamicQuantPattern(epsilon, FP8_DTYPE).register(
+                self.patterns
+            )
 
             # Fuse rms_norm + dynamic per-token fp8 quant
             RMSNormDynamicQuantPattern(epsilon, FP8_DTYPE).register(self.patterns)
 
-            # Only register group quant patterns on CUDA where the C++ op exists
-            if current_platform.is_cuda():
-                for group_shape in [GroupShape(1, 128), GroupShape(1, 64)]:
-                    for has_col_major_scales in [True, False]:
-                        for is_e8m0 in [True, False]:
-                            for is_tma_aligned in [False, True]:
-                                # Fuse fused_add_rms_norm + fp8 group quant
-                                FusedAddRMSNormGroupQuantPattern(
-                                    epsilon,
-                                    FP8_DTYPE,
-                                    group_shape=group_shape,
-                                    is_e8m0=is_e8m0,
-                                    has_col_major_scales=has_col_major_scales,
-                                    is_tma_aligned=is_tma_aligned,
-                                ).register(self.patterns)
+            # Only register group quant patterns on CUDA/ROCm where the C++ op exists
+            for group_shape in [GroupShape(1, 128), GroupShape(1, 64)]:
+                for has_col_major_scales in [True, False]:
+                    for is_e8m0 in [True, False]:
+                        for is_tma_aligned in [False, True]:
+                            # Fuse fused_add_rms_norm + fp8 group quant
+                            FusedAddRMSNormGroupQuantPattern(
+                                epsilon,
+                                FP8_DTYPE,
+                                group_shape=group_shape,
+                                is_e8m0=is_e8m0,
+                                has_col_major_scales=has_col_major_scales,
+                                is_tma_aligned=is_tma_aligned,
+                            ).register(self.patterns)
 
-                                # Fuse rms_norm + fp8 group quant
-                                RMSNormGroupQuantPattern(
-                                    epsilon,
-                                    FP8_DTYPE,
-                                    group_shape=group_shape,
-                                    is_e8m0=is_e8m0,
-                                    has_col_major_scales=has_col_major_scales,
-                                    is_tma_aligned=is_tma_aligned,
-                                ).register(self.patterns)
+                            # Fuse rms_norm + fp8 group quant
+                            RMSNormGroupQuantPattern(
+                                epsilon,
+                                FP8_DTYPE,
+                                group_shape=group_shape,
+                                is_e8m0=is_e8m0,
+                                has_col_major_scales=has_col_major_scales,
+                                is_tma_aligned=is_tma_aligned,
+                            ).register(self.patterns)
 
         self.dump_patterns(config, self.patterns)
 

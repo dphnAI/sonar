@@ -17,7 +17,9 @@ class LogitBiasState:
         self.max_num_reqs = max_num_reqs
 
         # Allowed token IDs.
-        self.num_allowed_token_ids = UvaBackedTensor(self.max_num_reqs, dtype=torch.int32)
+        self.num_allowed_token_ids = UvaBackedTensor(
+            self.max_num_reqs, dtype=torch.int32
+        )
         self.allowed_token_ids = StagedWriteTensor(
             (self.max_num_reqs, MAX_NUM_ALLOWED_TOKEN_IDS),
             dtype=torch.int32,
@@ -47,7 +49,9 @@ class LogitBiasState:
         # Using any of the above.
         self.use_logit_bias = np.zeros(max_num_reqs, dtype=bool)
 
-    def add_request(self, req_idx: int, prompt_len: int, sampling_params: SamplingParams) -> None:
+    def add_request(
+        self, req_idx: int, prompt_len: int, sampling_params: SamplingParams
+    ) -> None:
         # Using any logit bias.
         use_logit_bias = False
 
@@ -57,7 +61,8 @@ class LogitBiasState:
             num_allowed_token_ids = len(allowed_token_ids)
             if num_allowed_token_ids > MAX_NUM_ALLOWED_TOKEN_IDS:
                 raise ValueError(
-                    f"Too many allowed token IDs: {num_allowed_token_ids}. The max size is {MAX_NUM_ALLOWED_TOKEN_IDS}."
+                    f"Too many allowed token IDs: {num_allowed_token_ids}. "
+                    f"The max size is {MAX_NUM_ALLOWED_TOKEN_IDS}."
                 )
             self.num_allowed_token_ids.np[req_idx] = num_allowed_token_ids
             self.allowed_token_ids.stage_write(req_idx, 0, allowed_token_ids)
@@ -71,7 +76,8 @@ class LogitBiasState:
             num_logit_bias = len(logit_bias)
             if num_logit_bias > MAX_NUM_LOGIT_BIAS_TOKENS:
                 raise ValueError(
-                    f"Too many logit bias tokens: {num_logit_bias}. The max size is {MAX_NUM_LOGIT_BIAS_TOKENS}."
+                    f"Too many logit bias tokens: {num_logit_bias}. "
+                    f"The max size is {MAX_NUM_LOGIT_BIAS_TOKENS}."
                 )
             self.num_logit_bias.np[req_idx] = num_logit_bias
             self.logit_bias_token_ids.stage_write(req_idx, 0, logit_bias.keys())
@@ -89,7 +95,8 @@ class LogitBiasState:
             num_stop_token_ids = len(stop_token_ids)
             if num_stop_token_ids > MAX_NUM_STOP_TOKEN_IDS:
                 raise ValueError(
-                    f"Too many stop tokens: {num_stop_token_ids}. The max size is {MAX_NUM_STOP_TOKEN_IDS}."
+                    f"Too many stop tokens: {num_stop_token_ids}. "
+                    f"The max size is {MAX_NUM_STOP_TOKEN_IDS}."
                 )
             self.num_stop_token_ids.np[req_idx] = num_stop_token_ids
             self.stop_token_ids.stage_write(req_idx, 0, stop_token_ids)
@@ -162,7 +169,7 @@ def _bias_kernel(
     BLOCK_SIZE: tl.constexpr,
     LOGITS_BLOCK_SIZE: tl.constexpr,
 ):
-    token_idx = tl.program_id(0)
+    token_idx = tl.program_id(0).to(tl.int64)
     req_state_idx = tl.load(expanded_idx_mapping_ptr + token_idx)
 
     block = tl.arange(0, BLOCK_SIZE)
@@ -178,7 +185,11 @@ def _bias_kernel(
             allowed_token_ids_ptr + req_state_idx * allowed_token_ids_stride + block,
             mask=mask,
         )
-        logits = tl.load(logits_ptr + token_idx * logits_stride + allowed_token_ids, mask=mask)
+        logits = tl.load(
+            logits_ptr + token_idx * logits_stride + allowed_token_ids, mask=mask
+        )
+
+        tl.debug_barrier()  # save must read original logits before the -inf overwrite
 
         # Set logits to -inf for all tokens.
         for i in range(0, vocab_size, LOGITS_BLOCK_SIZE):
@@ -188,6 +199,8 @@ def _bias_kernel(
                 -float("inf"),
                 mask=offset < vocab_size,
             )
+
+        tl.debug_barrier()  # -inf overwrite must finish before restoring saved logits
 
         # Restore logits for allowed token IDs.
         tl.store(
@@ -213,7 +226,7 @@ def _bias_kernel(
     num_stop_token_ids = tl.load(num_stop_token_ids_ptr + req_state_idx)
     pos = tl.load(pos_ptr + token_idx)
     min_len = tl.load(min_lens_ptr + req_state_idx)
-    if num_stop_token_ids > 0 and pos < min_len:
+    if num_stop_token_ids > 0 and pos + 1 < min_len:
         mask = block < num_stop_token_ids
         stop_token_ids = tl.load(
             stop_token_ids_ptr + req_state_idx * stop_token_ids_stride + block,

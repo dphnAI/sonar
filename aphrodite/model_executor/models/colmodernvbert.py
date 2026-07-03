@@ -76,14 +76,18 @@ class ColModernVBertConnector(nn.Module):
         features = features.view(batch_size, height, width, hidden_size)
 
         # Reshape to (B, H/f, f, W/f, f, C)
-        features = features.view(batch_size, height // factor, factor, width // factor, factor, hidden_size)
+        features = features.view(
+            batch_size, height // factor, factor, width // factor, factor, hidden_size
+        )
 
         # Permute to (B, H/f, W/f, f, f, C)
         features = features.permute(0, 1, 3, 2, 4, 5)
 
         # Reshape to (B, H/f, W/f, C * f^2)
         new_hidden_size = hidden_size * (factor**2)
-        features = features.reshape(batch_size, height // factor, width // factor, new_hidden_size)
+        features = features.reshape(
+            batch_size, height // factor, width // factor, new_hidden_size
+        )
 
         return features
 
@@ -232,7 +236,9 @@ class ColModernVBertMultiModalProcessor(
     dummy_inputs=ColModernVBertDummyInputsBuilder,
 )
 @default_pooling_type(seq_pooling_type="CLS", tok_pooling_type="ALL")
-class ColModernVBertForRetrieval(nn.Module, SupportsMultiModal, SupportsLateInteraction):
+class ColModernVBertForRetrieval(
+    nn.Module, SupportsMultiModal, SupportsLateInteraction
+):
     """ColModernVBERT multimodal late-interaction retrieval model.
 
     Architecture:

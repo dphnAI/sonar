@@ -1,13 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Integration tests for FlexAttention backend vs default backend"""
 
 import pytest
 import torch
 
+from tests.kernels.utils import to_int8
 from aphrodite import _custom_ops as ops
 from aphrodite.platforms import current_platform
-from tests.kernels.utils import to_int8
 
 if not current_platform.is_cpu():
     pytest.skip("skipping CPU-only tests", allow_module_level=True)
@@ -42,7 +41,9 @@ def ref_int8_scaled_mm(
 ):
     if azp is not None:
         a = a.to(dtype=torch.float32) - azp.to(dtype=torch.float32)
-    output = torch.mm((scale_a * a.to(dtype=torch.float32)), (scale_b * b.to(dtype=torch.float32)))
+    output = torch.mm(
+        (scale_a * a.to(dtype=torch.float32)), (scale_b * b.to(dtype=torch.float32))
+    )
     if bias is not None:
         output += bias.float()
 
@@ -137,14 +138,18 @@ def onednn_gemm_test_helper(
     )
 
     out = ops.onednn_mm(handler, a, bias)
-    baseline = torch.nn.functional.linear(a.float(), b.float(), bias_f32).to(dtype=a.dtype)
+    baseline = torch.nn.functional.linear(a.float(), b.float(), bias_f32).to(
+        dtype=a.dtype
+    )
 
     torch.testing.assert_close(out, baseline)
 
     if use_bias:
         # To test runtime bias setting
         out = ops.onednn_mm(handler, a, None)
-        baseline = torch.nn.functional.linear(a.float(), b.float(), None).to(dtype=a.dtype)
+        baseline = torch.nn.functional.linear(a.float(), b.float(), None).to(
+            dtype=a.dtype
+        )
 
         torch.testing.assert_close(out, baseline)
 

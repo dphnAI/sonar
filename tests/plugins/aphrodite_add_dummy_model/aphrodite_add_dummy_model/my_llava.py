@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
+
 import torch
-from aphrodite.modeling.models.llava import (
+
+from aphrodite.model_executor.models.llava import (
     LlavaDummyInputsBuilder,
     LlavaForConditionalGeneration,
     LlavaMultiModalProcessor,
     LlavaProcessingInfo,
 )
-
 from aphrodite.multimodal import MULTIMODAL_REGISTRY
 
 

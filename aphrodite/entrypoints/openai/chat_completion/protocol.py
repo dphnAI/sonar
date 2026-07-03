@@ -11,7 +11,13 @@ from openai.types.chat.chat_completion_audio import (
     ChatCompletionAudio as OpenAIChatCompletionAudio,
 )
 from openai.types.chat.chat_completion_message import Annotation as OpenAIAnnotation
-from pydantic import AliasChoices, Field, PrivateAttr, model_serializer, model_validator
+from pydantic import (
+    AliasChoices,
+    Field,
+    PrivateAttr,
+    model_serializer,
+    model_validator,
+)
 
 from aphrodite.config import ModelConfig
 from aphrodite.config.utils import replace
@@ -30,6 +36,8 @@ from aphrodite.entrypoints.openai.engine.protocol import (
     StructuralTagResponseFormat,
     ToolCall,
     UsageInfo,
+    validate_structural_tag_response_format,
+    validate_structured_outputs_structural_tag,
 )
 from aphrodite.exceptions import APHRODITEValidationError
 from aphrodite.logger import init_logger
@@ -41,6 +49,7 @@ from aphrodite.sampling_params import (
     RequestOutputKind,
     SamplingParams,
     StructuredOutputsParams,
+    ThinkingTokenBudget,
 )
 from aphrodite.utils import random_uuid
 
@@ -85,6 +94,13 @@ class ChatMessage(OpenAIBaseModel):
     # Aphrodite-specific fields that are not in OpenAI spec
     reasoning: str | None = None
 
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler):
+        data = handler(self)
+        if len(data.get("tool_calls", [])) == 0:
+            data.pop("tool_calls", None)
+        return data
+
 
 class ChatCompletionLogProb(OpenAIBaseModel):
     token: str
@@ -114,6 +130,16 @@ class ChatCompletionResponseChoice(OpenAIBaseModel):
     # not part of the OpenAI spec but is useful for tracing the tokens
     # in agent scenarios
     token_ids: list[int] | None = None
+    # Per-token expert routing decisions, base64-encoded ``.npy`` bytes
+    # (numpy serialization). Shape after decode:
+    #   (num_tokens - 1, num_layers, num_experts_per_tok)  dtype uint8/uint16
+    # ``num_tokens - 1`` because the last sampled token has not been
+    # forwarded yet and therefore has no routing data.
+    # Decode:
+    #   np.load(io.BytesIO(base64.b64decode(s)))
+    # ``None`` if (a) the request was aborted before any forward pass,
+    # or (b) ``enable_return_routed_experts`` is off server-side.
+    routed_experts: str | None = None
 
 
 class ChatCompletionResponse(OpenAIBaseModel):
@@ -129,7 +155,12 @@ class ChatCompletionResponse(OpenAIBaseModel):
     # Aphrodite-specific fields that are not in OpenAI spec
     prompt_logprobs: list[dict[int, Logprob] | None] | None = None
     prompt_token_ids: list[int] | None = None
-    kv_transfer_params: dict[str, Any] | None = Field(default=None, description="KVTransfer parameters.")
+    # Rendered prompt text from chat templating (only set when
+    # ``return_prompt_text=True`` on the request).
+    prompt_text: str | None = None
+    kv_transfer_params: dict[str, Any] | None = Field(
+        default=None, description="KVTransfer parameters."
+    )
 
 
 class ChatCompletionResponseStreamChoice(OpenAIBaseModel):
@@ -154,6 +185,9 @@ class ChatCompletionStreamResponse(OpenAIBaseModel):
     system_fingerprint: str | None = None
     # not part of the OpenAI spec but for tracing the tokens
     prompt_token_ids: list[int] | None = None
+    # Rendered prompt text from chat templating (only set when
+    # ``return_prompt_text=True`` on the request); only sent on the first chunk.
+    prompt_text: str | None = None
 
 
 class ChatCompletionToolsParam(OpenAIBaseModel):
@@ -195,7 +229,8 @@ class ChatCompletionRequest(OpenAIBaseModel):
     top_logprobs: int | None = 0
     max_tokens: int | None = Field(
         default=None,
-        deprecated="max_tokens is deprecated in favor of the max_completion_tokens field",
+        deprecated="max_tokens is deprecated in favor of "
+        "the max_completion_tokens field",
     )
     max_completion_tokens: int | None = None
     n: int | None = 1
@@ -208,10 +243,16 @@ class ChatCompletionRequest(OpenAIBaseModel):
     temperature: float | None = None
     top_p: float | None = None
     tools: list[ChatCompletionToolsParam] | None = None
-    tool_choice: Literal["none"] | Literal["auto"] | Literal["required"] | ChatCompletionNamedToolChoiceParam | None = (
-        "none"
-    )
-    reasoning_effort: Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"] | None = Field(
+    tool_choice: (
+        Literal["none"]
+        | Literal["auto"]
+        | Literal["required"]
+        | ChatCompletionNamedToolChoiceParam
+        | None
+    ) = "none"
+    reasoning_effort: (
+        Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"] | None
+    ) = Field(
         default=None,
         description=(
             "Constrains effort on reasoning for reasoning models. "
@@ -222,7 +263,7 @@ class ChatCompletionRequest(OpenAIBaseModel):
             "part of the standard OpenAI API specification."
         ),
     )
-    thinking_token_budget: int | None = None
+    thinking_token_budget: ThinkingTokenBudget = None
     include_reasoning: bool = True
     parallel_tool_calls: bool | None = True
 
@@ -233,15 +274,7 @@ class ChatCompletionRequest(OpenAIBaseModel):
     use_beam_search: bool = False
     top_k: int | None = None
     min_p: float | None = None
-    top_a: float | None = 0.0
-    tfs: float | None = 1.0
-    eta_cutoff: float | None = 0.0
-    epsilon_cutoff: float | None = 0.0
-    typical_p: float | None = 1.0
-    smoothing_factor: float | None = 0.0
-    smoothing_curve: float | None = 1.0
     repetition_penalty: float | None = None
-    no_repeat_ngram_size: int | None = 0
     length_penalty: float = 1.0
     stop_token_ids: list[int] | None = []
     include_stop_str_in_output: bool = False
@@ -250,9 +283,26 @@ class ChatCompletionRequest(OpenAIBaseModel):
     skip_special_tokens: bool = True
     spaces_between_special_tokens: bool = True
     truncate_prompt_tokens: Annotated[int, Field(ge=-1, le=_INT64_MAX)] | None = None
+    truncation_side: Literal["left", "right"] | None = Field(
+        default=None,
+        description=(
+            "Which side to truncate from when truncate_prompt_tokens is active. "
+            "'right' keeps the first N tokens. "
+            "'left' keeps the last N tokens."
+        ),
+    )
     prompt_logprobs: int | None = None
     allowed_token_ids: list[int] | None = None
     bad_words: list[str] = Field(default_factory=list)
+    # Aphrodite extra sampler params
+    top_a: float | None = 0.0
+    tfs: float | None = 1.0
+    eta_cutoff: float | None = 0.0
+    epsilon_cutoff: float | None = 0.0
+    typical_p: float | None = 1.0
+    smoothing_factor: float | None = 0.0
+    smoothing_curve: float | None = 1.0
+    no_repeat_ngram_size: int | None = 0
     temperature_last: bool | None = False
     xtc_threshold: float | None = 0.1
     xtc_probability: float | None = 0.0
@@ -278,7 +328,8 @@ class ChatCompletionRequest(OpenAIBaseModel):
     echo: bool = Field(
         default=False,
         description=(
-            "If true, the new message will be prepended with the last message if they belong to the same role."
+            "If true, the new message will be prepended with the last message "
+            "if they belong to the same role."
         ),
     )
     add_generation_prompt: bool = Field(
@@ -331,7 +382,8 @@ class ChatCompletionRequest(OpenAIBaseModel):
     chat_template_kwargs: dict[str, Any] | None = Field(
         default=None,
         description=(
-            "Additional keyword args to pass to the template renderer. Will be accessible by the chat template."
+            "Additional keyword args to pass to the template renderer. "
+            "Will be accessible by the chat template."
         ),
     )
     media_io_kwargs: dict[str, dict[str, Any]] | None = Field(
@@ -386,6 +438,42 @@ class ChatCompletionRequest(OpenAIBaseModel):
             "need to map generated text back to input tokens."
         ),
     )
+    return_token_offsets: bool | None = Field(
+        default=False,
+        description=(
+            "If true, return char-level (start, end) offsets for each "
+            "token relative to the tokenized source string in the "
+            "`token_offsets` field of the rendered response. Only "
+            "supported on the `/v1/completions/render` and "
+            "`/v1/chat/completions/render` endpoints; ignored on regular "
+            "generation endpoints. Honored only for Fast (Rust-backed) "
+            "tokenizers; otherwise `token_offsets` is null. For chat "
+            "requests, offsets are relative to the templated prompt "
+            "string (after applying the chat template). Multimodal "
+            "inputs and pre-tokenized inputs always yield null."
+        ),
+    )
+    return_prompt_text: bool | None = Field(
+        default=None,
+        description=(
+            "If true, the response will include ``prompt_text`` containing the "
+            "prompt string produced by chat templating. In streaming mode it "
+            "is sent only on the first chunk. This is useful for inspecting "
+            "exactly what was fed into the model."
+        ),
+    )
+
+    return_assistant_tokens_mask: bool = Field(
+        default=False,
+        description=(
+            "If true, the /render response will include an "
+            "``assistant_tokens_mask`` field — a per-token list of 0/1 "
+            "values indicating which tokens were assistant-generated. "
+            "Requires the chat template to use ``{% generation %}`` "
+            "tags.  When the template does not support it, "
+            "``assistant_tokens_mask`` will be ``null``."
+        ),
+    )
 
     cache_salt: str | None = Field(
         default=None,
@@ -408,7 +496,8 @@ class ChatCompletionRequest(OpenAIBaseModel):
         default=None,
         validation_alias=AliasChoices("aphrodite_xargs", "aphrodite_xargs"),
         description=(
-            "Additional request parameters with (list of) string or numeric values, used by custom extensions."
+            "Additional request parameters with (list of) string or "
+            "numeric values, used by custom extensions."
         ),
     )
 
@@ -431,13 +520,14 @@ class ChatCompletionRequest(OpenAIBaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _materialize_tool_calls_before(cls, data: Any) -> Any:
-        """Eagerly convert tool_calls generators/iterators to lists.
+    def _normalize_messages_before(cls, data: Any) -> Any:
+        """Pre-process message dicts before Pydantic field validation.
 
-        Must run before Pydantic field validation so that one-shot
-        generators are not consumed during union type matching of
-        ChatCompletionAssistantMessageParam (which types tool_calls
-        as Iterable[...]).
+        Performs two normalizations in a single pass:
+        - Converts tool_calls generators/iterators to lists so one-shot
+          generators are not consumed during union type matching.
+        - Renames the deprecated ``reasoning_content`` field to
+          ``reasoning`` so downstream code only needs to check one field.
         """
         if not isinstance(data, dict):
             return data
@@ -450,6 +540,9 @@ class ChatCompletionRequest(OpenAIBaseModel):
             tool_calls = msg.get("tool_calls")
             if tool_calls is not None and not isinstance(tool_calls, list):
                 msg["tool_calls"] = list(tool_calls)
+            reasoning_content = msg.pop("reasoning_content", None)
+            if reasoning_content is not None and msg.get("reasoning") is None:
+                msg["reasoning"] = reasoning_content
         return data
 
     @model_validator(mode="after")
@@ -478,19 +571,30 @@ class ChatCompletionRequest(OpenAIBaseModel):
         default_template: str | None,
         default_template_content_format: ChatTemplateContentFormatOption,
     ) -> ChatParams:
+        extra_kwargs: dict[str, Any] = dict(
+            add_generation_prompt=self.add_generation_prompt,
+            continue_final_message=self.continue_final_message,
+            documents=self.documents,
+            reasoning_effort=self.reasoning_effort,
+        )
+
+        # When reasoning is requested, activate thinking for models whose
+        # chat templates require explicit opt-in (e.g., Gemma4 defaults
+        # enable_thinking to false). For templates that don't declare the
+        # variable, resolve_chat_template_kwargs filters it out harmlessly.
+        user_kwargs = self.chat_template_kwargs or {}
+        if self.reasoning_effort is not None and "enable_thinking" not in user_kwargs:
+            extra_kwargs["enable_thinking"] = self.reasoning_effort != "none"
+
         return ChatParams(
             chat_template=self.chat_template or default_template,
             chat_template_content_format=default_template_content_format,
             chat_template_kwargs=merge_kwargs(
                 self.chat_template_kwargs,
-                dict(
-                    add_generation_prompt=self.add_generation_prompt,
-                    continue_final_message=self.continue_final_message,
-                    documents=self.documents,
-                    reasoning_effort=self.reasoning_effort,
-                ),
+                extra_kwargs,
             ),
             media_io_kwargs=self.media_io_kwargs,
+            return_assistant_tokens_mask=bool(self.return_assistant_tokens_mask),
         )
 
     def build_tok_params(self, model_config: ModelConfig) -> TokenizeParams:
@@ -505,10 +609,12 @@ class ChatCompletionRequest(OpenAIBaseModel):
             max_total_tokens=model_config.max_model_len,
             max_output_tokens=max_output_tokens or 0,
             truncate_prompt_tokens=self.truncate_prompt_tokens,
+            truncation_side=self.truncation_side,
             add_special_tokens=self.add_special_tokens,
             needs_detokenization=bool(self.echo and not self.return_token_ids),
             max_total_tokens_param="max_model_len",
             max_output_tokens_param=max_output_tokens_param,
+            return_token_offsets=bool(self.return_token_offsets),
         )
 
     # Default sampling parameters for chat completion requests
@@ -520,10 +626,14 @@ class ChatCompletionRequest(OpenAIBaseModel):
         "min_p": 0.0,
     }
 
-    def to_beam_search_params(self, max_tokens: int, default_sampling_params: dict) -> BeamSearchParams:
+    def to_beam_search_params(
+        self, max_tokens: int, default_sampling_params: dict
+    ) -> BeamSearchParams:
         n = self.n if self.n is not None else 1
         if (temperature := self.temperature) is None:
-            temperature = default_sampling_params.get("temperature", self._DEFAULT_SAMPLING_PARAMS["temperature"])
+            temperature = default_sampling_params.get(
+                "temperature", self._DEFAULT_SAMPLING_PARAMS["temperature"]
+            )
 
         return BeamSearchParams(
             beam_width=n,
@@ -546,13 +656,33 @@ class ChatCompletionRequest(OpenAIBaseModel):
                 self._DEFAULT_SAMPLING_PARAMS["repetition_penalty"],
             )
         if (temperature := self.temperature) is None:
-            temperature = default_sampling_params.get("temperature", self._DEFAULT_SAMPLING_PARAMS["temperature"])
+            temperature = default_sampling_params.get(
+                "temperature", self._DEFAULT_SAMPLING_PARAMS["temperature"]
+            )
         if (top_p := self.top_p) is None:
-            top_p = default_sampling_params.get("top_p", self._DEFAULT_SAMPLING_PARAMS["top_p"])
+            top_p = default_sampling_params.get(
+                "top_p", self._DEFAULT_SAMPLING_PARAMS["top_p"]
+            )
         if (top_k := self.top_k) is None:
-            top_k = default_sampling_params.get("top_k", self._DEFAULT_SAMPLING_PARAMS["top_k"])
+            top_k = default_sampling_params.get(
+                "top_k", self._DEFAULT_SAMPLING_PARAMS["top_k"]
+            )
         if (min_p := self.min_p) is None:
-            min_p = default_sampling_params.get("min_p", self._DEFAULT_SAMPLING_PARAMS["min_p"])
+            min_p = default_sampling_params.get(
+                "min_p", self._DEFAULT_SAMPLING_PARAMS["min_p"]
+            )
+
+        # Merge server-default stop_token_ids (e.g., model-specific tokens
+        # like </call> for gpt-oss) with any request-specified ones
+        stop_token_ids = self.stop_token_ids
+        default_stop_ids = default_sampling_params.get("stop_token_ids")
+        if default_stop_ids:
+            if not stop_token_ids:
+                stop_token_ids = list(default_stop_ids)
+            else:
+                stop_token_ids = list(
+                    dict.fromkeys([*stop_token_ids, *default_stop_ids])
+                )
 
         prompt_logprobs = self.prompt_logprobs
         if prompt_logprobs is None and self.echo:
@@ -587,9 +717,7 @@ class ChatCompletionRequest(OpenAIBaseModel):
                 self.structured_outputs = (
                     StructuredOutputsParams(**structured_outputs_kwargs)
                     if self.structured_outputs is None
-                    else replace(  # type: ignore[type-var]
-                        self.structured_outputs, **structured_outputs_kwargs
-                    )
+                    else replace(self.structured_outputs, **structured_outputs_kwargs)
                 )
 
         extra_args: dict[str, Any] = self.aphrodite_xargs if self.aphrodite_xargs else {}
@@ -601,25 +729,42 @@ class ChatCompletionRequest(OpenAIBaseModel):
             presence_penalty=self.presence_penalty,
             frequency_penalty=self.frequency_penalty,
             repetition_penalty=repetition_penalty,
-            no_repeat_ngram_size=self.no_repeat_ngram_size,
             temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            min_p=min_p,
+            seed=self.seed,
+            stop=self.stop,
+            stop_token_ids=stop_token_ids,
+            logprobs=self.top_logprobs if self.logprobs else None,
+            prompt_logprobs=prompt_logprobs,
+            ignore_eos=self.ignore_eos,
+            max_tokens=max_tokens,
+            min_tokens=self.min_tokens,
+            skip_special_tokens=self.skip_special_tokens,
+            spaces_between_special_tokens=self.spaces_between_special_tokens,
+            include_stop_str_in_output=self.include_stop_str_in_output,
+            output_kind=RequestOutputKind.DELTA
+            if self.stream
+            else RequestOutputKind.FINAL_ONLY,
+            structured_outputs=self.structured_outputs,
+            logit_bias=self.logit_bias,
+            bad_words=self.bad_words,
+            thinking_token_budget=self.thinking_token_budget,
+            allowed_token_ids=self.allowed_token_ids,
+            # Aphrodite extra sampler params
+            no_repeat_ngram_size=self.no_repeat_ngram_size,
             dynatemp_min=self.dynatemp_min,
             dynatemp_max=self.dynatemp_max,
             dynatemp_exponent=self.dynatemp_exponent,
             temperature_last=self.temperature_last,
-            top_p=top_p,
-            top_k=top_k,
             top_a=self.top_a,
-            min_p=min_p,
             tfs=self.tfs,
             eta_cutoff=self.eta_cutoff,
             epsilon_cutoff=self.epsilon_cutoff,
             typical_p=self.typical_p,
             smoothing_factor=self.smoothing_factor,
             smoothing_curve=self.smoothing_curve,
-            seed=self.seed,
-            stop=self.stop,
-            stop_token_ids=self.stop_token_ids,
             xtc_threshold=self.xtc_threshold,
             xtc_probability=self.xtc_probability,
             dry_multiplier=self.dry_multiplier,
@@ -635,20 +780,6 @@ class ChatCompletionRequest(OpenAIBaseModel):
             mirostat_mode=self.mirostat_mode,
             mirostat_tau=self.mirostat_tau,
             mirostat_eta=self.mirostat_eta,
-            logprobs=self.top_logprobs if self.logprobs else None,
-            prompt_logprobs=prompt_logprobs,
-            ignore_eos=self.ignore_eos,
-            max_tokens=max_tokens,
-            min_tokens=self.min_tokens,
-            skip_special_tokens=self.skip_special_tokens,
-            spaces_between_special_tokens=self.spaces_between_special_tokens,
-            include_stop_str_in_output=self.include_stop_str_in_output,
-            output_kind=RequestOutputKind.DELTA if self.stream else RequestOutputKind.FINAL_ONLY,
-            structured_outputs=self.structured_outputs,
-            logit_bias=self.logit_bias,
-            bad_words=self.bad_words,
-            thinking_token_budget=self.thinking_token_budget,
-            allowed_token_ids=self.allowed_token_ids,
             extra_args=extra_args or None,
             skip_clone=True,  # Created fresh per request, safe to skip clone
             repetition_detection=self.repetition_detection,
@@ -662,7 +793,9 @@ class ChatCompletionRequest(OpenAIBaseModel):
             return data
 
         rf_type = (
-            response_format.get("type") if isinstance(response_format, dict) else getattr(response_format, "type", None)
+            response_format.get("type")
+            if isinstance(response_format, dict)
+            else getattr(response_format, "type", None)
         )
 
         if rf_type == "json_schema":
@@ -673,9 +806,13 @@ class ChatCompletionRequest(OpenAIBaseModel):
             )
             if json_schema is None:
                 raise APHRODITEValidationError(
-                    "When response_format type is 'json_schema', the 'json_schema' field must be provided.",
+                    "When response_format type is 'json_schema', the "
+                    "'json_schema' field must be provided.",
                     parameter="response_format",
                 )
+
+        if rf_type == "structural_tag":
+            validate_structural_tag_response_format(response_format)
 
         return data
 
@@ -736,22 +873,31 @@ class ChatCompletionRequest(OpenAIBaseModel):
         # as a StructuredOutputsParams dataclass instance.
         is_dataclass = isinstance(structured_outputs_kwargs, StructuredOutputsParams)
         count = sum(
-            (getattr(structured_outputs_kwargs, k, None) if is_dataclass else structured_outputs_kwargs.get(k))
+            (
+                getattr(structured_outputs_kwargs, k, None)
+                if is_dataclass
+                else structured_outputs_kwargs.get(k)
+            )
             is not None
             for k in ("json", "regex", "choice")
         )
         # you can only use one kind of constraints for structured outputs
         if count > 1:
-            raise ValueError(
-                "You can only use one kind of constraints for structured outputs ('json', 'regex' or 'choice')."
+            raise APHRODITEValidationError(
+                "You can only use one kind of constraints for structured "
+                "outputs ('json', 'regex' or 'choice').",
             )
         # you can only either use structured outputs or tools, not both
-        if count > 1 and data.get("tool_choice", "none") not in (
+        if count > 0 and data.get("tool_choice", "none") not in (
             "none",
             "auto",
             "required",
         ):
-            raise ValueError("You can only either use constraints for structured outputs or tools, not both.")
+            raise APHRODITEValidationError(
+                "You can only either use constraints for structured outputs "
+                "or tools, not both.",
+            )
+        validate_structured_outputs_structural_tag(structured_outputs_kwargs)
         return data
 
     @model_validator(mode="before")
@@ -765,7 +911,8 @@ class ChatCompletionRequest(OpenAIBaseModel):
         # Reject empty tools array, matching OpenAI API behavior
         if data.get("tools") == []:
             raise ValueError(
-                "`tools` must not be an empty array. Either provide at least one tool or omit the field entirely."
+                "`tools` must not be an empty array. "
+                "Either provide at least one tool or omit the field entirely."
             )
 
         # if "tool_choice" is not specified but tools are provided,
@@ -781,54 +928,83 @@ class ChatCompletionRequest(OpenAIBaseModel):
         if "tool_choice" in data and data["tool_choice"] is not None:
             # ensure that if "tool choice" is specified, tools are present
             if "tools" not in data or data["tools"] is None:
-                raise ValueError("When using `tool_choice`, `tools` must be set.")
+                raise APHRODITEValidationError(
+                    "When using `tool_choice`, `tools` must be set.",
+                    parameter="tool_choice",
+                )
 
             # make sure that tool choice is either a named tool
             # OR that it's set to "auto" or "required"
-            if data["tool_choice"] not in ["auto", "required"] and not isinstance(data["tool_choice"], dict):
-                raise ValueError(
+            if data["tool_choice"] not in ["auto", "required"] and not isinstance(
+                data["tool_choice"], dict
+            ):
+                raise APHRODITEValidationError(
                     f"Invalid value for `tool_choice`: {data['tool_choice']}! "
                     'Only named tools, "none", "auto" or "required" '
-                    "are supported."
+                    "are supported.",
+                    parameter="tool_choice",
                 )
 
             # ensure that if "tool_choice" is specified as an object,
             # it matches a valid tool
-            correct_usage_message = 'Correct usage: `{"type": "function", "function": {"name": "my_function"}}`'
+            correct_usage_message = (
+                'Correct usage: `{"type": "function",'
+                ' "function": {"name": "my_function"}}`'
+            )
             if isinstance(data["tool_choice"], dict):
                 valid_tool = False
                 function = data["tool_choice"].get("function")
                 if not isinstance(function, dict):
-                    raise ValueError(
-                        f"Invalid value for `function`: `{function}` in `tool_choice`! {correct_usage_message}"
+                    raise APHRODITEValidationError(
+                        f"Invalid value for `function`: `{function}` in "
+                        f"`tool_choice`! {correct_usage_message}",
+                        parameter="tool_choice.function",
                     )
                 if "name" not in function:
-                    raise ValueError(f"Expected field `name` in `function` in `tool_choice`! {correct_usage_message}")
+                    raise APHRODITEValidationError(
+                        f"Expected field `name` in `function` in "
+                        f"`tool_choice`! {correct_usage_message}",
+                        parameter="tool_choice.function.name",
+                    )
                 function_name = function["name"]
                 if not isinstance(function_name, str) or len(function_name) == 0:
-                    raise ValueError(
-                        f"Invalid `name` in `function`: `{function_name}` in `tool_choice`! {correct_usage_message}"
+                    raise APHRODITEValidationError(
+                        f"Invalid `name` in `function`: `{function_name}`"
+                        f" in `tool_choice`! {correct_usage_message}",
+                        parameter="tool_choice.function.name",
                     )
                 for tool in data["tools"]:
                     if tool["function"]["name"] == function_name:
                         valid_tool = True
                         break
                 if not valid_tool:
-                    raise ValueError("The tool specified in `tool_choice` does not match any of the specified `tools`")
+                    raise APHRODITEValidationError(
+                        "The tool specified in `tool_choice` does not match any"
+                        " of the specified `tools`",
+                        parameter="tool_choice",
+                    )
         return data
 
     @model_validator(mode="before")
     @classmethod
     def check_generation_prompt(cls, data):
         if data.get("continue_final_message") and data.get("add_generation_prompt"):
-            raise ValueError("Cannot set both `continue_final_message` and `add_generation_prompt` to True.")
+            raise APHRODITEValidationError(
+                "Cannot set both `continue_final_message` and "
+                "`add_generation_prompt` to True.",
+            )
         return data
 
     @model_validator(mode="before")
     @classmethod
     def check_cache_salt_support(cls, data):
-        if data.get("cache_salt") is not None and (not isinstance(data["cache_salt"], str) or not data["cache_salt"]):
-            raise ValueError("Parameter 'cache_salt' must be a non-empty string if provided.")
+        if data.get("cache_salt") is not None and (
+            not isinstance(data["cache_salt"], str) or not data["cache_salt"]
+        ):
+            raise APHRODITEValidationError(
+                "Parameter 'cache_salt' must be a non-empty string if provided.",
+                parameter="cache_salt",
+            )
         return data
 
     @model_validator(mode="before")
@@ -897,7 +1073,9 @@ class BatchChatCompletionRequest(OpenAIBaseModel):
     - The ``n`` parameter must be 1 (or omitted).
     """
 
-    messages: list[list[ChatCompletionMessageParam]] = Field(..., min_length=1)
+    messages: list[Annotated[list[ChatCompletionMessageParam], Field(min_length=1)]] = (
+        Field(..., min_length=1)
+    )
     model: str | None = None
 
     # Shared sampling / generation fields — mirror ChatCompletionRequest.
@@ -915,6 +1093,8 @@ class BatchChatCompletionRequest(OpenAIBaseModel):
     temperature: float | None = 0.7
     top_p: float | None = 1.0
     user: str | None = None
+    tool_choice: Literal["none"] | None = "none"
+    include_reasoning: bool = True
 
     # Aphrodite extensions
     best_of: int | None = None
@@ -942,14 +1122,29 @@ class BatchChatCompletionRequest(OpenAIBaseModel):
             data = data.model_dump(exclude_unset=True)
         if data.get("use_beam_search"):
             raise ValueError(
-                "Batch chat completions do not support beam search. Please set `use_beam_search` to False."
+                "Batch chat completions do not support beam search. "
+                "Please set `use_beam_search` to False."
             )
+        response_format = data.get("response_format")
+        rf_type = (
+            response_format.get("type")
+            if isinstance(response_format, dict)
+            else getattr(response_format, "type", None)
+        )
+        if rf_type == "structural_tag":
+            validate_structural_tag_response_format(response_format)
+        if (structured_outputs := data.get("structured_outputs")) is not None:
+            validate_structured_outputs_structural_tag(structured_outputs)
         n = data.get("n", 1)
         if n is not None and n != 1:
-            raise ValueError("Batch chat completions do not support `n > 1`. Please set `n` to 1.")
+            raise ValueError(
+                "Batch chat completions do not support `n > 1`. Please set `n` to 1."
+            )
         return data
 
-    def to_chat_completion_request(self, messages: list[ChatCompletionMessageParam]) -> ChatCompletionRequest:
+    def to_chat_completion_request(
+        self, messages: list[ChatCompletionMessageParam]
+    ) -> ChatCompletionRequest:
         """Build a single-conversation ChatCompletionRequest from one conversation."""
         data = self.model_dump(exclude={"messages"}, exclude_none=True)
         data["messages"] = messages

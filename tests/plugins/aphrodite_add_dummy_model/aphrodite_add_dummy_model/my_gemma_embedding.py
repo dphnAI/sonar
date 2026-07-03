@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 from collections.abc import Iterable
 
 import torch
 import torch.nn as nn
-from aphrodite.common.sequence import IntermediateTensors
-from aphrodite.modeling.layers.pooler import DispatchPooler, Pooler
-from aphrodite.modeling.models.gemma2 import Gemma2Model
-from aphrodite.modeling.models.utils import WeightsMapper, maybe_prefix
 
 from aphrodite.config import AphroditeConfig
+from aphrodite.model_executor.layers.pooler import DispatchPooler
+from aphrodite.model_executor.models.gemma2 import Gemma2Model
+from aphrodite.model_executor.models.utils import WeightsMapper, maybe_prefix
+from aphrodite.sequence import IntermediateTensors
 
 
 class MyGemma2Embedding(nn.Module):
@@ -20,23 +21,22 @@ class MyGemma2Embedding(nn.Module):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
 
-        self.model = Gemma2Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Gemma2Model(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
+        )
 
         pooler_config = aphrodite_config.model_config.pooler_config
         assert pooler_config is not None
 
-        self.pooler = DispatchPooler(
-            {
-                "token_embed": Pooler.for_token_embed(pooler_config),
-                "embed": Pooler.for_embed(pooler_config),
-            }
-        )
+        self.pooler = DispatchPooler.for_embedding(pooler_config)
 
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
 
     def forward(
         self,
-        input_ids: torch.Tensor,
+        input_ids: torch.Tensor | None,
         positions: torch.Tensor,
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
@@ -56,5 +56,7 @@ class MyGemma2Embedding(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
         weights = self.hf_to_aphrodite_mapper.apply(weights)
-        weights = ((name, data) for name, data in weights if not name.startswith("lm_head."))
+        weights = (
+            (name, data) for name, data in weights if not name.startswith("lm_head.")
+        )
         return self.model.load_weights(weights)

@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import os
 
 import pytest
-from aphrodite.modeling.layers.pooler import CLSPool, DispatchPooler, MeanPool, PoolingType
-from aphrodite.modeling.models.bert import BertEmbeddingModel
-from aphrodite.modeling.models.roberta import RobertaEmbeddingModel
 
+from aphrodite.model_executor.layers.pooler import DispatchPooler
+from aphrodite.model_executor.layers.pooler.seqwise import CLSPool, MeanPool
+from aphrodite.model_executor.models.bert import BertEmbeddingModel
+from aphrodite.model_executor.models.roberta import RobertaEmbeddingModel
 from aphrodite.platforms import current_platform
 
 MAX_MODEL_LEN = 128
@@ -17,7 +19,9 @@ MODEL_NAME_ROBERTA = os.environ.get("MODEL_NAME", "intfloat/multilingual-e5-base
 REVISION_ROBERTA = os.environ.get("REVISION", "main")
 
 
-@pytest.mark.skipif(current_platform.is_rocm(), reason="Xformers backend is not supported on ROCm.")
+@pytest.mark.skipif(
+    current_platform.is_rocm(), reason="Xformers backend is not supported on ROCm."
+)
 def test_model_loading_with_params(aphrodite_runner, monkeypatch):
     """
     Test parameter weight loading with tp>1.
@@ -30,7 +34,9 @@ def test_model_loading_with_params(aphrodite_runner, monkeypatch):
         dtype="float16",
         max_model_len=MAX_MODEL_LEN,
     ) as aphrodite_model:
-        output = aphrodite_model.embed("Write a short story about a robot that dreams for the first time.\n")
+        output = aphrodite_model.embed(
+            "Write a short story about a robot that dreams for the first time.\n"
+        )
 
         model_config = aphrodite_model.llm.llm_engine.model_config
         model_tokenizer = aphrodite_model.llm.llm_engine.tokenizer
@@ -40,8 +46,9 @@ def test_model_loading_with_params(aphrodite_runner, monkeypatch):
         assert model_config.encoder_config["do_lower_case"]
 
         # asserts on the pooling config files
-        assert model_config.pooler_config.pooling_type == PoolingType.CLS.name
-        assert model_config.pooler_config.normalize
+        assert model_config.pooler_config.seq_pooling_type == "CLS"
+        assert model_config.pooler_config.tok_pooling_type == "ALL"
+        assert model_config.pooler_config.use_activation
 
         # asserts on the tokenizer loaded
         assert model_config.tokenizer == "BAAI/bge-base-en-v1.5"
@@ -57,7 +64,9 @@ def test_model_loading_with_params(aphrodite_runner, monkeypatch):
         assert output
 
 
-@pytest.mark.skipif(current_platform.is_rocm(), reason="Xformers backend is not supported on ROCm.")
+@pytest.mark.skipif(
+    current_platform.is_rocm(), reason="Xformers backend is not supported on ROCm."
+)
 def test_roberta_model_loading_with_params(aphrodite_runner, monkeypatch):
     """
     Test parameter weight loading with tp>1.
@@ -70,7 +79,9 @@ def test_roberta_model_loading_with_params(aphrodite_runner, monkeypatch):
         dtype="float16",
         max_model_len=MAX_MODEL_LEN,
     ) as aphrodite_model:
-        output = aphrodite_model.embed("Write a short story about a robot that dreams for the first time.\n")
+        output = aphrodite_model.embed(
+            "Write a short story about a robot that dreams for the first time.\n"
+        )
 
         model_config = aphrodite_model.llm.llm_engine.model_config
         model_tokenizer = aphrodite_model.llm.llm_engine.tokenizer
@@ -80,8 +91,9 @@ def test_roberta_model_loading_with_params(aphrodite_runner, monkeypatch):
         assert not model_config.encoder_config["do_lower_case"]
 
         # asserts on the pooling config files
-        assert model_config.pooler_config.pooling_type == PoolingType.MEAN.name
-        assert model_config.pooler_config.normalize
+        assert model_config.pooler_config.seq_pooling_type == "MEAN"
+        assert model_config.pooler_config.tok_pooling_type == "ALL"
+        assert model_config.pooler_config.use_activation
 
         # asserts on the tokenizer loaded
         assert model_config.tokenizer == "intfloat/multilingual-e5-base"
@@ -97,7 +109,9 @@ def test_roberta_model_loading_with_params(aphrodite_runner, monkeypatch):
         assert output
 
 
-@pytest.mark.skipif(current_platform.is_rocm(), reason="Xformers backend is not supported on ROCm.")
+@pytest.mark.skipif(
+    current_platform.is_rocm(), reason="Xformers backend is not supported on ROCm."
+)
 def test_facebook_roberta_model_loading_with_params(aphrodite_runner, monkeypatch):
     """
     Test loading roberta-base model with no lm_head.
@@ -105,8 +119,12 @@ def test_facebook_roberta_model_loading_with_params(aphrodite_runner, monkeypatc
     # to use apply_model
     monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
     model_name = "FacebookAI/roberta-base"
-    with aphrodite_runner(model_name=model_name, dtype="float16", max_model_len=MAX_MODEL_LEN) as aphrodite_model:
-        output = aphrodite_model.embed("Write a short story about a robot that dreams for the first time.\n")
+    with aphrodite_runner(
+        model_name=model_name, dtype="float16", max_model_len=MAX_MODEL_LEN
+    ) as aphrodite_model:
+        output = aphrodite_model.embed(
+            "Write a short story about a robot that dreams for the first time.\n"
+        )
 
         assert aphrodite_model.llm.llm_engine.model_config.tokenizer == model_name
 

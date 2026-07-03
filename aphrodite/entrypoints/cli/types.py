@@ -23,5 +23,7 @@ class CLISubcommand:
         # No validation by default
         pass
 
-    def subparser_init(self, subparsers: argparse._SubParsersAction) -> FlexibleArgumentParser:
+    def subparser_init(
+        self, subparsers: argparse._SubParsersAction
+    ) -> FlexibleArgumentParser:
         raise NotImplementedError("Subclasses should implement this method")

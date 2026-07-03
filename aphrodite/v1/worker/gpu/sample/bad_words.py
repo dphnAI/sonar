@@ -41,7 +41,10 @@ class BadWordsState:
 
         num_bad_words = len(bad_words_token_ids)
         if num_bad_words > MAX_NUM_BAD_WORDS:
-            raise ValueError(f"Too many bad words: {num_bad_words}. The max number is {MAX_NUM_BAD_WORDS}.")
+            raise ValueError(
+                f"Too many bad words: {num_bad_words}. "
+                f"The max number is {MAX_NUM_BAD_WORDS}."
+            )
 
         # Flatten bad words and compute offsets
         flattened_tokens: list[int] = []
@@ -52,7 +55,8 @@ class BadWordsState:
 
         if len(flattened_tokens) > MAX_BAD_WORDS_TOTAL_TOKENS:
             raise ValueError(
-                f"Too many total bad word tokens: {len(flattened_tokens)}. The max is {MAX_BAD_WORDS_TOTAL_TOKENS}."
+                f"Too many total bad word tokens: {len(flattened_tokens)}. "
+                f"The max is {MAX_BAD_WORDS_TOTAL_TOKENS}."
             )
 
         # Stage writes
@@ -110,7 +114,7 @@ def _bad_words_kernel(
     input_ids_ptr,
     expanded_local_pos_ptr,
 ):
-    token_idx = tl.program_id(0)
+    token_idx = tl.program_id(0).to(tl.int64)
     bw_idx = tl.program_id(1)
 
     req_state_idx = tl.load(expanded_idx_mapping_ptr + token_idx)

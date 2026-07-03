@@ -76,7 +76,9 @@ class AttnFp8StaticQuantPattern(AphroditePatternReplacement[..., torch.Tensor]):
                     output_block_scale=None,
                     kv_cache_dummy_dep=kv_cache_dummy_dep,
                 )
-                attn_out_view = RESHAPE_OP(at1[1], [q.shape[0], self._num_heads * self._head_size])
+                attn_out_view = RESHAPE_OP(
+                    at1[1], [q.shape[0], self._num_heads * self._head_size]
+                )
                 return self._quant_matcher(attn_out_view, scale)[0]
 
             return _pattern_with_ln
@@ -93,7 +95,9 @@ class AttnFp8StaticQuantPattern(AphroditePatternReplacement[..., torch.Tensor]):
                 output_block_scale=None,
                 kv_cache_dummy_dep=kv_cache_dummy_dep,
             )
-            attn_out_view = RESHAPE_OP(at1[1], [q.shape[0], self._num_heads * self._head_size])
+            attn_out_view = RESHAPE_OP(
+                at1[1], [q.shape[0], self._num_heads * self._head_size]
+            )
             return self._quant_matcher(attn_out_view, scale)[0]
 
         return _pattern
@@ -165,7 +169,9 @@ class AttnFp8StaticQuantPattern(AphroditePatternReplacement[..., torch.Tensor]):
         return inputs
 
 
-class AttnNvfp4QuantPattern(AphroditePatternReplacement[..., tuple[torch.Tensor, torch.Tensor]]):
+class AttnNvfp4QuantPattern(
+    AphroditePatternReplacement[..., tuple[torch.Tensor, torch.Tensor]]
+):
     """
     Fusion for Attention+Nvfp4Quant.
 
@@ -210,7 +216,9 @@ class AttnNvfp4QuantPattern(AphroditePatternReplacement[..., tuple[torch.Tensor,
                     output_block_scale=None,
                     kv_cache_dummy_dep=kv_cache_dummy_dep,
                 )
-                attn_out_view = RESHAPE_OP(at1[1], [q.shape[0], self._num_heads * self._head_size])
+                attn_out_view = RESHAPE_OP(
+                    at1[1], [q.shape[0], self._num_heads * self._head_size]
+                )
                 at2 = auto_functionalized(
                     self._QUANT_OP,
                     input=attn_out_view,
@@ -244,7 +252,9 @@ class AttnNvfp4QuantPattern(AphroditePatternReplacement[..., tuple[torch.Tensor,
                 output_block_scale=None,
                 kv_cache_dummy_dep=kv_cache_dummy_dep,
             )
-            attn_out_view = RESHAPE_OP(at1[1], [q.shape[0], self._num_heads * self._head_size])
+            attn_out_view = RESHAPE_OP(
+                at1[1], [q.shape[0], self._num_heads * self._head_size]
+            )
             at2 = auto_functionalized(
                 self._QUANT_OP,
                 input=attn_out_view,
@@ -291,7 +301,9 @@ class AttnNvfp4QuantPattern(AphroditePatternReplacement[..., tuple[torch.Tensor,
                     output_block_scale=osv,
                     kv_cache_dummy_dep=kv_cache_dummy_dep,
                 )
-                return RESHAPE_OP(at2[1], [-1, self._num_heads * self._head_size // 2]), at2[2]
+                return RESHAPE_OP(
+                    at2[1], [-1, self._num_heads * self._head_size // 2]
+                ), at2[2]
 
             return _replacement_with_ln
 
@@ -322,7 +334,9 @@ class AttnNvfp4QuantPattern(AphroditePatternReplacement[..., tuple[torch.Tensor,
                 output_block_scale=osv,
                 kv_cache_dummy_dep=kv_cache_dummy_dep,
             )
-            return RESHAPE_OP(at2[1], [-1, self._num_heads * self._head_size // 2]), at2[2]
+            return RESHAPE_OP(
+                at2[1], [-1, self._num_heads * self._head_size // 2]
+            ), at2[2]
 
         return _replacement
 

@@ -76,7 +76,9 @@ def _maybe_set_cuda_compatibility_path():
     if ld_paths and ld_paths[0] and os.path.normpath(ld_paths[0]) == norm_path:
         return  # Already at the front
 
-    new_paths = [norm_path] + [p for p in ld_paths if not p or os.path.normpath(p) != norm_path]
+    new_paths = [norm_path] + [
+        p for p in ld_paths if not p or os.path.normpath(p) != norm_path
+    ]
     os.environ["LD_LIBRARY_PATH"] = os.pathsep.join(new_paths)
 
 
@@ -94,12 +96,12 @@ logger = init_logger(__name__)
 # that interact with aphrodite workers.
 # they are executed whenever `import aphrodite` is called.
 
-# see https://github.com/aphrodite-project/aphrodite/pull/15951
+# see https://github.com/vllm-project/vllm/pull/15951
 # it avoids unintentional cuda initialization from torch.cuda.is_available()
 os.environ["PYTORCH_NVML_BASED_CUDA_CHECK"] = "1"
 
-# see https://github.com/aphrodite-project/aphrodite/issues/10480 and
-# https://github.com/aphrodite-project/aphrodite/issues/10619.
+# see https://github.com/vllm-project/vllm/issues/10480 and
+# https://github.com/vllm-project/vllm/issues/10619.
 os.environ["TORCHINDUCTOR_COMPILE_THREADS"] = "1"
 
 # Enable Triton autotuning result caching to disk by default.
@@ -109,6 +111,13 @@ os.environ["TORCHINDUCTOR_COMPILE_THREADS"] = "1"
 # It can still be overridden by setting TRITON_CACHE_AUTOTUNING=0
 # in the environment.
 os.environ.setdefault("TRITON_CACHE_AUTOTUNING", "1")
+
+# When unset, TileLang routes JIT temp dirs through a world-shared
+# /tmp/tvm-debug-mode-tempdirs/ whose ownership is pinned to whichever
+# user compiled first, breaking every other user on a shared host.
+# Opt into per-process tempdirs unless the user explicitly chose the
+# debug layout (see https://github.com/vllm-project/vllm/issues/41410).
+os.environ.setdefault("TILELANG_CLEANUP_TEMP_FILES", "1")
 
 # ===================================================
 # torch 2.9 Inductor PythonWrapperCodegen monkeypatch
@@ -148,12 +157,16 @@ def memory_plan_reuse_patched(self):
         isinstance(V.graph.wrapper_code, SubgraphPythonWrapperCodegen)
         and V.graph.wrapper_code.partition_signatures is not None
     ):
-        out_names = get_output_names(V.graph.wrapper_code.partition_signatures.output_nodes)
+        out_names = get_output_names(
+            V.graph.wrapper_code.partition_signatures.output_nodes
+        )
     else:
         out_names = V.graph.get_output_names()
 
     while (
-        self.lines and isinstance(self.lines[-1], MemoryPlanningLine) and self.lines[-1].node.name not in out_names  # type: ignore[attr-defined]
+        self.lines
+        and isinstance(self.lines[-1], MemoryPlanningLine)
+        and self.lines[-1].node.name not in out_names  # type: ignore[attr-defined]
     ):
         # these lines will be pointless
         self.lines.pop()
@@ -182,7 +195,9 @@ def memory_plan_reuse_patched(self):
 # For more context, see https://github.com/pytorch/pytorch/pull/165815.
 
 
-def get_graph_partition_signature_patched(self, partitions, skip_cudagraphs: list[bool]):
+def get_graph_partition_signature_patched(
+    self, partitions, skip_cudagraphs: list[bool]
+):
     """
     Gets signature for each graph partition, including input nodes, output nodes, and
     whether deallocating an input within graph partition.
@@ -208,14 +223,18 @@ def get_graph_partition_signature_patched(self, partitions, skip_cudagraphs: lis
             return False
 
         if isinstance(buf.node.layout, NoneLayout):
-            if isinstance(buf.node, MutationOutput) and (real_name := self.mutation_real_name.get(buf_name, None)):
+            if isinstance(buf.node, MutationOutput) and (
+                real_name := self.mutation_real_name.get(buf_name, None)
+            ):
                 return is_none_layout(real_name)
 
             return True
 
         return False
 
-    for partition, skip_cudagraph in zip(reversed(partitions), reversed(skip_cudagraphs)):
+    for partition, skip_cudagraph in zip(
+        reversed(partitions), reversed(skip_cudagraphs)
+    ):
         output_names: OrderedSet[str] = OrderedSet()
 
         for node in partition:
@@ -225,16 +244,26 @@ def get_graph_partition_signature_patched(self, partitions, skip_cudagraphs: lis
 
         # all reads/writes are partition inputs except those generated
         # within the partition and tensor constants
-        read_writes = dependencies.ReadWrites.merge_list([node.read_writes for node in partition])
+        read_writes = dependencies.ReadWrites.merge_list(
+            [node.read_writes for node in partition]
+        )
 
         # WeakDep is fake dependency on unused buffer. It should not appear
         # in partition_input_names for inputs that are actually read or written.
         partition_input_names = (
-            OrderedSet([x.name for x in read_writes.reads | read_writes.writes if not is_none_layout(x.name)])
+            OrderedSet(
+                [
+                    x.name
+                    for x in read_writes.reads | read_writes.writes
+                    if not is_none_layout(x.name)
+                ]
+            )
             - output_names
         )
 
-        partition_input_names = OrderedSet(self.mutation_real_name.get(name, name) for name in partition_input_names)
+        partition_input_names = OrderedSet(
+            self.mutation_real_name.get(name, name) for name in partition_input_names
+        )
 
         buffer_names_to_free: OrderedSet[str] = OrderedSet()
         for node in partition:
@@ -243,12 +272,22 @@ def get_graph_partition_signature_patched(self, partitions, skip_cudagraphs: lis
         # buffer_names_to_free may contain buffers allocated in previous
         # graph partitions. These buffers should also be a partition
         # input.
-        extra_input_names = [name for name in (buffer_names_to_free - output_names) if name in name_to_node]
+        extra_input_names = [
+            name
+            for name in (buffer_names_to_free - output_names)
+            if name in name_to_node
+        ]
         partition_input_names.update(extra_input_names)
 
-        input_nodes = {name: name_to_node[name] for name in partition_input_names if name in name_to_node}
+        input_nodes = {
+            name: name_to_node[name]
+            for name in partition_input_names
+            if name in name_to_node
+        }
         input_deallocation = {
-            name: name in buffer_names_to_free for name in partition_input_names if name in name_to_node
+            name: name in buffer_names_to_free
+            for name in partition_input_names
+            if name in name_to_node
         }
 
         # if an input tensor is not freed in the partition function, it should
@@ -256,16 +295,26 @@ def get_graph_partition_signature_patched(self, partitions, skip_cudagraphs: lis
         # since the returned output tensor is a cudagraph managed tensor with
         # a static tensor address.
         extra_output_names = [
-            name for name in partition_input_names if name in name_to_node and name not in buffer_names_to_free
+            name
+            for name in partition_input_names
+            if name in name_to_node and name not in buffer_names_to_free
         ]
 
         returned_output_names.update(extra_output_names)
 
-        returned_output_names = OrderedSet(self.mutation_real_name.get(name, name) for name in returned_output_names)
+        returned_output_names = OrderedSet(
+            self.mutation_real_name.get(name, name) for name in returned_output_names
+        )
 
-        output_nodes = [name_to_node[name] for name in returned_output_names if not is_none_layout(name)]
+        output_nodes = [
+            name_to_node[name]
+            for name in returned_output_names
+            if not is_none_layout(name)
+        ]
 
-        constant_names = [name for name in partition_input_names if name in V.graph.constants]
+        constant_names = [
+            name for name in partition_input_names if name in V.graph.constants
+        ]
 
         symbol_inputs = self.get_graph_partition_symbol_inputs(partition, input_nodes)
 
@@ -280,7 +329,9 @@ def get_graph_partition_signature_patched(self, partitions, skip_cudagraphs: lis
 
         signatures.append(partition_signature)
 
-        unmet_output_names = partition_input_names.union(unmet_output_names - returned_output_names)
+        unmet_output_names = partition_input_names.union(
+            unmet_output_names - returned_output_names
+        )
 
     return signatures[::-1]
 
@@ -289,7 +340,7 @@ def get_graph_partition_signature_patched(self, partitions, skip_cudagraphs: lis
 # torch 2.9 Inductor Scheduler monkeypatch
 # ========================================
 # This change monkeypatches a function in Inductor to work around the following
-# bug: https://github.com/aphrodite-project/aphrodite/issues/26678
+# bug: https://github.com/vllm-project/vllm/issues/26678
 #
 # The bug occurs when `use_inductor_graph_partition` is turned on and there
 # exists operators inside of `splitting_ops` that have an in-place mutation. In
@@ -327,7 +378,9 @@ def should_partition_patched(self, node, should_log: bool = False) -> bool:
     # Allow users to manually specify if a node should be partitioned
     # Can only do this for FallbackKernels
     ir_node = node.node
-    if isinstance(ir_node, torch._inductor.ir.FallbackKernel) and (op := ir_node.op_overload):
+    if isinstance(ir_node, torch._inductor.ir.FallbackKernel) and (
+        op := ir_node.op_overload
+    ):
         op_overload_packet_name = op.name()
         op_overload_name = (
             f"{op_overload_packet_name}.{op._overloadname}"
@@ -335,7 +388,8 @@ def should_partition_patched(self, node, should_log: bool = False) -> bool:
             else op_overload_packet_name
         )
         if (
-            op_overload_packet_name in torch._inductor.config.custom_should_partition_ops
+            op_overload_packet_name
+            in torch._inductor.config.custom_should_partition_ops
             or op_overload_name in torch._inductor.config.custom_should_partition_ops
         ):
             assert isinstance(op, torch._ops.OpOverload)
@@ -344,7 +398,10 @@ def should_partition_patched(self, node, should_log: bool = False) -> bool:
     # When not using cudagraphs, keep all kernels in the `call` function
     # instead of graph partition functions, since graph partition only brings
     # benefit to cudagraph
-    if not torch._inductor.config.triton.cudagraphs and _unstable_customized_partition_wrapper.wrapper is None:
+    if (
+        not torch._inductor.config.triton.cudagraphs
+        and _unstable_customized_partition_wrapper.wrapper is None
+    ):
         return True
 
     # avoid duplicating logs when should_partition is called multiple times
@@ -407,7 +464,7 @@ def _update_scheduler_patched(self) -> None:
 # ===================================================
 # Workaround for TorchInductor autotune using get_raw_stream() without defining it.
 # This occurs when compile_sizes > 1 in compilation_config.
-# For more context, see https://github.com/aphrodite-project/aphrodite/issues/30905.
+# For more context, see https://github.com/vllm-project/vllm/issues/30905.
 def _patch_get_raw_stream_if_needed():
     """Workaround for TorchInductor autotune get_raw_stream() bug."""
     from aphrodite.utils.torch_utils import is_torch_equal
@@ -433,7 +490,9 @@ if is_torch_equal("2.9.0"):
 
     # `custom_should_partition_ops` is a new config after 2.9.0. So this would
     # not overwrite any user configs.
-    torch._inductor.config._config["custom_should_partition_ops"] = _ConfigEntry(_Config(default=[]))
+    torch._inductor.config._config["custom_should_partition_ops"] = _ConfigEntry(
+        _Config(default=[])
+    )
 
     PythonWrapperCodegen.memory_plan_reuse = memory_plan_reuse_patched
     GraphLowering._update_scheduler = _update_scheduler_patched
@@ -469,7 +528,9 @@ def _apply_constrain_to_fx_strides_patch():
         return
     _constrain_to_fx_strides_patched = True
 
-    if not is_torch_equal_or_newer("2.11.0.dev") or is_torch_equal_or_newer("2.12.0.dev"):
+    if not is_torch_equal_or_newer("2.11.0.dev") or is_torch_equal_or_newer(
+        "2.12.0.dev"
+    ):
         return
 
     import torch._inductor.ir as _ir
@@ -481,14 +542,18 @@ def _apply_constrain_to_fx_strides_patch():
             if isinstance(arg, _ir.IRNode):
                 meta_val = fx_arg.meta.get("val")
                 if isinstance(meta_val, torch.Tensor):
-                    stride_order = _ir.get_stride_order(meta_val.stride(), _V.graph.sizevars.shape_env)
+                    stride_order = _ir.get_stride_order(
+                        meta_val.stride(), _V.graph.sizevars.shape_env
+                    )
                     return _ir.ExternKernel.require_stride_order(arg, stride_order)
                 return arg
             if isinstance(arg, dict):
                 return {key: apply_constraint(arg[key], fx_arg[key]) for key in arg}
             return arg
 
-        args = tuple(apply_constraint(arg, fx_arg) for arg, fx_arg in zip(args, fx_node.args))
+        args = tuple(
+            apply_constraint(arg, fx_arg) for arg, fx_arg in zip(args, fx_node.args)
+        )
         kwargs = {k: apply_constraint(v, fx_node.kwargs[k]) for k, v in kwargs.items()}
         return args, kwargs
 
@@ -519,7 +584,9 @@ if is_torch_equal_or_newer("2.10.0") and not is_torch_equal_or_newer("2.12.0.dev
         for ref in runtime_env.external_refs:
             if ref not in runtime_env.used_globals:
                 if ref.startswith("__builtins_dict__") and ref in self.f_globals:
-                    runtime_env.used_globals[ref] = _safe_builtins_dict(self.f_globals[ref])
+                    runtime_env.used_globals[ref] = _safe_builtins_dict(
+                        self.f_globals[ref]
+                    )
                 elif hasattr(_builtins, ref):
                     runtime_env.used_globals[ref] = getattr(_builtins, ref)
         return runtime_env
@@ -593,6 +660,7 @@ _patch_fxgraphcache_pickle_if_needed()
 def _apply_cpp_indirect_assert_patch():
     """Replace CppVecKernel.indirect_assert with a fixed copy that uses
     `VecMask<...>::from(scalar)` for scalar masks.
+
     Idempotent: marks the class with `_aphrodite_indirect_assert_patched` after
     the first apply.
     """
@@ -648,6 +716,7 @@ def _apply_cpp_indirect_assert_patch():
 
 def _patch_cpp_indirect_assert_if_needed():
     """Apply cpp codegen indirect_assert backport when on torch 2.11.x.
+
     Defers application until torch._inductor.codegen.cpp is naturally
     imported by Inductor. Importing it eagerly during aphrodite.__init__ pulls
     in torch._inductor.scheduler, whose top-level
@@ -689,3 +758,116 @@ def _patch_cpp_indirect_assert_if_needed():
 
 
 _patch_cpp_indirect_assert_if_needed()
+
+# ============================================================
+# Inductor FALLBACK_ALLOW_LIST fast-path for aphrodite::*/aphrodite_aiter::* ops
+# ============================================================
+# When Inductor encounters a custom op without a registered lowering or
+# decomposition (e.g. aphrodite::all_reduce, aphrodite_aiter::fused_add_rms_norm) it
+# correctly creates an implicit fallback that calls into the eager Python
+# impl. However, unless `base_name` (e.g. "aphrodite::all_reduce") is in
+# torch._inductor.lowering.FALLBACK_ALLOW_LIST, GraphLowering.call_function
+# (torch/_inductor/graph.py:~1283) takes the slow path that emits
+#   log.info("Creating implicit fallback for:\n%s",
+#            error.operator_str(target, args, kwargs))
+# `operator_str` eagerly recurses through __str__ on every input TensorBox;
+# for deep MoE/TP graphs (e.g. Kimi-K2.6 at TP=8) the IR provenance tree
+# behind a TP all-reduce input or a residual-fed RMSNorm input is hundreds
+# of layers deep, and stringifying it consumes many minutes of CPU per call,
+# effectively hanging compilation.
+#
+# Patching FALLBACK_ALLOW_LIST membership to also match any "aphrodite::*" or
+# "aphrodite_aiter::*" base_name routes our custom ops through the fast path
+# `make_fallback(target, warn=False, override_decomp=True)` instead. This
+# preserves all downstream behaviour (allreduce_rms_fusion still pattern-
+# matches them, partitioning still works, fallback semantics identical) but
+# skips the expensive log formatting on the FIRST encounter of each op.
+#
+# We wrap the OrderedSet in a thin proxy that:
+#   - Returns True from __contains__ for any aphrodite::*/aphrodite_aiter::* op
+#   - Otherwise delegates to the underlying set (preserving membership of
+#     the standard entries like "torchvision::roi_align", "aten::index_add")
+#   - Forwards add()/__iter__()/__len__()/etc. so other Inductor code paths
+#     that mutate or iterate the set keep working.
+
+_APHRODITE_FALLBACK_NAMESPACE_PREFIXES = ("aphrodite::", "aphrodite_aiter::")
+
+
+class _AphroditeFallbackAllowList:
+    """Membership proxy that auto-allows aphrodite::*/aphrodite_aiter::* base_names."""
+
+    _aphrodite_patched = True
+
+    def __init__(self, inner):
+        self._inner = inner
+
+    def __contains__(self, item):
+        if isinstance(item, str) and item.startswith(_APHRODITE_FALLBACK_NAMESPACE_PREFIXES):
+            return True
+        return item in self._inner
+
+    def add(self, item):
+        self._inner.add(item)
+
+    def discard(self, item):
+        self._inner.discard(item)
+
+    def __iter__(self):
+        return iter(self._inner)
+
+    def __len__(self):
+        return len(self._inner)
+
+    def __repr__(self):
+        return f"_AphroditeFallbackAllowList({self._inner!r})"
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+def _patch_inductor_fallback_allow_list() -> None:
+    """Wrap torch._inductor.lowering.FALLBACK_ALLOW_LIST so any custom op in
+    the ``aphrodite::`` or ``aphrodite_aiter::`` namespaces is treated as a member.
+
+    Idempotent: a sentinel attribute on the proxy prevents re-wrapping.
+    """
+    try:
+        from torch._inductor import lowering as _lowering
+    except ImportError:
+        return
+
+    base = getattr(_lowering, "FALLBACK_ALLOW_LIST", None)
+    if base is None or getattr(base, "_aphrodite_patched", False):
+        return
+
+    _lowering.FALLBACK_ALLOW_LIST = _AphroditeFallbackAllowList(base)
+
+    # torch/_inductor/graph.py imports the symbol at module load time:
+    #   from torch._inductor.lowering import FALLBACK_ALLOW_LIST
+    # so we also need to overwrite the local binding in the graph module if
+    # it has already been imported.
+    try:
+        from torch._inductor import graph as _graph
+
+        if hasattr(_graph, "FALLBACK_ALLOW_LIST"):
+            _graph.FALLBACK_ALLOW_LIST = _lowering.FALLBACK_ALLOW_LIST
+    except ImportError:
+        pass
+
+
+_patch_inductor_fallback_allow_list()
+
+# ============================================================
+# Triton Autotuner determinism
+# ============================================================
+# Replace the Autotuner.run so it always pick the first running configuration.
+# Useful to eliminate autotune variability leading to non determinism.
+if os.environ.get("APHRODITE_TRITON_FORCE_FIRST_CONFIG", "0").strip().lower() in (
+    "1",
+    "true",
+):
+    from aphrodite.triton_utils.force_first_config import (
+        install as _install_force_first_config,
+    )
+
+    _install_force_first_config()

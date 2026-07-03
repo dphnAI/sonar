@@ -6,20 +6,15 @@ from typing import TYPE_CHECKING
 
 from transformers import PreTrainedTokenizerBase
 
-from aphrodite.logger import init_logger
 from aphrodite.reasoning import ReasoningParser
 from aphrodite.reasoning.deepseek_r1_reasoning_parser import DeepSeekR1ReasoningParser
 
 from .identity_reasoning_parser import IdentityReasoningParser
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.openai.chat_completion.protocol import (
-        ChatCompletionRequest,
-    )
+    from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
     from aphrodite.entrypoints.openai.engine.protocol import DeltaMessage
     from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-
-logger = init_logger(__name__)
 
 
 class DeepSeekV3ReasoningParser(ReasoningParser):
@@ -53,7 +48,9 @@ class DeepSeekV3ReasoningParser(ReasoningParser):
     def is_reasoning_end(self, input_ids: Sequence[int]) -> bool:
         return self._parser.is_reasoning_end(input_ids)
 
-    def is_reasoning_end_streaming(self, input_ids: Sequence[int], delta_ids: Iterable[int]) -> bool:
+    def is_reasoning_end_streaming(
+        self, input_ids: Sequence[int], delta_ids: Iterable[int]
+    ) -> bool:
         return self._parser.is_reasoning_end_streaming(input_ids, delta_ids)
 
     def extract_content_ids(self, input_ids: list[int]) -> list[int]:

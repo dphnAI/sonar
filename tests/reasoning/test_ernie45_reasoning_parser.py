@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 from transformers import AutoTokenizer
 
-from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
 from tests.reasoning.utils import run_reasoning_extraction
+from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
 
 parser_name = "ernie45"
 
@@ -19,36 +20,36 @@ def ernie45_tokenizer():
 # 带 </think>，非stream
 WITH_THINK = {
     "output": "abc</think>def",
-    "reasoning_content": "abc",
+    "reasoning": "abc",
     "content": "def",
 }
 # 带 </think>，stream
 WITH_THINK_STREAM = {
     "output": "abc</think>def",
-    "reasoning_content": "abc",
+    "reasoning": "abc",
     "content": "def",
 }
-# without </think>, all is reasoning_content
+# without </think>, all is reasoning
 WITHOUT_THINK = {
     "output": "abc",
-    "reasoning_content": "abc",
+    "reasoning": "abc",
     "content": None,
 }
-# without </think>, all is reasoning_content
+# without </think>, all is reasoning
 WITHOUT_THINK_STREAM = {
     "output": "abc",
-    "reasoning_content": "abc",
+    "reasoning": "abc",
     "content": None,
 }
 
 COMPLETE_REASONING = {
     "output": "abc</think>",
-    "reasoning_content": "abc",
+    "reasoning": "abc",
     "content": None,
 }
 MULTILINE_REASONING = {
     "output": "abc\nABC</think>def\nDEF",
-    "reasoning_content": "abc\nABC",
+    "reasoning": "abc\nABC",
     "content": "def\nDEF",
 }
 
@@ -109,11 +110,15 @@ def test_reasoning(
         if one_token:
             output_tokens.append(one_token)
 
-    parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(ernie45_tokenizer)
+    parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(
+        ernie45_tokenizer
+    )
 
-    reasoning, content = run_reasoning_extraction(parser, output_tokens, streaming=streaming)
+    reasoning, content = run_reasoning_extraction(
+        parser, output_tokens, streaming=streaming
+    )
 
     print()
 
-    assert reasoning == param_dict["reasoning_content"]
+    assert reasoning == param_dict["reasoning"]
     assert content == param_dict["content"]

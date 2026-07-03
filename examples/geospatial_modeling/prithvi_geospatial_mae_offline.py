@@ -415,7 +415,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model",
         type=str,
-        default="christian-pinto/Prithvi-EO-2.0-300M-TL-VLLM",
+        default="christian-pinto/Prithvi-EO-2.0-300M-TL-APHRODITE",
         help="Path to a checkpoint file to load from.",
     )
     parser.add_argument(

@@ -16,7 +16,7 @@ from transformers import (
     ChameleonVQVAEConfig,
 )
 
-from aphrodite.config import AphroditeConfig, CacheConfig
+from aphrodite.config import CacheConfig, AphroditeConfig
 from aphrodite.config.multimodal import BaseDummyOptions
 from aphrodite.distributed import get_pp_group, get_tensor_model_parallel_world_size
 from aphrodite.inputs import MultiModalDataDict
@@ -37,10 +37,7 @@ from aphrodite.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.model_executor.model_loader.weight_utils import (
-    default_weight_loader,
-    row_parallel_weight_loader,
-)
+from aphrodite.model_executor.model_loader.weight_utils import row_parallel_weight_loader
 from aphrodite.model_executor.utils import set_weight_attrs
 from aphrodite.multimodal import MULTIMODAL_REGISTRY
 from aphrodite.multimodal.inputs import (
@@ -66,7 +63,8 @@ from .interfaces import (
     SupportsQuant,
 )
 from .utils import (
-    is_pp_missing_parameter,
+    AutoWeightsLoader,
+    WeightsMapper,
     make_empty_intermediate_tensors_factory,
     make_layers,
     maybe_prefix,
@@ -212,7 +210,9 @@ class ChameleonLayerNorm(nn.LayerNorm):
         set_weight_attrs(self.bias, {"weight_loader": row_parallel_weight_loader})
 
     def forward(self, hidden_states):
-        hidden_states = F.layer_norm(hidden_states, self.normalized_shape, None, None, eps=1e-5)
+        hidden_states = F.layer_norm(
+            hidden_states, self.normalized_shape, None, None, eps=1e-5
+        )
         hidden_states = hidden_states * self.weight + self.bias
         return hidden_states
 
@@ -244,7 +244,9 @@ class ChameleonMLP(nn.Module):
             prefix=f"{prefix}.down_proj",
         )
         if hidden_act != "silu":
-            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu is supported for now.")
+            raise ValueError(
+                f"Unsupported activation: {hidden_act}. Only silu is supported for now."
+            )
         self.act_fn = SiluAndMul()
 
     def forward(self, x):
@@ -324,7 +326,9 @@ class ChameleonAttention(nn.Module):
             prefix=f"{prefix}.attn",
         )
 
-    def _apply_qk_norm(self, q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def _apply_qk_norm(
+        self, q: torch.Tensor, k: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # reshape for layernorm
         q = q.reshape(-1, self.num_heads, self.head_dim)
         k = k.reshape(-1, self.num_kv_heads, self.head_dim)
@@ -364,7 +368,9 @@ class ChameleonDecoderLayer(nn.Module):
         self.self_attn = ChameleonAttention(
             hidden_size=self.hidden_size,
             num_heads=config.num_attention_heads,
-            num_kv_heads=getattr(config, "num_key_value_heads", config.num_attention_heads),
+            num_kv_heads=getattr(
+                config, "num_key_value_heads", config.num_attention_heads
+            ),
             rope_parameters=config.rope_parameters,
             max_position_embeddings=max_position_embeddings,
             quant_config=quant_config,
@@ -381,7 +387,9 @@ class ChameleonDecoderLayer(nn.Module):
             prefix=f"{prefix}.mlp",
         )
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
     def forward(
         self,
@@ -421,7 +429,9 @@ class ChameleonSwinDecoderLayer(nn.Module):
         self.self_attn = ChameleonAttention(
             hidden_size=self.hidden_size,
             num_heads=config.num_attention_heads,
-            num_kv_heads=getattr(config, "num_key_value_heads", config.num_attention_heads),
+            num_kv_heads=getattr(
+                config, "num_key_value_heads", config.num_attention_heads
+            ),
             rope_parameters=config.rope_parameters,
             max_position_embeddings=max_position_embeddings,
             quant_config=quant_config,
@@ -438,7 +448,9 @@ class ChameleonSwinDecoderLayer(nn.Module):
             prefix=f"{prefix}.mlp",
         )
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
     def forward(
         self,
@@ -492,12 +504,14 @@ class ChameleonVQVAEVectorQuantizer(nn.Module):
         )
 
         min_encoding_indices = torch.argmin(distances, dim=1)
-        hidden_state_quant = self.embedding(min_encoding_indices).view(hidden_state.shape)
+        hidden_state_quant = self.embedding(min_encoding_indices).view(
+            hidden_state.shape
+        )
 
         # compute loss for embedding
-        loss = torch.mean((hidden_state_quant.detach() - hidden_state) ** 2) + self.beta * torch.mean(
-            (hidden_state_quant - hidden_state.detach()) ** 2
-        )
+        loss = torch.mean(
+            (hidden_state_quant.detach() - hidden_state) ** 2
+        ) + self.beta * torch.mean((hidden_state_quant - hidden_state.detach()) ** 2)
 
         # preserve gradients
         hidden_state_quant = hidden_state + (hidden_state_quant - hidden_state).detach()
@@ -512,7 +526,9 @@ class ChameleonVQVAEVectorQuantizer(nn.Module):
 class ChameleonVQVAEEncoderConvDownsample(nn.Module):
     def __init__(self, in_channels: int):
         super().__init__()
-        self.conv = Conv2dLayer(in_channels, in_channels, kernel_size=3, stride=2, padding=0)
+        self.conv = Conv2dLayer(
+            in_channels, in_channels, kernel_size=3, stride=2, padding=0
+        )
 
     def forward(self, hidden_states: torch.Tensor):
         # no asymmetric padding in torch conv, must do it ourselves
@@ -535,16 +551,28 @@ class ChameleonVQVAEEncoderResnetBlock(nn.Module):
         self.out_channels = in_channels if out_channels is None else out_channels
         self.use_conv_shortcut = conv_shortcut
 
-        self.norm1 = torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
-        self.conv1 = Conv2dLayer(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
-        self.norm2 = torch.nn.GroupNorm(num_groups=32, num_channels=out_channels, eps=1e-6, affine=True)
+        self.norm1 = torch.nn.GroupNorm(
+            num_groups=32, num_channels=in_channels, eps=1e-6, affine=True
+        )
+        self.conv1 = Conv2dLayer(
+            in_channels, out_channels, kernel_size=3, stride=1, padding=1
+        )
+        self.norm2 = torch.nn.GroupNorm(
+            num_groups=32, num_channels=out_channels, eps=1e-6, affine=True
+        )
         self.dropout = torch.nn.Dropout(config.dropout)
-        self.conv2 = Conv2dLayer(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.conv2 = Conv2dLayer(
+            out_channels, out_channels, kernel_size=3, stride=1, padding=1
+        )
         if self.in_channels != self.out_channels:
             if self.use_conv_shortcut:
-                self.conv_shortcut = Conv2dLayer(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+                self.conv_shortcut = Conv2dLayer(
+                    in_channels, out_channels, kernel_size=3, stride=1, padding=1
+                )
             else:
-                self.nin_shortcut = Conv2dLayer(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
+                self.nin_shortcut = Conv2dLayer(
+                    in_channels, out_channels, kernel_size=1, stride=1, padding=0
+                )
 
     def forward(self, hidden_states: torch.Tensor):
         residual = hidden_states
@@ -572,11 +600,21 @@ class ChameleonVQVAEEncoderAttnBlock(nn.Module):
         super().__init__()
         self.in_channels = in_channels
 
-        self.norm = torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
-        self.q = Conv2dLayer(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
-        self.k = Conv2dLayer(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
-        self.v = Conv2dLayer(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
-        self.proj_out = Conv2dLayer(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.norm = torch.nn.GroupNorm(
+            num_groups=32, num_channels=in_channels, eps=1e-6, affine=True
+        )
+        self.q = Conv2dLayer(
+            in_channels, in_channels, kernel_size=1, stride=1, padding=0
+        )
+        self.k = Conv2dLayer(
+            in_channels, in_channels, kernel_size=1, stride=1, padding=0
+        )
+        self.v = Conv2dLayer(
+            in_channels, in_channels, kernel_size=1, stride=1, padding=0
+        )
+        self.proj_out = Conv2dLayer(
+            in_channels, in_channels, kernel_size=1, stride=1, padding=0
+        )
 
     def forward(self, hidden_states: torch.Tensor):
         residual = hidden_states
@@ -587,7 +625,9 @@ class ChameleonVQVAEEncoderAttnBlock(nn.Module):
 
         # compute attention
         batch_size, channels, height, width = query_states.shape
-        query_states = query_states.reshape(batch_size, channels, height * width).permute(0, 2, 1)
+        query_states = query_states.reshape(
+            batch_size, channels, height * width
+        ).permute(0, 2, 1)
         key_states = key_states.reshape(batch_size, channels, height * width)
         attn_weights = torch.bmm(query_states, key_states)
         attn_weights = attn_weights * (int(channels) ** (-0.5))
@@ -596,7 +636,9 @@ class ChameleonVQVAEEncoderAttnBlock(nn.Module):
         # attend to values
         value_states = value_states.reshape(batch_size, channels, height * width)
         attn_weights = attn_weights.permute(0, 2, 1)
-        attn_output = torch.bmm(value_states, attn_weights).reshape(batch_size, channels, height, width)
+        attn_output = torch.bmm(value_states, attn_weights).reshape(
+            batch_size, channels, height, width
+        )
 
         attn_output = self.proj_out(attn_output)
         return residual + attn_output
@@ -616,7 +658,9 @@ class ChameleonVQVAEEncoder(nn.Module):
         latent_channels = config.latent_channels
         channel_multiplier = config.channel_multiplier
 
-        self.conv_in = Conv2dLayer(in_channels, base_channels, kernel_size=3, stride=1, padding=1)
+        self.conv_in = Conv2dLayer(
+            in_channels, base_channels, kernel_size=3, stride=1, padding=1
+        )
 
         curr_res = resolution
         in_channel_multiplier = (1,) + tuple(channel_multiplier)
@@ -657,14 +701,20 @@ class ChameleonVQVAEEncoder(nn.Module):
             in_channels=block_in,
             out_channels=block_in,
         )
-        self.mid.attn_1 = ChameleonVQVAEEncoderAttnBlock(block_in) if config.attn_type == "vanilla" else nn.Identity()
+        self.mid.attn_1 = (
+            ChameleonVQVAEEncoderAttnBlock(block_in)
+            if config.attn_type == "vanilla"
+            else nn.Identity()
+        )
         self.mid.block_2 = ChameleonVQVAEEncoderResnetBlock(
             config=config,
             in_channels=block_in,
             out_channels=block_in,
         )
 
-        self.norm_out = torch.nn.GroupNorm(num_groups=32, num_channels=block_in, eps=1e-6, affine=True)
+        self.norm_out = torch.nn.GroupNorm(
+            num_groups=32, num_channels=block_in, eps=1e-6, affine=True
+        )
         self.conv_out = Conv2dLayer(
             block_in,
             2 * latent_channels if double_latent else latent_channels,
@@ -710,7 +760,9 @@ class ChameleonVQVAE(nn.Module):
         self.post_quant_conv = Conv2dLayer(config.embed_dim, config.latent_channels, 1)
         self.eval()  # Chameleon's VQ model is frozen
 
-    def encode(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def encode(
+        self, pixel_values: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = self.encoder(pixel_values)
         hidden_states = self.quant_conv(hidden_states)
         quant, emb_loss, indices = self.quantize(hidden_states)
@@ -733,14 +785,18 @@ class ChameleonImageVocabularyMapping:
 
     @cached_property
     def image_tokens(self):
-        return sorted([val for name, val in self.vocab_map.items() if name.startswith("IMGIMG")])
+        return sorted(
+            [val for name, val in self.vocab_map.items() if name.startswith("IMGIMG")]
+        )
 
     @cached_property
     def bpe2img(self):
         img_tkn_chr_mapping = {chr(ord("A") + i): str(i) for i in range(10)}
 
         def remap(old_name: str) -> str:
-            return "".join(img_tkn_chr_mapping.get(c, c) for c in old_name[len("IMGIMG") : -1])
+            return "".join(
+                img_tkn_chr_mapping.get(c, c) for c in old_name[len("IMGIMG") : -1]
+            )
 
         return {tok: int(remap(self.val2name[tok])) for tok in self.image_tokens}
 
@@ -750,7 +806,9 @@ class ChameleonImageVocabularyMapping:
 
     @cached_property
     def bpe2img_search_tensors(self):
-        return torch.tensor(sorted(self.bpe2img.keys())), torch.tensor(sorted(self.bpe2img.values()))
+        return torch.tensor(sorted(self.bpe2img.keys())), torch.tensor(
+            sorted(self.bpe2img.values())
+        )
 
     @cached_property
     def img2bpe_mapping_tensor(self):
@@ -780,7 +838,11 @@ class ChameleonModel(nn.Module):
             config.hidden_size,
         )
         self.vocabulary_mapping = ChameleonImageVocabularyMapping(config.vocabulary_map)
-        decoder_layer = ChameleonDecoderLayer if not self.config.swin_norm else ChameleonSwinDecoderLayer
+        decoder_layer = (
+            ChameleonDecoderLayer
+            if not self.config.swin_norm
+            else ChameleonSwinDecoderLayer
+        )
 
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
@@ -838,7 +900,9 @@ class ChameleonModel(nn.Module):
                 residual,
             )
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
+            return IntermediateTensors(
+                {"hidden_states": hidden_states, "residual": residual}
+            )
         hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
 
@@ -848,11 +912,23 @@ class ChameleonModel(nn.Module):
     info=ChameleonProcessingInfo,
     dummy_inputs=ChameleonDummyInputsBuilder,
 )
-class ChameleonForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, SupportsQuant):
+class ChameleonForConditionalGeneration(
+    nn.Module, SupportsMultiModal, SupportsPP, SupportsQuant
+):
     packed_modules_mapping = {
         "qkv_proj": ["q_proj", "k_proj", "v_proj"],
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
+
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_stacked={
+            ".q_proj": (".qkv_proj", "q"),
+            ".k_proj": (".qkv_proj", "k"),
+            ".v_proj": (".qkv_proj", "v"),
+            ".gate_proj": (".gate_up_proj", 0),
+            ".up_proj": (".gate_up_proj", 1),
+        },
+    )
 
     @classmethod
     def get_placeholder_str(cls, modality: str, i: int) -> str | None:
@@ -870,7 +946,11 @@ class ChameleonForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsP
 
         with self._mark_composite_model(
             aphrodite_config,
-            language_targets=(ChameleonDecoderLayer if not self.config.swin_norm else ChameleonSwinDecoderLayer),
+            language_targets=(
+                ChameleonDecoderLayer
+                if not self.config.swin_norm
+                else ChameleonSwinDecoderLayer
+            ),
             tower_targets={"image": ChameleonVQVAE},
         ):
             self.model = ChameleonModel(
@@ -888,9 +968,13 @@ class ChameleonForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsP
 
         logit_scale = getattr(config, "logit_scale", 1.0)
         self.logits_processor = LogitsProcessor(config.vocab_size, scale=logit_scale)
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
 
-    def _parse_and_validate_image_input(self, **kwargs: object) -> ChameleonImagePixelInputs | None:
+    def _parse_and_validate_image_input(
+        self, **kwargs: object
+    ) -> ChameleonImagePixelInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
 
         if pixel_values is None:
@@ -910,7 +994,9 @@ class ChameleonForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsP
         if image_input is None:
             return []
         assert self.model.vqmodel is not None
-        image_tokens = self.model.get_image_tokens(image_input["data"].to(self.config.dtype))
+        image_tokens = self.model.get_image_tokens(
+            image_input["data"].to(self.config.dtype)
+        )
         vision_embeddings = self.model.embed_input_ids(image_tokens)
         return vision_embeddings
 
@@ -925,7 +1011,9 @@ class ChameleonForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsP
         if intermediate_tensors is not None:
             inputs_embeds = None
 
-        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds=inputs_embeds)
+        hidden_states = self.model(
+            input_ids, positions, intermediate_tensors, inputs_embeds=inputs_embeds
+        )
         return hidden_states
 
     def compute_logits(
@@ -943,77 +1031,6 @@ class ChameleonForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsP
         return logits
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            # (param_name, shard_name, shard_id)
-            (".qkv_proj", ".q_proj", "q"),
-            (".qkv_proj", ".k_proj", "k"),
-            (".qkv_proj", ".v_proj", "v"),
-            (".gate_up_proj", ".gate_proj", 0),
-            (".gate_up_proj", ".up_proj", 1),
-        ]
-        params_dict = dict(self.named_parameters())
-        loaded_params: set[str] = set()
-        for name, loaded_weight in weights:
-            if "rotary_emb.inv_freq" in name:
-                continue
-
-            if "rotary_emb.cos_cached" in name or "rotary_emb.sin_cached" in name:
-                # Models trained using ColossalAI may include these tensors in
-                # the checkpoint. Skip them.
-                continue
-
-            # With tie_word_embeddings, we can skip lm_head.weight
-            # The weight might appear unnecessarily in the files if the model is
-            # processed with quantization, LoRA, fine-tuning, etc.
-            if self.config.tie_word_embeddings and "lm_head.weight" in name:
-                continue
-
-            use_default_weight_loading = False
-            if "vqmodel" in name:
-                if self.model.vqmodel is not None:
-                    # We only do sharding for language model and
-                    # not vqvae for now.
-                    use_default_weight_loading = True
-            else:
-                for param_name, weight_name, shard_id in stacked_params_mapping:
-                    if weight_name not in name:
-                        continue
-                    name = name.replace(weight_name, param_name)
-                    # Skip loading extra bias for GPTQ models.
-                    if name.endswith(".bias") and name not in params_dict:
-                        continue
-                    if is_pp_missing_parameter(name, self):
-                        continue
-                    param = params_dict[name]
-                    weight_loader = param.weight_loader
-                    weight_loader(param, loaded_weight, shard_id)
-                    break
-                else:
-                    # Skip loading extra bias for GPTQ models.
-                    if name.endswith(".bias") and name not in params_dict:
-                        continue
-                    # Remapping the name of FP8 kv-scale.
-                    if name.endswith("kv_scale"):
-                        remapped_kv_scale_name = name.replace(".kv_scale", ".attn.kv_scale")
-                        if remapped_kv_scale_name not in params_dict:
-                            logger.warning_once(
-                                "Found kv scale in the checkpoint (e.g. %s), but not found the expected name in the model (e.g. %s). kv-scale is not loaded.",  # noqa: E501
-                                name,
-                                remapped_kv_scale_name,
-                            )
-                            continue
-                        else:
-                            name = remapped_kv_scale_name
-                    if is_pp_missing_parameter(name, self):
-                        continue
-                    param = params_dict[name]
-                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                    weight_loader(param, loaded_weight)
-            if use_default_weight_loading and name in params_dict:
-                if is_pp_missing_parameter(name, self):
-                    continue
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
+        skip_prefixes = ["lm_head."] if self.config.tie_word_embeddings else None
+        loader = AutoWeightsLoader(self, skip_prefixes=skip_prefixes)
+        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)

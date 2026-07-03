@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-import pytest
-from aphrodite.lora.models import LoRAModel
-from aphrodite.modeling.models.llama import LlamaForCausalLM
 
+import pytest
+
+from aphrodite.lora.lora_model import LoRAModel
 from aphrodite.lora.peft_helper import PEFTHelper
 from aphrodite.lora.utils import get_adapter_absolute_path
+from aphrodite.model_executor.models.qwen3 import Qwen3ForCausalLM
 
 # Provide absolute path and huggingface lora ids
-lora_fixture_name = ["sql_lora_files", "sql_lora_huggingface_id"]
+lora_fixture_name = ["llama32_lora_files", "llama32_lora_huggingface_id"]
 LLAMA_LORA_MODULES = [
     "qkv_proj",
     "o_proj",
@@ -22,16 +23,15 @@ LLAMA_LORA_MODULES = [
 @pytest.mark.parametrize("lora_fixture_name", lora_fixture_name)
 def test_load_checkpoints_from_huggingface(lora_fixture_name, request):
     lora_name = request.getfixturevalue(lora_fixture_name)
-    packed_modules_mapping = LlamaForCausalLM.packed_modules_mapping
-    embedding_modules = LlamaForCausalLM.embedding_modules
-    embed_padding_modules = LlamaForCausalLM.embedding_padding_modules
-    expected_lora_modules: list[str] = []
+    packed_modules_mapping = Qwen3ForCausalLM.packed_modules_mapping
+
+    expected_lora_lst: list[str] = []
     for module in LLAMA_LORA_MODULES:
         if module in packed_modules_mapping:
-            expected_lora_modules.extend(packed_modules_mapping[module])
+            expected_lora_lst.extend(packed_modules_mapping[module])
         else:
-            expected_lora_modules.append(module)
-
+            expected_lora_lst.append(module)
+    expected_lora_modules = set(expected_lora_lst)
     lora_path = get_adapter_absolute_path(lora_name)
 
     # lora loading should work for either absolute path and huggingface id.
@@ -42,8 +42,6 @@ def test_load_checkpoints_from_huggingface(lora_fixture_name, request):
         peft_helper=peft_helper,
         lora_model_id=1,
         device="cpu",
-        embedding_modules=embedding_modules,
-        embedding_padding_modules=embed_padding_modules,
     )
 
     # Assertions to ensure the model is loaded correctly

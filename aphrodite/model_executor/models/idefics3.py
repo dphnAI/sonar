@@ -149,13 +149,17 @@ class Idefics3ProcessingInfo(BaseProcessingInfo):
         image_processor: Idefics3ImageProcessor = hf_processor.image_processor
         max_image_size = image_processor.size["longest_edge"]
         if resolution_max_side > max_image_size:
-            raise ValueError("`resolution_max_side` cannot be larger than `max_image_size`")
+            raise ValueError(
+                "`resolution_max_side` cannot be larger than `max_image_size`"
+            )
 
         height, width = image_height, image_width
 
         # Find the output size, when rescaling the longest edge to max_len and
         # preserving the aspect ratio
-        height, width = self._resize_output_size(height=height, width=width, max_len=resolution_max_side)
+        height, width = self._resize_output_size(
+            height=height, width=width, max_len=resolution_max_side
+        )
         return height, width
 
     def _get_image_feature_grid_size(
@@ -205,7 +209,9 @@ class Idefics3ProcessingInfo(BaseProcessingInfo):
         processor: Idefics3Processor,
         mm_kwargs: Mapping[str, object],
     ) -> str:
-        image_token, fake_image_token, global_img_token = self._get_image_token(processor)
+        image_token, fake_image_token, global_img_token = self._get_image_token(
+            processor
+        )
         image_seq_len = processor.image_seq_len
         grid_placeholder = "<row_{n_h}_col_{n_w}>"
 
@@ -314,7 +320,9 @@ class Idefics3MultiModalProcessor(BaseMultiModalProcessor[Idefics3ProcessingInfo
 
         mm_items = self.info.parse_mm_data({"image": images}, validate=False)
         parsed_images = mm_items.get_items("image", ImageProcessorItems)
-        image_sizes = [parsed_images.get_image_size(i) for i in range(len(parsed_images))]
+        image_sizes = [
+            parsed_images.get_image_size(i) for i in range(len(parsed_images))
+        ]
         hf_processor = self.info.get_hf_processor(**mm_kwargs)
 
         num_patches = [
@@ -343,9 +351,11 @@ class Idefics3MultiModalProcessor(BaseMultiModalProcessor[Idefics3ProcessingInfo
 
         return dict(
             pixel_values=MultiModalFieldConfig.flat_from_sizes("image", num_patches),
-            pixel_attention_mask=MultiModalFieldConfig.flat_from_sizes("image", num_patches),
+            pixel_attention_mask=MultiModalFieldConfig.flat_from_sizes(
+                "image", num_patches
+            ),
             image_embeds=MultiModalFieldConfig.batched("image"),
-            num_patches=MultiModalFieldConfig.batched("image"),
+            num_patches=MultiModalFieldConfig.batched("image", keep_on_cpu=True),
         )
 
     def _get_prompt_updates(
@@ -468,7 +478,8 @@ class Idefics3Model(nn.Module):
         )
 
         self.image_seq_len = int(
-            ((config.vision_config.image_size // config.vision_config.patch_size) ** 2) / (config.scale_factor**2)
+            ((config.vision_config.image_size // config.vision_config.patch_size) ** 2)
+            / (config.scale_factor**2)
         )
         self.image_token_id = self.config.image_token_id
 
@@ -485,7 +496,9 @@ class Idefics3Model(nn.Module):
 
         # Remove padding images - padding images are full 0.
         nb_values_per_image = pixel_values.shape[1:].numel()
-        real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
+        real_images_inds = (pixel_values == 0.0).sum(
+            dim=(-1, -2, -3)
+        ) != nb_values_per_image
         pixel_values = pixel_values[real_images_inds].contiguous()
 
         # Handle the vision attention mask
@@ -493,8 +506,12 @@ class Idefics3Model(nn.Module):
         pixel_attention_mask = pixel_attention_mask[real_images_inds].contiguous()
 
         patch_size = self.config.vision_config.patch_size
-        patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
-        patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
+        patches_subgrid = pixel_attention_mask.unfold(
+            dimension=1, size=patch_size, step=patch_size
+        )
+        patches_subgrid = patches_subgrid.unfold(
+            dimension=2, size=patch_size, step=patch_size
+        )
         patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
 
         # Get sequence from the vision encoder
@@ -649,7 +666,9 @@ class Idefics3ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLo
         if intermediate_tensors is not None:
             inputs_embeds = None
 
-        hidden_states = self.model.text_model(input_ids, positions, intermediate_tensors, inputs_embeds=inputs_embeds)
+        hidden_states = self.model.text_model(
+            input_ids, positions, intermediate_tensors, inputs_embeds=inputs_embeds
+        )
 
         return hidden_states
 

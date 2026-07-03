@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import contextlib
+import os
 import threading
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import msgspec
 import regex as re
 import torch
 import zmq
 
-from aphrodite import envs
-from aphrodite.config import AphroditeConfig
+from aphrodite.config import KVTransferConfig, AphroditeConfig
 from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorMetadata,
 )
@@ -43,6 +43,11 @@ ReqId = str
 TransferId = str
 
 
+class MoRIIOTransferAck(NamedTuple):
+    transfer_id: TransferId
+    consumer_tp_size: int = 1
+
+
 @dataclass
 class WriteTask:
     request_id: ReqId
@@ -51,7 +56,7 @@ class WriteTask:
     local_block_ids: list[int]
     remote_block_ids_hint: list[int] | None
     layer_name: str
-    event: torch.cuda.Event
+    event: torch.Event
     remote_notify_port: int
     remote_ip: str
     enqueue_time: float = field(default_factory=time.perf_counter)
@@ -78,8 +83,17 @@ class RemoteAllocInfo:
 
     block_ids: list[int]
     writes_done: int = 0
+    writes_expected: int | None = None
     decode_dp_rank: int = 0
-    transfer_offset: tuple[list[int], list[int], list[int]] | None = None
+    completion_request_id: str | None = None
+    completion_remote_notify_port: int | None = None
+    completion_remote_ip: str | None = None
+    completion_notified: bool = False
+    transfer_statuses: list[Any] = field(default_factory=list)
+    transfer_offsets: dict[
+        tuple[tuple[int, ...], tuple[int, ...], torch.dtype],
+        tuple[list[int], list[int], list[int]],
+    ] = field(default_factory=dict)
 
 
 class ROLE(Enum):
@@ -162,8 +176,10 @@ class TransferError(MoRIIOError):
     pass
 
 
-def get_moriio_mode() -> MoRIIOMode:
-    read_mode = envs.APHRODITE_MORIIO_CONNECTOR_READ_MODE
+def get_moriio_mode(kv_transfer_config: KVTransferConfig) -> MoRIIOMode:
+    read_mode = str(
+        kv_transfer_config.kv_connector_extra_config.get("read_mode", "false")
+    ).lower().strip() in ("true", "1")
     logger.debug("MoRIIO Connector read_mode: %s", read_mode)
     if read_mode:
         return MoRIIOMode.READ
@@ -173,6 +189,38 @@ def get_moriio_mode() -> MoRIIOMode:
 
 def get_port_offset(dp_rank: int, tp_rank: int, tp_size: int = 1) -> int:
     return (dp_rank) * tp_size + tp_rank
+
+
+def resolve_host_ip(extra_config: dict) -> str:
+    """The IP this MoRIIO process advertises for KV transfer.
+
+    Honors an explicit ``host_ip`` in ``kv_connector_extra_config`` before
+    falling back to ``get_ip()``. An external router/orchestrator can set it to
+    the node's routable address; this is required under frameworks (e.g. Ray)
+    where ``get_ip()`` resolves to an unroutable public IP and ``APHRODITE_HOST_IP``
+    cannot be propagated to the worker processes that bind the transfer engine.
+    """
+    return extra_config.get("host_ip") or get_ip()
+
+
+_DEPRECATED_ENV_VARS: dict[str, str] = {
+    "APHRODITE_MORIIO_CONNECTOR_READ_MODE": "read_mode",
+    "APHRODITE_MORIIO_QP_PER_TRANSFER": "qp_per_transfer",
+    "APHRODITE_MORIIO_POST_BATCH_SIZE": "post_batch_size",
+    "APHRODITE_MORIIO_NUM_WORKERS": "num_workers",
+}
+
+
+def _warn_deprecated_env_vars() -> None:
+    for env_var, new_key in _DEPRECATED_ENV_VARS.items():
+        if env_var in os.environ:
+            logger.warning_once(
+                "The environment variable %s is deprecated and ignored. "
+                "Set %r inside kv_transfer_config.kv_connector_extra_config "
+                "instead.",
+                env_var,
+                new_key,
+            )
 
 
 @dataclass
@@ -189,6 +237,13 @@ class MoRIIOConfig:
     dp_rank: int
     dp_size: int
     tp_size: int
+    transfer_timeout: float
+    defer_timeout: float
+    read_mode: bool = False
+    qp_per_transfer: int = 1
+    post_batch_size: int = -1
+    num_workers: int = 1
+    backend: str = "rdma"
 
     @classmethod
     def from_aphrodite_config(cls, aphrodite_config: AphroditeConfig) -> "MoRIIOConfig":
@@ -200,9 +255,28 @@ class MoRIIOConfig:
         # notify_port       -> For synchronizing stages between prefill and decode
         # handshake_port    -> For initial handshake between mori engine
 
+        # Optional tuning knobs
+        # read_mode        -> If true, run the connector in READ mode (consumer
+        #                     pulls KV from producer) instead of the default
+        #                     WRITE mode.
+        # transfer_timeout -> Timeout for waiting_for_transfer_complete before
+        #                     raising TransferError (sec).
+        # defer_timeout    -> Timeout before a deferred send with no finished_sending
+        #                     notification is reaped and its blocks force-freed (sec).
+
+        # Knobs for RDMA transfers, ignored if on xgmi backend
+        # qp_per_transfer  -> Number of RDMA Queue Pairs per KV transfer.
+        # post_batch_size  -> Batch size for posting transfer work requests
+        #                     (-1 lets the MoRI backend choose).
+        # num_workers      -> Number of background worker threads the MoRI
+        #                     engine uses for transfer processing.
+
         # TODO : merge notify_port and handshake_port to simplify port management
         #        supports non-contiguous ports
-        assert aphrodite_config.kv_transfer_config is not None, "kv_transfer_config must be set for MoRIIOConnector"
+        assert aphrodite_config.kv_transfer_config is not None, (
+            "kv_transfer_config must be set for MoRIIOConnector"
+        )
+        _warn_deprecated_env_vars()
         kv_transfer_config = aphrodite_config.kv_transfer_config
         extra_config = kv_transfer_config.kv_connector_extra_config
         tp_rank = get_tensor_model_parallel_rank()
@@ -211,9 +285,24 @@ class MoRIIOConfig:
         dp_size = aphrodite_config.parallel_config.data_parallel_size
         tp_size = get_tensor_model_parallel_world_size()
         port_offset = get_port_offset(dp_rank, tp_rank)
+        backend = str(extra_config.get("backend", "rdma")).lower()
+        if backend not in ("rdma", "xgmi"):
+            raise ValueError(
+                f"Invalid MoRIIO backend {backend!r} in kv_connector_extra_config; "
+                "must be one of 'rdma' or 'xgmi'."
+            )
+
+        transfer_timeout = float(
+            extra_config.get(
+                "transfer_timeout", MoRIIOConstants.DEFAULT_TRANSFER_TIMEOUT
+            )
+        )
+        defer_timeout = float(
+            extra_config.get("defer_timeout", MoRIIOConstants.DEFAULT_DEFER_TIMEOUT)
+        )
 
         return cls(
-            local_ip=get_ip(),
+            local_ip=resolve_host_ip(extra_config),
             local_kv_port=get_open_port(),
             proxy_ip=extra_config["proxy_ip"],
             local_ping_port=get_open_port(),
@@ -225,6 +314,13 @@ class MoRIIOConfig:
             dp_rank=dp_rank,
             dp_size=dp_size,
             tp_size=tp_size,
+            read_mode=get_moriio_mode(kv_transfer_config) == MoRIIOMode.READ,
+            qp_per_transfer=int(extra_config.get("qp_per_transfer", 1)),
+            post_batch_size=int(extra_config.get("post_batch_size", -1)),
+            num_workers=int(extra_config.get("num_workers", 1)),
+            backend=backend,
+            transfer_timeout=transfer_timeout,
+            defer_timeout=defer_timeout,
         )
 
 
@@ -245,15 +341,23 @@ class MoRIIOConstants:
 
     APHRODITE_MORI_READ_ABORT_REQUEST_TIMEOUT = 3600
 
+    # Timeout (seconds) for waiting_for_transfer_complete before raising TransferError.
+    # Overridable via kv_connector_extra_config["transfer_timeout"].
+    DEFAULT_TRANSFER_TIMEOUT = 30.0
+    # Timeout (seconds) before a deferred send with no finished_sending
+    # notification is reaped and its blocks force-freed.
+    # Overridable via kv_connector_extra_config["defer_timeout"].
+    DEFAULT_DEFER_TIMEOUT = 60.0
 
-# The router embeds both zmq_addresses in the request_id (similar to P2pNcclConnector):
+
+# The router embeds both zmq_addresses in the request_id:
 #   "___prefill_addr_{zmq}___decode_addr_{zmq}_{32-hex-uuid}"
 # MoRIIO zmq_address format: "host:IP,handshake:PORT,notify:PORT"
 #
 # This lets each connector side parse the peer's connection info without
 # requiring the router to pass it explicitly in kv_transfer_params.
 _PREFILL_ZMQ_RE = re.compile(r"___prefill_addr_(.+?)___decode_addr_")
-# vLLM wraps the router's X-Request-Id as "cmpl-<id>-<seq>-<hex>" so there may
+# Aphrodite wraps the router's X-Request-Id as "cmpl-<id>-<seq>-<hex>" so there may
 # be a trailing "-<seq>-<hex>" suffix after the 32-char UUID.  Allow it.
 _DECODE_ZMQ_RE = re.compile(r"___decode_addr_(.+)_[0-9a-f]{32}(?:-.*)?$")
 
@@ -281,13 +385,14 @@ def parse_moriio_zmq_address(
         notify_port = int(parts["notify"])
     except (KeyError, ValueError) as e:
         raise ValueError(
-            f"Malformed zmq_address {zmq_address!r}: expected 'host:IP,handshake:PORT,notify:PORT' format"
+            f"Malformed zmq_address {zmq_address!r}: expected "
+            f"'host:IP,handshake:PORT,notify:PORT' format"
         ) from e
     return host, handshake_port, notify_port
 
 
 def get_peer_zmq_from_request_id(request_id: str, is_producer: bool) -> str:
-    """Extract the *peer's* zmq_address from the vLLM router request_id.
+    """Extract the *peer's* zmq_address from the Aphrodite router request_id.
 
     The producer (prefill) needs the decode's address; the consumer (decode)
     needs the prefill's address.
@@ -297,7 +402,9 @@ def get_peer_zmq_from_request_id(request_id: str, is_producer: bool) -> str:
     else:
         m = _PREFILL_ZMQ_RE.search(request_id)
     if m is None:
-        raise ValueError(f"Cannot parse peer zmq_address from request_id: {request_id!r}")
+        raise ValueError(
+            f"Cannot parse peer zmq_address from request_id: {request_id!r}"
+        )
     return m.group(1)
 
 
@@ -341,10 +448,21 @@ class MoRIIOConnectorMetadata(KVConnectorMetadata):
     ):
         transfer_id = kv_transfer_params["transfer_id"]
 
-        # Parse host/ports from the request_id. The router embeds both zmq_addresses
-        # in the request_id
-        peer_zmq = get_peer_zmq_from_request_id(request_id, is_producer=write_mode)
-        remote_host, remote_handshake_port, remote_notify_port = parse_moriio_zmq_address(peer_zmq)
+        remote_host = kv_transfer_params.get("remote_host")
+        remote_handshake_port = kv_transfer_params.get("remote_handshake_port")
+        remote_notify_port = kv_transfer_params.get("remote_notify_port")
+        if (
+            remote_host is None
+            or remote_handshake_port is None
+            or remote_notify_port is None
+        ):
+            # Parse host/ports from the request_id. The router embeds both
+            # zmq_addresses in PD request IDs, but WRITE decode requests may carry
+            # a plain request ID and get the remote address via kv_transfer_params.
+            peer_zmq = get_peer_zmq_from_request_id(request_id, is_producer=write_mode)
+            remote_host, remote_handshake_port, remote_notify_port = (
+                parse_moriio_zmq_address(peer_zmq)
+            )
 
         _req = ReqMeta(
             transfer_id=transfer_id,
@@ -352,9 +470,9 @@ class MoRIIOConnectorMetadata(KVConnectorMetadata):
             remote_block_ids=kv_transfer_params["remote_block_ids"],
             remote_engine_id=kv_transfer_params["remote_engine_id"],
             remote_host=remote_host,
-            remote_port=remote_handshake_port,
-            remote_handshake_port=remote_handshake_port,
-            remote_notify_port=remote_notify_port,
+            remote_port=int(remote_handshake_port),
+            remote_handshake_port=int(remote_handshake_port),
+            remote_notify_port=int(remote_notify_port),
             tp_size=kv_transfer_params.get("tp_size", 1),
             remote_dp_size=kv_transfer_params.get("remote_dp_size", 1),
         )
@@ -374,7 +492,9 @@ def zmq_ctx(socket_type: Any, addr: str) -> Iterator[zmq.Socket]:
     ctx: zmq.Context | None = None
     try:
         ctx = zmq.Context()  # type: ignore[attr-defined]
-        yield make_zmq_socket(ctx=ctx, path=addr, socket_type=socket_type, bind=socket_type == zmq.ROUTER)
+        yield make_zmq_socket(
+            ctx=ctx, path=addr, socket_type=socket_type, bind=socket_type == zmq.ROUTER
+        )
     finally:
         if ctx is not None:
             ctx.destroy(linger=0)

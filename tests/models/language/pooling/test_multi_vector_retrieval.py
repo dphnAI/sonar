@@ -5,6 +5,7 @@ import torch
 from transformers import AutoModel
 
 from tests.models.utils import check_embeddings_close
+from aphrodite.config import PoolerConfig
 
 
 @pytest.mark.parametrize(
@@ -17,6 +18,7 @@ def test_embed_models(hf_runner, aphrodite_runner, example_prompts, model: str, 
     with aphrodite_runner(
         model,
         runner="pooling",
+        pooler_config=PoolerConfig(task="token_embed"),
         max_model_len=None,
     ) as aphrodite_model:
         aphrodite_outputs = aphrodite_model.token_embed(example_prompts)

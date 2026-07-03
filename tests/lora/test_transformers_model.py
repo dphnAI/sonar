@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 
 import aphrodite
@@ -64,7 +65,9 @@ def test_ilama_lora(ilama_lora_files):
         assert output2[i] == EXPECTED_LORA_OUTPUT[i]
 
 
-@pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
+@pytest.mark.skipif(
+    current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests"
+)
 @multi_gpu_test(num_gpus=4)
 @create_new_process_for_each_test()
 def test_ilama_lora_tp4(ilama_lora_files):
@@ -88,7 +91,9 @@ def test_ilama_lora_tp4(ilama_lora_files):
         assert output2[i] == EXPECTED_LORA_OUTPUT[i]
 
 
-@pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
+@pytest.mark.skipif(
+    current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests"
+)
 @multi_gpu_test(num_gpus=4)
 @create_new_process_for_each_test()
 def test_ilama_lora_tp4_fully_sharded_loras(ilama_lora_files):

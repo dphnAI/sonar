@@ -10,7 +10,7 @@ import torch
 
 import aphrodite.envs as envs
 from aphrodite.compilation.cuda_graph import CUDAGraphWrapper
-from aphrodite.config import AphroditeConfig, CUDAGraphMode
+from aphrodite.config import CUDAGraphMode, AphroditeConfig
 from aphrodite.distributed import get_ep_group
 from aphrodite.distributed.device_communicators.pynccl_allocator import set_graph_pool_id
 from aphrodite.forward_context import (
@@ -29,6 +29,23 @@ from aphrodite.utils.platform_utils import num_compute_units
 from aphrodite.v1.worker.ubatching import UBatchContext, make_ubatch_contexts
 
 logger = init_logger(__name__)
+
+
+def _cat_ubatch_outputs(
+    sorted_results: list,
+) -> "torch.Tensor | tuple[torch.Tensor, ...]":
+    """Concatenate per-ubatch model outputs along the batch dim.
+
+    Most models return a single hidden-states tensor per ubatch. Target
+    models running with auxiliary output (e.g. EAGLE3 speculative decoding,
+    which collects aux hidden states for the drafter) return a tuple of
+    tensors instead. Fan out over tuple components so `torch.cat` sees
+    matching shapes and the caller receives the same structure the model
+    produced for a single ubatch (#40769).
+    """
+    if sorted_results and isinstance(sorted_results[0], tuple):
+        return tuple(torch.cat(parts, dim=0) for parts in zip(*sorted_results))
+    return torch.cat(sorted_results, dim=0)
 
 
 @dataclass
@@ -106,13 +123,17 @@ class UBatchWrapper:
         self.compilation_config = aphrodite_config.compilation_config
         self.comm_stream = torch.cuda.Stream(device=device)
         # Ubatch threads plus the main thread
-        self.ready_barrier = threading.Barrier(self.aphrodite_config.parallel_config.num_ubatches + 1)
+        self.ready_barrier = threading.Barrier(
+            self.aphrodite_config.parallel_config.num_ubatches + 1
+        )
 
         self.cudagraphs: dict[int, CUDAGraphMetaData] = {}
 
         self.cudagraph_wrapper = None
         if runtime_mode is not CUDAGraphMode.NONE:
-            self.cudagraph_wrapper = CUDAGraphWrapper(runnable, aphrodite_config, runtime_mode=runtime_mode)
+            self.cudagraph_wrapper = CUDAGraphWrapper(
+                runnable, aphrodite_config, runtime_mode=runtime_mode
+            )
 
         self.sm_control = self._create_sm_control_context(aphrodite_config)
         self.device = device
@@ -133,6 +154,16 @@ class UBatchWrapper:
     @staticmethod
     def _create_sm_control_context(aphrodite_config: AphroditeConfig):
         comm_sms: int = envs.APHRODITE_DBO_COMM_SMS
+        rocm_deepep_ht_dbo = (
+            current_platform.is_rocm()
+            and aphrodite_config.parallel_config.enable_dbo
+            and aphrodite_config.parallel_config.all2all_backend == "deepep_high_throughput"
+        )
+        if rocm_deepep_ht_dbo:
+            # On ROCm, reserving CUs for DeepEP HT communication under DBO
+            # corrupts DP+EP generation accuracy. Keep the backend active, but
+            # leave all CUs visible to the compute and communication kernels.
+            comm_sms = 0
 
         set_comm_sms = lambda sms: None
         if aphrodite_config.parallel_config.enable_expert_parallel:
@@ -169,7 +200,8 @@ class UBatchWrapper:
             return getattr(self.runnable, key)
         if self.is_debugging_mode:
             raise AttributeError(
-                f"Attribute {key} not exists in the runnable of cudagraph wrapper: {self._runnable_str}"
+                f"Attribute {key} not exists in the runnable of "
+                f"cudagraph wrapper: {self._runnable_str}"
             )
         raise AttributeError
 
@@ -261,7 +293,7 @@ class UBatchWrapper:
                 for thread in ubatch_threads:
                     thread.join()
                 sorted_results = [value for position, value in sorted(results)]
-                result = torch.cat(sorted_results, dim=0)
+                result = _cat_ubatch_outputs(sorted_results)
                 cudagraph_metadata.outputs = result
                 # Join offloader's copy stream after forward to avoid unjoined
                 # stream error. The last layer's start_prefetch forks copy_stream,
@@ -305,7 +337,7 @@ class UBatchWrapper:
             for thread in ubatch_threads:
                 thread.join()
         sorted_results = [value for position, value in sorted(results)]
-        result = torch.cat(sorted_results, dim=0)
+        result = _cat_ubatch_outputs(sorted_results)
         return result
 
     def _make_ubatch_metadata(
@@ -368,7 +400,8 @@ class UBatchWrapper:
                     positions=sliced_positions,
                     inputs_embeds=sliced_inputs_embeds,
                     intermediate_tensors=sliced_intermediate_tensors,
-                    num_tokens=ubatch_slice.token_slice.stop - ubatch_slice.token_slice.start,
+                    num_tokens=ubatch_slice.token_slice.stop
+                    - ubatch_slice.token_slice.start,
                 )
             )
 
@@ -389,8 +422,14 @@ class UBatchWrapper:
             sliced_positions = positions[:, tokens_slice]
         else:
             sliced_positions = positions[tokens_slice]
-        sliced_inputs_embeds = inputs_embeds[tokens_slice] if inputs_embeds is not None else None
-        sliced_intermediate_tensors = intermediate_tensors[tokens_slice] if intermediate_tensors is not None else None
+        sliced_inputs_embeds = (
+            inputs_embeds[tokens_slice] if inputs_embeds is not None else None
+        )
+        sliced_intermediate_tensors = (
+            intermediate_tensors[tokens_slice]
+            if intermediate_tensors is not None
+            else None
+        )
 
         return (
             sliced_input_ids,
@@ -451,7 +490,10 @@ class UBatchWrapper:
                 )
             )
 
-        if num_tokens not in self.cudagraphs and cudagraph_runtime_mode is CUDAGraphMode.FULL:
+        if (
+            num_tokens not in self.cudagraphs
+            and cudagraph_runtime_mode is CUDAGraphMode.FULL
+        ):
             ubatch_metadata = self._make_ubatch_metadata(
                 ubatch_slices=ubatch_slices,
                 attn_metadata=attn_metadata,
@@ -467,7 +509,10 @@ class UBatchWrapper:
             )
             with self.sm_control:
                 return self._capture_ubatches(ubatch_metadata, self.runnable)
-        elif num_tokens in self.cudagraphs and cudagraph_runtime_mode is CUDAGraphMode.FULL:
+        elif (
+            num_tokens in self.cudagraphs
+            and cudagraph_runtime_mode is CUDAGraphMode.FULL
+        ):
             cudagraph_metadata = self.cudagraphs[num_tokens]
             # Sync offloader before replay - ensures any external dependencies
             # from pre-capture prefetches are satisfied.

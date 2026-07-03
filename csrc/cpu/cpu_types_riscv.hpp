@@ -1,7 +1,7 @@
 #ifndef CPU_TYPES_RISCV_HPP
 #define CPU_TYPES_RISCV_HPP
 
-// RISC-V Vector (RVV) CPU type definitions for Aphrodite.
+// RISC-V Vector (RVV) CPU type definitions for vLLM.
 //
 // Supports multiple VLENs via compile-time dispatch. The compiler defines
 // __riscv_v_min_vlen from the zvl<N>b extension in -march. The defs header

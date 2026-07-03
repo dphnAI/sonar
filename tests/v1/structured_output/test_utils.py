@@ -1,8 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import pytest
 
-from aphrodite.v1.structured_output.backend_xgrammar import has_xgrammar_unsupported_json_features
+from aphrodite.v1.structured_output.backend_xgrammar import (
+    has_xgrammar_unsupported_json_features,
+)
 
 pytestmark = pytest.mark.cpu_test
 
@@ -41,8 +44,6 @@ def unsupported_array_schemas():
 @pytest.fixture
 def unsupported_object_schemas():
     return [
-        {"type": "object", "minProperties": 1},
-        {"type": "object", "maxProperties": 5},
         {"type": "object", "propertyNames": {"pattern": "^[a-z]+$"}},
         {"type": "object", "patternProperties": {"^S": {"type": "string"}}},
     ]
@@ -76,6 +77,8 @@ def supported_schema():
                 },
             },
         },
+        "minProperties": 1,
+        "maxProperties": 100,
     }
 
 
@@ -92,8 +95,12 @@ def supported_schema():
 def test_unsupported_json_features_by_type(schema_type, request):
     schemas = request.getfixturevalue(schema_type)
     for schema in schemas:
-        assert has_xgrammar_unsupported_json_features(schema), f"Schema should be unsupported: {schema}"
+        assert has_xgrammar_unsupported_json_features(schema), (
+            f"Schema should be unsupported: {schema}"
+        )
 
 
 def test_supported_json_features(supported_schema):
-    assert not has_xgrammar_unsupported_json_features(supported_schema), "Schema should be supported"
+    assert not has_xgrammar_unsupported_json_features(supported_schema), (
+        "Schema should be supported"
+    )

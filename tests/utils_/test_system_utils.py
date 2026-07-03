@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
+import os
 import tempfile
 from pathlib import Path
 
-from aphrodite.utils.system_utils import unique_filepath
+from aphrodite.utils.system_utils import _maybe_force_spawn, unique_filepath
 
 
 def test_unique_filepath():
@@ -16,3 +18,10 @@ def test_unique_filepath():
         paths.add(path)
     assert len(paths) == 10
     assert len(list(Path(temp_dir).glob("*.txt"))) == 10
+
+
+def test_numa_bind_forces_spawn(monkeypatch):
+    monkeypatch.delenv("APHRODITE_WORKER_MULTIPROC_METHOD", raising=False)
+    monkeypatch.setattr("sys.argv", ["aphrodite", "serve", "--numa-bind"])
+    _maybe_force_spawn()
+    assert os.environ["APHRODITE_WORKER_MULTIPROC_METHOD"] == "spawn"

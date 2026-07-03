@@ -60,7 +60,8 @@ def check_allspark_supported_dtype_shape(
     else:
         return (
             False,
-            f"AllSpark currently does not support device_capability = {device_capability}.",
+            "AllSpark currently does not support "
+            f"device_capability = {device_capability}.",
         )
 
     return True, None

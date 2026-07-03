@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
+
 import pytest
 
 from aphrodite.lora.request import LoRARequest
@@ -9,7 +11,9 @@ from aphrodite.lora.resolver import LoRAResolver, LoRAResolverRegistry
 class DummyLoRAResolver(LoRAResolver):
     """A dummy LoRA resolver for testing."""
 
-    async def resolve_lora(self, base_model_name: str, lora_name: str) -> LoRARequest | None:
+    async def resolve_lora(
+        self, base_model_name: str, lora_name: str
+    ) -> LoRARequest | None:
         if lora_name == "test_lora":
             return LoRARequest(
                 lora_name=lora_name,

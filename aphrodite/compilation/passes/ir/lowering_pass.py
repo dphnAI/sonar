@@ -10,7 +10,6 @@ from torch._inductor.pattern_matcher import (
     PatternMatcherPass,
     register_graph_pattern,
 )
-from torch._ops import OpOverload, OpOverloadPacket
 
 from aphrodite.config import AphroditeConfig
 from aphrodite.ir.op import IrOp
@@ -18,39 +17,9 @@ from aphrodite.logger import init_logger
 from aphrodite.logging_utils import lazy
 
 from ..aphrodite_inductor_pass import AphroditeInductorPass
+from .utils import get_ir_op
 
 logger = init_logger(__name__)
-
-
-def get_default_overload(op: OpOverload | OpOverloadPacket) -> OpOverload:
-    if isinstance(op, OpOverloadPacket):
-        return op.default
-    assert isinstance(op, OpOverload), "Expected an OpOverload or OpOverloadPacket"
-    return op
-
-
-def get_ir_op(node: fx.Node) -> IrOp | None:
-    if node.op != "call_function":
-        return None
-
-    if not isinstance(node.target, (OpOverload, OpOverloadPacket)):
-        return None
-
-    op_overload = get_default_overload(node.target)
-    if op_overload.namespace != "aphrodite_ir":
-        return None
-
-    op_name = op_overload._opname
-    if op_name not in IrOp.registry:
-        logger.warning(
-            "Unknown Aphrodite IR op %s, there's likely an issue with torch registration, "
-            "or a torch custom op was registered in the aphrodite_ir namespace by mistake.",
-            op_name,
-        )
-        return None
-
-    ir_op = IrOp.registry[op_name]
-    return ir_op
 
 
 class AphroditeIRLoweringPass(AphroditeInductorPass):
@@ -76,7 +45,7 @@ class AphroditeIRLoweringPass(AphroditeInductorPass):
 
         assert len(match.nodes) == 1, "Expected single node match"
         node = match.nodes[0]
-        ir_op = get_ir_op(node)
+        ir_op = get_ir_op(node)  # TODO is node.target always an overload?
         assert ir_op is not None, "Expected Aphrodite IR op"
         assert not node.kwargs  # I think there should never be kwargs here
 
@@ -86,13 +55,18 @@ class AphroditeIRLoweringPass(AphroditeInductorPass):
         self.selected_impls[ir_op.name][node.name] = ir_op_impl.provider
 
         # replace_by_example wants node args, not the fake tensors
+        # use func_impl_fn to properly handle in-place implementations
         # TODO(luka): Use aot_export_module to get functionalized graph
         # TODO(luka): Cache the fx_replacement to avoid re-tracing the same impl
 
         # Defaults not present on node.args but required for replacement tracing
         bound_args = ir_op._py_signature.bind(*node.args)
         bound_args.apply_defaults()
-        match.replace_by_example(ir_op_impl.impl_fn, bound_args.args)
+        # It is not safe to run functional passes (like DCE) on the replacements
+        # as they might not be functional.
+        match.replace_by_example(
+            ir_op_impl.func_impl_fn, bound_args.args, run_functional_passes=False
+        )
 
     @AphroditeInductorPass.time_and_log
     def __call__(self, graph: fx.Graph) -> None:
@@ -136,7 +110,7 @@ class AphroditeIRLoweringPass(AphroditeInductorPass):
 
         if failed_nodes or failed_ops:
             logger.warning("Failed to lower Aphrodite IR ops: %s", ",".join(failed_ops))
-            logger.warning("Full node list: %s", failed_nodes)
+            logger.warning("Full node list: %s", ",".join(str(n) for n in failed_nodes))
 
     def uuid(self) -> str:
         """
@@ -144,10 +118,13 @@ class AphroditeIRLoweringPass(AphroditeInductorPass):
         so we include them in the cache key.
         """
         priorities = {name: op.get_priority() for name, op in IrOp.registry.items()}
-        priorities_str = ";".join(f"{name}={','.join(p)}" for name, p in priorities.items())
+        priorities_str = ";".join(
+            f"{name}={','.join(p)}" for name, p in priorities.items()
+        )
 
         impl_uuids_str = ";".join(
-            f"{name}=" + ",".join(IrOp.registry[name].impls[provider].uuid() for provider in p)
+            f"{name}="
+            + ",".join(IrOp.registry[name].impls[provider].uuid() for provider in p)
             for name, p in priorities.items()
         )
 

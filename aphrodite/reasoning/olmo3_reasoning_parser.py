@@ -9,17 +9,12 @@ from typing import TYPE_CHECKING
 import regex as re
 
 from aphrodite.entrypoints.openai.engine.protocol import DeltaMessage
-from aphrodite.logger import init_logger
 from aphrodite.reasoning import ReasoningParser
 
 if TYPE_CHECKING:
-    from aphrodite.entrypoints.openai.chat_completion.protocol import (
-        ChatCompletionRequest,
-    )
+    from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
     from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
     from aphrodite.tokenizers import TokenizerLike
-
-logger = init_logger(__name__)
 
 
 class Olmo3ReasoningState(enum.Enum):
@@ -154,10 +149,18 @@ class Olmo3ReasoningBuffer:
         _, overlap_think_start = string_overlap(delta_text, self.think_start)
         _, overlap_think_end = string_overlap(delta_text, self.think_end)
 
-        partial_overlap_start = overlap_think_start is not None and len(overlap_think_start) < len(self.think_start)
-        partial_overlap_end = overlap_think_end is not None and len(overlap_think_end) < len(self.think_end)
+        partial_overlap_start = overlap_think_start is not None and len(
+            overlap_think_start
+        ) < len(self.think_start)
+        partial_overlap_end = overlap_think_end is not None and len(
+            overlap_think_end
+        ) < len(self.think_end)
 
-        if partial_overlap_start and self.think_start in self.buffer and not partial_overlap_end:
+        if (
+            partial_overlap_start
+            and self.think_start in self.buffer
+            and not partial_overlap_end
+        ):
             # we can only process the buffer if partial overlap
             # is the last part of think token (thus causing
             # text_buffer to contain the start of think token)
@@ -229,9 +232,15 @@ class Olmo3ReasoningParser(ReasoningParser):
 
     def __init__(self, tokenizer: "TokenizerLike", *args, **kwargs):
         super().__init__(tokenizer, *args, **kwargs)
-        self.buffer = Olmo3ReasoningBuffer(think_start=self.think_start, think_end=self.think_end)
-        self.think_end_first_token_ids: list[int] = [self.vocab[token] for token in self.think_end_first_split]
-        self.think_end_rest_token_ids: list[int] = [self.vocab[token] for token in self.think_end_rest_split]
+        self.buffer = Olmo3ReasoningBuffer(
+            think_start=self.think_start, think_end=self.think_end
+        )
+        self.think_end_first_token_ids: list[int] = [
+            self.vocab[token] for token in self.think_end_first_split
+        ]
+        self.think_end_rest_token_ids: list[int] = [
+            self.vocab[token] for token in self.think_end_rest_split
+        ]
 
     @property
     def reasoning_start_str(self) -> str:
@@ -245,7 +254,10 @@ class Olmo3ReasoningParser(ReasoningParser):
         rest_ids = self.think_end_rest_token_ids
         rest_len = len(rest_ids)
         for i in range(len(input_ids) - rest_len, -1, -1):
-            if list(input_ids[i + 1 : i + 1 + rest_len]) == rest_ids and input_ids[i] in self.think_end_first_token_ids:
+            if (
+                list(input_ids[i + 1 : i + 1 + rest_len]) == rest_ids
+                and input_ids[i] in self.think_end_first_token_ids
+            ):
                 return True
         return False
 

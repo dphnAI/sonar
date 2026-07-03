@@ -17,6 +17,7 @@ from torch.library import Library, infer_schema
 
 import aphrodite.envs as envs
 from aphrodite.logger import init_logger
+from aphrodite.utils.platform_utils import is_pin_memory_available
 
 if TYPE_CHECKING:
     from aphrodite.config import ModelConfig
@@ -38,6 +39,7 @@ STR_DTYPE_TO_TORCH_DTYPE = {
     "fp8_e4m3": torch.uint8,
     "fp8_e5m2": torch.uint8,
     "int8": torch.int8,
+    "int4_per_token_head": torch.uint8,
     "int8_per_token_head": torch.int8,
     "fp8_per_token_head": torch.uint8,
     "fp8_inc": torch.float8_e4m3fn,
@@ -67,8 +69,15 @@ MODELOPT_TO_APHRODITE_KV_CACHE_DTYPE_MAP = {
 T = TypeVar("T")
 
 
+PIN_MEMORY = is_pin_memory_available()
+
+
 def is_quantized_kv_cache(kv_cache_dtype: str) -> bool:
-    return kv_cache_dtype.startswith("fp8") or kv_cache_dtype.endswith("per_token_head") or kv_cache_dtype == "nvfp4"
+    return (
+        kv_cache_dtype.startswith("fp8")
+        or kv_cache_dtype.endswith("per_token_head")
+        or kv_cache_dtype == "nvfp4"
+    )
 
 
 def kv_cache_uses_per_token_head_scales(kv_cache_dtype: str) -> bool:
@@ -104,6 +113,32 @@ def is_strictly_contiguous(t: torch.Tensor) -> bool:
             return False
         expected_stride *= shape[i]
     return True
+
+
+def canonicalize_singleton_dim_strides(t: torch.Tensor) -> torch.Tensor:
+    """Fix degenerate strides on size=1 dimensions for CUDA TMA compatibility.
+
+    PyTorch allows any stride on a size=1 dim (is_contiguous() is always True
+    there), so a size=1 dim may have stride=1 (2 bytes for bf16) instead of
+    the canonical product(shape[i+1:]).  CUDA TMA on H100+ requires all
+    non-outermost strides to be ≥16-byte aligned; stride=1 triggers
+    cudaErrorIllegalInstruction.  Zero-copy: patches stride metadata only via
+    as_strided; returns t unchanged if all size=1 strides are already canonical.
+    """
+    if 1 not in t.shape:
+        return t
+    strides = list(t.stride())
+    shape = t.shape
+    prev_stride = 1
+    changed = False
+    for i in range(len(shape) - 1, -1, -1):
+        if shape[i] == 1 and strides[i] != prev_stride:
+            strides[i] = prev_stride
+            changed = True
+        prev_stride = strides[i] * shape[i]
+    if not changed:
+        return t
+    return t.as_strided(t.shape, strides)
 
 
 @contextlib.contextmanager
@@ -210,7 +245,11 @@ def is_lossless_cast(src_dtype: torch.dtype, tgt_dtype: torch.dtype):
     # Compare floating-point types
     src_info = torch.finfo(src_dtype)
     tgt_info = torch.finfo(tgt_dtype)
-    return src_info.min >= tgt_info.min and src_info.max <= tgt_info.max and src_info.resolution >= tgt_info.resolution
+    return (
+        src_info.min >= tgt_info.min
+        and src_info.max <= tgt_info.max
+        and src_info.resolution >= tgt_info.resolution
+    )
 
 
 def common_broadcastable_dtype(dtypes: Collection[torch.dtype]):
@@ -288,7 +327,11 @@ def get_kv_cache_quant_algo_string(quant_cfg: dict[str, Any]) -> str | None:
             or quant_cfg.get("kv_cache_quant_algo")
         )
         if isinstance(kv_algo, dict):
-            if kv_algo.get("dynamic") is False and kv_algo.get("num_bits") == 8 and kv_algo.get("type") == "float":
+            if (
+                kv_algo.get("dynamic") is False
+                and kv_algo.get("num_bits") == 8
+                and kv_algo.get("type") == "float"
+            ):
                 kv_algo = "fp8"
             elif kv_algo.get("num_bits") == 4 and kv_algo.get("type") == "float":
                 kv_algo = "nvfp4"
@@ -328,7 +371,9 @@ def get_kv_cache_quant_algo_dtype(quant_cfg: dict[str, Any]) -> torch.dtype | No
     return None
 
 
-def resolve_kv_cache_dtype_string(kv_cache_dtype: str, model_config: ModelConfig) -> str:
+def resolve_kv_cache_dtype_string(
+    kv_cache_dtype: str, model_config: ModelConfig
+) -> str:
     """Resolve 'auto' kv_cache_dtype to the actual string value from model config.
     Returns the resolved cache_dtype string.
     """
@@ -347,7 +392,9 @@ def resolve_kv_cache_dtype_string(kv_cache_dtype: str, model_config: ModelConfig
     return "auto"
 
 
-def kv_cache_dtype_str_to_dtype(kv_cache_dtype: str, model_config: ModelConfig) -> torch.dtype:
+def kv_cache_dtype_str_to_dtype(
+    kv_cache_dtype: str, model_config: ModelConfig
+) -> torch.dtype:
     if kv_cache_dtype == "auto":
         # Model config may not be specified for unit tests, default to float16
         return model_config.dtype if model_config else torch.half
@@ -414,9 +461,9 @@ def _nvfp4_split_data_scale(
 
     base = kv_side.storage_offset()
     data = torch.as_strided(kv_side, data_shape, data_strides, storage_offset=base)
-    scale = torch.as_strided(kv_side, scale_shape, scale_strides, storage_offset=base + data_per_kv).view(
-        torch.float8_e4m3fn
-    )
+    scale = torch.as_strided(
+        kv_side, scale_shape, scale_strides, storage_offset=base + data_per_kv
+    ).view(torch.float8_e4m3fn)
 
     return data, scale
 
@@ -495,9 +542,9 @@ def create_kv_caches_with_random_flash(
                 device=device,
             ).permute(*inv)
         else:
-            key_value_cache = torch.empty(size=kv_cache_allocation_shape, dtype=dtype, device=device).permute(
-                *stride_order
-            )
+            key_value_cache = torch.empty(
+                size=kv_cache_allocation_shape, dtype=dtype, device=device
+            ).permute(*stride_order)
             if cache_dtype in ["auto", "half", "bfloat16", "float"]:
                 key_value_cache.uniform_(-scale, scale)
             elif cache_dtype == "fp8":
@@ -521,7 +568,9 @@ def create_kv_caches_with_random(
     device: str | None = "cuda",
 ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
     if cache_dtype == "fp8" and head_size % 16:
-        raise ValueError(f"Does not support key cache of type fp8 with head_size {head_size}")
+        raise ValueError(
+            f"Does not support key cache of type fp8 with head_size {head_size}"
+        )
 
     set_random_seed(seed)
 
@@ -556,14 +605,24 @@ def create_kv_caches_with_random(
 
 
 def async_tensor_h2d(
-    data: list,
-    dtype: torch.dtype,
-    target_device: str | torch.device,
-    pin_memory: bool,
+    data: list | np.ndarray | torch.Tensor,
+    device: str | torch.device,
+    dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
-    """Asynchronously create a tensor and copy it from host to device."""
-    t = torch.tensor(data, dtype=dtype, pin_memory=pin_memory, device="cpu")
-    return t.to(device=target_device, non_blocking=True)
+    """Copy list/numpy array/tensor async from host to device."""
+    if isinstance(data, np.ndarray):
+        data = torch.from_numpy(data)
+    if isinstance(data, torch.Tensor):
+        t = data.pin_memory() if PIN_MEMORY else data
+    else:
+        t = torch.tensor(data, dtype=dtype, pin_memory=PIN_MEMORY, device="cpu")
+    assert t.is_cpu
+    return t.to(device=device, dtype=dtype, non_blocking=True)
+
+
+def np_to_pinned_tensor(array: np.ndarray) -> torch.Tensor:
+    t = torch.from_numpy(array)
+    return t.pin_memory() if PIN_MEMORY else t
 
 
 def make_ndarray_with_pad(
@@ -668,7 +727,8 @@ def current_stream() -> torch.cuda.Stream:
                 _current_stream_tls.value = current_stream()
             else:
                 raise ValueError(
-                    "Fail to set current stream, current platform may not support current_stream with torch API"
+                    "Fail to set current stream, current platform "
+                    "may not support current_stream with torch API"
                 )
     return _current_stream_tls.value
 
@@ -710,7 +770,10 @@ def weak_ref_tensor(tensor: Any) -> Any:
 
 
 def weak_ref_tensors(
-    tensors: torch.Tensor | list[torch.Tensor] | tuple[torch.Tensor] | IntermediateTensors,
+    tensors: torch.Tensor
+    | list[torch.Tensor]
+    | tuple[torch.Tensor]
+    | IntermediateTensors,
 ) -> torch.Tensor | list[Any] | tuple[Any] | Any:
     """
     Convenience function to create weak references to tensors,
@@ -727,7 +790,9 @@ def weak_ref_tensors(
     from aphrodite.sequence import IntermediateTensors
 
     if isinstance(tensors, IntermediateTensors):
-        ret = IntermediateTensors({key: weak_ref_tensor(val) for key, val in tensors.tensors.items()})
+        ret = IntermediateTensors(
+            {key: weak_ref_tensor(val) for key, val in tensors.tensors.items()}
+        )
         return ret
     raise ValueError("Invalid type for tensors")
 
@@ -745,7 +810,8 @@ def get_accelerator_view_from_cpu_tensor(cpu_tensor: torch.Tensor) -> torch.Tens
         return torch.ops._C.get_cuda_view_from_cpu_tensor(cpu_tensor)
     else:
         raise ValueError(
-            f"`get_accelerator_view_from_cpu_tensor` is currently not supported in: {current_platform.device_name}"
+            f"`get_accelerator_view_from_cpu_tensor` is currently "
+            f"not supported in: {current_platform.device_name}"
         )
 
 
@@ -776,7 +842,10 @@ def _is_torch_equal(target: str) -> bool:
     torch_version = version.parse(torch_version)
     # torch version is like "2.6.0.dev20240101" or "2.6.0.dev20240101+cpu"
     # or "2.6.0+cu128" but never "2.6.0.1"
-    return torch_version >= version.parse(target) and version.parse(target + ".1") > torch_version
+    return (
+        torch_version >= version.parse(target)
+        and version.parse(target + ".1") > torch_version
+    )
 
 
 def is_torch_equal(target: str) -> bool:
@@ -852,11 +921,6 @@ def _resolve_layer_name(layer_name: str | LayerName) -> str:
 def _encode_layer_name(layer_name: str) -> str | LayerName:
     """Wrap a str layer name as LayerName when enabled."""
     return LayerName(layer_name) if _USE_LAYERNAME else layer_name
-
-
-# Supports xccl with PyTorch versions >= 2.8.0.dev for XPU platform
-def supports_xccl() -> bool:
-    return torch.distributed.is_xccl_available()
 
 
 # Supports XPU Graph with PyTorch versions >= 2.11.0.dev for XPU platform

@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import torch
-from aphrodite.attention.ops.common import pack_seq_triton, unpack_seq_triton
 from torch.testing import assert_close
+
+from aphrodite.v1.attention.ops.common import pack_seq_triton, unpack_seq_triton
 
 
 def test_pack_seq_basic_fp8():
@@ -88,7 +90,9 @@ def test_pack_seq_default_negative_inf_padding_fp8():
 
     # Check that padding is large negative values (fp8 representation of -inf)
     padded_data = result[:, 10:].to(torch.float32)
-    assert torch.all(padded_data < -100)  # fp8 -inf is represented as large negative number
+    assert torch.all(
+        padded_data < -100
+    )  # fp8 -inf is represented as large negative number
 
 
 def test_pack_seq_edge_cases_fp8():
@@ -217,7 +221,9 @@ def test_unpack_seq_triton_edge_cases_fp8():
     packed = pack_seq_triton(x, lengths)
     unpacked = unpack_seq_triton(packed, lengths)
     # Only compare the first 3 elements that were actually packed
-    assert_close(x[:3].to(torch.float32), unpacked.to(torch.float32), rtol=1e-1, atol=1e-2)
+    assert_close(
+        x[:3].to(torch.float32), unpacked.to(torch.float32), rtol=1e-1, atol=1e-2
+    )
 
     x = torch.randn(15, 8, 16, dtype=torch.float32, device=device) * 0.1
     x = x.to(dtype=dtype)

@@ -7,6 +7,7 @@ from typing import Any, Literal
 import torch
 
 from aphrodite.config import AphroditeConfig
+from aphrodite.config.lora import LoRAConfig
 from aphrodite.exceptions import LoRAAdapterNotFoundError
 from aphrodite.logger import init_logger
 from aphrodite.lora.lora_model import LoRAModel
@@ -41,9 +42,14 @@ class WorkerLoRAManager:
         self.embedding_modules = embedding_modules
         self._cached_dummy_lora: None | Literal[False] | LoRAModel = False
         self.max_num_seqs = aphrodite_config.scheduler_config.max_num_seqs
-        self.max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+        self.max_num_batched_tokens = (
+            aphrodite_config.scheduler_config.max_num_batched_tokens
+        )
         self.vocab_size = aphrodite_config.model_config.get_vocab_size()
-        self.lora_config = aphrodite_config.lora_config
+        lora_config = aphrodite_config.lora_config
+        if lora_config is None:
+            raise ValueError("LoRA config must be set for WorkerLoRAManager.")
+        self.lora_config: LoRAConfig = lora_config
 
         # Use get_text_config() in case of multimodal models
         text_config = aphrodite_config.model_config.hf_config.get_text_config()
@@ -53,9 +59,13 @@ class WorkerLoRAManager:
         # TODO: Generalize max_position_embeddings handling for
         # out-of-tree (OOT) encoder-decoder models
         if aphrodite_config.model_config.is_encoder_decoder:
-            self.max_position_embeddings = getattr(text_config, "max_target_positions", None)
+            self.max_position_embeddings = getattr(
+                text_config, "max_target_positions", None
+            )
         else:
-            self.max_position_embeddings = getattr(text_config, "max_position_embeddings", None)
+            self.max_position_embeddings = getattr(
+                text_config, "max_position_embeddings", None
+            )
         self.device = device
         # Lazily initialized by create_lora_manager.
         self._adapter_manager: LoRAModelManager
@@ -75,8 +85,10 @@ class WorkerLoRAManager:
     def create_lora_manager(
         self,
         model: torch.nn.Module,
-        aphrodite_config: AphroditeConfig | None = None,
+        aphrodite_config: AphroditeConfig,
     ) -> Any:
+        if aphrodite_config is None:
+            raise ValueError("aphrodite_config must be provided to create a LoRA manager.")
         lora_manager = create_lora_manager(
             model,
             max_num_seqs=self.max_num_seqs,
@@ -116,9 +128,13 @@ class WorkerLoRAManager:
             peft_helper.validate_legal(self.lora_config)
 
             # For some models like Qwen2VL, we need to use hf_to_aphrodite_mapper
-            # to ensure correct loading of lora weights.
+            # to ensure correct loading of lora weights. Drop the QKV/MLP fusion
+            # substr maps so constituent names (e.g. `q_proj`) survive for the
+            # LoRA manager to pack, while keeping genuine renames/prefixes.
             model = self._adapter_manager.model
             hf_to_aphrodite_mapper = getattr(model, "hf_to_aphrodite_mapper", None)
+            if hf_to_aphrodite_mapper is not None:
+                hf_to_aphrodite_mapper = hf_to_aphrodite_mapper.get_unstacked_mapper()
 
             # Get model-defined prefixes to skip during LoRA loading.
             lora_skip_prefixes = getattr(model, "lora_skip_prefixes", None)
@@ -134,7 +150,12 @@ class WorkerLoRAManager:
                 tensorizer_config_dict=lora_request.tensorizer_config_dict,
                 weights_mapper=hf_to_aphrodite_mapper,
                 skip_prefixes=lora_skip_prefixes,
+                moe_ep_spec=self._adapter_manager.moe_ep_load_spec,
             )
+            # Stamp the on-disk MoE layout onto the loaded model so the
+            # adapter manager can route 3D-format checkpoints through the
+            # 3D->2D conversion when running under the universal 2D wrapper.
+            lora.is_3d_lora_weight = lora_request.is_3d_lora_weight
 
         except FileNotFoundError as e:
             # FileNotFoundError should be raised if both
@@ -142,7 +163,9 @@ class WorkerLoRAManager:
             #       offline mode)
             # - No local adapter files found at `lora_request.lora_path`
             # For NotFoundError
-            raise LoRAAdapterNotFoundError(lora_request.lora_name, lora_request.lora_path) from e
+            raise LoRAAdapterNotFoundError(
+                lora_request.lora_name, lora_request.lora_path
+            ) from e
         except Exception as e:
             raise e
 
@@ -154,7 +177,9 @@ class WorkerLoRAManager:
         if isinstance(self._cached_dummy_lora, LoRAModel):
             dummy_lora = self._cached_dummy_lora.clone(lora_request.lora_int_id)
         else:
-            dummy_lora = self._adapter_manager.create_dummy_lora(lora_request.lora_int_id, rank, self.embedding_modules)
+            dummy_lora = self._adapter_manager.create_dummy_lora(
+                lora_request.lora_int_id, rank, self.embedding_modules
+            )
             if self._cached_dummy_lora is None:
                 self._cached_dummy_lora = dummy_lora
         return self._adapter_manager.add_adapter(dummy_lora)
@@ -171,12 +196,17 @@ class WorkerLoRAManager:
             self._adapter_manager.set_adapter_mapping(mapping)
 
     def supports_tower_connector_lora(self) -> bool:
-        return self._adapter_manager.supports_mm and self._adapter_manager.supports_tower_connector_lora
+        return (
+            self._adapter_manager.supports_mm
+            and self._adapter_manager.supports_tower_connector_lora
+        )
 
     def _apply_adapters(self, adapter_requests: set[Any]) -> None:
         existing_adapters = self.list_adapters()
         models_map = {
-            adapter_request.adapter_id: adapter_request for adapter_request in adapter_requests if adapter_request
+            adapter_request.adapter_id: adapter_request
+            for adapter_request in adapter_requests
+            if adapter_request
         }
         if len(models_map) > self._adapter_manager.adapter_slots:
             raise RuntimeError(
@@ -220,8 +250,10 @@ class LRUCacheWorkerLoRAManager(WorkerLoRAManager):
     def create_lora_manager(
         self,
         model: torch.nn.Module,
-        aphrodite_config: AphroditeConfig | None = None,
+        aphrodite_config: AphroditeConfig,
     ) -> Any:
+        if aphrodite_config is None:
+            raise ValueError("aphrodite_config must be provided to create a LoRA manager.")
         lora_manager = create_lora_manager(
             model,
             lora_manager_cls=self._manager_cls,
@@ -236,7 +268,11 @@ class LRUCacheWorkerLoRAManager(WorkerLoRAManager):
         return lora_manager.model
 
     def _apply_adapters(self, lora_requests: set[LoRARequest]) -> None:
-        loras_map = {lora_request.lora_int_id: lora_request for lora_request in lora_requests if lora_request}
+        loras_map = {
+            lora_request.lora_int_id: lora_request
+            for lora_request in lora_requests
+            if lora_request
+        }
         if len(loras_map) > self._adapter_manager.lora_slots:
             raise RuntimeError(
                 f"Number of requested LoRAs ({len(loras_map)}) is greater "
@@ -252,7 +288,10 @@ class LRUCacheWorkerLoRAManager(WorkerLoRAManager):
         # This is ok because it's currently only called from
         # the single-threaded core engine loop.
 
-        if lora_request.lora_int_id not in self.list_adapters() or lora_request.load_inplace:
+        if (
+            lora_request.lora_int_id not in self.list_adapters()
+            or lora_request.load_inplace
+        ):
             # Load the new adapter first to ensure it is actually valid, before
             # evicting any existing adapters.
             # This may cause the # of loaded lora adapters to very temporarily
@@ -273,6 +312,8 @@ class LRUCacheWorkerLoRAManager(WorkerLoRAManager):
         else:
             # If the lora is already loaded, just touch it to
             # update its position in the caches
-            loaded = self._adapter_manager.get_adapter(lora_request.lora_int_id) is not None
+            loaded = (
+                self._adapter_manager.get_adapter(lora_request.lora_int_id) is not None
+            )
         self._adapter_manager.activate_adapter(lora_request.lora_int_id)
         return loaded

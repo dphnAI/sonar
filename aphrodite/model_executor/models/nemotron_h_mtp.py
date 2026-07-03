@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
+from aphrodite.config import CacheConfig, ModelConfig, AphroditeConfig
 from aphrodite.config.parallel import ParallelConfig
 from aphrodite.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
@@ -72,7 +72,9 @@ class NemotronHMTPAttentionDecoderLayer(NemotronHAttentionDecoderLayer):
                 output_size=config.hidden_size,
                 bias=False,
                 gather_output=True,
-                params_dtype=config.dtype if hasattr(config, "dtype") else torch.bfloat16,
+                params_dtype=config.dtype
+                if hasattr(config, "dtype")
+                else torch.bfloat16,
                 quant_config=quant_config,
                 prefix=f"{prefix}.eh_proj",
             )
@@ -98,7 +100,9 @@ class NemotronHMTPAttentionDecoderLayer(NemotronHAttentionDecoderLayer):
             previous_hidden_states_normed = self.hnorm(hidden_states)
 
             # Fuse via concatenation and linear projection
-            fused = torch.cat([inputs_embeds_normed, previous_hidden_states_normed], dim=-1)
+            fused = torch.cat(
+                [inputs_embeds_normed, previous_hidden_states_normed], dim=-1
+            )
             hidden_states, _ = self.eh_proj(fused)
 
         # Call parent forward (Attention)
@@ -155,7 +159,9 @@ class NemotronHMTPMoEDecoderLayer(NemotronHMoEDecoderLayer):
                 output_size=config.hidden_size,
                 bias=False,
                 gather_output=True,
-                params_dtype=config.dtype if hasattr(config, "dtype") else torch.bfloat16,
+                params_dtype=config.dtype
+                if hasattr(config, "dtype")
+                else torch.bfloat16,
                 quant_config=quant_config,
                 prefix=f"{prefix}.eh_proj",
             )
@@ -181,7 +187,9 @@ class NemotronHMTPMoEDecoderLayer(NemotronHMoEDecoderLayer):
             previous_hidden_states_normed = self.hnorm(hidden_states)
 
             # Fuse via concatenation and linear projection
-            fused = torch.cat([inputs_embeds_normed, previous_hidden_states_normed], dim=-1)
+            fused = torch.cat(
+                [inputs_embeds_normed, previous_hidden_states_normed], dim=-1
+            )
             hidden_states, _ = self.eh_proj(fused)
 
         # Call parent forward (MoE)
@@ -216,7 +224,9 @@ class NemotronHMultiTokenPredictor(nn.Module):
 
         self.mtp_start_layer_idx = config.num_hidden_layers
         self.num_mtp_layers = getattr(config, "num_nextn_predict_layers", 1)
-        assert self.num_mtp_layers == 1, "Only one MTP layer is supported for NemotronH-MTP"
+        assert self.num_mtp_layers == 1, (
+            "Only one MTP layer is supported for NemotronH-MTP"
+        )
 
         self.pattern_str = config.mtp_hybrid_override_pattern
         self.pattern_len = len(self.pattern_str)
@@ -260,14 +270,20 @@ class NemotronHMultiTokenPredictor(nn.Module):
             elif char == "E":
                 self.layers[str(i)] = NemotronHMTPMoEDecoderLayer(**common_kwargs)
             else:
-                raise NotImplementedError(f"Pattern char '{char}' in {self.pattern_str} not implemented")
+                raise NotImplementedError(
+                    f"Pattern char '{char}' in {self.pattern_str} not implemented"
+                )
 
         self.make_empty_intermediate_tensors: Callable[..., IntermediateTensors] = (
-            make_empty_intermediate_tensors_factory(["hidden_states", "residual"], config.hidden_size)
+            make_empty_intermediate_tensors_factory(
+                ["hidden_states", "residual"], config.hidden_size
+            )
         )
 
     def get_input_embeddings(self, input_ids: torch.Tensor) -> torch.Tensor:
-        assert self.embed_tokens is not None, "embed_tokens not initialized - must be shared from target model"
+        assert self.embed_tokens is not None, (
+            "embed_tokens not initialized - must be shared from target model"
+        )
         return self.embed_tokens(input_ids)
 
     def forward(
@@ -317,10 +333,14 @@ class NemotronHMTP(nn.Module, SupportsPP):
         # EPLB config for experts
         self.num_redundant_experts = 0
         if aphrodite_config.parallel_config and aphrodite_config.parallel_config.eplb_config:
-            self.num_redundant_experts = aphrodite_config.parallel_config.eplb_config.num_redundant_experts
+            self.num_redundant_experts = (
+                aphrodite_config.parallel_config.eplb_config.num_redundant_experts
+            )
 
         # MTP predictor
-        self.model = NemotronHMultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "mtp"))
+        self.model = NemotronHMultiTokenPredictor(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "mtp")
+        )
 
         # LM head for generating logits
         self.lm_head = ParallelLMHead(
@@ -331,7 +351,9 @@ class NemotronHMTP(nn.Module, SupportsPP):
 
         self.logits_processor = LogitsProcessor(self.config.vocab_size)
 
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
 
     def get_input_embeddings(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.get_input_embeddings(input_ids)
@@ -360,7 +382,9 @@ class NemotronHMTP(nn.Module, SupportsPP):
         hidden_states: torch.Tensor,
     ) -> torch.Tensor | None:
         """Compute logits for DRAFT token generation."""
-        assert self.lm_head is not None, "lm_head not initialized - must be shared from target model"
+        assert self.lm_head is not None, (
+            "lm_head not initialized - must be shared from target model"
+        )
         return self.logits_processor(self.lm_head, hidden_states)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
@@ -391,7 +415,11 @@ class NemotronHMTP(nn.Module, SupportsPP):
 
         for name, loaded_weight in weights:
             # Only process MTP weights - skip all non-MTP weights
-            if not name.startswith("mtp.") and "embeddings" not in name and "lm_head" not in name:
+            if (
+                not name.startswith("mtp.")
+                and "embeddings" not in name
+                and "lm_head" not in name
+            ):
                 continue
             # Skip rotary embeddings (computed, not loaded)
             if "rotary_emb.inv_freq" in name:

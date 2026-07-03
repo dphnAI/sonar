@@ -4,7 +4,7 @@
 # Adapted from
 # https://github.com/huggingface/transformers/blob/19e6e80e10118f855137b90740936c0b11ac397f/src/transformers/models/qwen2_vl/modeling_qwen2_vl.py
 # Copyright 2024 The Qwen team.
-# Copyright 2023 The Aphrodite team.
+# Copyright 2023 The vLLM team.
 # Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -41,7 +41,6 @@ from transformers.models.qwen2_vl.configuration_qwen2_vl import (
     Qwen2VLVisionConfig,
 )
 from transformers.models.qwen2_vl.image_processing_qwen2_vl import smart_resize
-from transformers.models.qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
 
 from aphrodite.config import AphroditeConfig
 from aphrodite.config.multimodal import BaseDummyOptions
@@ -61,7 +60,6 @@ from aphrodite.model_executor.layers.rotary_embedding import get_rope
 from aphrodite.model_executor.layers.rotary_embedding.common import (
     ApplyRotaryEmb,
 )
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 from aphrodite.model_executor.models.module_mapping import MultiModelKeys
 from aphrodite.multimodal import MULTIMODAL_REGISTRY
 from aphrodite.multimodal.inputs import (
@@ -86,12 +84,13 @@ from aphrodite.multimodal.processing import (
     PromptUpdate,
 )
 from aphrodite.sequence import IntermediateTensors
-from aphrodite.tokenizers import TokenizerLike
 from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderCudaGraphReplayBuffers
 
 from .interfaces import (
     MultiModalEmbeddings,
+    SupportsEncoderCudaGraph,
     SupportsLoRA,
     SupportsMRoPE,
     SupportsMultiModal,
@@ -286,10 +285,18 @@ class Qwen2VisionAttention(nn.Module):
         super().__init__()
         # Per attention head and per partition values.
         use_data_parallel = is_vit_use_data_parallel()
-        self.tp_size = 1 if use_data_parallel else parallel_state.get_tensor_model_parallel_world_size()
+        self.tp_size = (
+            1
+            if use_data_parallel
+            else parallel_state.get_tensor_model_parallel_world_size()
+        )
         self.tp_rank = parallel_state.get_tensor_model_parallel_rank()
-        self.hidden_size_per_attention_head = dist_utils.divide(projection_size, num_heads)
-        self.num_attention_heads_per_partition = dist_utils.divide(num_heads, self.tp_size)
+        self.hidden_size_per_attention_head = dist_utils.divide(
+            projection_size, num_heads
+        )
+        self.num_attention_heads_per_partition = dist_utils.divide(
+            num_heads, self.tp_size
+        )
 
         self.qkv = ColumnParallelLinear(
             input_size=embed_dim,
@@ -326,7 +333,9 @@ class Qwen2VisionAttention(nn.Module):
 
         # 3 * [s, b, head * head_dim]
         if self.tp_size > 1:
-            splitter = partial(dist_utils.split_tensor_along_last_dim, num_partitions=self.tp_size)
+            splitter = partial(
+                dist_utils.split_tensor_along_last_dim, num_partitions=self.tp_size
+            )
             q = splitter(q)[self.tp_rank]
             k = splitter(k)[self.tp_rank]
             v = splitter(v)[self.tp_rank]
@@ -512,6 +521,15 @@ class Qwen2VisionPatchMerger(nn.Module):
 
 
 class Qwen2VisionTransformer(nn.Module):
+    # Vision checkpoints store qkv pre-fused; merge separate q/k/v into qkv.
+    hf_to_aphrodite_mapper = WeightsMapper(
+        orig_to_new_stacked={
+            ".q_proj": (".qkv", "q"),
+            ".k_proj": (".qkv", "k"),
+            ".v_proj": (".qkv", "v"),
+        }
+    )
+
     def __init__(
         self,
         vision_config: Qwen2VLVisionConfig,
@@ -587,7 +605,9 @@ class Qwen2VisionTransformer(nn.Module):
     def device(self) -> torch.device:
         return self.patch_embed.proj.weight.device
 
-    def rot_pos_emb(self, grid_thw: list[list[int]]) -> tuple[torch.Tensor, torch.Tensor]:
+    def rot_pos_emb(
+        self, grid_thw: list[list[int]]
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         pos_ids = []
         max_grid_size = 0
         for t, h, w in grid_thw:
@@ -620,6 +640,7 @@ class Qwen2VisionTransformer(nn.Module):
         # Use pre-computed cos_sin_cache from RotaryEmbedding
         cos, sin = self.rotary_pos_emb.get_cos_sin(max_grid_size)
 
+        pos_ids = pos_ids.to(cos.device, non_blocking=True)
         cos_combined = cos[pos_ids].flatten(1)
         sin_combined = sin[pos_ids].flatten(1)
         return cos_combined, sin_combined
@@ -634,36 +655,86 @@ class Qwen2VisionTransformer(nn.Module):
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
         return max_seqlen
 
+    def prepare_encoder_metadata(
+        self,
+        grid_thw: list[list[int]],
+        *,
+        max_batch_size: int | None = None,
+        max_frames_per_batch: int | None = None,
+        max_seqlen_override: int | None = None,
+        device: torch.device | None = None,
+    ) -> dict[str, torch.Tensor]:
+        if device is None:
+            device = self.device
+
+        # Position embeddings.
+        rotary_pos_emb_cos, rotary_pos_emb_sin = self.rot_pos_emb(grid_thw)
+
+        grid_thw_np = np.array(grid_thw, dtype=np.int32)
+        cu_seqlens = np.repeat(
+            grid_thw_np[:, 1] * grid_thw_np[:, 2],
+            grid_thw_np[:, 0],
+        ).cumsum(dtype=np.int32)
+        cu_seqlens = np.concatenate([np.zeros(1, dtype=np.int32), cu_seqlens])
+        cu_seqlens = torch.from_numpy(cu_seqlens)
+
+        # Keep cu_seqlens shape stable across capture/replay.
+        pad_to = (
+            max_frames_per_batch if max_frames_per_batch is not None else max_batch_size
+        )
+        if pad_to is not None:
+            num_seqs = len(cu_seqlens) - 1
+            if num_seqs < pad_to:
+                cu_seqlens = torch.cat(
+                    (
+                        cu_seqlens,
+                        torch.full(
+                            (pad_to - num_seqs,),
+                            cu_seqlens[-1],
+                            dtype=cu_seqlens.dtype,
+                            device=cu_seqlens.device,
+                        ),
+                    )
+                )
+
+        # Compute (or override) max seqlen used by FA-style backends.
+        if max_seqlen_override is None:
+            max_seqlen = self.compute_attn_mask_seqlen(cu_seqlens)
+        else:
+            max_seqlen = torch.tensor(max_seqlen_override, dtype=torch.int32)
+
+        return {
+            "rotary_pos_emb_cos": rotary_pos_emb_cos,
+            "rotary_pos_emb_sin": rotary_pos_emb_sin,
+            "cu_seqlens": cu_seqlens.to(device=device, non_blocking=True),
+            "max_seqlen": max_seqlen,
+        }
+
     def forward(
         self,
         x: torch.Tensor,
-        grid_thw: torch.Tensor | list[list[int]],
+        grid_thw: torch.Tensor | list[list[int]] | None,
+        *,
+        encoder_metadata: dict[str, torch.Tensor] | None = None,
     ) -> torch.Tensor:
         # patchify
         x = x.to(device=self.device, dtype=self.dtype)
         x = self.patch_embed(x)
 
-        if isinstance(grid_thw, list):
-            grid_thw_list = grid_thw
-            grid_thw = np.array(grid_thw, dtype=np.int32)
-        else:
-            grid_thw_list = grid_thw.tolist()
-            grid_thw = grid_thw.numpy()
+        if encoder_metadata is None:
+            assert grid_thw is not None
+            grid_thw_list = (
+                grid_thw if isinstance(grid_thw, list) else grid_thw.tolist()
+            )
+            encoder_metadata = self.prepare_encoder_metadata(grid_thw_list)
 
-        # compute position embedding
-        rotary_pos_emb_cos, rotary_pos_emb_sin = self.rot_pos_emb(grid_thw_list)
-
-        # compute cu_seqlens
-        cu_seqlens = np.repeat(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(axis=0, dtype=np.int32)
-        cu_seqlens = np.concatenate([np.zeros(1, dtype=np.int32), cu_seqlens])
-        cu_seqlens = torch.from_numpy(cu_seqlens)
+        rotary_pos_emb_cos = encoder_metadata["rotary_pos_emb_cos"]
+        rotary_pos_emb_sin = encoder_metadata["rotary_pos_emb_sin"]
+        cu_seqlens = encoder_metadata["cu_seqlens"]
+        max_seqlen = encoder_metadata["max_seqlen"]
 
         # transformers
         x = x.unsqueeze(1)
-
-        # pre-compute seqlens for attn mask to reduce cuMemcpy operations
-        max_seqlen = self.compute_attn_mask_seqlen(cu_seqlens)
-        cu_seqlens = cu_seqlens.to(self.device, non_blocking=True)
         for blk in self.blocks:
             x = blk(
                 x,
@@ -679,31 +750,8 @@ class Qwen2VisionTransformer(nn.Module):
         return x
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        stacked_params_mapping = [
-            # (param_name, shard_name, shard_id)
-            ("qkv_proj", "q_proj", "q"),
-            ("qkv_proj", "k_proj", "k"),
-            ("qkv_proj", "v_proj", "v"),
-        ]
-        params_dict = dict(self.named_parameters(remove_duplicate=False))
-        loaded_params: set[str] = set()
-
-        for name, loaded_weight in weights:
-            for param_name, weight_name, shard_id in stacked_params_mapping:
-                if weight_name not in name:
-                    continue
-                name = name.replace(weight_name, param_name)
-
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                weight_loader(param, loaded_weight)
-            loaded_params.add(name)
-        return loaded_params
+        loader = AutoWeightsLoader(self)
+        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
 
 
 def _create_qwen2vl_field_factory(
@@ -715,18 +763,30 @@ def _create_qwen2vl_field_factory(
     def _qwen2vl_field_config(hf_inputs: Mapping[str, torch.Tensor]):
         image_grid_thw = hf_inputs.get("image_grid_thw", torch.empty((0, 3)))
         image_pixel_grid_sizes = image_grid_thw.prod(-1)
-        image_embed_grid_sizes = image_pixel_grid_sizes // spatial_merge_size // spatial_merge_size
+        image_embed_grid_sizes = (
+            image_pixel_grid_sizes // spatial_merge_size // spatial_merge_size
+        )
 
         video_grid_thw = hf_inputs.get("video_grid_thw", torch.empty((0, 3)))
         video_grid_sizes = video_grid_thw.prod(-1)
-        video_embed_grid_sizes = video_grid_sizes // spatial_merge_size // spatial_merge_size
+        video_embed_grid_sizes = (
+            video_grid_sizes // spatial_merge_size // spatial_merge_size
+        )
 
         return dict(
-            pixel_values=MultiModalFieldConfig.flat_from_sizes("image", image_pixel_grid_sizes),
-            image_embeds=MultiModalFieldConfig.flat_from_sizes("image", image_embed_grid_sizes),
+            pixel_values=MultiModalFieldConfig.flat_from_sizes(
+                "image", image_pixel_grid_sizes
+            ),
+            image_embeds=MultiModalFieldConfig.flat_from_sizes(
+                "image", image_embed_grid_sizes
+            ),
             image_grid_thw=MultiModalFieldConfig.batched("image", keep_on_cpu=True),
-            pixel_values_videos=MultiModalFieldConfig.flat_from_sizes("video", video_grid_sizes),
-            video_embeds=MultiModalFieldConfig.flat_from_sizes("video", video_embed_grid_sizes),
+            pixel_values_videos=MultiModalFieldConfig.flat_from_sizes(
+                "video", video_grid_sizes
+            ),
+            video_embeds=MultiModalFieldConfig.flat_from_sizes(
+                "video", video_embed_grid_sizes
+            ),
             video_grid_thw=MultiModalFieldConfig.batched("video", keep_on_cpu=True),
             timestamps=MultiModalFieldConfig.batched("video", keep_on_cpu=True),
         )
@@ -885,7 +945,9 @@ class Qwen2VLProcessingInfo(BaseProcessingInfo):
         )
         return num_video_tokens
 
-    def get_image_size_with_most_features(self, max_pixels: int | None = None) -> ImageSize:
+    def get_image_size_with_most_features(
+        self, max_pixels: int | None = None
+    ) -> ImageSize:
         # NOTE: Simply processing a huge size with _get_vision_info might not give a
         # size that maximizes the number of features, i.e., the number of (merged)
         # patches. This is because the number of patches limits the allowed aspect
@@ -979,7 +1041,9 @@ class Qwen2VLProcessingInfo(BaseProcessingInfo):
         max_videos = mm_counts.get("video", 0)
 
         max_total_frames = self._get_max_video_frames(seq_len)
-        max_frames_per_video = min(max_total_frames // max(max_videos, 1), max_frames_per_video)
+        max_frames_per_video = min(
+            max_total_frames // max(max_videos, 1), max_frames_per_video
+        )
 
         return max(max_frames_per_video, 1)
 
@@ -1021,7 +1085,9 @@ class Qwen2VLDummyInputsBuilder(BaseDummyInputsBuilder[Qwen2VLProcessingInfo]):
         num_videos = mm_counts.get("video", 0)
 
         target_width, target_height = self.info.get_image_size_with_most_features()
-        target_num_frames = self.info.get_num_frames_with_most_features(seq_len, mm_counts)
+        target_num_frames = self.info.get_num_frames_with_most_features(
+            seq_len, mm_counts
+        )
 
         image_overrides = mm_options.get("image")
         video_overrides = mm_options.get("video")
@@ -1084,7 +1150,9 @@ class Qwen2VLMultiModalProcessor(BaseMultiModalProcessor[Qwen2VLProcessingInfo])
         hf_inputs: BatchFeature,
         hf_processor_mm_kwargs: Mapping[str, object],
     ) -> Mapping[str, MultiModalFieldConfig]:
-        return _create_qwen2vl_field_factory(self.info.get_hf_config().vision_config.spatial_merge_size)(hf_inputs)
+        return _create_qwen2vl_field_factory(
+            self.info.get_hf_config().vision_config.spatial_merge_size
+        )(hf_inputs)
 
 
 @MULTIMODAL_REGISTRY.register_processor(
@@ -1092,7 +1160,14 @@ class Qwen2VLMultiModalProcessor(BaseMultiModalProcessor[Qwen2VLProcessingInfo])
     info=Qwen2VLProcessingInfo,
     dummy_inputs=Qwen2VLDummyInputsBuilder,
 )
-class Qwen2VLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA, SupportsPP, SupportsMRoPE):
+class Qwen2VLForConditionalGeneration(
+    nn.Module,
+    SupportsMultiModal,
+    SupportsLoRA,
+    SupportsPP,
+    SupportsMRoPE,
+    SupportsEncoderCudaGraph,
+):
     # To ensure correct weight loading and mapping.
     hf_to_aphrodite_mapper = WeightsMapper(
         orig_to_new_prefix={
@@ -1107,7 +1182,9 @@ class Qwen2VLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoR
 
     supports_encoder_tp_data = True
 
-    def iter_mm_grid_thw(self, mm_features: list[MultiModalFeatureSpec]) -> Iterator[tuple[int, int, int, int, float]]:
+    def iter_mm_grid_thw(
+        self, mm_features: list[MultiModalFeatureSpec]
+    ) -> Iterator[tuple[int, int, int, int, float]]:
         """
         Iterate over multimodal features and yield grid information.
 
@@ -1129,7 +1206,9 @@ class Qwen2VLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoR
                 t, h, w = mm_feature.data["video_grid_thw"].data.tolist()
                 second_per_grid_ts = 1.0
                 if mm_feature.data.get("second_per_grid_ts", None):
-                    second_per_grid_ts = mm_feature.data["second_per_grid_ts"].data.item()
+                    second_per_grid_ts = mm_feature.data[
+                        "second_per_grid_ts"
+                    ].data.item()
                 t_factor = second_per_grid_ts * tokens_per_second
                 yield (
                     offset,
@@ -1158,7 +1237,9 @@ class Qwen2VLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoR
         ) in self.iter_mm_grid_thw(mm_features):
             text_len = offset - st
             st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-            llm_pos_ids_list.append(np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx)
+            llm_pos_ids_list.append(
+                np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx
+            )
 
             grid_indices = np.indices((llm_grid_t, llm_grid_h, llm_grid_w))
             if t_factor != 1.0:
@@ -1169,7 +1250,9 @@ class Qwen2VLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoR
         if st < len(input_tokens):
             st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
             text_len = len(input_tokens) - st
-            llm_pos_ids_list.append(np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx)
+            llm_pos_ids_list.append(
+                np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx
+            )
 
         llm_positions = np.concatenate(llm_pos_ids_list, axis=1).reshape(3, -1)
         mrope_position_delta = (llm_positions.max() + 1 - len(input_tokens)).item()
@@ -1190,7 +1273,7 @@ class Qwen2VLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoR
         config: Qwen2VLConfig = aphrodite_config.model_config.hf_config
         quant_config = aphrodite_config.quant_config
         multimodal_config = aphrodite_config.model_config.multimodal_config
-
+        self.model_config = aphrodite_config.model_config
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
         self.config = config
         self.multimodal_config = multimodal_config
@@ -1210,9 +1293,13 @@ class Qwen2VLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoR
                 architectures=["Qwen2ForCausalLM"],
             )
 
-        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.language_model.make_empty_intermediate_tensors
+        )
 
-    def _parse_and_validate_image_input(self, **kwargs: object) -> Qwen2VLImageInputs | None:
+    def _parse_and_validate_image_input(
+        self, **kwargs: object
+    ) -> Qwen2VLImageInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         image_embeds = kwargs.pop("image_embeds", None)
         image_grid_thw = kwargs.pop("image_grid_thw", None)
@@ -1234,7 +1321,9 @@ class Qwen2VLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoR
                 image_grid_thw=image_grid_thw,
             )
 
-    def _parse_and_validate_video_input(self, **kwargs: object) -> Qwen2VLVideoInputs | None:
+    def _parse_and_validate_video_input(
+        self, **kwargs: object
+    ) -> Qwen2VLVideoInputs | None:
         pixel_values_videos = kwargs.pop("pixel_values_videos", None)
         video_embeds = kwargs.pop("video_embeds", None)
         video_grid_thw = kwargs.pop("video_grid_thw", None)
@@ -1256,7 +1345,9 @@ class Qwen2VLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoR
                 video_grid_thw=video_grid_thw,
             )
 
-    def _process_image_input(self, image_input: Qwen2VLImageInputs) -> tuple[torch.Tensor, ...]:
+    def _process_image_input(
+        self, image_input: Qwen2VLImageInputs
+    ) -> tuple[torch.Tensor, ...]:
         grid_thw = image_input["image_grid_thw"]
         assert grid_thw.ndim == 2
 
@@ -1277,7 +1368,9 @@ class Qwen2VLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoR
         sizes = (grid_thw.prod(-1) // merge_size // merge_size).tolist()
         return image_embeds.split(sizes)
 
-    def _process_video_input(self, video_input: Qwen2VLVideoInputs) -> tuple[torch.Tensor, ...]:
+    def _process_video_input(
+        self, video_input: Qwen2VLVideoInputs
+    ) -> tuple[torch.Tensor, ...]:
         grid_thw = video_input["video_grid_thw"]
         assert grid_thw.ndim == 2
 
@@ -1306,9 +1399,15 @@ class Qwen2VLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoR
         # Preserve the order of modalities if there are multiple of them
         # from the order of kwargs.
         for input_key in kwargs:
-            if input_key in ("pixel_values", "image_embeds") and "images" not in modalities:
+            if (
+                input_key in ("pixel_values", "image_embeds")
+                and "images" not in modalities
+            ):
                 modalities["images"] = self._parse_and_validate_image_input(**kwargs)
-            if input_key in ("pixel_values_videos", "video_embeds") and "videos" not in modalities:
+            if (
+                input_key in ("pixel_values_videos", "video_embeds")
+                and "videos" not in modalities
+            ):
                 modalities["videos"] = self._parse_and_validate_video_input(**kwargs)
 
         return modalities
@@ -1335,6 +1434,238 @@ class Qwen2VLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoR
                 multimodal_embeddings += tuple(video_embeddings)
 
         return multimodal_embeddings
+
+    # -- SupportsEncoderCudaGraph protocol methods --
+
+    def get_encoder_cudagraph_config(self):
+        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+            EncoderCudaGraphConfig,
+        )
+
+        max_frames = self.get_max_frames_per_video()
+        return EncoderCudaGraphConfig(
+            modalities=["image", "video"],
+            buffer_keys=[
+                "pixel_values",
+                "rotary_pos_emb_cos",
+                "rotary_pos_emb_sin",
+                "cu_seqlens",
+                "max_seqlen",
+            ],
+            out_hidden_size=self.visual.out_hidden_size,
+            max_frames_per_video=max_frames,
+        )
+
+    def get_input_modality(self, mm_kwargs: dict[str, Any]) -> str:
+        if "image_grid_thw" in mm_kwargs:
+            return "image"
+        return "video"
+
+    def get_max_frames_per_video(self) -> int:
+        mm_registry = MULTIMODAL_REGISTRY
+        info = mm_registry.get_processing_info(self.model_config)
+        max_frames_per_video = info.get_num_frames_with_most_features(
+            seq_len=self.model_config.max_model_len,
+            mm_counts={"video": self.multimodal_config.get_limit_per_prompt("video")},
+        )
+        return max_frames_per_video
+
+    def get_encoder_cudagraph_budget_range(
+        self,
+        aphrodite_config: AphroditeConfig,
+    ) -> tuple[int, int]:
+        # Min: estimated smallest possible encoder input.
+        # 224x224 image -> 16x16 patches (patch_size=14)
+        #                spatial_merge_size=2 -> 8x8 = 64 tokens
+        min_budget = 64
+        # Max: capped by max_num_batched_tokens
+        max_budget = min(
+            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            self.model_config.max_model_len,
+        )
+        return (min_budget, max_budget)
+
+    def _get_pixel_values_by_modality(self, mm_kwargs: dict[str, Any]) -> torch.Tensor:
+        if self.get_input_modality(mm_kwargs) == "image":
+            pixel_values = mm_kwargs["pixel_values"]
+        else:
+            pixel_values = mm_kwargs["pixel_values_videos"]
+        return pixel_values
+
+    def _get_grid_thw_by_modality(self, mm_kwargs: dict[str, Any]) -> list[list[int]]:
+        grid_thw_key = f"{self.get_input_modality(mm_kwargs)}_grid_thw"
+        grid_thw = mm_kwargs[grid_thw_key]
+        if not isinstance(grid_thw, list):
+            grid_thw = grid_thw.tolist()
+        return grid_thw
+
+    def get_encoder_cudagraph_item_specs(
+        self,
+        mm_kwargs: dict[str, Any],
+    ):
+        from aphrodite.v1.worker.encoder_cudagraph_defs import EncoderItemSpec
+
+        m = self.visual.spatial_merge_size
+        grid_thw = self._get_grid_thw_by_modality(mm_kwargs)
+        return [
+            EncoderItemSpec(
+                input_size=t * h * w,
+                output_tokens=t * (h // m) * (w // m),
+            )
+            for t, h, w in grid_thw
+        ]
+
+    def select_encoder_cudagraph_items(
+        self, mm_kwargs: dict[str, Any], indices: list[int]
+    ) -> dict[str, Any]:
+        grid_thw = self._get_grid_thw_by_modality(mm_kwargs)
+        pixel_values = self._get_pixel_values_by_modality(mm_kwargs)
+
+        if len(indices) == 0:
+            if self.get_input_modality(mm_kwargs) == "image":
+                return {
+                    "pixel_values": pixel_values[:0],
+                    "image_grid_thw": [],
+                }
+            else:
+                return {
+                    "pixel_values_videos": pixel_values[:0],
+                    "video_grid_thw": [],
+                }
+
+        # Compute cumulative patch offsets for slicing pixel_values.
+        patches_per_item = [t * h * w for t, h, w in grid_thw]
+        cum_patches = [0]
+        for p in patches_per_item:
+            cum_patches.append(cum_patches[-1] + p)
+
+        selected_pv = torch.cat(
+            [pixel_values[cum_patches[i] : cum_patches[i + 1]] for i in indices]
+        )
+        selected_grid = [grid_thw[i] for i in indices]
+
+        if self.get_input_modality(mm_kwargs) == "image":
+            return {
+                "pixel_values": selected_pv,
+                "image_grid_thw": selected_grid,
+            }
+        else:
+            return {
+                "pixel_values_videos": selected_pv,
+                "video_grid_thw": selected_grid,
+            }
+
+    def prepare_encoder_cudagraph_capture_inputs(
+        self,
+        token_budget: int,
+        max_batch_size: int,
+        max_frames_per_batch: int,
+        device: torch.device,
+        dtype: torch.dtype,
+        path: str = "default",
+    ):
+        from aphrodite.v1.worker.encoder_cudagraph_defs import (
+            EncoderCudaGraphCaptureInputs,
+        )
+
+        spatial_merge_size = self.visual.spatial_merge_size
+        # Use ceil so captured capacity is never smaller than token_budget.
+        per_mm_item_output = (token_budget + max_batch_size - 1) // max_batch_size
+
+        frames_per_item = max_frames_per_batch // max_batch_size
+        if frames_per_item > 1:
+            tokens_per_frame = (
+                per_mm_item_output + frames_per_item - 1
+            ) // frames_per_item
+            grid_config = [
+                [
+                    frames_per_item,
+                    spatial_merge_size,
+                    tokens_per_frame * spatial_merge_size,
+                ]
+                for _ in range(max_batch_size)
+            ]
+        else:
+            grid_config = [
+                [1, spatial_merge_size, per_mm_item_output * spatial_merge_size]
+                for _ in range(max_batch_size)
+            ]
+
+        # Create dummy pixel_values.
+        patch_embed = self.visual.patch_embed
+        in_channels = patch_embed.proj.in_channels
+        patch_size = patch_embed.patch_size
+        temporal_patch_size = patch_embed.temporal_patch_size
+        total_patches = sum(t * h * w for t, h, w in grid_config)
+        flattened_patch_size = (
+            in_channels * temporal_patch_size * patch_size * patch_size
+        )
+        dummy_pixel_values = torch.randn(
+            total_patches, flattened_patch_size, device=device, dtype=dtype
+        )
+
+        # max_seqlen.item() gets baked into the CUDA graph at capture time.
+        metadata = self.visual.prepare_encoder_metadata(
+            grid_config,
+            max_batch_size=max_batch_size,
+            max_frames_per_batch=max_frames_per_batch,
+            max_seqlen_override=token_budget * (spatial_merge_size**2),
+            device=device,
+        )
+
+        # Capture with image-format kwargs; pixel_values shape is compatible with
+        # both image and video replay paths.
+        values = metadata | {
+            "pixel_values": dummy_pixel_values,
+        }
+
+        return EncoderCudaGraphCaptureInputs(
+            values=values,
+        )
+
+    def prepare_encoder_cudagraph_replay_buffers(
+        self,
+        mm_kwargs: dict[str, Any],
+        max_batch_size: int,
+        max_frames_per_batch: int,
+        path: str = "default",
+    ) -> EncoderCudaGraphReplayBuffers:
+        modality = self.get_input_modality(mm_kwargs)
+        grid_thw_list = self._get_grid_thw_by_modality(mm_kwargs)
+
+        if modality == "image":
+            metadata = self.visual.prepare_encoder_metadata(
+                grid_thw_list,
+                max_batch_size=max_batch_size,
+            )
+        else:
+            metadata = self.visual.prepare_encoder_metadata(
+                grid_thw_list,
+                max_frames_per_batch=max_frames_per_batch,
+            )
+
+        values = metadata | {
+            "pixel_values": self._get_pixel_values_by_modality(mm_kwargs),
+        }
+        return EncoderCudaGraphReplayBuffers(values=values)
+
+    def encoder_cudagraph_forward(
+        self,
+        values: dict[str, torch.Tensor],
+        path: str = "default",
+    ) -> torch.Tensor:
+        pixel_values = values.pop("pixel_values")
+        metadata = values
+        return self.visual(pixel_values, None, encoder_metadata=metadata)
+
+    def encoder_eager_forward(
+        self,
+        mm_kwargs: dict[str, Any],
+        path: str = "default",
+    ) -> torch.Tensor:
+        pixel_values = self._get_pixel_values_by_modality(mm_kwargs)
+        grid_thw = self._get_grid_thw_by_modality(mm_kwargs)
+        return self.visual(pixel_values, grid_thw)
 
     def forward(
         self,
@@ -1407,83 +1738,3 @@ class Qwen2VLForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoR
         vision_config = hf_config.vision_config
         merge_size = vision_config.spatial_merge_size
         return num_vision_tokens // merge_size**2
-
-
-class Tarsier2MultiModalProcessor(Qwen2VLMultiModalProcessor):
-    pass
-
-
-class Tarsier2ImageProcessor(Qwen2VLImageProcessor):
-    def __init__(
-        self,
-        size: dict[str, int] | None = None,
-        **kwargs,
-    ) -> None:
-        if size is not None and "min_pixels" in size and "max_pixels" in size:
-            # Remap if Tarsier2-specific format is provided
-            remapped_size = {
-                "shortest_edge": size["min_pixels"],
-                "longest_edge": size["max_pixels"],
-            }
-            super().__init__(size=remapped_size, **kwargs)
-        else:
-            super().__init__(size=size, **kwargs)
-
-
-class Tarsier2Processor(Qwen2VLProcessor):
-    def __init__(
-        self,
-        image_processor: Tarsier2ImageProcessor,
-        tokenizer: TokenizerLike,
-        video_processor: Qwen2VLVideoProcessor,
-        **kwargs,
-    ):
-        super().__init__(
-            image_processor=image_processor,
-            tokenizer=tokenizer,
-            video_processor=video_processor,
-            chat_template=None,
-            **kwargs,
-        )
-
-
-class Tarsier2ProcessingInfo(Qwen2VLProcessingInfo):
-    def get_hf_config(self) -> Qwen2VLConfig:
-        model_path = self.ctx.model_config.model
-        correct_config = Qwen2VLConfig.from_pretrained(model_path)
-
-        return correct_config
-
-    def get_hf_processor(self, **kwargs: object) -> Tarsier2Processor:
-        vision_config = self.ctx.get_hf_image_processor_config()
-        image_processor = Tarsier2ImageProcessor(**vision_config)
-        video_processor = Qwen2VLVideoProcessor(**vision_config)
-        return Tarsier2Processor(
-            image_processor=image_processor,
-            video_processor=video_processor,
-            tokenizer=self.get_tokenizer(),
-            **kwargs,
-        )
-
-    def get_image_processor(self) -> Tarsier2ImageProcessor:
-        return Tarsier2ImageProcessor(**self.ctx.get_hf_image_processor_config())
-
-
-@MULTIMODAL_REGISTRY.register_processor(
-    Tarsier2MultiModalProcessor,
-    info=Tarsier2ProcessingInfo,
-    dummy_inputs=Qwen2VLDummyInputsBuilder,
-)
-class Tarsier2ForConditionalGeneration(Qwen2VLForConditionalGeneration):
-    hf_to_aphrodite_mapper = WeightsMapper(
-        orig_to_new_prefix={
-            "vision_tower.": "visual.",
-        }
-    )
-
-    def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        skip_prefixes = []
-        if self.visual is None:
-            skip_prefixes.extend(["visual."])
-        loader = AutoWeightsLoader(self, skip_prefixes=skip_prefixes)
-        return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)

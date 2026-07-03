@@ -26,7 +26,7 @@ import torch
 from torch import nn
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
+from aphrodite.config import CacheConfig, ModelConfig, AphroditeConfig
 from aphrodite.config.parallel import ParallelConfig
 from aphrodite.distributed import get_ep_group, get_tensor_model_parallel_world_size
 from aphrodite.distributed.communication_op import tensor_model_parallel_all_gather
@@ -64,9 +64,12 @@ from aphrodite.model_executor.model_loader.weight_utils import (
     maybe_remap_kv_scale_name,
 )
 from aphrodite.model_executor.models.interfaces import (
+    EagleModelMixin,
     HasInnerState,
     IsHybrid,
     MixtureOfExperts,
+    SupportsEagle,
+    SupportsEagle3,
     SupportsLoRA,
     SupportsMambaPrefixCaching,
     SupportsPP,
@@ -143,7 +146,9 @@ class NemotronHMoE(nn.Module):
         self.n_routed_experts: int = config.n_routed_experts
         self.n_shared_experts: int = config.n_shared_experts
         self.use_latent_moe: bool = getattr(config, "moe_latent_size", None) is not None
-        self.moe_hidden_size: int = config.moe_latent_size if self.use_latent_moe else config.hidden_size
+        self.moe_hidden_size: int = (
+            config.moe_latent_size if self.use_latent_moe else config.hidden_size
+        )
 
         self.is_sequence_parallel = parallel_config.use_sequence_parallel_moe
 
@@ -155,7 +160,9 @@ class NemotronHMoE(nn.Module):
             prefix=f"{prefix}.gate",
         )
 
-        self.gate.e_score_correction_bias = nn.Parameter(torch.empty(config.n_routed_experts, dtype=torch.float32))
+        self.gate.e_score_correction_bias = nn.Parameter(
+            torch.empty(config.n_routed_experts, dtype=torch.float32)
+        )
         # Load balancing settings.
         self.enable_eplb = parallel_config.enable_eplb
 
@@ -165,12 +172,16 @@ class NemotronHMoE(nn.Module):
         self.n_local_physical_experts = self.n_physical_experts // self.ep_size
 
         self.physical_expert_start = self.ep_rank * self.n_local_physical_experts
-        self.physical_expert_end = self.physical_expert_start + self.n_local_physical_experts
+        self.physical_expert_end = (
+            self.physical_expert_start + self.n_local_physical_experts
+        )
 
         if config.n_shared_experts is None or config.n_shared_experts == 0:
             self.shared_experts = None
         else:
-            intermediate_size = config.moe_shared_expert_intermediate_size * config.n_shared_experts
+            intermediate_size = (
+                config.moe_shared_expert_intermediate_size * config.n_shared_experts
+            )
 
             self.shared_experts = NemotronHMLP(
                 config=config,
@@ -218,7 +229,6 @@ class NemotronHMoE(nn.Module):
             scoring_func="sigmoid",
             e_score_correction_bias=self.gate.e_score_correction_bias,
             activation=activation_without_mul(config.mlp_hidden_act),
-            is_act_and_mul=False,  # non-gated MoE
             enable_eplb=self.enable_eplb,
             num_redundant_experts=self.n_redundant_experts,
             is_sequence_parallel=self.is_sequence_parallel,
@@ -239,10 +249,14 @@ class NemotronHMoE(nn.Module):
         # router_logits: (num_tokens, n_experts)
         router_logits, _ = self.gate(hidden_states)
 
-        final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=router_logits)
+        final_hidden_states = self.experts(
+            hidden_states=hidden_states, router_logits=router_logits
+        )
 
         if self.is_sequence_parallel:
-            final_hidden_states = tensor_model_parallel_all_gather(final_hidden_states, 0)
+            final_hidden_states = tensor_model_parallel_all_gather(
+                final_hidden_states, 0
+            )
             final_hidden_states = final_hidden_states[:num_tokens]
 
         return final_hidden_states.view(num_tokens, hidden_dim)
@@ -527,7 +541,7 @@ ALL_DECODER_LAYER_TYPES = {
 
 
 @support_torch_compile
-class NemotronHModel(nn.Module):
+class NemotronHModel(nn.Module, EagleModelMixin):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
 
@@ -550,7 +564,9 @@ class NemotronHModel(nn.Module):
 
         def get_layer(prefix: str):
             layer_idx = int(prefix.rsplit(".", 1)[1])
-            layer_class = ALL_DECODER_LAYER_TYPES[config.hybrid_override_pattern[layer_idx]]
+            layer_class = ALL_DECODER_LAYER_TYPES[
+                config.hybrid_override_pattern[layer_idx]
+            ]
             return layer_class(
                 config=config,
                 layer_idx=layer_idx,
@@ -591,16 +607,27 @@ class NemotronHModel(nn.Module):
             hidden_states = intermediate_tensors["hidden_states"]
             residual = intermediate_tensors["residual"]
 
-        for layer in islice(self.layers, self.start_layer, self.end_layer):
+        aux_hidden_states = self._maybe_add_hidden_state([], 0, hidden_states, residual)
+        for idx, layer in enumerate(
+            islice(self.layers, self.start_layer, self.end_layer)
+        ):
             hidden_states, residual = layer(
                 positions=positions,
                 hidden_states=hidden_states,
                 residual=residual,
             )
+            self._maybe_add_hidden_state(
+                aux_hidden_states, idx + 1, hidden_states, residual
+            )
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
+            return IntermediateTensors(
+                {"hidden_states": hidden_states, "residual": residual}
+            )
         hidden_states, _ = self.norm_f(hidden_states, residual)
+
+        if len(aux_hidden_states) > 0:
+            return hidden_states, aux_hidden_states
         return hidden_states
 
     def is_spec_layer(self, config: NemotronHConfig, weight_name: str) -> bool:
@@ -629,7 +656,9 @@ class NemotronHModel(nn.Module):
                 else:
                     # HF converts dicts to objects with attributes
                     if getattr(block, "block_type", "") == "moe":
-                        max_experts = max(max_experts, getattr(block, "n_routed_experts", 0))
+                        max_experts = max(
+                            max_experts, getattr(block, "n_routed_experts", 0)
+                        )
         return max_experts
 
     def get_expert_mapping(self) -> list[tuple[str, str, int, str]]:
@@ -713,7 +742,9 @@ class NemotronHModel(nn.Module):
                     # We should ask the weight loader to return success or not
                     # here since otherwise we may skip experts with other
                     # available replicas.
-                    weight_loader = typing.cast(Callable[..., bool], param.weight_loader)
+                    weight_loader = typing.cast(
+                        Callable[..., bool], param.weight_loader
+                    )
                     success = weight_loader(
                         param,
                         loaded_weight,
@@ -733,7 +764,9 @@ class NemotronHModel(nn.Module):
                         continue
 
                     param = params_dict[name]
-                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
+                    weight_loader = getattr(
+                        param, "weight_loader", default_weight_loader
+                    )
                     weight_loader(param, loaded_weight)
 
             loaded_params.add(name)
@@ -745,6 +778,8 @@ class NemotronHForCausalLM(
     HasInnerState,
     SupportsLoRA,
     SupportsPP,
+    SupportsEagle,
+    SupportsEagle3,
     IsHybrid,
     SupportsQuant,
     MixtureOfExperts,
@@ -832,21 +867,25 @@ class NemotronHForCausalLM(
         super().__init__()
         self.config = config
         self.scheduler_config = scheduler_config
-        self.model = NemotronHModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = NemotronHModel(
+            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
+        )
 
         self.lm_head = ParallelLMHead(
             config.vocab_size,
             config.hidden_size,
+            quant_config=self.quant_config,
             prefix=maybe_prefix(prefix, "lm_head"),
         )
 
         self.logits_processor = LogitsProcessor(config.vocab_size)
 
-        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+        self.make_empty_intermediate_tensors = (
+            self.model.make_empty_intermediate_tensors
+        )
 
         # Set MoE hyperparameters
         if self.model.has_moe:
-            self.expert_weights = []
             self.num_expert_groups = config.n_group
 
             self.moe_layers = []
@@ -894,7 +933,9 @@ class NemotronHForCausalLM(
         inputs_embeds: torch.Tensor | None = None,
         **kwargs,
     ):
-        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
+        hidden_states = self.model(
+            input_ids, positions, intermediate_tensors, inputs_embeds
+        )
 
         return hidden_states
 

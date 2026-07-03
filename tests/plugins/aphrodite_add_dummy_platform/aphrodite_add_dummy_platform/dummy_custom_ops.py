@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 import torch
-from aphrodite.modeling.layers.rotary_embedding import RotaryEmbedding
+
+from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
 
 
 # Register CustomRotaryEmbedding to CustomOP.

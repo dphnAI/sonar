@@ -49,7 +49,8 @@ class RayPrometheusMetric:
             expected = len(self.metric._tag_keys) - 1
             if len(labels) != expected:
                 raise ValueError(
-                    f"Number of labels must match the number of tag keys. Expected {expected}, got {len(labels)}"
+                    "Number of labels must match the number of tag keys. "
+                    f"Expected {expected}, got {len(labels)}"
                 )
             labelskwargs.update(zip(self.metric._tag_keys, labels))
 
@@ -98,7 +99,6 @@ class RayGaugeWrapper(RayPrometheusMetric):
         del multiprocess_mode
 
         super().__init__()
-
         tag_keys = self._get_tag_keys(labelnames)
         name = self._get_sanitized_opentelemetry_name(name)
 
@@ -113,7 +113,7 @@ class RayGaugeWrapper(RayPrometheusMetric):
 
     def set_to_current_time(self):
         # ray metrics doesn't have set_to_current time, https://docs.ray.io/en/latest/_modules/ray/util/metrics.html
-        return self.metric.set(time.time())
+        return self.set(time.time())
 
 
 class RayCounterWrapper(RayPrometheusMetric):
