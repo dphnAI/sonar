@@ -78,7 +78,9 @@ def assert_encoder_kv_cache_spec(engine: LLM) -> None:
     assert isinstance(spec, SlidingWindowSpec)
     assert spec.block_size == 16
     assert spec.num_kv_heads == 128
-    assert spec.sliding_window == cdiv(750, 4) == 188
+    # cdiv(750, 4) == 188 pooled tokens cover the model's window; the extra
+    # +1 is an eviction margin (see whisper_causal.py get_kv_cache_spec).
+    assert spec.sliding_window == cdiv(750, 4) + 1 == 189
     assert (
         spec.max_admission_blocks_per_request(
             max_num_batched_tokens=1,
@@ -139,9 +141,7 @@ def test_voxtral_realtime_forward(audio_assets, tokenizer, engine):
 
         return (tokenized.tokens, tokenized.audios[0].audio_array)
 
-    tokenized_list = [
-        from_file(audio_asset.get_local_path()) for audio_asset in audio_assets
-    ]
+    tokenized_list = [from_file(audio_asset.get_local_path()) for audio_asset in audio_assets]
 
     inputs = []
     sampling_params = []
@@ -164,11 +164,7 @@ def test_voxtral_realtime_forward(audio_assets, tokenizer, engine):
 
     texts = _normalize([out.outputs[0].text for out in outputs])
     for i, (got, expected) in enumerate(zip(texts, EXPECTED_TEXT)):
-        assert got == expected, (
-            f"Output mismatch at index {i}:\n"
-            f"  got:      {got!r}\n"
-            f"  expected: {expected!r}"
-        )
+        assert got == expected, f"Output mismatch at index {i}:\n  got:      {got!r}\n  expected: {expected!r}"
 
 
 @pytest.mark.asyncio
@@ -210,15 +206,9 @@ async def test_voxtral_realtime_generator(audio_assets, tokenizer, async_engine)
 
     texts = _normalize(
         [
-            tokenizer.decode(
-                output_tokens, special_token_policy=SpecialTokenPolicy.IGNORE
-            )
+            tokenizer.decode(output_tokens, special_token_policy=SpecialTokenPolicy.IGNORE)
             for output_tokens in output_tokens_list
         ]
     )
     for i, (got, expected) in enumerate(zip(texts, EXPECTED_TEXT)):
-        assert got == expected, (
-            f"Output mismatch at index {i}:\n"
-            f"  got:      {got!r}\n"
-            f"  expected: {expected!r}"
-        )
+        assert got == expected, f"Output mismatch at index {i}:\n  got:      {got!r}\n  expected: {expected!r}"
