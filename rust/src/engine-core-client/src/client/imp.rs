@@ -18,10 +18,9 @@ use crate::error::{client_closed, dispatcher_closed, unexpected_dispatcher_outpu
 use crate::metrics::{LoraInfoExporter, record_scheduler_stats};
 use crate::protocol::stats::SchedulerStats;
 use crate::protocol::utility::UtilityOutput;
-use crate::protocol::{
-    ClassifiedEngineCoreOutputs, EngineCoreOutput, EngineCoreOutputs, EngineCoreRequestType,
-    encode_msgpack,
-};
+use crate::protocol::encode_msgpack;
+use crate::protocol::output::{ClassifiedEngineCoreOutputs, EngineCoreOutput, EngineCoreOutputs};
+use crate::protocol::request::EngineCoreRequestType;
 use crate::transport::{ConnectedEngine, EngineId};
 use crate::{Error, Result, transport};
 

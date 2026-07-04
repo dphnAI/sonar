@@ -28,10 +28,9 @@ use aphrodite_engine_core_client::protocol::logprobs::{
     Logprobs, MaybeWireLogprobs, PositionLogprobs, TokenLogprob,
 };
 use aphrodite_engine_core_client::protocol::utility::{UtilityOutput, UtilityResultEnvelope};
-use aphrodite_engine_core_client::protocol::{
-    EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, EngineCoreRequest, StopReason,
-    decode_value,
-};
+use aphrodite_engine_core_client::protocol::decode_value;
+use aphrodite_engine_core_client::protocol::output::{EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, StopReason};
+use aphrodite_engine_core_client::protocol::request::EngineCoreRequest;
 use aphrodite_engine_core_client::test_utils::{
     IpcNamespace, spawn_mock_engine_task, spawn_mock_engine_task_with_ready,
 };

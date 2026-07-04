@@ -136,18 +136,13 @@ def enable_allreduce_rms_fusion(cfg: "AphroditeConfig") -> bool:
     if current_platform.is_rocm():
         from aphrodite._aiter_ops import rocm_aiter_ops
 
-        return (
-            rocm_aiter_ops.is_enabled() and cfg.parallel_config.tensor_parallel_size > 1
-        )
+        return rocm_aiter_ops.is_enabled() and cfg.parallel_config.tensor_parallel_size > 1
 
     return (
         cfg.parallel_config.tensor_parallel_size > 1
         and current_platform.is_cuda()
         and has_flashinfer()
-        and (
-            current_platform.is_device_capability_family(100)
-            or current_platform.is_device_capability(90)
-        )
+        and (current_platform.is_device_capability_family(100) or current_platform.is_device_capability(90))
     )
 
 
@@ -323,13 +318,9 @@ class AphroditeConfig:
     diffusion_config: DiffusionConfig | None = None
     """Diffusion LLM (dLLM) configuration."""
 
-    structured_outputs_config: StructuredOutputsConfig = Field(
-        default_factory=StructuredOutputsConfig
-    )
+    structured_outputs_config: StructuredOutputsConfig = Field(default_factory=StructuredOutputsConfig)
     """Structured outputs configuration."""
-    observability_config: ObservabilityConfig = Field(
-        default_factory=ObservabilityConfig
-    )
+    observability_config: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
     """Observability configuration."""
     quant_config: QuantizationConfig | None = None
     """Quantization configuration."""
@@ -486,9 +477,7 @@ class AphroditeConfig:
             aphrodite_factors.append("None")
         factors.append(aphrodite_factors)
 
-        hash_str = safe_hash(str(factors).encode(), usedforsecurity=False).hexdigest()[
-            :10
-        ]
+        hash_str = safe_hash(str(factors).encode(), usedforsecurity=False).hexdigest()[:10]
         return hash_str
 
     @property
@@ -506,15 +495,9 @@ class AphroditeConfig:
 
     @property
     def num_speculative_tokens(self) -> int:
-        if (
-            self.speculative_config is not None
-            and self.speculative_config.num_speculative_tokens is not None
-        ):
+        if self.speculative_config is not None and self.speculative_config.num_speculative_tokens is not None:
             return self.speculative_config.num_speculative_tokens
-        if (
-            self.diffusion_config is not None
-            and self.diffusion_config.canvas_length is not None
-        ):
+        if self.diffusion_config is not None and self.diffusion_config.canvas_length is not None:
             return self.diffusion_config.canvas_length
         return 0
 
@@ -524,6 +507,13 @@ class AphroditeConfig:
         if use_v2_model_runner is not None:
             return use_v2_model_runner
 
+        # DSpark is implemented only by the V2 GPU model runner, and DeepSeek-V4
+        # is not otherwise a default-V2 architecture, so force V2 for it. If V2
+        # is unsupported for the rest of the config, _validate_v2_model_runner
+        # raises rather than silently falling back to V1 (which can't run dspark).
+        if self.speculative_config is not None and self.speculative_config.method == "dspark":
+            return True
+
         if self.model_config is not None and self.model_config.is_diffusion:
             return True
 
@@ -531,16 +521,13 @@ class AphroditeConfig:
             return False
 
         if not HAS_TRITON:
-            logger.warning_once(
-                "Model Runner V2 requires Triton; using the V1 model runner instead."
-            )
+            logger.warning_once("Model Runner V2 requires Triton; using the V1 model runner instead.")
             return False
 
         unsupported = self._get_v2_model_runner_unsupported_features()
         if unsupported:
             logger.warning_once(
-                "Model Runner V2 does not yet support %s; using the V1 model "
-                "runner instead.",
+                "Model Runner V2 does not yet support %s; using the V1 model runner instead.",
                 ", ".join(unsupported),
             )
             return False
@@ -556,9 +543,7 @@ class AphroditeConfig:
             return False
 
         architectures = getattr(model_config, "architectures", [])
-        return any(
-            arch in DEFAULT_V2_MODEL_RUNNER_ARCHITECTURES for arch in architectures
-        )
+        return any(arch in DEFAULT_V2_MODEL_RUNNER_ARCHITECTURES for arch in architectures)
 
     @property
     def needs_dp_coordinator(self) -> bool:
@@ -578,9 +563,7 @@ class AphroditeConfig:
         # For non-MoE models, only need coordinator in internal/hybrid LB mode
         # (for stats collection).
         return self.parallel_config.data_parallel_size > 1 and (
-            self.model_config is None
-            or self.model_config.is_moe
-            or not self.parallel_config.data_parallel_external_lb
+            self.model_config is None or self.model_config.is_moe or not self.parallel_config.data_parallel_external_lb
         )
 
     def enable_trace_function_call_for_thread(self) -> None:
@@ -606,9 +589,7 @@ class AphroditeConfig:
             enable_trace_function_call(log_path)
 
     @staticmethod
-    def _get_quantization_config(
-        model_config: ModelConfig, load_config: LoadConfig
-    ) -> QuantizationConfig | None:
+    def _get_quantization_config(model_config: ModelConfig, load_config: LoadConfig) -> QuantizationConfig | None:
         """Get the quantization config."""
         from aphrodite.platforms import current_platform
 
@@ -642,16 +623,12 @@ class AphroditeConfig:
         return None
 
     @staticmethod
-    def get_quantization_config(
-        model_config: ModelConfig, load_config: LoadConfig
-    ) -> QuantizationConfig | None:
+    def get_quantization_config(model_config: ModelConfig, load_config: LoadConfig) -> QuantizationConfig | None:
         import copy
 
         # For some reason, the _ version of this modifies the model_config
         # object, so using deepcopy to avoid this problem.
-        return AphroditeConfig._get_quantization_config(
-            copy.deepcopy(model_config), load_config
-        )
+        return AphroditeConfig._get_quantization_config(copy.deepcopy(model_config), load_config)
 
     def with_hf_config(
         self,
@@ -668,9 +645,7 @@ class AphroditeConfig:
 
             if hf_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES:
                 hf_config = copy.deepcopy(hf_config)
-                hf_config.architectures = [
-                    MODEL_FOR_CAUSAL_LM_MAPPING_NAMES[hf_config.model_type]
-                ]
+                hf_config.architectures = [MODEL_FOR_CAUSAL_LM_MAPPING_NAMES[hf_config.model_type]]
 
         model_config = copy.deepcopy(self.model_config)
 
@@ -700,9 +675,7 @@ class AphroditeConfig:
         # Therefore, the presence of tie_word_embeddings in SomeVLTextConfig cannot
         # be used as a signal for whether tie_word_embeddings should be copied from
         # hf_config to the language_model config.
-        if model_config.is_multimodal_model and hasattr(
-            model_config.hf_config, "tie_word_embeddings"
-        ):
+        if model_config.is_multimodal_model and hasattr(model_config.hf_config, "tie_word_embeddings"):
             tie_word_embeddings = model_config.hf_config.tie_word_embeddings
             hf_config.get_text_config().tie_word_embeddings = tie_word_embeddings
 
@@ -810,10 +783,7 @@ class AphroditeConfig:
 
     def _verify_kv_transfer_compat(self) -> None:
         """Reject configurations that silently corrupt KV transfers."""
-        if (
-            self.kv_transfer_config is None
-            or self.kv_transfer_config.kv_connector is None
-        ):
+        if self.kv_transfer_config is None or self.kv_transfer_config.kv_connector is None:
             return
 
         # PyTorch's expandable_segments allocator uses CUDA VMM, which can
@@ -831,9 +801,7 @@ class AphroditeConfig:
         # expandable_segments off around its pool (see #40812), so the KV
         # cache allocated within that context lands on stable physical pages
         # even when the env var is set.
-        if "expandable_segments:True" not in os.environ.get(
-            "PYTORCH_CUDA_ALLOC_CONF", ""
-        ):
+        if "expandable_segments:True" not in os.environ.get("PYTORCH_CUDA_ALLOC_CONF", ""):
             return
         if self.model_config is not None and (self.model_config.enable_cumem_allocator):
             return
@@ -868,25 +836,16 @@ class AphroditeConfig:
 
             self.parallel_config.is_moe_model = self.model_config.is_moe
 
-        if (
-            self.model_config is not None
-            and self.model_config.enable_return_routed_experts
-        ):
+        if self.model_config is not None and self.model_config.enable_return_routed_experts:
             if self.parallel_config.pipeline_parallel_size > 1:
-                raise ValueError(
-                    "--enable-return-routed-experts is incompatible with "
-                    "pipeline parallelism (PP > 1)."
-                )
+                raise ValueError("--enable-return-routed-experts is incompatible with pipeline parallelism (PP > 1).")
 
             # Incompatible with any KV connector — covers both PD disaggregation
             # (kv_producer/kv_consumer: routing captured on P can't reach D) and
             # single-instance KV offload/sharing (kv_both: slot_mapping semantics
             # change when KV blocks live outside local GPU memory, breaking the
             # slot-indexed routed_experts buffer).
-            if (
-                self.kv_transfer_config is not None
-                and self.kv_transfer_config.is_kv_transfer_instance
-            ):
+            if self.kv_transfer_config is not None and self.kv_transfer_config.is_kv_transfer_instance:
                 raise ValueError(
                     "--enable-return-routed-experts is incompatible with KV "
                     "connectors (PD disaggregation, KV cache offload)."
@@ -895,10 +854,7 @@ class AphroditeConfig:
         if self.lora_config is not None:
             self.lora_config.verify_with_model_config(self.model_config)
 
-        if (
-            self.mamba_config.enable_stochastic_rounding
-            and self.cache_config.mamba_ssm_cache_dtype != "float16"
-        ):
+        if self.mamba_config.enable_stochastic_rounding and self.cache_config.mamba_ssm_cache_dtype != "float16":
             raise ValueError(
                 "Stochastic rounding for Mamba cache requires "
                 "the SSM cache to be float16. Please set it explicitly, "
@@ -908,9 +864,7 @@ class AphroditeConfig:
             )
 
         if self.quant_config is None and self.model_config is not None:
-            self.quant_config = AphroditeConfig._get_quantization_config(
-                self.model_config, self.load_config
-            )
+            self.quant_config = AphroditeConfig._get_quantization_config(self.model_config, self.load_config)
 
         if (
             self.quant_config is not None
@@ -958,51 +912,38 @@ class AphroditeConfig:
                     self.speculative_config.method not in get_args(EagleModelTypes)
                     and self.speculative_config.method not in get_args(NgramGPUTypes)
                     and self.speculative_config.method != "draft_model"
+                    and self.speculative_config.method != "dspark"
                 ):
                     raise ValueError(
                         "Currently, async scheduling is only supported "
-                        "with EAGLE/MTP/Draft Model/NGram GPU kind of "
+                        "with EAGLE/MTP/Draft Model/NGram GPU/DSpark kind of "
                         "speculative decoding"
                     )
                 if self.speculative_config.disable_padded_drafter_batch:
-                    raise ValueError(
-                        "Async scheduling is not compatible with "
-                        "disable_padded_drafter_batch=True."
-                    )
+                    raise ValueError("Async scheduling is not compatible with disable_padded_drafter_batch=True.")
             if not executor_supports_async_sched:
-                raise ValueError(
-                    f"`{executor_backend}` does not support async scheduling yet."
-                )
+                raise ValueError(f"`{executor_backend}` does not support async scheduling yet.")
         elif self.scheduler_config.async_scheduling is None:
             # Enable async scheduling unless there is an incompatible option.
-            if (
-                self.model_config is not None
-                and self.model_config.runner_type == "pooling"
-            ):
+            if self.model_config is not None and self.model_config.runner_type == "pooling":
                 # The current implementation of asynchronous scheduling negatively
                 # impacts performance of pooling models, so we disable by default.
-                logger.debug(
-                    "Disabling asynchronous scheduling by default for pooling model."
-                )
+                logger.debug("Disabling asynchronous scheduling by default for pooling model.")
                 self.scheduler_config.async_scheduling = False
             elif (
                 self.speculative_config is not None
                 and self.speculative_config.method not in get_args(EagleModelTypes)
                 and self.speculative_config.method not in get_args(NgramGPUTypes)
+                and self.speculative_config.method != "dspark"
             ):
                 logger.warning_once(
-                    "Async scheduling not supported with %s-based "
-                    "speculative decoding and will be disabled.",
+                    "Async scheduling not supported with %s-based speculative decoding and will be disabled.",
                     self.speculative_config.method,
                 )
                 self.scheduler_config.async_scheduling = False
-            elif (
-                self.speculative_config is not None
-                and self.speculative_config.disable_padded_drafter_batch
-            ):
+            elif self.speculative_config is not None and self.speculative_config.disable_padded_drafter_batch:
                 logger.warning_once(
-                    "Async scheduling is not compatible with "
-                    "disable_padded_drafter_batch=True and will be disabled.",
+                    "Async scheduling is not compatible with disable_padded_drafter_batch=True and will be disabled.",
                 )
                 self.scheduler_config.async_scheduling = False
             elif not executor_supports_async_sched:
@@ -1033,8 +974,7 @@ class AphroditeConfig:
                     self.model_config is None or self.model_config.is_moe
                 ):
                     logger.info_once(
-                        "Disabling NCCL for DP synchronization "
-                        "when using async scheduling.",
+                        "Disabling NCCL for DP synchronization when using async scheduling.",
                     )
                 self.parallel_config.disable_nccl_for_dp_synchronization = True
             else:
@@ -1047,8 +987,7 @@ class AphroditeConfig:
             and not self.model_config.disable_cascade_attn
         ):
             logger.warning_once(
-                "Disabling cascade attention (not yet compatible with "
-                "async speculative decoding).",
+                "Disabling cascade attention (not yet compatible with async speculative decoding).",
             )
             self.model_config.disable_cascade_attn = True
 
@@ -1058,10 +997,7 @@ class AphroditeConfig:
             and self.model_config.multimodal_config.mm_tensor_ipc == "torch_shm"
             and os.environ.get("APHRODITE_WORKER_MULTIPROC_METHOD") != "spawn"
         ):
-            raise ValueError(
-                "torch_shm is known to fail without "
-                "APHRODITE_WORKER_MULTIPROC_METHOD set to spawn"
-            )
+            raise ValueError("torch_shm is known to fail without APHRODITE_WORKER_MULTIPROC_METHOD set to spawn")
 
         if (
             self.model_config is not None
@@ -1085,8 +1021,7 @@ class AphroditeConfig:
 
         if os.environ.get("TORCH_COMPILE_DISABLE") == "1":
             logger.warning(
-                "TORCH_COMPILE_DISABLE is set, disabling torch.compile. "
-                "This is equivalent to setting -cc.mode=none"
+                "TORCH_COMPILE_DISABLE is set, disabling torch.compile. This is equivalent to setting -cc.mode=none"
             )
             self.compilation_config.mode = CompilationMode.NONE
 
@@ -1109,8 +1044,7 @@ class AphroditeConfig:
         ):
             os.environ["APHRODITE_USE_BREAKABLE_CUDAGRAPH"] = "1"
             logger.info_once(
-                "Auto-enabling APHRODITE_USE_BREAKABLE_CUDAGRAPH=1. "
-                "Set APHRODITE_USE_BREAKABLE_CUDAGRAPH=0 to opt out."
+                "Auto-enabling APHRODITE_USE_BREAKABLE_CUDAGRAPH=1. Set APHRODITE_USE_BREAKABLE_CUDAGRAPH=0 to opt out."
             )
 
         if envs.APHRODITE_USE_BREAKABLE_CUDAGRAPH:
@@ -1163,10 +1097,7 @@ class AphroditeConfig:
             )
 
         if all(s not in self.compilation_config.custom_ops for s in ("all", "none")):
-            if (
-                self.compilation_config.backend == "inductor"
-                and self.compilation_config.mode != CompilationMode.NONE
-            ):
+            if self.compilation_config.backend == "inductor" and self.compilation_config.mode != CompilationMode.NONE:
                 self.compilation_config.custom_ops.append("none")
             else:
                 self.compilation_config.custom_ops.append("all")
@@ -1180,8 +1111,7 @@ class AphroditeConfig:
         self._apply_optimization_level_defaults(default_config)
         if self.kernel_config.enable_flashinfer_autotune is None:
             raise ValueError(
-                "KernelConfig.enable_flashinfer_autotune must be set after applying "
-                "optimization level defaults."
+                "KernelConfig.enable_flashinfer_autotune must be set after applying optimization level defaults."
             )
 
         self._maybe_override_dynamic_sd_cudagraph_mode()
@@ -1192,8 +1122,7 @@ class AphroditeConfig:
             and not envs.APHRODITE_USE_BREAKABLE_CUDAGRAPH
         ):
             logger.info(
-                "Cudagraph mode %s is not compatible with compilation mode %s."
-                "Overriding to NONE.",
+                "Cudagraph mode %s is not compatible with compilation mode %s.Overriding to NONE.",
                 self.compilation_config.cudagraph_mode,
                 self.compilation_config.mode,
             )
@@ -1241,9 +1170,7 @@ class AphroditeConfig:
             # resolve default behavior: try to be as safe as possible
             # this config is unsafe if any spec decoding draft model has a MOE.
             # We'll conservatively turn it off if we see spec decoding.
-            self.compilation_config.fast_moe_cold_start = (
-                self.speculative_config is None
-            )
+            self.compilation_config.fast_moe_cold_start = self.speculative_config is None
 
         self._set_max_num_scheduled_tokens()
 
@@ -1255,23 +1182,18 @@ class AphroditeConfig:
                     and model_config.pooler_config is not None
                 ):
                     logger.warning_once(
-                        "Pooling models do not support full cudagraphs. "
-                        "Overriding cudagraph_mode to PIECEWISE."
+                        "Pooling models do not support full cudagraphs. Overriding cudagraph_mode to PIECEWISE."
                     )
                     self.compilation_config.cudagraph_mode = CUDAGraphMode.PIECEWISE
-                elif (
-                    model_config.is_encoder_decoder
-                    and self.compilation_config.cudagraph_mode
-                    not in (CUDAGraphMode.NONE, CUDAGraphMode.FULL_DECODE_ONLY)
+                elif model_config.is_encoder_decoder and self.compilation_config.cudagraph_mode not in (
+                    CUDAGraphMode.NONE,
+                    CUDAGraphMode.FULL_DECODE_ONLY,
                 ):
                     logger.info_once(
-                        "Encoder-decoder models do not support %s. "
-                        "Overriding cudagraph_mode to FULL_DECODE_ONLY.",
+                        "Encoder-decoder models do not support %s. Overriding cudagraph_mode to FULL_DECODE_ONLY.",
                         self.compilation_config.cudagraph_mode.name,
                     )
-                    self.compilation_config.cudagraph_mode = (
-                        CUDAGraphMode.FULL_DECODE_ONLY
-                    )
+                    self.compilation_config.cudagraph_mode = CUDAGraphMode.FULL_DECODE_ONLY
 
             # Check if KV connector requires PIECEWISE mode for CUDA graphs
             if (
@@ -1284,12 +1206,8 @@ class AphroditeConfig:
                     KVConnectorFactory,
                 )
 
-                connector_cls = KVConnectorFactory.get_connector_class(
-                    self.kv_transfer_config
-                )
-                if connector_cls.requires_piecewise_for_cudagraph(
-                    self.kv_transfer_config.kv_connector_extra_config
-                ):
+                connector_cls = KVConnectorFactory.get_connector_class(self.kv_transfer_config)
+                if connector_cls.requires_piecewise_for_cudagraph(self.kv_transfer_config.kv_connector_extra_config):
                     logger.warning_once(
                         "KV connector %s requires PIECEWISE CUDA graph mode "
                         "due to layerwise async operations that cannot be "
@@ -1316,10 +1234,7 @@ class AphroditeConfig:
             self.compilation_config.cudagraph_mode = CUDAGraphMode.NONE
 
         if self.cache_config.kv_sharing_fast_prefill:
-            if (
-                self.speculative_config is not None
-                and self.speculative_config.use_eagle()
-            ):
+            if self.speculative_config is not None and self.speculative_config.use_eagle():
                 raise ValueError(
                     "Fast prefill optimization for KV sharing is not "
                     "compatible with EAGLE as EAGLE requires correct logits "
@@ -1350,8 +1265,7 @@ class AphroditeConfig:
             and not self.cache_config.enable_prefix_caching
         ):
             logger.warning(
-                "KV cache events are on, but prefix caching is not enabled. "
-                "Use --enable-prefix-caching to enable."
+                "KV cache events are on, but prefix caching is not enabled. Use --enable-prefix-caching to enable."
             )
         if (
             self.kv_events_config is not None
@@ -1375,9 +1289,7 @@ class AphroditeConfig:
 
         # Do this after all the updates to compilation_config.mode
         effective_dp_size = (
-            self.parallel_config.data_parallel_size
-            if self.model_config is None or self.model_config.is_moe
-            else 1
+            self.parallel_config.data_parallel_size if self.model_config is None or self.model_config.is_moe else 1
         )
         self.compilation_config.set_splitting_ops_for_v1(
             all2all_backend=self.parallel_config.all2all_backend,
@@ -1392,8 +1304,7 @@ class AphroditeConfig:
             # TODO: https://github.com/vllm-project/vllm/issues/27894
             if self.compilation_config.mode != CompilationMode.APHRODITE_COMPILE:
                 logger.warning(
-                    "Sequence parallelism is enabled, but running in wrong "
-                    "aphrodite compile mode: %s.",
+                    "Sequence parallelism is enabled, but running in wrong aphrodite compile mode: %s.",
                     self.compilation_config.mode,
                 )
 
@@ -1431,11 +1342,7 @@ class AphroditeConfig:
                     "when cudagraph_mode piecewise cudagraphs is used, "
                     f"cudagraph_mode={self.compilation_config.cudagraph_mode}"
                 )
-        if (
-            self.model_config
-            and envs.APHRODITE_BATCH_INVARIANT
-            and not self.model_config.disable_cascade_attn
-        ):
+        if self.model_config and envs.APHRODITE_BATCH_INVARIANT and not self.model_config.disable_cascade_attn:
             self.model_config.disable_cascade_attn = True
             logger.warning_once(
                 "Disabling cascade attention when APHRODITE_BATCH_INVARIANT is enabled.",
@@ -1488,14 +1395,8 @@ class AphroditeConfig:
         if not current_platform.support_hybrid_kv_cache():
             # Hybrid KV cache manager is not supported on non-GPU platforms.
             need_disable_hybrid_kv_cache_manager = True
-        if (
-            self.model_config is not None
-            and self.model_config.attention_chunk_size is not None
-        ):
-            if (
-                self.speculative_config is not None
-                and self.speculative_config.use_eagle()
-            ):
+        if self.model_config is not None and self.model_config.attention_chunk_size is not None:
+            if self.speculative_config is not None and self.speculative_config.use_eagle():
                 # Hybrid KV cache manager is not yet supported with chunked
                 # local attention + eagle.
                 need_disable_hybrid_kv_cache_manager = True
@@ -1531,13 +1432,8 @@ class AphroditeConfig:
                         "(for MultiConnector, all child connectors must "
                         "support HMA)."
                     )
-            self.scheduler_config.disable_hybrid_kv_cache_manager = (
-                need_disable_hybrid_kv_cache_manager
-            )
-        elif (
-            self.scheduler_config.disable_hybrid_kv_cache_manager is False
-            and need_disable_hybrid_kv_cache_manager
-        ):
+            self.scheduler_config.disable_hybrid_kv_cache_manager = need_disable_hybrid_kv_cache_manager
+        elif self.scheduler_config.disable_hybrid_kv_cache_manager is False and need_disable_hybrid_kv_cache_manager:
             raise ValueError(
                 "Hybrid KV cache manager was explicitly enabled but is not "
                 "supported in this configuration. Consider omitting the "
@@ -1550,15 +1446,12 @@ class AphroditeConfig:
             self.scheduler_config.disable_hybrid_kv_cache_manager = False
 
         if self.compilation_config.debug_dump_path:
-            self.compilation_config.debug_dump_path = (
-                self.compilation_config.debug_dump_path.absolute().expanduser()
-            )
+            self.compilation_config.debug_dump_path = self.compilation_config.debug_dump_path.absolute().expanduser()
         if envs.APHRODITE_DEBUG_DUMP_PATH is not None:
             env_path = Path(envs.APHRODITE_DEBUG_DUMP_PATH).absolute().expanduser()
             if self.compilation_config.debug_dump_path:
                 logger.warning(
-                    "Config-specified debug dump path is overridden"
-                    " by APHRODITE_DEBUG_DUMP_PATH to %s",
+                    "Config-specified debug dump path is overridden by APHRODITE_DEBUG_DUMP_PATH to %s",
                     env_path,
                 )
             self.compilation_config.debug_dump_path = env_path
@@ -1579,11 +1472,7 @@ class AphroditeConfig:
     def update_sizes_for_sequence_parallelism(self, possible_sizes: list) -> list:
         # remove the sizes that not multiple of tp_size when
         # enable sequence parallelism
-        removed_sizes = [
-            size
-            for size in possible_sizes
-            if size % self.parallel_config.tensor_parallel_size != 0
-        ]
+        removed_sizes = [size for size in possible_sizes if size % self.parallel_config.tensor_parallel_size != 0]
         if removed_sizes:
             logger.warning(
                 "Batch sizes %s are removed because they are not "
@@ -1593,11 +1482,7 @@ class AphroditeConfig:
                 self.parallel_config.tensor_parallel_size,
             )
 
-        return [
-            size
-            for size in possible_sizes
-            if size % self.parallel_config.tensor_parallel_size == 0
-        ]
+        return [size for size in possible_sizes if size % self.parallel_config.tensor_parallel_size == 0]
 
     def _set_max_num_scheduled_tokens(self):
         """
@@ -1609,14 +1494,11 @@ class AphroditeConfig:
         """
         if self.speculative_config is not None:
             scheduled_token_delta = (
-                self.speculative_config.max_num_new_slots_for_drafting
-                * self.scheduler_config.max_num_seqs
+                self.speculative_config.max_num_new_slots_for_drafting * self.scheduler_config.max_num_seqs
             )
             max_num_batched_tokens = self.scheduler_config.max_num_batched_tokens
             if self.scheduler_config.max_num_scheduled_tokens is None:
-                self.scheduler_config.max_num_scheduled_tokens = (
-                    max_num_batched_tokens - scheduled_token_delta
-                )
+                self.scheduler_config.max_num_scheduled_tokens = max_num_batched_tokens - scheduled_token_delta
 
             if self.scheduler_config.max_num_scheduled_tokens <= 0:
                 raise ValueError(
@@ -1639,8 +1521,7 @@ class AphroditeConfig:
 
             max_num_scheduled_tokens = self.scheduler_config.max_num_scheduled_tokens
             if max_num_batched_tokens < max_num_scheduled_tokens + (
-                self.speculative_config.max_num_new_slots_for_drafting
-                * self.scheduler_config.max_num_seqs
+                self.speculative_config.max_num_new_slots_for_drafting * self.scheduler_config.max_num_seqs
             ):
                 raise ValueError(
                     f"AphroditeConfig received max_num_scheduled_tokens but it does not have"
@@ -1699,33 +1580,25 @@ class AphroditeConfig:
             and self.compilation_config.cudagraph_mode != CUDAGraphMode.NONE
         ):
             # determine the initial max_cudagraph_capture_size
-            max_cudagraph_capture_size = (
-                self.compilation_config.max_cudagraph_capture_size
-            )
+            max_cudagraph_capture_size = self.compilation_config.max_cudagraph_capture_size
             if max_cudagraph_capture_size is None:
                 decode_query_len = 1 + self.num_speculative_tokens
-                max_cudagraph_capture_size = min(
-                    self.scheduler_config.max_num_seqs * decode_query_len * 2, 512
-                )
+                max_cudagraph_capture_size = min(self.scheduler_config.max_num_seqs * decode_query_len * 2, 512)
             max_num_tokens = self.scheduler_config.max_num_batched_tokens
             max_cudagraph_capture_size = min(max_num_tokens, max_cudagraph_capture_size)
 
             assert max_cudagraph_capture_size >= 1, (
-                "Maximum cudagraph size should be greater than or equal to 1 "
-                "when using cuda graph."
+                "Maximum cudagraph size should be greater than or equal to 1 when using cuda graph."
             )
 
             # determine the cudagraph_capture_sizes
             if self.compilation_config.cudagraph_capture_sizes is not None:
                 assert len(self.compilation_config.cudagraph_capture_sizes) > 0, (
-                    "cudagraph_capture_sizes should contain at least one element "
-                    "when using cuda graph."
+                    "cudagraph_capture_sizes should contain at least one element when using cuda graph."
                 )
                 # de-duplicate the sizes provided by the config
                 dedup_sizes = list(set(self.compilation_config.cudagraph_capture_sizes))
-                cudagraph_capture_sizes = [
-                    i for i in dedup_sizes if i <= max_num_tokens
-                ]
+                cudagraph_capture_sizes = [i for i in dedup_sizes if i <= max_num_tokens]
                 # sort to make sure the sizes are in ascending order
                 cudagraph_capture_sizes.sort()
             else:
@@ -1735,41 +1608,25 @@ class AphroditeConfig:
                     interactivity_max = min(max_cudagraph_capture_size, 32)
                     cudagraph_capture_sizes = list(range(1, interactivity_max + 1))
                 else:
-                    cudagraph_capture_sizes = [
-                        i for i in [1, 2, 4] if i <= max_cudagraph_capture_size
-                    ]
+                    cudagraph_capture_sizes = [i for i in [1, 2, 4] if i <= max_cudagraph_capture_size]
                 if max_cudagraph_capture_size >= 8:
                     # Step size 8 for small batch sizes, up to 256(not included)
-                    cudagraph_capture_sizes += list(
-                        range(8, min(max_cudagraph_capture_size + 1, 256), 8)
-                    )
+                    cudagraph_capture_sizes += list(range(8, min(max_cudagraph_capture_size + 1, 256), 8))
                 if max_cudagraph_capture_size >= 256:
                     # Step size 16 for larger batch sizes
-                    cudagraph_capture_sizes += list(
-                        range(256, max_cudagraph_capture_size + 1, 16)
-                    )
+                    cudagraph_capture_sizes += list(range(256, max_cudagraph_capture_size + 1, 16))
                 # ensure max_num_tokens is captured if within max capture size
-                if (
-                    max_num_tokens <= max_cudagraph_capture_size
-                    and max_num_tokens not in cudagraph_capture_sizes
-                ):
+                if max_num_tokens <= max_cudagraph_capture_size and max_num_tokens not in cudagraph_capture_sizes:
                     cudagraph_capture_sizes.append(max_num_tokens)
                 # de-duplicate and sort the sizes
                 cudagraph_capture_sizes = sorted(set(cudagraph_capture_sizes))
 
-            if (
-                self.parallel_config.tensor_parallel_size > 1
-                and self.compilation_config.pass_config.enable_sp
-            ):
-                cudagraph_capture_sizes = self.update_sizes_for_sequence_parallelism(
-                    cudagraph_capture_sizes
-                )
+            if self.parallel_config.tensor_parallel_size > 1 and self.compilation_config.pass_config.enable_sp:
+                cudagraph_capture_sizes = self.update_sizes_for_sequence_parallelism(cudagraph_capture_sizes)
 
             # user-specific compilation_config.max_cudagraph_capture_size get
             # truncated to valid_max_size when they are inconsistent.
-            valid_max_size = (
-                cudagraph_capture_sizes[-1] if cudagraph_capture_sizes else 0
-            )
+            valid_max_size = cudagraph_capture_sizes[-1] if cudagraph_capture_sizes else 0
             if (
                 self.compilation_config.max_cudagraph_capture_size is not None
                 and self.compilation_config.max_cudagraph_capture_size != valid_max_size
@@ -1791,17 +1648,14 @@ class AphroditeConfig:
             # always set the final max_cudagraph_capture_size
             self.compilation_config.max_cudagraph_capture_size = valid_max_size
 
-            if self.compilation_config.cudagraph_capture_sizes is not None and len(
-                cudagraph_capture_sizes
-            ) < len(self.compilation_config.cudagraph_capture_sizes):
+            if self.compilation_config.cudagraph_capture_sizes is not None and len(cudagraph_capture_sizes) < len(
+                self.compilation_config.cudagraph_capture_sizes
+            ):
                 # If users have specified capture sizes, we only need to
                 # compare the lens before and after modification since the modified
                 # list is only the subset of the original list.
                 logger.warning(
-                    (
-                        "cudagraph_capture_sizes specified in compilation_config"
-                        " %s is overridden by config %s"
-                    ),
+                    ("cudagraph_capture_sizes specified in compilation_config %s is overridden by config %s"),
                     self.compilation_config.cudagraph_capture_sizes,
                     cudagraph_capture_sizes,
                 )
@@ -1839,10 +1693,7 @@ class AphroditeConfig:
                 max_size = compilation_config.pass_config.flashinfer_max_size(tp_size)
             if max_size is not None and self.model_config is not None:
                 assert isinstance(self.model_config.dtype, torch.dtype)
-                max_token_num = max_size // (
-                    self.model_config.get_hidden_size()
-                    * self.model_config.dtype.itemsize
-                )
+                max_token_num = max_size // (self.model_config.get_hidden_size() * self.model_config.dtype.itemsize)
                 if compile_range_end is not None and max_token_num < compile_range_end:
                     computed_compile_ranges_endpoints.append(max_token_num)
                 else:
@@ -1866,16 +1717,12 @@ class AphroditeConfig:
                 hidden_size = self.model_config.get_hidden_size()
                 assert isinstance(self.model_config.dtype, torch.dtype)
                 element_size = self.model_config.dtype.itemsize
-                pass_config.sp_min_token_num = get_sequence_parallelism_threshold(
-                    hidden_size, tp_size, element_size
-                )
+                pass_config.sp_min_token_num = get_sequence_parallelism_threshold(hidden_size, tp_size, element_size)
 
             min_token_num = pass_config.sp_min_token_num
             max_num_batched_tokens = self.scheduler_config.max_num_batched_tokens
             if min_token_num is not None and (
-                max_num_batched_tokens is not None
-                and min_token_num < max_num_batched_tokens
-                and min_token_num > 1
+                max_num_batched_tokens is not None and min_token_num < max_num_batched_tokens and min_token_num > 1
             ):
                 # Add endpoint at min_token_num - 1 to ensure SP applies
                 # starting from min_token_num
@@ -1883,9 +1730,7 @@ class AphroditeConfig:
                 computed_compile_ranges_endpoints.append(min_token_num - 1)
 
         if compilation_config.pass_config.fuse_rope_kvcache:
-            max_token_num = (
-                compilation_config.pass_config.rope_kvcache_fusion_max_token_num
-            )
+            max_token_num = compilation_config.pass_config.rope_kvcache_fusion_max_token_num
             if max_token_num is not None:
                 if compile_range_end is not None and max_token_num < compile_range_end:
                     computed_compile_ranges_endpoints.append(max_token_num)
@@ -1902,9 +1747,7 @@ class AphroditeConfig:
                 assert x > 0, f"Invalid compile range endpoint: {x}"
                 if compile_range_end is not None and x < compile_range_end and x > 1:
                     computed_compile_ranges_endpoints.append(x)
-        compilation_config.compile_ranges_endpoints = sorted(
-            computed_compile_ranges_endpoints
-        )
+        compilation_config.compile_ranges_endpoints = sorted(computed_compile_ranges_endpoints)
 
     def try_verify_and_update_config(self):
         if self.model_config is None:
@@ -1937,14 +1780,9 @@ class AphroditeConfig:
 
             SequenceClassificationConfig.verify_and_update_config(self)
 
-        if hasattr(self.model_config, "model_weights") and is_runai_obj_uri(
-            self.model_config.model_weights
-        ):
+        if hasattr(self.model_config, "model_weights") and is_runai_obj_uri(self.model_config.model_weights):
             if self.load_config.load_format == "auto":
-                logger.info(
-                    "Detected Run:ai model config. "
-                    "Overriding `load_format` to 'runai_streamer'"
-                )
+                logger.info("Detected Run:ai model config. Overriding `load_format` to 'runai_streamer'")
                 self.load_config.load_format = "runai_streamer"
             elif self.load_config.load_format not in (
                 "modelexpress",
@@ -2020,10 +1858,7 @@ class AphroditeConfig:
         if self.compilation_config.mode == CompilationMode.STOCK_TORCH_COMPILE:
             unsupported.append("stock torch.compile")
 
-        if (
-            self.compilation_config.pass_config.enable_sp
-            and self.parallel_config.tensor_parallel_size > 1
-        ):
+        if self.compilation_config.pass_config.enable_sp and self.parallel_config.tensor_parallel_size > 1:
             unsupported.append("sequence parallelism")
 
         # V2 does not implement the external_launcher (torchrun) PP-output
@@ -2038,24 +1873,25 @@ class AphroditeConfig:
             # TODO: ngram / ngram_gpu are not supported by the v2 model runner yet
             if speculative_config.method in ("ngram", "ngram_gpu"):
                 unsupported.append("ngram/ngram_gpu speculative decoding")
-            elif speculative_config.method not in ("eagle", "eagle3", "mtp", "dflash"):
+            elif speculative_config.method not in (
+                "eagle",
+                "eagle3",
+                "mtp",
+                "dflash",
+                "dspark",
+            ):
                 unsupported.append(f"speculative method '{speculative_config.method}'")
 
             if speculative_config.uses_dynamic_speculative_decoding():
                 unsupported.append("dynamic speculative decoding")
 
-            # V2 EagleSpeculator does not support parallel_drafting (for P-Eagle)
-            # DFlash uses parallel drafting natively in V2 via DFlashSpeculator.
-            if (
-                speculative_config.parallel_drafting
-                and speculative_config.method != "dflash"
-            ):
+            # V2 EagleSpeculator does not support parallel_drafting (for P-Eagle).
+            # DFlash and DSpark use parallel drafting natively in V2 via their
+            # own speculators.
+            if speculative_config.parallel_drafting and speculative_config.method not in ("dflash", "dspark"):
                 unsupported.append("parallel drafting for EAGLE speculative decoding")
 
-            if (
-                speculative_config.method == "eagle3"
-                and self.parallel_config.pipeline_parallel_size > 1
-            ):
+            if speculative_config.method == "eagle3" and self.parallel_config.pipeline_parallel_size > 1:
                 unsupported.append("EAGLE3 with pipeline parallelism")
 
         if self.parallel_config.enable_dbo:
@@ -2074,9 +1910,7 @@ class AphroditeConfig:
 
             has_logitsproc_plugins = bool(entry_points(group="aphrodite.logits_processors"))
 
-        if model_config is not None and (
-            model_config.logits_processors or has_logitsproc_plugins
-        ):
+        if model_config is not None and (model_config.logits_processors or has_logitsproc_plugins):
             unsupported.append("custom logits processors")
 
         if model_config is not None and model_config.enable_prompt_embeds:
@@ -2106,9 +1940,7 @@ class AphroditeConfig:
 
         unsupported = self._get_v2_model_runner_unsupported_features()
         if unsupported:
-            raise ValueError(
-                f"Model Runner V2 does not yet support: {', '.join(unsupported)}"
-            )
+            raise ValueError(f"Model Runner V2 does not yet support: {', '.join(unsupported)}")
 
         if self.reasoning_config is not None:
             logger.warning_once(
@@ -2127,12 +1959,9 @@ class AphroditeConfig:
         # DCP interleave-size compatibility
         if self.parallel_config.decode_context_parallel_size > 1:
             if self.parallel_config.dcp_kv_cache_interleave_size > 1 and (
-                self.parallel_config.cp_kv_cache_interleave_size
-                != self.parallel_config.dcp_kv_cache_interleave_size
+                self.parallel_config.cp_kv_cache_interleave_size != self.parallel_config.dcp_kv_cache_interleave_size
             ):
-                self.parallel_config.cp_kv_cache_interleave_size = (
-                    self.parallel_config.dcp_kv_cache_interleave_size
-                )
+                self.parallel_config.cp_kv_cache_interleave_size = self.parallel_config.dcp_kv_cache_interleave_size
                 logger.warning_once(
                     "cp_kv_cache_interleave_size is overridden by dcp_kv_cache"
                     "_interleave_size. And dcp-kv-cache-interleave-size will be "
@@ -2184,9 +2013,7 @@ class AphroditeConfig:
             and self.cache_config.mamba_block_size != self.model_config.max_model_len
         )
         if mamba_block_size_is_set and not self.cache_config.enable_prefix_caching:
-            raise ValueError(
-                "--mamba-block-size can only be set with --enable-prefix-caching"
-            )
+            raise ValueError("--mamba-block-size can only be set with --enable-prefix-caching")
         return self
 
 
@@ -2195,9 +2022,7 @@ _current_prefix: str | None = None
 
 
 @contextmanager
-def set_current_aphrodite_config(
-    aphrodite_config: AphroditeConfig, check_compile=False, prefix: str | None = None
-):
+def set_current_aphrodite_config(aphrodite_config: AphroditeConfig, check_compile=False, prefix: str | None = None):
     """
     Temporarily set the current Aphrodite config.
     Used during model initialization.

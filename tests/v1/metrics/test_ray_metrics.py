@@ -7,6 +7,7 @@ import pytest
 import ray
 
 from aphrodite.config.model import ModelDType
+from aphrodite.platforms import current_platform
 from aphrodite.sampling_params import SamplingParams
 from aphrodite.v1.engine.async_llm import AsyncEngineArgs, AsyncLLM
 from aphrodite.v1.metrics.ray_wrappers import (
@@ -22,6 +23,18 @@ MODELS = [
 ]
 
 
+# The first .remote() call starts a local Ray cluster via ray.init(), whose
+# GCS server occasionally fails to start within Ray's fixed 30s bootstrap
+# window on ROCm CI (RuntimeError: "Timed out waiting for file
+# .../gcs_server_port_..."). That timeout is not configurable, so retry the
+# whole test: a fresh ray.init() gets a new GCS process. Scoped to that error
+# so real failures still fail immediately.
+@pytest.mark.flaky(
+    reruns=2,
+    reruns_delay=5,
+    only_rerun="Timed out waiting for file",
+    condition=current_platform.is_rocm(),
+)
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("dtype", ["half"])
 @pytest.mark.parametrize("max_tokens", [16])

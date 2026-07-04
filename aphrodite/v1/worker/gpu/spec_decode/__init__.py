@@ -14,6 +14,12 @@ def init_speculator(aphrodite_config: AphroditeConfig, device: torch.device):
         )
 
         return DFlashSpeculator(aphrodite_config, device)
+    elif speculative_config.method == "dspark":
+        from aphrodite.v1.worker.gpu.spec_decode.dspark.speculator import (
+            DSparkSpeculator,
+        )
+
+        return DSparkSpeculator(aphrodite_config, device)
     elif speculative_config.use_gemma4_mtp():
         from aphrodite.v1.worker.gpu.spec_decode.gemma4.speculator import (
             Gemma4Speculator,

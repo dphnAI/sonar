@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 pub(crate) mod logprobs;
 pub(crate) mod token_ids;
 
-use aphrodite_engine_core_client::protocol::EngineCoreSamplingParams;
+use aphrodite_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
 use aphrodite_llm::GenerateRequest;
 use aphrodite_tokenizer::Tokenizer;
 

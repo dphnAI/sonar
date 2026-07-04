@@ -118,6 +118,7 @@ def main():
             # Execute decode stage with same request ID
             generator = forward_request(DECODE_SERVICE_URL, original_request_data, request_id)
             response = await make_response(generator)
+            response.headers["Content-Type"] = "application/json"
             response.timeout = None
             return response
 

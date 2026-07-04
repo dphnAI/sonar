@@ -11,7 +11,7 @@ from transformers import Qwen3Config
 
 from aphrodite import _custom_ops as ops
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig, get_current_aphrodite_config
+from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
 from aphrodite.distributed import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
@@ -52,9 +52,7 @@ from .utils import (
 logger = init_logger(__name__)
 
 
-def _resolve_layer_attention(
-    config: Qwen3Config, layer_idx: int
-) -> tuple[int | None, bool]:
+def _resolve_layer_attention(config: Qwen3Config, layer_idx: int) -> tuple[int | None, bool]:
     """Resolve ``(sliding_window, causal)`` for one DFlash draft layer.
 
     +----------------------+-------------------------+--------------------------------+
@@ -109,9 +107,7 @@ def _resolve_layer_attention(
 
     sliding_window = None
     if is_sliding:
-        sliding_window = dflash_config.get(
-            "swa_window_size", getattr(config, "sliding_window", None)
-        )
+        sliding_window = dflash_config.get("swa_window_size", getattr(config, "sliding_window", None))
         if sliding_window is None:
             raise ValueError(
                 "DFlash sliding attention requires a window size configured in "
@@ -226,12 +222,8 @@ class DFlashQwen3Attention(nn.Module):
 
         # Per-head RMSNorm
         q_shape, k_shape = q.shape, k.shape
-        q = self.q_norm(
-            q.view(*q_shape[:-1], q_shape[-1] // self.head_dim, self.head_dim)
-        ).view(q_shape)
-        k = self.k_norm(
-            k.view(*k_shape[:-1], k_shape[-1] // self.head_dim, self.head_dim)
-        ).view(k_shape)
+        q = self.q_norm(q.view(*q_shape[:-1], q_shape[-1] // self.head_dim, self.head_dim)).view(q_shape)
+        k = self.k_norm(k.view(*k_shape[:-1], k_shape[-1] // self.head_dim, self.head_dim)).view(k_shape)
 
         q, k = self.rotary_emb(positions, q, k)
 
@@ -293,9 +285,7 @@ class DFlashQwen3DecoderLayer(nn.Module):
             prefix=f"{prefix}.mlp",
         )
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -435,9 +425,7 @@ class DFlashQwen3Model(nn.Module):
 
         # K-norm weights stacked into one contiguous [num_layers, head_dim]
         # tensor so the per-layer K-norm runs as a single grouped kernel.
-        self._k_norm_weights = torch.stack(
-            [a.k_norm.weight.data for a in layers_attn], dim=0
-        ).contiguous()
+        self._k_norm_weights = torch.stack([a.k_norm.weight.data for a in layers_attn], dim=0).contiguous()
 
         # RoPE parameters
         self._rope_head_size = attn0.rotary_emb.head_size
@@ -472,7 +460,7 @@ class DFlashQwen3Model(nn.Module):
         self,
         context_states: torch.Tensor,
         context_positions: torch.Tensor,
-        context_slot_mapping: torch.Tensor | None = None,
+        context_slot_mapping: torch.Tensor | list[torch.Tensor | None] | None = None,
     ) -> None:
         """Precompute K/V for context states write them into each layer's KV cache.
 
@@ -507,15 +495,11 @@ class DFlashQwen3Model(nn.Module):
             self._hidden_norm_weight,
             self._rms_norm_eps,
         )
-        all_kv_flat = F.linear(
-            normed_context_states, self._fused_kv_weight, self._fused_kv_bias
-        )
+        all_kv_flat = F.linear(normed_context_states, self._fused_kv_weight, self._fused_kv_bias)
         # Single contiguous copy that separates K/V and transposes to
         # layer-major layout.  Result: [2, L, num_ctx, nkv, hd] contiguous.
         # Indexing dim-0 gives contiguous [L, num_ctx, nkv, hd] for K and V.
-        all_kv = (
-            all_kv_flat.view(num_ctx, L, 2, nkv, hd).permute(2, 1, 0, 3, 4).contiguous()
-        )
+        all_kv = all_kv_flat.view(num_ctx, L, 2, nkv, hd).permute(2, 1, 0, 3, 4).contiguous()
         all_k = all_kv[0]  # [L, num_ctx, nkv, hd], contiguous
         all_v = all_kv[1]  # [L, num_ctx, nkv, hd], contiguous
 
@@ -551,7 +535,11 @@ class DFlashQwen3Model(nn.Module):
 
         # --- Per-layer cache insert ---
         all_k_final = all_k_flat.view(L, num_ctx, nkv, hd)
+        per_layer = isinstance(context_slot_mapping, (list, tuple))
         for i in range(L):
+            slot_mapping = context_slot_mapping[i] if per_layer else context_slot_mapping
+            if slot_mapping is None:
+                continue  # dummy run: skip cache ops
             attn = self._attn_layers[i]
             kv_cache = attn.kv_cache
             attn.impl.do_kv_cache_update(
@@ -559,7 +547,7 @@ class DFlashQwen3Model(nn.Module):
                 all_k_final[i],
                 all_v[i],
                 kv_cache,
-                context_slot_mapping,
+                slot_mapping,
             )
 
     def forward(
@@ -637,9 +625,7 @@ class DFlashQwen3ForCausalLM(Qwen3ForCausalLM):
         self.config = self.draft_model_config.hf_config
         if getattr(self.config, "draft_vocab_size", None) is None:
             self.config.draft_vocab_size = getattr(self.config, "vocab_size", None)
-        target_layer_num = aphrodite_config.model_config.get_num_layers(
-            aphrodite_config.parallel_config
-        )
+        target_layer_num = aphrodite_config.model_config.get_num_layers(aphrodite_config.parallel_config)
         self.model = DFlashQwen3Model(
             aphrodite_config=aphrodite_config,
             prefix=maybe_prefix(prefix, "model"),
@@ -703,12 +689,10 @@ class DFlashQwen3ForCausalLM(Qwen3ForCausalLM):
         self,
         context_states: torch.Tensor,
         context_positions: torch.Tensor,
-        context_slot_mapping: torch.Tensor | None = None,
+        context_slot_mapping: torch.Tensor | list[torch.Tensor | None] | None = None,
     ) -> None:
         """Precompute projected + RoPE'd K/V and write to cache."""
-        self.model.precompute_and_store_context_kv(
-            context_states, context_positions, context_slot_mapping
-        )
+        self.model.precompute_and_store_context_kv(context_states, context_positions, context_slot_mapping)
 
     def combine_hidden_states(
         self,

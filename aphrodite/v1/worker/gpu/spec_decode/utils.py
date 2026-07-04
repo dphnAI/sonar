@@ -18,9 +18,7 @@ class DraftTokensHandler:
         self.draft_tokens_np: np.ndarray | None = None
         self.num_draft_tokens: int = 0
 
-    def set_draft_tokens(
-        self, input_batch: InputBatch, draft_tokens: torch.Tensor
-    ) -> None:
+    def set_draft_tokens(self, input_batch: InputBatch, draft_tokens: torch.Tensor) -> None:
         self.req_ids = input_batch.req_ids
         self.num_draft_tokens = draft_tokens.shape[1]
         if not input_batch.has_structured_output_reqs:
@@ -54,17 +52,23 @@ class DraftTokensHandler:
 def get_parallel_drafting_token_id(hf_config) -> int:
     """Resolve the mask token id used for parallel drafting slots.
 
-    Checks (in order): `dflash_config.mask_token_id`, `pard_token`,
-    `ptd_token_id`. Raises ValueError if none are present.
+    Checks (in order): `dflash_config.mask_token_id`, top-level `mask_token_id`,
+    `dspark_noise_token_id`, `pard_token`, `ptd_token_id`. Raises ValueError if
+    none are present.
     """
     dflash_config = getattr(hf_config, "dflash_config", None) or {}
     if "mask_token_id" in dflash_config:
         return int(dflash_config["mask_token_id"])
+    if getattr(hf_config, "mask_token_id", None) is not None:
+        return int(hf_config.mask_token_id)
+    if hasattr(hf_config, "dspark_noise_token_id"):
+        return int(hf_config.dspark_noise_token_id)
     if hasattr(hf_config, "pard_token"):
         return int(hf_config.pard_token)
     if hasattr(hf_config, "ptd_token_id"):
         return int(hf_config.ptd_token_id)
     raise ValueError(
         "Model config must specify `dflash_config.mask_token_id`,"
-        " `pard_token`, or `ptd_token_id` for parallel drafting."
+        " `mask_token_id`, `dspark_noise_token_id`, `pard_token`, or"
+        " `ptd_token_id` for parallel drafting."
     )

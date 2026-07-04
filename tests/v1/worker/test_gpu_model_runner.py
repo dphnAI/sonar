@@ -10,12 +10,12 @@ import torch
 
 import aphrodite.v1.worker.gpu_model_runner as gpu_model_runner_module
 from aphrodite.config import (
+    AphroditeConfig,
     AttentionConfig,
     CacheConfig,
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
-    AphroditeConfig,
     set_current_aphrodite_config,
 )
 from aphrodite.distributed.parallel_state import (
@@ -73,9 +73,7 @@ def initialize_kv_cache(runner: GPUModelRunner):
         kv_cache_tensors=[
             KVCacheTensor(size=tensor_size, shared_by=["layer.0"]),
         ],
-        kv_cache_groups=[
-            KVCacheGroupSpec(layer_names=["layer.0"], kv_cache_spec=attn_spec)
-        ],
+        kv_cache_groups=[KVCacheGroupSpec(layer_names=["layer.0"], kv_cache_spec=attn_spec)],
     )
     runner.kv_cache_config = kv_cache_config
     runner.input_batch = InputBatch(
@@ -85,9 +83,7 @@ def initialize_kv_cache(runner: GPUModelRunner):
         device=runner.device,
         vocab_size=runner.model_config.get_vocab_size(),
         block_sizes=[kv_cache_config.kv_cache_groups[0].kv_cache_spec.block_size],
-        kernel_block_sizes=[
-            kv_cache_config.kv_cache_groups[0].kv_cache_spec.block_size
-        ],
+        kernel_block_sizes=[kv_cache_config.kv_cache_groups[0].kv_cache_spec.block_size],
     )
     runner.initialize_attn_backend(kv_cache_config)
 
@@ -126,9 +122,7 @@ def model_runner():
         model_config = aphrodite_config.model_config
         num_heads = model_config.get_num_kv_heads(aphrodite_config.parallel_config)
         head_size = model_config.get_head_size()
-        aphrodite_config.compilation_config.static_forward_context["layer.0"] = Attention(
-            num_heads, head_size, 0.1
-        )
+        aphrodite_config.compilation_config.static_forward_context["layer.0"] = Attention(num_heads, head_size, 0.1)
         runner = GPUModelRunner(aphrodite_config, DEVICE_TYPE)
         initialize_kv_cache(runner)
         yield runner
@@ -206,9 +200,7 @@ def _is_req_added(model_runner, req_id: str) -> bool:
     return req_id in model_runner.requests
 
 
-def _is_sampling_metadata_changed(
-    model_runner, sampling_metadata_before: SamplingMetadata
-):
+def _is_sampling_metadata_changed(model_runner, sampling_metadata_before: SamplingMetadata):
     return model_runner.input_batch.sampling_metadata is not (sampling_metadata_before)
 
 
@@ -219,9 +211,7 @@ def _is_req_state_block_table_match(model_runner, req_id: str) -> bool:
     if block_table.num_blocks_per_row[req_index] != len(req_state.block_ids[0]):
         return False
     num_blocks = block_table.num_blocks_per_row[req_index]
-    return (
-        block_table.block_table.np[req_index, :num_blocks] == req_state.block_ids[0]
-    ).all()
+    return (block_table.block_table.np[req_index, :num_blocks] == req_state.block_ids[0]).all()
 
 
 def _make_mock_backend_for_kernel_block_size(
@@ -276,9 +266,7 @@ def test_sample_tokens_receives_pp_sampled_ids_only_on_non_last_rank(
         nonlocal receive_calls
         receive_calls += 1
 
-    runner._pp_receive_prev_sampled_token_ids_to_input_batch = (
-        receive_prev_sampled_token_ids
-    )
+    runner._pp_receive_prev_sampled_token_ids_to_input_batch = receive_prev_sampled_token_ids
     monkeypatch.setattr(
         gpu_model_runner_module,
         "get_pp_group",
@@ -373,17 +361,13 @@ def test_set_active_mm_loras_builds_tower_and_connector_mappings():
 
     assert lora_manager.set_active_adapters.call_count == 2
 
-    tower_requests, tower_mapping = lora_manager.set_active_adapters.call_args_list[
-        0
-    ].args
+    tower_requests, tower_mapping = lora_manager.set_active_adapters.call_args_list[0].args
     assert tower_requests == {lora_request}
     assert tower_mapping.type is LoRAMappingType.TOWER
     assert tower_mapping.prompt_mapping == (7, 7, 0)
     assert tower_mapping.index_mapping == (7, 7, 7, 7, 7, 7, 7, 0, 0)
 
-    connector_requests, connector_mapping = (
-        lora_manager.set_active_adapters.call_args_list[1].args
-    )
+    connector_requests, connector_mapping = lora_manager.set_active_adapters.call_args_list[1].args
     assert connector_requests == {lora_request}
     assert connector_mapping.type is LoRAMappingType.CONNECTOR
     assert connector_mapping.prompt_mapping == (7, 7, 0)
@@ -677,9 +661,7 @@ def test_update_states_pp_non_async_multi_request_keeps_token_buffers_consistent
         last_len = int(last_runner.input_batch.num_tokens_no_spec[last_idx])
         assert non_last_len == last_len
         assert (
-            non_last_runner.input_batch.token_ids_cpu[
-                non_last_idx, :non_last_len
-            ].tolist()
+            non_last_runner.input_batch.token_ids_cpu[non_last_idx, :non_last_len].tolist()
             == last_runner.input_batch.token_ids_cpu[last_idx, :last_len].tolist()
         )
 
@@ -742,9 +724,7 @@ def test_update_states_pp_async_multi_request_keeps_rank_state_consistent(
         last_len = int(last_runner.input_batch.num_tokens_no_spec[last_idx])
         assert non_last_len == last_len
         assert (
-            non_last_runner.input_batch.token_ids_cpu[
-                non_last_idx, :non_last_len
-            ].tolist()
+            non_last_runner.input_batch.token_ids_cpu[non_last_idx, :non_last_len].tolist()
             == last_runner.input_batch.token_ids_cpu[last_idx, :last_len].tolist()
         )
 
@@ -763,27 +743,21 @@ def test_kv_cache_stride_order(monkeypatch, model_runner):
         break
 
     assert attn_backend is not None, "No attention backend found"
-    expected_kv_cache_shape = list(
-        attn_backend.get_kv_cache_shape(NUM_BLOCKS, BLOCK_SIZE, n_heads, head_size)
-    )
+    expected_kv_cache_shape = list(attn_backend.get_kv_cache_shape(NUM_BLOCKS, BLOCK_SIZE, n_heads, head_size))
 
     # TODO mla test
     default_stride = tuple(range(5))
     # Permutation that gets you back to expected kv shape
     for test_stride in ((1, 4, 0, 2, 3), (0, 1, 2, 3, 4)):
 
-        def rnd_stride_order(
-            include_num_layers_dimension: bool = False, test_stride=test_stride
-        ):
+        def rnd_stride_order(include_num_layers_dimension: bool = False, test_stride=test_stride):
             assert not include_num_layers_dimension
             return test_stride
 
         # Patch the attention backend class and re-trigger the KV cache creation
         for attn_group in model_runner._attn_group_iterator():
             attn_backend = attn_group.backend
-            monkeypatch.setattr(
-                attn_backend, "get_kv_cache_stride_order", rnd_stride_order
-            )
+            monkeypatch.setattr(attn_backend, "get_kv_cache_stride_order", rnd_stride_order)
 
         model_runner.attn_groups = []
         model_runner.kv_caches = []
@@ -814,14 +788,10 @@ def test_load_model_weights_inplace(dist_init, model_runner, model_runner_2):
     original_load_format = model_runner_2.load_config.load_format
     model_runner_2.update_config({"load_config": {"load_format": "dummy"}})
     model_runner_2.load_model()  # Initial model loading with dummy weights
-    assert str(model_runner.get_model().state_dict()) != str(
-        model_runner_2.get_model().state_dict()
-    )
+    assert str(model_runner.get_model().state_dict()) != str(model_runner_2.get_model().state_dict())
     model_runner_2.update_config({"load_config": {"load_format": original_load_format}})
     model_runner_2.reload_weights()  # Load real weights inplace
-    assert str(model_runner.get_model().state_dict()) == str(
-        model_runner_2.get_model().state_dict()
-    )
+    assert str(model_runner.get_model().state_dict()) == str(model_runner_2.get_model().state_dict())
 
 
 def test_reload_weights_before_load_model(model_runner):
@@ -860,6 +830,28 @@ def test_sample_passes_reordered_draft_probs_to_rejection_sampler():
         dim=0,
     )
     assert torch.equal(passed_draft_probs, expected_draft_probs)
+
+
+def test_invalid_draft_suffixes_remain_rejected_in_metadata():
+    runner = object.__new__(GPUModelRunner)
+    runner.device = torch.device("cpu")
+    runner.arange_np = np.arange(64, dtype=np.int64)
+    runner._arange_scratch = np.empty(64, dtype=np.int64)
+    # Placeholder (-1) drafts are kept in input_ids (clamped to 0 only at the
+    # embedding boundary). For num_draft_tokens=[2, 1, 2] the draft positions
+    # are [1, 2, 4, 6, 7], so the gather carries the -1s straight into the
+    # rejection-sampling metadata.
+    runner.input_ids = SimpleNamespace(
+        gpu=torch.tensor([99, 10, -1, 99, 12, 99, 13, -1], dtype=torch.int32),
+    )
+
+    metadata = GPUModelRunner._calc_spec_decode_metadata(
+        runner,
+        np.array([2, 1, 2], dtype=np.int32),
+        np.array([3, 5, 8], dtype=np.int32),
+    )
+
+    assert metadata.draft_token_ids.tolist() == [10, -1, 12, 13, -1]
 
 
 def test_init_kv_cache_with_kv_sharing_invalid_target_layer_order(default_aphrodite_config):
@@ -976,9 +968,7 @@ def test_init_kv_cache_without_kv_sharing(default_aphrodite_config):
     available_memory = 20 * GiB_bytes
     # page size for layer 0's kv_cache_spec is 32KB
     num_expected_blocks = 327680  # 20GB / 32KB / 2 (num layers)
-    kv_cache_config = get_kv_cache_configs(
-        aphrodite_config, [kv_cache_spec], [available_memory]
-    )[0]
+    kv_cache_config = get_kv_cache_configs(aphrodite_config, [kv_cache_spec], [available_memory])[0]
     assert kv_cache_config.num_blocks == num_expected_blocks
     assert len(kv_cache_config.kv_cache_tensors) == 2
     assert kv_cache_config.kv_cache_tensors[0].size == available_memory // 2
@@ -992,9 +982,7 @@ def test_init_kv_cache_without_kv_sharing(default_aphrodite_config):
     # this will only allocate 2 block worth of memory (2 * 32kb)
     kv_cache_config.num_blocks = 1
     for kv_cache_tensor in kv_cache_config.kv_cache_tensors:
-        kv_cache_tensor.size = kv_cache_spec[
-            kv_cache_tensor.shared_by[0]
-        ].page_size_bytes
+        kv_cache_tensor.size = kv_cache_spec[kv_cache_tensor.shared_by[0]].page_size_bytes
 
     runner.initialize_kv_cache(kv_cache_config)
 
@@ -1047,9 +1035,7 @@ def test_init_kv_cache_with_kv_sharing_valid(default_aphrodite_config):
     # with KV sharing, we can allocate (available_mem//page_size//1) blocks
     # which is twice as many as without KV sharing
     num_expected_blocks = 655360  # 20GB / 32KB
-    kv_cache_config = get_kv_cache_configs(
-        aphrodite_config, [kv_cache_spec], [available_memory]
-    )[0]
+    kv_cache_config = get_kv_cache_configs(aphrodite_config, [kv_cache_spec], [available_memory])[0]
     assert kv_cache_config.num_blocks == num_expected_blocks
     assert len(kv_cache_config.kv_cache_tensors) == 1
     # Each layer now has twice the available memory for KV cache
@@ -1180,9 +1166,7 @@ def test_hybrid_attention_mamba_tensor_shapes():
         kv_cache_spec = runner.get_kv_cache_spec()
 
         available_memory = 5 * GiB_bytes
-        kv_cache_config = get_kv_cache_configs(
-            aphrodite_config, [kv_cache_spec], [available_memory]
-        )[0]
+        kv_cache_config = get_kv_cache_configs(aphrodite_config, [kv_cache_spec], [available_memory])[0]
         runner.initialize_kv_cache(kv_cache_config)
 
     # random partition of blocks
@@ -1220,15 +1204,9 @@ def test_hybrid_attention_mamba_tensor_shapes():
     conv_constant_shape = conv_shape[1:]
     ssm_constant_shape = ssm_shape[1:]
 
-    attn_blocks_constant = torch.full(
-        (test_block_size, *attn_constant_shape), device=DEVICE_TYPE, fill_value=3.33
-    )
-    conv_blocks_constant = torch.full(
-        (test_block_size, *conv_constant_shape), device=DEVICE_TYPE, fill_value=6.66
-    )
-    ssm_blocks_constant = torch.full(
-        (test_block_size, *ssm_constant_shape), device=DEVICE_TYPE, fill_value=9.99
-    )
+    attn_blocks_constant = torch.full((test_block_size, *attn_constant_shape), device=DEVICE_TYPE, fill_value=3.33)
+    conv_blocks_constant = torch.full((test_block_size, *conv_constant_shape), device=DEVICE_TYPE, fill_value=6.66)
+    ssm_blocks_constant = torch.full((test_block_size, *ssm_constant_shape), device=DEVICE_TYPE, fill_value=9.99)
 
     # Fill attention blocks with constants using kv block indices
     kernel_blocks_for_attention = kv_blocks_for_attention * block_split_ratio
@@ -1303,9 +1281,7 @@ def test_hybrid_block_table_initialization():
     # Verify hybrid block configuration
     assert block_table.use_hybrid_blocks is True
     assert block_table.block_size == kernel_block_sizes[0]
-    assert block_table.blocks_per_kv_block == (
-        block_size // kernel_block_sizes[0]
-    )  # Changed to use first element
+    assert block_table.blocks_per_kv_block == (block_size // kernel_block_sizes[0])  # Changed to use first element
 
     # Test block table conversion logic
     # One kvcache_manager block should map to multiple kernel blocks
@@ -1375,9 +1351,7 @@ def test_hybrid_cache_integration(default_aphrodite_config, dist_init):
     model_config = aphrodite_config.model_config
     num_heads = model_config.get_num_kv_heads(aphrodite_config.parallel_config)
     head_size = model_config.get_head_size()
-    aphrodite_config.compilation_config.static_forward_context["layer.0"] = Attention(
-        num_heads, head_size, 0.1
-    )
+    aphrodite_config.compilation_config.static_forward_context["layer.0"] = Attention(num_heads, head_size, 0.1)
 
     runner = GPUModelRunner(aphrodite_config, DEVICE_TYPE)
 
@@ -1394,9 +1368,7 @@ def test_hybrid_cache_integration(default_aphrodite_config, dist_init):
         kv_cache_tensors=[
             KVCacheTensor(size=tensor_size, shared_by=["layer.0"]),
         ],
-        kv_cache_groups=[
-            KVCacheGroupSpec(layer_names=["layer.0"], kv_cache_spec=attn_spec)
-        ],
+        kv_cache_groups=[KVCacheGroupSpec(layer_names=["layer.0"], kv_cache_spec=attn_spec)],
     )
     runner.kv_cache_config = kv_cache_config
 
@@ -1415,9 +1387,7 @@ def test_hybrid_cache_integration(default_aphrodite_config, dist_init):
 
     # Verify hybrid block table configuration
     block_table = runner.input_batch.block_table.block_tables[0]
-    assert block_table.block_size == (
-        kv_cache_config.kv_cache_groups[0].kv_cache_spec.block_size
-    )
+    assert block_table.block_size == (kv_cache_config.kv_cache_groups[0].kv_cache_spec.block_size)
 
     # Test request processing with hybrid blocks
     req_id = "hybrid_req_0"
@@ -1606,9 +1576,7 @@ def test_mamba_cache_raises_when_max_num_seqs_exceeds_blocks():
         kv_cache_spec = runner.get_kv_cache_spec()
 
         available_memory = 5 * GiB_bytes
-        kv_cache_config = get_kv_cache_configs(
-            aphrodite_config, [kv_cache_spec], [available_memory]
-        )[0]
+        kv_cache_config = get_kv_cache_configs(aphrodite_config, [kv_cache_spec], [available_memory])[0]
         num_blocks = kv_cache_config.num_blocks
 
         # Force max_num_seqs to exceed num_blocks so the check triggers.

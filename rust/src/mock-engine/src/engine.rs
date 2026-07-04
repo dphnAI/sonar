@@ -14,9 +14,8 @@ use tracing::{debug, info, warn};
 use aphrodite_engine_core_client::protocol::utility::{
     EngineCoreUtilityRequest, UtilityOutput, UtilityResultEnvelope,
 };
-use aphrodite_engine_core_client::protocol::{
-    EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, EngineCoreRequest,
-};
+use aphrodite_engine_core_client::protocol::output::{EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs};
+use aphrodite_engine_core_client::protocol::request::EngineCoreRequest;
 
 use super::Opt;
 

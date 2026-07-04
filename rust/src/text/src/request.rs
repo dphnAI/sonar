@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use aphrodite_engine_core_client::protocol::lora::LoraRequest;
 use aphrodite_engine_core_client::protocol::multimodal::MmFeatures;
-use aphrodite_engine_core_client::protocol::{ReasoningParserKwargs, StructuredOutputsParams};
+use aphrodite_engine_core_client::protocol::request::ReasoningParserKwargs;
+use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputsParams;
 
 use crate::error::{Error, Result};
 use crate::output::TextDecodeOptions;

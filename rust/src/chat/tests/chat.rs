@@ -15,9 +15,8 @@ use aphrodite_chat::{
 use aphrodite_engine_core_client::protocol::logprobs::{
     Logprobs, MaybeWireLogprobs, PositionLogprobs, TokenLogprob,
 };
-use aphrodite_engine_core_client::protocol::{
-    EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, EngineCoreRequest, StopReason,
-};
+use aphrodite_engine_core_client::protocol::output::{EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, StopReason};
+use aphrodite_engine_core_client::protocol::request::EngineCoreRequest;
 use aphrodite_engine_core_client::test_utils::{IpcNamespace, spawn_mock_engine_task};
 use aphrodite_engine_core_client::{EngineCoreClient, EngineCoreClientConfig};
 use aphrodite_llm::Llm;

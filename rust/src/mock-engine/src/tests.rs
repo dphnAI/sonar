@@ -5,9 +5,9 @@ use anyhow::Result;
 use futures::StreamExt as _;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
-use aphrodite_engine_core_client::protocol::{
-    EngineCoreFinishReason, EngineCoreRequest, EngineCoreSamplingParams,
-};
+use aphrodite_engine_core_client::protocol::output::EngineCoreFinishReason;
+use aphrodite_engine_core_client::protocol::request::EngineCoreRequest;
+use aphrodite_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
 use aphrodite_engine_core_client::test_utils::IpcNamespace;
 use aphrodite_engine_core_client::{EngineCoreClient, EngineCoreClientConfig, TransportMode};
 

@@ -178,6 +178,7 @@ async def handle_request():
         # return decode
         generator = forward_request(f"http://{decode_addr}{request.path}", original_request_data, request_id)
         response = await make_response(generator)
+        response.headers["Content-Type"] = "application/json"
         response.timeout = None
 
         return response

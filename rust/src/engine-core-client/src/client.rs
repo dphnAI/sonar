@@ -14,7 +14,8 @@ use crate::error::{Error, Result};
 use crate::protocol::handshake::EngineCoreReadyResponse;
 use crate::protocol::lora::LoraRequest;
 use crate::protocol::utility::{EngineCoreUtilityRequest, PauseMode};
-use crate::protocol::{EngineCoreRequest, EngineCoreRequestType, ModelDtype};
+use crate::protocol::dtype::ModelDtype;
+use crate::protocol::request::{EngineCoreRequest, EngineCoreRequestType};
 use crate::runtime::{BackgroundShutdownRuntime, build_zmq_runtime};
 use crate::transport::{self, ConnectedEngine};
 

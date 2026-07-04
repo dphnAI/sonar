@@ -22,7 +22,7 @@ use llm_multimodal::{
     TrackedMedia,
 };
 use tracing::warn;
-use aphrodite_engine_core_client::protocol::ModelDtype;
+use aphrodite_engine_core_client::protocol::dtype::ModelDtype;
 use aphrodite_engine_core_client::protocol::multimodal::{
     MmBatchedField, MmFeatureSpec, MmFeatures, MmField, MmFieldElem, MmFlatField, MmKwargsItem,
     MmSharedField, MmSlice, PlaceholderRange, SliceSpec,

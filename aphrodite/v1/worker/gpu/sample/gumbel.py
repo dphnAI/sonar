@@ -101,9 +101,7 @@ def gumbel_block_argmax(
 ):
     req_state_idx = tl.load(expanded_idx_mapping_ptr + token_idx).to(tl.int64)
     is_valid_req = req_state_idx >= 0
-    temp = tl.load(temp_ptr + req_state_idx, mask=is_valid_req, other=0.0).to(
-        tl.float32
-    )
+    temp = tl.load(temp_ptr + req_state_idx, mask=is_valid_req, other=0.0).to(tl.float32)
     if temp != 0.0 and APPLY_TEMPERATURE:
         # Apply temperature.
         # NOTE(woosuk): Match the behavior of _temperature_kernel.
@@ -120,10 +118,7 @@ def gumbel_block_argmax(
         else:
             col = 0
         tl.store(
-            processed_logits_ptr
-            + req_state_idx * processed_logits_stride
-            + col * vocab_size
-            + block,
+            processed_logits_ptr + req_state_idx * processed_logits_stride + col * vocab_size + block,
             logits,
             mask=mask & is_valid_req,
         )
@@ -223,16 +218,18 @@ def gumbel_sample(
     output_processed_logits_col: torch.Tensor | None = None,
     use_fp64: bool = False,
 ) -> torch.Tensor:
+    # Enforce contiguity on non-strided input tensors
+    expanded_idx_mapping = expanded_idx_mapping.contiguous()
+    pos = pos.contiguous()
+    if output_processed_logits_col is not None:
+        output_processed_logits_col = output_processed_logits_col.contiguous()
     num_tokens, vocab_size = logits.shape
     BLOCK_SIZE = 1024
     num_blocks = triton.cdiv(vocab_size, BLOCK_SIZE)
     local_argmax = logits.new_empty(num_tokens, num_blocks, dtype=torch.int64)
     local_max_dtype = torch.float64 if use_fp64 else torch.float32
     local_max = logits.new_empty(num_tokens, num_blocks, dtype=local_max_dtype)
-    per_token_col = (
-        output_processed_logits_col is not None
-        and output_processed_logits_col.dim() > 0
-    )
+    per_token_col = output_processed_logits_col is not None and output_processed_logits_col.dim() > 0
     _gumbel_sample_kernel[(num_tokens, num_blocks)](
         local_argmax,
         local_argmax.stride(0),
