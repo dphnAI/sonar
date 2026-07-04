@@ -57,9 +57,7 @@ class DeepseekV32MultiTokenPredictorLayer(nn.Module):
             dtype=torch.int32,
             device=current_platform.device_type,
         )
-        self.shared_head = SharedHead(
-            config=config, prefix=prefix, quant_config=quant_config
-        )
+        self.shared_head = SharedHead(config=config, prefix=prefix, quant_config=quant_config)
         self.mtp_block = DeepseekV32DecoderLayer(
             aphrodite_config,
             prefix,
@@ -86,9 +84,7 @@ class DeepseekV32MultiTokenPredictorLayer(nn.Module):
             self.enorm.variance_epsilon,
         )
         hidden_states = self.eh_proj(eh_input)
-        hidden_states, residual = self.mtp_block(
-            positions=positions, hidden_states=hidden_states, residual=None
-        )
+        hidden_states, residual = self.mtp_block(positions=positions, hidden_states=hidden_states, residual=None)
         # mtp_block's MoE output is left un-reduced (skip_final_all_reduce); the
         # main model fuses that all-reduce into the next norm, but here the
         # recycle hidden is consumed directly, so reduce it now.
@@ -107,9 +103,7 @@ class DeepseekV32MultiTokenPredictor(nn.Module):
         self.num_mtp_layers = config.num_nextn_predict_layers
         self.layers = torch.nn.ModuleDict(
             {
-                str(idx): DeepseekV32MultiTokenPredictorLayer(
-                    aphrodite_config, f"{prefix}.layers.{idx}"
-                )
+                str(idx): DeepseekV32MultiTokenPredictorLayer(aphrodite_config, f"{prefix}.layers.{idx}")
                 for idx in range(
                     self.mtp_start_layer_idx,
                     self.mtp_start_layer_idx + self.num_mtp_layers,
@@ -129,6 +123,15 @@ class DeepseekV32MultiTokenPredictor(nn.Module):
             self_attn = getattr(layer.mtp_block, "self_attn", None)
             if self_attn is not None and hasattr(self_attn, "skip_topk"):
                 self_attn.skip_topk = skip
+
+    def compact_topk_indices(self, slot_ids: torch.Tensor):
+        """Gather the top-k index rows at ``slot_ids`` to the front of the buffer."""
+        num_slots = slot_ids.numel()
+        for layer in self.layers.values():
+            self_attn = getattr(layer.mtp_block, "self_attn", None)
+            if self_attn is not None and hasattr(self_attn, "topk_indices_buffer"):
+                topk_indices_buffer = self_attn.topk_indices_buffer
+                topk_indices_buffer[:num_slots] = topk_indices_buffer[slot_ids]
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.embed_tokens(input_ids)
@@ -159,9 +162,7 @@ class DeepseekV32MultiTokenPredictor(nn.Module):
     ) -> torch.Tensor:
         current_step_idx = spec_step_idx % self.num_mtp_layers
         mtp_layer = self.layers[str(self.mtp_start_layer_idx + current_step_idx)]
-        return self.logits_processor(
-            mtp_layer.shared_head.head, mtp_layer.shared_head(hidden_states)
-        )
+        return self.logits_processor(mtp_layer.shared_head.head, mtp_layer.shared_head(hidden_states))
 
 
 class DeepseekV32MTP(nn.Module, DeepseekV2MixtureOfExperts):
@@ -200,9 +201,7 @@ class DeepseekV32MTP(nn.Module, DeepseekV2MixtureOfExperts):
         inputs_embeds: torch.Tensor | None = None,
         spec_step_idx: int = 0,
     ) -> torch.Tensor:
-        return self.model(
-            input_ids, positions, hidden_states, inputs_embeds, spec_step_idx
-        )
+        return self.model(input_ids, positions, hidden_states, inputs_embeds, spec_step_idx)
 
     def compute_logits(
         self,
@@ -229,17 +228,13 @@ class DeepseekV32MTP(nn.Module, DeepseekV2MixtureOfExperts):
                     shared_weight = True
                 break
         if not spec_layer_weight:
-            name = name.replace(
-                f"model.layers.{spec_layer}.", f"model.layers.{spec_layer}.mtp_block."
-            )
+            name = name.replace(f"model.layers.{spec_layer}.", f"model.layers.{spec_layer}.mtp_block.")
         elif shared_weight:
             name = name.replace(f"model.layers.{spec_layer}.", "model.")
         return name
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        rocm_aiter_moe_shared_expert_enabled = (
-            rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
-        )
+        rocm_aiter_moe_shared_expert_enabled = rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
         stacked_params_mapping = [
             ("gate_up_proj", "gate_proj", 0),
             ("gate_up_proj", "up_proj", 1),
@@ -254,11 +249,7 @@ class DeepseekV32MTP(nn.Module, DeepseekV2MixtureOfExperts):
             ckpt_down_proj_name="down_proj",
             ckpt_up_proj_name="up_proj",
             num_experts=self.config.n_routed_experts
-            + (
-                self.config.n_shared_experts
-                if rocm_aiter_moe_shared_expert_enabled
-                else 0
-            ),
+            + (self.config.n_shared_experts if rocm_aiter_moe_shared_expert_enabled else 0),
         )
 
         pp_missing_layer_names = get_pp_missing_layer_names(self)
@@ -271,9 +262,7 @@ class DeepseekV32MTP(nn.Module, DeepseekV2MixtureOfExperts):
             spec_layer = get_spec_layer_idx_from_weight_name(self.config, name)
             if spec_layer is None:
                 continue
-            is_fusion_moe_shared_experts_layer = (
-                rocm_aiter_moe_shared_expert_enabled and ("mlp.shared_experts" in name)
-            )
+            is_fusion_moe_shared_experts_layer = rocm_aiter_moe_shared_expert_enabled and ("mlp.shared_experts" in name)
             name = self._rewrite_spec_layer_name(spec_layer, name)
 
             if _try_load_fp8_indexer_wk(
@@ -294,9 +283,7 @@ class DeepseekV32MTP(nn.Module, DeepseekV2MixtureOfExperts):
                 if is_fusion_moe_shared_experts_layer:
                     continue
                 name_mapped = name.replace(weight_name, param_name)
-                if (
-                    param_name == "fused_qkv_a_proj"
-                ) and name_mapped not in params_dict:
+                if (param_name == "fused_qkv_a_proj") and name_mapped not in params_dict:
                     continue
                 else:
                     name = name_mapped
@@ -310,11 +297,7 @@ class DeepseekV32MTP(nn.Module, DeepseekV2MixtureOfExperts):
                 num_chunks = 1
                 if is_fusion_moe_shared_experts_layer:
                     num_chunks = getattr(self.config, "n_shared_experts", 1) or 1
-                    split_dim = (
-                        1
-                        if ("down_proj.weight" in name and loaded_weight.ndim > 1)
-                        else 0
-                    )
+                    split_dim = 1 if ("down_proj.weight" in name and loaded_weight.ndim > 1) else 0
                     total = loaded_weight.shape[split_dim]
                     assert total % num_chunks == 0
                     chunk_size = total // num_chunks
@@ -343,9 +326,7 @@ class DeepseekV32MTP(nn.Module, DeepseekV2MixtureOfExperts):
                         is_expert_weight = True
                         name_mapped = chunk_name.replace(weight_name, param_name)
                         param = params_dict[name_mapped]
-                        weight_loader = typing.cast(
-                            Callable[..., bool], param.weight_loader
-                        )
+                        weight_loader = typing.cast(Callable[..., bool], param.weight_loader)
                         success = weight_loader(
                             param,
                             weight_to_load,
@@ -368,15 +349,10 @@ class DeepseekV32MTP(nn.Module, DeepseekV2MixtureOfExperts):
                         name = maybe_remap_kv_scale_name(name, params_dict)  # type: ignore[assignment]
                         if name is None:
                             continue
-                        if (
-                            spec_layer != self.model.mtp_start_layer_idx
-                            and ".layers" not in name
-                        ):
+                        if spec_layer != self.model.mtp_start_layer_idx and ".layers" not in name:
                             continue
                         param = params_dict[name]
-                        weight_loader = getattr(
-                            param, "weight_loader", default_weight_loader
-                        )
+                        weight_loader = getattr(param, "weight_loader", default_weight_loader)
                         weight_loader(param, loaded_weight)
             if not is_fusion_moe_shared_experts_layer:
                 loaded_params.add(name)
@@ -391,8 +367,5 @@ class DeepseekV32MTP(nn.Module, DeepseekV2MixtureOfExperts):
             self.model.mtp_start_layer_idx + self.model.num_mtp_layers,
         ):
             if layer_idx not in loaded_layers:
-                raise ValueError(
-                    f"MTP speculative decoding layer {layer_idx} weights "
-                    f"missing from checkpoint."
-                )
+                raise ValueError(f"MTP speculative decoding layer {layer_idx} weights missing from checkpoint.")
         return loaded_params
