@@ -162,6 +162,7 @@ def main():
                 DECODE_SERVICE_URL, original_request_data, request_id, kv_transfer_params=kv_transfer_params
             )
             response = await make_response(generator)
+            response.headers["Content-Type"] = "application/json"
             response.timeout = None
             logger.info("✓ DECODE: Complete")
             logger.info("=" * 80)
