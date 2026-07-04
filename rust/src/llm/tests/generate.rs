@@ -10,7 +10,7 @@ use aphrodite_engine_core_client::protocol::logprobs::{
     Logprobs, MaybeWireLogprobs, PositionLogprobs, TokenLogprob,
 };
 use aphrodite_engine_core_client::protocol::stats::PrefillStats;
-use aphrodite_engine_core_client::protocol::output::{EngineCoreEvent, EngineCoreEventType, EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs};
+use aphrodite_engine_core_client::protocol::output::{EngineCoreEvent, EngineCoreEventType, EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, RequestBatchOutputs};
 use aphrodite_engine_core_client::protocol::request::EngineCoreRequest;
 use aphrodite_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
 use aphrodite_engine_core_client::test_utils::{IpcNamespace, spawn_mock_engine_task};
@@ -248,7 +248,7 @@ async fn generate_streams_outputs() {
 
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         outputs: vec![
                             request_output_with_logprobs(
                                 &request.request_id,
@@ -267,7 +267,8 @@ async fn generate_streams_outputs() {
                         ],
                         finished_requests: Some(BTreeSet::from([request.request_id.clone()])),
                         ..Default::default()
-                    },
+                    }
+                    .into(),
                 )
                 .await;
             })
@@ -328,7 +329,7 @@ async fn collect_output_aggregates_raw_tokens_logprobs_and_terminal_metadata() {
 
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         engine_index: 0,
                         outputs: vec![
                             EngineCoreOutput {
@@ -355,13 +356,9 @@ async fn collect_output_aggregates_raw_tokens_logprobs_and_terminal_metadata() {
                                 Some(serde_json::json!({"connector": "x"})),
                             ),
                         ],
-                        scheduler_stats: None,
-                        timestamp: 0.0,
-                        utility_output: None,
                         finished_requests: None,
-                        wave_complete: None,
-                        start_wave: None,
-                    },
+                    }
+                    .into(),
                 )
                 .await;
             })
@@ -409,10 +406,11 @@ async fn generate_propagates_unexpected_close_errors() {
 
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         finished_requests: Some(BTreeSet::from([request.request_id])),
                         ..Default::default()
-                    },
+                    }
+                    .into(),
                 )
                 .await;
             })
@@ -456,10 +454,11 @@ async fn dropping_a_live_generate_stream_triggers_abort() {
 
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         outputs: vec![request_output(&request.request_id, vec![99], None)],
                         ..Default::default()
-                    },
+                    }
+                    .into(),
                 )
                 .await;
 
@@ -510,7 +509,7 @@ async fn duplicate_external_request_ids_are_randomized_before_reaching_engine_co
 
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         outputs: vec![request_output(
                             &request_1.request_id,
                             vec![],
@@ -518,13 +517,14 @@ async fn duplicate_external_request_ids_are_randomized_before_reaching_engine_co
                         )],
                         finished_requests: Some(BTreeSet::from([request_1.request_id.clone()])),
                         ..Default::default()
-                    },
+                    }
+                    .into(),
                 )
                 .await;
 
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         outputs: vec![request_output(
                             &request_2.request_id,
                             vec![],
@@ -532,7 +532,8 @@ async fn duplicate_external_request_ids_are_randomized_before_reaching_engine_co
                         )],
                         finished_requests: Some(BTreeSet::from([request_2.request_id])),
                         ..Default::default()
-                    },
+                    }
+                    .into(),
                 )
                 .await;
             })
@@ -573,10 +574,11 @@ async fn abort_resolves_external_request_id_to_internal_before_reaching_engine()
 
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         outputs: vec![request_output(&request.request_id, vec![7], None)],
                         ..Default::default()
-                    },
+                    }
+                    .into(),
                 )
                 .await;
 
@@ -640,13 +642,14 @@ async fn abort_by_external_id_aborts_all_internal_requests() {
 
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         outputs: vec![
                             request_output(&request_1.request_id, vec![7], None),
                             request_output(&request_2.request_id, vec![8], None),
                         ],
                         ..Default::default()
-                    },
+                    }
+                    .into(),
                 )
                 .await;
 
@@ -707,7 +710,7 @@ async fn generate_records_request_metrics_in_prometheus_output() {
 
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         engine_index: 4,
                         timestamp: 10.0,
                         outputs: vec![EngineCoreOutput {
@@ -733,13 +736,14 @@ async fn generate_records_request_metrics_in_prometheus_output() {
                             )
                         }],
                         ..Default::default()
-                    },
+                    }
+                    .into(),
                 )
                 .await;
 
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         engine_index: 4,
                         timestamp: 11.5,
                         outputs: vec![request_output_with_events(
@@ -753,7 +757,8 @@ async fn generate_records_request_metrics_in_prometheus_output() {
                         )],
                         finished_requests: Some(BTreeSet::from([request.request_id])),
                         ..Default::default()
-                    },
+                    }
+                    .into(),
                 )
                 .await;
             })
@@ -840,7 +845,7 @@ async fn dropping_stream_records_abort_terminal_request_metrics() {
 
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         engine_index: 5,
                         timestamp: 10.0,
                         outputs: vec![request_output_with_events(
@@ -859,7 +864,8 @@ async fn dropping_stream_records_abort_terminal_request_metrics() {
                             ]),
                         )],
                         ..Default::default()
-                    },
+                    }
+                    .into(),
                 )
                 .await;
 

@@ -14,7 +14,7 @@ use tracing::{debug, info, warn};
 use aphrodite_engine_core_client::protocol::utility::{
     EngineCoreUtilityRequest, UtilityOutput, UtilityResultEnvelope,
 };
-use aphrodite_engine_core_client::protocol::output::{EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs};
+use aphrodite_engine_core_client::protocol::output::{EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, RequestBatchOutputs, UtilityCallOutput};
 use aphrodite_engine_core_client::protocol::request::EngineCoreRequest;
 
 use super::Opt;
@@ -59,13 +59,14 @@ fn empty_finish_outputs(
     let output = request_output(request_id, Vec::new(), Some(finish_reason));
     let finished_requests = BTreeSet::from([output.request_id.clone()]);
 
-    EngineCoreOutputs {
+    RequestBatchOutputs {
         engine_index,
         outputs: vec![output],
         timestamp: now_secs(),
         finished_requests: Some(finished_requests),
         ..Default::default()
     }
+    .into()
 }
 
 /// Encode a utility result into the protocol's msgpack value envelope.
@@ -96,16 +97,16 @@ fn utility_response(
         _ => utility_envelope(Value::Nil),
     }?;
 
-    Ok(EngineCoreOutputs {
+    Ok(UtilityCallOutput {
         engine_index,
-        utility_output: Some(UtilityOutput {
+        timestamp: now_secs(),
+        output: UtilityOutput {
             call_id: request.call_id,
             failure_message: None,
             result: Some(result),
-        }),
-        timestamp: now_secs(),
-        ..Default::default()
-    })
+        },
+    }
+    .into())
 }
 
 /// Message sent from the frontend to the mock engine task to drive the engine loop.
@@ -268,13 +269,14 @@ impl Engine {
                 }
                 for (client_index, (client_outputs, finished_requests)) in outputs_by_client {
                     outputs.push({
-                        let outputs = EngineCoreOutputs {
+                        let outputs = RequestBatchOutputs {
                             engine_index: self.engine_index,
                             outputs: client_outputs,
                             timestamp: now_secs(),
                             finished_requests: Some(finished_requests),
                             ..Default::default()
-                        };
+                        }
+                    .into();
                         EngineOutput {
                             client_index,
                             outputs,
@@ -356,14 +358,15 @@ impl Engine {
             .filter_map(|(client_index, (outputs, finished_requests))| {
                 (!outputs.is_empty()).then(|| EngineOutput {
                     client_index,
-                    outputs: EngineCoreOutputs {
+                    outputs: RequestBatchOutputs {
                         engine_index: self.engine_index,
                         outputs,
                         timestamp: now_secs(),
                         finished_requests: (!finished_requests.is_empty())
                             .then_some(finished_requests),
                         ..Default::default()
-                    },
+                    }
+                    .into(),
                 })
             })
             .collect()

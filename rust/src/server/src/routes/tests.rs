@@ -29,7 +29,7 @@ use aphrodite_engine_core_client::protocol::logprobs::{
 };
 use aphrodite_engine_core_client::protocol::utility::{UtilityOutput, UtilityResultEnvelope};
 use aphrodite_engine_core_client::protocol::decode_value;
-use aphrodite_engine_core_client::protocol::output::{EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, StopReason};
+use aphrodite_engine_core_client::protocol::output::{EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs, RequestBatchOutputs, UtilityCallOutput, StopReason};
 use aphrodite_engine_core_client::protocol::request::EngineCoreRequest;
 use aphrodite_engine_core_client::test_utils::{
     IpcNamespace, spawn_mock_engine_task, spawn_mock_engine_task_with_ready,
@@ -230,19 +230,14 @@ fn engine_outputs_for_request(
     request_id: &str,
     output_specs: Vec<(Vec<u32>, Option<EngineCoreFinishReason>)>,
 ) -> EngineCoreOutputs {
-    EngineCoreOutputs {
-        engine_index: 0,
+    RequestBatchOutputs {
         outputs: output_specs
             .into_iter()
             .map(|(token_ids, finish_reason)| request_output(request_id, token_ids, finish_reason))
             .collect(),
-        scheduler_stats: None,
-        timestamp: 0.0,
-        utility_output: None,
-        finished_requests: None,
-        wave_complete: None,
-        start_wave: None,
+        ..Default::default()
     }
+    .into()
 }
 
 fn test_llm(client: EngineCoreClient) -> Llm {
@@ -388,14 +383,15 @@ fn utility_none_result() -> UtilityResultEnvelope {
 }
 
 fn utility_outputs(call_id: u64, result: UtilityResultEnvelope) -> EngineCoreOutputs {
-    EngineCoreOutputs {
-        utility_output: Some(UtilityOutput {
+    UtilityCallOutput {
+        output: UtilityOutput {
             call_id: call_id.into(),
             failure_message: None,
             result: Some(result),
-        }),
+        },
         ..Default::default()
     }
+    .into()
 }
 
 async fn send_outputs(push: &mut PushSocket, outputs: EngineCoreOutputs) {
@@ -2279,7 +2275,7 @@ async fn non_stream_chat_includes_logprobs_and_prompt_logprobs() {
 
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         engine_index: 0,
                         outputs: vec![request_output_with_logprobs(
                             &request.request_id,
@@ -2289,13 +2285,10 @@ async fn non_stream_chat_includes_logprobs_and_prompt_logprobs() {
                             Some(sample_logprobs_for_tokens(&bytes_to_token_ids(b"hi"))),
                             Some(prompt_logprobs_for_tokens(&prompt_token_ids)),
                         )],
-                        scheduler_stats: None,
-                        timestamp: 0.0,
-                        utility_output: None,
                         finished_requests: None,
-                        wave_complete: None,
-                        start_wave: None,
-                    },
+                        ..Default::default()
+                    }
+                    .into(),
                 )
                 .await;
             })
@@ -3119,7 +3112,7 @@ async fn non_stream_completions_include_logprobs() {
                     rmp_serde::from_slice(&add[1]).expect("decode request");
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         engine_index: 0,
                         outputs: vec![
                             request_output_with_logprobs(
@@ -3139,13 +3132,10 @@ async fn non_stream_completions_include_logprobs() {
                                 None,
                             ),
                         ],
-                        scheduler_stats: None,
-                        timestamp: 0.0,
-                        utility_output: None,
                         finished_requests: Some(BTreeSet::from([request.request_id.clone()])),
-                        wave_complete: None,
-                        start_wave: None,
-                    },
+                        ..Default::default()
+                    }
+                    .into(),
                 )
                 .await;
             })
@@ -3222,7 +3212,7 @@ async fn non_stream_completions_include_prompt_logprobs() {
                     rmp_serde::from_slice(&add[1]).expect("decode request");
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         engine_index: 0,
                         outputs: vec![request_output_with_logprobs(
                             &request.request_id,
@@ -3244,13 +3234,10 @@ async fn non_stream_completions_include_prompt_logprobs() {
                             }),
                             Some(prompt_logprobs_for_hello()),
                         )],
-                        scheduler_stats: None,
-                        timestamp: 0.0,
-                        utility_output: None,
                         finished_requests: None,
-                        wave_complete: None,
-                        start_wave: None,
-                    },
+                        ..Default::default()
+                    }
+                    .into(),
                 )
                 .await;
             })
@@ -3586,7 +3573,7 @@ async fn non_stream_raw_generate_returns_token_output_envelope() {
 
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         engine_index: 0,
                         outputs: vec![
                             request_output_with_logprobs(
@@ -3607,13 +3594,10 @@ async fn non_stream_raw_generate_returns_token_output_envelope() {
                                 Some(json!({"connector": "x"})),
                             ),
                         ],
-                        scheduler_stats: None,
-                        timestamp: 0.0,
-                        utility_output: None,
                         finished_requests: None,
-                        wave_complete: None,
-                        start_wave: None,
-                    },
+                        ..Default::default()
+                    }
+                    .into(),
                 )
                 .await;
             })
@@ -3706,7 +3690,7 @@ async fn stream_raw_generate_returns_sse_chunks_and_usage() {
 
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         engine_index: 0,
                         outputs: vec![
                             request_output_with_logprobs(
@@ -3726,13 +3710,10 @@ async fn stream_raw_generate_returns_sse_chunks_and_usage() {
                                 None,
                             ),
                         ],
-                        scheduler_stats: None,
-                        timestamp: 0.0,
-                        utility_output: None,
                         finished_requests: None,
-                        wave_complete: None,
-                        start_wave: None,
-                    },
+                        ..Default::default()
+                    }
+                    .into(),
                 )
                 .await;
             })
@@ -4424,7 +4405,7 @@ async fn include_reasoning_false_suppresses_non_stream_output_metadata() {
 
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         engine_index: 0,
                         outputs: vec![
                             request_output_with_logprobs(
@@ -4444,13 +4425,10 @@ async fn include_reasoning_false_suppresses_non_stream_output_metadata() {
                                 None,
                             ),
                         ],
-                        scheduler_stats: None,
-                        timestamp: 0.0,
-                        utility_output: None,
                         finished_requests: None,
-                        wave_complete: None,
-                        start_wave: None,
-                    },
+                        ..Default::default()
+                    }
+                    .into(),
                 )
                 .await;
             })
@@ -4599,7 +4577,7 @@ async fn tool_call_sse_chunks_can_carry_logprobs() {
 
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         engine_index: 0,
                         outputs: vec![request_output_with_logprobs(
                             &request.request_id,
@@ -4611,18 +4589,15 @@ async fn tool_call_sse_chunks_can_carry_logprobs() {
                             ))),
                             None,
                         )],
-                        scheduler_stats: None,
-                        timestamp: 0.0,
-                        utility_output: None,
                         finished_requests: None,
-                        wave_complete: None,
-                        start_wave: None,
-                    },
+                        ..Default::default()
+                    }
+                    .into(),
                 )
                 .await;
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
+                    RequestBatchOutputs {
                         engine_index: 0,
                         outputs: vec![request_output_with_logprobs(
                             &request.request_id,
@@ -4634,19 +4609,15 @@ async fn tool_call_sse_chunks_can_carry_logprobs() {
                             ))),
                             None,
                         )],
-                        scheduler_stats: None,
-                        timestamp: 0.0,
-                        utility_output: None,
                         finished_requests: None,
-                        wave_complete: None,
-                        start_wave: None,
-                    },
+                        ..Default::default()
+                    }
+                    .into(),
                 )
                 .await;
                 send_outputs(
                     push,
-                    EngineCoreOutputs {
-                        engine_index: 0,
+                    RequestBatchOutputs {
                         outputs: vec![request_output_with_logprobs(
                             &request.request_id,
                             bytes_to_token_ids(
@@ -4659,13 +4630,10 @@ async fn tool_call_sse_chunks_can_carry_logprobs() {
                             ))),
                             None,
                         )],
-                        scheduler_stats: None,
-                        timestamp: 0.0,
-                        utility_output: None,
                         finished_requests: Some(BTreeSet::from([request.request_id.clone()])),
-                        wave_complete: None,
-                        start_wave: None,
-                    },
+                        ..Default::default()
+                    }
+                    .into(),
                 )
                 .await;
             })
