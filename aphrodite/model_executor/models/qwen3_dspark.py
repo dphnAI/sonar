@@ -36,22 +36,30 @@ logger = init_logger(__name__)
 class DSparkMarkovHead(nn.Module):
     """Sequential transition-bias head (low-rank V x r, r x V).
 
-    ``markov_w1[token]`` is an r-dim embedding of the previously sampled token;
-    ``markov_w2`` projects it back to a vocab-size bias added to the base logits.
+    ``markov_w1[token]`` embeds the previously sampled token (target vocab,
+    ``vocab_size``); ``markov_w2`` projects it to a draft-vocab bias
+    (``draft_vocab_size``) added to the base draft logits. The two sizes
+    coincide for full-vocab drafts.
     """
 
-    def __init__(self, vocab_size: int, markov_rank: int, prefix: str) -> None:
+    def __init__(
+        self,
+        vocab_size: int,
+        draft_vocab_size: int,
+        markov_rank: int,
+        prefix: str,
+    ) -> None:
         super().__init__()
         # TODO(ben): profile for which (if any) it makes sense to replicate or TP-shard
         self.markov_w1 = VocabParallelEmbedding(vocab_size, markov_rank, prefix=maybe_prefix(prefix, "markov_w1"))
-        self.markov_w2 = ParallelLMHead(vocab_size, markov_rank, prefix=maybe_prefix(prefix, "markov_w2"))
+        self.markov_w2 = ParallelLMHead(draft_vocab_size, markov_rank, prefix=maybe_prefix(prefix, "markov_w2"))
 
     def embed(self, token_ids: torch.Tensor) -> torch.Tensor:
         """r-dim Markov embedding of ``token_ids`` ([B] -> [B, r])."""
         return self.markov_w1(token_ids)
 
     def bias(self, markov_embed: torch.Tensor, logits_processor) -> torch.Tensor:
-        """Vocab-size transition bias from a Markov embedding ([B, r] -> [B, V])."""
+        """Draft-vocab transition bias from a Markov embedding ([B, r] -> [B, V])."""
         return logits_processor(self.markov_w2, markov_embed)
 
 
@@ -67,8 +75,10 @@ class Qwen3DSparkModel(DFlashQwen3Model):
     ) -> None:
         super().__init__(aphrodite_config=aphrodite_config, start_layer_id=start_layer_id, prefix=prefix)
         config = self.config
+        draft_vocab_size = getattr(config, "draft_vocab_size", None) or config.vocab_size
         self.markov_head = DSparkMarkovHead(
             config.vocab_size,
+            draft_vocab_size,
             config.markov_rank,
             prefix=maybe_prefix(prefix, "markov_head"),
         )
@@ -107,6 +117,17 @@ class Qwen3DSparkForCausalLM(DFlashQwen3ForCausalLM):
     def get_draft_kv_cache_layer_names(self) -> list[str]:
         return [layer.self_attn.attn.layer_name for layer in self.model.layers]
 
+    def compute_draft_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # Draft-vocab logits without the d2t scatter: the speculator adds the
+        # Markov bias in draft space, then remaps via map_draft_to_target.
+        return self.logits_processor(self.lm_head, hidden_states)
+
+    def map_draft_to_target(self, draft_ids: torch.Tensor) -> torch.Tensor:
+        # Map draft-vocab ids to target ids (identity for full-vocab drafts).
+        if self.draft_id_to_target_id is None:
+            return draft_ids
+        return draft_ids + self.draft_id_to_target_id[draft_ids]
+
     def markov_embed(self, token_ids: torch.Tensor) -> torch.Tensor:
         return self.model.markov_head.embed(token_ids)
 
@@ -117,8 +138,15 @@ class Qwen3DSparkForCausalLM(DFlashQwen3ForCausalLM):
         model_weights = {}
         includes_embed_tokens = False
         includes_lm_head = False
+        includes_draft_id_mapping = False
         for name, loaded_weight in weights:
-            if "lm_head" not in name:
+            # t2d is training-only; the draft remaps via d2t at sampling time.
+            if "t2d" in name:
+                continue
+            if "d2t" in name:
+                name = name.replace("d2t", "draft_id_to_target_id")
+                includes_draft_id_mapping = True
+            elif "lm_head" not in name:
                 name = "model." + name
             if "embed_tokens" in name:
                 includes_embed_tokens = True
@@ -138,6 +166,8 @@ class Qwen3DSparkForCausalLM(DFlashQwen3ForCausalLM):
             skip_substrs.append("embed_tokens")
         if not includes_lm_head:
             skip_substrs.append("lm_head")
+        if not includes_draft_id_mapping:
+            skip_substrs.append("draft_id_to_target_id")
         loader = AutoWeightsLoader(self, skip_substrs=skip_substrs)
         loader.load_weights(model_weights.items())
         self.model._build_fused_kv_buffers()
