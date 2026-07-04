@@ -10,14 +10,6 @@ import pytest
 import torch
 from tqdm import tqdm
 
-from tests.evals.gsm8k.gsm8k_eval import _build_gsm8k_prompts, evaluate_gsm8k_offline
-from tests.utils import (
-    get_attn_backend_list_based_on_platform,
-    large_gpu_mark,
-    multi_gpu_marks,
-    multi_gpu_only,
-    single_gpu_only,
-)
 from aphrodite import LLM, SamplingParams
 from aphrodite.assets.base import APHRODITE_S3_BUCKET_URL
 from aphrodite.assets.image import VLM_IMAGES_DIR
@@ -27,6 +19,14 @@ from aphrodite.distributed import cleanup_dist_env_and_memory
 from aphrodite.engine.arg_utils import EngineArgs
 from aphrodite.platforms import current_platform
 from aphrodite.v1.metrics.reader import Metric
+from tests.evals.gsm8k.gsm8k_eval import _build_gsm8k_prompts, evaluate_gsm8k_offline
+from tests.utils import (
+    get_attn_backend_list_based_on_platform,
+    large_gpu_mark,
+    multi_gpu_marks,
+    multi_gpu_only,
+    single_gpu_only,
+)
 
 MTP_SIMILARITY_RATE = 0.8
 
@@ -42,9 +42,7 @@ def _skip_if_insufficient_gpus_for_tp(tp_size: int):
     """Skip test if available GPUs < tp_size on ROCm."""
     available_gpus = torch.accelerator.device_count()
     if available_gpus < tp_size:
-        pytest.skip(
-            f"Test requires {tp_size} GPUs, but only {available_gpus} available"
-        )
+        pytest.skip(f"Test requires {tp_size} GPUs, but only {available_gpus} available")
 
 
 Messages = list[dict[str, Any]]
@@ -84,17 +82,13 @@ def get_test_prompts(mm_enabled: bool, num_prompts: int = 100) -> list[Messages]
         )
     prompts.extend(
         [{"role": "user", "content": prompt}]
-        for prompt in _build_gsm8k_prompts(
-            num_questions=num_gsm8k_prompts, num_shots=5
-        )[0]
+        for prompt in _build_gsm8k_prompts(num_questions=num_gsm8k_prompts, num_shots=5)[0]
     )
     for _ in range(num_mm_prompts):
         placeholders = [
             {
                 "type": "image_url",
-                "image_url": {
-                    "url": f"{APHRODITE_S3_BUCKET_URL}/{VLM_IMAGES_DIR}/stop_sign.jpg"
-                },
+                "image_url": {"url": f"{APHRODITE_S3_BUCKET_URL}/{VLM_IMAGES_DIR}/stop_sign.jpg"},
             }
         ]
         prompt = [
@@ -107,9 +101,7 @@ def get_test_prompts(mm_enabled: bool, num_prompts: int = 100) -> list[Messages]
 
 
 def get_instruct_coder_messages(n: int) -> list[Messages]:
-    dataset = InstructCoderDataset(
-        dataset_path="likaixin/InstructCoder", dataset_split="train"
-    )
+    dataset = InstructCoderDataset(dataset_path="likaixin/InstructCoder", dataset_split="train")
     prompts: Iterable[str] = dataset.sample_prompts(n=n)
     return [[{"role": "user", "content": prompt}] for prompt in prompts]
 
@@ -215,10 +207,7 @@ def test_ngram_gpu_default_with_async_scheduling(
         async_scheduling=async_scheduling,
     )
     # Assert the resolved async_scheduling config matches what was requested.
-    assert (
-        spec_llm.llm_engine.aphrodite_config.scheduler_config.async_scheduling
-        == async_scheduling
-    )
+    assert spec_llm.llm_engine.aphrodite_config.scheduler_config.async_scheduling == async_scheduling
     evaluate_llm_for_gsm8k(spec_llm, expected_accuracy_threshold=0.8)
     del spec_llm
     cleanup_dist_env_and_memory()
@@ -323,9 +312,7 @@ def test_speculators_model_integration(
 
     # First run: Direct speculator model (simplified integration)
     spec_llm = LLM(model=model_path, max_model_len=4096, gpu_memory_utilization=0.92)
-    evaluate_llm_for_gsm8k(
-        spec_llm, expected_accuracy_threshold=expected_accuracy_threshold
-    )
+    evaluate_llm_for_gsm8k(spec_llm, expected_accuracy_threshold=expected_accuracy_threshold)
     spec_outputs = spec_llm.chat(test_prompts, sampling_config)
 
     # Verify speculative config was auto-detected
@@ -335,14 +322,11 @@ def test_speculators_model_integration(
 
     spec_config = spec_llm.llm_engine.aphrodite_config.speculative_config
     assert spec_config.num_speculative_tokens > 0, (
-        f"Expected positive speculative tokens, "
-        f"got {spec_config.num_speculative_tokens}"
+        f"Expected positive speculative tokens, got {spec_config.num_speculative_tokens}"
     )
 
     # Verify draft model is set to the speculator model
-    assert spec_config.model == model_path, (
-        f"Draft model should be {model_path}, got {spec_config.model}"
-    )
+    assert spec_config.model == model_path, f"Draft model should be {model_path}, got {spec_config.model}"
 
     # Extract verifier model for reference run
     verifier_model = spec_llm.llm_engine.aphrodite_config.model_config.model
@@ -359,16 +343,11 @@ def test_speculators_model_integration(
     cleanup_dist_env_and_memory()
 
     # Compare outputs
-    matches = sum(
-        1
-        for ref, spec in zip(ref_outputs, spec_outputs)
-        if ref.outputs[0].text == spec.outputs[0].text
-    )
+    matches = sum(1 for ref, spec in zip(ref_outputs, spec_outputs) if ref.outputs[0].text == spec.outputs[0].text)
 
     # Heuristic: expect at least 66% of prompts to match exactly
     assert matches >= int(0.66 * len(ref_outputs)), (
-        f"Only {matches}/{len(ref_outputs)} outputs matched. "
-        f"Expected at least {int(0.66 * len(ref_outputs))} matches."
+        f"Only {matches}/{len(ref_outputs)} outputs matched. Expected at least {int(0.66 * len(ref_outputs))} matches."
     )
 
 
@@ -394,18 +373,14 @@ def _run_eagle_correctness(
         required = Version("5.0.0")
         if installed < required:
             pytest.skip(
-                "Eagle3 with the Transformers modeling backend requires "
-                f"transformers>={required}, but got {installed}"
+                f"Eagle3 with the Transformers modeling backend requires transformers>={required}, but got {installed}"
             )
 
     test_prompts = get_test_prompts(mm_enabled)
 
     if "Llama-4-Scout" in model_setup[1] and attn_backend == "FLASH_ATTN":
         if current_platform.is_rocm():
-            print(
-                "FLASH_ATTN for spec_decode not supported on "
-                "ROCm currently. Changing to FLEX_ATTENTION backend."
-            )
+            print("FLASH_ATTN for spec_decode not supported on ROCm currently. Changing to FLEX_ATTENTION backend.")
             attention_config = {"backend": "FLEX_ATTENTION"}
         else:
             attention_config = None
@@ -413,10 +388,7 @@ def _run_eagle_correctness(
         attention_config = {"backend": attn_backend}
 
     if attn_backend == "TRITON_ATTN" and not current_platform.is_rocm():
-        pytest.skip(
-            "TRITON_ATTN does not support "
-            "multi-token eagle spec decode on current platform"
-        )
+        pytest.skip("TRITON_ATTN does not support multi-token eagle spec decode on current platform")
 
     with monkeypatch.context() as m:
         m.setenv("APHRODITE_MLA_DISABLE", "1")
@@ -441,9 +413,7 @@ def _run_eagle_correctness(
             tensor_parallel_size=tp_size,
             attention_config=attention_config,
         )
-        evaluate_llm_for_gsm8k(
-            ref_llm, expected_accuracy_threshold=expected_accuracy_threshold
-        )
+        evaluate_llm_for_gsm8k(ref_llm, expected_accuracy_threshold=expected_accuracy_threshold)
         ref_outputs = ref_llm.chat(test_prompts, sampling_config)
         del ref_llm
         torch.accelerator.empty_cache()
@@ -467,9 +437,7 @@ def _run_eagle_correctness(
         )
         # EAGLE/EAGLE3 supports async scheduling; assert it is active by default.
         assert spec_llm.llm_engine.aphrodite_config.scheduler_config.async_scheduling
-        evaluate_llm_for_gsm8k(
-            spec_llm, expected_accuracy_threshold=expected_accuracy_threshold
-        )
+        evaluate_llm_for_gsm8k(spec_llm, expected_accuracy_threshold=expected_accuracy_threshold)
         spec_outputs = spec_llm.chat(test_prompts, sampling_config)
         matches = 0
         misses = 0
@@ -579,9 +547,7 @@ def test_eagle_correctness_light(
             False,
             "auto",
             0.8,
-            marks=pytest.mark.skip(
-                reason="architecture of its eagle3 is LlamaForCausalLMEagle3"
-            ),
+            marks=pytest.mark.skip(reason="architecture of its eagle3 is LlamaForCausalLMEagle3"),
         ),
         pytest.param(
             (
@@ -594,9 +560,7 @@ def test_eagle_correctness_light(
             False,
             "auto",
             0.7,
-            marks=pytest.mark.skip(
-                reason="Skipping due to its head_dim not being a multiple of 32"
-            ),
+            marks=pytest.mark.skip(reason="Skipping due to its head_dim not being a multiple of 32"),
         ),
         (
             (
@@ -833,10 +797,7 @@ def test_mtp_correctness(
             from packaging.version import Version
 
             if Version(transformers.__version__) < Version("5.8.0"):
-                pytest.skip(
-                    "Gemma4 MTP assistant requires transformers>=5.8.0, "
-                    f"got {transformers.__version__}"
-                )
+                pytest.skip(f"Gemma4 MTP assistant requires transformers>=5.8.0, got {transformers.__version__}")
 
         ref_llm = LLM(
             model=model_name,
@@ -847,9 +808,7 @@ def test_mtp_correctness(
             **extra_kwargs,
         )
         ref_outputs = ref_llm.chat(test_prompts, sampling_config)
-        evaluate_llm_for_gsm8k(
-            ref_llm, expected_accuracy_threshold=expected_accuracy_threshold
-        )
+        evaluate_llm_for_gsm8k(ref_llm, expected_accuracy_threshold=expected_accuracy_threshold)
         del ref_llm
         torch.accelerator.empty_cache()
         cleanup_dist_env_and_memory()
@@ -874,9 +833,7 @@ def test_mtp_correctness(
         )
         # MTP supports async scheduling; assert it is active by default.
         assert spec_llm.llm_engine.aphrodite_config.scheduler_config.async_scheduling
-        evaluate_llm_for_gsm8k(
-            spec_llm, expected_accuracy_threshold=expected_accuracy_threshold
-        )
+        evaluate_llm_for_gsm8k(spec_llm, expected_accuracy_threshold=expected_accuracy_threshold)
         spec_outputs = spec_llm.chat(test_prompts, sampling_config)
         matches = 0
         misses = 0
@@ -1179,9 +1136,7 @@ def test_draft_model_engine_args_rejects_invalid_tp_argname():
 def assert_draft_model_correctness(args: ArgsTest):
     """Compare the outputs using and not using speculative decoding.
     In the greedy decoding case, the outputs must match EXACTLY."""
-    test_prompts: list[Messages] = get_messages(
-        dataset=args.dataset, n=args.num_prompts
-    )
+    test_prompts: list[Messages] = get_messages(dataset=args.dataset, n=args.num_prompts)
 
     spec_llm = LLM(
         model=args.target_model,
@@ -1209,9 +1164,7 @@ def assert_draft_model_correctness(args: ArgsTest):
     acceptance_len: float = compute_acceptance_len(metrics)
 
     # Need to evaluate after getting metrics to avoid polluting the AR
-    evaluate_llm_for_gsm8k(
-        spec_llm, expected_accuracy_threshold=args.expected_gsm8k_accuracy
-    )
+    evaluate_llm_for_gsm8k(spec_llm, expected_accuracy_threshold=args.expected_gsm8k_accuracy)
 
     print(
         f"spec-decode: target={args.target_model}, draft={args.draft_model}, "
@@ -1256,9 +1209,7 @@ def some_high_acceptance_metrics() -> dict:
     }
 
 
-def compute_acceptance_rate(
-    metrics: list[Metric], prev_metrics: list[Metric] | None = None
-) -> float:
+def compute_acceptance_rate(metrics: list[Metric], prev_metrics: list[Metric] | None = None) -> float:
     name2metric = {metric.name: metric for metric in metrics}
     n_draft_toks = name2metric["aphrodite:spec_decode_num_draft_tokens"].value
     if n_draft_toks == 0:
@@ -1267,17 +1218,13 @@ def compute_acceptance_rate(
     if prev_metrics is not None:
         prev_name2metric = {metric.name: metric for metric in prev_metrics}
         n_draft_toks -= prev_name2metric["aphrodite:spec_decode_num_draft_tokens"].value
-        n_accepted_toks -= prev_name2metric[
-            "aphrodite:spec_decode_num_accepted_tokens"
-        ].value
+        n_accepted_toks -= prev_name2metric["aphrodite:spec_decode_num_accepted_tokens"].value
         if n_draft_toks <= 0:
             return float("nan")
     return n_accepted_toks / n_draft_toks
 
 
-def compute_acceptance_len(
-    metrics: list[Metric], prev_metrics: list[Metric] | None = None
-) -> float:
+def compute_acceptance_len(metrics: list[Metric], prev_metrics: list[Metric] | None = None) -> float:
     name2metric = {metric.name: metric for metric in metrics}
     n_drafts = name2metric["aphrodite:spec_decode_num_drafts"].value
     n_accepted_toks = name2metric["aphrodite:spec_decode_num_accepted_tokens"].value
@@ -1286,9 +1233,7 @@ def compute_acceptance_len(
     if prev_metrics is not None:
         prev_name2metric = {metric.name: metric for metric in prev_metrics}
         n_drafts -= prev_name2metric["aphrodite:spec_decode_num_drafts"].value
-        n_accepted_toks -= prev_name2metric[
-            "aphrodite:spec_decode_num_accepted_tokens"
-        ].value
+        n_accepted_toks -= prev_name2metric["aphrodite:spec_decode_num_accepted_tokens"].value
         if n_drafts <= 0:
             return 1
     return 1 + (n_accepted_toks / n_drafts)
@@ -1300,10 +1245,7 @@ def load_and_process_dataset(data_name: str):
 
     if data_name == "gsm8k":
         dataset = load_dataset("openai/gsm8k", "main", split="test")
-        prompt_fmt = (
-            "{question}\nPlease reason step by step,"
-            " and put your final answer within \\boxed{{}}."
-        )
+        prompt_fmt = "{question}\nPlease reason step by step, and put your final answer within \\boxed{{}}."
         dataset = dataset.map(lambda x: {"turns": [prompt_fmt.format(**x)]})
     elif data_name == "mt-bench":
         dataset = load_dataset("HuggingFaceH4/mt_bench_prompts", split="train")
@@ -1342,9 +1284,7 @@ def dflash_config():
 
 
 @pytest.mark.parametrize("use_mrv2", [False, True])
-def test_dflash_acceptance_rates(
-    monkeypatch: pytest.MonkeyPatch, use_mrv2: bool, dflash_config
-):
+def test_dflash_acceptance_rates(monkeypatch: pytest.MonkeyPatch, use_mrv2: bool, dflash_config):
     """
     E2E test for DFlash (block diffusion) speculative decoding.
     Runs acceptance rate validation on GSM8k, MT-Bench, and HumanEval
@@ -1412,6 +1352,67 @@ def test_dflash_acceptance_rates(
     cleanup_dist_env_and_memory()
 
 
+@pytest.fixture
+def dspark_config():
+    target_model = "Qwen/Qwen3-4B-FP8"
+    draft_model = "deepseek-ai/dspark_qwen3_4b_block7"
+
+    return dict(
+        model=target_model,
+        trust_remote_code=True,
+        speculative_config={
+            "method": "dspark",
+            "model": draft_model,
+            "num_speculative_tokens": 7,
+            "attention_backend": "FLASH_ATTN",
+            "draft_sample_method": "probabilistic",
+        },
+        max_model_len=4096,
+        disable_log_stats=False,
+    )
+
+
+@single_gpu_only
+@large_gpu_mark(min_gb=24)
+def test_dspark_correctness_and_acceptance_rate(dspark_config):
+    """
+    E2E test for DSpark speculative decoding: acceptance rate/length
+    regression coverage plus GSM8K correctness, at temperature=1.0 to
+    exercise the probabilistic draft-sampling/rejection-sampling path
+    (not just greedy).
+
+    Uses Qwen/Qwen3-4B-FP8 as target with the dspark_qwen3_4b_block7 draft
+    model. Reference: measured over 12 runs of the full GSM8K set at
+    temperature=1.0 (prefix caching disabled to avoid cross-run reuse):
+      accuracy:        min=0.782 max=0.814 mean=0.801
+      acceptance_rate: min=0.418 max=0.434 mean=0.428
+      acceptance_len:  min=3.928 max=4.037 mean=3.994
+    Thresholds set conservatively to 10% to avoid flaking due to unlucky sampling
+    """
+    spec_llm = LLM(**dspark_config)
+
+    results = evaluate_gsm8k_offline(spec_llm, temperature=1.0)
+    gsm8k_accuracy = results["accuracy"]
+
+    metrics = spec_llm.get_metrics()
+    acceptance_rate = compute_acceptance_rate(metrics)
+    acceptance_len = compute_acceptance_len(metrics)
+
+    print(
+        f"DSpark acceptance_rate={acceptance_rate:.2f}, "
+        f"acceptance_len={acceptance_len:.2f}, "
+        f"gsm8k_accuracy={gsm8k_accuracy:.3f}"
+    )
+
+    assert acceptance_rate >= 0.428 * 0.9
+    assert acceptance_len >= 3.994 * 0.9
+    assert gsm8k_accuracy >= 0.801 * 0.9
+
+    del spec_llm
+    torch.accelerator.empty_cache()
+    cleanup_dist_env_and_memory()
+
+
 @single_gpu_only
 def test_synthetic_acceptance_rate():
     """Verify that synthetic rejection sampling produces an acceptance
@@ -1461,9 +1462,7 @@ def test_synthetic_acceptance_rate():
 
 
 @pytest.mark.parametrize("use_mrv2", [False, True])
-def test_dflash_correctness(
-    monkeypatch: pytest.MonkeyPatch, use_mrv2: bool, dflash_config
-):
+def test_dflash_correctness(monkeypatch: pytest.MonkeyPatch, use_mrv2: bool, dflash_config):
     """
     E2E test for DFlash (block diffusion) speculative decoding.
     Ensures output correctness on GSM8k, with cudagraphs and batching on.
@@ -1485,8 +1484,7 @@ def test_dflash_correctness(
     expected_len = 3.5  # Measured is 3.9 to 4.0
     print(f"DFlash GSM8k correctness test got AL {acceptance_len}")
     assert acceptance_len >= expected_len, (
-        "DFlash correctness check failed with"
-        f" {acceptance_len=}, expected at least {expected_len}"
+        f"DFlash correctness check failed with {acceptance_len=}, expected at least {expected_len}"
     )
 
     del spec_llm

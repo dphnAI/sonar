@@ -586,6 +586,8 @@ _SPECULATIVE_DECODING_MODELS = {
     "EagleLlama4ForCausalLM": ("llama4_eagle", "EagleLlama4ForCausalLM"),
     "EagleMiniCPMForCausalLM": ("minicpm_eagle", "EagleMiniCPMForCausalLM"),
     "DFlashDraftModel": ("qwen3_dflash", "DFlashQwen3ForCausalLM"),
+    "DSparkDraftModel": ("aphrodite.models.deepseek_v4", "DSparkDeepseekV4ForCausalLM"),
+    "Qwen3DSparkModel": ("qwen3_dspark", "Qwen3DSparkForCausalLM"),
     "PEagleDraftModel": ("llama_eagle3", "Eagle3LlamaForCausalLM"),
     "PeagleLlamaForCausalLM": ("llama_eagle3", "Eagle3LlamaForCausalLM"),
     "Eagle3LlamaForCausalLM": ("llama_eagle3", "Eagle3LlamaForCausalLM"),
@@ -771,22 +773,16 @@ class _ModelInfo:
             attn_type=get_attn_type(model),
             score_type=get_score_type(model),
             supports_multimodal=supports_multimodal(model),
-            supports_multimodal_raw_input_only=supports_multimodal_raw_input_only(
-                model
-            ),
+            supports_multimodal_raw_input_only=supports_multimodal_raw_input_only(model),
             requires_raw_input_tokens=requires_raw_input_tokens(model),
-            supports_multimodal_encoder_tp_data=supports_multimodal_encoder_tp_data(
-                model
-            ),
+            supports_multimodal_encoder_tp_data=supports_multimodal_encoder_tp_data(model),
             supports_pp=supports_pp(model),
             has_inner_state=has_inner_state(model),
             is_attention_free=is_attention_free(model),
             is_hybrid=is_hybrid(model),
             supports_mamba_prefix_caching=supports_mamba_prefix_caching(model),
             supports_transcription=supports_transcription(model),
-            supports_transcription_only=(
-                supports_transcription(model) and model.supports_transcription_only
-            ),
+            supports_transcription_only=(supports_transcription(model) and model.supports_transcription_only),
             has_noops=has_noops(model),
         )
 
@@ -944,12 +940,8 @@ class _LazyRegisteredModel(_BaseRegisteredModel):
                 )
 
         # Performed in another process to avoid initializing CUDA
-        mi = _run_in_subprocess(
-            lambda: _ModelInfo.from_model_cls(self.load_model_cls())
-        )
-        logger.debug(
-            "Loaded model info for class %s.%s", self.module_name, self.class_name
-        )
+        mi = _run_in_subprocess(lambda: _ModelInfo.from_model_cls(self.load_model_cls()))
+        logger.debug("Loaded model info for class %s.%s", self.module_name, self.class_name)
 
         # save cache file
         if module_hash is not None:
@@ -1019,8 +1011,7 @@ class _ModelRegistry:
 
         if model_arch in self.models:
             logger.debug(
-                "Model architecture %s is already registered, and will be "
-                "overwritten by the new model class %s.",
+                "Model architecture %s is already registered, and will be overwritten by the new model class %s.",
                 model_arch,
                 model_cls,
             )
@@ -1035,10 +1026,7 @@ class _ModelRegistry:
         elif isinstance(model_cls, type) and issubclass(model_cls, nn.Module):
             model = _RegisteredModel.from_model_cls(model_cls)
         else:
-            msg = (
-                "`model_cls` should be a string or PyTorch model class, "
-                f"not a {type(model_arch)}"
-            )
+            msg = f"`model_cls` should be a string or PyTorch model class, not a {type(model_arch)}"
             raise TypeError(msg)
 
         self.models[model_arch] = model
@@ -1048,8 +1036,7 @@ class _ModelRegistry:
 
         if any(arch in all_supported_archs for arch in architectures):
             raise ValueError(
-                f"Model architectures {architectures} failed "
-                "to be inspected. Please check the logs for more details."
+                f"Model architectures {architectures} failed to be inspected. Please check the logs for more details."
             )
 
         for arch in architectures:
@@ -1096,9 +1083,7 @@ class _ModelRegistry:
         if architecture in _TRANSFORMERS_BACKEND_MODELS:
             return architecture
 
-        auto_map: dict[str, str] = (
-            getattr(model_config.hf_config, "auto_map", None) or dict()
-        )
+        auto_map: dict[str, str] = getattr(model_config.hf_config, "auto_map", None) or dict()
 
         # Make sure that config class is always initialized before model class,
         # otherwise the model class won't be able to access the config class,
@@ -1151,10 +1136,7 @@ class _ModelRegistry:
             if model_config.model_impl != "transformers":
                 return None
 
-            raise ValueError(
-                f"The Transformers implementation of {architecture!r} "
-                "is not compatible with Aphrodite."
-            )
+            raise ValueError(f"The Transformers implementation of {architecture!r} is not compatible with Aphrodite.")
 
         return model_config._get_transformers_backend_cls()
 
@@ -1224,10 +1206,7 @@ class _ModelRegistry:
                 return (model_info, arch)
 
         # Fallback to transformers impl (before resolving runner_type)
-        if (
-            all(arch not in self.models for arch in architectures)
-            and model_config.model_impl == "auto"
-        ):
+        if all(arch not in self.models for arch in architectures) and model_config.model_impl == "auto":
             arch = self._try_resolve_transformers(architectures[0], model_config)
             if arch is not None:
                 model_info = self._try_inspect_model_cls(arch)
@@ -1278,10 +1257,7 @@ class _ModelRegistry:
                 return (model_cls, arch)
 
         # Fallback to transformers impl (before resolving runner_type)
-        if (
-            all(arch not in self.models for arch in architectures)
-            and model_config.model_impl == "auto"
-        ):
+        if all(arch not in self.models for arch in architectures) and model_config.model_impl == "auto":
             arch = self._try_resolve_transformers(architectures[0], model_config)
             if arch is not None:
                 model_cls = self._try_load_model_cls(arch)
@@ -1414,18 +1390,14 @@ def _run_in_subprocess(fn: Callable[[], _T]) -> _T:
 
         # cannot use `sys.executable __file__` here because the script
         # contains relative imports
-        returned = subprocess.run(
-            _SUBPROCESS_COMMAND, input=input_bytes, capture_output=True
-        )
+        returned = subprocess.run(_SUBPROCESS_COMMAND, input=input_bytes, capture_output=True)
 
         # check if the subprocess is successful
         try:
             returned.check_returncode()
         except Exception as e:
             # wrap raised exception to provide more information
-            raise RuntimeError(
-                f"Error raised in subprocess:\n{returned.stderr.decode()}"
-            ) from e
+            raise RuntimeError(f"Error raised in subprocess:\n{returned.stderr.decode()}") from e
 
         with open(output_filepath, "rb") as f:
             return pickle.load(f)

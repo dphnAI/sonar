@@ -48,7 +48,12 @@ from aphrodite.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding,
 )
 from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
-from aphrodite.model_executor.models.interfaces import MixtureOfExperts, SupportsPP
+from aphrodite.model_executor.models.interfaces import (
+    EagleModelMixin,
+    MixtureOfExperts,
+    SupportsEagle3,
+    SupportsPP,
+)
 from aphrodite.model_executor.models.utils import (
     AutoWeightsLoader,
     PPMissingLayer,
@@ -118,9 +123,7 @@ class DeepseekV4MLP(nn.Module):
             prefix=f"{prefix}.down_proj",
         )
         if hidden_act != "silu":
-            raise ValueError(
-                f"Unsupported activation: {hidden_act}. Only silu is supported for now."
-            )
+            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu is supported for now.")
         if swiglu_limit is not None:
             self.act_fn = SiluAndMulWithClamp(swiglu_limit)
         else:
@@ -179,9 +182,7 @@ class DeepseekV4MegaMoEExperts(nn.Module):
         self.intermediate_size = intermediate_size
         self.max_num_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
 
-        self.num_logical_experts = (
-            num_logical_experts if num_logical_experts is not None else num_experts
-        )
+        self.num_logical_experts = num_logical_experts if num_logical_experts is not None else num_experts
 
         self.eplb_state = EplbLayerState()
 
@@ -272,9 +273,7 @@ class DeepseekV4MegaMoEExperts(nn.Module):
                 if "w13_" not in weight_name:
                     continue
                 shard_offset = 0 if shard_id == "w1" else self.intermediate_size
-                expert_data = expert_data.narrow(
-                    0, shard_offset, self.intermediate_size
-                )
+                expert_data = expert_data.narrow(0, shard_offset, self.intermediate_size)
             elif shard_id == "w2":
                 if "w2_" not in weight_name:
                     continue
@@ -303,10 +302,7 @@ class DeepseekV4MegaMoEExperts(nn.Module):
         if torch.cuda.get_device_capability(device)[0] != 10:
             raise NotImplementedError("DeepGEMM MegaMoE requires SM100 GPUs.")
         if self.hidden_size % 128 != 0 or self.intermediate_size % 128 != 0:
-            raise ValueError(
-                "DeepGEMM MegaMoE requires hidden and intermediate sizes "
-                "to be multiples of 128."
-            )
+            raise ValueError("DeepGEMM MegaMoE requires hidden and intermediate sizes to be multiples of 128.")
 
     def finalize_weights(self) -> None:
         if self._transformed_l1_weights is not None:
@@ -331,11 +327,9 @@ class DeepseekV4MegaMoEExperts(nn.Module):
             (1, 32),
             self.num_local_experts,
         )
-        self._transformed_l1_weights, self._transformed_l2_weights = (
-            deep_gemm.transform_weights_for_mega_moe(
-                (self.w13_weight.data.view(torch.int8).contiguous(), w13_scale),
-                (self.w2_weight.data.view(torch.int8).contiguous(), w2_scale),
-            )
+        self._transformed_l1_weights, self._transformed_l2_weights = deep_gemm.transform_weights_for_mega_moe(
+            (self.w13_weight.data.view(torch.int8).contiguous(), w13_scale),
+            (self.w2_weight.data.view(torch.int8).contiguous(), w2_scale),
         )
         # Drop the original loader-side parameters: the MegaMoE kernels only
         # consume the transformed views above. transform_weights_for_mega_moe
@@ -465,9 +459,7 @@ class DeepseekV4MegaMoEExperts(nn.Module):
                 logical_to_physical_map=eplb_state.logical_to_physical_map,
                 logical_replica_count=eplb_state.logical_replica_count,
                 record_enabled=eplb_state.should_record_tensor,
-                num_unpadded_tokens=eplb_state.num_unpadded_tokens_tensors[
-                    dbo_current_ubatch_id()
-                ]
+                num_unpadded_tokens=eplb_state.num_unpadded_tokens_tensors[dbo_current_ubatch_id()]
                 if eplb_state.num_unpadded_tokens_tensors is not None
                 else None,
             )
@@ -515,9 +507,7 @@ class DeepseekV4MoE(nn.Module):
         config = aphrodite_config.model_config.hf_config
         quant_config = aphrodite_config.quant_config
         self.prefix = prefix
-        self.use_mega_moe = (
-            aphrodite_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
-        )
+        self.use_mega_moe = aphrodite_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
         if self.use_mega_moe and not aphrodite_config.parallel_config.enable_expert_parallel:
             raise NotImplementedError(
                 "DeepSeek V4 MegaMoE currently requires expert parallel. "
@@ -535,9 +525,7 @@ class DeepseekV4MoE(nn.Module):
         self.renormalize = config.norm_topk_prob
         self.scoring_func = getattr(config, "scoring_func", "sqrtsoftplus")
         if self.use_mega_moe and self.scoring_func != "sqrtsoftplus":
-            raise NotImplementedError(
-                "DeepSeek V4 MegaMoE currently supports sqrtsoftplus routing only."
-            )
+            raise NotImplementedError("DeepSeek V4 MegaMoE currently supports sqrtsoftplus routing only.")
         if self.use_mega_moe and getattr(config, "expert_dtype", "fp4") != "fp4":
             raise NotImplementedError(
                 "DeepSeek V4 MegaMoE only supports fp4 experts; got expert_dtype="
@@ -618,9 +606,7 @@ class DeepseekV4MoE(nn.Module):
         )
         self.n_local_physical_experts = self.n_physical_experts // self.ep_size
         self.physical_expert_start = self.ep_rank * self.n_local_physical_experts
-        self.physical_expert_end = (
-            self.physical_expert_start + self.n_local_physical_experts
-        )
+        self.physical_expert_end = self.physical_expert_start + self.n_local_physical_experts
 
         self.n_local_experts = self.n_local_physical_experts
         self.experts_start_idx = self.physical_expert_start
@@ -684,9 +670,7 @@ class DeepseekV4MoE(nn.Module):
             num_redundant_experts=eplb_config.num_redundant_experts,
         )
 
-    def forward(
-        self, hidden_states: torch.Tensor, input_ids: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, input_ids: torch.Tensor | None = None) -> torch.Tensor:
         if self.gate.tid2eid is not None and input_ids is None:
             raise ValueError("DeepSeek V4 hash MoE routing requires input_ids.")
 
@@ -709,9 +693,7 @@ class DeepseekV4MoE(nn.Module):
             hash_indices_table=self.gate.tid2eid,
             routed_scaling_factor=self.routed_scaling_factor,
         )
-        activation_clamp = (
-            float(self.swiglu_limit) if self.swiglu_limit is not None else None
-        )
+        activation_clamp = float(self.swiglu_limit) if self.swiglu_limit is not None else None
         final_hidden_states = self.experts(
             hidden_states,
             topk_weights,
@@ -725,9 +707,7 @@ class DeepseekV4MoE(nn.Module):
 
         return final_hidden_states.view(org_shape)
 
-    def _forward_fused_moe(
-        self, hidden_states: torch.Tensor, input_ids: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def _forward_fused_moe(self, hidden_states: torch.Tensor, input_ids: torch.Tensor | None = None) -> torch.Tensor:
         org_shape = hidden_states.shape
         if self.experts.is_internal_router:
             # In this case, the gate/router runs inside the FusedMoE class
@@ -933,7 +913,7 @@ class DeepseekV4DecoderLayer(nn.Module):
         return x, residual, post_mix, res_mix
 
 
-class DeepseekV4Model(nn.Module):
+class DeepseekV4Model(nn.Module, EagleModelMixin):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
 
@@ -942,9 +922,7 @@ class DeepseekV4Model(nn.Module):
         self.config = config
         self.quant_config = quant_config
         self.parallel_config = aphrodite_config.parallel_config
-        self.use_mega_moe = (
-            aphrodite_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
-        )
+        self.use_mega_moe = aphrodite_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
         if self.use_mega_moe and not aphrodite_config.parallel_config.enable_expert_parallel:
             raise NotImplementedError(
                 "DeepSeek V4 MegaMoE currently requires expert parallel. "
@@ -1074,7 +1052,12 @@ class DeepseekV4Model(nn.Module):
             input_ids = input_ids.to(torch.int64)
 
         residual, post_mix, res_mix = None, None, None
-        for layer in islice(self.layers, self.start_layer, self.end_layer):
+        aux_hidden_states: list[torch.Tensor] = []
+        final_aux_recon: torch.Tensor | None = None  # avoid duplicate mhc_post call
+        for idx, layer in enumerate(
+            islice(self.layers, self.start_layer, self.end_layer),
+            start=self.start_layer,
+        ):
             hidden_states, residual, post_mix, res_mix = layer(
                 hidden_states,
                 positions,
@@ -1083,10 +1066,17 @@ class DeepseekV4Model(nn.Module):
                 res_mix,
                 residual,
             )
+            if idx + 1 in self.aux_hidden_state_layers:
+                # Reconstruct the aux hidden state for draft models
+                aux_recon = mhc_post_tilelang(hidden_states, residual, post_mix, res_mix)
+                aux_hidden_states.append(aux_recon.mean(dim=1))
+                final_aux_recon = aux_recon
         if layer is not None:
-            hidden_states = mhc_post_tilelang(
-                hidden_states, residual, post_mix, res_mix
-            )
+            # Reuse if the last layer was captured as an aux hidden state
+            if self.end_layer in self.aux_hidden_state_layers:
+                hidden_states = final_aux_recon
+            else:
+                hidden_states = mhc_post_tilelang(hidden_states, residual, post_mix, res_mix)
 
         if not get_pp_group().is_last_rank:
             return IntermediateTensors({"hidden_states": hidden_states})
@@ -1104,6 +1094,8 @@ class DeepseekV4Model(nn.Module):
             self.hc_eps,
         )
         hidden_states = self.norm(hidden_states)
+        if len(aux_hidden_states) > 0:
+            return hidden_states, aux_hidden_states
         return hidden_states
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
@@ -1162,10 +1154,7 @@ class DeepseekV4Model(nn.Module):
                     # checkpoints but the MoE param is uint8. copy_()
                     # would do a numeric conversion (e.g. 2^-7 → 0),
                     # destroying the raw exponent bytes.
-                    if (
-                        "weight_scale" in name
-                        and loaded_weight.dtype == torch.float8_e8m0fnu
-                    ):
+                    if "weight_scale" in name and loaded_weight.dtype == torch.float8_e8m0fnu:
                         loaded_weight = loaded_weight.view(torch.uint8)
                     for mapping in expert_mapping:
                         param_name, weight_name, expert_id, expert_shard_id = mapping
@@ -1178,9 +1167,7 @@ class DeepseekV4Model(nn.Module):
                         # We should ask the weight loader to return success or not
                         # here since otherwise we may skip experts with other
                         # available replicas.
-                        weight_loader = typing.cast(
-                            Callable[..., bool], param.weight_loader
-                        )
+                        weight_loader = typing.cast(Callable[..., bool], param.weight_loader)
                         success = weight_loader(
                             param,
                             loaded_weight,
@@ -1206,18 +1193,14 @@ class DeepseekV4Model(nn.Module):
                     if is_pp_missing_parameter(name, self):
                         continue
                     param = params_dict[name]
-                    weight_loader = getattr(
-                        param, "weight_loader", default_weight_loader
-                    )
+                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
                     weight_loader(param, loaded_weight)
                     loaded_params.add(name)
                     continue
 
         return loaded_params
 
-    def _pad_shared_expert_weight(
-        self, name: str, loaded_weight: torch.Tensor
-    ) -> torch.Tensor:
+    def _pad_shared_expert_weight(self, name: str, loaded_weight: torch.Tensor) -> torch.Tensor:
         """Zero-pad a block-FP8 shared-expert weight/scale on its intermediate
         axis so the standard TP loaders split it into even, block-aligned shards
         (trailing ranks get the zero pad). gate (w1)/up (w3) [I, H] pad dim 0;
@@ -1330,7 +1313,7 @@ class DeepseekV4MixtureOfExperts(MixtureOfExperts):
             moe.experts.update_expert_map()
 
 
-class DeepseekV4ForCausalLM(nn.Module, SupportsPP, DeepseekV4MixtureOfExperts):
+class DeepseekV4ForCausalLM(nn.Module, SupportsPP, SupportsEagle3, DeepseekV4MixtureOfExperts):
     model_cls = DeepseekV4Model
 
     # Default mapper assumes the original FP4-expert checkpoint layout.
@@ -1346,9 +1329,7 @@ class DeepseekV4ForCausalLM(nn.Module, SupportsPP, DeepseekV4MixtureOfExperts):
         if expert_dtype != "fp4":
             self.hf_to_aphrodite_mapper = _make_deepseek_v4_weights_mapper(expert_dtype)
 
-        self.model = self.model_cls(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = self.model_cls(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
@@ -1400,9 +1381,7 @@ class DeepseekV4ForCausalLM(nn.Module, SupportsPP, DeepseekV4MixtureOfExperts):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
         return hidden_states
 
     def get_mtp_target_hidden_states(self) -> torch.Tensor | None:

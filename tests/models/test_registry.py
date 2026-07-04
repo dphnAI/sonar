@@ -43,10 +43,12 @@ def test_registry_imports(model_arch):
 
         if importlib.util.find_spec("terratorch") is None:
             pytest.skip(
-                "terratorch is not installed; "
-                "temporarily skipped while PyPI has `lightning` quarantined "
-                "(see #41376)"
+                "terratorch is not installed; temporarily skipped while PyPI has `lightning` quarantined (see #41376)"
             )
+
+    # DSpark draft model is NVIDIA-only; class is stubbed to None on ROCm/XPU.
+    if model_arch == "DSparkDraftModel" and not current_platform.is_cuda():
+        pytest.skip("DSparkDraftModel is only supported on CUDA")
 
     # Ensure all model classes can be imported successfully
     model_cls = ModelRegistry._try_load_model_cls(model_arch)
@@ -93,8 +95,7 @@ def test_registry_model_property(model_arch, is_mm, init_cuda, score_type):
         ModelRegistry._try_load_model_cls(model_arch)
         if not torch.cuda.is_initialized():
             warnings.warn(
-                "This model no longer initializes CUDA on import. "
-                "Please test using a different one.",
+                "This model no longer initializes CUDA on import. Please test using a different one.",
                 stacklevel=2,
             )
 
@@ -122,8 +123,7 @@ def test_registry_is_pp(model_arch, is_pp, init_cuda):
         ModelRegistry._try_load_model_cls(model_arch)
         if not torch.cuda.is_initialized():
             warnings.warn(
-                "This model no longer initializes CUDA on import. "
-                "Please test using a different one.",
+                "This model no longer initializes CUDA on import. Please test using a different one.",
                 stacklevel=2,
             )
 
@@ -145,11 +145,6 @@ def test_lazy_modelinfo_package_hash_includes_submodules(tmp_path):
 
 
 def test_hf_registry_coverage():
-    untested_archs = (
-        ModelRegistry.get_supported_archs() - HF_EXAMPLE_MODELS.get_supported_archs()
-    )
+    untested_archs = ModelRegistry.get_supported_archs() - HF_EXAMPLE_MODELS.get_supported_archs()
 
-    assert not untested_archs, (
-        "Please add the following architectures to "
-        f"`tests/models/registry.py`: {untested_archs}"
-    )
+    assert not untested_archs, f"Please add the following architectures to `tests/models/registry.py`: {untested_archs}"
