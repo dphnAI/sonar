@@ -910,6 +910,17 @@ _MULTIMODAL_EXAMPLE_MODELS = {
     ),
     "LlavaNextForConditionalGeneration": _HfExamplesInfo("llava-hf/llava-v1.6-mistral-7b-hf"),
     "LlavaNextVideoForConditionalGeneration": _HfExamplesInfo("llava-hf/LLaVA-NeXT-Video-7B-hf"),
+    "LlavaOnevision2ForConditionalGeneration": _HfExamplesInfo(
+        "lmms-lab-encoder/LLaVA-OneVision-2-8B-Instruct",
+        trust_remote_code=True,
+        # Keep the init/schema harness eager (these tests never run forward).
+        # NOTE: a separate H200-only hang exists in the core FA3 attention
+        # construction (after `FlashAttentionImpl.__init__` logs the FA3
+        # version, while building the Qwen3 backbone). enforce_eager does NOT
+        # gate that path, so this flag is hygiene, not the fix -- tracked with
+        # the maintainer.
+        enforce_eager=True,
+    ),
     "LlavaOnevisionForConditionalGeneration": _HfExamplesInfo("llava-hf/llava-onevision-qwen2-0.5b-ov-hf"),
     "MiDashengLMModel": _HfExamplesInfo("mispeech/midashenglm-7b", trust_remote_code=True),
     "MiMoV2OmniForCausalLM": _HfExamplesInfo(
