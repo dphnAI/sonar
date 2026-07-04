@@ -1,7 +1,7 @@
 //! Applies xgrammar structural-tag constraints for strict tool calling.
 
 use thiserror_ext::AsReport;
-use aphrodite_engine_core_client::protocol::{StructuredOutputBackend, StructuredOutputsParams};
+use aphrodite_engine_core_client::protocol::structured_outputs::{StructuredOutputBackend, StructuredOutputsParams};
 use aphrodite_parser::tool::StructuralTagModel;
 use xgrammar_structural_tag::{
     FunctionDefinition, FunctionToolParam, ToolChoice as StructuralTagToolChoice, ToolParam,
@@ -76,7 +76,7 @@ fn structural_tag_tool_choice(request: &ChatRequest) -> Option<StructuralTagTool
 #[cfg(test)]
 mod tests {
     use serde_json::{Value, json};
-    use aphrodite_engine_core_client::protocol::{StructuredOutputBackend, StructuredOutputsParams};
+    use aphrodite_engine_core_client::protocol::structured_outputs::{StructuredOutputBackend, StructuredOutputsParams};
     use aphrodite_parser::tool::{Qwen3CoderToolParser, Tool, ToolParser};
 
     use super::*;

@@ -10,7 +10,7 @@ use std::path::Path;
 
 use minijinja::Environment;
 use serde::{Deserialize, Serialize};
-use serde_json::{self};
+use serde_json::self;
 use aphrodite_text::backend::hf::HfSpecialTokens;
 
 use super::error::TemplateError;

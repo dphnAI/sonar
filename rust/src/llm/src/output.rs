@@ -8,7 +8,7 @@ use futures::stream::FusedStream;
 use futures::{Stream, StreamExt as _, pin_mut};
 use serde::{Deserialize, Serialize};
 use aphrodite_engine_core_client::protocol::logprobs::Logprobs;
-use aphrodite_engine_core_client::protocol::{EngineCoreFinishReason, StopReason};
+use aphrodite_engine_core_client::protocol::output::{EngineCoreFinishReason, StopReason};
 use aphrodite_engine_core_client::{AbortCause, EngineCoreOutputStream};
 
 use crate::error::Result;

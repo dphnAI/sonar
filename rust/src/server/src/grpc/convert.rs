@@ -3,7 +3,8 @@
 
 use tonic::Status;
 use uuid::Uuid;
-use aphrodite_engine_core_client::protocol::{StopReason, StructuredOutputsParams};
+use aphrodite_engine_core_client::protocol::output::StopReason;
+use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputsParams;
 use aphrodite_text::{
     DecodedLogprobs, DecodedPromptLogprobs, FinishReason, Finished, Prompt, SamplingParams,
     TextDecodeOptions, TextRequest,
@@ -502,7 +503,7 @@ impl ResponseOpts {
 
 #[cfg(test)]
 mod tests {
-    use aphrodite_engine_core_client::protocol::StopReason;
+    use aphrodite_engine_core_client::protocol::output::StopReason;
     use aphrodite_text::{FinishReason, Finished, Prompt};
 
     use super::pb::finish_info::{FinishReason as PbFinishReason, StopReason as PbStopReason};

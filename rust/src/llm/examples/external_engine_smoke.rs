@@ -5,7 +5,7 @@ use clap::Parser;
 use futures::StreamExt as _;
 use tokio::time::timeout;
 use tracing_subscriber::EnvFilter;
-use aphrodite_engine_core_client::protocol::EngineCoreSamplingParams;
+use aphrodite_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
 use aphrodite_engine_core_client::{EngineCoreClient, EngineCoreClientConfig, TransportMode};
 use aphrodite_llm::{FinishReason, GenerateOutputStream, GenerateRequest, Llm};
 

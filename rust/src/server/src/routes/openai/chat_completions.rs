@@ -21,7 +21,7 @@ use aphrodite_chat::{
     AssistantBlockKind, AssistantMessageExt as _, ChatEvent, ChatEventStream, ChatEventStreamTrait,
     CollectedAssistantMessage, FinishReason,
 };
-use aphrodite_engine_core_client::protocol::StopReason;
+use aphrodite_engine_core_client::protocol::output::StopReason;
 
 use self::convert::{ResponseOptions, prepare_chat_request};
 use crate::config::ApiServerOptions;
@@ -825,7 +825,7 @@ mod tests {
     use aphrodite_chat::{
         AssistantBlockKind, AssistantContentBlock, AssistantToolCall, ChatEvent, FinishReason,
     };
-    use aphrodite_engine_core_client::protocol::StopReason;
+    use aphrodite_engine_core_client::protocol::output::StopReason;
     use aphrodite_text::{DecodedLogprobs, DecodedPositionLogprobs, DecodedTokenLogprob};
 
     use super::{

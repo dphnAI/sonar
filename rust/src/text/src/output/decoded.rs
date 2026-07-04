@@ -5,7 +5,7 @@ use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use tracing::{Level, debug, trace};
 use aphrodite_engine_core_client::AbortCause;
-use aphrodite_engine_core_client::protocol::StopReason;
+use aphrodite_engine_core_client::protocol::output::StopReason;
 use aphrodite_llm::{FinishReason, GenerateOutput, TokenUsage};
 use aphrodite_tokenizer::{DynTokenizer, IncrementalDecoder};
 

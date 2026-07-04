@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use aphrodite_engine_core_client::protocol::StructuredOutputsParams;
+use aphrodite_engine_core_client::protocol::structured_outputs::StructuredOutputsParams;
 
 use crate::error::ApiError;
 

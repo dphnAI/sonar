@@ -10,10 +10,9 @@ use aphrodite_engine_core_client::protocol::logprobs::{
     Logprobs, MaybeWireLogprobs, PositionLogprobs, TokenLogprob,
 };
 use aphrodite_engine_core_client::protocol::stats::PrefillStats;
-use aphrodite_engine_core_client::protocol::{
-    EngineCoreEvent, EngineCoreEventType, EngineCoreFinishReason, EngineCoreOutput,
-    EngineCoreOutputs, EngineCoreRequest, EngineCoreSamplingParams,
-};
+use aphrodite_engine_core_client::protocol::output::{EngineCoreEvent, EngineCoreEventType, EngineCoreFinishReason, EngineCoreOutput, EngineCoreOutputs};
+use aphrodite_engine_core_client::protocol::request::EngineCoreRequest;
+use aphrodite_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
 use aphrodite_engine_core_client::test_utils::{IpcNamespace, spawn_mock_engine_task};
 use aphrodite_engine_core_client::{EngineCoreClient, EngineCoreClientConfig};
 use aphrodite_llm::{

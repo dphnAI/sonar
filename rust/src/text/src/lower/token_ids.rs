@@ -1,7 +1,7 @@
 use std::result::Result;
 
 use thiserror::Error;
-use aphrodite_engine_core_client::protocol::EngineCoreSamplingParams;
+use aphrodite_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
 
 use crate::SamplingLimits;
 

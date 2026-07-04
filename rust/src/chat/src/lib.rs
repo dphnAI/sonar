@@ -50,7 +50,8 @@ mod request;
 mod stream;
 
 use aphrodite_engine_core_client::EngineCoreClient;
-use aphrodite_engine_core_client::protocol::{ModelDtype, ReasoningParserKwargs};
+use aphrodite_engine_core_client::protocol::dtype::ModelDtype;
+use aphrodite_engine_core_client::protocol::request::ReasoningParserKwargs;
 use aphrodite_llm::Llm;
 use aphrodite_text::{Prompt, TextLlm, TextRequest};
 
