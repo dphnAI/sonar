@@ -4,7 +4,6 @@
 import torch
 
 import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.config import get_current_aphrodite_config
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.model_executor.layers.fused_moe.config import (
@@ -87,7 +86,6 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
         # - pass per-block weight scales to the kernel
         # - skip input activation quantization (kernel applies scaling)
         self.use_deepseek_fp8_block_scale = quant_config.is_block_quantized
-        self.max_capture_size = get_current_aphrodite_config().compilation_config.max_cudagraph_capture_size
 
         if quant_config.weight_quant_dtype == "mxfp4":
             # This value is used specifically for gpt-oss,
@@ -372,7 +370,6 @@ class FlashInferExperts(mk.FusedMoEExpertsModular):
             use_deepseek_fp8_block_scale=self.use_deepseek_fp8_block_scale,
             use_mxfp8_act_scaling=use_mxfp8_act_scaling,
             use_w4_group_scaling=use_w4_group_scaling,
-            tune_max_num_tokens=max(self.max_capture_size, 1),
         )
 
     def moe_sum(self, input: torch.Tensor, output: torch.Tensor) -> None:
