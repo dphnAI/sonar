@@ -48,6 +48,9 @@ pub struct AppState {
     model_path: Option<String>,
     /// Lazily initialized runtime for heavyweight request paths.
     request_runtime: OnceLock<BackgroundShutdownRuntime>,
+    /// Profiler mode that registers `/start_profile` and `/stop_profile`
+    /// routes when present.
+    pub profiler: Option<String>,
 }
 
 impl AppState {
@@ -75,6 +78,7 @@ impl AppState {
             lora_manager: LoraManager::new(),
             model_path: None,
             request_runtime: OnceLock::new(),
+            profiler: None,
         }
     }
 
@@ -93,6 +97,12 @@ impl AppState {
     /// Set the backend model path reported as `root` for base-model cards.
     pub fn with_model_path(mut self, model_path: String) -> Self {
         self.model_path = Some(model_path);
+        self
+    }
+
+    /// Set the profiler mode that enables `/start_profile` and `/stop_profile`.
+    pub fn with_profiler(mut self, profiler: Option<String>) -> Self {
+        self.profiler = profiler;
         self
     }
 
