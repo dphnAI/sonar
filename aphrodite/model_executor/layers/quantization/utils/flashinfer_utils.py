@@ -33,18 +33,17 @@ def activation_to_flashinfer_type(activation: MoEActivation) -> "ActivationType"
         MoEActivation.SILU_NO_MUL: ActivationType.Silu,
         MoEActivation.GELU_NO_MUL: ActivationType.Gelu,
         MoEActivation.SILU: ActivationType.Swiglu,
+        # SwiGLU-OAI uses Swiglu; the OAI alpha/beta/clamp come from gemm1_* args.
+        MoEActivation.SWIGLUOAI_UNINTERLEAVE: ActivationType.Swiglu,
         MoEActivation.GELU: ActivationType.Geglu,
         MoEActivation.GELU_TANH: ActivationType.Geglu,
         MoEActivation.RELU2_NO_MUL: ActivationType.Relu2,
-        MoEActivation.SWIGLUOAI_UNINTERLEAVE: ActivationType.Swiglu,
     }
     return ACTIVATION_TO_FI_ACTIVATION[activation]
 
 
 def swap_w13_to_w31(x: torch.Tensor) -> torch.Tensor:
-    return (
-        x.reshape(-1, 2, x.shape[-2] // 2, x.shape[-1]).flip(dims=[1]).reshape(x.shape)
-    )
+    return x.reshape(-1, 2, x.shape[-2] // 2, x.shape[-1]).flip(dims=[1]).reshape(x.shape)
 
 
 def rotate_weights_for_fi_trtllm_fp8_per_tensor_moe(
@@ -62,9 +61,7 @@ def rotate_weights_for_fi_trtllm_fp8_per_tensor_moe(
     gemm1_weights_fp8_interleaved = []
     for i in range(num_experts):
         gemm1_weights_fp8_interleaved.append(
-            reorder_rows_for_gated_act_gemm(gemm1_weights[i])
-            if is_gated_activation
-            else gemm1_weights[i]
+            reorder_rows_for_gated_act_gemm(gemm1_weights[i]) if is_gated_activation else gemm1_weights[i]
         )
 
     # Stack weights and scales for all experts
@@ -77,22 +74,14 @@ def rotate_weights_for_fi_trtllm_fp8_per_tensor_moe(
     gemm2_weights_fp8_shuffled = []
     for i in range(num_experts):
         gemm1_weights_fp8_shuffled.append(
-            shuffle_matrix_a(
-                gemm1_weights_fp8_interleaved[i].view(torch.uint8), epilogue_tile_m
-            )
+            shuffle_matrix_a(gemm1_weights_fp8_interleaved[i].view(torch.uint8), epilogue_tile_m)
         )
 
-        gemm2_weights_fp8_shuffled.append(
-            shuffle_matrix_a(gemm2_weights[i].view(torch.uint8), epilogue_tile_m)
-        )
+        gemm2_weights_fp8_shuffled.append(shuffle_matrix_a(gemm2_weights[i].view(torch.uint8), epilogue_tile_m))
 
     # Stack weights for all experts
-    gemm1_weights.data = torch.stack(gemm1_weights_fp8_shuffled).view(
-        torch.float8_e4m3fn
-    )
-    gemm2_weights.data = torch.stack(gemm2_weights_fp8_shuffled).view(
-        torch.float8_e4m3fn
-    )
+    gemm1_weights.data = torch.stack(gemm1_weights_fp8_shuffled).view(torch.float8_e4m3fn)
+    gemm2_weights.data = torch.stack(gemm2_weights_fp8_shuffled).view(torch.float8_e4m3fn)
 
 
 def is_flashinfer_supporting_global_sf(backend: FlashinferMoeBackend | None) -> bool:
@@ -117,9 +106,7 @@ def convert_moe_weights_to_flashinfer_trtllm_block_layout(
     returns the shuffled weight tensors.
     """
     if w13_weight.dtype != torch.bfloat16 or w2_weight.dtype != torch.bfloat16:
-        raise ValueError(
-            "Unquantized Moe Backend FlashInfer TRTLLM requires bfloat16 weights"
-        )
+        raise ValueError("Unquantized Moe Backend FlashInfer TRTLLM requires bfloat16 weights")
 
     from flashinfer.fused_moe.core import (
         _maybe_get_cached_w3_w1_permute_indices,
@@ -138,9 +125,7 @@ def convert_moe_weights_to_flashinfer_trtllm_block_layout(
         expert_uint8: torch.Tensor,
         source_indices: torch.Tensor,
     ) -> None:
-        expert_blocks = expert_uint8.view(
-            expert_uint8.shape[0], out.shape[0], block_k
-        ).permute(1, 0, 2)
+        expert_blocks = expert_uint8.view(expert_uint8.shape[0], out.shape[0], block_k).permute(1, 0, 2)
         torch.index_select(
             expert_blocks,
             1,
@@ -238,14 +223,10 @@ def align_fp4_moe_weights_for_fi(
     padded_w2 = w2.new_zeros((num_experts, hidden_size, padded_intermediate // 2))
     padded_w2[:, :, : w2.shape[2]] = w2
 
-    padded_w13_scale = w13_scale.new_zeros(
-        (num_experts, padded_gate_up_dim, hidden_size // 16)
-    )
+    padded_w13_scale = w13_scale.new_zeros((num_experts, padded_gate_up_dim, hidden_size // 16))
     padded_w13_scale[:, : w13_scale.shape[1], :] = w13_scale
 
-    padded_w2_scale = w2_scale.new_zeros(
-        (num_experts, hidden_size, padded_intermediate // 16)
-    )
+    padded_w2_scale = w2_scale.new_zeros((num_experts, hidden_size, padded_intermediate // 16))
     padded_w2_scale[:, :, : w2_scale.shape[2]] = w2_scale
 
     return padded_w13, padded_w13_scale, padded_w2, padded_w2_scale, padded_intermediate
@@ -276,17 +257,13 @@ def align_trtllm_fp4_moe_hidden_dim_for_fi(
     padded_w13 = w13.new_zeros((num_experts, gate_up_dim, padded_hidden_size // 2))
     padded_w13[:, :, :packed_hidden_size] = w13
 
-    padded_w13_scale = w13_scale.new_zeros(
-        (num_experts, gate_up_dim, padded_hidden_size // 16)
-    )
+    padded_w13_scale = w13_scale.new_zeros((num_experts, gate_up_dim, padded_hidden_size // 16))
     padded_w13_scale[:, :, : w13_scale.shape[2]] = w13_scale
 
     padded_w2 = w2.new_zeros((num_experts, padded_hidden_size, w2.shape[2]))
     padded_w2[:, : w2.shape[1], :] = w2
 
-    padded_w2_scale = w2_scale.new_zeros(
-        (num_experts, padded_hidden_size, w2_scale.shape[2])
-    )
+    padded_w2_scale = w2_scale.new_zeros((num_experts, padded_hidden_size, w2_scale.shape[2]))
     padded_w2_scale[:, : w2_scale.shape[1], :] = w2_scale
 
     return padded_w13, padded_w13_scale, padded_w2, padded_w2_scale, padded_hidden_size
@@ -350,12 +327,8 @@ def _shuffle_deepseek_fp8_moe_weights(
 
     M13, K13 = w13.shape[1], w13.shape[2]
     M2, K2 = w2.shape[1], w2.shape[2]
-    w13_out = torch.empty(
-        num_experts, K13 // block_k, M13, block_k, dtype=torch.uint8, device=w13.device
-    )
-    w2_out = torch.empty(
-        num_experts, K2 // block_k, M2, block_k, dtype=torch.uint8, device=w2.device
-    )
+    w13_out = torch.empty(num_experts, K13 // block_k, M13, block_k, dtype=torch.uint8, device=w13.device)
+    w2_out = torch.empty(num_experts, K2 // block_k, M2, block_k, dtype=torch.uint8, device=w2.device)
 
     for i in range(num_experts):
         t13 = shuffle_matrix_a(w13[i].view(torch.uint8), epilogue_tile_m)
@@ -396,15 +369,9 @@ def _shuffle_mxfp8_moe_weights(
     w13_scale_interleaved: list[torch.Tensor] = []
     for i in range(num_experts):
         if is_gated:
-            w13_interleaved.append(
-                reorder_rows_for_gated_act_gemm(
-                    w13[i].reshape(2 * intermediate_size, -1)
-                )
-            )
+            w13_interleaved.append(reorder_rows_for_gated_act_gemm(w13[i].reshape(2 * intermediate_size, -1)))
             w13_scale_interleaved.append(
-                reorder_rows_for_gated_act_gemm(
-                    w13_scale[i].reshape(2 * intermediate_size, -1)
-                )
+                reorder_rows_for_gated_act_gemm(w13_scale[i].reshape(2 * intermediate_size, -1))
             )
         else:
             w13_interleaved.append(w13[i])
@@ -415,15 +382,11 @@ def _shuffle_mxfp8_moe_weights(
     w13_scale_shuffled: list[torch.Tensor] = []
     w2_scale_shuffled: list[torch.Tensor] = []
     for i in range(num_experts):
-        w13_shuffled.append(
-            shuffle_matrix_a(w13_interleaved[i].view(torch.uint8), epilogue_tile_m)
-        )
+        w13_shuffled.append(shuffle_matrix_a(w13_interleaved[i].view(torch.uint8), epilogue_tile_m))
         w2_shuffled.append(shuffle_matrix_a(w2[i].view(torch.uint8), epilogue_tile_m))
         w13_scale_shuffled.append(
             shuffle_matrix_sf_a(
-                w13_scale_interleaved[i]
-                .view(torch.uint8)
-                .reshape(2 * intermediate_size, -1),
+                w13_scale_interleaved[i].view(torch.uint8).reshape(2 * intermediate_size, -1),
                 epilogue_tile_m,
             )
         )
@@ -463,9 +426,7 @@ def prepare_fp8_moe_layer_for_fi(
     """
 
     assert hasattr(layer.moe_config, "is_act_and_mul")
-    block_quant = (
-        hasattr(layer, "weight_block_size") and layer.weight_block_size is not None
-    )
+    block_quant = hasattr(layer, "weight_block_size") and layer.weight_block_size is not None
     is_mxfp8 = block_quant and w13_scale.dtype == torch.uint8
     is_deepseek_fp8 = block_quant and not is_mxfp8
     is_gated = layer.activation.is_gated
@@ -487,9 +448,7 @@ def prepare_fp8_moe_layer_for_fi(
             else:
                 w13_scale = swap_w13_to_w31(w13_scale)
 
-        w13, w2, w13_scale, w2_scale = _shuffle_mxfp8_moe_weights(
-            w13, w2, w13_scale, w2_scale, is_gated
-        )
+        w13, w2, w13_scale, w2_scale = _shuffle_mxfp8_moe_weights(w13, w2, w13_scale, w2_scale, is_gated)
         return w13, w2, w13_scale, w2_scale
 
     # Some FI MoE kernels require internal alignment of 16
