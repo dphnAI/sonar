@@ -2,11 +2,11 @@
 Breathing Life into Language
 </h1>
 
-![aphrodite](https://raw.githubusercontent.com/PygmalionAI/aphrodite-engine/main/assets/aphrodite.png)
+![sonar](assets/sonar.jpg)
 
-Aphrodite is an inference engine that optimizes the serving of HuggingFace-compatible models at scale. Built on vLLM's Paged Attention technology, it delivers high-performance model inference for multiple concurrent users. Aphrodite serves as the backend engine powering [PygmalionAI](https://pygmalion.chat)'s chat platforms and API infrastructure.
+Sonar (formerly Aphrodite Engine) is an inference engine that optimizes the serving of HuggingFace-compatible models at scale. Built on vLLM's Paged Attention technology, it delivers high-performance model inference for multiple concurrent users. Sonar serves as the backend engine powering [PygmalionAI](https://pygmalion.chat)'s chat platforms and API infrastructure.
 
-Aphrodite builds upon and integrates the exceptional work from [various projects](#acknowledgements), primarily [vLLM](https://vllm.ai).
+Sonar builds upon and integrates the exceptional work from [various projects](#acknowledgements), primarily [vLLM](https://vllm.ai).
 
 ## Features
 
@@ -24,7 +24,7 @@ Aphrodite builds upon and integrates the exceptional work from [various projects
 
 ## Quickstart
 
-Install the engine:
+Install the engine (the Python package and CLI keep the historical `aphrodite` name for now):
 
 ```sh
 pip install -U aphrodite-engine
@@ -49,13 +49,13 @@ This will create a [OpenAI](https://platform.openai.com/docs/api-reference/)-com
 
 ### Notes
 
-1. By design, Aphrodite takes up 92% of your GPU's VRAM. If you're not serving an LLM at scale, you may want to limit the amount of memory it takes up. You can do this in the API example by launching the server with the `--gpu-memory-utilization 0.6` (0.6 means 60%).
+1. By design, Sonar takes up 92% of your GPU's VRAM. If you're not serving an LLM at scale, you may want to limit the amount of memory it takes up. You can do this in the API example by launching the server with the `--gpu-memory-utilization 0.6` (0.6 means 60%).
 
 2. You can view the full list of commands by running `aphrodite run --help`.
 
 ## Acknowledgements
 
-Aphrodite Engine would have not been possible without the phenomenal work of other open-source projects. A (non-exhaustive) list:
+Sonar would have not been possible without the phenomenal work of other open-source projects. A (non-exhaustive) list:
 
 - [vLLM](https://github.com/vllm-project/vllm)
 - [TensorRT-LLM](https://github.com/NVIDIA/TensorRT-LLM)
