@@ -25,7 +25,7 @@ from aphrodite.entrypoints.openai.engine.protocol import (
 )
 from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
 from aphrodite.entrypoints.speech_to_text.base.serving import (
-    OpenAISpeechToText,
+    SpeechToTextBaseServing,
     asr_inter_chunk_separator,
 )
 from aphrodite.entrypoints.speech_to_text.transcription.protocol import TranscriptionRequest
@@ -78,9 +78,7 @@ class _StubTranscriptionModel:
     supports_segment_timestamp = False
 
     @classmethod
-    def get_speech_to_text_config(
-        cls, model_config: ModelConfig, task_type: str
-    ) -> SpeechToTextConfig:
+    def get_speech_to_text_config(cls, model_config: ModelConfig, task_type: str) -> SpeechToTextConfig:
         return SpeechToTextConfig(
             sample_rate=16000.0,
             max_audio_clip_s=5.0,
@@ -234,7 +232,7 @@ async def test_create_transcription_non_streaming_joins_chunks_by_language():
             "aphrodite.model_executor.model_loader.get_model_cls",
             return_value=_StubTranscriptionModel,
         ),
-        patch.object(OpenAISpeechToText, "_preprocess_speech_to_text", preprocess_mock),
+        patch.object(SpeechToTextBaseServing, "_preprocess_speech_to_text", preprocess_mock),
     ):
         serving = OpenAIServingTranscription(engine_client, models, request_logger=None)
 
@@ -245,9 +243,7 @@ async def test_create_transcription_non_streaming_joins_chunks_by_language():
             stream=False,
             response_format="json",
         )
-        out_en = await serving.create_transcription(
-            b"\x00\x00", req_en, raw_request=None
-        )
+        out_en = await serving.create_transcription(b"\x00\x00", req_en, raw_request=None)
         assert not isinstance(out_en, ErrorResponse)
         assert out_en.text == "hello world"
 
@@ -266,8 +262,6 @@ async def test_create_transcription_non_streaming_joins_chunks_by_language():
             stream=False,
             response_format="json",
         )
-        out_zh = await serving.create_transcription(
-            b"\x00\x00", req_zh, raw_request=None
-        )
+        out_zh = await serving.create_transcription(b"\x00\x00", req_zh, raw_request=None)
         assert not isinstance(out_zh, ErrorResponse)
         assert out_zh.text == "你好世界"

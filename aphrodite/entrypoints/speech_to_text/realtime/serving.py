@@ -9,7 +9,7 @@ from typing import Literal, cast
 import numpy as np
 
 from aphrodite.engine.protocol import EngineClient, StreamingInput
-from aphrodite.entrypoints.openai.engine.serving import OpenAIServing
+from aphrodite.entrypoints.generate.base.serving import GenerateBaseServing
 from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
 from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
 from aphrodite.inputs import PromptType
@@ -20,7 +20,7 @@ from aphrodite.renderers.inputs.preprocess import parse_model_prompt
 logger = init_logger(__name__)
 
 
-class OpenAIServingRealtime(OpenAIServing):
+class OpenAIServingRealtime(GenerateBaseServing):
     """Realtime audio transcription service via WebSocket streaming.
 
     Provides streaming audio-to-text transcription by transforming audio chunks
@@ -76,9 +76,7 @@ class OpenAIServingRealtime(OpenAIServing):
         # TODO(Patrick) - fix this
         stream_input_iter = cast(
             AsyncGenerator[PromptType, None],
-            self.model_cls.buffer_realtime_audio(
-                audio_stream, input_stream, model_config
-            ),
+            self.model_cls.buffer_realtime_audio(audio_stream, input_stream, model_config),
         )
 
         async for prompt in stream_input_iter:

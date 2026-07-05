@@ -4,6 +4,7 @@ from typing import Any
 
 from aphrodite.config import ModelConfig
 from aphrodite.entrypoints.chat_utils import ChatTemplateContentFormatOption
+from aphrodite.entrypoints.generate.base.serving import resolve_token_id_placeholder
 from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionLogProbs,
     ChatCompletionRequest,
@@ -15,7 +16,6 @@ from aphrodite.entrypoints.openai.completion.protocol import (
     CompletionResponseChoice,
 )
 from aphrodite.entrypoints.openai.engine.protocol import ToolCall
-from aphrodite.entrypoints.openai.engine.serving import resolve_token_id_placeholder
 from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import GenerateResponse
 from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
 from aphrodite.logger import init_logger
@@ -60,12 +60,8 @@ class OnlineDerenderer:
         )
 
         self.chat_template = chat_template
-        self.chat_template_content_format: ChatTemplateContentFormatOption = (
-            chat_template_content_format
-        )
-        self.default_chat_template_kwargs: dict[str, Any] = (
-            default_chat_template_kwargs or {}
-        )
+        self.chat_template_content_format: ChatTemplateContentFormatOption = chat_template_content_format
+        self.default_chat_template_kwargs: dict[str, Any] = default_chat_template_kwargs or {}
         self.trust_request_chat_template = trust_request_chat_template
 
         self.log_error_stack = log_error_stack
@@ -84,19 +80,13 @@ class OnlineDerenderer:
             if not choice.token_ids:
                 raise ValueError(f"choice {choice.index} has empty or null token_ids")
 
-            resolved_logprobs = (
-                _resolve_logprobs(choice.logprobs, tokenizer)
-                if choice.logprobs is not None
-                else None
-            )
+            resolved_logprobs = _resolve_logprobs(choice.logprobs, tokenizer) if choice.logprobs is not None else None
 
             if self.parser is not None and chat_request is not None:
                 # Parser path: decode with special tokens preserved
                 # so the parser can see markers like </think>,
                 # <tool_call>, or Harmony channel tokens.
-                decoded_text = tokenizer.decode(
-                    choice.token_ids, skip_special_tokens=False
-                )
+                decoded_text = tokenizer.decode(choice.token_ids, skip_special_tokens=False)
 
                 chat_template_kwargs: dict[str, Any] = {}
                 if not self.use_harmony:
@@ -144,9 +134,7 @@ class OnlineDerenderer:
                 )
             else:
                 # No parser: plain detokenization.
-                decoded_text = tokenizer.decode(
-                    choice.token_ids, skip_special_tokens=True
-                )
+                decoded_text = tokenizer.decode(choice.token_ids, skip_special_tokens=True)
                 message = ChatMessage(role="assistant", content=decoded_text)
 
             choices.append(
@@ -166,9 +154,7 @@ class OnlineDerenderer:
         prompt_tokens: list[int] | None = None,
     ) -> tuple[list[CompletionResponseChoice], int, int]:
         n = len(generate_responses)
-        prompt_tokens_list: list[int] = (
-            prompt_tokens if prompt_tokens is not None else [0] * n
-        )
+        prompt_tokens_list: list[int] = prompt_tokens if prompt_tokens is not None else [0] * n
 
         tokenizer = self.renderer.get_tokenizer()
         choices: list[CompletionResponseChoice] = []
@@ -179,20 +165,13 @@ class OnlineDerenderer:
         for gen, pt in zip(generate_responses, prompt_tokens_list):
             for choice in gen.choices:
                 if not choice.token_ids:
-                    raise ValueError(
-                        f"choice {choice.index} in response {gen.request_id} "
-                        "has empty or null token_ids"
-                    )
+                    raise ValueError(f"choice {choice.index} in response {gen.request_id} has empty or null token_ids")
 
-                decoded_text = tokenizer.decode(
-                    choice.token_ids, skip_special_tokens=True
-                )
+                decoded_text = tokenizer.decode(choice.token_ids, skip_special_tokens=True)
                 completion_logprobs = None
                 if choice.logprobs is not None:
                     resolved = _resolve_logprobs(choice.logprobs, tokenizer)
-                    completion_logprobs = _convert_chat_logprobs_to_completion_logprobs(
-                        resolved
-                    )
+                    completion_logprobs = _convert_chat_logprobs_to_completion_logprobs(resolved)
                 choices.append(
                     CompletionResponseChoice(
                         index=index,
@@ -218,9 +197,7 @@ def _parse_token_id_placeholder(token: str) -> int | None:
         return None
 
 
-def _correct_decoded_token(
-    token_id: int, context_token_ids: list[int], tokenizer: TokenizerLike
-) -> str:
+def _correct_decoded_token(token_id: int, context_token_ids: list[int], tokenizer: TokenizerLike) -> str:
     """Use preceding tokens as context to fix U+FFFD from byte-fallback.
 
     Mirrors LogprobsProcessor._correct_decoded_token in v1/engine/logprobs.py.
@@ -256,9 +233,7 @@ def _correct_decoded_token(
     return ""
 
 
-def _resolve_logprobs(
-    logprobs: ChatCompletionLogProbs, tokenizer: TokenizerLike
-) -> ChatCompletionLogProbs:
+def _resolve_logprobs(logprobs: ChatCompletionLogProbs, tokenizer: TokenizerLike) -> ChatCompletionLogProbs:
     """Resolve token_id:N placeholders in a ChatCompletionLogProbs object."""
     if logprobs.content is None:
         return logprobs
@@ -281,9 +256,7 @@ def _resolve_logprobs(
             if top_str.endswith("�") and top_id is not None:
                 top_str = _correct_decoded_token(top_id, context_token_ids, tokenizer)
                 top_bytes = list(top_str.encode("utf-8"))
-            resolved_top.append(
-                top.model_copy(update={"token": top_str, "bytes": top_bytes})
-            )
+            resolved_top.append(top.model_copy(update={"token": top_str, "bytes": top_bytes}))
 
         resolved_content.append(
             entry.model_copy(
@@ -319,11 +292,7 @@ def _convert_chat_logprobs_to_completion_logprobs(
         text_offset.append(offset)
         tokens.append(entry.token)
         token_logprobs.append(entry.logprob)
-        top_logprobs_list.append(
-            {t.token: t.logprob for t in entry.top_logprobs}
-            if entry.top_logprobs
-            else None
-        )
+        top_logprobs_list.append({t.token: t.logprob for t in entry.top_logprobs} if entry.top_logprobs else None)
         offset += len(entry.token)
 
     return CompletionLogProbs(

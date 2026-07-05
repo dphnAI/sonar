@@ -11,9 +11,11 @@ from aphrodite.entrypoints.openai.models.serving import (
     OpenAIModelRegistry,
     OpenAIServingModels,
 )
+from aphrodite.entrypoints.pooling.typing import AnyPoolingRequest
 from aphrodite.entrypoints.serve.engine.typing import AnyRequest
 from aphrodite.entrypoints.serve.utils.error_response import create_error_response
 from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
+from aphrodite.exceptions import APHRODITENotFoundError
 from aphrodite.inputs import EngineInput
 from aphrodite.lora.request import LoRARequest
 from aphrodite.renderers.inputs.preprocess import (
@@ -37,7 +39,7 @@ class BaseServing:
 
     async def _check_model(
         self,
-        request: AnyRequest,
+        request: AnyRequest | AnyPoolingRequest,
     ) -> ErrorResponse | None:
         error_response = None
 
@@ -52,10 +54,7 @@ class BaseServing:
         ):
             if isinstance(load_result, LoRARequest):
                 return None
-            if (
-                isinstance(load_result, ErrorResponse)
-                and load_result.error.code == HTTPStatus.BAD_REQUEST.value
-            ):
+            if isinstance(load_result, ErrorResponse) and load_result.error.code == HTTPStatus.BAD_REQUEST.value:
                 error_response = load_result
 
         return error_response or self.create_error_response(
@@ -112,18 +111,14 @@ class BaseServing:
         )
 
     @staticmethod
-    def _base_request_id(
-        raw_request: Request | None, default: str | None = None
-    ) -> str | None:
+    def _base_request_id(raw_request: Request | None, default: str | None = None) -> str | None:
         """Pulls the request id to use from a header, if provided"""
-        if raw_request is not None and (
-            (req_id := raw_request.headers.get("X-Request-Id")) is not None
-        ):
+        if raw_request is not None and ((req_id := raw_request.headers.get("X-Request-Id")) is not None):
             return req_id
 
         return random_uuid() if default is None else default
 
-    def _get_message_types(self, request: AnyRequest) -> set[str]:
+    def _get_message_types(self, request: AnyRequest | AnyPoolingRequest) -> set[str]:
         """Retrieve the set of types from message content dicts up
         until `_`; we use this to match potential multimodal data
         with default per modality loras.
@@ -138,17 +133,13 @@ class BaseServing:
             return message_types
 
         for message in messages:
-            if (
-                isinstance(message, dict)
-                and "content" in message
-                and isinstance(message["content"], list)
-            ):
+            if isinstance(message, dict) and "content" in message and isinstance(message["content"], list):
                 for content_dict in message["content"]:
                     if "type" in content_dict:
                         message_types.add(content_dict["type"].split("_")[0])
         return message_types
 
-    def _get_active_default_mm_loras(self, request: AnyRequest) -> LoRARequest | None:
+    def _get_active_default_mm_loras(self, request: AnyRequest | AnyPoolingRequest) -> LoRARequest | None:
         """Determine if there are any active default multimodal loras."""
         # TODO: Currently this is only enabled for chat completions
         # to be better aligned with only being enabled for .generate
@@ -173,7 +164,7 @@ class BaseServing:
 
     def _maybe_get_adapters(
         self,
-        request: AnyRequest,
+        request: AnyRequest | AnyPoolingRequest,
         supports_default_mm_loras: bool = False,
     ) -> LoRARequest | None:
         if request.model in self.models.lora_requests:
@@ -190,4 +181,4 @@ class BaseServing:
             return None
 
         # if _check_model has been called earlier, this will be unreachable
-        raise ValueError(f"The model `{request.model}` does not exist.")
+        raise APHRODITENotFoundError(f"The model `{request.model}` does not exist.")

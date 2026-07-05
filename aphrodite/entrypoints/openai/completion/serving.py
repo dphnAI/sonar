@@ -13,6 +13,12 @@ import pybase64 as base64
 from fastapi import Request
 
 from aphrodite.engine.protocol import EngineClient
+from aphrodite.entrypoints.generate.base.serving import (
+    GenerateBaseServing,
+    GenerationError,
+    clamp_prompt_logprobs,
+    format_token_id_placeholder,
+)
 from aphrodite.entrypoints.openai.completion.protocol import (
     CompletionLogProbs,
     CompletionRequest,
@@ -26,12 +32,6 @@ from aphrodite.entrypoints.openai.engine.protocol import (
     PromptTokenUsageInfo,
     RequestResponseMetadata,
     UsageInfo,
-)
-from aphrodite.entrypoints.openai.engine.serving import (
-    GenerationError,
-    OpenAIServing,
-    clamp_prompt_logprobs,
-    format_token_id_placeholder,
 )
 from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
 from aphrodite.entrypoints.serve.utils.api_utils import get_max_tokens, should_include_usage
@@ -50,7 +50,7 @@ from aphrodite.utils.collection_utils import as_list
 logger = init_logger(__name__)
 
 
-class OpenAIServingCompletion(OpenAIServing):
+class OpenAIServingCompletion(GenerateBaseServing):
     def __init__(
         self,
         engine_client: EngineClient,
@@ -130,9 +130,7 @@ class OpenAIServingCompletion(OpenAIServing):
         raw_request: Request | None = None,
     ) -> AsyncGenerator[str, None] | CompletionResponse | ErrorResponse:
         if request.stream and request.use_beam_search:
-            return self.create_error_response(
-                "Streaming is not currently supported with beam search"
-            )
+            return self.create_error_response("Streaming is not currently supported with beam search")
 
         result = await self.render_completion_request(request)
         if isinstance(result, ErrorResponse):
@@ -167,9 +165,7 @@ class OpenAIServingCompletion(OpenAIServing):
 
             sampling_params: SamplingParams | BeamSearchParams
             if request.use_beam_search:
-                sampling_params = request.to_beam_search_params(
-                    max_tokens, self.default_sampling_params
-                )
+                sampling_params = request.to_beam_search_params(max_tokens, self.default_sampling_params)
             else:
                 sampling_params = request.to_sampling_params(
                     max_tokens,
@@ -185,11 +181,7 @@ class OpenAIServingCompletion(OpenAIServing):
                 lora_request=lora_request,
             )
 
-            trace_headers = (
-                None
-                if raw_request is None
-                else await self._get_trace_headers(raw_request.headers)
-            )
+            trace_headers = None if raw_request is None else await self._get_trace_headers(raw_request.headers)
 
             if isinstance(sampling_params, BeamSearchParams):
                 generator = self.beam_search(
@@ -296,9 +288,7 @@ class OpenAIServingCompletion(OpenAIServing):
         first_iteration = True
 
         stream_options = request.stream_options
-        include_usage, include_continuous_usage = should_include_usage(
-            stream_options, self.enable_force_include_usage
-        )
+        include_usage, include_continuous_usage = should_include_usage(stream_options, self.enable_force_include_usage)
 
         try:
             async for prompt_idx, res in result_generator:
@@ -365,11 +355,7 @@ class OpenAIServingCompletion(OpenAIServing):
                             prompt_token_ids_to_return = prompt_token_ids
                             has_echoed[i] = True
 
-                        if (
-                            not delta_text
-                            and not delta_token_ids
-                            and not previous_num_tokens[i]
-                        ):
+                        if not delta_text and not delta_token_ids and not previous_num_tokens[i]:
                             # Chunked prefill case, don't return empty chunks
                             continue
 
@@ -406,21 +392,13 @@ class OpenAIServingCompletion(OpenAIServing):
                                 finish_reason=finish_reason,
                                 stop_reason=stop_reason,
                                 prompt_token_ids=prompt_token_ids_to_return,
-                                token_ids=(
-                                    as_list(output.token_ids)
-                                    if request.return_token_ids
-                                    else None
-                                ),
+                                token_ids=(as_list(output.token_ids) if request.return_token_ids else None),
                             )
                         ],
                     )
                     # Stamp on terminal chunk only when no trailing usage chunk
                     # will follow (that one is the true final message).
-                    if (
-                        not include_usage
-                        and self.system_fingerprint is not None
-                        and finish_reason is not None
-                    ):
+                    if not include_usage and self.system_fingerprint is not None and finish_reason is not None:
                         chunk.system_fingerprint = self.system_fingerprint
                     if include_continuous_usage:
                         prompt_tokens = num_prompt_tokens[prompt_idx]
@@ -443,9 +421,7 @@ class OpenAIServingCompletion(OpenAIServing):
             )
 
             if self.enable_prompt_tokens_details and num_cached_tokens is not None:
-                final_usage_info.prompt_tokens_details = PromptTokenUsageInfo(
-                    cached_tokens=num_cached_tokens
-                )
+                final_usage_info.prompt_tokens_details = PromptTokenUsageInfo(cached_tokens=num_cached_tokens)
 
             if include_usage:
                 final_usage_chunk = CompletionStreamResponse(
@@ -456,9 +432,7 @@ class OpenAIServingCompletion(OpenAIServing):
                     usage=final_usage_info,
                     system_fingerprint=self.system_fingerprint,
                 )
-                final_usage_data = final_usage_chunk.model_dump_json(
-                    exclude_unset=False, exclude_none=True
-                )
+                final_usage_data = final_usage_chunk.model_dump_json(exclude_unset=False, exclude_none=True)
                 yield f"data: {final_usage_data}\n\n"
 
             # report to FastAPI middleware aggregate usage across all choices
@@ -548,9 +522,7 @@ class OpenAIServingCompletion(OpenAIServing):
                 if output.routed_experts is not None:
                     buf = io.BytesIO()
                     np.save(buf, output.routed_experts)
-                    routed_experts_b64 = base64.b64encode(buf.getvalue()).decode(
-                        "ascii"
-                    )
+                    routed_experts_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
 
                 choice_data = CompletionResponseChoice(
                     index=len(choices),
@@ -559,12 +531,8 @@ class OpenAIServingCompletion(OpenAIServing):
                     finish_reason=output.finish_reason,
                     stop_reason=output.stop_reason,
                     prompt_logprobs=final_res.prompt_logprobs,
-                    prompt_token_ids=(
-                        prompt_token_ids if request.return_token_ids else None
-                    ),
-                    token_ids=(
-                        as_list(output.token_ids) if request.return_token_ids else None
-                    ),
+                    prompt_token_ids=(prompt_token_ids if request.return_token_ids else None),
+                    token_ids=(as_list(output.token_ids) if request.return_token_ids else None),
                     routed_experts=routed_experts_b64,
                 )
                 choices.append(choice_data)
@@ -579,14 +547,8 @@ class OpenAIServingCompletion(OpenAIServing):
             total_tokens=num_prompt_tokens + num_generated_tokens,
         )
 
-        if (
-            self.enable_prompt_tokens_details
-            and last_final_res
-            and last_final_res.num_cached_tokens is not None
-        ):
-            usage.prompt_tokens_details = PromptTokenUsageInfo(
-                cached_tokens=last_final_res.num_cached_tokens
-            )
+        if self.enable_prompt_tokens_details and last_final_res and last_final_res.num_cached_tokens is not None:
+            usage.prompt_tokens_details = PromptTokenUsageInfo(cached_tokens=last_final_res.num_cached_tokens)
 
         request_metadata.final_usage_info = usage
         if final_res_batch:
@@ -619,9 +581,7 @@ class OpenAIServingCompletion(OpenAIServing):
         last_token_len = 0
 
         should_return_as_token_id = (
-            return_as_token_id
-            if return_as_token_id is not None
-            else self.return_tokens_as_token_ids
+            return_as_token_id if return_as_token_id is not None else self.return_tokens_as_token_ids
         )
         for i, token_id in enumerate(token_ids):
             step_top_logprobs = top_logprobs[i]
@@ -631,8 +591,7 @@ class OpenAIServingCompletion(OpenAIServing):
                 else:
                     if tokenizer is None:
                         raise APHRODITEValidationError(
-                            "Unable to get tokenizer because "
-                            "`skip_tokenizer_init=True`",
+                            "Unable to get tokenizer because `skip_tokenizer_init=True`",
                             parameter="skip_tokenizer_init",
                             value=True,
                         )

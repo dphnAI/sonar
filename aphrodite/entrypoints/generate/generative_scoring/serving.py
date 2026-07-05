@@ -23,8 +23,8 @@ from aphrodite.entrypoints.openai.engine.protocol import (
     OpenAIBaseModel,
     UsageInfo,
 )
-from aphrodite.entrypoints.openai.engine.serving import OpenAIServing
 from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
+from aphrodite.entrypoints.serve.engine.serving import BaseServing
 from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
 from aphrodite.inputs import EngineInput, tokens_input
 from aphrodite.logger import init_logger
@@ -142,7 +142,7 @@ class GenerativeScoringResponse(OpenAIBaseModel):
 # ============================================================================
 
 
-class ServingGenerativeScoring(OpenAIServing):
+class ServingGenerativeScoring(BaseServing):
     """Serving class for generative scoring computation.
 
     This class handles computing the probability of specified token IDs
@@ -164,10 +164,12 @@ class ServingGenerativeScoring(OpenAIServing):
         request_logger: RequestLogger | None,
     ) -> None:
         super().__init__(
-            engine_client=engine_client,
             models=models,
+            model_config=engine_client.model_config,
             request_logger=request_logger,
         )
+        self.engine_client = engine_client
+        self.renderer = engine_client.renderer
 
     async def create_generative_scoring(
         self,

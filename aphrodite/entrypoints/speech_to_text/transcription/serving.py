@@ -14,7 +14,7 @@ from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
 from aphrodite.logger import init_logger
 from aphrodite.outputs import RequestOutput
 
-from ..base.serving import OpenAISpeechToText
+from ..base.serving import SpeechToTextBaseServing
 from .protocol import (
     TranscriptionRequest,
     TranscriptionResponse,
@@ -26,7 +26,7 @@ from .protocol import (
 logger = init_logger(__name__)
 
 
-class OpenAIServingTranscription(OpenAISpeechToText):
+class OpenAIServingTranscription(SpeechToTextBaseServing):
     """Handles transcription requests."""
 
     def __init__(
@@ -52,12 +52,7 @@ class OpenAIServingTranscription(OpenAISpeechToText):
         audio_data: bytes,
         request: TranscriptionRequest,
         raw_request: Request | None = None,
-    ) -> (
-        TranscriptionResponse
-        | TranscriptionResponseVerbose
-        | AsyncGenerator[str, None]
-        | ErrorResponse
-    ):
+    ) -> TranscriptionResponse | TranscriptionResponseVerbose | AsyncGenerator[str, None] | ErrorResponse:
         """Transcription API similar to OpenAI's API.
 
         See https://platform.openai.com/docs/api-reference/audio/createTranscription
@@ -68,9 +63,7 @@ class OpenAIServingTranscription(OpenAISpeechToText):
             request=request,
             raw_request=raw_request,
             response_class=(
-                TranscriptionResponseVerbose
-                if request.response_format == "verbose_json"
-                else TranscriptionResponse
+                TranscriptionResponseVerbose if request.response_format == "verbose_json" else TranscriptionResponse
             ),
             stream_generator_method=self.transcription_stream_generator,
         )

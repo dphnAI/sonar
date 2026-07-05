@@ -14,6 +14,10 @@ import pybase64 as base64
 from fastapi import Request
 
 from aphrodite.engine.protocol import EngineClient
+from aphrodite.entrypoints.generate.base.serving import (
+    GenerateBaseServing,
+    clamp_prompt_logprobs,
+)
 from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionLogProb,
     ChatCompletionLogProbs,
@@ -26,7 +30,6 @@ from aphrodite.entrypoints.openai.engine.protocol import (
     RequestResponseMetadata,
     UsageInfo,
 )
-from aphrodite.entrypoints.openai.engine.serving import OpenAIServing, clamp_prompt_logprobs
 from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
 from aphrodite.entrypoints.serve.utils.api_utils import get_max_tokens, should_include_usage
 from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
@@ -55,7 +58,7 @@ from .protocol import (
 logger = init_logger(__name__)
 
 
-class ServingTokens(OpenAIServing):
+class ServingTokens(GenerateBaseServing):
     """Provides Tokens IN <> Tokens OUT functionality to Aphrodite API."""
 
     def __init__(
@@ -81,10 +84,7 @@ class ServingTokens(OpenAIServing):
         self.enable_log_outputs = enable_log_outputs
         self.force_no_detokenize = force_no_detokenize
         if force_no_detokenize:
-            logger.info(
-                "Tokens-only mode is enabled, skipping detokenization "
-                "step for incoming requests."
-            )
+            logger.info("Tokens-only mode is enabled, skipping detokenization step for incoming requests.")
 
         # Mirrors ``OpenAIServingChat`` so we can apply server-side
         # ``max_tokens`` defaulting when the client omits it. Without this,
@@ -119,9 +119,7 @@ class ServingTokens(OpenAIServing):
 
         model_name = self.models.model_name(lora_request)
 
-        request_id = (
-            f"generate-tokens-{self._base_request_id(raw_request, request.request_id)}"
-        )
+        request_id = f"generate-tokens-{self._base_request_id(raw_request, request.request_id)}"
 
         request_metadata = RequestResponseMetadata(request_id=request_id)
         if raw_request:
@@ -143,9 +141,7 @@ class ServingTokens(OpenAIServing):
         if features := request.features:
             # Convert PlaceholderRangeInfo → PlaceholderRange per modality.
             mm_placeholders: dict[str, list[PlaceholderRange]] = {
-                modality: [
-                    PlaceholderRange(offset=p.offset, length=p.length) for p in ranges
-                ]
+                modality: [PlaceholderRange(offset=p.offset, length=p.length) for p in ranges]
                 for modality, ranges in features.mm_placeholders.items()
             }
 
@@ -153,10 +149,7 @@ class ServingTokens(OpenAIServing):
             mm_kwargs: dict[str, list[MultiModalKwargsItem | None]] = {}
             if features.kwargs_data is not None:
                 for modality, items in features.kwargs_data.items():
-                    mm_kwargs[modality] = [
-                        decode_mm_kwargs_item(item) if item is not None else None
-                        for item in items
-                    ]
+                    mm_kwargs[modality] = [decode_mm_kwargs_item(item) if item is not None else None for item in items]
             else:
                 for modality, hashes in features.mm_hashes.items():
                     mm_kwargs[modality] = [None] * len(hashes)
@@ -204,11 +197,7 @@ class ServingTokens(OpenAIServing):
             lora_request=lora_request,
         )
 
-        trace_headers = (
-            None
-            if raw_request is None
-            else await self._get_trace_headers(raw_request.headers)
-        )
+        trace_headers = None if raw_request is None else await self._get_trace_headers(raw_request.headers)
 
         # Extract data_parallel_rank from header (router can inject it)
         data_parallel_rank = self._get_data_parallel_rank(raw_request)
@@ -308,14 +297,9 @@ class ServingTokens(OpenAIServing):
             completion_tokens=num_generated_tokens,
             total_tokens=num_prompt_tokens + num_generated_tokens,
         )
-        if (
-            self.enable_prompt_tokens_details
-            and final_res.num_cached_tokens is not None
-        ):
+        if self.enable_prompt_tokens_details and final_res.num_cached_tokens is not None:
             # This info is not available at the /coordinator level
-            usage.prompt_tokens_details = PromptTokenUsageInfo(
-                cached_tokens=final_res.num_cached_tokens
-            )
+            usage.prompt_tokens_details = PromptTokenUsageInfo(cached_tokens=final_res.num_cached_tokens)
 
         request_metadata.final_usage_info = usage
 
@@ -364,9 +348,7 @@ class ServingTokens(OpenAIServing):
         num_cached_tokens = None
         sampling_params: SamplingParams = request.sampling_params
 
-        include_usage, include_continuous_usage = should_include_usage(
-            request.stream_options, False
-        )
+        include_usage, include_continuous_usage = should_include_usage(request.stream_options, False)
 
         try:
             async for res in result_generator:
@@ -405,9 +387,7 @@ class ServingTokens(OpenAIServing):
                     if output.routed_experts is not None:
                         buf = io.BytesIO()
                         np.save(buf, output.routed_experts)
-                        routed_experts_b64 = base64.b64encode(buf.getvalue()).decode(
-                            "ascii"
-                        )
+                        routed_experts_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
 
                     chunk = GenerateStreamResponse(
                         request_id=request_id,
@@ -438,9 +418,7 @@ class ServingTokens(OpenAIServing):
             )
 
             if self.enable_prompt_tokens_details and num_cached_tokens is not None:
-                final_usage_info.prompt_tokens_details = PromptTokenUsageInfo(
-                    cached_tokens=num_cached_tokens
-                )
+                final_usage_info.prompt_tokens_details = PromptTokenUsageInfo(cached_tokens=num_cached_tokens)
 
             if include_usage:
                 final_chunk = GenerateStreamResponse(
@@ -453,9 +431,7 @@ class ServingTokens(OpenAIServing):
             request_metadata.final_usage_info = final_usage_info
 
         except GenerationError as e:
-            yield (
-                f"data: {self._convert_generation_error_to_streaming_response(e)}\n\n"
-            )
+            yield (f"data: {self._convert_generation_error_to_streaming_response(e)}\n\n")
         except Exception as e:
             logger.exception("Error in token generation stream.")
             data = self.create_streaming_error_response(e)
@@ -492,11 +468,8 @@ class ServingTokens(OpenAIServing):
                                 token=f"token_id:{token_id}",
                                 logprob=max(logprob.logprob, -9999.0),
                             )
-                            for i, (token_id, logprob) in enumerate(
-                                step_top_logprobs.items()
-                            )
-                            if num_output_top_logprobs is not None
-                            and i < max(num_output_top_logprobs, 1)
+                            for i, (token_id, logprob) in enumerate(step_top_logprobs.items())
+                            if num_output_top_logprobs is not None and i < max(num_output_top_logprobs, 1)
                         ],
                     )
                 )

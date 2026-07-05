@@ -9,7 +9,7 @@ from aphrodite.tasks import SupportedTask
 from aphrodite.utils.serial_utils import EmbedDType, Endianness
 
 from ..base.io_processor import PoolingIOProcessor
-from ..base.serving import PoolingServingBase
+from ..base.serving import PoolingBaseServing
 from ..factories import init_pooling_io_processors
 from ..typing import AnyPoolingRequest, PoolingServeContext
 from ..utils import (
@@ -30,7 +30,7 @@ from .protocol import (
 logger = init_logger(__name__)
 
 
-class ServingPooling(PoolingServingBase):
+class ServingPooling(PoolingBaseServing):
     request_id_prefix = "pooling"
 
     def __init__(
@@ -72,15 +72,9 @@ class ServingPooling(PoolingServingBase):
         # plugin task uses io_processor.parse_request to verify inputs
         if pooling_task != "plugin" and pooling_task != self.pooling_task:
             if pooling_task not in self.supported_tasks:
-                raise ValueError(
-                    f"Unsupported task: {pooling_task!r} "
-                    f"Supported tasks: {self.supported_tasks}"
-                )
+                raise ValueError(f"Unsupported task: {pooling_task!r} Supported tasks: {self.supported_tasks}")
             else:
-                raise ValueError(
-                    "Try switching the model's pooling_task "
-                    f"via --pooler-config.task {request.task}."
-                )
+                raise ValueError(f"Try switching the model's pooling_task via --pooler-config.task {request.task}.")
 
         if pooling_task == "plugin" and "plugin" not in self.io_processors:
             raise ValueError(

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from aphrodite.entrypoints.speech_to_text.base.serving import OpenAISpeechToText
+from aphrodite.entrypoints.speech_to_text.base.serving import SpeechToTextBaseServing
 from aphrodite.entrypoints.speech_to_text.transcription.protocol import TranscriptionResponse
 
 
@@ -33,9 +33,7 @@ async def _records_start_then_never_finishes(started_request_ids, request_id):
         ),
     ],
 )
-async def test_non_streaming_cancel_aborts_engine_requests(
-    engine_inputs, expected_request_ids
-):
+async def test_non_streaming_cancel_aborts_engine_requests(engine_inputs, expected_request_ids):
     engine_client = SimpleNamespace(
         errored=False,
         generate=Mock(side_effect=lambda *_args, **_kwargs: _never_finishes()),
@@ -43,7 +41,7 @@ async def test_non_streaming_cancel_aborts_engine_requests(
         is_tracing_enabled=AsyncMock(return_value=False),
     )
 
-    server = OpenAISpeechToText.__new__(OpenAISpeechToText)
+    server = SpeechToTextBaseServing.__new__(SpeechToTextBaseServing)
     server.engine_client = engine_client
     server.task_type = "transcribe"
     server.models = SimpleNamespace(model_name=lambda: "audio")
@@ -86,9 +84,7 @@ async def test_non_streaming_cancel_aborts_engine_requests(
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    generated_request_ids = [
-        call.args[2] for call in engine_client.generate.call_args_list
-    ]
+    generated_request_ids = [call.args[2] for call in engine_client.generate.call_args_list]
     assert generated_request_ids == expected_request_ids
     engine_client.abort.assert_awaited_once_with(expected_request_ids)
 
@@ -99,9 +95,7 @@ async def test_non_streaming_cancel_advances_all_chunk_generators():
     engine_client = SimpleNamespace(
         errored=False,
         generate=Mock(
-            side_effect=lambda *_args, **_kwargs: _records_start_then_never_finishes(
-                started_request_ids, _args[2]
-            )
+            side_effect=lambda *_args, **_kwargs: _records_start_then_never_finishes(started_request_ids, _args[2])
         ),
         abort=AsyncMock(),
         is_tracing_enabled=AsyncMock(return_value=False),
@@ -112,7 +106,7 @@ async def test_non_streaming_cancel_advances_all_chunk_generators():
         {"prompt": "chunk-1"},
         {"prompt": "chunk-2"},
     ]
-    server = OpenAISpeechToText.__new__(OpenAISpeechToText)
+    server = SpeechToTextBaseServing.__new__(SpeechToTextBaseServing)
     server.engine_client = engine_client
     server.task_type = "transcribe"
     server.models = SimpleNamespace(model_name=lambda: "audio")
@@ -170,7 +164,7 @@ async def test_language_detection_cancel_aborts_engine_request():
         abort=AsyncMock(),
     )
 
-    server = OpenAISpeechToText.__new__(OpenAISpeechToText)
+    server = SpeechToTextBaseServing.__new__(SpeechToTextBaseServing)
     server.engine_client = engine_client
     server.asr_config = SimpleNamespace()
     server.tokenizer = Mock()
