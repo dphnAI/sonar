@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cutlass_extensions/aphrodite_collective_builder.cuh"
+#include "libtorch_stable/cutlass_extensions/aphrodite_collective_builder.cuh"
 #include "machete_mainloop.cuh"
 
 namespace cutlass::gemm::collective {

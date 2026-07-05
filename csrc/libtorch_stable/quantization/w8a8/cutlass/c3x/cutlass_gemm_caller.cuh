@@ -55,6 +55,7 @@ void cutlass_gemm_caller(
       torch::stable::empty(workspace_size, torch::headeronly::ScalarType::Byte,
                            std::nullopt, device);
 
+  const torch::stable::accelerator::DeviceGuard device_guard(device.index());
   auto stream = get_current_cuda_stream(device.index());
 
   cutlass::Status status = gemm_op.run(args, workspace.data_ptr(), stream);
