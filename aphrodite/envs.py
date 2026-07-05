@@ -86,6 +86,7 @@ if TYPE_CHECKING:
     APHRODITE_MEDIA_CONNECTOR: str = "http"
     APHRODITE_MM_HASHER_ALGORITHM: str = "blake3"
     APHRODITE_TARGET_DEVICE: str = "cuda"
+    APHRODITE_USE_PRECOMPILED: bool = False
     APHRODITE_MAIN_CUDA_VERSION: str = "13.0"
     APHRODITE_FLOAT32_MATMUL_PRECISION: Literal["highest", "high", "medium"] = "highest"
     APHRODITE_BATCH_INVARIANT: bool = False
@@ -561,6 +562,10 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # Target device of Aphrodite, supporting [cuda (by default),
     # rocm, cpu]
     "APHRODITE_TARGET_DEVICE": lambda: os.getenv("APHRODITE_TARGET_DEVICE", "cuda").lower(),
+    # Build-time only: skip all native builds (CMake/CUDA and Rust); binaries must
+    # already exist in the source tree — nothing is downloaded.
+    "APHRODITE_USE_PRECOMPILED": lambda: os.getenv("APHRODITE_USE_PRECOMPILED", "").lower()
+    in ("1", "true", "yes"),
     # Main CUDA version of Aphrodite. This follows PyTorch but can be overridden.
     "APHRODITE_MAIN_CUDA_VERSION": lambda: (
         os.getenv("APHRODITE_MAIN_CUDA_VERSION", "").lower() or "13.0"

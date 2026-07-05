@@ -36,11 +36,12 @@ PRECOMPILED_RUST_FRONTEND_PATH = ROOT_DIR / "aphrodite" / "aphrodite-rs"
 # cannot import envs directly because it depends on aphrodite,
 #  which is not installed yet
 envs = load_module_from_path("envs", os.path.join(ROOT_DIR, "aphrodite", "envs.py"))
-rust_build = load_module_from_path(
-    "rust_build", os.path.join(ROOT_DIR, "tools", "build_rust.py")
-)
 
 APHRODITE_TARGET_DEVICE = envs.APHRODITE_TARGET_DEVICE
+
+# Skips all native builds (CMake/CUDA and Rust); binaries must already exist in the
+# source tree — nothing is downloaded.
+APHRODITE_USE_PRECOMPILED = envs.APHRODITE_USE_PRECOMPILED
 
 
 def should_require_rust_frontend() -> bool:
@@ -712,16 +713,45 @@ for rust_extension_path in get_precompiled_rust_extension_paths():
 if _no_device():
     ext_modules = []
 
+if APHRODITE_USE_PRECOMPILED:
+    prebuilt = sorted(
+        p.relative_to(ROOT_DIR / "aphrodite")
+        for pattern in ("*.so", "vllm_flash_attn/*.so", "third_party/deep_gemm/*.so",
+                        "metal/metal/*.so")
+        for p in (ROOT_DIR / "aphrodite").glob(pattern)
+    )
+    if prebuilt:
+        logger.info(
+            "APHRODITE_USE_PRECOMPILED=1: skipping native builds; reusing %d prebuilt "
+            "extension(s) found in the source tree", len(prebuilt)
+        )
+        for rel in prebuilt:
+            add_aphrodite_package_data(str(rel))
+    else:
+        logger.warning(
+            "APHRODITE_USE_PRECOMPILED=1 but no prebuilt extensions (*.so) were found "
+            "in the source tree — the resulting install will have no native ops. "
+            "Run a normal build first if that is not what you want."
+        )
+    ext_modules = []
+
 if not ext_modules:
     cmdclass = {}
 else:
     cmdclass = {"build_ext": cmake_build_ext}
 
 # Rust artifacts, built via setuptools-rust and installed into the package
-# directory alongside the Python modules.
-rust_extensions = rust_build.rust_extensions(
-    optional=not should_require_rust_frontend()
-)
+# directory alongside the Python modules. Imported lazily: setuptools-rust does
+# not need to be installed when nothing is being built.
+if APHRODITE_USE_PRECOMPILED:
+    rust_extensions = []
+else:
+    rust_build = load_module_from_path(
+        "rust_build", os.path.join(ROOT_DIR, "tools", "build_rust.py")
+    )
+    rust_extensions = rust_build.rust_extensions(
+        optional=not should_require_rust_frontend()
+    )
 
 setup(
     # static metadata should rather go in pyproject.toml
