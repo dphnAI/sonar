@@ -92,8 +92,15 @@ ARG INSTALL_KV_CONNECTORS=false
 # prepare basic build environment
 FROM ${BUILD_BASE_IMAGE} AS base
 
+ARG TARGETPLATFORM
 ARG CUDA_VERSION
 ARG PYTHON_VERSION
+ARG USE_SCCACHE
+ARG SCCACHE_DOWNLOAD_URL
+ARG SCCACHE_ENDPOINT
+ARG SCCACHE_BUCKET_NAME=aphrodite-build-sccache
+ARG SCCACHE_REGION_NAME=us-west-2
+ARG SCCACHE_S3_NO_CREDENTIALS=0
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -125,6 +132,29 @@ RUN apt-get update -y \
     && ln -s /opt/venv/bin/python3-config /usr/bin/python3-config \
     && ln -s /opt/venv/bin/pip /usr/bin/pip \
     && python3 --version && python3 -m pip --version
+
+# Install sccache once in base so Rust and CMake/CUDA builds share the same
+# binary and remote cache configuration.
+RUN if [ "$USE_SCCACHE" = "1" ]; then \
+        echo "Installing sccache..." \
+        && case "${TARGETPLATFORM}" in \
+          linux/arm64) SCCACHE_ARCH="aarch64" ;; \
+          linux/amd64) SCCACHE_ARCH="x86_64" ;; \
+          *) echo "Unsupported TARGETPLATFORM for sccache: ${TARGETPLATFORM}" >&2; exit 1 ;; \
+        esac \
+        && SCCACHE_VERSION="v0.8.1" \
+        && SCCACHE_DL_URL="${SCCACHE_DOWNLOAD_URL:-https://github.com/mozilla/sccache/releases/download/${SCCACHE_VERSION}/sccache-${SCCACHE_VERSION}-${SCCACHE_ARCH}-unknown-linux-musl.tar.gz}" \
+        && curl -L -o /tmp/sccache.tar.gz "${SCCACHE_DL_URL}" \
+        && tar -xzf /tmp/sccache.tar.gz -C /tmp \
+        && mv /tmp/sccache-${SCCACHE_VERSION}-${SCCACHE_ARCH}-unknown-linux-musl/sccache /usr/bin/sccache \
+        && chmod +x /usr/bin/sccache \
+        && rm -rf /tmp/sccache.tar.gz /tmp/sccache-${SCCACHE_VERSION}-${SCCACHE_ARCH}-unknown-linux-musl; \
+    fi
+
+ENV SCCACHE_BUCKET=${USE_SCCACHE:+${SCCACHE_BUCKET_NAME}}
+ENV SCCACHE_REGION=${USE_SCCACHE:+${SCCACHE_REGION_NAME}}
+ENV SCCACHE_S3_NO_CREDENTIALS=${USE_SCCACHE:+${SCCACHE_S3_NO_CREDENTIALS}}
+ENV SCCACHE_IDLE_TIMEOUT=${USE_SCCACHE:+0}
 
 # Activate virtual environment and add uv to PATH
 ENV PATH="/opt/venv/bin:/root/.local/bin:$PATH"
@@ -270,6 +300,8 @@ ARG aphrodite_target_device="cuda"
 ARG APHRODITE_VERSION_OVERRIDE=""
 ARG max_jobs=2
 ARG nvcc_threads=8
+ARG USE_SCCACHE
+ARG SCCACHE_ENDPOINT
 ENV APHRODITE_TARGET_DEVICE=${aphrodite_target_device}
 ENV APHRODITE_VERSION_OVERRIDE=${APHRODITE_VERSION_OVERRIDE}
 ENV MAX_JOBS=${max_jobs}
@@ -285,7 +317,16 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Build the Aphrodite wheel
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=.git,target=.git \
-    python3 setup.py bdist_wheel --dist-dir=dist --py-limited-api=cp38
+    --mount=type=secret,id=aws-credentials,target=/root/.aws/credentials,required=false \
+    if [ "$USE_SCCACHE" = "1" ]; then \
+        if [ -n "${SCCACHE_ENDPOINT}" ]; then export SCCACHE_ENDPOINT="${SCCACHE_ENDPOINT}"; fi; \
+        export RUSTC_WRAPPER=sccache; \
+        sccache --show-stats; \
+    fi \
+    && python3 setup.py bdist_wheel --dist-dir=dist --py-limited-api=cp38 \
+    && if [ "$USE_SCCACHE" = "1" ]; then \
+        sccache --show-stats; \
+    fi
 
 # Copy extension wheels from extensions-build stage for later use
 COPY --from=extensions-build /tmp/ep_kernels_workspace/dist /tmp/ep_kernels_workspace/dist

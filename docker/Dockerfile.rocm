@@ -108,13 +108,24 @@ FROM fetch_aphrodite_${REMOTE_APHRODITE} AS fetch_aphrodite
 # -----------------------
 # Aphrodite build stages
 FROM fetch_aphrodite AS build_aphrodite
+ARG USE_SCCACHE
+ARG SCCACHE_ENDPOINT
 
 # Build Aphrodite. setup.py auto-detects sccache in PATH.
 RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=secret,id=aws-credentials,target=/root/.aws/credentials,required=false \
     cd aphrodite \
+    && if [ "$USE_SCCACHE" = "1" ]; then \
+        if [ -n "${SCCACHE_ENDPOINT}" ]; then export SCCACHE_ENDPOINT="${SCCACHE_ENDPOINT}"; fi; \
+        export RUSTC_WRAPPER=sccache; \
+        sccache --show-stats; \
+    fi \
     && uv pip install --system -r requirements/rocm.txt \
     && python3 setup.py clean --all \
-    && python3 setup.py bdist_wheel --dist-dir=dist
+    && python3 setup.py bdist_wheel --dist-dir=dist \
+    && if [ "$USE_SCCACHE" = "1" ]; then \
+        sccache --show-stats; \
+    fi
 
 FROM scratch AS export_aphrodite
 ARG COMMON_WORKDIR
@@ -230,6 +241,8 @@ RUN git clone ${DEEPEP_REPO} \
 FROM fetch_aphrodite AS build_aphrodite_wheel_release
 
 ARG COMMON_WORKDIR
+ARG USE_SCCACHE
+ARG SCCACHE_ENDPOINT
 RUN mkdir -p /install
 
 COPY docker/context/base-wheels/ /tmp/base-wheels/
@@ -285,11 +298,20 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     && python3 setup.py clean --all
 
 RUN --mount=type=bind,source=.git,target=aphrodite/.git \
+    --mount=type=secret,id=aws-credentials,target=/root/.aws/credentials,required=false \
     cd aphrodite \
+    && if [ "$USE_SCCACHE" = "1" ]; then \
+        if [ -n "${SCCACHE_ENDPOINT}" ]; then export SCCACHE_ENDPOINT="${SCCACHE_ENDPOINT}"; fi; \
+        export RUSTC_WRAPPER=sccache; \
+        sccache --show-stats; \
+    fi \
     && export SETUPTOOLS_SCM_PRETEND_VERSION=$(cat /tmp/aphrodite_version.txt) \
     && export SETUPTOOLS_SCM_PRETEND_VERSION_FOR_APHRODITE_ENGINE="${SETUPTOOLS_SCM_PRETEND_VERSION}" \
     && echo "Building wheel with version: ${SETUPTOOLS_SCM_PRETEND_VERSION}" \
-    && python3 setup.py bdist_wheel --dist-dir=dist
+    && python3 setup.py bdist_wheel --dist-dir=dist \
+    && if [ "$USE_SCCACHE" = "1" ]; then \
+        sccache --show-stats; \
+    fi
 
 FROM scratch AS export_aphrodite_wheel_release
 ARG COMMON_WORKDIR
