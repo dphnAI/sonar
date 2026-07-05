@@ -277,6 +277,9 @@ def compute_kv_seq_mask(
     CHUNK_LOOKBACK: tl.constexpr = -1,
     CHUNK_SIZE: tl.constexpr = -1,
     MM_PREFIX_CLAMP_SW: tl.constexpr = False,
+    rswa_prefix_lens_ptr=None,
+    R_SWA_WINDOW: tl.constexpr = 0,
+    USE_R_SWA: tl.constexpr = False,
 ):
     """Build the KV mask for one tile.
 
@@ -312,7 +315,7 @@ def compute_kv_seq_mask(
     #   (causal AND sliding_window) OR mm_prefix
     if CHUNK_LOOKBACK > -1:
         seq_mask = seq_mask & ((query_abs_pos // CHUNK_SIZE - seq_offset[None, :] // CHUNK_SIZE) <= CHUNK_LOOKBACK)
-    elif SLIDING_WINDOW > 0:
+    elif SLIDING_WINDOW > 0 and not USE_R_SWA:
         sw_left = (query_abs_pos - seq_offset) < SLIDING_WINDOW
         if USE_PER_SEQ_CAUSAL:
             sw_right = (seq_offset[None, :] - query_abs_pos) < SLIDING_WINDOW
@@ -322,6 +325,12 @@ def compute_kv_seq_mask(
             seq_mask = seq_mask & sw_left & sw_right
         else:
             seq_mask = seq_mask & sw_left
+
+    if USE_R_SWA:
+        prefix_len = tl.load(rswa_prefix_lens_ptr + seq_idx)
+        in_prefix = seq_offset[None, :] < prefix_len
+        in_window = (query_abs_pos - seq_offset) < R_SWA_WINDOW
+        seq_mask = seq_mask & (in_prefix | in_window)
 
     # PrefixLM: extend mask with bidirectional ranges for multimodal tokens.
     # Default (MM_PREFIX_CLAMP_SW=False): applied AFTER sliding window so
