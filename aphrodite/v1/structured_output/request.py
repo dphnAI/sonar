@@ -23,6 +23,12 @@ class StructuredOutputRequest:
     params: StructuredOutputsParams
     _grammar: Future[StructuredOutputGrammar] | StructuredOutputGrammar | None = None
     reasoning_ended: bool | None = None
+    # Absolute index into the request's all_token_ids of the last reasoning
+    # token (the reasoning-end marker). Tokens at or before this index are
+    # reasoning content and must never be fed to the grammar. Only set when
+    # reasoning ends in a step whose tokens the scheduler advances immediately
+    # (structural tags + speculative decoding, see #42452).
+    reasoning_end_token_index: int | None = None
     reasoning_parser_kwargs: dict[str, Any] | None = None
     # Cached per request; do not share reasoning parsers across requests because
     # their behavior can depend on reasoning_parser_kwargs.
@@ -59,14 +65,10 @@ class StructuredOutputRequest:
     @property
     def grammar(self) -> StructuredOutputGrammar | None:
         completed = self._check_grammar_completion()
-        return (
-            cast(StructuredOutputGrammar | None, self._grammar) if completed else None
-        )
+        return cast(StructuredOutputGrammar | None, self._grammar) if completed else None
 
     @grammar.setter
-    def grammar(
-        self, grammar: StructuredOutputGrammar | Future[StructuredOutputGrammar]
-    ) -> None:
+    def grammar(self, grammar: StructuredOutputGrammar | Future[StructuredOutputGrammar]) -> None:
         self._grammar = grammar
 
     @functools.cached_property
