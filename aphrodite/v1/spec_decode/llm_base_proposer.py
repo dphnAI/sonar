@@ -24,6 +24,7 @@ from aphrodite.model_executor.model_loader import get_model
 from aphrodite.model_executor.models import supports_multimodal
 from aphrodite.model_executor.models.deepseek_eagle3 import Eagle3DeepseekV2ForCausalLM
 from aphrodite.model_executor.models.interfaces import SupportsMultiModal
+from aphrodite.model_executor.models.laguna_dflash import DFlashLagunaForCausalLM
 from aphrodite.model_executor.models.llama_eagle3 import Eagle3LlamaForCausalLM
 from aphrodite.model_executor.models.qwen3_dflash import DFlashQwen3ForCausalLM
 from aphrodite.model_executor.models.qwen3_eagle3 import Eagle3Qwen3ForCausalLM
@@ -488,6 +489,7 @@ class SpecDecodeBaseProposer:
                 (
                     Eagle3LlamaForCausalLM,
                     Eagle3DeepseekV2ForCausalLM,
+                    DFlashLagunaForCausalLM,
                     DFlashQwen3ForCausalLM,
                     Eagle3Qwen3ForCausalLM,
                 ),
