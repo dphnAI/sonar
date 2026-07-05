@@ -9,11 +9,6 @@ import pytest
 import torch
 from torch.nn.attention.flex_attention import create_block_mask, flex_attention
 
-from tests.v1.attention.utils import (
-    BatchSpec,
-    create_common_attn_metadata,
-    create_aphrodite_config,
-)
 from aphrodite.config import set_current_aphrodite_config
 from aphrodite.platforms import current_platform
 from aphrodite.utils.math_utils import cdiv
@@ -24,6 +19,11 @@ from aphrodite.v1.attention.backends.utils import (
     set_kv_cache_layout,
 )
 from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVQuantMode
+from tests.v1.attention.utils import (
+    BatchSpec,
+    create_aphrodite_config,
+    create_common_attn_metadata,
+)
 
 if not current_platform.is_device_capability_family(100):
     pytest.skip(
@@ -32,9 +32,10 @@ if not current_platform.is_device_capability_family(100):
     )
 
 from aphrodite.v1.attention.backends.flashinfer import (  # noqa: E402
+    FlashInferDecodeKernel,
     FlashInferImpl,
     FlashInferMetadataBuilder,
-    TRTLLMDecode,
+    FlashInferTrtllmAPIDecode,
     TRTLLMPrefill,
 )
 
@@ -105,10 +106,7 @@ def _create_hnd_kv_cache(
     ``kv_cache.permute(0, 1, 3, 2, 4)`` yields a contiguous HND view.
     """
     seq_lens = common_attn_metadata.seq_lens.cpu()
-    query_lens = (
-        common_attn_metadata.query_start_loc_cpu[1:]
-        - common_attn_metadata.query_start_loc_cpu[:-1]
-    )
+    query_lens = common_attn_metadata.query_start_loc_cpu[1:] - common_attn_metadata.query_start_loc_cpu[:-1]
     block_table = common_attn_metadata.block_table_tensor
     slot_mapping = common_attn_metadata.slot_mapping
     batch_size = len(k_contexts)
@@ -147,9 +145,7 @@ def _create_hnd_kv_cache(
     start_block_idx = 1
     for i in range(batch_size):
         n_blocks = cdiv(int(seq_lens[i]), block_size)
-        block_table[i, :n_blocks] = inv_perm[
-            start_block_idx : start_block_idx + n_blocks
-        ]
+        block_table[i, :n_blocks] = inv_perm[start_block_idx : start_block_idx + n_blocks]
         start_block_idx += n_blocks
 
     # Build slot mapping that is consistent with the block table.
@@ -160,9 +156,7 @@ def _create_hnd_kv_cache(
         intra_block_offsets = token_offsets % block_size
         start = common_attn_metadata.query_start_loc_cpu[i]
         end = common_attn_metadata.query_start_loc_cpu[i + 1]
-        slot_mapping[start:end] = block_table[
-            i, block_indices
-        ] * block_size + intra_block_offsets.to(device)
+        slot_mapping[start:end] = block_table[i, block_indices] * block_size + intra_block_offsets.to(device)
 
     # Transpose to FlashInfer logical shape then make HND-strided.
     kv_cache = kv_cache_raw.transpose(0, 1)
@@ -244,10 +238,7 @@ def _create_nvfp4_hnd_kv_cache(
     # with HND physical strides.
     block_table = common_attn_metadata.block_table_tensor
     seq_lens = common_attn_metadata.seq_lens.cpu()
-    query_lens = (
-        common_attn_metadata.query_start_loc_cpu[1:]
-        - common_attn_metadata.query_start_loc_cpu[:-1]
-    )
+    query_lens = common_attn_metadata.query_start_loc_cpu[1:] - common_attn_metadata.query_start_loc_cpu[:-1]
     kv_scale_t = torch.tensor(kv_scale_val, dtype=torch.float32, device=device)
 
     for i in range(len(k_contexts)):
@@ -294,12 +285,8 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
     aphrodite_config.attention_config.use_trtllm_attention = True
     aphrodite_config.cache_config.cache_dtype = kv_cache_dtype
 
-    num_q_heads = aphrodite_config.model_config.get_num_attention_heads(
-        aphrodite_config.parallel_config
-    )
-    num_kv_heads = aphrodite_config.model_config.get_num_kv_heads(
-        aphrodite_config.parallel_config
-    )
+    num_q_heads = aphrodite_config.model_config.get_num_attention_heads(aphrodite_config.parallel_config)
+    num_kv_heads = aphrodite_config.model_config.get_num_kv_heads(aphrodite_config.parallel_config)
     head_size = aphrodite_config.model_config.get_head_size()
     dtype = aphrodite_config.model_config.dtype
     scale = 1.0 / (head_size**0.5)
@@ -332,9 +319,7 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
             return (q_idx + context_len) >= kv_idx
 
         mask_fn = partial(causal_mask_mod, context_len=ctx_len)
-        block_mask = create_block_mask(
-            mask_fn, B=None, H=None, Q_LEN=q_len, KV_LEN=s_len, device=device
-        )
+        block_mask = create_block_mask(mask_fn, B=None, H=None, Q_LEN=q_len, KV_LEN=s_len, device=device)
         sdpa_out = flex_attention(
             q_sdpa,
             k_sdpa,
@@ -418,9 +403,7 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
                 _mock_get_per_layer_parameters,
             ),
         ):
-            builder = FlashInferMetadataBuilder(
-                kv_cache_spec, layer_names, aphrodite_config, device
-            )
+            builder = FlashInferMetadataBuilder(kv_cache_spec, layer_names, aphrodite_config, device)
             attn_metadata = builder.build(
                 common_prefix_len=0,
                 common_attn_metadata=common_attn_metadata,
@@ -435,9 +418,10 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
                     f"Expected TRTLLMPrefill, got {type(attn_metadata.prefill)}"
                 )
             if has_decodes:
-                assert isinstance(attn_metadata.decode, TRTLLMDecode), (
-                    f"Expected TRTLLMDecode, got {type(attn_metadata.decode)}"
+                assert isinstance(attn_metadata.decode, FlashInferTrtllmAPIDecode), (
+                    f"Expected FlashInferTrtllmAPIDecode, got {type(attn_metadata.decode)}"
                 )
+                assert attn_metadata.decode.kernel == FlashInferDecodeKernel.TRTLLM_GEN
 
             impl = FlashInferImpl(
                 num_heads=num_q_heads,
@@ -453,9 +437,7 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
             if is_nvfp4:
                 # For nvfp4, k_scale/v_scale are the global quantization
                 # scales (amax/448) used by reshape_and_cache_flash.
-                kv_scale_t = torch.tensor(
-                    kv_scale_val, dtype=torch.float32, device=device
-                )
+                kv_scale_t = torch.tensor(kv_scale_val, dtype=torch.float32, device=device)
                 mock_layer._k_scale = kv_scale_t
                 mock_layer._v_scale = kv_scale_t
                 mock_layer._k_scale_float = kv_scale_val
@@ -477,14 +459,8 @@ def _run_trtllm_integration(batch_spec, kv_cache_dtype="auto", model_name=MODEL)
                 finfo = torch.finfo(torch.float8_e4m3fn)
                 q_amax = query_aphrodite.abs().amax().clamp(min=1e-12)
                 q_s = (finfo.max / q_amax * 0.1).item()
-                query_aphrodite = (
-                    (query_aphrodite * q_s)
-                    .clamp(finfo.min, finfo.max)
-                    .to(torch.float8_e4m3fn)
-                )
-                mock_layer._q_scale = torch.tensor(
-                    1.0 / q_s, dtype=torch.float32, device=device
-                )
+                query_aphrodite = (query_aphrodite * q_s).clamp(finfo.min, finfo.max).to(torch.float8_e4m3fn)
+                mock_layer._q_scale = torch.tensor(1.0 / q_s, dtype=torch.float32, device=device)
                 mock_layer._q_scale_float = 1.0 / q_s
 
             output = impl.forward(
