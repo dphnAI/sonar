@@ -59,10 +59,7 @@ def test_release_metadata_args_prefer_pipeline_id() -> None:
         "APHRODITE_BUILD_URL": "https://buildkite.example/aphrodite/builds/1",
         "APHRODITE_IMAGE_TAG": "aphrodite/aphrodite-openai:v0.20.0-cu130-ubuntu2404",
     }
-    expected_tag = (
-        "public.ecr.aws/q9t5s3a7/aphrodite-release-repo:"
-        f"abc123-{os.uname().machine}-cu130-ubuntu2404"
-    )
+    expected_tag = f"public.ecr.aws/q9t5s3a7/aphrodite-release-repo:abc123-{os.uname().machine}-cu130-ubuntu2404"
     assert option_values(args, "--tag") == [expected_tag]
 
 
@@ -84,10 +81,7 @@ def test_nightly_metadata_args_fall_back_to_pipeline_slug() -> None:
         "APHRODITE_BUILD_URL": "https://buildkite.example/aphrodite/builds/2",
         "APHRODITE_IMAGE_TAG": "aphrodite/aphrodite-openai:nightly-def456-ubuntu2404",
     }
-    expected_tag = (
-        "public.ecr.aws/q9t5s3a7/aphrodite-release-repo:"
-        f"def456-{os.uname().machine}-ubuntu2404"
-    )
+    expected_tag = f"public.ecr.aws/q9t5s3a7/aphrodite-release-repo:def456-{os.uname().machine}-ubuntu2404"
     assert option_values(args, "--tag") == [expected_tag]
 
 
@@ -150,3 +144,16 @@ def test_aphrodite_openai_image_embeds_metadata_contract() -> None:
         'ai.aphrodite.image.tag="${APHRODITE_IMAGE_TAG}"',
     ):
         assert expected in dockerfile
+
+
+def test_rocm_export_image_includes_docker_metadata_inputs() -> None:
+    dockerfile = (REPO_ROOT / "docker" / "Dockerfile.rocm").read_text()
+
+    for build_stage in ("build_aphrodite", "build_aphrodite_wheel_release"):
+        for expected in (
+            f"COPY --from={build_stage} ${{COMMON_WORKDIR}}/aphrodite/docker/Dockerfile /docker/Dockerfile",
+            f"COPY --from={build_stage} ${{COMMON_WORKDIR}}/aphrodite/docker/Dockerfile.cpu /docker/Dockerfile.cpu",
+            f"COPY --from={build_stage} ${{COMMON_WORKDIR}}/aphrodite/docker/Dockerfile.rocm /docker/",
+            f"COPY --from={build_stage} ${{COMMON_WORKDIR}}/aphrodite/docker/docker-bake.hcl /docker/docker-bake.hcl",
+        ):
+            assert expected in dockerfile
