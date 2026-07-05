@@ -293,10 +293,7 @@ class Platform:
         try:
             return int(device_id)
         except ValueError as e:
-            raise ValueError(
-                f"Non-integer device ID {device_id!r} is not supported by "
-                f"{cls.device_name}."
-            ) from e
+            raise ValueError(f"Non-integer device ID {device_id!r} is not supported by {cls.device_name}.") from e
 
     @classmethod
     def device_id_to_physical_device_id(cls, device_id: int):
@@ -318,10 +315,7 @@ class Platform:
         # Treat empty device control env var as unset. This is a valid
         # configuration in Ray setups where the engine is launched in
         # a CPU-only placement group located on a GPU node.
-        if (
-            cls.device_control_env_var in os.environ
-            and os.environ[cls.device_control_env_var] != ""
-        ):
+        if cls.device_control_env_var in os.environ and os.environ[cls.device_control_env_var] != "":
             device_ids = os.environ[cls.device_control_env_var].split(",")
             physical_device_id = device_ids[device_id]
             return cls.device_control_id_to_physical_device_id(physical_device_id)
@@ -343,8 +337,7 @@ class Platform:
             return physical_device_id
 
         visible_physical_device_ids = [
-            cls.device_control_id_to_physical_device_id(physical_id)
-            for physical_id in device_control_env.split(",")
+            cls.device_control_id_to_physical_device_id(physical_id) for physical_id in device_control_env.split(",")
         ]
         if physical_device_id not in visible_physical_device_ids:
             raise RuntimeError(
@@ -372,9 +365,7 @@ class Platform:
                 f"visible device ordinal {device_id} is out of range for "
                 f"{cls.device_control_env_var}={device_control_env}"
             )
-        return cls.device_control_id_to_physical_device_id(
-            visible_device_ids[device_id]
-        )
+        return cls.device_control_id_to_physical_device_id(visible_device_ids[device_id])
 
     @classmethod
     def import_kernels(cls) -> None:
@@ -428,9 +419,7 @@ class Platform:
             logger.info_once(f"Using backend {backend} for vit attention")
             return backend
 
-        logger.info_once(
-            f"Using default backend {AttentionBackendEnum.TORCH_SDPA} for vit attention"
-        )
+        logger.info_once(f"Using default backend {AttentionBackendEnum.TORCH_SDPA} for vit attention")
         return AttentionBackendEnum.TORCH_SDPA
 
     @classmethod
@@ -528,8 +517,7 @@ class Platform:
         (e.g. pynvml for CUDA).
         """
         raise NotImplementedError(
-            "APHRODITE_GPU_NIC_PCIE_MAPPING is not supported on the "
-            f"current platform ({cls.device_name})"
+            f"APHRODITE_GPU_NIC_PCIE_MAPPING is not supported on the current platform ({cls.device_name})"
         )
 
     @classmethod
@@ -555,9 +543,7 @@ class Platform:
         raise NotImplementedError
 
     @classmethod
-    def pre_register_and_update(
-        cls, parser: FlexibleArgumentParser | None = None
-    ) -> None:
+    def pre_register_and_update(cls, parser: FlexibleArgumentParser | None = None) -> None:
         """
         Do some pre-registration or update action for the current platform.
 
@@ -598,9 +584,7 @@ class Platform:
         pass
 
     @classmethod
-    def _find_non_ssm_backend(
-        cls, aphrodite_config: "AphroditeConfig"
-    ) -> "type[AttentionBackend] | None":
+    def _find_non_ssm_backend(cls, aphrodite_config: "AphroditeConfig") -> "type[AttentionBackend] | None":
         """Find the first non-SSM attention backend from model layers."""
         from aphrodite.config.aphrodite import get_layers_from_aphrodite_config
         from aphrodite.model_executor.layers.attention_layer_base import (
@@ -623,8 +607,8 @@ class Platform:
         Ensure block_size is compatible with the attention backend.
         For hybrid models, also aligns block_size with mamba page sizes.
         """
-        from aphrodite.config.cache import CacheConfig
         from aphrodite.config.aphrodite import set_current_aphrodite_config
+        from aphrodite.config.cache import CacheConfig
 
         cache_config = aphrodite_config.cache_config
         model_config = aphrodite_config.model_config
@@ -640,9 +624,7 @@ class Platform:
         # Phase 1: Pick block size from backend (skip if user set --block-size)
         if not cache_config.user_specified_block_size:
             with set_current_aphrodite_config(aphrodite_config):
-                preferred = backend_cls.get_preferred_block_size(
-                    CacheConfig.DEFAULT_BLOCK_SIZE
-                )
+                preferred = backend_cls.get_preferred_block_size(CacheConfig.DEFAULT_BLOCK_SIZE)
             if preferred != CacheConfig.DEFAULT_BLOCK_SIZE:
                 logger.info(
                     "Setting kv cache block size to %d for %s backend.",
@@ -655,6 +637,87 @@ class Platform:
         # (may override user settings).
         if model_config.is_hybrid:
             cls._align_hybrid_block_size(aphrodite_config, backend_cls)
+
+        # Phase 3: Align block/page sizes when multiple KV dtypes share the
+        # block pool (for example, nvfp4 primary plus unquantized skip layers).
+        # This may override the user's --block-size.
+        if cache_config.kv_cache_dtype_skip_layers:
+            cls._align_heterogeneous_kv_block_size(aphrodite_config, backend_cls)
+
+    @classmethod
+    def _align_heterogeneous_kv_block_size(
+        cls,
+        aphrodite_config: "AphroditeConfig",
+        backend_cls: "type[AttentionBackend]",
+    ) -> None:
+        """Align block size when several KV dtypes share one block pool."""
+        from aphrodite.config.aphrodite import set_current_aphrodite_config
+        from aphrodite.utils.math_utils import cdiv
+        from aphrodite.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
+        from aphrodite.v1.attention.backend import MultipleOf
+        from aphrodite.v1.kv_cache_interface import FullAttentionSpec, get_kv_quant_mode
+
+        cache_config = aphrodite_config.cache_config
+        model_config = aphrodite_config.model_config
+        parallel_config = aphrodite_config.parallel_config
+        if not model_config:
+            return
+
+        def per_token_page_bytes(dtype: "torch.dtype", cache_dtype: str) -> int:
+            return FullAttentionSpec(
+                block_size=1,
+                num_kv_heads=model_config.get_num_kv_heads(parallel_config),
+                head_size=model_config.get_head_size(),
+                dtype=dtype,
+                kv_quant_mode=get_kv_quant_mode(cache_dtype),
+            ).page_size_bytes
+
+        primary_dtype = (
+            STR_DTYPE_TO_TORCH_DTYPE[cache_config.cache_dtype]
+            if cache_config.cache_dtype != "auto"
+            else model_config.dtype
+        )
+        primary_page = per_token_page_bytes(primary_dtype, cache_config.cache_dtype)
+
+        padded_pages: list[int] = []
+        if cache_config.kv_cache_dtype_skip_layers:
+            padded_pages.append(per_token_page_bytes(model_config.dtype, "auto"))
+        if not padded_pages:
+            return
+
+        largest_padded_page = max(padded_pages)
+        assert largest_padded_page >= primary_page, (
+            f"padded-spec per-token page ({largest_padded_page}B) < primary "
+            f"({primary_page}B); a higher-precision padded spec must not be "
+            "smaller than the quantized primary."
+        )
+        if largest_padded_page == primary_page:
+            return
+
+        with set_current_aphrodite_config(aphrodite_config):
+            supported = backend_cls.get_supported_kernel_block_sizes()
+        smallest_kernel_block = min(s.base if isinstance(s, MultipleOf) else s for s in supported)
+        block_alignment = max(smallest_kernel_block, cache_config.block_size)
+
+        required_page = max(
+            largest_padded_page * smallest_kernel_block,
+            cache_config.mamba_page_size_padded or 0,
+        )
+
+        primary_block_size = block_alignment * cdiv(required_page, block_alignment * primary_page)
+        if cache_config.block_size < primary_block_size:
+            cache_config.block_size = primary_block_size
+            logger.info(
+                "Setting attention block size to %d tokens so the quantized "
+                "primary KV page covers the higher-precision padded-spec page.",
+                primary_block_size,
+            )
+
+        shared_page = cache_config.block_size * primary_page
+        if cache_config.kv_cache_dtype_skip_layers:
+            cache_config.skip_page_size_padded = shared_page
+        if cache_config.mamba_page_size_padded is not None:
+            cache_config.mamba_page_size_padded = shared_page
 
     @classmethod
     def _align_hybrid_block_size(
@@ -711,9 +774,7 @@ class Platform:
             )
             from aphrodite.v1.kv_cache_interface import TQFullAttentionSpec
 
-            tq_cfg = TurboQuantConfig.from_cache_dtype(
-                cache_config.cache_dtype, model_config.get_head_size()
-            )
+            tq_cfg = TurboQuantConfig.from_cache_dtype(cache_config.cache_dtype, model_config.get_head_size())
             tq_page = TQFullAttentionSpec(
                 block_size=1,
                 num_kv_heads=model_config.get_num_kv_heads(parallel_config),
@@ -760,19 +821,12 @@ class Platform:
             return
 
         # mamba_block_size here should either be user specified value or None
-        mamba_block_size = (
-            cache_config.mamba_block_size
-            if cache_config.user_specified_mamba_block_size
-            else None
-        )
+        mamba_block_size = cache_config.mamba_block_size if cache_config.user_specified_mamba_block_size else None
 
         # Get kernel block alignment from the backend's supported sizes
         with set_current_aphrodite_config(aphrodite_config):
             kernel_block_alignment_size = max(
-                min(
-                    s.base if isinstance(s, MultipleOf) else s
-                    for s in backend_cls.get_supported_kernel_block_sizes()
-                ),
+                min(s.base if isinstance(s, MultipleOf) else s for s in backend_cls.get_supported_kernel_block_sizes()),
                 cache_config.block_size,
             )
 
@@ -798,8 +852,7 @@ class Platform:
         if cache_config.block_size < attn_block_size:
             cache_config.block_size = attn_block_size
             logger.info(
-                "Setting attention block size to %d tokens "
-                "to ensure that attention page size is >= mamba page size.",
+                "Setting attention block size to %d tokens to ensure that attention page size is >= mamba page size.",
                 attn_block_size,
             )
 
@@ -813,14 +866,9 @@ class Platform:
         if attn_page_size == mamba_page_size:
             return
 
-        if (
-            cache_config.mamba_page_size_padded is None
-            or cache_config.mamba_page_size_padded != attn_page_size
-        ):
+        if cache_config.mamba_page_size_padded is None or cache_config.mamba_page_size_padded != attn_page_size:
             cache_config.mamba_page_size_padded = attn_page_size
-            mamba_padding_pct = (
-                100 * (attn_page_size - mamba_page_size) / mamba_page_size
-            )
+            mamba_padding_pct = 100 * (attn_page_size - mamba_page_size) / mamba_page_size
             logger.info(
                 "Padding mamba page size by %.2f%% to ensure "
                 "that mamba page size and attention page size are "
@@ -853,9 +901,7 @@ class Platform:
         Verify whether the quantization is supported by the current platform.
         """
         if cls.supported_quantization and quant not in cls.supported_quantization:
-            raise ValueError(
-                f"{quant} quantization is currently not supported in {cls.device_name}."
-            )
+            raise ValueError(f"{quant} quantization is currently not supported in {cls.device_name}.")
 
     @classmethod
     def get_cpu_architecture(cls) -> CpuArchEnum:
@@ -886,17 +932,12 @@ class Platform:
             # Pinned memory support under WSL depends on the vendor and driver
             # version. Conservative default: return False. Platform subclasses
             # that can verify support (e.g. CudaPlatformBase) override this.
-            logger.warning_once(
-                "Using 'pin_memory=False' as WSL is detected. "
-                "This may slow down performance."
-            )
+            logger.warning_once("Using 'pin_memory=False' as WSL is detected. This may slow down performance.")
             return False
         return True
 
     @classmethod
-    def get_current_memory_usage(
-        cls, device: torch.types.Device | None = None
-    ) -> float:
+    def get_current_memory_usage(cls, device: torch.types.Device | None = None) -> float:
         """
         Return the memory usage in bytes.
         """
@@ -1162,14 +1203,10 @@ class Platform:
         Get the number of compute units for the current platform.
         (NVIDIA SM / AMD CU / Intel EU)
         """
-        raise NotImplementedError(
-            "num_compute_units is not implemented for the current platform."
-        )
+        raise NotImplementedError("num_compute_units is not implemented for the current platform.")
 
     @classmethod
-    def get_default_ir_op_priority(
-        cls, aphrodite_config: "AphroditeConfig"
-    ) -> "IrOpPriorityConfig":
+    def get_default_ir_op_priority(cls, aphrodite_config: "AphroditeConfig") -> "IrOpPriorityConfig":
         """Get the default IR op priority for the current platform."""
         from aphrodite.config.kernel import IrOpPriorityConfig
 
