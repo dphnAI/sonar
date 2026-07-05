@@ -198,6 +198,8 @@ Reference:
 - [Marlin](https://github.com/IST-DASLab/marlin)
 Aphrodite supports runtime quantization of LLMs from FP16 to FP8. This method will either use the hardware support present in NVIDIA GPUs (if Ada Lovelace or higher), or will use Marlin kernels for older GPUs (Ampere).
 
+On XPU, non-block FP8 scaled-mm linear layers default to W8A16; setting `--linear-backend xpu` forces W8A8. Use `--linear-backend xpu_woq` to explicitly select weight-only quantization (W8A16).
+
 To load a model with FP8 quantization, follow these steps:
 
 ```sh

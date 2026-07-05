@@ -78,7 +78,6 @@ def _create_mock_engine():
     mock_engine.model_config = MockModelConfig()
     mock_engine.input_processor = MagicMock()
 
-    # renderer is accessed by OpenAIServing.__init__ and serving.py
     mock_renderer = MagicMock()
     mock_renderer.tokenizer = get_tokenizer(MODEL_NAME)
     mock_engine.renderer = mock_renderer
@@ -97,10 +96,7 @@ def _create_serving(mock_engine) -> ServingGenerativeScoring:
 
 def _create_mock_request_output(logprobs_dict: dict[int, float]) -> RequestOutput:
     """Create a mock RequestOutput with specified logprobs."""
-    logprobs_with_objs = {
-        tid: Logprob(logprob=lp, rank=i + 1)
-        for i, (tid, lp) in enumerate(logprobs_dict.items())
-    }
+    logprobs_with_objs = {tid: Logprob(logprob=lp, rank=i + 1) for i, (tid, lp) in enumerate(logprobs_dict.items())}
     completion_output = CompletionOutput(
         index=0,
         text="",
@@ -182,14 +178,10 @@ class TestProbabilityComputation:
         ],
         ids=["softmax_basic", "softmax_extreme_values", "true_probs"],
     )
-    def test_compute_probabilities(
-        self, label_logprobs, apply_softmax, should_sum_to_one
-    ):
+    def test_compute_probabilities(self, label_logprobs, apply_softmax, should_sum_to_one):
         """Test probability computation for softmax and true probability modes."""
         serving = ServingGenerativeScoring.__new__(ServingGenerativeScoring)
-        probs = serving._compute_probabilities(
-            label_logprobs, apply_softmax=apply_softmax
-        )
+        probs = serving._compute_probabilities(label_logprobs, apply_softmax=apply_softmax)
 
         # Verify sum behavior
         total = sum(probs.values())
@@ -281,9 +273,7 @@ class TestPromptBuilding:
             label_token_ids=[500, 501],
             item_first=item_first,
         )
-        engine_inputs, _ = await serving._build_prompts(
-            request, MagicMock(), max_model_len=4096
-        )
+        engine_inputs, _ = await serving._build_prompts(request, MagicMock(), max_model_len=4096)
 
         for i, exp in enumerate(expected):
             assert engine_inputs[i]["prompt_token_ids"] == exp

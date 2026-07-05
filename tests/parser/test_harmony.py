@@ -7,7 +7,6 @@ from collections.abc import Sequence
 import pytest
 from openai_harmony import (
     Conversation,
-    HarmonyError,
     Message,
     RenderConversationConfig,
     Role,
@@ -49,6 +48,15 @@ def chat_request():
         model="openai/gpt-oss-20b",
         messages=[{"role": "user", "content": "Hello"}],
     )
+
+
+@pytest.fixture
+def malformed_msgs_str() -> list[str]:
+    return [
+        "<|channel|>analysis<|message|>thinking<|end|>",
+        "<|start|>assistant<|channel|>commentary<|message|>thinking<|end|>",
+        '<|start|>assistant<|channel|>final {"answer": "hi"}<|return|>',
+    ]
 
 
 def encode_output(harmony_str: str) -> list[int]:
@@ -101,21 +109,13 @@ def tool_call_tuples(tool_calls: list[FunctionCall] | None) -> list[tuple[str, s
 def tool_call_headers(delta_message) -> list:
     if delta_message is None or not delta_message.tool_calls:
         return []
-    return [
-        tool_call
-        for tool_call in delta_message.tool_calls
-        if tool_call.function and tool_call.function.name
-    ]
+    return [tool_call for tool_call in delta_message.tool_calls if tool_call.function and tool_call.function.name]
 
 
 def tool_call_payloads(delta_message) -> list:
     if delta_message is None or not delta_message.tool_calls:
         return []
-    return [
-        tool_call
-        for tool_call in delta_message.tool_calls
-        if tool_call.function and tool_call.function.arguments
-    ]
+    return [tool_call for tool_call in delta_message.tool_calls if tool_call.function and tool_call.function.arguments]
 
 
 def tool_call_entries(delta_message) -> list[tuple[int, str | None, str | None]]:
@@ -131,13 +131,20 @@ def tool_call_entries(delta_message) -> list[tuple[int, str | None, str | None]]
     ]
 
 
+def assert_parser_is_reset(harmony_parser: HarmonyParser):
+    assert harmony_parser._parser is None
+    assert harmony_parser._num_processed_messages == 0
+    assert harmony_parser._current_message_tokens == []
+
+
 class TestFlush:
     def test_flush(self, harmony_parser):
-        harmony_parser.process_chunk(
-            encode_output("<|channel|>analysis<|message|>Think")
-        )
+        harmony_parser.process_chunk(encode_output("<|channel|>analysis<|message|>Think"))
 
-        flushed = harmony_parser.flush()
+        flushed_segments = harmony_parser.flush()
+        assert flushed_segments is not None
+        assert len(flushed_segments) == 1
+        flushed = flushed_segments[0]
 
         assert flushed is not None
         assert flushed.channel == "analysis"
@@ -145,15 +152,27 @@ class TestFlush:
         assert flushed.delta == ""
         assert flushed.completed_message is not None
         assert get_text(flushed.completed_message) == "Think"
-        assert harmony_parser._parser is None
+        assert_parser_is_reset(harmony_parser)
 
-    def test_flush_raises_and_resets_on_non_terminal_eos(self, harmony_parser):
-        harmony_parser.process_chunk(encode_output("<|channel|>analysis"))
+    def test_flush_recovers_invalid_output(self, harmony_parser, malformed_msgs_str):
+        for msg_str in malformed_msgs_str[:-1]:
+            chunk = harmony_parser.process_chunk(encode_output(msg_str))
+            assert "".join(segment.delta for segment in chunk.segments) == "thinking"
 
-        with pytest.raises(HarmonyError):
-            harmony_parser.flush()
+        last_msg_str = malformed_msgs_str[-1]
+        harmony_parser.process_chunk(encode_output(last_msg_str))
+        flushed_segments = harmony_parser.flush()
+        assert len(flushed_segments) == 2
+        delta_segment = flushed_segments[0]
+        message_segment = flushed_segments[1]
 
-        assert harmony_parser._parser is None
+        assert delta_segment.channel == "final"
+        assert delta_segment.recipient is None
+        assert delta_segment.delta == last_msg_str
+        assert message_segment.channel == "final"
+        assert message_segment.recipient is None
+        assert get_text(message_segment.completed_message) == last_msg_str
+        assert_parser_is_reset(harmony_parser)
 
 
 class TestParse:
@@ -212,12 +231,8 @@ class TestParse:
         ],
     )
     @pytest.mark.parametrize("tool_channel", ["commentary", "analysis"])
-    def test_single_tool_call(
-        self, harmony_parser, chat_request, tool_args, tool_channel
-    ):
-        prompt = [
-            Message.from_role_and_content(Role.USER, "What is the weather in Tokyo?")
-        ]
+    def test_single_tool_call(self, harmony_parser, chat_request, tool_args, tool_channel):
+        prompt = [Message.from_role_and_content(Role.USER, "What is the weather in Tokyo?")]
         response = [tool_call("functions.get_current_weather", tool_args, tool_channel)]
 
         reasoning, content, tool_calls = harmony_parser.parse(
@@ -228,16 +243,10 @@ class TestParse:
 
         assert reasoning is None
         assert content is None
-        assert tool_call_tuples(tool_calls) == [
-            ("get_current_weather", json.dumps({"location": "Tokyo"}))
-        ]
+        assert tool_call_tuples(tool_calls) == [("get_current_weather", json.dumps({"location": "Tokyo"}))]
 
     def test_multiple_tool_calls_varied_formats(self, harmony_parser, chat_request):
-        prompt = [
-            Message.from_role_and_content(
-                Role.USER, "What is the weather in Tokyo based on where I'm at?"
-            )
-        ]
+        prompt = [Message.from_role_and_content(Role.USER, "What is the weather in Tokyo based on where I'm at?")]
         response = [
             tool_call("functions.get_current_weather", '{"location": "Tokyo"}'),
             tool_call("functions.get_user_location", '{"location": "Tokyo"}'),
@@ -277,9 +286,7 @@ class TestParse:
             model_output_token_ids=get_model_output_tokens(prompt, response),
         )
 
-        assert tool_call_tuples(tool_calls) == [
-            ("get_current_weather", json.dumps({"location": "Tokyo"}))
-        ]
+        assert tool_call_tuples(tool_calls) == [("get_current_weather", json.dumps({"location": "Tokyo"}))]
 
     def test_multiple_tool_calls_bare_recipients(self, harmony_parser, chat_request):
         prompt = [Message.from_role_and_content(Role.USER, "Use both tools.")]
@@ -326,9 +333,7 @@ class TestParse:
             model_output_token_ids=get_model_output_tokens(prompt, response),
         )
 
-        assert tool_call_tuples(tool_calls) == [
-            ("math.sum", json.dumps({"a": 2, "b": 3}))
-        ]
+        assert tool_call_tuples(tool_calls) == [("math.sum", json.dumps({"a": 2, "b": 3}))]
 
     def test_tool_calls_with_final_content(self, harmony_parser, chat_request):
         prompt = [Message.from_role_and_content(Role.USER, "What is the weather?")]
@@ -346,9 +351,7 @@ class TestParse:
 
         assert reasoning == "User asked about the weather."
         assert content == "This tool call will get the weather."
-        assert tool_call_tuples(tool_calls) == [
-            ("get_current_weather", json.dumps({"location": "Tokyo"}))
-        ]
+        assert tool_call_tuples(tool_calls) == [("get_current_weather", json.dumps({"location": "Tokyo"}))]
 
     # Raw/truncated Harmony output streams.
 
@@ -356,29 +359,25 @@ class TestParse:
         reasoning, content, tool_calls = harmony_parser.parse(
             "",
             chat_request,
-            model_output_token_ids=encode_output(
-                "<|channel|>final<|message|>I'm in the middle of answering"
-            ),
+            model_output_token_ids=encode_output("<|channel|>final<|message|>I'm in the middle of answering"),
         )
 
         assert reasoning is None
         assert content == "I'm in the middle of answering"
         assert tool_calls is None
-        assert harmony_parser._parser is None
+        assert_parser_is_reset(harmony_parser)
 
     def test_interrupted_reasoning_first_message(self, harmony_parser, chat_request):
         reasoning, content, tool_calls = harmony_parser.parse(
             "",
             chat_request,
-            model_output_token_ids=encode_output(
-                "<|channel|>analysis<|message|>I'm in the middle of thinking"
-            ),
+            model_output_token_ids=encode_output("<|channel|>analysis<|message|>I'm in the middle of thinking"),
         )
 
         assert reasoning == "I'm in the middle of thinking"
         assert content is None
         assert tool_calls is None
-        assert harmony_parser._parser is None
+        assert_parser_is_reset(harmony_parser)
 
     def test_truncated_output(self, harmony_parser, chat_request):
         reasoning, content, tool_calls = harmony_parser.parse(
@@ -394,24 +393,21 @@ class TestParse:
         assert reasoning == "I'm thinking."
         assert content == "I'm in the middle of answering"
         assert tool_calls is None
-        assert harmony_parser._parser is None
+        assert_parser_is_reset(harmony_parser)
 
-    def test_malformed_final_recovers_raw_content(self, harmony_parser, chat_request):
-        raw_output = (
-            "<|channel|>analysis<|message|>thinking<|end|>"
-            '<|start|>assistant<|channel|>final {"answer": "hi"}<|return|>'
-        )
+    def test_malformed_msgs_recovers_raw_content(self, harmony_parser, chat_request, malformed_msgs_str):
+        combined_output = "".join(malformed_msgs_str)
 
         reasoning, content, tool_calls = harmony_parser.parse(
-            raw_output,
+            "",
             chat_request,
-            model_output_token_ids=encode_output(raw_output),
+            model_output_token_ids=encode_output(combined_output),
         )
 
-        assert content == raw_output
-        assert reasoning is None
+        assert reasoning == "thinking"
+        assert content == "thinking\n" + malformed_msgs_str[-1]
         assert tool_calls is None
-        assert harmony_parser._parser is None
+        assert_parser_is_reset(harmony_parser)
 
     @pytest.mark.parametrize(
         ("harmony_str", "expected_content"),
@@ -459,9 +455,7 @@ class TestParse:
 
         assert reasoning is None
         assert content == "Let me check the weather."
-        assert tool_call_tuples(tool_calls) == [
-            ("get_weather", json.dumps({"location": "SF"}))
-        ]
+        assert tool_call_tuples(tool_calls) == [("get_weather", json.dumps({"location": "SF"}))]
 
 
 class TestParseDelta:
@@ -476,9 +470,7 @@ class TestParseDelta:
         )
         second_delta = parser.parse_delta(
             delta_text="",
-            delta_token_ids=encode_output(
-                "<|end|><|start|>assistant<|channel|>final<|message|>Answer"
-            ),
+            delta_token_ids=encode_output("<|end|><|start|>assistant<|channel|>final<|message|>Answer"),
             request=chat_request,
             finished=True,
         )
@@ -489,7 +481,7 @@ class TestParseDelta:
         assert second_delta is not None
         assert second_delta.content == "Answer"
         assert second_delta.reasoning is None
-        assert parser._parser is None
+        assert_parser_is_reset(parser)
 
     def test_multi_token(self, gpt_oss_tokenizer, chat_request):
         parser = HarmonyParser(gpt_oss_tokenizer)
@@ -506,30 +498,34 @@ class TestParseDelta:
         assert delta.reasoning is None
         assert not delta.tool_calls
 
-    def test_malformed_final_recovers_raw_content(
-        self, gpt_oss_tokenizer, chat_request
-    ):
+    def test_malformed_msgs_recovers_raw_content(self, gpt_oss_tokenizer, chat_request, malformed_msgs_str):
         parser = HarmonyParser(gpt_oss_tokenizer)
 
-        delta = parser.parse_delta(
-            delta_text='final {"answer": "hi"}',
-            delta_token_ids=encode_output(
-                '<|channel|>final {"answer": "hi"}<|return|>'
-            ),
+        for msg_str in malformed_msgs_str[:-1]:
+            delta = parser.parse_delta(
+                delta_text="",
+                delta_token_ids=encode_output(msg_str),
+                request=chat_request,
+                finished=False,
+            )
+            assert delta.reasoning or delta.content == "thinking"
+            assert not delta.tool_calls
+
+        last_delta = parser.parse_delta(
+            delta_text="",
+            delta_token_ids=encode_output(malformed_msgs_str[-1]),
             request=chat_request,
             finished=True,
         )
 
-        assert delta is not None
-        assert delta.content == 'final {"answer": "hi"}'
-        assert delta.reasoning is None
-        assert not delta.tool_calls
-        assert parser._parser is None
+        assert last_delta is not None
+        assert last_delta.content == malformed_msgs_str[-1]
+        assert last_delta.reasoning is None
+        assert not last_delta.tool_calls
+        assert_parser_is_reset(parser)
 
     @pytest.mark.parametrize("tool_channel", ["commentary", "analysis"])
-    def test_tool_call_split_across_deltas(
-        self, gpt_oss_tokenizer, chat_request, tool_channel
-    ):
+    def test_tool_call_split_across_deltas(self, gpt_oss_tokenizer, chat_request, tool_channel):
         parser = HarmonyParser(gpt_oss_tokenizer)
 
         first_delta = parser.parse_delta(
@@ -566,9 +562,7 @@ class TestParseDelta:
 
         delta = parser.parse_delta(
             delta_text="",
-            delta_token_ids=encode_output(
-                "<|channel|>commentary<|message|>I'll search for that"
-            ),
+            delta_token_ids=encode_output("<|channel|>commentary<|message|>I'll search for that"),
             request=chat_request,
             finished=False,
         )
@@ -603,12 +597,8 @@ class TestParseDelta:
             finished=False,
         )
 
-        assert [tool.function.name for tool in tool_call_headers(delta_a)] == [
-            "get_weather"
-        ]
-        assert [tool.function.name for tool in tool_call_headers(delta_b)] == [
-            "get_time"
-        ]
+        assert [tool.function.name for tool in tool_call_headers(delta_a)] == ["get_weather"]
+        assert [tool.function.name for tool in tool_call_headers(delta_b)] == ["get_time"]
         assert {tool.index for tool in delta_a.tool_calls} == {0}
         assert {tool.index for tool in delta_b.tool_calls} == {0}
 
@@ -695,9 +685,7 @@ class TestParseDelta:
 
         assert [tool.index for tool in tool_call_headers(first_delta)] == [0]
         assert [tool.index for tool in tool_call_headers(second_delta)] == [1]
-        assert [tool.function.name for tool in tool_call_headers(second_delta)] == [
-            "get_time"
-        ]
+        assert [tool.function.name for tool in tool_call_headers(second_delta)] == ["get_time"]
 
     def test_multi_tool_interleaved(self, gpt_oss_tokenizer, chat_request):
         parser = HarmonyParser(gpt_oss_tokenizer)
@@ -757,31 +745,21 @@ class TestProcessChunk:
         assert result.reasoning_token_count == 0
 
     def test_single_channel(self, harmony_parser):
-        result = harmony_parser.process_chunk(
-            encode_output("<|channel|>final<|message|>Hello")
-        )
+        result = harmony_parser.process_chunk(encode_output("<|channel|>final<|message|>Hello"))
 
-        assert [
-            (s.channel, s.recipient, s.delta) for s in result.segments if s.delta
-        ] == [("final", None, "Hello")]
+        assert [(s.channel, s.recipient, s.delta) for s in result.segments if s.delta] == [("final", None, "Hello")]
 
     def test_constrained_output_segment_recipient_normalized(self, harmony_parser):
         result = harmony_parser.process_chunk(
-            encode_output(
-                '<|channel|>final <|constrain|>json<|message|>{"result":true}<|end|>'
-            )
+            encode_output('<|channel|>final <|constrain|>json<|message|>{"result":true}<|end|>')
         )
 
         content_segments = [segment for segment in result.segments if segment.delta]
         assert all(segment.channel == "final" for segment in content_segments)
         assert all(segment.recipient is None for segment in content_segments)
-        assert (
-            "".join(segment.delta for segment in content_segments) == '{"result":true}'
-        )
+        assert "".join(segment.delta for segment in content_segments) == '{"result":true}'
         completed_messages = [
-            segment.completed_message
-            for segment in result.segments
-            if segment.completed_message is not None
+            segment.completed_message for segment in result.segments if segment.completed_message is not None
         ]
         assert len(completed_messages) == 1
         assert completed_messages[0].recipient is None
@@ -789,14 +767,11 @@ class TestProcessChunk:
     def test_cross_channel(self, harmony_parser):
         result = harmony_parser.process_chunk(
             encode_output(
-                "<|channel|>analysis<|message|>Think<|end|>"
-                "<|start|>assistant<|channel|>final<|message|>Answer"
+                "<|channel|>analysis<|message|>Think<|end|><|start|>assistant<|channel|>final<|message|>Answer"
             )
         )
 
-        assert [
-            (s.channel, s.recipient, s.delta) for s in result.segments if s.delta
-        ] == [
+        assert [(s.channel, s.recipient, s.delta) for s in result.segments if s.delta] == [
             ("analysis", None, "Think"),
             ("final", None, "Answer"),
         ]
@@ -804,19 +779,13 @@ class TestProcessChunk:
     def test_multi_boundary(self, harmony_parser):
         result = harmony_parser.process_chunk(
             encode_output(
-                "<|channel|>analysis<|message|>One<|end|>"
-                "<|start|>assistant<|channel|>final<|message|>Two<|end|>"
+                "<|channel|>analysis<|message|>One<|end|><|start|>assistant<|channel|>final<|message|>Two<|end|>"
             )
         )
 
-        boundary_segments = [
-            segment
-            for segment in result.segments
-            if segment.completed_message is not None
-        ]
+        boundary_segments = [segment for segment in result.segments if segment.completed_message is not None]
         assert [
-            (segment.completed_message.channel, get_text(segment.completed_message))
-            for segment in boundary_segments
+            (segment.completed_message.channel, get_text(segment.completed_message)) for segment in boundary_segments
         ] == [
             ("analysis", "One"),
             ("final", "Two"),

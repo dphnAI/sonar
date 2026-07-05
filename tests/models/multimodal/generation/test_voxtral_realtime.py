@@ -1,7 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-import contextlib
-
 import pytest
 import pytest_asyncio
 from mistral_common.protocol.transcription.request import (
@@ -12,7 +10,7 @@ from mistral_common.tokens.tokenizers.audio import Audio
 from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
 from mistral_common.tokens.tokenizers.tekken import SpecialTokenPolicy
 
-from aphrodite import LLM, EngineArgs, SamplingParams
+from aphrodite import LLM, SamplingParams
 from aphrodite.assets.audio import AudioAsset
 from aphrodite.engine.arg_utils import AsyncEngineArgs
 from aphrodite.utils.math_utils import cdiv
@@ -78,7 +76,9 @@ def assert_encoder_kv_cache_spec(engine: LLM) -> None:
     assert isinstance(spec, SlidingWindowSpec)
     assert spec.block_size == 16
     assert spec.num_kv_heads == 128
-    assert spec.sliding_window == cdiv(750, 4) == 188
+    # cdiv(750, 4) == 188 pooled tokens cover the model's window; the extra
+    # +1 is an eviction margin (see whisper_causal.py get_kv_cache_spec).
+    assert spec.sliding_window == cdiv(750, 4) + 1 == 189
     assert (
         spec.max_admission_blocks_per_request(
             max_num_batched_tokens=1,
@@ -98,77 +98,90 @@ def tokenizer() -> MistralTokenizer:
     return MistralTokenizer.from_hf_hub(MODEL_NAME)
 
 
-@pytest.fixture
-def engine(monkeypatch: pytest.MonkeyPatch):
-    # Disable multiprocessing allows us to access model executor from LLM engine
-    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
-    engine_args = EngineArgs(**ENGINE_CONFIG)
-    llm = LLM.from_engine_args(engine_args)
-    try:
-        yield llm
-    finally:
-        with contextlib.suppress(Exception):
-            llm.llm_engine.engine_core.shutdown()
-        import torch
-
-        torch.accelerator.empty_cache()
-
-
 @pytest_asyncio.fixture
 async def async_engine():
+    gpu_memory_utilization = ENGINE_CONFIG.get("gpu_memory_utilization", 0.9)
+    from aphrodite.platforms import current_platform
+
+    if current_platform.is_rocm():
+        from tests.utils import wait_for_rocm_memory_to_settle
+
+        wait_for_rocm_memory_to_settle(threshold_ratio=1.0 - gpu_memory_utilization)
+
     engine_args = AsyncEngineArgs(**ENGINE_CONFIG)
     llm = AsyncLLM.from_engine_args(engine_args)
     try:
         yield llm
     finally:
-        llm.shutdown()
+        shutdown_timeout = 60.0 if current_platform.is_rocm() else None
+        llm.shutdown(timeout=shutdown_timeout)
+        del llm
+        import torch
+
+        torch._dynamo.reset()
+        from aphrodite.distributed import cleanup_dist_env_and_memory
+
+        cleanup_dist_env_and_memory()
+        from tests.utils import wait_for_rocm_memory_to_settle
+
+        wait_for_rocm_memory_to_settle(threshold_ratio=1.0 - gpu_memory_utilization)
 
 
-def test_voxtral_realtime_forward(audio_assets, tokenizer, engine):
-    assert_encoder_kv_cache_spec(engine)
-    audio_config = tokenizer.instruct_tokenizer.tokenizer.audio
+def test_voxtral_realtime_forward(
+    audio_assets, tokenizer, aphrodite_runner, monkeypatch
+):
+    monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
 
-    def from_file(file_path: str):
-        audio = Audio.from_file(file_path, strict=False)
-        req = TranscriptionRequest(
-            audio=audio.to_base64(audio.format),
-            streaming=StreamingMode.OFFLINE,
-            language=None,
+    aphrodite_kwargs = {**ENGINE_CONFIG}
+    aphrodite_kwargs["model_name"] = aphrodite_kwargs.pop("model")
+
+    with aphrodite_runner(**aphrodite_kwargs) as aphrodite_model:
+        assert_encoder_kv_cache_spec(aphrodite_model.llm)
+        audio_config = tokenizer.instruct_tokenizer.tokenizer.audio
+
+        def from_file(file_path: str):
+            audio = Audio.from_file(file_path, strict=False)
+            req = TranscriptionRequest(
+                audio=audio.to_base64(audio.format),
+                streaming=StreamingMode.OFFLINE,
+                language=None,
+            )
+            tokenized = tokenizer.instruct_tokenizer.encode_transcription(req)
+
+            return (tokenized.tokens, tokenized.audios[0].audio_array)
+
+        tokenized_list = [
+            from_file(audio_asset.get_local_path()) for audio_asset in audio_assets
+        ]
+
+        inputs = []
+        sampling_params = []
+
+        for tokens, audio_array in tokenized_list:
+            num_samples = audio_array.shape[0]
+            max_tokens = audio_config.num_audio_tokens(num_samples) - len(tokens) - 1
+            sampling_params.append(
+                SamplingParams(temperature=0.0, max_tokens=max_tokens)
+            )
+
+            input_dict = {
+                "multi_modal_data": {"audio": [(audio_array, None)]},
+                "prompt_token_ids": tokens,
+            }
+            inputs.append(input_dict)
+
+        outputs = aphrodite_model.llm.generate(
+            inputs,
+            sampling_params=sampling_params,
         )
-        tokenized = tokenizer.instruct_tokenizer.encode_transcription(req)
 
-        return (tokenized.tokens, tokenized.audios[0].audio_array)
-
-    tokenized_list = [
-        from_file(audio_asset.get_local_path()) for audio_asset in audio_assets
-    ]
-
-    inputs = []
-    sampling_params = []
-
-    for tokens, audio_array in tokenized_list:
-        num_samples = audio_array.shape[0]
-        max_tokens = audio_config.num_audio_tokens(num_samples) - len(tokens) - 1
-        sampling_params.append(SamplingParams(temperature=0.0, max_tokens=max_tokens))
-
-        input_dict = {
-            "multi_modal_data": {"audio": [(audio_array, None)]},
-            "prompt_token_ids": tokens,
-        }
-        inputs.append(input_dict)
-
-    outputs = engine.generate(
-        inputs,
-        sampling_params=sampling_params,
-    )
-
-    texts = _normalize([out.outputs[0].text for out in outputs])
-    for i, (got, expected) in enumerate(zip(texts, EXPECTED_TEXT)):
-        assert got == expected, (
-            f"Output mismatch at index {i}:\n"
-            f"  got:      {got!r}\n"
-            f"  expected: {expected!r}"
-        )
+        texts = _normalize([out.outputs[0].text for out in outputs])
+        for i, (got, expected) in enumerate(zip(texts, EXPECTED_TEXT)):
+            assert got == expected, (
+                f"Output mismatch at index {i}:\n"
+                f"  got:      {got!r}\n"
+                f"  expected: {expected!r}"
+            )
 
 
 @pytest.mark.asyncio
@@ -210,15 +223,9 @@ async def test_voxtral_realtime_generator(audio_assets, tokenizer, async_engine)
 
     texts = _normalize(
         [
-            tokenizer.decode(
-                output_tokens, special_token_policy=SpecialTokenPolicy.IGNORE
-            )
+            tokenizer.decode(output_tokens, special_token_policy=SpecialTokenPolicy.IGNORE)
             for output_tokens in output_tokens_list
         ]
     )
     for i, (got, expected) in enumerate(zip(texts, EXPECTED_TEXT)):
-        assert got == expected, (
-            f"Output mismatch at index {i}:\n"
-            f"  got:      {got!r}\n"
-            f"  expected: {expected!r}"
-        )
+        assert got == expected, f"Output mismatch at index {i}:\n  got:      {got!r}\n  expected: {expected!r}"

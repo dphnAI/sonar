@@ -22,13 +22,12 @@ from aphrodite.parser.engine.parser_engine_config import (
     Transition,
 )
 from aphrodite.parser.engine.token_id_scanner import (
+    DROP_TERMINAL,
     LexerInput,
     PreLexedTerminal,
     TextChunk,
     TokenIDScanner,
 )
-
-DROP_TERMINAL = "__DROP__"
 
 
 @dataclass(slots=True)
@@ -50,11 +49,7 @@ def _build_drop_info(
     if not special_tokens:
         return None
 
-    configured_texts = (
-        set(config.token_id_terminals.values())
-        | set(config.terminals.values())
-        | config.preserve_tokens
-    )
+    configured_texts = set(config.token_id_terminals.values()) | set(config.terminals.values()) | config.preserve_tokens
 
     extra_token_ids: dict[int, str] = {}
     drop_texts: set[str] = set()
@@ -146,9 +141,7 @@ class StreamingParserEngine:
             tokenizer,
         )
 
-        self._token_id_terminal_names: frozenset[str] = frozenset(
-            resolved_token_ids.values()
-        )
+        self._token_id_terminal_names: frozenset[str] = frozenset(resolved_token_ids.values())
 
         self._lexer = IncrementalLexer(lexer_shape, content_terminal=CONTENT_TERMINAL)
 
@@ -175,9 +168,7 @@ class StreamingParserEngine:
         resolved token IDs, lexer shape, token text cache) to avoid
         redundant initialization work.
         """
-        self.state = (
-            initial_state if initial_state is not None else self.config.initial_state
-        )
+        self.state = initial_state if initial_state is not None else self.config.initial_state
         self.tool_index = -1
         self._ever_had_token_ids = False
         # DO NOT reset skip_tool_parsing here — callers set it before
@@ -223,9 +214,7 @@ class StreamingParserEngine:
 
         return self._process_scanner_items(scanner_items)
 
-    def _process_scanner_items(
-        self, items: Sequence[LexerInput]
-    ) -> list[SemanticEvent]:
+    def _process_scanner_items(self, items: Sequence[LexerInput]) -> list[SemanticEvent]:
         events: list[SemanticEvent] = []
         for item in items:
             if isinstance(item, PreLexedTerminal):
@@ -266,9 +255,7 @@ class StreamingParserEngine:
                 )
             self.state = ParserState.CONTENT
         elif self.state == ParserState.REASONING:
-            events.append(
-                SemanticEvent(EventType.REASONING_END, tool_index=self.tool_index)
-            )
+            events.append(SemanticEvent(EventType.REASONING_END, tool_index=self.tool_index))
             self.state = ParserState.CONTENT
 
         return events
@@ -331,9 +318,7 @@ class StreamingParserEngine:
                 ]
             content_type = self.config.content_events.get(self.state)
             if content_type is not None:
-                return [
-                    SemanticEvent(content_type, value=value, tool_index=self.tool_index)
-                ]
+                return [SemanticEvent(content_type, value=value, tool_index=self.tool_index)]
             return []
 
         if transition.skip_in_token_id_mode and self._ever_had_token_ids:
@@ -369,11 +354,7 @@ class StreamingParserEngine:
     ) -> list[SemanticEvent]:
         events: list[SemanticEvent] = []
 
-        if (
-            self.state == ParserState.TOOL_ARGS
-            and transition.next_state != ParserState.TOOL_ARGS
-            and self._args_buffer
-        ):
+        if self.state == ParserState.TOOL_ARGS and transition.next_state != ParserState.TOOL_ARGS and self._args_buffer:
             events.append(
                 SemanticEvent(
                     EventType.ARG_VALUE_CHUNK,

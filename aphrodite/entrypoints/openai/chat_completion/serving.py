@@ -19,6 +19,12 @@ from aphrodite.entrypoints.chat_utils import (
     ConversationMessage,
     make_tool_call_id,
 )
+from aphrodite.entrypoints.generate.base.serving import (
+    GenerateBaseServing,
+    GenerationError,
+    clamp_prompt_logprobs,
+    format_token_id_placeholder,
+)
 from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionLogProb,
     ChatCompletionLogProbs,
@@ -39,12 +45,6 @@ from aphrodite.entrypoints.openai.engine.protocol import (
     RequestResponseMetadata,
     ToolCall,
     UsageInfo,
-)
-from aphrodite.entrypoints.openai.engine.serving import (
-    GenerationError,
-    OpenAIServing,
-    clamp_prompt_logprobs,
-    format_token_id_placeholder,
 )
 from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
 from aphrodite.entrypoints.serve.utils.api_utils import get_max_tokens, should_include_usage
@@ -75,14 +75,8 @@ def _get_mm_token_counts(engine_input: EngineInput) -> dict[str, int]:
     prompt token span, so each sum matches the placeholder tokens already
     counted in ``usage.prompt_tokens``.
     """
-    mm_placeholders = cast(
-        "MultiModalPlaceholders | None", engine_input.get("mm_placeholders")
-    )
-    return {
-        modality: sum(p.length for p in ranges)
-        for modality, ranges in (mm_placeholders or {}).items()
-        if ranges
-    }
+    mm_placeholders = cast(MultiModalPlaceholders | None, engine_input.get("mm_placeholders"))
+    return {modality: sum(p.length for p in ranges) for modality, ranges in (mm_placeholders or {}).items() if ranges}
 
 
 def _make_prompt_tokens_details(
@@ -101,7 +95,7 @@ def _make_prompt_tokens_details(
     )
 
 
-class OpenAIServingChat(OpenAIServing):
+class OpenAIServingChat(GenerateBaseServing):
     def __init__(
         self,
         engine_client: EngineClient,
@@ -187,9 +181,7 @@ class OpenAIServingChat(OpenAIServing):
             )
         )
 
-    def _effective_chat_template_kwargs(
-        self, request: ChatCompletionRequest
-    ) -> dict[str, Any]:
+    def _effective_chat_template_kwargs(self, request: ChatCompletionRequest) -> dict[str, Any]:
         return (
             request.build_chat_params(
                 self.chat_template,
@@ -265,9 +257,7 @@ class OpenAIServingChat(OpenAIServing):
 
         conversation, engine_inputs = result
 
-        request_id = (
-            f"chatcmpl-{self._base_request_id(raw_request, request.request_id)}"
-        )
+        request_id = f"chatcmpl-{self._base_request_id(raw_request, request.request_id)}"
 
         request_metadata = RequestResponseMetadata(request_id=request_id)
         if raw_request:
@@ -290,15 +280,11 @@ class OpenAIServingChat(OpenAIServing):
 
             # If we are creating sub requests for multiple prompts, ensure that they
             # have unique request ids.
-            sub_request_id = (
-                request_id if len(engine_inputs) == 1 else f"{request_id}_{i}"
-            )
+            sub_request_id = request_id if len(engine_inputs) == 1 else f"{request_id}_{i}"
 
             max_tokens = get_max_tokens(
                 max_model_len,
-                request.max_completion_tokens
-                if request.max_completion_tokens is not None
-                else request.max_tokens,
+                request.max_completion_tokens if request.max_completion_tokens is not None else request.max_tokens,
                 self._extract_prompt_len(engine_input),
                 self.default_sampling_params,
                 self.override_max_tokens,
@@ -307,9 +293,7 @@ class OpenAIServingChat(OpenAIServing):
 
             sampling_params: SamplingParams | BeamSearchParams
             if request.use_beam_search:
-                sampling_params = request.to_beam_search_params(
-                    max_tokens, self.default_sampling_params
-                )
+                sampling_params = request.to_beam_search_params(max_tokens, self.default_sampling_params)
             else:
                 sampling_params = request.to_sampling_params(
                     max_tokens,
@@ -323,11 +307,7 @@ class OpenAIServingChat(OpenAIServing):
                 lora_request=lora_request,
             )
 
-            trace_headers = (
-                None
-                if raw_request is None
-                else await self._get_trace_headers(raw_request.headers)
-            )
+            trace_headers = None if raw_request is None else await self._get_trace_headers(raw_request.headers)
 
             if isinstance(sampling_params, BeamSearchParams):
                 generator = self.beam_search(
@@ -435,9 +415,7 @@ class OpenAIServingChat(OpenAIServing):
         try:
             if self.parser_cls is not None:
                 if tokenizer is None:
-                    raise ValueError(
-                        "Tokenizer not available when `skip_tokenizer_init=True`"
-                    )
+                    raise ValueError("Tokenizer not available when `skip_tokenizer_init=True`")
                 parsers: list[Parser | None] = [
                     self.parser_cls(
                         tokenizer,
@@ -457,9 +435,7 @@ class OpenAIServingChat(OpenAIServing):
             return
 
         stream_options = request.stream_options
-        include_usage, include_continuous_usage = should_include_usage(
-            stream_options, self.enable_force_include_usage
-        )
+        include_usage, include_continuous_usage = should_include_usage(stream_options, self.enable_force_include_usage)
 
         try:
             async for res in result_generator:
@@ -500,11 +476,7 @@ class OpenAIServingChat(OpenAIServing):
                             created=created_time,
                             choices=[choice_data],
                             model=model_name,
-                            prompt_token_ids=(
-                                res.prompt_token_ids
-                                if request.return_token_ids
-                                else None
-                            ),
+                            prompt_token_ids=(res.prompt_token_ids if request.return_token_ids else None),
                             prompt_text=prompt_text,
                         )
 
@@ -523,11 +495,7 @@ class OpenAIServingChat(OpenAIServing):
                     # last message
                     if request.echo:
                         last_msg_content: str | list[dict[str, str]] = ""
-                        if (
-                            conversation
-                            and "content" in conversation[-1]
-                            and conversation[-1].get("role") == role
-                        ):
+                        if conversation and "content" in conversation[-1] and conversation[-1].get("role") == role:
                             last_msg_content = conversation[-1]["content"] or ""
 
                         if last_msg_content:
@@ -576,11 +544,7 @@ class OpenAIServingChat(OpenAIServing):
 
                     delta_text = output.text
 
-                    if (
-                        not delta_text
-                        and not output.token_ids
-                        and not previous_num_tokens[i]
-                    ):
+                    if not delta_text and not output.token_ids and not previous_num_tokens[i]:
                         # Chunked prefill case, don't return empty chunks
                         continue
 
@@ -598,14 +562,9 @@ class OpenAIServingChat(OpenAIServing):
                             if delta_message.tool_calls:
                                 tools_streamed[i] = True
 
-                            if (
-                                delta_message.reasoning
-                                and not request.include_reasoning
-                            ):
+                            if delta_message.reasoning and not request.include_reasoning:
                                 delta_message.reasoning = None
-                                if not (
-                                    delta_message.content or delta_message.tool_calls
-                                ):
+                                if not (delta_message.content or delta_message.tool_calls):
                                     delta_message = None
 
                     # handle streaming just a content delta (no parsers)
@@ -625,10 +584,7 @@ class OpenAIServingChat(OpenAIServing):
                         # NOTE: If return_token_ids is enabled, we still need to
                         # send a chunk with token_ids even if delta_message is None
                         # to ensure all tokens are included in the response
-                        if (
-                            output.finish_reason is None
-                            and not request.return_token_ids
-                        ):
+                        if output.finish_reason is None and not request.return_token_ids:
                             continue
                         delta_message = DeltaMessage()
 
@@ -667,11 +623,7 @@ class OpenAIServingChat(OpenAIServing):
                             delta=delta_message,
                             logprobs=logprobs,
                             finish_reason=None,
-                            token_ids=(
-                                as_list(output.token_ids)
-                                if request.return_token_ids
-                                else None
-                            ),
+                            token_ids=(as_list(output.token_ids) if request.return_token_ids else None),
                         )
 
                     # if the model is finished generating
@@ -688,20 +640,14 @@ class OpenAIServingChat(OpenAIServing):
                         if tools_streamed[i] and not tool_choice_function_name:
                             finish_reason_ = "tool_calls"
                         else:
-                            finish_reason_ = (
-                                output.finish_reason if output.finish_reason else "stop"
-                            )
+                            finish_reason_ = output.finish_reason if output.finish_reason else "stop"
                         choice_data = ChatCompletionResponseStreamChoice(
                             index=i,
                             delta=delta_message,
                             logprobs=logprobs,
                             finish_reason=finish_reason_,
                             stop_reason=output.stop_reason,
-                            token_ids=(
-                                as_list(output.token_ids)
-                                if request.return_token_ids
-                                else None
-                            ),
+                            token_ids=(as_list(output.token_ids) if request.return_token_ids else None),
                         )
 
                         finish_reason_sent[i] = True
@@ -761,9 +707,7 @@ class OpenAIServingChat(OpenAIServing):
                     usage=final_usage,
                     system_fingerprint=self.system_fingerprint,
                 )
-                final_usage_data = final_usage_chunk.model_dump_json(
-                    exclude_unset=True, exclude_none=True
-                )
+                final_usage_data = final_usage_chunk.model_dump_json(exclude_unset=True, exclude_none=True)
                 yield f"data: {final_usage_data}\n\n"
 
             # report to FastAPI middleware aggregate usage across all choices
@@ -832,9 +776,7 @@ class OpenAIServingChat(OpenAIServing):
         choices: list[ChatCompletionResponseChoice] = []
 
         role = self.get_chat_request_role(request)
-        tool_parser_cls = (
-            self.parser_cls.tool_parser_cls if self.parser_cls is not None else None
-        )
+        tool_parser_cls = self.parser_cls.tool_parser_cls if self.parser_cls is not None else None
         for output in final_res.outputs:
             # check for error finish reason and raise GenerationError
             # finish_reason='error' indicates a retryable request-level internal error
@@ -870,8 +812,7 @@ class OpenAIServingChat(OpenAIServing):
 
             auto_tools_called = False
             is_named_tool_choice = (
-                request.tool_choice is not None
-                and type(request.tool_choice) is ChatCompletionNamedToolChoiceParam
+                request.tool_choice is not None and type(request.tool_choice) is ChatCompletionNamedToolChoiceParam
             )
             is_required_tool_choice = request.tool_choice == "required"
 
@@ -885,10 +826,7 @@ class OpenAIServingChat(OpenAIServing):
                     role=role,
                     reasoning=reasoning,
                     content=content or "",
-                    tool_calls=[
-                        ToolCall(id=tc.id or make_tool_call_id(), function=tc)
-                        for tc in (tool_calls or [])
-                    ],
+                    tool_calls=[ToolCall(id=tc.id or make_tool_call_id(), function=tc) for tc in (tool_calls or [])],
                 )
 
             # if the request doesn't use tool choice
@@ -909,10 +847,7 @@ class OpenAIServingChat(OpenAIServing):
                         role=role,
                         reasoning=reasoning,
                         content=content,
-                        tool_calls=[
-                            ToolCall(id=tc.id or make_tool_call_id(), function=tc)
-                            for tc in tool_calls
-                        ],
+                        tool_calls=[ToolCall(id=tc.id or make_tool_call_id(), function=tc) for tc in tool_calls],
                     )
 
                 else:
@@ -934,9 +869,7 @@ class OpenAIServingChat(OpenAIServing):
             # "tool_calls" for "auto" or "required" tool calls,
             # and "stop" for named tool calls.
             is_finish_reason_tool_calls = auto_tools_called or (
-                request.tool_choice
-                and request.tool_choice == "required"
-                and output.finish_reason == "stop"
+                request.tool_choice and request.tool_choice == "required" and output.finish_reason == "stop"
             )
 
             # Encode routed_experts for transport. JSON can't carry raw
@@ -959,9 +892,7 @@ class OpenAIServingChat(OpenAIServing):
                 if output.finish_reason
                 else "stop",
                 stop_reason=output.stop_reason,
-                token_ids=(
-                    as_list(output.token_ids) if request.return_token_ids else None
-                ),
+                token_ids=(as_list(output.token_ids) if request.return_token_ids else None),
                 routed_experts=routed_experts_b64,
             )
             choice_data = maybe_filter_parallel_tool_calls(choice_data, request)
@@ -970,11 +901,7 @@ class OpenAIServingChat(OpenAIServing):
 
         if request.echo:
             last_msg_content: str | list[dict[str, str]] = ""
-            if (
-                conversation
-                and "content" in conversation[-1]
-                and conversation[-1].get("role") == role
-            ):
+            if conversation and "content" in conversation[-1] and conversation[-1].get("role") == role:
                 last_msg_content = conversation[-1]["content"] or ""
             if isinstance(last_msg_content, list):
                 last_msg_content = "\n".join(msg["text"] for msg in last_msg_content)
@@ -987,9 +914,7 @@ class OpenAIServingChat(OpenAIServing):
         num_prompt_tokens = len(final_res.prompt_token_ids)
         if final_res.encoder_prompt_token_ids is not None:
             num_prompt_tokens += len(final_res.encoder_prompt_token_ids)
-        num_generated_tokens = sum(
-            len(output.token_ids) for output in final_res.outputs
-        )
+        num_generated_tokens = sum(len(output.token_ids) for output in final_res.outputs)
         usage = UsageInfo(
             prompt_tokens=num_prompt_tokens,
             completion_tokens=num_generated_tokens,
@@ -1014,9 +939,7 @@ class OpenAIServingChat(OpenAIServing):
             usage=usage,
             system_fingerprint=self.system_fingerprint,
             prompt_logprobs=clamp_prompt_logprobs(final_res.prompt_logprobs),
-            prompt_token_ids=(
-                final_res.prompt_token_ids if request.return_token_ids else None
-            ),
+            prompt_token_ids=(final_res.prompt_token_ids if request.return_token_ids else None),
             prompt_text=prompt_text,
             kv_transfer_params=final_res.kv_transfer_params,
         )
@@ -1032,9 +955,7 @@ class OpenAIServingChat(OpenAIServing):
                     tool_call_descriptions = []
                     for tc in choice.message.tool_calls:  # type: ignore
                         function_call: FunctionCall = tc.function  # type: ignore
-                        tool_call_descriptions.append(
-                            f"{function_call.name}({function_call.arguments})"
-                        )
+                        tool_call_descriptions.append(f"{function_call.name}({function_call.arguments})")
                     tool_calls_str = ", ".join(tool_call_descriptions)
                     output_text = f"[tool_calls: {tool_calls_str}]"
 
@@ -1091,9 +1012,7 @@ class OpenAIServingChat(OpenAIServing):
         logprobs_content: list[ChatCompletionLogProbsContent] = []
 
         should_return_as_token_id = (
-            return_as_token_id
-            if return_as_token_id is not None
-            else self.return_tokens_as_token_ids
+            return_as_token_id if return_as_token_id is not None else self.return_tokens_as_token_ids
         )
         for i, token_id in enumerate(token_ids):
             step_top_logprobs = top_logprobs[i]
@@ -1102,9 +1021,7 @@ class OpenAIServingChat(OpenAIServing):
                     token = format_token_id_placeholder(token_id)
                 else:
                     if tokenizer is None:
-                        raise ValueError(
-                            "Unable to get tokenizer because `skip_tokenizer_init=True`"
-                        )
+                        raise ValueError("Unable to get tokenizer because `skip_tokenizer_init=True`")
 
                     token = tokenizer.decode(token_id)
 
@@ -1127,11 +1044,7 @@ class OpenAIServingChat(OpenAIServing):
                             should_return_as_token_id,
                         ),
                         logprob=max(step_token.logprob, -9999.0),
-                        bytes=(
-                            None
-                            if step_decoded is None
-                            else list(step_decoded.encode("utf-8", errors="replace"))
-                        ),
+                        bytes=(None if step_decoded is None else list(step_decoded.encode("utf-8", errors="replace"))),
                         top_logprobs=self._get_top_logprobs(
                             step_top_logprobs,
                             num_output_top_logprobs,

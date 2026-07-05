@@ -116,4 +116,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,from=aphrodite-build,src=/workspace/aphrodite/dist,target=dist \
     uv pip install dist/*cpu*.whl
 
+# Copy the examples directory (including the chat/tool templates) so it is
+# present in the released image, as the CUDA image ships it too.
+COPY examples examples
+
 ENTRYPOINT ["python3", "-m", "aphrodite.endpoints.openai.api_server"]

@@ -167,10 +167,7 @@ def test_prefix_caching_for_prefill_dedup():
     # so all the blocks except the last are shared between the two requests.
     assert len(sched_output.num_scheduled_tokens) == 2
     assert sched_output.num_scheduled_tokens[req0.request_id] == num_prompt_tokens
-    assert (
-        sched_output.num_scheduled_tokens[req1.request_id]
-        == num_prompt_tokens % BLOCK_SIZE
-    )
+    assert sched_output.num_scheduled_tokens[req1.request_id] == num_prompt_tokens % BLOCK_SIZE
 
     sched_outputs.append(scheduler.schedule())
     while sched_outputs:
@@ -185,10 +182,7 @@ def test_prefix_caching_for_prefill_dedup():
         if sched_output.num_scheduled_tokens:
             sched_outputs.append(sched_output)
             if added_req:
-                assert (
-                    sched_output.num_scheduled_tokens[added_req.request_id]
-                    == num_prompt_tokens % BLOCK_SIZE
-                )
+                assert sched_output.num_scheduled_tokens[added_req.request_id] == num_prompt_tokens % BLOCK_SIZE
 
     assert scheduler.get_num_unfinished_requests() == 0
 
@@ -236,9 +230,7 @@ def test_prefix_caching_for_multi_turn():
         block_size=BLOCK_SIZE,
     )
     for i, req in enumerate(next_turn_requests):
-        req.prompt_token_ids = requests[i].prompt_token_ids + list(
-            requests[i].output_token_ids
-        )
+        req.prompt_token_ids = requests[i].prompt_token_ids + list(requests[i].output_token_ids)
         req._all_token_ids = req.prompt_token_ids.copy()
         req.all_token_ids = ConstantList(req._all_token_ids)
         req.block_hashes = []
@@ -253,9 +245,7 @@ def test_prefix_caching_for_multi_turn():
     # Make sure the next-turn requests get prefix cache hit by the previous
     # requests.
     for req in next_turn_requests:
-        assert sched_output.num_scheduled_tokens[req.request_id] == (
-            req.num_prompt_tokens % BLOCK_SIZE
-        )
+        assert sched_output.num_scheduled_tokens[req.request_id] == (req.num_prompt_tokens % BLOCK_SIZE)
 
 
 def test_abort_request_when_structured_output_fsm_cannot_advance():
@@ -272,6 +262,9 @@ def test_abort_request_when_structured_output_fsm_cannot_advance():
     scheduler.connector = None
     scheduler.structured_output_manager = Mock()
     scheduler.structured_output_manager.should_advance.return_value = True
+    scheduler.structured_output_manager.trim_reasoning_for_advance.side_effect = (
+        lambda request, new_token_ids: new_token_ids
+    )
     scheduler.requests = {request.request_id: request}
     scheduler.running = [request]
     scheduler.waiting = Mock()

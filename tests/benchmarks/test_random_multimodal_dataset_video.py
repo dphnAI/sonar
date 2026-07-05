@@ -16,7 +16,7 @@ from aphrodite.benchmarks.datasets import RandomMultiModalDataset, SampleRequest
 @pytest.fixture(scope="session")
 def hf_tokenizer() -> PreTrainedTokenizerBase:
     """Use a small, commonly available tokenizer."""
-    return AutoTokenizer.from_pretrained("gpt2")
+    return AutoTokenizer.from_pretrained("openai-community/gpt2")
 
 
 @pytest.fixture
@@ -131,9 +131,7 @@ def test_generate_mm_item_invalid_config(video_dataset: RandomMultiModalDataset)
 
 
 @pytest.mark.benchmark
-def test_sample_with_video_buckets(
-    video_dataset: RandomMultiModalDataset, hf_tokenizer: PreTrainedTokenizerBase
-):
+def test_sample_with_video_buckets(video_dataset: RandomMultiModalDataset, hf_tokenizer: PreTrainedTokenizerBase):
     """Test sampling with video bucket configurations."""
     # Configure bucket with video probability > 0
     bucket_config = {
@@ -186,9 +184,7 @@ def test_sample_with_video_buckets(
 
 
 @pytest.mark.benchmark
-def test_sample_video_only_buckets(
-    video_dataset: RandomMultiModalDataset, hf_tokenizer: PreTrainedTokenizerBase
-):
+def test_sample_video_only_buckets(video_dataset: RandomMultiModalDataset, hf_tokenizer: PreTrainedTokenizerBase):
     """Test sampling with only video buckets."""
     bucket_config = {
         (64, 64, 8): 1.0,  # Only videos
@@ -224,9 +220,7 @@ def test_sample_video_only_buckets(
 
 
 @pytest.mark.benchmark
-def test_sample_respects_video_limits(
-    video_dataset: RandomMultiModalDataset, hf_tokenizer: PreTrainedTokenizerBase
-):
+def test_sample_respects_video_limits(video_dataset: RandomMultiModalDataset, hf_tokenizer: PreTrainedTokenizerBase):
     """Test that sampling respects video limits per prompt."""
     bucket_config = {
         (64, 64, 8): 1.0,  # Only videos

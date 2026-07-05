@@ -116,17 +116,12 @@ def _get_model_ids_to_test(model_arch_list: AbstractSet[str]):
 
 def get_model_ids_to_test():
     transformers_arch_ids = {
-        model_id
-        for info in _TRANSFORMERS_BACKEND_MODELS.values()
-        for model_id in (info.default, *info.extras.values())
+        model_id for info in _TRANSFORMERS_BACKEND_MODELS.values() for model_id in (info.default, *info.extras.values())
     }
     aphrodite_only_archs = {
         arch
         for arch, info in _MULTIMODAL_EXAMPLE_MODELS.items()
-        if not any(
-            model_id in transformers_arch_ids
-            for model_id in (info.default, *info.extras.values())
-        )
+        if not any(model_id in transformers_arch_ids for model_id in (info.default, *info.extras.values()))
     }
 
     return _get_model_ids_to_test(aphrodite_only_archs)
@@ -253,8 +248,7 @@ def _test_processing_correctness(
     supported_mm_limits = processing_info.get_supported_mm_limits()
     # Keep integer limits for local data generation
     limit_mm_per_prompt_ints = {
-        modality: 3 if limit is None else limit
-        for modality, limit in supported_mm_limits.items()
+        modality: 3 if limit is None else limit for modality, limit in supported_mm_limits.items()
     }
 
     def _to_dummy_options(modality: str, count: int) -> BaseDummyOptions:
@@ -268,8 +262,7 @@ def _test_processing_correctness(
 
     # Assign normalized DummyOptions to the model config
     model_config.get_multimodal_config().limit_per_prompt = {
-        modality: _to_dummy_options(modality, count)
-        for modality, count in limit_mm_per_prompt_ints.items()
+        modality: _to_dummy_options(modality, count) for modality, count in limit_mm_per_prompt_ints.items()
     }
 
     baseline_processor = factories.build_processor(ctx, cache=None)
@@ -287,9 +280,7 @@ def _test_processing_correctness(
     }
     input_factory = {
         "image": partial(random_image, rng, min_wh=128, max_wh=256),
-        "video": partial(
-            random_video, rng, min_frames=2, max_frames=16, min_wh=128, max_wh=256
-        ),
+        "video": partial(random_video, rng, min_frames=2, max_frames=16, min_wh=128, max_wh=256),
         "audio": partial(
             random_audio,
             rng,
@@ -297,9 +288,7 @@ def _test_processing_correctness(
             max_len=min_audio_len + 512,
             sr=16000,
         ),
-        "vision_chunk": partial(
-            random_vision_chunk, rng, min_wh=128, max_wh=256, min_frames=1, max_frames=1
-        ),
+        "vision_chunk": partial(random_vision_chunk, rng, min_wh=128, max_wh=256, min_frames=1, max_frames=1),
     }
 
     for batch_idx in range(num_batches):
@@ -451,6 +440,15 @@ def test_processing_correctness(
             "MOSS-Audio uses a custom processor that dynamically expands "
             "audio placeholders from processed audio lengths. Its Aphrodite "
             "processor paths are covered by test_moss_audio.py."
+        )
+    if model_id == "lmms-lab-encoder/LLaVA-OneVision-2-8B-Instruct":
+        pytest.skip(
+            "LLaVA-OneVision-2 video processing routes frames through custom "
+            "video backends (qwen_vl_utils / codec) that require real encoded "
+            "video bytes and metadata. The synthetic numpy-array videos used by "
+            "this test yield empty video features, so the generic correctness "
+            "check cannot exercise the video path. Image processing is covered "
+            "by registration/inference tests."
         )
 
     _test_processing_correctness(

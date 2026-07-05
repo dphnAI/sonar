@@ -12,9 +12,9 @@ import pytest
 import pytest_asyncio
 import soundfile as sf
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.multimodal.media.audio import load_audio
 from aphrodite.platforms import current_platform
+from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "openai/whisper-large-v3-turbo"
 
@@ -68,7 +68,8 @@ def server(request):
     if request.param is not None:
         args += ["--attention-backend", request.param]
         if "AITER" in request.param:
-            env_dict = _AITER_ENV
+            # TODO: re-enable once AITER reenables fp16 unified attention.
+            pytest.skip("ROCM_AITER_UNIFIED_ATTN does not support fp16")
     with RemoteOpenAIServer(MODEL_NAME, args, env_dict=env_dict) as remote_server:
         yield remote_server
 
@@ -350,9 +351,7 @@ async def test_audio_with_max_tokens(whisper_client, mary_had_lamb):
     ],
     ids=["english", "italian"],
 )
-async def test_language_auto_detect(
-    whisper_client, fixture_name, expected_lang, expected_text, request
-):
+async def test_language_auto_detect(whisper_client, fixture_name, expected_lang, expected_text, request):
     """Auto-detect language when no language param is provided."""
     audio_file = request.getfixturevalue(fixture_name)
     transcription = await whisper_client.audio.transcriptions.create(

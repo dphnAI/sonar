@@ -9,7 +9,7 @@ import torch
 
 import aphrodite.envs as envs
 from aphrodite._aiter_ops import rocm_aiter_ops
-from aphrodite.config import CUDAGraphMode, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CUDAGraphMode
 from aphrodite.config.cache import CacheDType
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
@@ -94,6 +94,8 @@ class TritonAttentionMetadata:
     prefix_scheduler_metadata: torch.Tensor | None = None
     mm_prefix_range: dict[int, list[tuple[int, int]]] | None = None
     mm_prefix_range_tensor: torch.Tensor | None = None
+    rswa_prefix_lens: torch.Tensor | None = None
+    rswa_window: int | None = None
 
 
 class TritonAttentionMetadataBuilder(AttentionMetadataBuilder[TritonAttentionMetadata]):
@@ -122,13 +124,10 @@ class TritonAttentionMetadataBuilder(AttentionMetadataBuilder[TritonAttentionMet
         self.headdim = kv_cache_spec.head_size
 
         # Check if CUDA Graphs are enabled for decode
-        self.decode_cudagraph_enabled = (
-            self.aphrodite_config.compilation_config.cudagraph_mode
-            in (
-                CUDAGraphMode.FULL_AND_PIECEWISE,
-                CUDAGraphMode.FULL_DECODE_ONLY,
-                CUDAGraphMode.FULL,
-            )
+        self.decode_cudagraph_enabled = self.aphrodite_config.compilation_config.cudagraph_mode in (
+            CUDAGraphMode.FULL_AND_PIECEWISE,
+            CUDAGraphMode.FULL_DECODE_ONLY,
+            CUDAGraphMode.FULL,
         )
 
         # The launch grid for the 2D kernel is defined as (num_q_blocks, num_heads_kv).
@@ -174,10 +173,16 @@ class TritonAttentionMetadataBuilder(AttentionMetadataBuilder[TritonAttentionMet
             dtype=torch.float32,
             device=device,
         )
+        self.rswa_window = model_config.rswa_window
+        self.persistent_rswa_prefix_lens: torch.Tensor | None = None
+        if self.rswa_window is not None:
+            self.persistent_rswa_prefix_lens = torch.empty(
+                aphrodite_config.scheduler_config.max_num_seqs,
+                dtype=torch.int32,
+                device=device,
+            )
 
-    def build_for_cudagraph_capture(
-        self, common_attn_metadata: CommonAttentionMetadata
-    ) -> TritonAttentionMetadata:
+    def build_for_cudagraph_capture(self, common_attn_metadata: CommonAttentionMetadata) -> TritonAttentionMetadata:
         attn_metadata = self.build(0, common_attn_metadata)
         # When doing full graph capture, setting seq_lens to
         # max_model_len will cause graph capture to be extremely
@@ -204,12 +209,8 @@ class TritonAttentionMetadataBuilder(AttentionMetadataBuilder[TritonAttentionMet
         use_cascade = common_prefix_len > 0
 
         if use_cascade:
-            cu_prefix_query_lens = torch.tensor(
-                [0, num_actual_tokens], dtype=torch.int32, device=self.device
-            )
-            prefix_kv_lens = torch.tensor(
-                [common_prefix_len], dtype=torch.int32, device=self.device
-            )
+            cu_prefix_query_lens = torch.tensor([0, num_actual_tokens], dtype=torch.int32, device=self.device)
+            prefix_kv_lens = torch.tensor([common_prefix_len], dtype=torch.int32, device=self.device)
             suffix_kv_lens = common_attn_metadata.seq_lens.cpu() - common_prefix_len
             suffix_kv_lens = suffix_kv_lens.to(self.device)
         else:
@@ -243,9 +244,16 @@ class TritonAttentionMetadataBuilder(AttentionMetadataBuilder[TritonAttentionMet
         mm_ranges = common_attn_metadata.mm_req_doc_ranges
         if mm_ranges is not None:
             attn_metadata.mm_prefix_range = mm_ranges
-            attn_metadata.mm_prefix_range_tensor = compute_mm_prefix_range_tensor(
-                mm_ranges, num_reqs, seq_lens.device
-            )
+            attn_metadata.mm_prefix_range_tensor = compute_mm_prefix_range_tensor(mm_ranges, num_reqs, seq_lens.device)
+
+        rswa_prefix_lens = common_attn_metadata.rswa_prefix_lens
+        if self.rswa_window is not None and rswa_prefix_lens is not None:
+            assert self.persistent_rswa_prefix_lens is not None
+            rswa_prefix_lens = rswa_prefix_lens.to(device=self.device, dtype=torch.int32, non_blocking=True)
+            persistent_prefix_lens = self.persistent_rswa_prefix_lens[:num_reqs]
+            persistent_prefix_lens.copy_(rswa_prefix_lens[:num_reqs])
+            attn_metadata.rswa_prefix_lens = persistent_prefix_lens
+            attn_metadata.rswa_window = self.rswa_window
 
         return attn_metadata
 
@@ -411,9 +419,7 @@ class TritonAttentionImpl(AttentionImpl):
         hs = padded_hs - scale_pad
 
         raw = kv_cache.untyped_storage()
-        base_f32 = torch.tensor([], dtype=torch.float32, device=kv_cache.device).set_(
-            raw
-        )
+        base_f32 = torch.tensor([], dtype=torch.float32, device=kv_cache.device).set_(raw)
 
         # In the raw bytes, each (block, kv_half, slot, head) occupies
         # padded_hs * dtype_sz bytes.  The scale float32 sits at byte
@@ -480,20 +486,14 @@ class TritonAttentionImpl(AttentionImpl):
             cap = current_platform.get_device_capability()
             cap_str = cap.as_version_str() if cap is not None else "unknown"
             dev = current_platform.get_device_name()
-            if self.kv_cache_dtype.startswith("fp8") and not (
-                current_platform.has_device_capability(89)
-            ):
-                suggested = (
-                    "float16" if (cap is None or cap.to_int() < 80) else "bfloat16"
-                )
+            if self.kv_cache_dtype.startswith("fp8") and not (current_platform.has_device_capability(89)):
+                suggested = "float16" if (cap is None or cap.to_int() < 80) else "bfloat16"
                 raise ValueError(
                     f"FP8 KV cache is not supported by the Triton attention backend "
                     f"on {dev} (compute capability {cap_str}); native FP8 (fp8e4nv) "
                     f"requires SM89+. Re-run with --kv-cache-dtype {suggested}."
                 )
-            if self.kv_cache_dtype == "bfloat16" and not (
-                current_platform.has_device_capability(80)
-            ):
+            if self.kv_cache_dtype == "bfloat16" and not (current_platform.has_device_capability(80)):
                 raise ValueError(
                     f"bfloat16 KV cache is not supported on {dev} (compute capability "
                     f"{cap_str}); bfloat16 requires SM80+. Re-run with "
@@ -565,8 +565,7 @@ class TritonAttentionImpl(AttentionImpl):
         """
         if output_block_scale is not None:
             raise NotImplementedError(
-                "fused block_scale output quantization is not yet supported"
-                " for TritonAttentionImpl"
+                "fused block_scale output quantization is not yet supported for TritonAttentionImpl"
             )
 
         if attn_metadata is None:
@@ -610,10 +609,7 @@ class TritonAttentionImpl(AttentionImpl):
         # FP8 per-tensor / auto path (original flow).
         else:
             key_cache, value_cache = kv_cache.unbind(1)
-            if (
-                is_quantized_kv_cache(self.kv_cache_dtype)
-                and key_cache.dtype != self.fp8_dtype
-            ):
+            if is_quantized_kv_cache(self.kv_cache_dtype) and key_cache.dtype != self.fp8_dtype:
                 key_cache = key_cache.view(self.fp8_dtype)
                 value_cache = value_cache.view(self.fp8_dtype)
             descale_shape = (
@@ -622,10 +618,7 @@ class TritonAttentionImpl(AttentionImpl):
             )
             q_descale = (
                 layer._q_scale
-                if (
-                    self._kv_quant_mode == KVQuantMode.FP8_PER_TENSOR
-                    and query.dtype == self.fp8_dtype
-                )
+                if (self._kv_quant_mode == KVQuantMode.FP8_PER_TENSOR and query.dtype == self.fp8_dtype)
                 else None
             )
             k_descale = layer._k_scale.expand(descale_shape)
@@ -674,18 +667,19 @@ class TritonAttentionImpl(AttentionImpl):
             sinks=self.sinks,
             output_scale=output_scale,
             mm_prefix_range=mm_prefix_range_tensor,
+            rswa_prefix_lens=attn_metadata.rswa_prefix_lens,
+            rswa_window=attn_metadata.rswa_window,
             kv_quant_mode=self._kv_quant_mode,
             k_scale_cache=k_scale_cache,
             v_scale_cache=v_scale_cache,
             chunk_lookback=self.chunk_lookback,
             use_td=self.use_td,
+            mm_prefix_clamp_sliding_window=getattr(layer, "mm_prefix_clamp_sliding_window", False),
         )
 
         return output
 
-    def _pth_key_value_caches(
-        self, kv_cache: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def _pth_key_value_caches(self, kv_cache: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Per-token-head K/V cache views (ensures scale caches; FP8 retyped)."""
         self._ensure_scale_caches(kv_cache)
         key_cache, value_cache = kv_cache.unbind(1)
@@ -715,9 +709,7 @@ class TritonAttentionImpl(AttentionImpl):
         """
         # Quantized KV cache is not supported for encoder attention.
         if is_quantized_kv_cache(self.kv_cache_dtype):
-            raise NotImplementedError(
-                "quantized KV cache is not supported for encoder attention"
-            )
+            raise NotImplementedError("quantized KV cache is not supported for encoder attention")
 
         # Use encoder-specific metadata for sequence information
         query_start_loc = attn_metadata.query_start_loc

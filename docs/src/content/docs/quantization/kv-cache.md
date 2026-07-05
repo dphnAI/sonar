@@ -45,4 +45,34 @@ Or you can use the CLI:
 aphrodite run meta-llama/Llama-2-7b-chat-hf --kv-cache-dtype fp8 --quantization-param-path ./llama2-7b-fp8-kv/kv_cache_scales.json
 ```
 
+## Skipping Specific Layers from KV Cache Quantization
+
+Some attention layer types, such as sliding-window attention, are more
+sensitive to KV cache quantization. The `--kv-cache-dtype-skip-layers` flag
+leaves the specified layers at the model's native dtype while keeping the rest
+of the layers under the chosen quantized dtype. The flag accepts layer indices
+or layer-type names:
+
+```sh
+aphrodite run <model> \
+  --kv-cache-dtype fp8 \
+  --kv-cache-dtype-skip-layers sliding_window
+
+aphrodite run <model> \
+  --kv-cache-dtype fp8 \
+  --kv-cache-dtype-skip-layers 0 1 23
+```
+
+Programmatic usage:
+
+```python
+from aphrodite import LLM
+
+llm = LLM(
+    model="meta-llama/Llama-3.1-8B-Instruct",
+    kv_cache_dtype="fp8",
+    kv_cache_dtype_skip_layers=["sliding_window"],
+)
+```
+
 Note, current prefix caching doesn't work with FP8 KV cache enabled, forward_prefix kernel should handle different KV and cache type.

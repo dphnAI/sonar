@@ -23,6 +23,7 @@ from aphrodite.v1.kv_cache_interface import (
     AttentionSpec,
     KVCacheConfig,
     KVCacheSpec,
+    KVQuantMode,
     MambaSpec,
     UniformTypeKVCacheSpecs,
 )
@@ -87,9 +88,7 @@ def init_attn_backend(
     )
 
     # Phase 1: discover attention groups for each kv cache group.
-    for kv_cache_group_id, kv_cache_group_spec in enumerate(
-        kv_cache_config.kv_cache_groups
-    ):
+    for kv_cache_group_id, kv_cache_group_spec in enumerate(kv_cache_config.kv_cache_groups):
         layer_names = kv_cache_group_spec.layer_names
         if active_layer_names is not None:
             layer_names = list(active_layer_names.intersection(layer_names))
@@ -113,9 +112,7 @@ def init_attn_backend(
             num_heads_q = getattr(attn_layers[layer_name], "num_heads", 0)
             key = (attn_backend.full_cls_name(), layer_kv_cache_spec, num_heads_q)
             if key not in group_map:
-                group_map[key] = AttentionGroup(
-                    attn_backend, [layer_name], layer_kv_cache_spec, kv_cache_group_id
-                )
+                group_map[key] = AttentionGroup(attn_backend, [layer_name], layer_kv_cache_spec, kv_cache_group_id)
                 group_order.append(key)
             else:
                 group_map[key].layer_names.append(layer_name)
@@ -163,18 +160,14 @@ def init_attn_backend(
     return attn_groups, attn_cg_support_info, kernel_block_sizes
 
 
-def _allocate_kv_cache(
-    kv_cache_config: KVCacheConfig, shared_layers: dict[str, str], device: torch.device
-):
+def _allocate_kv_cache(kv_cache_config: KVCacheConfig, shared_layers: dict[str, str], device: torch.device):
     kv_cache_raw_tensors: dict[str, torch.Tensor] = {}
     packed_backing: torch.Tensor | None = None
     for kv_cache_tensor in kv_cache_config.kv_cache_tensors:
         if kv_cache_tensor.block_stride > 0:
             # Allocate once; all packed tensors alias the same backing.
             if packed_backing is None:
-                packed_backing = torch.zeros(
-                    kv_cache_tensor.size, dtype=torch.int8, device=device
-                )
+                packed_backing = torch.zeros(kv_cache_tensor.size, dtype=torch.int8, device=device)
             tensor = packed_backing
         else:
             tensor = torch.zeros(kv_cache_tensor.size, dtype=torch.int8, device=device)
@@ -200,9 +193,7 @@ def _reshape_attention_kv_cache(
     packing: tuple[int, int] | None,
 ) -> torch.Tensor:
     permuted_kv_cache_shape = tuple(kv_cache_shape[i] for i in kv_cache_stride_order)
-    inv_order = [
-        kv_cache_stride_order.index(i) for i in range(len(kv_cache_stride_order))
-    ]
+    inv_order = [kv_cache_stride_order.index(i) for i in range(len(kv_cache_stride_order))]
     dtype = kv_cache_spec.dtype
 
     if packing is not None:
@@ -210,9 +201,7 @@ def _reshape_attention_kv_cache(
         assert inv_order[0] == 0
         page_bytes = prod(kv_cache_shape[1:]) * get_dtype_size(dtype)
         kv_cache = (
-            kv_raw_tensor.view(-1, block_stride)[:, offset : offset + page_bytes]
-            .view(dtype)
-            .view(kv_cache_shape)
+            kv_raw_tensor.view(-1, block_stride)[:, offset : offset + page_bytes].view(dtype).view(kv_cache_shape)
         )
     elif kv_cache_spec.page_size_padded is not None:
         # Use a strided view to skip the padding between physical pages.
@@ -296,16 +285,15 @@ def _reshape_kv_cache(
                 # Use storage_block_size: it equals block_size for uncompressed
                 # specs but is smaller for compressed ones (DeepSeek V4), which
                 # store block_size tokens in block_size // compress_ratio slots.
-                num_blocks_per_kv_block = (
-                    kv_cache_spec.storage_block_size // kernel_block_size
-                )
+                num_blocks_per_kv_block = kv_cache_spec.storage_block_size // kernel_block_size
                 kernel_num_blocks = num_blocks * num_blocks_per_kv_block
+                layer_cache_dtype = "auto" if kv_cache_spec.kv_quant_mode == KVQuantMode.NONE else cache_dtype
                 kv_cache_shape = group.backend.get_kv_cache_shape(
                     kernel_num_blocks,
                     kernel_block_size,
                     kv_cache_spec.num_kv_heads,
                     kv_cache_spec.head_size,
-                    cache_dtype_str=cache_dtype,
+                    cache_dtype_str=layer_cache_dtype,
                 )
 
                 # FIXME(woosuk): Add kv_cache_stride_order to all attention backends.
@@ -345,9 +333,7 @@ def _reshape_kv_cache(
                     storage_offset_bytes += stride[0] * dtype_size
                 kv_caches[layer_name] = state_tensors
             else:
-                raise NotImplementedError(
-                    f"Unsupported KV cache spec type: {type(kv_cache_spec)}"
-                )
+                raise NotImplementedError(f"Unsupported KV cache spec type: {type(kv_cache_spec)}")
 
     if has_attn and has_mamba:
         _update_hybrid_attention_layout(
@@ -377,19 +363,19 @@ def _update_hybrid_attention_layout(
         kv_cache_spec = group.kv_cache_spec
         if not isinstance(kv_cache_spec, AttentionSpec):
             continue
+        layer_cache_dtype = "auto" if kv_cache_spec.kv_quant_mode == KVQuantMode.NONE else cache_dtype
         block_dim = group.backend.get_kv_cache_block_dim(
             kernel_block_sizes[group.kv_cache_group_id],
             kv_cache_spec.num_kv_heads,
             kv_cache_spec.head_size,
-            cache_dtype_str=cache_dtype,
+            cache_dtype_str=layer_cache_dtype,
         )
         # if the first dim of the kvcache's layout is already num_blocks, continue
         if block_dim == 0:
             continue
 
         assert block_dim == 1, (
-            "Expected the dim `num_blocks` at the second dim when updating"
-            " the kvcache's layout of full attention layer"
+            "Expected the dim `num_blocks` at the second dim when updating the kvcache's layout of full attention layer"
         )
 
         for layer_name in group.layer_names:
@@ -399,9 +385,7 @@ def _update_hybrid_attention_layout(
 
             kv_cache = kv_caches[layer_name]
             if kv_cache.shape[0] == 2:
-                assert kv_cache.shape[1] != 2, (
-                    f"Cannot determine layout for tensor of shape {kv_cache.shape}"
-                )
+                assert kv_cache.shape[1] != 2, f"Cannot determine layout for tensor of shape {kv_cache.shape}"
                 hidden_size = kv_cache.shape[2:].numel()
                 kv_cache.as_strided_(
                     size=kv_cache.shape,
@@ -424,9 +408,7 @@ def init_kv_cache(
     aphrodite_config: AphroditeConfig,
 ) -> dict[str, Any]:
     shared_kv_cache_layers = get_shared_kv_cache_layers(aphrodite_config)
-    kv_cache_raw_tensors = _allocate_kv_cache(
-        kv_cache_config, shared_kv_cache_layers, device
-    )
+    kv_cache_raw_tensors = _allocate_kv_cache(kv_cache_config, shared_kv_cache_layers, device)
     flattened_attn_groups = list(group for groups in attn_groups for group in groups)
     kv_caches = _reshape_kv_cache(
         attn_groups=flattened_attn_groups,
@@ -509,9 +491,7 @@ def build_attn_metadata(
         for attn_group in attn_groups[i]:
             attn_metadata_builder = attn_group.get_metadata_builder(0)
             if for_cudagraph_capture:
-                metadata = attn_metadata_builder.build_for_cudagraph_capture(
-                    common_attn_metadata
-                )
+                metadata = attn_metadata_builder.build_for_cudagraph_capture(common_attn_metadata)
             else:
                 attn_metadata_extra_kwargs = (
                     model_specific_attn_metadata.get_extra_attn_kwargs(

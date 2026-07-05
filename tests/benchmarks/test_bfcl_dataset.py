@@ -21,7 +21,7 @@ def _patch_hf_api(side_effect):
 
 @pytest.fixture(scope="session")
 def hf_tokenizer() -> PreTrainedTokenizerBase:
-    return AutoTokenizer.from_pretrained("gpt2")
+    return AutoTokenizer.from_pretrained("openai-community/gpt2")
 
 
 _FAKE_ROWS = {
@@ -225,11 +225,7 @@ def test_chat_backend_uses_messages_field_when_set() -> None:
         extra_body={"tools": [{"type": "function", "function": {"name": "add"}}]},
     )
 
-    asyncio.run(
-        async_request_openai_chat_completions(
-            request_func_input=req, session=_FakeSession()
-        )
-    )
+    asyncio.run(async_request_openai_chat_completions(request_func_input=req, session=_FakeSession()))
 
     payload = captured["payload"]
     assert payload["messages"] is messages, (
@@ -254,9 +250,7 @@ def test_bfcl_prompt_len_includes_tools(tmp_path: Path) -> None:
     captured: dict = {}
 
     class _FakeTokenizer:
-        def apply_chat_template(
-            self, messages, tools=None, tokenize=False, add_generation_prompt=True
-        ):
+        def apply_chat_template(self, messages, tools=None, tokenize=False, add_generation_prompt=True):
             captured["tools"] = tools
             base = " ".join(m.get("content", "") for m in messages)
             tool_text = json.dumps(tools) if tools else ""
@@ -275,8 +269,7 @@ def test_bfcl_prompt_len_includes_tools(tmp_path: Path) -> None:
 
     assert len(samples) == 1
     assert captured["tools"] is not None, (
-        "apply_chat_template must be called with tools= so the schema "
-        "contributes to the prompt-length estimate"
+        "apply_chat_template must be called with tools= so the schema contributes to the prompt-length estimate"
     )
     assert len(captured["tools"]) == 1
     assert captured["tools"][0]["function"]["name"] == "add"

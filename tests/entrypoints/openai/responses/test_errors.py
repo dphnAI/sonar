@@ -7,20 +7,23 @@ from unittest.mock import MagicMock
 import pytest
 
 import aphrodite.envs as envs
-from aphrodite.entrypoints.openai.engine.serving import GenerationError, OpenAIServing
+from aphrodite.entrypoints.generate.base.serving import (
+    GenerateBaseServing,
+    GenerationError,
+)
 from aphrodite.envs import disable_envs_cache
 
 
 @pytest.mark.asyncio
 async def test_raise_if_error_raises_generation_error():
     """test _raise_if_error raises GenerationError"""
-    # create a minimal OpenAIServing instance
+    # create a minimal GenerateBaseServing instance
     mock_engine = MagicMock()
     mock_engine.model_config = MagicMock()
     mock_engine.model_config.max_model_len = 100
     mock_models = MagicMock()
 
-    serving = OpenAIServing(
+    serving = GenerateBaseServing(
         engine_client=mock_engine,
         models=mock_models,
         request_logger=None,
@@ -47,7 +50,7 @@ async def test_convert_generation_error_to_streaming_response():
     mock_engine.model_config.max_model_len = 100
     mock_models = MagicMock()
 
-    serving = OpenAIServing(
+    serving = GenerateBaseServing(
         engine_client=mock_engine,
         models=mock_models,
         request_logger=None,
@@ -77,7 +80,7 @@ def test_is_model_supported_skip_name_validation_env(
     mock_models = MagicMock()
     mock_models.is_base_model.return_value = False
 
-    serving = OpenAIServing(
+    serving = GenerateBaseServing(
         engine_client=mock_engine,
         models=mock_models,
         request_logger=None,

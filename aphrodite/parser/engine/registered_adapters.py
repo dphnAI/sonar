@@ -7,6 +7,8 @@ names so that :class:`ReasoningParserManager` and
 :class:`ToolParserManager` can load them lazily.
 """
 
+from aphrodite.parser.deepseek_v4 import DeepSeekV4Parser
+from aphrodite.parser.deepseek_v32 import DeepSeekV32Parser
 from aphrodite.parser.engine.adapters import make_adapters
 from aphrodite.parser.gemma4 import Gemma4Parser
 from aphrodite.parser.glm47_moe import Glm47MoeParser
@@ -15,6 +17,16 @@ from aphrodite.parser.minimax_m2 import MinimaxM2Parser
 from aphrodite.parser.nemotron_v3 import NemotronV3Parser
 from aphrodite.parser.qwen3 import Qwen3Parser
 from aphrodite.parser.seed_oss import SeedOssParser
+
+(
+    DeepSeekV32ParserReasoningAdapter,
+    DeepSeekV32ParserToolAdapter,
+) = make_adapters(DeepSeekV32Parser)
+
+(
+    DeepSeekV4ParserReasoningAdapter,
+    DeepSeekV4ParserToolAdapter,
+) = make_adapters(DeepSeekV4Parser)
 
 (
     MinimaxM2ParserReasoningAdapter,

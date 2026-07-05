@@ -13,7 +13,7 @@ from aphrodite.benchmarks.datasets.create_txt_slices_dataset import create_txt_s
 @pytest.fixture(scope="session")
 def hf_tokenizer() -> PreTrainedTokenizerBase:
     # Use a small, commonly available tokenizer
-    return AutoTokenizer.from_pretrained("gpt2")
+    return AutoTokenizer.from_pretrained("openai-community/gpt2")
 
 
 text_content = """
@@ -27,9 +27,7 @@ sunt in culpa qui officia deserunt mollit anim id est laborum.
 
 
 @pytest.mark.benchmark
-def test_create_txt_slices_jsonl(
-    hf_tokenizer: PreTrainedTokenizerBase, tmp_path: Path
-) -> None:
+def test_create_txt_slices_jsonl(hf_tokenizer: PreTrainedTokenizerBase, tmp_path: Path) -> None:
     """Test that create_txt_slices_jsonl produces valid JSONL for CustomDataset."""
     txt_path = tmp_path / "input.txt"
     jsonl_path = tmp_path / "input.txt.jsonl"
@@ -39,7 +37,7 @@ def test_create_txt_slices_jsonl(
     create_txt_slices_jsonl(
         input_path=str(txt_path),
         output_path=str(jsonl_path),
-        tokenizer_name="gpt2",
+        tokenizer_name="openai-community/gpt2",
         num_prompts=10,
         input_len=10,
         output_len=10,

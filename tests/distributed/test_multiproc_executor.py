@@ -11,11 +11,11 @@ import multiprocessing
 import os
 import socket
 
-from tests.utils import multi_gpu_test
 from aphrodite.config import AphroditeConfig
 from aphrodite.engine.arg_utils import EngineArgs
 from aphrodite.v1.core.sched.output import SchedulerOutput
 from aphrodite.v1.executor.multiproc_executor import MultiprocExecutor
+from tests.utils import multi_gpu_test
 
 MODEL = "facebook/opt-125m"
 
@@ -162,9 +162,7 @@ def test_multiproc_executor_failure_callback():
 
         # Register another callback - should be invoked immediately
         executor.register_failure_callback(test_callback)
-        assert len(callback_invoked) == 1, (
-            "Callback should be invoked when executor is failed"
-        )
+        assert len(callback_invoked) == 1, "Callback should be invoked when executor is failed"
 
     finally:
         # Clean up
@@ -198,9 +196,7 @@ def test_multiproc_executor_worker_monitor():
 
         time.sleep(0.5)  # Give processes time to terminate
         for worker in executor.workers:
-            assert not worker.proc.is_alive(), (
-                f"Worker rank {worker.rank} should terminate after shutdown"
-            )
+            assert not worker.proc.is_alive(), f"Worker rank {worker.rank} should terminate after shutdown"
 
 
 @multi_gpu_test(num_gpus=2)
@@ -283,9 +279,12 @@ def test_multiproc_executor_pipeline_parallel():
         output_rank = executor._get_output_rank()
         assert output_rank == 2, "Output rank should be 2 (first rank of last PP stage)"
 
-        # Verify max_concurrent_batches for pipeline parallel
-        assert aphrodite_config.max_concurrent_batches == 2, (
-            "Max concurrent batches should equal PP size"
+        # V2 model runner uses one extra batch to overlap async scheduling.
+        expected_concurrent_batches = 2 + int(
+            aphrodite_config.scheduler_config.async_scheduling and aphrodite_config.use_v2_model_runner
+        )
+        assert aphrodite_config.max_concurrent_batches == expected_concurrent_batches, (
+            "Max concurrent batches should follow the configured PP/async scheduling policy"
         )
 
     finally:
@@ -304,20 +303,17 @@ def test_multiproc_executor_properties():
 
     try:
         # Test supports_pp property
-        assert MultiprocExecutor.supports_pp is True, (
-            "MultiprocExecutor should support pipeline parallelism"
-        )
+        assert MultiprocExecutor.supports_pp is True, "MultiprocExecutor should support pipeline parallelism"
 
         # Test world_size calculation
         assert executor.world_size == (
-            executor.parallel_config.tensor_parallel_size
-            * executor.parallel_config.pipeline_parallel_size
+            executor.parallel_config.tensor_parallel_size * executor.parallel_config.pipeline_parallel_size
         ), "World size should equal TP * PP"
 
         # Test local_world_size calculation
-        assert executor.local_world_size == (
-            executor.parallel_config.world_size // executor.parallel_config.nnodes
-        ), "Local world size should be world_size / nnodes"
+        assert executor.local_world_size == (executor.parallel_config.world_size // executor.parallel_config.nnodes), (
+            "Local world size should be world_size / nnodes"
+        )
 
     finally:
         # Clean up
@@ -362,28 +358,19 @@ def test_multiproc_executor_multi_node():
             executor = MultiprocExecutor(aphrodite_config=aphrodite_config)
 
             # Verify node-specific properties
-            assert executor.world_size == 4, (
-                f"World size should be 4 on node {node_rank}"
-            )
-            assert executor.local_world_size == 2, (
-                f"Local world size should be 2 on node {node_rank}"
-            )
-            assert len(executor.workers) == 2, (
-                f"Should have 2 local workers on node {node_rank}"
-            )
+            assert executor.world_size == 4, f"World size should be 4 on node {node_rank}"
+            assert executor.local_world_size == 2, f"Local world size should be 2 on node {node_rank}"
+            assert len(executor.workers) == 2, f"Should have 2 local workers on node {node_rank}"
 
             # Verify worker ranks are correct for this node
             expected_ranks = [node_rank * 2, node_rank * 2 + 1]
             actual_ranks = sorted([w.rank for w in executor.workers])
             assert actual_ranks == expected_ranks, (
-                f"Node {node_rank} should have workers "
-                f"with ranks {expected_ranks}, got {actual_ranks}"
+                f"Node {node_rank} should have workers with ranks {expected_ranks}, got {actual_ranks}"
             )
             # Verify all workers are alive
             for worker in executor.workers:
-                assert worker.proc.is_alive(), (
-                    f"Worker rank {worker.rank} should be alive on node {node_rank}"
-                )
+                assert worker.proc.is_alive(), f"Worker rank {worker.rank} should be alive on node {node_rank}"
             # executor.gen
             # Put success result in queue BEFORE shutdown to avoid hanging
             result_queue.put({"node": node_rank, "success": True})

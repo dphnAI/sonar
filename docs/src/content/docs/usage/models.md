@@ -89,6 +89,7 @@ On ROCm platforms, Mistral and Mixtral are capped to 4096 max context length due
 | `LlavaForConditionalGeneration`          |        Image         |                `llava-hf/llava-v1.5-7b-hf` |
 | `LlavaNextForConditionalGeneration`      |        Image         |        `llava-hf/llava-v1.6-mistral-7b-hf` |
 | `LlavaNextVideoForConditionalGeneration` |        Video         |          `llava-hf/LLaVA-NeXT-Video-7B-hf` |
+| `LlavaOnevision2ForConditionalGeneration` |    Image, Video     | `lmms-lab-encoder/LLaVA-OneVision-2-8B-Instruct` |
 | `LlavaOnevisionForConditionalGeneration` |     Image, Video     |  `llava-hf/llava-onevision-qwen2-7b-ov-hf` |
 | `MiniCPMV`                               |        Image         |                    `openbmb/MiniCPM-V-2_6` |
 | `MllamaForConditionalGeneration`         |        Image         | `meta-llama/Llama-3.2-11B-Vision-Instruct` |

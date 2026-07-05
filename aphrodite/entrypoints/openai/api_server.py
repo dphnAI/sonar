@@ -22,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.datastructures import State
 
 import aphrodite.envs as envs
-from aphrodite.config import ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig
 from aphrodite.engine.arg_utils import AsyncEngineArgs
 from aphrodite.engine.protocol import EngineClient
 from aphrodite.entrypoints.chat_utils import load_chat_template
@@ -170,9 +170,7 @@ def build_app(
         supported_tasks = _FALLBACK_SUPPORTED_TASKS
 
     if args.disable_fastapi_docs:
-        app = FastAPI(
-            openapi_url=None, docs_url=None, redoc_url=None, lifespan=lifespan
-        )
+        app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None, lifespan=lifespan)
     elif args.enable_offline_docs:
         app = FastAPI(docs_url=None, redoc_url=None, lifespan=lifespan)
     else:
@@ -285,9 +283,7 @@ def build_app(
         elif inspect.iscoroutinefunction(imported):
             app.middleware("http")(imported)
         else:
-            raise ValueError(
-                f"Invalid middleware {middleware}. Must be a function or a class."
-            )
+            raise ValueError(f"Invalid middleware {middleware}. Must be a function or a class.")
 
     app = sagemaker_standards_bootstrap(app)
     return app
@@ -304,9 +300,7 @@ async def init_app_state(
     if args.tool_call_parser is not None:
         from aphrodite.parser.metrics import init_parser_metrics
 
-        init_parser_metrics(
-            model_name=cast(str, aphrodite_config.model_config.served_model_name)
-        )
+        init_parser_metrics(model_name=cast(str, aphrodite_config.model_config.served_model_name))
 
     if supported_tasks is None:
         warnings.warn(
@@ -328,9 +322,7 @@ async def init_app_state(
     else:
         request_logger = None
 
-    base_model_paths = [
-        BaseModelPath(name=name, model_path=args.model) for name in served_model_names
-    ]
+    base_model_paths = [BaseModelPath(name=name, model_path=args.model) for name in served_model_names]
 
     state.engine_client = engine_client
     state.log_stats = not args.disable_log_stats
@@ -339,11 +331,7 @@ async def init_app_state(
     resolved_chat_template = load_chat_template(args.chat_template)
 
     # Merge default_mm_loras into the static lora_modules
-    default_mm_loras = (
-        aphrodite_config.lora_config.default_mm_loras
-        if aphrodite_config.lora_config is not None
-        else {}
-    )
+    default_mm_loras = aphrodite_config.lora_config.default_mm_loras if aphrodite_config.lora_config is not None else {}
     lora_modules = process_lora_modules(args.lora_modules, default_mm_loras)
 
     state.openai_serving_models = OpenAIServingModels(
@@ -396,9 +384,7 @@ async def init_app_state(
     if "generate" in supported_tasks:
         from aphrodite.entrypoints.generate.api_router import init_generate_state
 
-        await init_generate_state(
-            engine_client, state, args, request_logger, supported_tasks
-        )
+        await init_generate_state(engine_client, state, args, request_logger, supported_tasks)
 
         from aphrodite.entrypoints.scale_out.factories import init_scale_out_state
 
@@ -407,9 +393,7 @@ async def init_app_state(
     if "transcription" in supported_tasks or "realtime" in supported_tasks:
         from aphrodite.entrypoints.speech_to_text.factories import init_speech_to_text_state
 
-        init_speech_to_text_state(
-            engine_client, state, args, request_logger, supported_tasks
-        )
+        init_speech_to_text_state(engine_client, state, args, request_logger, supported_tasks)
 
     if any(task in POOLING_TASKS for task in supported_tasks):
         from aphrodite.entrypoints.pooling.factories import init_pooling_state
@@ -440,10 +424,7 @@ async def init_render_app_state(
     served_model_names = args.served_model_name or [args.model]
     model_registry = OpenAIModelRegistry(
         model_config=aphrodite_config.model_config,
-        base_model_paths=[
-            BaseModelPath(name=name, model_path=args.model)
-            for name in served_model_names
-        ],
+        base_model_paths=[BaseModelPath(name=name, model_path=args.model) for name in served_model_names],
     )
 
     if args.enable_log_requests:
@@ -508,14 +489,19 @@ async def init_render_app_state(
     state.server_load_metrics = 0
 
 
-def create_server_socket(addr: tuple[str, int]) -> socket.socket:
+def create_server_socket(
+    addr: tuple[str, int],
+    *,
+    reuse_port: bool,
+) -> socket.socket:
     family = socket.AF_INET
     if is_valid_ipv6_address(addr[0]):
         family = socket.AF_INET6
 
     sock = socket.socket(family=family, type=socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    if reuse_port:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
     sock.bind(addr)
 
     return sock
@@ -531,8 +517,7 @@ def validate_api_server_args(args):
     valid_tool_parses = ToolParserManager.list_registered()
     if args.enable_auto_tool_choice and args.tool_call_parser not in valid_tool_parses:
         raise KeyError(
-            f"invalid tool call parser: {args.tool_call_parser} "
-            f"(chose from {{ {','.join(valid_tool_parses)} }})"
+            f"invalid tool call parser: {args.tool_call_parser} (chose from {{ {','.join(valid_tool_parses)} }})"
         )
 
     valid_reasoning_parsers = ReasoningParserManager.list_registered()
@@ -540,13 +525,12 @@ def validate_api_server_args(args):
         reasoning_parser := args.structured_outputs_config.reasoning_parser
     ) and reasoning_parser not in valid_reasoning_parsers:
         raise KeyError(
-            f"invalid reasoning parser: {reasoning_parser} "
-            f"(chose from {{ {','.join(valid_reasoning_parsers)} }})"
+            f"invalid reasoning parser: {reasoning_parser} (chose from {{ {','.join(valid_reasoning_parsers)} }})"
         )
 
 
 @instrument(span_name="API server setup")
-def setup_server(args):
+def setup_server(args, *, reuse_port: bool):
     """Validate API server args and create the server socket."""
 
     log_version_and_model(logger, APHRODITE_VERSION, args.model)
@@ -567,7 +551,7 @@ def setup_server(args):
         sock = create_server_unix_socket(args.uds)
     else:
         sock_addr = (args.host or "", args.port)
-        sock = create_server_socket(sock_addr)
+        sock = create_server_socket(sock_addr, reuse_port=reuse_port)
 
     # workaround to avoid footguns where uvicorn drops requests with too
     # many concurrent requests active
@@ -688,13 +672,11 @@ async def run_server(args, **uvicorn_kwargs) -> None:
 
     signal.signal(signal.SIGTERM, _interrupt_init)
 
-    listen_address, sock = setup_server(args)
+    listen_address, sock = setup_server(args, reuse_port=False)
     await run_server_worker(listen_address, sock, args, **uvicorn_kwargs)
 
 
-async def run_server_worker(
-    listen_address, sock, args, client_config=None, **uvicorn_kwargs
-) -> None:
+async def run_server_worker(listen_address, sock, args, client_config=None, **uvicorn_kwargs) -> None:
     """Run a single API server worker."""
 
     if args.tool_parser_plugin and len(args.tool_parser_plugin) > 3:
@@ -707,9 +689,7 @@ async def run_server_worker(
         args,
         client_config=client_config,
     ) as engine_client:
-        shutdown_task = await build_and_serve(
-            engine_client, listen_address, sock, args, **uvicorn_kwargs
-        )
+        shutdown_task = await build_and_serve(engine_client, listen_address, sock, args, **uvicorn_kwargs)
     # NB: Await server shutdown only after the backend context is exited
     try:
         await shutdown_task
@@ -722,9 +702,7 @@ if __name__ == "__main__":
     # This section should be in sync with aphrodite/entrypoints/cli/main.py for CLI
     # entrypoints.
     cli_env_setup()
-    parser = FlexibleArgumentParser(
-        description="Aphrodite OpenAI-Compatible RESTful API server."
-    )
+    parser = FlexibleArgumentParser(description="Aphrodite OpenAI-Compatible RESTful API server.")
     parser = make_arg_parser(parser)
     args = parser.parse_args()
     validate_parsed_serve_args(args)

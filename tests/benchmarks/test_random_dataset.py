@@ -17,7 +17,7 @@ from aphrodite.benchmarks.datasets import (
 @pytest.fixture(scope="session")
 def hf_tokenizer() -> PreTrainedTokenizerBase:
     # Use a small, commonly available tokenizer
-    return AutoTokenizer.from_pretrained("gpt2")
+    return AutoTokenizer.from_pretrained("openai-community/gpt2")
 
 
 class Params(NamedTuple):
@@ -30,9 +30,7 @@ class Params(NamedTuple):
 
 @pytest.fixture(scope="session")
 def random_dataset_params() -> Params:
-    return Params(
-        num_requests=16, prefix_len=7, range_ratio=0.3, input_len=50, output_len=20
-    )
+    return Params(num_requests=16, prefix_len=7, range_ratio=0.3, input_len=50, output_len=20)
 
 
 def _fingerprint_sample(req: SampleRequest) -> tuple[str, int, int]:
@@ -61,9 +59,7 @@ def _collect_samples(
 
 
 @pytest.mark.benchmark
-def test_random_dataset_same_seed(
-    hf_tokenizer: PreTrainedTokenizerBase, random_dataset_params: Params
-) -> None:
+def test_random_dataset_same_seed(hf_tokenizer: PreTrainedTokenizerBase, random_dataset_params: Params) -> None:
     """Same seed should yield identical outputs, even if global RNGs change.
 
     This guards against accidental reliance on Python's random or np.random
@@ -102,9 +98,7 @@ def test_random_dataset_same_seed(
 
 
 @pytest.mark.benchmark
-def test_random_dataset_different_seeds(
-    hf_tokenizer: PreTrainedTokenizerBase, random_dataset_params: Params
-) -> None:
+def test_random_dataset_different_seeds(hf_tokenizer: PreTrainedTokenizerBase, random_dataset_params: Params) -> None:
     """Different seeds should change outputs with overwhelming likelihood."""
     p = random_dataset_params
     seed_a = 0

@@ -6,8 +6,11 @@ from collections.abc import Sequence
 import torch
 
 from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    kFp8DynamicTensorSym,
+    kFp8DynamicTokenSym,
     kFp8StaticChannelSym,
     kFp8StaticTensorSym,
+    kFp8StaticTokenSym,
 )
 from aphrodite.model_executor.utils import replace_parameter
 from aphrodite.platforms import current_platform
@@ -16,13 +19,93 @@ from .BlockScaledMMLinearKernel import Fp8BlockScaledMMLinearKernel
 from .ScaledMMLinearKernel import FP8ScaledMMLinearKernel, FP8ScaledMMLinearLayerConfig
 
 
-class XPUFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
+class XPUW8A8FP8LinearKernel(FP8ScaledMMLinearKernel):
+    _SUPPORTED_ACT_QUANT_KEYS = {
+        kFp8DynamicTensorSym,
+        kFp8DynamicTokenSym,
+        kFp8StaticTensorSym,
+        kFp8StaticTokenSym,
+    }
+    _SUPPORTED_WEIGHT_QUANT_KEYS = {
+        kFp8StaticChannelSym,
+        kFp8StaticTensorSym,
+    }
+
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if not current_platform.is_xpu():
-            return False, "XPUFP8ScaledMM only support on XPU"
+            return False, "XPUW8A8FP8Linear only support on XPU"
+        return True, None
+
+    @classmethod
+    def can_implement(cls, c: FP8ScaledMMLinearLayerConfig) -> tuple[bool, str | None]:
+        if c.weight_quant_key not in cls._SUPPORTED_WEIGHT_QUANT_KEYS:
+            return (
+                False,
+                "XPUW8A8FP8Linear only support per-channel and per-tensor quantization",
+            )
+        if c.activation_quant_key not in cls._SUPPORTED_ACT_QUANT_KEYS:
+            return (
+                False,
+                "XPUW8A8FP8Linear only support per-tensor and per-token activation quantization",
+            )
+        if c.weight_quant_key.dtype not in {torch.float8_e5m2, torch.float8_e4m3fn}:
+            return False, "XPUW8A8FP8Linear only support FP8 weight dtype"
+        if c.activation_quant_key.dtype not in {
+            torch.float8_e5m2,
+            torch.float8_e4m3fn,
+        }:
+            return False, "XPUW8A8FP8Linear only support FP8 activation dtype"
+        return True, None
+
+    def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
+        """Ensure weight is stored as C-contiguous [K, N] (KN layout).
+
+        Checkpoints store weight as [N, K]; fp8_gemm requires [K, N],
+        C-contiguous. Three incoming layouts are possible:
+          * [N, K] C-contiguous   <- direct checkpoint   -> .t().contiguous()
+          * [K, N] Fortran-order  <- fp8.py's weight.t() -> .contiguous()
+          * [K, N] C-contiguous   <- already correct     -> no-op
+
+        For square weights (K == N) the shape is ambiguous; contiguity is used
+        as a proxy: C-contiguous means checkpoint [N, K] (needs transpose);
+        Fortran-order means fp8.py already transposed (needs only contiguous).
+        """
+        K = getattr(layer, "input_size_per_partition", self.config.weight_shape[1])
+        N = getattr(layer, "output_size_per_partition", self.config.weight_shape[0])
+        w = layer.weight
+
+        if w.shape not in {(K, N), (N, K)}:
+            raise ValueError(f"XPUW8A8FP8Linear expects weight shape ({K},{N}) or ({N},{K}), but got {tuple(w.shape)}")
+
+        needs_transpose = w.shape == (N, K) if K != N else w.is_contiguous()
+        layer_weight = w.t() if needs_transpose else w
+        replace_parameter(layer, "weight", layer_weight.contiguous())
+        ws = layer.weight_scale
+        if ws.numel() == 1:
+            replace_parameter(layer, "weight_scale", ws.reshape(1))
+
+    def apply_scaled_mm(
+        self,
+        *,
+        A: torch.Tensor,
+        B: torch.Tensor,
+        out_dtype: torch.dtype,
+        As: torch.Tensor,
+        Bs: torch.Tensor,
+        bias: torch.Tensor | None,
+        output_shape: list,
+    ) -> torch.Tensor:
+        # B is C-contiguous [K, N] from process_weights_after_loading.
+        output = torch.ops._xpu_C.fp8_gemm(A, B, out_dtype, As, Bs, bias)
+        return output.view(*output_shape)
+
+
+class XPUW8A16FP8LinearKernel(FP8ScaledMMLinearKernel):
+    @classmethod
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
+        if not current_platform.is_xpu():
+            return False, "XPUW8A16FP8Linear only support on XPU"
         return True, None
 
     @classmethod
@@ -30,15 +113,13 @@ class XPUFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         if c.weight_quant_key not in {kFp8StaticChannelSym, kFp8StaticTensorSym}:
             return (
                 False,
-                "XPUFP8ScaledMM only support per-channel and per-tensor quantization",
+                "XPUW8A16FP8Linear only support per-channel and per-tensor quantization",
             )
         if c.weight_quant_key.dtype not in {torch.float8_e5m2, torch.float8_e4m3fn}:
-            return False, "XPUFP8ScaledMM only support FP8 weight dtype"
+            return False, "XPUW8A16FP8Linear only support FP8 weight dtype"
         return True, None
 
-    def __init__(
-        self, c: FP8ScaledMMLinearLayerConfig, layer_param_names: Sequence[str]
-    ) -> None:
+    def __init__(self, c: FP8ScaledMMLinearLayerConfig, layer_param_names: Sequence[str]) -> None:
         assert self.can_implement(c)[0]
         assert self.is_supported()[0]
         self.config = c
@@ -52,9 +133,7 @@ class XPUFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         weight = layer.weight
         out_features, in_features = self.config.weight_shape
 
-        if weight.shape == (out_features, in_features) and (
-            in_features != out_features or weight.is_contiguous()
-        ):
+        if weight.shape == (out_features, in_features) and (in_features != out_features or weight.is_contiguous()):
             replace_parameter(layer, "weight", weight.data.t())
         # else: already in [in, out] layout — no-op
 
@@ -87,18 +166,14 @@ class XPUFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
 
 class XPUFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if not current_platform.is_xpu():
             return False, "XPUFp8BlockScaledMM only support on XPU"
         return True, None
 
     def process_weights_after_loading(self, layer: torch.nn.Module):
         super().process_weights_after_loading(layer)
-        scale_attr = (
-            "weight_scale_inv" if hasattr(layer, "weight_scale_inv") else "weight_scale"
-        )
+        scale_attr = "weight_scale_inv" if hasattr(layer, "weight_scale_inv") else "weight_scale"
         scale = getattr(layer, scale_attr)
         # Models with scale_fmt=ue8m0 (e.g. DeepSeek-V4) store weight scales
         # as float8_e8m0fnu. The oneDNN fp8_gemm kernel dispatches to its

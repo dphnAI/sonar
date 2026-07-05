@@ -79,12 +79,8 @@ class OnlineRenderer:
         )
 
         self.chat_template = chat_template
-        self.chat_template_content_format: ChatTemplateContentFormatOption = (
-            chat_template_content_format
-        )
-        self.default_chat_template_kwargs: dict[str, Any] = (
-            default_chat_template_kwargs or {}
-        )
+        self.chat_template_content_format: ChatTemplateContentFormatOption = chat_template_content_format
+        self.default_chat_template_kwargs: dict[str, Any] = default_chat_template_kwargs or {}
         self.trust_request_chat_template = trust_request_chat_template
 
         self.log_error_stack = log_error_stack
@@ -114,11 +110,7 @@ class OnlineRenderer:
             _mt.validate_request_params(request)
 
         # Check if tool parsing is unavailable (common condition)
-        tool_parsing_unavailable = (
-            tool_parser is None
-            and not is_mistral_tokenizer(tokenizer)
-            and not self.use_harmony
-        )
+        tool_parsing_unavailable = tool_parser is None and not is_mistral_tokenizer(tokenizer) and not self.use_harmony
 
         # Validate tool_choice when tool parsing is required but unavailable
         if tool_parsing_unavailable and request.tool_choice not in (
@@ -129,19 +121,15 @@ class OnlineRenderer:
                 # for hf tokenizers, "auto" tools requires
                 # --enable-auto-tool-choice and --tool-call-parser
                 return self.create_error_response(
-                    '"auto" tool choice requires '
-                    "--enable-auto-tool-choice and --tool-call-parser to be set"
+                    '"auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set'
                 )
             elif request.tool_choice != "auto":
                 # "required" or named tool requires tool parser
                 return self.create_error_response(
-                    f'tool_choice="{request.tool_choice}" requires '
-                    "--tool-call-parser to be set"
+                    f'tool_choice="{request.tool_choice}" requires --tool-call-parser to be set'
                 )
 
-        if request.tools is None or (
-            request.tool_choice == "none" and self.exclude_tools_when_tool_choice_none
-        ):
+        if request.tools is None or (request.tool_choice == "none" and self.exclude_tools_when_tool_choice_none):
             tool_dicts = None
         else:
             tool_dicts = [tool.model_dump() for tool in request.tools]
@@ -169,9 +157,7 @@ class OnlineRenderer:
         else:
             # For GPT-OSS.
             should_include_tools = tool_dicts is not None
-            conversation, engine_inputs = self._make_request_with_harmony(
-                request, should_include_tools
-            )
+            conversation, engine_inputs = self._make_request_with_harmony(request, should_include_tools)
 
         return conversation, engine_inputs
 
@@ -236,9 +222,7 @@ class OnlineRenderer:
             return self.create_error_response("Echo is unsupported with prompt embeds.")
 
         if request.prompt_logprobs is not None and request.prompt_embeds is not None:
-            return self.create_error_response(
-                "prompt_logprobs is not compatible with prompt embeds."
-            )
+            return self.create_error_response("prompt_logprobs is not compatible with prompt embeds.")
 
         engine_inputs = await self.preprocess_completion(
             request,
@@ -264,13 +248,10 @@ class OnlineRenderer:
         chat_template_kwargs: dict[str, Any] | None,
         trust_request_chat_template: bool,
     ) -> ErrorResponse | None:
-        """Copied from OpenAIServing._validate_chat_template."""
+        """Copied from GenerateBaseServing._validate_chat_template."""
         if not trust_request_chat_template and (
             request_chat_template is not None
-            or (
-                chat_template_kwargs
-                and chat_template_kwargs.get("chat_template") is not None
-            )
+            or (chat_template_kwargs and chat_template_kwargs.get("chat_template") is not None)
         ):
             return self.create_error_response(
                 "Chat template is passed with request, but "
@@ -287,7 +268,7 @@ class OnlineRenderer:
         *,
         skip_mm_cache: bool = False,
     ) -> list[EngineInput]:
-        """Copied from OpenAIServing._preprocess_completion."""
+        """Copied from GenerateBaseServing._preprocess_completion."""
         prompts = list[SingletonPrompt | bytes]()
         if prompt_embeds is not None:  # embeds take higher priority
             prompts.extend(prompt_to_seq(prompt_embeds))
@@ -302,17 +283,12 @@ class OnlineRenderer:
         *,
         skip_mm_cache: bool = False,
     ) -> list[EngineInput]:
-        """Copied from OpenAIServing._preprocess_cmpl."""
+        """Copied from GenerateBaseServing._preprocess_cmpl."""
         renderer = self.renderer
         model_config = self.model_config
 
         parsed_prompts = [
-            (
-                prompt
-                if isinstance(prompt, bytes)
-                else parse_model_prompt(model_config, prompt)
-            )
-            for prompt in prompts
+            (prompt if isinstance(prompt, bytes) else parse_model_prompt(model_config, prompt)) for prompt in prompts
         ]
         tok_params = request.build_tok_params(model_config)
 
@@ -320,9 +296,7 @@ class OnlineRenderer:
             parsed_prompts,
             tok_params,
             prompt_extras={
-                k: v
-                for k in ("mm_processor_kwargs", "cache_salt")
-                if (v := getattr(request, k, None)) is not None
+                k: v for k in ("mm_processor_kwargs", "cache_salt") if (v := getattr(request, k, None)) is not None
             },
             skip_mm_cache=skip_mm_cache,
         )
@@ -339,7 +313,7 @@ class OnlineRenderer:
         *,
         skip_mm_cache: bool = False,
     ) -> tuple[list[ConversationMessage], list[EngineInput]]:
-        """Copied from OpenAIServing._preprocess_chat."""
+        """Copied from GenerateBaseServing._preprocess_chat."""
         renderer = self.renderer
         mm_config = self.model_config.multimodal_config
 
@@ -347,17 +321,12 @@ class OnlineRenderer:
             default_template_kwargs,
             dict(
                 tools=tool_dicts,
-                tokenize=(
-                    is_mistral_tokenizer(renderer.tokenizer)
-                    or self.model_config.enable_prompt_embeds
-                ),
+                tokenize=(is_mistral_tokenizer(renderer.tokenizer) or self.model_config.enable_prompt_embeds),
             ),
         )
 
         tok_params = request.build_tok_params(self.model_config)
-        chat_params = request.build_chat_params(
-            default_template, default_template_content_format
-        ).with_defaults(
+        chat_params = request.build_chat_params(default_template, default_template_content_format).with_defaults(
             default_template_kwargs,
             default_media_io_kwargs=(mm_config.media_io_kwargs if mm_config else None),
             default_mm_processor_kwargs=getattr(request, "mm_processor_kwargs", None),
@@ -368,9 +337,7 @@ class OnlineRenderer:
             chat_params,
             tok_params,
             prompt_extras={
-                k: v
-                for k in ("mm_processor_kwargs", "cache_salt")
-                if (v := getattr(request, k, None)) is not None
+                k: v for k in ("mm_processor_kwargs", "cache_salt") if (v := getattr(request, k, None)) is not None
             },
             skip_mm_cache=skip_mm_cache,
         )
@@ -393,9 +360,7 @@ class OnlineRenderer:
                 and tokenizer.supports_grammar
             )
             should_adjust_request = (
-                parser.reasoning_parser_cls is not None
-                or tool_choice != "none"
-                or is_mistral_grammar_eligible
+                parser.reasoning_parser_cls is not None or tool_choice != "none" or is_mistral_grammar_eligible
             )
             if should_adjust_request:
                 if not isinstance(request, ChatCompletionRequest | ResponsesRequest):

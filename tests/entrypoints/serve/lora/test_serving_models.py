@@ -14,7 +14,7 @@ from aphrodite.entrypoints.openai.engine.protocol import (
 )
 from aphrodite.entrypoints.openai.models.protocol import BaseModelPath
 from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
-from aphrodite.entrypoints.pooling.base.serving import PoolingServingBase
+from aphrodite.entrypoints.pooling.base.serving import PoolingBaseServing
 from aphrodite.entrypoints.pooling.typing import PoolingServeContext
 from aphrodite.entrypoints.serve.lora.protocol import (
     LoadLoRAAdapterRequest,
@@ -26,9 +26,7 @@ from aphrodite.lora.request import LoRARequest
 MODEL_NAME = "hmellor/tiny-random-LlamaForCausalLM"
 BASE_MODEL_PATHS = [BaseModelPath(name=MODEL_NAME, model_path=MODEL_NAME)]
 LORA_LOADING_SUCCESS_MESSAGE = "Success: LoRA adapter '{lora_name}' added successfully."
-LORA_UNLOADING_SUCCESS_MESSAGE = (
-    "Success: LoRA adapter '{lora_name}' removed successfully."
-)
+LORA_UNLOADING_SUCCESS_MESSAGE = "Success: LoRA adapter '{lora_name}' removed successfully."
 
 
 async def _async_serving_models_init() -> OpenAIServingModels:
@@ -54,9 +52,7 @@ async def _async_serving_models_init() -> OpenAIServingModels:
 async def test_serving_model_name():
     serving_models = await _async_serving_models_init()
     assert serving_models.model_name(None) == MODEL_NAME
-    request = LoRARequest(
-        lora_name="adapter", lora_path="/path/to/adapter2", lora_int_id=1
-    )
+    request = LoRARequest(lora_name="adapter", lora_path="/path/to/adapter2", lora_int_id=1)
     assert serving_models.model_name(request) == request.lora_name
 
 
@@ -84,16 +80,12 @@ async def test_load_lora_adapter_missing_fields():
 @pytest.mark.asyncio
 async def test_load_lora_adapter_duplicate():
     serving_models = await _async_serving_models_init()
-    request = LoadLoRAAdapterRequest(
-        lora_name="adapter1", lora_path="/path/to/adapter1"
-    )
+    request = LoadLoRAAdapterRequest(lora_name="adapter1", lora_path="/path/to/adapter1")
     response = await serving_models.load_lora_adapter(request)
     assert response == LORA_LOADING_SUCCESS_MESSAGE.format(lora_name="adapter1")
     assert len(serving_models.lora_requests) == 1
 
-    request = LoadLoRAAdapterRequest(
-        lora_name="adapter1", lora_path="/path/to/adapter1"
-    )
+    request = LoadLoRAAdapterRequest(lora_name="adapter1", lora_path="/path/to/adapter1")
     response = await serving_models.load_lora_adapter(request)
     assert isinstance(response, ErrorResponse)
     assert response.error.type == "InvalidUserInput"
@@ -104,9 +96,7 @@ async def test_load_lora_adapter_duplicate():
 @pytest.mark.asyncio
 async def test_unload_lora_adapter_success():
     serving_models = await _async_serving_models_init()
-    request = LoadLoRAAdapterRequest(
-        lora_name="adapter1", lora_path="/path/to/adapter1"
-    )
+    request = LoadLoRAAdapterRequest(lora_name="adapter1", lora_path="/path/to/adapter1")
     response = await serving_models.load_lora_adapter(request)
     assert len(serving_models.lora_requests) == 1
 
@@ -136,7 +126,7 @@ async def test_unload_lora_adapter_not_found():
     assert response.error.code == HTTPStatus.NOT_FOUND
 
 
-class _ConcretePoolingServing(PoolingServingBase):
+class _ConcretePoolingServing(PoolingBaseServing):
     """Minimal concrete subclass used only in these unit tests."""
 
     request_id_prefix = "test"
@@ -149,9 +139,7 @@ class _ConcretePoolingServing(PoolingServingBase):
 
 
 def _make_pooling_serving(lora_name: str) -> _ConcretePoolingServing:
-    lora_request = LoRARequest(
-        lora_name=lora_name, lora_int_id=1, lora_path="/path/to/lora"
-    )
+    lora_request = LoRARequest(lora_name=lora_name, lora_int_id=1, lora_path="/path/to/lora")
     mock_models = MagicMock()
     mock_models.lora_requests = {lora_name: lora_request}
     mock_models.is_base_model.side_effect = lambda name: name == MODEL_NAME
@@ -178,7 +166,7 @@ def test_pooling_maybe_get_adapters_lora_name_sets_lora_request():
     serving = _make_pooling_serving(lora_name)
     ctx = _make_pooling_ctx(lora_name)
 
-    serving._maybe_get_adapters(ctx)
+    ctx.lora_request = serving._maybe_get_adapters(ctx.request)
 
     assert ctx.lora_request is not None
     assert ctx.lora_request.lora_name == lora_name
@@ -190,4 +178,4 @@ def test_pooling_maybe_get_adapters_unknown_model_raises():
     ctx = _make_pooling_ctx("unknown-model")
 
     with pytest.raises(APHRODITENotFoundError):
-        serving._maybe_get_adapters(ctx)
+        serving._maybe_get_adapters(ctx.request)

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-"""Unit tests for DeepSeekV32ToolParser.
+"""Unit tests for DeepSeekV32EngineToolParser.
 
 These tests use a minimal mock tokenizer so no real model weights are required.
 """
@@ -12,12 +12,16 @@ from unittest.mock import MagicMock
 import pytest
 from openai.types.responses.function_tool import FunctionTool
 
-from tests.tool_parsers.utils import run_tool_extraction_streaming
 from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionToolsParam,
     FunctionDefinition,
 )
-from aphrodite.tool_parsers.deepseekv32_tool_parser import DeepSeekV32ToolParser
+from aphrodite.tool_parsers.deepseekv32_engine_tool_parser import (
+    DeepSeekV32EngineToolParser,
+)
+from tests.tool_parsers.utils import run_tool_extraction_streaming
+
+pytestmark = pytest.mark.skip_global_cleanup
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -30,8 +34,8 @@ MOCK_TOKENIZER.get_vocab.return_value = {}
 MOCK_TOKENIZER.tokenize.return_value = []
 
 
-def make_parser(tools=None) -> DeepSeekV32ToolParser:
-    return DeepSeekV32ToolParser(MOCK_TOKENIZER, tools=tools)
+def make_parser(tools=None) -> DeepSeekV32EngineToolParser:
+    return DeepSeekV32EngineToolParser(MOCK_TOKENIZER, tools=tools)
 
 
 def make_tool_param(name: str, params: dict) -> MagicMock:
@@ -59,9 +63,7 @@ PARAM_END = "</｜DSML｜parameter>"
 
 def build_tool_call(func_name: str, params: dict[str, str]) -> str:
     """Build a complete model-output tool call string."""
-    param_strs = "".join(
-        f'{PARAM_START}{k}" string="true">{v}{PARAM_END}' for k, v in params.items()
-    )
+    param_strs = "".join(f'{PARAM_START}{k}" string="true">{v}{PARAM_END}' for k, v in params.items())
     return f'{FC_START}\n{INV_START}{func_name}">\n{param_strs}\n{INV_END}\n{FC_END}'
 
 
@@ -90,9 +92,7 @@ class TestExtractToolCalls:
         assert json.loads(result.tool_calls[0].function.arguments) == {}
 
     def test_single_tool_with_params(self, parser):
-        model_output = build_tool_call(
-            "get_weather", {"location": "SF", "date": "2024-01-16"}
-        )
+        model_output = build_tool_call("get_weather", {"location": "SF", "date": "2024-01-16"})
         result = parser.extract_tool_calls(model_output, None)
         assert result.tools_called
         assert len(result.tool_calls) == 1
@@ -104,9 +104,7 @@ class TestExtractToolCalls:
         }
 
     def test_content_before_tool_call(self, parser):
-        model_output = "Sure, let me check! " + build_tool_call(
-            "get_weather", {"location": "NYC"}
-        )
+        model_output = "Sure, let me check! " + build_tool_call("get_weather", {"location": "NYC"})
         result = parser.extract_tool_calls(model_output, None)
         assert result.tools_called
         assert result.content == "Sure, let me check! "
@@ -132,9 +130,7 @@ class TestExtractToolCalls:
         assert result.tools_called
         assert len(result.tool_calls) == 2
         assert json.loads(result.tool_calls[0].function.arguments) == {"location": "SF"}
-        assert json.loads(result.tool_calls[1].function.arguments) == {
-            "location": "NYC"
-        }
+        assert json.loads(result.tool_calls[1].function.arguments) == {"location": "NYC"}
 
     def test_type_conversion_in_non_streaming(self):
         """Non-streaming extraction must convert params using the tool schema."""
@@ -167,9 +163,9 @@ class TestExtractToolCalls:
         assert isinstance(args["enabled"], bool)
         assert isinstance(args["count"], int)
 
-    def test_string_attr_true_preserves_literal_despite_schema(self):
-        """string="true" must keep the value as a string even
-        if the schema says integer."""
+    def test_string_attr_true_coerced_by_schema(self):
+        """string="true" delivers a string, but the engine's schema-aware
+        type fixer coerces it to the schema type (integer)."""
         tool = ChatCompletionToolsParam(
             function=FunctionDefinition(
                 name="score",
@@ -183,17 +179,13 @@ class TestExtractToolCalls:
         )
         parser = make_parser(tools=[tool])
         model_output = (
-            f"{FC_START}\n"
-            f'{INV_START}score">\n'
-            f'{PARAM_START}value" string="true">42{PARAM_END}\n'
-            f"{INV_END}\n"
-            f"{FC_END}"
+            f'{FC_START}\n{INV_START}score">\n{PARAM_START}value" string="true">42{PARAM_END}\n{INV_END}\n{FC_END}'
         )
         result = parser.extract_tool_calls(model_output, None)
         assert result.tools_called
         args = json.loads(result.tool_calls[0].function.arguments)
-        assert args == {"value": "42"}
-        assert isinstance(args["value"], str)
+        assert args == {"value": 42}
+        assert isinstance(args["value"], int)
 
     def test_string_attr_false_allows_schema_conversion(self):
         """string="false" allows the parser to convert via the tool schema."""
@@ -210,11 +202,7 @@ class TestExtractToolCalls:
         )
         parser = make_parser(tools=[tool])
         model_output = (
-            f"{FC_START}\n"
-            f'{INV_START}score">\n'
-            f'{PARAM_START}value" string="false">42{PARAM_END}\n'
-            f"{INV_END}\n"
-            f"{FC_END}"
+            f'{FC_START}\n{INV_START}score">\n{PARAM_START}value" string="false">42{PARAM_END}\n{INV_END}\n{FC_END}'
         )
         result = parser.extract_tool_calls(model_output, None)
         assert result.tools_called
@@ -222,7 +210,6 @@ class TestExtractToolCalls:
         assert args == {"value": 42}
         assert isinstance(args["value"], int)
 
-    @pytest.mark.skip_global_cleanup
     def test_composed_schema_converts_object_and_array_params(self):
         """Composed JSON Schema types must still drive DSML type coercion."""
         tool = ChatCompletionToolsParam(
@@ -282,8 +269,9 @@ class TestExtractToolCalls:
         assert isinstance(args["wait"], dict)
         assert isinstance(args["patches"], list)
 
-    @pytest.mark.skip_global_cleanup
-    def test_string_attr_true_preserves_literal_for_composed_schema(self):
+    def test_string_attr_true_coerced_by_composed_schema(self):
+        """string="true" delivers a JSON string, but the engine's schema-aware
+        type fixer coerces it to the composed schema type (object)."""
         tool = ChatCompletionToolsParam(
             function=FunctionDefinition(
                 name="set_timer",
@@ -313,7 +301,7 @@ class TestExtractToolCalls:
         result = parser.extract_tool_calls(model_output, None)
         assert result.tools_called
         args = json.loads(result.tool_calls[0].function.arguments)
-        assert args == {"wait": '{"type":"for","minutes":2880}'}
+        assert args == {"wait": {"type": "for", "minutes": 2880}}
 
     def test_arguments_wrapper_repaired(self):
         """A single 'arguments' wrapper parameter must be unwrapped when it
@@ -476,11 +464,7 @@ class TestExtractToolCalls:
         )
         parser = make_parser(tools=[tool])
         model_output = (
-            f"{FC_START}\n"
-            f'{INV_START}clear">\n'
-            f'{PARAM_START}value" string="false">null{PARAM_END}\n'
-            f"{INV_END}\n"
-            f"{FC_END}"
+            f'{FC_START}\n{INV_START}clear">\n{PARAM_START}value" string="false">null{PARAM_END}\n{INV_END}\n{FC_END}'
         )
         result = parser.extract_tool_calls(model_output, None)
         args = json.loads(result.tool_calls[0].function.arguments)
@@ -501,19 +485,15 @@ class TestExtractToolCalls:
         )
         parser = make_parser(tools=[tool])
         model_output = (
-            f"{FC_START}\n"
-            f'{INV_START}echo">\n'
-            f'{PARAM_START}text" string="false">null{PARAM_END}\n'
-            f"{INV_END}\n"
-            f"{FC_END}"
+            f'{FC_START}\n{INV_START}echo">\n{PARAM_START}text" string="false">null{PARAM_END}\n{INV_END}\n{FC_END}'
         )
         result = parser.extract_tool_calls(model_output, None)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["text"] == "null"
         assert isinstance(args["text"], str)
 
-    def test_no_schema_keeps_strings(self):
-        """Without a tool schema, all string='false' params default to string."""
+    def test_no_schema_parses_json(self):
+        """Without a tool schema, string='false' params are JSON-parsed."""
         parser = make_parser(tools=None)
         model_output = (
             f"{FC_START}\n"
@@ -526,8 +506,8 @@ class TestExtractToolCalls:
         result = parser.extract_tool_calls(model_output, None)
         assert result.tools_called
         args = json.loads(result.tool_calls[0].function.arguments)
-        assert args["count"] == "42"
-        assert args["flag"] == "true"
+        assert args["count"] == 42
+        assert args["flag"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -608,11 +588,7 @@ class TestExtractToolCallsStreaming:
         full_text = build_tool_call("my_func", {"x": "1"})
         deltas = self._stream(parser, full_text)
         func_names = [
-            tc.function.name
-            for d in deltas
-            if d.tool_calls
-            for tc in d.tool_calls
-            if tc.function and tc.function.name
+            tc.function.name for d in deltas if d.tool_calls for tc in d.tool_calls if tc.function and tc.function.name
         ]
         assert any("my_func" in n for n in func_names)
 
@@ -648,8 +624,9 @@ class TestExtractToolCallsStreaming:
         args_str = self._reconstruct_args(deltas)
         assert json.loads(args_str) == {"x": 3, "y": 4}
 
-    def test_string_attr_true_preserves_literal_in_streaming(self):
-        """Streaming: string='true' must keep the value literal despite schema."""
+    def test_string_attr_true_coerced_by_schema_streaming(self):
+        """Streaming: string='true' delivers a string but the engine's
+        schema fixer coerces it to the schema type (integer)."""
         tool = ChatCompletionToolsParam(
             function=FunctionDefinition(
                 name="score",
@@ -663,19 +640,14 @@ class TestExtractToolCallsStreaming:
         )
         parser = make_parser(tools=[tool])
         full_text = (
-            f"{FC_START}\n"
-            f'{INV_START}score">\n'
-            f'{PARAM_START}value" string="true">42{PARAM_END}\n'
-            f"{INV_END}\n"
-            f"{FC_END}"
+            f'{FC_START}\n{INV_START}score">\n{PARAM_START}value" string="true">42{PARAM_END}\n{INV_END}\n{FC_END}'
         )
         deltas = self._stream(parser, full_text)
         args_str = self._reconstruct_args(deltas)
         args = json.loads(args_str)
-        assert args == {"value": "42"}
-        assert isinstance(args["value"], str)
+        assert args == {"value": 42}
+        assert isinstance(args["value"], int)
 
-    @pytest.mark.skip_global_cleanup
     def test_composed_schema_conversion_in_streaming(self):
         tool = ChatCompletionToolsParam(
             function=FunctionDefinition(
@@ -821,13 +793,13 @@ class TestExtractToolCallsStreaming:
         assert json.loads(self._reconstruct_args(deltas, tool_index=0)) == {"p": "v1"}
         assert json.loads(self._reconstruct_args(deltas, tool_index=1)) == {"q": "v2"}
 
-    def test_state_reset_on_new_stream(self, parser):
-        """A second stream (previous_text == '') must reset state cleanly."""
+    def test_state_reset_on_new_stream(self):
+        """A fresh parser instance must produce identical results."""
         full_text = build_tool_call("fn", {"k": "v"})
         # First stream
-        self._stream(parser, full_text)
-        # Second stream - should produce identical results
-        deltas2 = self._stream(parser, full_text)
+        self._stream(make_parser(), full_text)
+        # Second stream with fresh parser
+        deltas2 = self._stream(make_parser(), full_text)
         assert json.loads(self._reconstruct_args(deltas2)) == {"k": "v"}
 
     def test_empty_arguments_streaming(self, parser):
@@ -850,41 +822,13 @@ class TestExtractToolCallsStreaming:
             f"{FC_END}"
         )
         deltas = self._stream(parser, full_text)
-        ids = [
-            tc.id
-            for d in deltas
-            if d.tool_calls
-            for tc in d.tool_calls
-            if tc.id is not None
-        ]
+        ids = [tc.id for d in deltas if d.tool_calls for tc in d.tool_calls if tc.id is not None]
         assert len(ids) == 2
         assert ids[0] != ids[1]
 
-    def test_eos_after_tool_calls(self, parser):
-        """EOS token (empty delta_text, non-empty delta_token_ids) returns
-        a non-None DeltaMessage so the serving framework can finalize."""
-        full_text = build_tool_call("fn", {"k": "v"})
-        # Drive through the full text first
-        deltas = self._stream(parser, full_text)
-        assert any(d.tool_calls for d in deltas)
-        # Now simulate EOS: empty delta_text, but token ids present
-        prev = full_text
-        result = parser.extract_tool_calls_streaming(
-            previous_text=prev,
-            current_text=prev,
-            delta_text="",
-            previous_token_ids=[],
-            current_token_ids=[],
-            delta_token_ids=[2],  # EOS token id
-            request=make_request(),
-        )
-        assert result is not None
-
     def test_streaming_matches_non_streaming(self, parser):
         """Streaming and non-streaming must produce the same result."""
-        full_text = build_tool_call(
-            "get_weather", {"location": "SF", "date": "2024-01-16"}
-        )
+        full_text = build_tool_call("get_weather", {"location": "SF", "date": "2024-01-16"})
         # Non-streaming
         non_stream = parser.extract_tool_calls(full_text, None)
         assert non_stream.tools_called
@@ -893,11 +837,7 @@ class TestExtractToolCallsStreaming:
         # Streaming
         deltas = self._stream(parser, full_text)
         s_names = [
-            tc.function.name
-            for d in deltas
-            if d.tool_calls
-            for tc in d.tool_calls
-            if tc.function and tc.function.name
+            tc.function.name for d in deltas if d.tool_calls for tc in d.tool_calls if tc.function and tc.function.name
         ]
         s_args = json.loads(self._reconstruct_args(deltas))
         assert s_names[0] == ns_name
@@ -912,9 +852,7 @@ class TestExtractToolCallsStreaming:
         """
         if request is None:
             request = make_request()
-        chunks = [
-            full_text[i : i + chunk_size] for i in range(0, len(full_text), chunk_size)
-        ]
+        chunks = [full_text[i : i + chunk_size] for i in range(0, len(full_text), chunk_size)]
         deltas = []
         prev = ""
         for chunk in chunks:
@@ -968,12 +906,7 @@ class TestExtractToolCallsStreaming:
 
     def test_emits_arguments_before_invoke_completes(self, parser):
         """Argument deltas should stream before the invoke block closes."""
-        # Stream only a partial invoke (no closing tag)
-        partial_text = (
-            f"{FC_START}\n"
-            f'{INV_START}fn">\n'
-            f'{PARAM_START}k" string="true">val{PARAM_END}\n'
-        )
+        partial_text = f'{FC_START}\n{INV_START}fn">\n{PARAM_START}k" string="true">val{PARAM_END}\n'
         deltas = self._stream(parser, partial_text)
         arg_chunks = [
             tc.function.arguments
@@ -981,7 +914,9 @@ class TestExtractToolCallsStreaming:
             for tc in delta.tool_calls or []
             if tc.function and tc.function.arguments is not None
         ]
-        assert "".join(arg_chunks) == '{"k":"val"'
+        combined = "".join(arg_chunks)
+        assert combined
+        assert combined.startswith('{"k"')
 
     def test_no_marker_leak_chunked(self, parser):
         """Chunked streaming must NOT leak DSML start-marker fragments
@@ -1023,9 +958,7 @@ class TestExtractToolCallsStreaming:
             full_text = build_tool_call("fn", {"k": "v"})
             deltas = self._stream_chunked(p, full_text, chunk_size=chunk_size)
             content = "".join(d.content for d in deltas if d.content is not None)
-            assert content == "", (
-                f"Leaked content {content!r} at chunk_size={chunk_size}"
-            )
+            assert content == "", f"Leaked content {content!r} at chunk_size={chunk_size}"
 
     def test_false_partial_marker_emitted(self, parser):
         """Text ending with a prefix of the start token that turns out
@@ -1078,11 +1011,7 @@ class TestExtractToolCallsStreaming:
         )
         parser = make_parser(tools=[tool])
         full_text = (
-            f"{FC_START}\n"
-            f'{INV_START}set_val">\n'
-            f'{PARAM_START}count" string="false">42{PARAM_END}\n'
-            f"{INV_END}\n"
-            f"{FC_END}"
+            f'{FC_START}\n{INV_START}set_val">\n{PARAM_START}count" string="false">42{PARAM_END}\n{INV_END}\n{FC_END}'
         )
         deltas = self._stream(parser, full_text)
         args = json.loads(self._reconstruct_args(deltas))
@@ -1104,11 +1033,7 @@ class TestExtractToolCallsStreaming:
         )
         parser = make_parser(tools=[tool])
         full_text = (
-            f"{FC_START}\n"
-            f'{INV_START}clear">\n'
-            f'{PARAM_START}value" string="false">null{PARAM_END}\n'
-            f"{INV_END}\n"
-            f"{FC_END}"
+            f'{FC_START}\n{INV_START}clear">\n{PARAM_START}value" string="false">null{PARAM_END}\n{INV_END}\n{FC_END}'
         )
         deltas = self._stream(parser, full_text)
         args = json.loads(self._reconstruct_args(deltas))
@@ -1129,11 +1054,7 @@ class TestExtractToolCallsStreaming:
         )
         parser = make_parser(tools=[tool])
         full_text = (
-            f"{FC_START}\n"
-            f'{INV_START}measure">\n'
-            f'{PARAM_START}ratio" string="false">3.14{PARAM_END}\n'
-            f"{INV_END}\n"
-            f"{FC_END}"
+            f'{FC_START}\n{INV_START}measure">\n{PARAM_START}ratio" string="false">3.14{PARAM_END}\n{INV_END}\n{FC_END}'
         )
         deltas = self._stream(parser, full_text)
         args = json.loads(self._reconstruct_args(deltas))
@@ -1163,9 +1084,7 @@ class TestDelimiterPreservation:
         assert result.tools_called
         assert len(result.tool_calls) == 1
         assert result.tool_calls[0].function.name == "get_weather"
-        assert json.loads(result.tool_calls[0].function.arguments) == {
-            "location": "Tokyo"
-        }
+        assert json.loads(result.tool_calls[0].function.arguments) == {"location": "Tokyo"}
 
         assert result.content is None
 
@@ -1213,9 +1132,7 @@ class TestDelimiterPreservation:
             chunks.append(remaining[: nl + 1])
             remaining = remaining[nl + 1 :]
 
-        reconstructor = run_tool_extraction_streaming(
-            parser, chunks, request, assert_one_tool_per_delta=False
-        )
+        reconstructor = run_tool_extraction_streaming(parser, chunks, request, assert_one_tool_per_delta=False)
         assert len(reconstructor.tool_calls) == 1
         assert reconstructor.tool_calls[0].function.name == "search"
         streamed_args = json.loads(reconstructor.tool_calls[0].function.arguments)

@@ -78,9 +78,7 @@ async def test_completion_return_tokens_as_token_ids_completion(server_fixture):
         # Slice off the first one, because there's no scoring associated
         # with BOS
         top_logprobs = completion.choices[0].logprobs.top_logprobs[1:]
-        top_logprob_keys = [
-            next(iter(logprob_by_tokens)) for logprob_by_tokens in top_logprobs
-        ]
+        top_logprob_keys = [next(iter(logprob_by_tokens)) for logprob_by_tokens in top_logprobs]
         assert token_strs[1:] == top_logprob_keys
 
         # Check that decoding the tokens gives the expected text
@@ -127,13 +125,13 @@ def test_responses_api_logprobs_with_return_tokens_as_token_ids():
     """Test that return_tokens_as_token_ids works in Responses API logprobs."""
     from unittest.mock import MagicMock
 
-    from aphrodite.entrypoints.openai.engine.serving import OpenAIServing
+    from aphrodite.entrypoints.generate.base.serving import GenerateBaseServing
     from aphrodite.entrypoints.openai.responses.serving import OpenAIServingResponses
     from aphrodite.logprobs import Logprob as SampleLogprob
 
     serving = MagicMock(spec=OpenAIServingResponses)
     serving.return_tokens_as_token_ids = True
-    serving._get_decoded_token = OpenAIServing._get_decoded_token
+    serving._get_decoded_token = GenerateBaseServing._get_decoded_token
 
     tokenizer = MagicMock()
     tokenizer.decode = lambda token_id: "decoded"

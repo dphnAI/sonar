@@ -128,11 +128,7 @@ def _load_kv_tile_td(
     Tensor descriptors zero-pad reads beyond the shape boundary, so
     ``HEAD_SIZE_PADDED > HEAD_SIZE`` is handled correctly.
     """
-    base = (
-        cache_ptr
-        + physical_block_idx_scalar * stride_cache_0
-        + kv_head_idx * stride_cache_2
-    )
+    base = cache_ptr + physical_block_idx_scalar * stride_cache_0 + kv_head_idx * stride_cache_2
     desc = tl.make_tensor_descriptor(
         base=base,
         shape=(BLOCK_SIZE, HEAD_SIZE),
@@ -221,6 +217,9 @@ def kernel_unified_attention(
     USE_MM_PREFIX: tl.constexpr,  # bool
     MAX_MM_RANGES: tl.constexpr,  # int
     mm_prefix_range_ptr,
+    rswa_prefix_lens_ptr,
+    R_SWA_WINDOW: tl.constexpr,  # int
+    USE_R_SWA: tl.constexpr,  # bool
     stride_k_cache_0: tl.int64,  # int
     stride_k_cache_1: tl.int64,  # int
     stride_k_cache_2: tl.int64,  # int
@@ -275,6 +274,10 @@ def kernel_unified_attention(
     USE_TD: tl.constexpr = False,
     USE_TD_QO: tl.constexpr = False,
     Q_IS_FP8: tl.constexpr = False,
+    # Gemma4: clamp mm_prefix bidirectional ranges by the sliding window
+    # instead of letting them override it. Default False preserves the
+    # original (causal AND SW) OR mm_prefix behavior for all other models.
+    MM_PREFIX_CLAMP_SW: tl.constexpr = False,
 ):
     USE_PER_TOKEN_HEAD_SCALES: tl.constexpr = KV_QUANT_MODE >= 2
     USE_FP8_Q_DESCALE: tl.constexpr = KV_QUANT_MODE == 1 and Q_IS_FP8
@@ -295,9 +298,7 @@ def kernel_unified_attention(
         cur_batch_in_all_start_index,
         cur_batch_query_len,
         seq_len,
-    ) = resolve_seq_and_query_len(
-        query_start_len_ptr, seq_lens_ptr, q_block_global_idx, num_seqs, BLOCK_Q
-    )
+    ) = resolve_seq_and_query_len(query_start_len_ptr, seq_lens_ptr, q_block_global_idx, num_seqs, BLOCK_Q)
 
     if q_block_local_idx * BLOCK_Q >= cur_batch_query_len:
         return
@@ -311,9 +312,7 @@ def kernel_unified_attention(
 
     # Number of valid query rows in this block (used by TD descriptor
     # shapes, but always computed so the variable stays in scope).
-    q_block_local_len = tl.minimum(
-        BLOCK_Q, cur_batch_query_len - q_block_local_idx * BLOCK_Q
-    )
+    q_block_local_len = tl.minimum(BLOCK_Q, cur_batch_query_len - q_block_local_idx * BLOCK_Q)
 
     offs_m = tl.arange(0, BLOCK_M)
     offs_d = tl.arange(0, HEAD_SIZE_PADDED)
@@ -322,11 +321,7 @@ def kernel_unified_attention(
 
     query_offset_0 = cur_batch_in_all_start_index + query_pos
     query_offset_1 = kv_head_idx * num_queries_per_kv + offs_m % num_queries_per_kv
-    query_offset = (
-        query_offset_0[:, None] * query_stride_0
-        + query_offset_1[:, None] * query_stride_1
-        + offs_d[None, :]
-    )
+    query_offset = query_offset_0[:, None] * query_stride_0 + query_offset_1[:, None] * query_stride_1 + offs_d[None, :]
 
     dim_mask = tl.where(offs_d < HEAD_SIZE, 1, 0).to(tl.int1)
     query_mask_0 = tl.where(query_pos < cur_batch_query_len, 1, 0).to(tl.int1)
@@ -357,9 +352,7 @@ def kernel_unified_attention(
 
     block_table_offset = seq_idx * block_table_stride
 
-    M = init_softmax_M(
-        sink_ptr, query_offset_1, query_mask_1, segm_idx, BLOCK_M, USE_SINKS, IS_3D
-    )
+    M = init_softmax_M(sink_ptr, query_offset_1, query_mask_1, segm_idx, BLOCK_M, USE_SINKS, IS_3D)
     L = tl.full([BLOCK_M], 1.0, dtype=tl.float32)
     # acc : (BLOCK_M, HEAD_SIZE_PADDED)
     acc = tl.zeros([BLOCK_M, HEAD_SIZE_PADDED], dtype=tl.float32)
@@ -372,9 +365,7 @@ def kernel_unified_attention(
     context_len = seq_len - cur_batch_query_len
 
     if USE_ALIBI_SLOPES:
-        alibi_slope = tl.load(
-            alibi_slopes_ptr + query_offset_1, mask=query_mask_1, other=0.0
-        )
+        alibi_slope = tl.load(alibi_slopes_ptr + query_offset_1, mask=query_mask_1, other=0.0)
 
     if USE_QQ_BIAS:
         qq_bias_row_ptrs = qq_bias_ptr + query_pos[:, None] * qq_bias_stride_0
@@ -391,7 +382,7 @@ def kernel_unified_attention(
         BLOCK_Q,
         num_queries_per_kv,
         SLIDING_WINDOW,
-        USE_MM_PREFIX,
+        USE_MM_PREFIX or USE_R_SWA,
         IS_3D,
         USE_CAUSAL,
         USE_PER_SEQ_CAUSAL,
@@ -404,9 +395,7 @@ def kernel_unified_attention(
         seq_offset = j * TILE_SIZE + offs_t
         tile_mask = seq_offset < max_seq_prefix_len
 
-        physical_block_idx = tl.load(
-            block_tables_ptr + block_table_offset + seq_offset // BLOCK_SIZE
-        ).to(tl.int64)
+        physical_block_idx = tl.load(block_tables_ptr + block_table_offset + seq_offset // BLOCK_SIZE).to(tl.int64)
 
         if USE_TD:
             # All TILE_SIZE slots within a single KV tile map to one
@@ -414,9 +403,9 @@ def kernel_unified_attention(
             # from the static_assert above), so load the block index as
             # a scalar instead of a broadcast reduction.
             offset_in_block = (j * TILE_SIZE) % BLOCK_SIZE
-            physical_block_scalar = tl.load(
-                block_tables_ptr + block_table_offset + (j * TILE_SIZE) // BLOCK_SIZE
-            ).to(tl.int64)
+            physical_block_scalar = tl.load(block_tables_ptr + block_table_offset + (j * TILE_SIZE) // BLOCK_SIZE).to(
+                tl.int64
+            )
             # K : (HEAD_SIZE, TILE_SIZE)
             K_load = _load_kv_tile_td(
                 key_cache_ptr,
@@ -482,17 +471,13 @@ def kernel_unified_attention(
                 + (seq_offset % BLOCK_SIZE) * stride_ks_slot
                 + kv_head_idx * stride_ks_head
             )
-            k_token_head_scales = tl.load(
-                k_scale_cache_ptr + scale_idx, mask=tile_mask, other=1.0
-            )
+            k_token_head_scales = tl.load(k_scale_cache_ptr + scale_idx, mask=tile_mask, other=1.0)
             v_scale_idx = (
                 physical_block_idx * stride_vs_blk
                 + (seq_offset % BLOCK_SIZE) * stride_vs_slot
                 + kv_head_idx * stride_vs_head
             )
-            v_token_head_scales = tl.load(
-                v_scale_cache_ptr + v_scale_idx, mask=tile_mask, other=1.0
-            )
+            v_token_head_scales = tl.load(v_scale_cache_ptr + v_scale_idx, mask=tile_mask, other=1.0)
 
         query_abs_pos = context_len + query_pos[:, None]
         seq_mask = compute_kv_seq_mask(
@@ -509,6 +494,10 @@ def kernel_unified_attention(
             per_seq_causal_ptr,
             CHUNK_LOOKBACK,
             CHUNK_SIZE,
+            MM_PREFIX_CLAMP_SW,
+            rswa_prefix_lens_ptr,
+            R_SWA_WINDOW,
+            USE_R_SWA,
         )
 
         # S : (BLOCK_M, TILE_SIZE)
@@ -523,19 +512,13 @@ def kernel_unified_attention(
         if USE_SOFTCAP:
             S = apply_softcap(S, softcap)
 
-        S = tl.where(
-            query_mask_1[:, None] & query_mask_0[:, None] & seq_mask, S, float("-inf")
-        )
+        S = tl.where(query_mask_1[:, None] & query_mask_0[:, None] & seq_mask, S, float("-inf"))
 
         if USE_ALIBI_SLOPES:
-            S = apply_alibi_to_score(
-                S, alibi_slope, seq_offset, context_len, query_pos, USE_ALIBI_SQRT
-            )
+            S = apply_alibi_to_score(S, alibi_slope, seq_offset, context_len, query_pos, USE_ALIBI_SQRT)
 
         if USE_QQ_BIAS:
-            S += load_qq_bias_tile(
-                qq_bias_row_ptrs, seq_offset, context_len, qq_bias_stride_0
-            )
+            S += load_qq_bias_tile(qq_bias_row_ptrs, seq_offset, context_len, qq_bias_stride_0)
 
         M, L, P, alpha = softmax_step(S, M, L)
         acc = acc * alpha[:, None]
@@ -574,12 +557,9 @@ def kernel_unified_attention(
             # (T, H, SEGS, PAD) layout.
             segm_base = (
                 segm_output_ptr
-                + (cur_batch_in_all_start_index + q_block_local_idx * BLOCK_Q).to(
-                    tl.int64
-                )
+                + (cur_batch_in_all_start_index + q_block_local_idx * BLOCK_Q).to(tl.int64)
                 * (num_query_heads * NUM_SEGMENTS_PER_SEQ * HEAD_SIZE_PADDED)
-                + (kv_head_idx * num_queries_per_kv)
-                * (NUM_SEGMENTS_PER_SEQ * HEAD_SIZE_PADDED)
+                + (kv_head_idx * num_queries_per_kv) * (NUM_SEGMENTS_PER_SEQ * HEAD_SIZE_PADDED)
                 + segm_idx * HEAD_SIZE_PADDED
             )
             _store_output_td(
@@ -595,8 +575,7 @@ def kernel_unified_attention(
             )
         else:
             segm_output_offset = (
-                query_offset_0[:, None].to(tl.int64)
-                * (num_query_heads * NUM_SEGMENTS_PER_SEQ * HEAD_SIZE_PADDED)
+                query_offset_0[:, None].to(tl.int64) * (num_query_heads * NUM_SEGMENTS_PER_SEQ * HEAD_SIZE_PADDED)
                 + query_offset_1[:, None] * (NUM_SEGMENTS_PER_SEQ * HEAD_SIZE_PADDED)
                 + segm_idx * HEAD_SIZE_PADDED
                 + tl.arange(0, HEAD_SIZE_PADDED)[None, :]
@@ -632,8 +611,7 @@ def kernel_unified_attention(
             # ``output_stride_1`` per head).
             output_base = (
                 output_ptr
-                + (cur_batch_in_all_start_index + q_block_local_idx * BLOCK_Q)
-                * output_stride_0
+                + (cur_batch_in_all_start_index + q_block_local_idx * BLOCK_Q) * output_stride_0
                 + (kv_head_idx * num_queries_per_kv) * output_stride_1
             )
             _store_output_td(
@@ -649,9 +627,7 @@ def kernel_unified_attention(
             )
         else:
             output_offset = (
-                query_offset_0[:, None] * output_stride_0
-                + query_offset_1[:, None] * output_stride_1
-                + offs_d[None, :]
+                query_offset_0[:, None] * output_stride_0 + query_offset_1[:, None] * output_stride_1 + offs_d[None, :]
             )
             tl.store(
                 output_ptr + output_offset,
@@ -687,9 +663,7 @@ def reduce_segments(
     query_token_idx = tl.program_id(0)
     query_head_idx = tl.program_id(1)
 
-    seq_idx = find_seq_idx(
-        query_start_len_ptr, query_token_idx, num_seqs, BLOCK_Q, False
-    )
+    seq_idx = find_seq_idx(query_start_len_ptr, query_token_idx, num_seqs, BLOCK_Q, False)
 
     # sequence len for this particular sequence
     seq_len = tl.load(seq_lens_ptr + seq_idx)
@@ -700,9 +674,7 @@ def reduce_segments(
 
     # create masks for subsequent loads
     act_num_segments = cdiv_fn(seq_len, tiles_per_segment * TILE_SIZE)
-    segm_mask = tl.arange(0, NUM_SEGMENTS_PER_SEQ) < tl.full(
-        [NUM_SEGMENTS_PER_SEQ], act_num_segments, dtype=tl.int32
-    )
+    segm_mask = tl.arange(0, NUM_SEGMENTS_PER_SEQ) < tl.full([NUM_SEGMENTS_PER_SEQ], act_num_segments, dtype=tl.int32)
     dim_mask = tl.where(tl.arange(0, HEAD_SIZE_PADDED) < HEAD_SIZE, 1, 0).to(tl.int1)
 
     # load segment maxima
@@ -721,8 +693,7 @@ def reduce_segments(
 
     # load, rescale, and add segment attention outputs
     segm_output_offset = (
-        query_token_idx.to(tl.int64)
-        * (num_query_heads * NUM_SEGMENTS_PER_SEQ * HEAD_SIZE_PADDED)
+        query_token_idx.to(tl.int64) * (num_query_heads * NUM_SEGMENTS_PER_SEQ * HEAD_SIZE_PADDED)
         + query_head_idx * (NUM_SEGMENTS_PER_SEQ * HEAD_SIZE_PADDED)
         + tl.arange(0, NUM_SEGMENTS_PER_SEQ)[:, None] * HEAD_SIZE_PADDED
         + tl.arange(0, HEAD_SIZE_PADDED)[None, :]
@@ -743,9 +714,7 @@ def reduce_segments(
 
     # write result
     output_offset = (
-        query_token_idx * output_stride_0
-        + query_head_idx * output_stride_1
-        + tl.arange(0, HEAD_SIZE_PADDED)
+        query_token_idx * output_stride_0 + query_head_idx * output_stride_1 + tl.arange(0, HEAD_SIZE_PADDED)
     )
     tl.store(output_ptr + output_offset, acc, mask=dim_mask)
 
@@ -807,6 +776,10 @@ def unified_attention(
     sinks=None,
     # Optional tensor for prefix lengths (PrefixLM support)
     mm_prefix_range=None,
+    # R-SWA support: prefix tokens stay globally visible, generated tokens use
+    # a fixed sliding window.
+    rswa_prefix_lens=None,
+    rswa_window: int | None = None,
     use_alibi_sqrt=False,
     # KV cache quantization mode and per-token-head scale caches.
     kv_quant_mode: KVQuantMode = KVQuantMode.NONE,
@@ -819,6 +792,9 @@ def unified_attention(
     # The non-TD branch is dead-code-eliminated at Triton compile time so
     # disabling this flag costs nothing.
     use_td: bool = False,
+    # Gemma4: clamp mm_prefix bidirectional ranges by the sliding window.
+    # Default False keeps the original behavior for every other model.
+    mm_prefix_clamp_sliding_window: bool = False,
 ):
     # Resolve causal: bool or per-seq tensor.
     use_per_seq_causal = isinstance(causal, torch.Tensor)
@@ -828,9 +804,7 @@ def unified_attention(
     # Sub-byte packed mode (INT4) needs a bespoke kernel (split-dot +
     # sub-byte unpack); everything else goes through the core kernel below.
     if kv_quant_mode == KVQuantMode.INT4_PER_TOKEN_HEAD:
-        assert use_causal and not use_per_seq_causal, (
-            "INT4_PER_TOKEN_HEAD only supports causal attention"
-        )
+        assert use_causal and not use_per_seq_causal, "INT4_PER_TOKEN_HEAD only supports causal attention"
         from aphrodite.v1.attention.ops.int4_per_token_head import (
             unified_attention_int4,
         )
@@ -885,9 +859,9 @@ def unified_attention(
             use_mm_prefix = True
             max_mm_ranges = mm_prefix_range.shape[1]
         else:
-            raise ValueError(
-                f"Unsupported mm_prefix_range shape: {mm_prefix_range.shape}"
-            )
+            raise ValueError(f"Unsupported mm_prefix_range shape: {mm_prefix_range.shape}")
+
+    use_rswa = rswa_window is not None and rswa_prefix_lens is not None
 
     use_alibi_slopes = alibi_slopes is not None
     use_qq_bias = qq_bias is not None
@@ -899,9 +873,7 @@ def unified_attention(
     num_queries_per_kv = num_query_heads // num_kv_heads
     head_size = q.shape[2]
 
-    BLOCK_M = (
-        16 if num_queries_per_kv <= 16 else triton.next_power_of_2(num_queries_per_kv)
-    )
+    BLOCK_M = 16 if num_queries_per_kv <= 16 else triton.next_power_of_2(num_queries_per_kv)
     BLOCK_Q = BLOCK_M // num_queries_per_kv
 
     # Tuned launch parameters; ``None`` lets Triton pick its defaults.
@@ -945,12 +917,8 @@ def unified_attention(
     elif sliding_window_val <= 0:
         chunk_lookback = -1
 
-    TILE_SIZE_PREFILL = _get_tile_size(
-        head_size, sliding_window_val, q.element_size(), is_prefill=True
-    )
-    TILE_SIZE_DECODE = _get_tile_size(
-        head_size, sliding_window_val, q.element_size(), is_prefill=False
-    )
+    TILE_SIZE_PREFILL = _get_tile_size(head_size, sliding_window_val, q.element_size(), is_prefill=True)
+    TILE_SIZE_DECODE = _get_tile_size(head_size, sliding_window_val, q.element_size(), is_prefill=False)
 
     # Wider KV tile for the tuned large-head path (see above). Only the 2D
     # path (used when max_seqlen_q > 1) reads TILE_SIZE_PREFILL.
@@ -999,8 +967,7 @@ def unified_attention(
             f"set APHRODITE_TRITON_ATTN_USE_TD=0 or pad the query layout."
         )
         assert out.stride(1) == head_size, (
-            f"USE_TD_QO requires contiguous output heads "
-            f"(out.stride(1) = {out.stride(1)} != head_size = {head_size})."
+            f"USE_TD_QO requires contiguous output heads (out.stride(1) = {out.stride(1)} != head_size = {head_size})."
         )
 
     # Launch the 2D kernel if
@@ -1103,6 +1070,9 @@ def unified_attention(
         USE_MM_PREFIX=use_mm_prefix,
         MAX_MM_RANGES=max_mm_ranges,
         mm_prefix_range_ptr=mm_prefix_range,
+        rswa_prefix_lens_ptr=rswa_prefix_lens if use_rswa else seqused_k,
+        R_SWA_WINDOW=rswa_window or 0,
+        USE_R_SWA=use_rswa,
         stride_k_cache_0=k.stride(0),
         stride_k_cache_1=k.stride(1),
         stride_k_cache_2=k.stride(2),
@@ -1130,6 +1100,7 @@ def unified_attention(
         CHUNK_SIZE=chunk_size,
         USE_TD=use_td,
         USE_TD_QO=use_td_qo,
+        MM_PREFIX_CLAMP_SW=mm_prefix_clamp_sliding_window,
         **launch_kwargs,
     )
 

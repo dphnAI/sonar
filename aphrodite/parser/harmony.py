@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import TYPE_CHECKING, NamedTuple
 
-from openai_harmony import HarmonyError
+from openai_harmony import HarmonyError, Message, Role
 
 from aphrodite.entrypoints.chat_utils import make_tool_call_id
 from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
@@ -31,7 +31,7 @@ from aphrodite.reasoning.gptoss_reasoning_parser import GptOssReasoningParser
 from aphrodite.tool_parsers.gptoss_tool_parser import GptOssToolParser
 
 if TYPE_CHECKING:
-    from openai_harmony import Message, StreamableParser
+    from openai_harmony import StreamableParser
 
 
 logger = init_logger(__name__)
@@ -44,9 +44,7 @@ class _SegmentType(Enum):
     IGNORE = auto()
 
     @staticmethod
-    def from_channel_and_recipient(
-        channel: str | None, recipient: str | None
-    ) -> _SegmentType:
+    def from_channel_and_recipient(channel: str | None, recipient: str | None) -> _SegmentType:
         if recipient and is_function_recipient(recipient):
             return _SegmentType.TOOL
         if channel == "analysis":
@@ -73,23 +71,16 @@ class HarmonyParser(DelegatingParser):
     def __init__(self, tokenizer, tools=None, *args, **kwargs):
         super().__init__(tokenizer, tools, *args, **kwargs)
 
-        if self.reasoning_parser and not isinstance(
-            self.reasoning_parser, GptOssReasoningParser
-        ):
-            raise ValueError(
-                "Harmony requires GptOssReasoningParser, "
-                f"got {self.reasoning_parser.__class__.__name__}."
-            )
+        if self.reasoning_parser and not isinstance(self.reasoning_parser, GptOssReasoningParser):
+            raise ValueError(f"Harmony requires GptOssReasoningParser, got {self.reasoning_parser.__class__.__name__}.")
 
         if self.tool_parser and not isinstance(self.tool_parser, GptOssToolParser):
-            raise ValueError(
-                "Harmony requires GptOssToolParser, "
-                f"got {self.tool_parser.__class__.__name__}."
-            )
+            raise ValueError(f"Harmony requires GptOssToolParser, got {self.tool_parser.__class__.__name__}.")
 
         self._parser: StreamableParser | None = None
         self._next_tool_call_index = 0
         self._num_processed_messages = 0
+        self._current_message_tokens: list[int] = []
 
     @property
     def _harmony_parser(self) -> StreamableParser:
@@ -107,32 +98,43 @@ class HarmonyParser(DelegatingParser):
         self._num_processed_messages += 1
         return msg
 
-    def flush(self) -> Segment | None:
+    def flush(self) -> list[Segment]:
+        segments: list[Segment] = []
         try:
             self._harmony_parser.process_eos()
             msg = self._poll_completed_message()
         except HarmonyError:
-            logger.warning(
-                "Harmony parser ended in a non-terminal state; returning the "
-                "raw unparsed output. This usually indicates a malformed "
-                "assistant turn, e.g. a 'final' channel missing the "
-                "<|message|> delimiter."
+            logger.warning("Harmony parser ended in a non-terminal state; returning the recovered raw output.")
+
+            final_channel = "final"
+            text = self.model_tokenizer.decode(self._current_message_tokens)
+            segments.append(
+                Segment(
+                    channel=final_channel,
+                    recipient=None,
+                    delta=text,
+                    completed_message=None,
+                )
             )
-            raise
-        finally:
-            # Reset to the initial assistant-parser state for the next turn.
-            self._parser = None
-            self._num_processed_messages = 0
+            msg = Message.from_role_and_content(Role.ASSISTANT, text).with_channel(final_channel)
+
+        # Reset to the initial assistant-parser state for the next turn.
+        self._parser = None
+        self._num_processed_messages = 0
+        self._current_message_tokens.clear()
 
         if msg is None:
-            return None
+            return segments
 
-        return Segment(
-            channel=msg.channel,
-            recipient=msg.recipient,
-            delta="",
-            completed_message=msg,
+        segments.append(
+            Segment(
+                channel=msg.channel,
+                recipient=msg.recipient,
+                delta="",
+                completed_message=msg,
+            )
         )
+        return segments
 
     def parse(
         self,
@@ -147,12 +149,9 @@ class HarmonyParser(DelegatingParser):
         Callers must decide whether to surface them.
         """
         result = self.process_chunk(model_output_token_ids)
-        try:
-            flushed_segment = self.flush()
-        except HarmonyError:
-            return None, model_output, None
-        if flushed_segment is not None:
-            result.segments.append(flushed_segment)
+        flushed_segments = self.flush()
+        if flushed_segments:
+            result.segments.extend(flushed_segments)
 
         reasoning_parts: list[str] = []
         content_parts: list[str] = []
@@ -165,9 +164,7 @@ class HarmonyParser(DelegatingParser):
             if msg.author.role != "assistant" or not msg.content:
                 continue
             text = msg.content[0].text
-            segment_type = _SegmentType.from_channel_and_recipient(
-                msg.channel, msg.recipient
-            )
+            segment_type = _SegmentType.from_channel_and_recipient(msg.channel, msg.recipient)
             match segment_type:
                 case _SegmentType.REASONING if self.reasoning_parser and text:
                     reasoning_parts.append(text)
@@ -204,18 +201,12 @@ class HarmonyParser(DelegatingParser):
         *,
         finished: bool,
     ) -> DeltaMessage | None:
-        prev_recipient = self._normalize_recipient(
-            self._harmony_parser.current_recipient
-        )
+        prev_recipient = self._normalize_recipient(self._harmony_parser.current_recipient)
         result = self.process_chunk(delta_token_ids)
         if finished:
-            try:
-                flushed_segment = self.flush()
-            except HarmonyError:
-                self._next_tool_call_index = 0
-                return DeltaMessage(content=delta_text)
-            if flushed_segment is not None:
-                result.segments.append(flushed_segment)
+            flushed_segments = self.flush()
+            if flushed_segments:
+                result.segments.extend(flushed_segments)
         combined_content = ""
         combined_reasoning = ""
         tool_messages: list[DeltaToolCall] = []
@@ -225,9 +216,7 @@ class HarmonyParser(DelegatingParser):
                 prev_recipient = None
                 continue
 
-            segment_type = _SegmentType.from_channel_and_recipient(
-                segment.channel, segment.recipient
-            )
+            segment_type = _SegmentType.from_channel_and_recipient(segment.channel, segment.recipient)
             match segment_type:
                 case _SegmentType.REASONING if self.reasoning_parser:
                     combined_reasoning += segment.delta
@@ -292,15 +281,16 @@ class HarmonyParser(DelegatingParser):
         for token_id in token_ids:
             self._harmony_parser.process(token_id)
             channel = self._harmony_parser.current_channel
-            recipient = self._normalize_recipient(
-                self._harmony_parser.current_recipient
-            )
+            recipient = self._normalize_recipient(self._harmony_parser.current_recipient)
             delta = self._harmony_parser.last_content_delta or ""
             completed_message = self._poll_completed_message()
 
-            if channel == "analysis" or (
-                channel == "commentary" and recipient is not None
-            ):
+            if completed_message is not None:
+                self._current_message_tokens.clear()
+            else:
+                self._current_message_tokens.append(token_id)
+
+            if channel == "analysis" or (channel == "commentary" and recipient is not None):
                 reasoning_token_count += 1
 
             segments.append(

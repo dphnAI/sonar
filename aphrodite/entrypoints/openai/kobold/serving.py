@@ -7,10 +7,10 @@ from collections.abc import AsyncGenerator
 from fastapi import Request
 
 from aphrodite.engine.protocol import EngineClient
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.entrypoints.openai.engine.serving import OpenAIServing
+from aphrodite.entrypoints.generate.base.serving import GenerateBaseServing
 from aphrodite.entrypoints.openai.kobold.protocol import KAIGenerationInputSchema
 from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
+from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
 from aphrodite.logger import init_logger
 from aphrodite.sampling_params import SamplingParams
 from aphrodite.tokenizers import TokenizerLike
@@ -23,7 +23,7 @@ _KOBOLD_BADWORD_BIAS = -100.0
 gen_cache: dict[str, str] = {}
 
 
-class OpenAIServingKobold(OpenAIServing):
+class OpenAIServingKobold(GenerateBaseServing):
     """Serving class for KoboldAI API compatibility."""
 
     def __init__(

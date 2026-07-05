@@ -27,6 +27,7 @@ from aphrodite.logger import init_logger
 from aphrodite.model_executor.offloader.base import get_offloader
 from aphrodite.platforms import current_platform
 from aphrodite.sequence import IntermediateTensors
+from aphrodite.utils.math_utils import round_up
 from aphrodite.v1.kv_cache_interface import KVCacheConfig
 from aphrodite.v1.worker.gpu.attn_utils import build_slot_mappings_by_layer
 from aphrodite.v1.worker.gpu.block_table import BlockTables
@@ -82,10 +83,7 @@ def _is_compatible(
     # desc.uniform_token_count=None (PIECEWISE) can handle any uniform_token_count
     # desc.num_reqs=None means no request padding needed (PIECEWISE)
     return (
-        (
-            desc.uniform_token_count is None
-            or desc.uniform_token_count == uniform_token_count
-        )
+        (desc.uniform_token_count is None or desc.uniform_token_count == uniform_token_count)
         and (desc.num_reqs is None or desc.num_reqs >= num_reqs)
         and desc.num_tokens >= num_tokens
         and desc.num_active_loras == num_active_loras
@@ -101,9 +99,7 @@ def get_uniform_token_count(
     Return the uniform token count if batch is uniform, else None.
     A batch is uniform if all requests have the same number of tokens.
     """
-    if (max_query_len == num_tokens // num_reqs) and (
-        num_tokens == max_query_len * num_reqs
-    ):
+    if (max_query_len == num_tokens // num_reqs) and (num_tokens == max_query_len * num_reqs):
         return max_query_len
     return None
 
@@ -141,17 +137,10 @@ class CudaGraphManager:
 
         self._candidates: dict[tuple[int, int], list[BatchExecutionDescriptor]] = {}
         self._capture_descs: dict[CUDAGraphMode, list[BatchExecutionDescriptor]] = {}
-        # adjust the cudagraph sizes to be a multiple of the uniform decode query length
-        self.compilation_config.adjust_cudagraph_sizes_for_spec_decode(
-            self.decode_query_len, self.tp_size
-        )
         self._init_candidates()
 
         # Breakable CUDA graph (PW CUDA graph without torch.compile)
-        self.use_breakable_cg = (
-            is_breakable_cudagraph_enabled()
-            and self.cudagraph_mode.has_piecewise_cudagraphs()
-        )
+        self.use_breakable_cg = is_breakable_cudagraph_enabled() and self.cudagraph_mode.has_piecewise_cudagraphs()
         self.breakable_cg_runner: BreakableCUDAGraphWrapper | None = None
 
     def _build_lora_dispatch_map(self) -> tuple[dict[int, int], int]:
@@ -188,44 +177,65 @@ class CudaGraphManager:
 
         capture_sizes = sorted(capture_sizes)
         max_decode_tokens = self.max_num_reqs * self.decode_query_len
+        max_cg_capture_size = self.compilation_config.max_cudagraph_capture_size
+        assert max_cg_capture_size is not None
         decode_mode = self.cudagraph_mode.decode_mode()
         mixed_mode = self.cudagraph_mode.mixed_mode()
         separate_decode_routine = self.cudagraph_mode.separate_routine()
 
-        descs_by_token_lora: dict[tuple[int, int], list[BatchExecutionDescriptor]] = (
-            defaultdict(list)
-        )
-        descs_by_mode = defaultdict(list)
+        descs_by_token_lora: dict[tuple[int, int], list[BatchExecutionDescriptor]] = defaultdict(list)
+        descs_by_mode: defaultdict[CUDAGraphMode, list[BatchExecutionDescriptor]] = defaultdict(list)
 
-        for num_tokens, num_active_loras in product(
-            capture_sizes, self.lora_capture_cases
-        ):
+        # When using Dynamic SD, num_speculative_tokens is the max number of
+        # draft tokens. The scheduler might use a smaller number so we need
+        # to capture graphs for all possible values during decode.
+        speculative_config = self.aphrodite_config.speculative_config
+        if speculative_config and speculative_config.uses_dynamic_speculative_decoding():
+            num_spec_per_batch_size = speculative_config.num_speculative_tokens_per_batch_size
+            # uses_dynamic_speculative_decoding() guarantees this is set.
+            assert num_spec_per_batch_size is not None
+            # decode_query_len = num_speculative_steps + num_new_sampled_tokens
+            # _per_step. Recover num_new_sampled_tokens_per_step
+            # from the values the manager already has.
+            num_new_sampled_tokens_per_step = self.decode_query_len - self.aphrodite_config.num_speculative_tokens
+            # Each entry is (range_start, range_end, num_speculative_tokens).
+            decode_query_lens = [x[2] + num_new_sampled_tokens_per_step for x in num_spec_per_batch_size]
+        else:
+            decode_query_lens = [self.decode_query_len]
+
+        for num_tokens, num_active_loras in product(capture_sizes, self.lora_capture_cases):
             # Capture uniform decode specfifc graphs if required
             #  (i.e. separate decode routine)
-            if (
-                separate_decode_routine
-                and decode_mode
-                and self.decode_query_len <= num_tokens <= max_decode_tokens
-            ):
-                desc = BatchExecutionDescriptor(
-                    cg_mode=decode_mode,
-                    num_tokens=num_tokens,
-                    num_reqs=num_tokens // self.decode_query_len,
-                    uniform_token_count=self.decode_query_len,
-                    num_active_loras=num_active_loras,
-                )
-                descs_by_mode[decode_mode].append(desc)
-                descs_by_token_lora[(num_tokens, num_active_loras)].append(desc)
+            if separate_decode_routine and decode_mode:
+                for decode_query_len in decode_query_lens:
+                    rounded_num_tokens = round_up(num_tokens, decode_query_len)
+                    rounded_num_reqs = rounded_num_tokens // decode_query_len
+
+                    if (
+                        rounded_num_tokens > max_decode_tokens
+                        or rounded_num_tokens > max_cg_capture_size
+                        or rounded_num_reqs > self.max_num_reqs
+                    ):
+                        continue
+
+                    desc = BatchExecutionDescriptor(
+                        cg_mode=decode_mode,
+                        num_tokens=rounded_num_tokens,
+                        num_reqs=rounded_num_reqs,
+                        uniform_token_count=decode_query_len,
+                        num_active_loras=num_active_loras,
+                    )
+
+                    # avoid duplicate graphs
+                    if desc not in descs_by_mode[decode_mode]:
+                        descs_by_mode[decode_mode].append(desc)
+                        descs_by_token_lora[(rounded_num_tokens, num_active_loras)].append(desc)
 
             if mixed_mode:
                 # for PIECEWISE graphs there is no limit on requests when replaying
                 # i.e. no request padding is needed
                 # so we leave it as None
-                num_reqs = (
-                    min(num_tokens, self.max_num_reqs)
-                    if mixed_mode == CUDAGraphMode.FULL
-                    else None
-                )
+                num_reqs = min(num_tokens, self.max_num_reqs) if mixed_mode == CUDAGraphMode.FULL else None
                 desc = BatchExecutionDescriptor(
                     cg_mode=mixed_mode,
                     num_tokens=num_tokens,
@@ -245,9 +255,7 @@ class CudaGraphManager:
                 for num_active_loras in self.lora_capture_cases:
                     staging_key = (token_cg_size, num_active_loras)
                     if staging_key in descs_by_token_lora:
-                        self._candidates[(i, num_active_loras)] = descs_by_token_lora[
-                            staging_key
-                        ]
+                        self._candidates[(i, num_active_loras)] = descs_by_token_lora[staging_key]
             current_range_start = token_cg_size + 1
 
         for mode, descs in descs_by_mode.items():
@@ -294,25 +302,15 @@ class CudaGraphManager:
                     forward_fn(CUDAGraphMode.NONE)
 
                     # Capture
-                    logger.debug(
-                        "CG Capture: mode=%s, batch_desc=%s", desc.cg_mode.name, desc
-                    )
+                    logger.debug("CG Capture: mode=%s, batch_desc=%s", desc.cg_mode.name, desc)
                     if desc.cg_mode == CUDAGraphMode.PIECEWISE:
-                        attn_states[desc] = AttentionStatePair(
-                            warmup_attn_state, warmup_attn_state
-                        )
+                        attn_states[desc] = AttentionStatePair(warmup_attn_state, warmup_attn_state)
                         forward_fn(CUDAGraphMode.PIECEWISE)
                     else:
                         # Capture with fresh attention state.
-                        forward_fn, capture_attn_state = create_forward_fn(
-                            desc, warmup=False
-                        )
-                        attn_states[desc] = AttentionStatePair(
-                            warmup_attn_state, capture_attn_state
-                        )
-                        assert desc not in self.graphs, (
-                            f"Graph already captured for {desc}"
-                        )
+                        forward_fn, capture_attn_state = create_forward_fn(desc, warmup=False)
+                        attn_states[desc] = AttentionStatePair(warmup_attn_state, capture_attn_state)
+                        assert desc not in self.graphs, f"Graph already captured for {desc}"
                         graph = torch.cuda.CUDAGraph()
                         # Sync offloader's copy stream before capture.
                         # Ensure any pre-capture prefetches from offloader are complete.
@@ -359,9 +357,7 @@ class CudaGraphManager:
 
     def run_fullgraph(self, desc: BatchExecutionDescriptor):
         """Replay a captured FULL cudagraph."""
-        assert desc.cg_mode == CUDAGraphMode.FULL, (
-            f"Expected FULL mode, got {desc.cg_mode}"
-        )
+        assert desc.cg_mode == CUDAGraphMode.FULL, f"Expected FULL mode, got {desc.cg_mode}"
         assert desc in self.graphs, f"No cudagraph for {desc}"
         # Sync offloader before replay - needed when transitioning from
         # eager/piecewise to full cudagraph (e.g., prefill → decode).
@@ -374,9 +370,7 @@ class CudaGraphManager:
 
     def init_breakable_cg_runner(self, model: nn.Module) -> None:
         if self.breakable_cg_runner is None:
-            self.breakable_cg_runner = BreakableCUDAGraphWrapper(
-                model, self.aphrodite_config
-            )
+            self.breakable_cg_runner = BreakableCUDAGraphWrapper(model, self.aphrodite_config)
 
     def run_pw_graph(self, model: nn.Module, model_inputs: dict[str, Any]) -> Any:
         if not self.use_breakable_cg:
@@ -443,9 +437,7 @@ class ModelCudaGraphManager(CudaGraphManager):
                 lora_capture_hook(desc.num_active_loras, num_reqs, num_tokens)
 
             num_tokens_across_dp = (
-                torch.full((self.dp_size,), num_tokens, dtype=torch.int32, device="cpu")
-                if self.dp_size > 1
-                else None
+                torch.full((self.dp_size,), num_tokens, dtype=torch.int32, device="cpu") if self.dp_size > 1 else None
             )
 
             model_inputs = {
@@ -516,9 +508,7 @@ class ModelCudaGraphManager(CudaGraphManager):
                         self.hidden_states = torch.empty_like(hidden_states)
                     self.hidden_states[:num_tokens] = hidden_states
                     if self.use_aux_hidden_state_outputs and not self.aux_hidden_states:
-                        self.aux_hidden_states = [
-                            torch.empty_like(x) for x in aux_hidden_states
-                        ]
+                        self.aux_hidden_states = [torch.empty_like(x) for x in aux_hidden_states]
                     for i, aux in enumerate(aux_hidden_states):
                         self.aux_hidden_states[i][:num_tokens] = aux
                 else:
@@ -526,9 +516,7 @@ class ModelCudaGraphManager(CudaGraphManager):
                     assert isinstance(model_output, IntermediateTensors)
                     intermediate_tensors = model_output
                     if self.intermediate_tensors is None:
-                        self.intermediate_tensors = IntermediateTensors.empty_like(
-                            intermediate_tensors
-                        )
+                        self.intermediate_tensors = IntermediateTensors.empty_like(intermediate_tensors)
                     for k, v in intermediate_tensors.tensors.items():
                         self.intermediate_tensors[k][:num_tokens] = v
 
@@ -565,9 +553,7 @@ def prepare_inputs_to_capture(
     input_batch = InputBatch.make_dummy(num_reqs, num_tokens, input_buffers)
     input_block_tables = block_tables.get_dummy_block_tables(num_reqs)
     slot_mappings = block_tables.get_dummy_slot_mappings(num_tokens)
-    slot_mappings_by_layer = build_slot_mappings_by_layer(
-        slot_mappings, kv_cache_config
-    )
+    slot_mappings_by_layer = build_slot_mappings_by_layer(slot_mappings, kv_cache_config)
 
     # HACK(woosuk): Special handling for DCP.
     if block_tables.cp_size > 1:

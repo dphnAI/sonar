@@ -13,9 +13,8 @@ from fastapi.responses import JSONResponse, Response
 from aphrodite.config import ModelConfig
 from aphrodite.entrypoints.generate.factories import get_generate_invocation_types
 from aphrodite.entrypoints.openai.engine.protocol import ErrorResponse
-from aphrodite.entrypoints.openai.engine.serving import OpenAIServing
-from aphrodite.entrypoints.pooling.base.serving import PoolingServingBase
 from aphrodite.entrypoints.pooling.factories import get_pooling_invocation_types
+from aphrodite.entrypoints.serve.engine.serving import BaseServing
 from aphrodite.entrypoints.serve.instrumentator.basic import base
 from aphrodite.entrypoints.serve.instrumentator.health import health
 from aphrodite.entrypoints.serve.utils.api_utils import validate_json_request
@@ -24,7 +23,7 @@ from aphrodite.tasks import SupportedTask
 # TODO: RequestType = TypeForm[BaseModel] when recognized by type checkers
 # (requires typing_extensions >= 4.13)
 RequestType = Any
-GetHandlerFn = Callable[[Request], OpenAIServing | PoolingServingBase | None]
+GetHandlerFn = Callable[[Request], BaseServing | None]
 EndpointFn = Callable[[RequestType, Request], Awaitable[Any]]
 
 
@@ -36,9 +35,9 @@ def attach_router(
     router = APIRouter()
 
     # NOTE: Construct the TypeAdapters only once
-    INVOCATION_TYPES = get_generate_invocation_types(
+    INVOCATION_TYPES = get_generate_invocation_types(supported_tasks, model_config) + get_pooling_invocation_types(
         supported_tasks, model_config
-    ) + get_pooling_invocation_types(supported_tasks, model_config)
+    )
 
     INVOCATION_VALIDATORS = [
         (pydantic.TypeAdapter(request_type), (get_handler, endpoint))
@@ -89,8 +88,7 @@ def attach_router(
             return await endpoint(request, raw_request)
 
         type_names = [
-            t.__name__ if isinstance(t := validator._type, type) else str(t)
-            for validator, _ in valid_endpoints
+            t.__name__ if isinstance(t := validator._type, type) else str(t) for validator, _ in valid_endpoints
         ]
         msg = f"Cannot find suitable handler for request. Expected one of: {type_names}"
         res = base(raw_request).create_error_response(message=msg)

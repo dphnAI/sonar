@@ -4,6 +4,12 @@ from collections.abc import Sequence
 from http import HTTPStatus
 from typing import Any, cast
 
+from aphrodite.entrypoints.serve.disagg.mm_serde import encode_mm_kwargs_item
+from aphrodite.entrypoints.serve.disagg.protocol import (
+    GenerateRequest,
+    MultiModalFeatures,
+    PlaceholderRangeInfo,
+)
 from openai_harmony import Message as OpenAIMessage
 
 from aphrodite.config import ModelConfig
@@ -11,7 +17,6 @@ from aphrodite.entrypoints.chat_utils import (
     ChatTemplateContentFormatOption,
     ConversationMessage,
 )
-from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
 from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
 from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
 from aphrodite.entrypoints.openai.engine.protocol import (
@@ -25,12 +30,7 @@ from aphrodite.entrypoints.openai.parser.harmony_utils import (
     render_for_completion,
 )
 from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
-from aphrodite.entrypoints.serve.disagg.mm_serde import encode_mm_kwargs_item
-from aphrodite.entrypoints.serve.disagg.protocol import (
-    GenerateRequest,
-    MultiModalFeatures,
-    PlaceholderRangeInfo,
-)
+from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
 from aphrodite.entrypoints.utils import (
     create_error_response,
     get_max_tokens,
@@ -424,7 +424,7 @@ class OpenAIServingRender:
         chat_template_kwargs: dict[str, Any] | None,
         trust_request_chat_template: bool,
     ) -> ErrorResponse | None:
-        """Copied from OpenAIServing._validate_chat_template."""
+        """Copied from GenerateBaseServing._validate_chat_template."""
         if not trust_request_chat_template and (
             request_chat_template is not None
             or (chat_template_kwargs and chat_template_kwargs.get("chat_template") is not None)
@@ -444,7 +444,7 @@ class OpenAIServingRender:
         *,
         skip_mm_cache: bool = False,
     ) -> list[EngineInput]:
-        """Copied from OpenAIServing._preprocess_completion."""
+        """Copied from GenerateBaseServing._preprocess_completion."""
         prompts = list[SingletonPrompt | bytes]()
         if prompt_embeds is not None:  # embeds take higher priority
             prompts.extend(prompt_to_seq(prompt_embeds))
@@ -459,7 +459,7 @@ class OpenAIServingRender:
         *,
         skip_mm_cache: bool = False,
     ) -> list[EngineInput]:
-        """Copied from OpenAIServing._preprocess_cmpl."""
+        """Copied from GenerateBaseServing._preprocess_cmpl."""
         renderer = self.renderer
         model_config = self.model_config
 
@@ -490,7 +490,7 @@ class OpenAIServingRender:
         *,
         skip_mm_cache: bool = False,
     ) -> tuple[list[ConversationMessage], list[EngineInput]]:
-        """Copied from OpenAIServing._preprocess_chat."""
+        """Copied from GenerateBaseServing._preprocess_chat."""
         renderer = self.renderer
         mm_config = self.model_config.multimodal_config
 

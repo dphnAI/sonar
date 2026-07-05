@@ -84,7 +84,11 @@ def assert_executor(executor, tp_size, pp_size):
     assert executor._get_output_rank() == expected_output_rank
 
     if pp_size > 1:
-        assert executor.aphrodite_config.max_concurrent_batches == pp_size
+        expected_concurrent_batches = pp_size + int(
+            executor.aphrodite_config.scheduler_config.async_scheduling
+            and executor.aphrodite_config.use_v2_model_runner
+        )
+        assert executor.aphrodite_config.max_concurrent_batches == expected_concurrent_batches
 
     executor.check_health()
     assert not executor.is_failed
@@ -107,10 +111,7 @@ def test_select_tcpstore_port_seeds_disjoint_windows(monkeypatch):
 
     monkeypatch.setattr(ray_executor_v2, "_get_open_port", fake_get_open_port)
 
-    ports = [
-        RayExecutorV2._select_tcpstore_port(rank, master_port=29500)
-        for rank in range(4)
-    ]
+    ports = [RayExecutorV2._select_tcpstore_port(rank, master_port=29500) for rank in range(4)]
 
     assert requested == [(29600, 32), (29632, 32), (29664, 32), (29696, 32)]
     assert len(set(ports)) == 4
@@ -306,9 +307,7 @@ def test_ray_v2_single_node_generation(tp_size, pp_size):
     [("2,3", [2, 3], 4), ("3,2", [3, 2], 4)],
     indirect=["create_placement_group"],
 )
-def test_ray_v2_bundle_indices_env(
-    bundle_indices, expected_bundle_ids, create_placement_group, monkeypatch
-):
+def test_ray_v2_bundle_indices_env(bundle_indices, expected_bundle_ids, create_placement_group, monkeypatch):
     """Validate explicit APHRODITE_RAY_BUNDLE_INDICES bundle placement."""
     monkeypatch.setenv("APHRODITE_RAY_BUNDLE_INDICES", bundle_indices)
     aphrodite_config = create_aphrodite_config(
@@ -317,10 +316,7 @@ def test_ray_v2_bundle_indices_env(
     )
     executor = RayExecutorV2(aphrodite_config=aphrodite_config)
     try:
-        actual = [
-            h.bundle_id_idx
-            for h in sorted(executor.ray_worker_handles, key=lambda h: h.rank)
-        ]
+        actual = [h.bundle_id_idx for h in sorted(executor.ray_worker_handles, key=lambda h: h.rank)]
         assert actual == expected_bundle_ids
         assert_executor(executor, tp_size=2, pp_size=1)
     finally:
@@ -335,14 +331,10 @@ def test_ray_v2_bundle_indices_env(
     ],
     indirect=["create_placement_group"],
 )
-def test_ray_v2_invalid_bundle_indices(
-    bundle_indices, expected_error, create_placement_group, monkeypatch
-):
+def test_ray_v2_invalid_bundle_indices(bundle_indices, expected_error, create_placement_group, monkeypatch):
     """Validate invalid bundle indices are rejected."""
     monkeypatch.setenv("APHRODITE_RAY_BUNDLE_INDICES", bundle_indices)
-    aphrodite_config = create_aphrodite_config(
-        tensor_parallel_size=2, placement_group=create_placement_group
-    )
+    aphrodite_config = create_aphrodite_config(tensor_parallel_size=2, placement_group=create_placement_group)
     with pytest.raises(AssertionError, match=expected_error):
         RayExecutorV2(aphrodite_config=aphrodite_config)
 

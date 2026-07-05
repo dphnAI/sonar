@@ -15,6 +15,7 @@ import aphrodite.config.aphrodite as aphrodite_config_module
 import aphrodite.envs as envs
 from aphrodite.compilation.backends import AphroditeBackend
 from aphrodite.config import (
+    AphroditeConfig,
     CompilationConfig,
     KernelConfig,
     ModelConfig,
@@ -22,18 +23,18 @@ from aphrodite.config import (
     PoolerConfig,
     SchedulerConfig,
     SpeculativeConfig,
-    AphroditeConfig,
     update_config,
+)
+from aphrodite.config.aphrodite import (
+    OPTIMIZATION_LEVEL_TO_CONFIG,
+    OptimizationLevel,
 )
 from aphrodite.config.compilation import CompilationMode, CUDAGraphMode
 from aphrodite.config.kernel import IrOpPriorityConfig
 from aphrodite.config.load import LoadConfig
 from aphrodite.config.utils import get_field
-from aphrodite.config.aphrodite import (
-    OPTIMIZATION_LEVEL_TO_CONFIG,
-    OptimizationLevel,
-)
 from aphrodite.platforms import current_platform
+from aphrodite.v1.attention.backend import AttentionCGSupport
 
 DEVICE_TYPE = current_platform.device_type
 
@@ -65,6 +66,36 @@ def test_v2_model_runner_env_tri_state(monkeypatch, env_value, expected):
         monkeypatch.setenv("APHRODITE_USE_V2_MODEL_RUNNER", env_value)
 
     assert envs.APHRODITE_USE_V2_MODEL_RUNNER is expected
+
+
+@pytest.mark.parametrize(
+    ("use_v2_model_runner", "expected_capture_sizes"),
+    [
+        (False, [4, 8, 12, 16]),
+        (True, list(range(1, 17))),
+    ],
+)
+def test_resolve_cudagraph_mode_adjusts_spec_decode_sizes_only_for_v1(
+    use_v2_model_runner,
+    expected_capture_sizes,
+):
+    compilation_config = CompilationConfig(
+        cudagraph_mode=CUDAGraphMode.FULL_AND_PIECEWISE,
+        cudagraph_capture_sizes=list(range(1, 17)),
+    )
+    compilation_config.max_cudagraph_capture_size = 16
+    compilation_config.post_init_cudagraph_sizes()
+
+    cudagraph_mode = compilation_config.resolve_cudagraph_mode_and_sizes(
+        AttentionCGSupport.ALWAYS,
+        "FakeAttentionBackend",
+        uniform_decode_query_len=4,
+        use_v2_model_runner=use_v2_model_runner,
+        tensor_parallel_size=1,
+    )
+
+    assert cudagraph_mode == CUDAGraphMode.FULL_AND_PIECEWISE
+    assert compilation_config.cudagraph_capture_sizes == expected_capture_sizes
 
 
 @pytest.mark.parametrize(
@@ -118,7 +149,17 @@ def test_v2_model_runner_env_tri_state(monkeypatch, env_value, expected):
                 is_moe=False,
                 is_quantized=False,
             ),
-            False,
+            True,
+        ),
+        (
+            SimpleNamespace(
+                model="google/gemma-2-2b",
+                architectures=["Gemma2ForCausalLM"],
+                runner_type="generate",
+                is_moe=False,
+                is_quantized=False,
+            ),
+            True,
         ),
         (
             SimpleNamespace(
@@ -197,6 +238,18 @@ def test_v2_model_runner_env_tri_state(monkeypatch, env_value, expected):
                 runner_type="generate",
                 is_moe=False,
                 is_quantized=False,
+                is_hybrid=True,
+            ),
+            False,
+        ),
+        (
+            SimpleNamespace(
+                model="state-spaces/mamba-130m-hf",
+                architectures=["MambaForCausalLM"],
+                runner_type="generate",
+                is_moe=False,
+                is_quantized=False,
+                is_attention_free=True,
             ),
             False,
         ),
@@ -418,9 +471,7 @@ def test_disable_sliding_window(model_id_expected):
     assert model_config.max_model_len == expected
 
 
-@pytest.mark.skipif(
-    current_platform.is_rocm(), reason="Xformers backend is not supported on ROCm."
-)
+@pytest.mark.skipif(current_platform.is_rocm(), reason="Xformers backend is not supported on ROCm.")
 def test_get_pooling_config():
     model_id = "sentence-transformers/all-MiniLM-L12-v2"
     model_config = ModelConfig(model_id)
@@ -431,9 +482,7 @@ def test_get_pooling_config():
     assert model_config.pooler_config.tok_pooling_type == "ALL"
 
 
-@pytest.mark.skipif(
-    current_platform.is_rocm(), reason="Xformers backend is not supported on ROCm."
-)
+@pytest.mark.skipif(current_platform.is_rocm(), reason="Xformers backend is not supported on ROCm.")
 def test_get_pooling_config_from_args():
     model_id = "sentence-transformers/all-MiniLM-L12-v2"
     pooler_config = PoolerConfig(seq_pooling_type="CLS", use_activation=False)
@@ -505,9 +554,7 @@ def test_is_quantized(model_id, quantized):
     assert model_config.is_quantized == quantized
 
 
-@pytest.mark.skipif(
-    current_platform.is_rocm(), reason="Xformers backend is not supported on ROCm."
-)
+@pytest.mark.skipif(current_platform.is_rocm(), reason="Xformers backend is not supported on ROCm.")
 def test_get_bert_tokenization_sentence_transformer_config():
     model_id = "BAAI/bge-base-en-v1.5"
     bge_model_config = ModelConfig(model_id)
@@ -528,20 +575,14 @@ def test_rope_customization():
     LONGCHAT_ROPE_PARAMETERS = {"rope_type": "linear", "factor": 8.0}
 
     llama_model_config = ModelConfig("meta-llama/Meta-Llama-3-8B-Instruct")
-    assert (
-        getattr(llama_model_config.hf_config, "rope_parameters", None)
-        == LLAMA_ROPE_PARAMETERS
-    )
+    assert getattr(llama_model_config.hf_config, "rope_parameters", None) == LLAMA_ROPE_PARAMETERS
     assert llama_model_config.max_model_len == 8192
 
     llama_model_config = ModelConfig(
         "meta-llama/Meta-Llama-3-8B-Instruct",
         hf_overrides={"rope_parameters": TEST_ROPE_PARAMETERS},
     )
-    assert (
-        getattr(llama_model_config.hf_config, "rope_parameters", None)
-        == TEST_ROPE_PARAMETERS
-    )
+    assert getattr(llama_model_config.hf_config, "rope_parameters", None) == TEST_ROPE_PARAMETERS
     assert llama_model_config.max_model_len == 16384
 
     longchat_model_config = ModelConfig("lmsys/longchat-13b-16k")
@@ -558,10 +599,7 @@ def test_rope_customization():
             "rope_parameters": TEST_ROPE_PARAMETERS,
         },
     )
-    assert (
-        getattr(longchat_model_config.hf_config, "rope_parameters", None)
-        == TEST_ROPE_PARAMETERS
-    )
+    assert getattr(longchat_model_config.hf_config, "rope_parameters", None) == TEST_ROPE_PARAMETERS
     assert longchat_model_config.max_model_len == 4096
 
 
@@ -596,9 +634,7 @@ def test_nested_hf_overrides():
     assert model_config.hf_config.vision_config.hidden_size == 512
 
 
-@pytest.mark.skipif(
-    current_platform.is_rocm(), reason="Encoder Decoder models not supported on ROCm."
-)
+@pytest.mark.skipif(current_platform.is_rocm(), reason="Encoder Decoder models not supported on ROCm.")
 @pytest.mark.parametrize(
     ("model_id", "is_encoder_decoder"),
     [
@@ -696,9 +732,7 @@ def test_load_config_pt_load_map_location(pt_load_map_location):
         ("deepseek-ai/DeepSeek-R1-Distill-Qwen-7B", 131073, 131072, True),
     ],
 )
-def test_get_and_verify_max_len(
-    model_id, max_model_len, expected_max_len, should_raise
-):
+def test_get_and_verify_max_len(model_id, max_model_len, expected_max_len, should_raise):
     """Test get_and_verify_max_len with different configurations."""
     model_config = ModelConfig(model_id)
 
@@ -738,24 +772,14 @@ def test_s3_url_model_tokenizer_paths(mock_pull_files, s3_url):
     ModelConfig.maybe_pull_model_tokenizer_for_runai(config1, s3_url, s3_url)
 
     # Check that model and tokenizer point to existing directories
-    assert os.path.exists(config1.model), (
-        f"Model directory does not exist: {config1.model}"
-    )
-    assert os.path.isdir(config1.model), (
-        f"Model path is not a directory: {config1.model}"
-    )
-    assert os.path.exists(config1.tokenizer), (
-        f"Tokenizer directory does not exist: {config1.tokenizer}"
-    )
-    assert os.path.isdir(config1.tokenizer), (
-        f"Tokenizer path is not a directory: {config1.tokenizer}"
-    )
+    assert os.path.exists(config1.model), f"Model directory does not exist: {config1.model}"
+    assert os.path.isdir(config1.model), f"Model path is not a directory: {config1.model}"
+    assert os.path.exists(config1.tokenizer), f"Tokenizer directory does not exist: {config1.tokenizer}"
+    assert os.path.isdir(config1.tokenizer), f"Tokenizer path is not a directory: {config1.tokenizer}"
 
     # Verify that the paths are different from the original S3 URL
     assert config1.model != s3_url, "Model path should be converted to local directory"
-    assert config1.tokenizer != s3_url, (
-        "Tokenizer path should be converted to local directory"
-    )
+    assert config1.tokenizer != s3_url, "Tokenizer path should be converted to local directory"
 
     # Store the original paths
     created_model_dir = config1.model
@@ -766,27 +790,17 @@ def test_s3_url_model_tokenizer_paths(mock_pull_files, s3_url):
     ModelConfig.maybe_pull_model_tokenizer_for_runai(config2, s3_url, s3_url)
 
     # Check that the new directories exist
-    assert os.path.exists(config2.model), (
-        f"Model directory does not exist: {config2.model}"
-    )
-    assert os.path.isdir(config2.model), (
-        f"Model path is not a directory: {config2.model}"
-    )
-    assert os.path.exists(config2.tokenizer), (
-        f"Tokenizer directory does not exist: {config2.tokenizer}"
-    )
-    assert os.path.isdir(config2.tokenizer), (
-        f"Tokenizer path is not a directory: {config2.tokenizer}"
-    )
+    assert os.path.exists(config2.model), f"Model directory does not exist: {config2.model}"
+    assert os.path.isdir(config2.model), f"Model path is not a directory: {config2.model}"
+    assert os.path.exists(config2.tokenizer), f"Tokenizer directory does not exist: {config2.tokenizer}"
+    assert os.path.isdir(config2.tokenizer), f"Tokenizer path is not a directory: {config2.tokenizer}"
 
     # Verify that the paths are deterministic (same as before)
     assert config2.model == created_model_dir, (
-        f"Model paths are not deterministic. "
-        f"Original: {created_model_dir}, New: {config2.model}"
+        f"Model paths are not deterministic. Original: {created_model_dir}, New: {config2.model}"
     )
     assert config2.tokenizer == create_tokenizer_dir, (
-        f"Tokenizer paths are not deterministic. "
-        f"Original: {create_tokenizer_dir}, New: {config2.tokenizer}"
+        f"Tokenizer paths are not deterministic. Original: {create_tokenizer_dir}, New: {config2.tokenizer}"
     )
 
 
@@ -1095,9 +1109,7 @@ def test_is_prefix_caching_supported(
 )
 def test_is_custom_op_enabled(backend: str, custom_ops: list[str], expected: bool):
     """Test that is_custom_op_enabled works correctly."""
-    config = AphroditeConfig(
-        compilation_config=CompilationConfig(backend=backend, custom_ops=custom_ops)
-    )
+    config = AphroditeConfig(compilation_config=CompilationConfig(backend=backend, custom_ops=custom_ops))
     assert config.compilation_config.is_custom_op_enabled("fused_layernorm") is expected
 
 
@@ -1190,9 +1202,7 @@ def test_aphrodite_config_defaults(model_id, compilation_config, optimization_le
     for pass_k, pass_v in pass_config_dict.items():
         actual = getattr(aphrodite_config.compilation_config.pass_config, pass_k)
         expected = pass_v(aphrodite_config) if callable(pass_v) else pass_v
-        assert actual == expected, (
-            f"pass_config.{pass_k}: expected {expected}, got {actual}"
-        )
+        assert actual == expected, f"pass_config.{pass_k}: expected {expected}, got {actual}"
 
     # Verify other compilation_config defaults
     compilation_config_dict = default_config["compilation_config"]
@@ -1205,9 +1215,7 @@ def test_aphrodite_config_defaults(model_id, compilation_config, optimization_le
         # cudagraph_mode to NONE; expect that instead of the level default.
         if k == "cudagraph_mode" and not current_platform.support_static_graph_mode():
             expected = CUDAGraphMode.NONE
-        assert actual == expected, (
-            f"compilation_config.{k}: expected {expected}, got {actual}"
-        )
+        assert actual == expected, f"compilation_config.{k}: expected {expected}, got {actual}"
 
 
 def test_aphrodite_config_callable_defaults():
@@ -1224,23 +1232,15 @@ def test_aphrodite_config_callable_defaults():
 
     # Test with quantized model
     quantized_model = ModelConfig("RedHatAI/Llama-3.2-1B-FP8")
-    config_quantized = AphroditeConfig(
-        model_config=quantized_model, optimization_level=OptimizationLevel.O2
-    )
-    enable_if_quantized = lambda cfg: (
-        cfg.model_config is not None and cfg.model_config.is_quantized
-    )
+    config_quantized = AphroditeConfig(model_config=quantized_model, optimization_level=OptimizationLevel.O2)
+    enable_if_quantized = lambda cfg: (cfg.model_config is not None and cfg.model_config.is_quantized)
     assert enable_if_quantized(config_quantized) is True
     assert enable_if_quantized(config_no_model) is False
 
     # Test with MoE model
     moe_model = ModelConfig("deepseek-ai/DeepSeek-V2-Lite")
-    config_moe = AphroditeConfig(
-        model_config=moe_model, optimization_level=OptimizationLevel.O2
-    )
-    enable_if_sequential = lambda cfg: (
-        cfg.model_config is not None and not cfg.model_config.is_moe
-    )
+    config_moe = AphroditeConfig(model_config=moe_model, optimization_level=OptimizationLevel.O2)
+    enable_if_sequential = lambda cfg: (cfg.model_config is not None and not cfg.model_config.is_moe)
     assert enable_if_sequential(config_moe) is False
     assert enable_if_sequential(config_quantized) is True
 
@@ -1283,9 +1283,7 @@ def test_aphrodite_config_explicit_overrides():
 
     # Explicit cudagraph mode override on quantized model at O2
     pass_config = PassConfig(enable_qk_norm_rope_fusion=True)
-    compilation_config = CompilationConfig(
-        cudagraph_mode=CUDAGraphMode.NONE, pass_config=pass_config
-    )
+    compilation_config = CompilationConfig(cudagraph_mode=CUDAGraphMode.NONE, pass_config=pass_config)
     config = AphroditeConfig(
         model_config=quantized_model,
         optimization_level=OptimizationLevel.O2,
@@ -1299,41 +1297,23 @@ def test_aphrodite_config_explicit_overrides():
     assert config.compilation_config.mode == CompilationMode.APHRODITE_COMPILE
 
     # Different optimization levels with same model
-    config_o0 = AphroditeConfig(
-        model_config=regular_model, optimization_level=OptimizationLevel.O0
-    )
-    config_o2 = AphroditeConfig(
-        model_config=regular_model, optimization_level=OptimizationLevel.O2
-    )
+    config_o0 = AphroditeConfig(model_config=regular_model, optimization_level=OptimizationLevel.O0)
+    config_o2 = AphroditeConfig(model_config=regular_model, optimization_level=OptimizationLevel.O2)
     assert config_o0.compilation_config.mode == CompilationMode.NONE
     assert config_o2.compilation_config.mode == CompilationMode.APHRODITE_COMPILE
     assert config_o0.compilation_config.cudagraph_mode == CUDAGraphMode.NONE
-    assert (
-        config_o2.compilation_config.cudagraph_mode == CUDAGraphMode.FULL_AND_PIECEWISE
-    )
+    assert config_o2.compilation_config.cudagraph_mode == CUDAGraphMode.FULL_AND_PIECEWISE
 
     # Same optimization level across different model types
-    config_moe_o2 = AphroditeConfig(
-        model_config=moe_model, optimization_level=OptimizationLevel.O2
-    )
-    config_regular_o2 = AphroditeConfig(
-        model_config=regular_model, optimization_level=OptimizationLevel.O2
-    )
-    config_quantized_o2 = AphroditeConfig(
-        model_config=quantized_model, optimization_level=OptimizationLevel.O2
-    )
+    config_moe_o2 = AphroditeConfig(model_config=moe_model, optimization_level=OptimizationLevel.O2)
+    config_regular_o2 = AphroditeConfig(model_config=regular_model, optimization_level=OptimizationLevel.O2)
+    config_quantized_o2 = AphroditeConfig(model_config=quantized_model, optimization_level=OptimizationLevel.O2)
     # All should have same base compilation settings at O2
     assert config_moe_o2.compilation_config.mode == CompilationMode.APHRODITE_COMPILE
     assert config_regular_o2.compilation_config.mode == CompilationMode.APHRODITE_COMPILE
     assert config_quantized_o2.compilation_config.mode == CompilationMode.APHRODITE_COMPILE
-    assert (
-        config_moe_o2.compilation_config.cudagraph_mode
-        == CUDAGraphMode.FULL_AND_PIECEWISE
-    )
-    assert (
-        config_regular_o2.compilation_config.cudagraph_mode
-        == CUDAGraphMode.FULL_AND_PIECEWISE
-    )
+    assert config_moe_o2.compilation_config.cudagraph_mode == CUDAGraphMode.FULL_AND_PIECEWISE
+    assert config_regular_o2.compilation_config.cudagraph_mode == CUDAGraphMode.FULL_AND_PIECEWISE
 
     # Override one field but not others
     pass_config = PassConfig(eliminate_noops=False)
@@ -1370,11 +1350,7 @@ def test_fusion_pass_op_priority():
     # using custom kernel for RMSNorm via IR:
     # Note that Aphrodite IR only supports the non-residual rms_norm for now;
     # soon this will be resolved.
-    cfg3 = AphroditeConfig(
-        kernel_config=KernelConfig(
-            ir_op_priority=IrOpPriorityConfig(rms_norm=["aphrodite_c"])
-        )
-    )
+    cfg3 = AphroditeConfig(kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=["aphrodite_c"])))
     assert cfg3.compilation_config.pass_config.fuse_norm_quant
 
     # block-fp8 model should enable quant_fp8 automatically
@@ -1459,9 +1435,7 @@ def test_renderer_num_workers_with_mm_cache():
 
 def test_eagle_draft_model_config():
     """Test that EagleDraft model config is correctly set."""
-    target_model_config = ModelConfig(
-        "meta-llama/Meta-Llama-3-8B-Instruct", trust_remote_code=True
-    )
+    target_model_config = ModelConfig("meta-llama/Meta-Llama-3-8B-Instruct", trust_remote_code=True)
     speculative_config = SpeculativeConfig(
         model="yuhuili/EAGLE-LLaMA3-Instruct-8B",
         num_speculative_tokens=1,
@@ -1505,9 +1479,7 @@ def test_ir_op_priority_default():
     assert priority_config.fused_add_rms_norm == ["aphrodite_c", "native"]
 
     # Assert single ops override the default
-    priority_config = IrOpPriorityConfig.with_default(
-        ["native"], rms_norm=["oink", "native"]
-    )
+    priority_config = IrOpPriorityConfig.with_default(["native"], rms_norm=["oink", "native"])
     assert priority_config.rms_norm == ["oink", "native"]
     assert priority_config.fused_add_rms_norm == ["native"]
 
@@ -1536,9 +1508,7 @@ def test_ir_op_priority_ctx():
     from aphrodite.config.kernel import IrOpPriorityConfig
 
     priority = IrOpPriorityConfig.with_default(["native"], rms_norm=["aphrodite_c"])
-    priority2 = IrOpPriorityConfig.with_default(
-        ["native"], fused_add_rms_norm=["aphrodite_c"]
-    )
+    priority2 = IrOpPriorityConfig.with_default(["native"], fused_add_rms_norm=["aphrodite_c"])
     with priority.set_priority():
         assert ir.ops.rms_norm.get_priority() == ["aphrodite_c", "native"]
         assert ir.ops.fused_add_rms_norm.get_priority() == ["native"]
