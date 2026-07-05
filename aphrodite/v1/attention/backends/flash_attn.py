@@ -169,10 +169,7 @@ class FlashAttentionBackend(AttentionBackend):
         if kv_cache_dtype in ("fp8", "fp8_e4m3"):
             if current_platform.is_xpu():
                 return True
-            return (
-                get_flash_attn_version() == 3
-                and current_platform.is_device_capability_family(90)
-            )
+            return get_flash_attn_version() == 3 and current_platform.is_device_capability_family(90)
         return kv_cache_dtype in ["auto", "float16", "bfloat16"]
 
     @classmethod
@@ -204,10 +201,7 @@ class FlashAttentionBackend(AttentionBackend):
     ) -> str | None:
         if has_sink and device_capability < DeviceCapability(9, 0):
             return "sink not supported on compute capability < 9.0"
-        if (
-            use_mm_prefix
-            and get_flash_attn_version(head_size=head_size, has_sinks=has_sink) != 4
-        ):
+        if use_mm_prefix and get_flash_attn_version(head_size=head_size, has_sinks=has_sink) != 4:
             return (
                 "mm_prefix (PrefixLM bidirectional attention) requires "
                 "FlashAttention v4, which does not resolve for this "
@@ -320,9 +314,7 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
     # TODO(luka, lucas): audit FA2 as part of:
     #  https://github.com/vllm-project/vllm/issues/22945
     _cudagraph_support = (
-        AttentionCGSupport.ALWAYS
-        if get_flash_attn_version() == 3
-        else AttentionCGSupport.UNIFORM_BATCH
+        AttentionCGSupport.ALWAYS if get_flash_attn_version() == 3 else AttentionCGSupport.UNIFORM_BATCH
     )
     supports_update_block_table: bool = True
 
@@ -348,9 +340,7 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
         self.compilation_config = aphrodite_config.compilation_config
         self.attention_config = aphrodite_config.attention_config
 
-        self.num_heads_q = self.model_config.get_num_attention_heads(
-            self.parallel_config
-        )
+        self.num_heads_q = self.model_config.get_num_attention_heads(self.parallel_config)
         self.num_heads_kv = self.model_config.get_num_kv_heads(self.parallel_config)
         self.kv_cache_dtype = kv_cache_spec.dtype
         self.headdim = self.model_config.get_head_size()
@@ -369,13 +359,9 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
             self.dcp_world_size = 1
             self.dcp_rank = 0
 
-        self.cp_kv_cache_interleave_size = (
-            self.parallel_config.cp_kv_cache_interleave_size
-        )
+        self.cp_kv_cache_interleave_size = self.parallel_config.cp_kv_cache_interleave_size
 
-        self.use_full_cuda_graph = (
-            self.compilation_config.cudagraph_mode.has_full_cudagraphs()
-        )
+        self.use_full_cuda_graph = self.compilation_config.cudagraph_mode.has_full_cudagraphs()
         self.max_cudagraph_size = self.compilation_config.max_cudagraph_capture_size
 
         if self.use_full_cuda_graph and self.aot_schedule:
@@ -396,9 +382,7 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
             # When using cuda graph, we need to set the upper bound of the
             # number of splits so that large enough intermediate buffers are
             # pre-allocated during capture.
-            self.max_num_splits = (
-                self.attention_config.flash_attn_max_num_splits_for_cuda_graph
-            )
+            self.max_num_splits = self.attention_config.flash_attn_max_num_splits_for_cuda_graph
 
         if self.dcp_world_size > 1:
             max_num_reqs = aphrodite_config.scheduler_config.max_num_seqs
@@ -418,12 +402,8 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
         self.persistent_rswa_window_tensor: torch.Tensor | None = None
         if self.rswa_window is not None:
             max_num_reqs = aphrodite_config.scheduler_config.max_num_seqs
-            self.persistent_rswa_prefix_lens = torch.zeros(
-                max_num_reqs, dtype=torch.int32, device=self.device
-            )
-            self.persistent_rswa_window_tensor = torch.tensor(
-                [self.rswa_window], dtype=torch.int32, device=self.device
-            )
+            self.persistent_rswa_prefix_lens = torch.zeros(max_num_reqs, dtype=torch.int32, device=self.device)
+            self.persistent_rswa_window_tensor = torch.tensor([self.rswa_window], dtype=torch.int32, device=self.device)
 
     def build(
         self,
@@ -447,9 +427,7 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
 
         # Disable AOT schedule for spec-decode proposer (not worth the overhead)
         # and for batch invariance (schedule varies with max_seqlen_q/k).
-        aot_schedule = (
-            self.aot_schedule and not fast_build and not envs.APHRODITE_BATCH_INVARIANT
-        )
+        aot_schedule = self.aot_schedule and not fast_build and not envs.APHRODITE_BATCH_INVARIANT
 
         if self.aot_sliding_window is None:
             self.aot_sliding_window = (-1, -1)
@@ -482,9 +460,7 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
         if envs.APHRODITE_BATCH_INVARIANT:
             max_num_splits = 1
 
-        def schedule(
-            batch_size, cu_query_lens, max_query_len, seqlens, max_seq_len, causal
-        ):
+        def schedule(batch_size, cu_query_lens, max_query_len, seqlens, max_seq_len, causal):
             cache_dtype = self.cache_config.cache_dtype
             if is_quantized_kv_cache(cache_dtype):
                 qkv_dtype = current_platform.fp8_dtype()
@@ -503,9 +479,7 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
                     cu_seqlens_q=cu_query_lens,
                     page_size=self.block_size,
                     causal=causal,
-                    window_size=_maybe_symmetrize_window(
-                        self.aot_sliding_window, causal
-                    ),
+                    window_size=_maybe_symmetrize_window(self.aot_sliding_window, causal),
                     num_splits=max_num_splits,
                 )
             return None
@@ -550,12 +524,8 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
                 causal=False,
             )
         elif use_cascade:
-            cu_prefix_query_lens = torch.tensor(
-                [0, num_actual_tokens], dtype=torch.int32, device=self.device
-            )
-            prefix_kv_lens = torch.tensor(
-                [common_prefix_len], dtype=torch.int32, device=self.device
-            )
+            cu_prefix_query_lens = torch.tensor([0, num_actual_tokens], dtype=torch.int32, device=self.device)
+            prefix_kv_lens = torch.tensor([common_prefix_len], dtype=torch.int32, device=self.device)
             # Use GPU tensor directly - no CPU sync needed
             suffix_kv_lens = seq_lens[:num_reqs] - common_prefix_len
             prefix_scheduler_metadata = schedule(
@@ -599,9 +569,7 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
 
         # Symmetrize the spec's sliding_window for non-causal attention
         group_sliding_window = getattr(self.kv_cache_spec, "sliding_window", None)
-        base_window = (
-            (-1, -1) if group_sliding_window is None else (group_sliding_window - 1, 0)
-        )
+        base_window = (-1, -1) if group_sliding_window is None else (group_sliding_window - 1, 0)
         effective_sliding_window = _maybe_symmetrize_window(base_window, causal)
 
         attn_metadata = FlashAttentionMetadata(
@@ -634,17 +602,12 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
                 compute_mm_prefix_range_tensor,
             )
 
-            attn_metadata.mm_prefix_range_tensor = compute_mm_prefix_range_tensor(
-                mm_ranges, num_reqs, seq_lens.device
-            )
+            attn_metadata.mm_prefix_range_tensor = compute_mm_prefix_range_tensor(mm_ranges, num_reqs, seq_lens.device)
 
         # R-SWA: copy prefix lengths into persistent buffers (outside the
         # compiled region) so forward() never allocates during CUDA graph
         # capture.  rswa_window is a static model config scalar read here.
-        if (
-            self.rswa_window is not None
-            and common_attn_metadata.rswa_prefix_lens is not None
-        ):
+        if self.rswa_window is not None and common_attn_metadata.rswa_prefix_lens is not None:
             assert self.persistent_rswa_prefix_lens is not None
             assert self.persistent_rswa_window_tensor is not None
             src = common_attn_metadata.rswa_prefix_lens
@@ -724,12 +687,9 @@ class FlashAttentionImpl(AttentionImpl):
 
         self.sinks = sinks
         if self.sinks is not None:
-            assert flash_attn_supports_sinks(), (
-                "Sinks are only supported in FlashAttention 3"
-            )
+            assert flash_attn_supports_sinks(), "Sinks are only supported in FlashAttention 3"
             assert self.sinks.shape[0] == num_heads, (
-                "Sinks must have the same number of heads as the number of "
-                "heads in the layer"
+                "Sinks must have the same number of heads as the number of heads in the layer"
             )
 
         self.supports_quant_query_input = flash_attn_supports_quant_query_input()
@@ -773,14 +733,10 @@ class FlashAttentionImpl(AttentionImpl):
               {q,k,v}_descale to be (num_sequences, num_kv_heads).
               We use torch's .expand() to avoid duplicating values
         """
-        assert self.vllm_flash_attn_version is not None, (
-            "FlashAttention version not detected."
-        )
+        assert self.vllm_flash_attn_version is not None, "FlashAttention version not detected."
 
         if output_scale is not None or output_block_scale is not None:
-            raise NotImplementedError(
-                "fused output quantization is not yet supported for FlashAttentionImpl"
-            )
+            raise NotImplementedError("fused output quantization is not yet supported for FlashAttentionImpl")
 
         if attn_metadata is None:
             # Profiling run.
@@ -847,11 +803,7 @@ class FlashAttentionImpl(AttentionImpl):
 
             descale_shape = (cu_seqlens_q.shape[0] - 1, self.num_kv_heads)
 
-            q_descale = (
-                layer._q_scale.expand(descale_shape)
-                if self.supports_quant_query_input
-                else None
-            )
+            q_descale = layer._q_scale.expand(descale_shape) if self.supports_quant_query_input else None
             k_descale = layer._k_scale.expand(descale_shape)
             v_descale = layer._v_scale.expand(descale_shape)
 
@@ -871,13 +823,9 @@ class FlashAttentionImpl(AttentionImpl):
                 return output
             else:
                 window = (
-                    attn_metadata.sliding_window
-                    if attn_metadata.sliding_window is not None
-                    else self.sliding_window
+                    attn_metadata.sliding_window if attn_metadata.sliding_window is not None else self.sliding_window
                 )
-                sliding_window_size: list[int] | None = (
-                    list(window) if window is not None else None
-                )
+                sliding_window_size: list[int] | None = list(window) if window is not None else None
 
                 causal = attn_metadata.causal
                 is_dynamic_causal = isinstance(causal, torch.Tensor)
@@ -892,7 +840,20 @@ class FlashAttentionImpl(AttentionImpl):
                     and self.vllm_flash_attn_version == 4
                 ):
                     max_ranges = mm_prefix_ranges.shape[1]
-                    mm_mask_mod = _make_mm_prefix_mask_mod(max_ranges)
+                    # Gemma4: clamp the bidirectional block to the sliding
+                    # window (HF (causal OR blockwise) AND sliding_window on
+                    # local layers). Other mm-prefix models pass sliding_window=0
+                    # -> unclamped, behavior unchanged. sliding_window_size[0]+1
+                    # is the window (self.sliding_window = (sw-1, 0) on sliding
+                    # layers); causal mm_prefix never hits the symmetric path.
+                    mm_clamp_sw = 0
+                    if (
+                        getattr(layer, "mm_prefix_clamp_sliding_window", False)
+                        and sliding_window_size is not None
+                        and sliding_window_size[0] >= 0
+                    ):
+                        mm_clamp_sw = sliding_window_size[0] + 1
+                    mm_mask_mod = _make_mm_prefix_mask_mod(max_ranges, sliding_window=mm_clamp_sw)
                     mm_aux = [mm_prefix_ranges]
 
                 # R-SWA: use CuTE-DSL mask_mod on FA4 for exact token-level
@@ -918,13 +879,10 @@ class FlashAttentionImpl(AttentionImpl):
                 if isinstance(causal, torch.Tensor):
                     if self.vllm_flash_attn_version != 4:
                         raise NotImplementedError(
-                            "Per-sequence causal requires FA4. Current version: "
-                            f"FA{self.vllm_flash_attn_version}"
+                            f"Per-sequence causal requires FA4. Current version: FA{self.vllm_flash_attn_version}"
                         )
                     dynamic_causal = causal
-                    has_window = (
-                        sliding_window_size is not None and sliding_window_size[1] >= 0
-                    )
+                    has_window = sliding_window_size is not None and sliding_window_size[1] >= 0
                     causal = not has_window
 
                 flash_attn_varlen_func(
@@ -1032,9 +990,7 @@ class FlashAttentionImpl(AttentionImpl):
         k_descale: torch.Tensor | None = None,
         v_descale: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        assert self.vllm_flash_attn_version is not None, (
-            "FlashAttention version not detected."
-        )
+        assert self.vllm_flash_attn_version is not None, "FlashAttention version not detected."
 
         cu_seqlens_q = attn_metadata.query_start_loc
         max_seqlen_q = attn_metadata.max_query_len
@@ -1042,9 +998,7 @@ class FlashAttentionImpl(AttentionImpl):
 
         query = query.contiguous()
         query_across_dcp = get_dcp_group().all_gather(query, dim=1)
-        sliding_window_size = (
-            list(self.sliding_window) if self.sliding_window is not None else None
-        )
+        sliding_window_size = list(self.sliding_window) if self.sliding_window is not None else None
         n = query_across_dcp.shape[0]
         (dcp_context_out,) = current_workspace_manager().get_simultaneous(
             (
@@ -1137,15 +1091,11 @@ class FlashAttentionImpl(AttentionImpl):
             attn_metadata: Encoder attention metadata
             layer: The attention layer
         """
-        assert self.vllm_flash_attn_version is not None, (
-            "FlashAttention version not detected."
-        )
+        assert self.vllm_flash_attn_version is not None, "FlashAttention version not detected."
 
         # For encoder attention, process FP8 quantization if needed
         if is_quantized_kv_cache(self.kv_cache_dtype):
-            raise NotImplementedError(
-                "quantization is not supported for encoder attention"
-            )
+            raise NotImplementedError("quantization is not supported for encoder attention")
 
         # Use encoder-specific metadata for sequence information
         cu_seqlens_q = attn_metadata.query_start_loc
@@ -1159,9 +1109,7 @@ class FlashAttentionImpl(AttentionImpl):
         )
 
         # Call flash attention directly on Q, K, V tensors
-        sliding_window_size = (
-            list(self.sliding_window) if self.sliding_window is not None else None
-        )
+        sliding_window_size = list(self.sliding_window) if self.sliding_window is not None else None
         flash_attn_varlen_func(
             q=query,
             k=key,
@@ -1189,13 +1137,23 @@ class FlashAttentionImpl(AttentionImpl):
         return output
 
 
-def _make_mm_prefix_mask_mod(max_ranges: int):
+def _make_mm_prefix_mask_mod(max_ranges: int, sliding_window: int = 0):
     """Build a CuTE-DSL mask_mod implementing (causal OR mm_prefix).
 
     Returns a @cute.jit callable that evaluates:
       keep = (kv_idx <= q_idx) OR
-             (q_idx in [r_start,r_end] AND kv_idx in [r_start,r_end])
+             (q_idx in [r_start,r_end] AND kv_idx in [r_start,r_end]
+              [AND (q_idx - kv_idx) < sliding_window])
     for each mm_prefix range stored in aux_tensors[0].
+
+    When sliding_window > 0 (Gemma4 sliding layers), the bidirectional block is
+    clamped to the sliding window, matching HF's
+    (causal OR blockwise) AND sliding_window (== sliding_window_overlay
+    kv > q - sw; future kv passes since q - kv < 0). sliding_window <= 0
+    (default) leaves the block unclamped, so other mm-prefix models are
+    unchanged. q_idx/kv_idx are local offsets, but their difference is
+    frame-invariant and image bidirectional attention only matters during
+    prefill (where local == absolute).
     """
     import cutlass
     import cutlass.cute as cute
@@ -1223,7 +1181,10 @@ def _make_mm_prefix_mask_mod(max_ranges: int):
             valid = r_start < r_end
             q_in = (q_idx >= r_start) & (q_idx <= r_end) & valid
             k_in = (kv_idx >= r_start) & (kv_idx <= r_end) & valid
-            keep = keep | (q_in & k_in)
+            mm = q_in & k_in
+            if sliding_window > 0:
+                mm = mm & ((q_idx - kv_idx) < sliding_window)
+            keep = keep | mm
         return keep
 
     mm_prefix_mask_mod.use_fast_sampling = True
@@ -1324,12 +1285,7 @@ def use_cascade_attention(
     num_queries_per_kv = num_query_heads // num_kv_heads
     # The criteria for using FlashDecoding can be found in the following link:
     # https://github.com/vllm-project/flash-attention/blob/96266b1111111f3d11aabefaf3bacbab6a89d03c/csrc/flash_attn/flash_api.cpp#L535
-    use_flash_decoding = (
-        num_queries_per_kv > 1
-        and not use_sliding_window
-        and not use_alibi
-        and np.all(query_lens == 1)
-    )
+    use_flash_decoding = num_queries_per_kv > 1 and not use_sliding_window and not use_alibi and np.all(query_lens == 1)
     if not use_flash_decoding:
         # Use cascade attention.
         return True
@@ -1351,9 +1307,7 @@ def use_cascade_attention(
     cascade_waves = cdiv(cascade_ctas, num_sms)
     cascade_time = cascade_waves * num_prefix_tiles
 
-    flash_decoding_ctas = (
-        num_reqs * num_kv_heads * cdiv(num_queries_per_kv, q_tile_size)
-    )
+    flash_decoding_ctas = num_reqs * num_kv_heads * cdiv(num_queries_per_kv, q_tile_size)
     flash_decoding_ctas *= num_prefix_tiles
     flash_decoding_time = cdiv(flash_decoding_ctas, num_sms)
 
@@ -1389,9 +1343,7 @@ def cascade_attention(
 ) -> torch.Tensor:
     assert alibi_slopes is None, "Cascade attention does not support ALiBi."
     # TODO: Support sliding window.
-    assert sliding_window == (-1, -1), (
-        "Cascade attention does not support sliding window."
-    )
+    assert sliding_window == (-1, -1), "Cascade attention does not support sliding window."
 
     num_tokens = query.shape[0]
     block_size = key_cache.shape[-3]
