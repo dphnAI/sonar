@@ -95,20 +95,18 @@ class ParserEngine(Parser):
         self.model_tokenizer = tokenizer
         self._tools = tools
         self._stream_state = StreamState(
-            tool_call_id_type=(
-                get_tool_call_id_type(model_config)
-                if model_config is not None
-                else "random"
-            ),
+            tool_call_id_type=(get_tool_call_id_type(model_config) if model_config is not None else "random"),
         )
         self._reasoning_parser = None
         self._tool_parser = None
         self.parser_engine_config = parser_engine_config
-        self._engine = StreamingParserEngine(
-            parser_engine_config, tokenizer, vocab=self.vocab
-        )
+        self._engine = StreamingParserEngine(parser_engine_config, tokenizer, vocab=self.vocab)
 
-        self._reasoning_ended: bool = False
+        self._has_reasoning = (
+            "THINK_END" in parser_engine_config.token_id_terminals
+            or parser_engine_config.initial_state == ParserState.REASONING
+        )
+        self._reasoning_ended: bool = not self._has_reasoning
         self._streaming_initialized: bool = False
         self._prompt_streaming_prepared: bool = False
 
@@ -121,15 +119,9 @@ class ParserEngine(Parser):
         self._arg_converter = parser_engine_config.arg_converter
         self._arg_structural_chars = parser_engine_config.arg_structural_chars
         self._stream_arg_deltas = parser_engine_config.stream_arg_deltas
-        self._strip_trailing_reasoning_ws = (
-            parser_engine_config.strip_trailing_reasoning_whitespace
-        )
-        self._drop_ws_only_content_before_tools = (
-            parser_engine_config.drop_whitespace_only_content_before_tools
-        )
-        self._strip_content_ws_with_tools = (
-            parser_engine_config.strip_content_whitespace_with_tools
-        )
+        self._strip_trailing_reasoning_ws = parser_engine_config.strip_trailing_reasoning_whitespace
+        self._drop_ws_only_content_before_tools = parser_engine_config.drop_whitespace_only_content_before_tools
+        self._strip_content_ws_with_tools = parser_engine_config.strip_content_whitespace_with_tools
 
         vocab = self.vocab
         self._reasoning_start_token_id: int | None = None
@@ -188,7 +180,7 @@ class ParserEngine(Parser):
 
     def _reset(self, initial_state: ParserState | None = None) -> None:
         self._engine.reset(initial_state=initial_state)
-        self._reasoning_ended = False
+        self._reasoning_ended = not self._has_reasoning
         self._tool_slots.clear()
         self._deferred_content = ""
         self._deferred_reasoning = ""
@@ -243,9 +235,7 @@ class ParserEngine(Parser):
             if isinstance(items_schema, dict):
                 changed = False
                 for i, item in enumerate(value):
-                    coerced, item_changed = ParserEngine._coerce_value(
-                        item, items_schema
-                    )
+                    coerced, item_changed = ParserEngine._coerce_value(item, items_schema)
                     if item_changed:
                         value[i] = coerced
                         changed = True
@@ -255,7 +245,7 @@ class ParserEngine(Parser):
         types = extract_types_from_schema(schema)
         as_str = json.dumps(value, ensure_ascii=False)
         coerced = coerce_to_schema_type(as_str, types)
-        if coerced != value:
+        if type(coerced) is not type(value) or coerced != value:
             return coerced, True
         return value, False
 
@@ -461,11 +451,7 @@ class ParserEngine(Parser):
             trimmed = combined.rstrip()
             self._deferred_reasoning = combined[len(trimmed) :]
             delta.reasoning = trimmed or None
-            if (
-                delta.reasoning is None
-                and delta.content is None
-                and not delta.tool_calls
-            ):
+            if delta.reasoning is None and delta.content is None and not delta.tool_calls:
                 return None
         elif self._deferred_reasoning and self._reasoning_ended:
             self._deferred_reasoning = ""
@@ -652,9 +638,7 @@ class ParserEngine(Parser):
 
         content = delta.content if delta else None
         if content:
-            content = self._strip_content_whitespace(
-                content, tool_call_info.tools_called
-            )
+            content = self._strip_content_whitespace(content, tool_call_info.tools_called)
 
         return reasoning, content, tool_call_info
 
@@ -798,9 +782,7 @@ class ParserEngine(Parser):
         slot = self._tool_slots[idx]
         slot.name = name
         slot.name_sent = True
-        slot.string_keys = self._streamable_string_keys(
-            find_tool_properties(self._tools, name)
-        )
+        slot.string_keys = self._streamable_string_keys(find_tool_properties(self._tools, name))
         self._ensure_tool_id(slot, name)
         deltas.append(
             DeltaToolCall(
@@ -856,9 +838,7 @@ class ParserEngine(Parser):
             if name and self._is_valid_tool_name(name):
                 slot.name = name
                 slot.name_sent = True
-                slot.string_keys = self._streamable_string_keys(
-                    find_tool_properties(self._tools, name)
-                )
+                slot.string_keys = self._streamable_string_keys(find_tool_properties(self._tools, name))
                 self._ensure_tool_id(slot, name)
                 deltas.append(
                     DeltaToolCall(
@@ -1019,9 +999,7 @@ class ParserEngine(Parser):
                     try:
                         args_json = converter(raw_body, False)
                     except (json.JSONDecodeError, ValueError, TypeError):
-                        logger.debug(
-                            "arg converter failed (extract): %s", raw_body[:80]
-                        )
+                        logger.debug("arg converter failed (extract): %s", raw_body[:80])
                         args_json = self._extract_args_json(raw_body, name)
                 else:
                     args_json = self._extract_args_json(raw_body, name)

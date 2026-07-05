@@ -16,9 +16,13 @@ from aphrodite.entrypoints.openai.chat_completion.protocol import (
 from aphrodite.parser.abstract_parser import DelegatingParser
 from aphrodite.tool_parsers.abstract_tool_parser import ToolParser
 from aphrodite.tool_parsers.deepseekv3_tool_parser import DeepSeekV3ToolParser
-from aphrodite.tool_parsers.deepseekv4_tool_parser import DeepSeekV4ToolParser
+from aphrodite.tool_parsers.deepseekv4_engine_tool_parser import (
+    DeepSeekV4EngineToolParser,
+)
 from aphrodite.tool_parsers.deepseekv31_tool_parser import DeepSeekV31ToolParser
-from aphrodite.tool_parsers.deepseekv32_tool_parser import DeepSeekV32ToolParser
+from aphrodite.tool_parsers.deepseekv32_engine_tool_parser import (
+    DeepSeekV32EngineToolParser,
+)
 from aphrodite.tool_parsers.glm47_moe_tool_parser import Glm47MoeModelToolParser
 from aphrodite.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
 from aphrodite.tool_parsers.kimi_k2_tool_parser import KimiK2ToolParser
@@ -26,8 +30,8 @@ from aphrodite.tool_parsers.llama_tool_parser import Llama3JsonToolParser
 from aphrodite.tool_parsers.minimax_m2_tool_parser import MinimaxM2ToolParser
 from aphrodite.tool_parsers.qwen3_engine_tool_parser import Qwen3EngineToolParser
 from aphrodite.tool_parsers.structural_tag_registry import (
-    SUPPORTED_STRUCTURAL_TAG_MODELS,
     APHRODITE_BUILTIN_STRUCTURAL_TAG_MODELS,
+    SUPPORTED_STRUCTURAL_TAG_MODELS,
     XGRAMMAR_BUILTIN_STRUCTURAL_TAG_MODELS,
     _get_function_parameters,
     get_model_structural_tag,
@@ -171,9 +175,7 @@ def test_get_model_structural_tag_supports_named_tool_choice(
     tag = get_model_structural_tag(
         model=model,
         tools=sample_tools,
-        tool_choice=ChatCompletionNamedToolChoiceParam(
-            function=ChatCompletionNamedFunction(name="get_weather")
-        ),
+        tool_choice=ChatCompletionNamedToolChoiceParam(function=ChatCompletionNamedFunction(name="get_weather")),
         reasoning=False,
     )
 
@@ -185,8 +187,8 @@ def test_get_model_structural_tag_supports_named_tool_choice(
     [
         (DeepSeekV3ToolParser, "deepseek_r1"),
         (DeepSeekV31ToolParser, "deepseek_v3_1"),
-        (DeepSeekV32ToolParser, "deepseek_v3_2"),
-        (DeepSeekV4ToolParser, "deepseek_v4"),
+        (DeepSeekV32EngineToolParser, "deepseek_v3_2"),
+        (DeepSeekV4EngineToolParser, "deepseek_v4"),
         (Glm47MoeModelToolParser, "glm_4_7"),
         (Hermes2ProToolParser, "hermes"),
         (KimiK2ToolParser, "kimi"),
@@ -308,10 +310,7 @@ def test_xgrammar_function_parameters_are_preserved(
         reasoning=False,
     )
 
-    assert (
-        captured[0][0]["function"]["parameters"]
-        == sample_tools_strict[0].function.parameters
-    )
+    assert captured[0][0]["function"]["parameters"] == sample_tools_strict[0].function.parameters
     assert sample_tools_strict[0].function.parameters is not None
 
 
