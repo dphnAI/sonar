@@ -4,7 +4,7 @@ Breathing Life into Language
 
 ![sonar](assets/sonar.jpg)
 
-Sonar (formerly Aphrodite Engine) is an inference engine that optimizes the serving of HuggingFace-compatible models at scale. Built on vLLM's Paged Attention technology, it delivers high-performance model inference for multiple concurrent users. Sonar serves as the backend engine powering [PygmalionAI](https://pygmalion.chat)'s chat platforms and API infrastructure.
+Sonar (formerly Aphrodite Engine) is an inference engine that optimizes the serving of HuggingFace-compatible models at scale. Built on vLLM's Paged Attention technology, it delivers high-performance model inference for multiple concurrent users. Sonar serves as the backend engine powering the [Dolphin Inference Network](https://datagen.dphn.ai) and [PygmalionAI](https://pygmalion.chat)'s chat platforms and API infrastructure.
 
 Sonar builds upon and integrates the exceptional work from [various projects](#acknowledgements), primarily [vLLM](https://vllm.ai).
 
