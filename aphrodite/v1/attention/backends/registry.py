@@ -98,6 +98,7 @@ class AttentionBackendEnum(Enum, metaclass=_AttentionBackendEnumMeta):
     FLASH_ATTN_MLA_SPARSE = (
         "aphrodite.v1.attention.backends.mla.flashattn_mla_sparse.FlashAttnMLASparseBackend"
     )
+    SM89_MLA_SPARSE = "aphrodite.v1.attention.backends.mla.sm89_mla_sparse.Sm89MLASparseBackend"
     MINIMAX_M3_SPARSE = (
         "aphrodite.models.minimax_m3.common.sparse_attention.MiniMaxM3SparseBackend"
     )

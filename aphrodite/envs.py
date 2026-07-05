@@ -267,6 +267,7 @@ if TYPE_CHECKING:
     APHRODITE_WEIGHT_OFFLOADING_DISABLE_UVA: bool = False
     APHRODITE_WSL2_ENABLE_PIN_MEMORY: bool = False
     APHRODITE_DISABLE_LOG_LOGO: bool = False
+    APHRODITE_DISABLE_SM89_DSA: bool = False
     APHRODITE_LORA_DISABLE_PDL: bool = False
     APHRODITE_ENABLE_CUDA_COMPATIBILITY: bool = False
     APHRODITE_CUDA_COMPATIBILITY_PATH: str | None = None
@@ -1890,6 +1891,10 @@ environment_variables: dict[str, Callable[[], Any]] = {
     ),
     # Disable logging of Aphrodite logo at server startup time.
     "APHRODITE_DISABLE_LOG_LOGO": lambda: bool(int(os.getenv("APHRODITE_DISABLE_LOG_LOGO", "0"))),
+    # Kill switch for the sm89 (Ada, e.g. RTX 4090) DeepSeek sparse attention
+    # kernels. When set, the SM89_MLA_SPARSE backend and the sm89 indexer
+    # logits paths are skipped even if the kernels are compiled in.
+    "APHRODITE_DISABLE_SM89_DSA": lambda: bool(int(os.getenv("APHRODITE_DISABLE_SM89_DSA", "0"))),
     # Disable PDL for LoRA, as enabling PDL with LoRA on SM100 causes
     # Triton compilation to fail.
     "APHRODITE_LORA_DISABLE_PDL": lambda: bool(int(os.getenv("APHRODITE_LORA_DISABLE_PDL", "0"))),

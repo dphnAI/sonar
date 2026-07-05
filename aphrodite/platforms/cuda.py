@@ -162,6 +162,10 @@ def _get_backend_priorities(
                 AttentionBackendEnum.TRITON_MLA,
                 AttentionBackendEnum.FLASH_ATTN_MLA_SPARSE,
                 AttentionBackendEnum.FLASHMLA_SPARSE,
+                # sm89-only (rejected elsewhere via supports_compute_capability
+                # and supports_combination, which also honor the
+                # APHRODITE_DISABLE_SM89_DSA kill switch).
+                AttentionBackendEnum.SM89_MLA_SPARSE,
             ]
     else:
         if device_capability.major == 10:

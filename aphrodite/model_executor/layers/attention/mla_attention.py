@@ -202,9 +202,9 @@ from aphrodite import _custom_ops as ops
 from aphrodite._aiter_ops import rocm_aiter_ops
 from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
 from aphrodite.config import (
+    AphroditeConfig,
     CacheConfig,
     ModelConfig,
-    AphroditeConfig,
     get_current_aphrodite_config,
     get_current_aphrodite_config_or_none,
 )
@@ -325,7 +325,7 @@ def _canonicalize_sparse_mla_kv_cache_dtype(
     kv_cache_dtype: CacheDType,
 ) -> CacheDType:
     backend_name = attn_backend.get_name()
-    if backend_name == "FLASHMLA_SPARSE" and is_quantized_kv_cache(kv_cache_dtype):
+    if backend_name in ("FLASHMLA_SPARSE", "SM89_MLA_SPARSE") and is_quantized_kv_cache(kv_cache_dtype):
         return "fp8_ds_mla"
     if backend_name == "FLASHINFER_MLA_SPARSE_SM120" and kv_cache_dtype in (
         "auto",

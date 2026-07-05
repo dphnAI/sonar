@@ -494,6 +494,28 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
       "Tensor workspace, int k, int max_seq_len) -> ()");
 #endif
 
+#ifdef APHRODITE_ENABLE_SM89_DSA
+  // sm89 DeepSeek sparse attention kernels.
+  // conditionally compiled so impl registrations are in source files
+  ops.def(
+      "sm89_fp8_paged_mqa_logits(Tensor q, Tensor pool, Tensor weights, "
+      "Tensor seq_lens, Tensor block_table, Tensor sched, Tensor! logits, "
+      "bool clean_logits) -> ()");
+
+  ops.def(
+      "sm89_paged_mqa_logits_metadata(Tensor seq_lens, Tensor! sched, "
+      "int next_n) -> ()");
+
+  ops.def(
+      "sm89_fp8_mqa_logits(Tensor q, Tensor kv, Tensor kv_scales, "
+      "Tensor weights, Tensor cu_seqlen_ks, Tensor cu_seqlen_ke, "
+      "Tensor! logits) -> ()");
+
+  ops.def(
+      "sm89_sparse_mla_fwd(Tensor q, Tensor pool, Tensor indices, "
+      "Tensor! out, Tensor! lse, float sm_scale) -> ()");
+#endif
+
   // Activation ops
   ops.def(
       "persistent_masked_m_silu_mul_quant(Tensor input, Tensor counts, Tensor! "

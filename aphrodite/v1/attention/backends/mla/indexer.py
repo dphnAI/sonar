@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import torch
 
 import aphrodite.envs as envs
+from aphrodite import _custom_ops as ops
 from aphrodite.config import AphroditeConfig
 from aphrodite.distributed import get_dcp_group
 from aphrodite.logger import init_logger
@@ -24,6 +25,7 @@ from aphrodite.v1.attention.backend import (
     MultipleOf,
 )
 from aphrodite.v1.attention.backends.mla.compressor_utils import get_compressed_slot_mapping
+from aphrodite.v1.attention.backends.mla.sm89_mla_sparse import use_sm89_dsa
 from aphrodite.v1.attention.backends.utils import (
     get_dcp_local_seq_lens,
     split_decodes_and_prefills,
@@ -304,6 +306,13 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
 
         sm_count = num_compute_units(self.device.index)
         self.num_sms = sm_count
+        self.use_sm89_dsa = use_sm89_dsa()
+        if self.use_sm89_dsa:
+            # The sm89 paged-logits kernel runs a fixed persistent-CTA grid
+            # (2 CTAs/SM x 128 SMs) and derives its partition count P from the
+            # (P+1, 2) scheduler table, so size the buffer for P=256 instead of
+            # the SM count.
+            self.num_sms = 256
 
         self.offsets_buffer = torch.arange(
             next_n, device=self.device, dtype=torch.int32
@@ -723,8 +732,18 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
             if seq_lens.dim() == 1:
                 seq_lens = seq_lens.unsqueeze(-1)
 
+            # Must be checked before the deep_gemm branch: deep_gemm may be
+            # pip-installed on sm89 even though its kernels cannot run there.
+            if self.use_sm89_dsa:
+                # Fills the persistent (P+1, 2) partition table in place, so
+                # the buffer address stays stable across CUDA graph replays.
+                ops.sm89_paged_mqa_logits_metadata(
+                    seq_lens,
+                    self.scheduler_metadata_buffer,
+                    seq_lens.shape[1],
+                )
             # DeepGEMM is required for the paged MQA logits on CUDA devices
-            if current_platform.is_cuda() and has_deep_gemm():
+            elif current_platform.is_cuda() and has_deep_gemm():
                 self.scheduler_metadata_buffer[:] = get_paged_mqa_logits_metadata(
                     seq_lens,
                     self.kv_cache_spec.storage_block_size,
