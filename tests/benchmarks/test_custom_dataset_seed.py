@@ -12,7 +12,7 @@ from aphrodite.benchmarks.datasets import get_samples
 
 @pytest.fixture(scope="session")
 def hf_tokenizer() -> PreTrainedTokenizerBase:
-    return AutoTokenizer.from_pretrained("gpt2")
+    return AutoTokenizer.from_pretrained("openai-community/gpt2")
 
 
 def _write_jsonl(path: Path, n_rows: int) -> None:
@@ -36,9 +36,7 @@ def _args_for_custom(dataset_path: str, seed: int) -> argparse.Namespace:
 
 
 @pytest.mark.benchmark
-def test_custom_dataset_seed_propagates(
-    hf_tokenizer: PreTrainedTokenizerBase, tmp_path: Path
-) -> None:
+def test_custom_dataset_seed_propagates(hf_tokenizer: PreTrainedTokenizerBase, tmp_path: Path) -> None:
     """--seed must control the CustomDataset shuffle used by get_samples.
 
     Without the fix, CustomDataset was instantiated without random_seed,
@@ -61,9 +59,7 @@ def test_custom_dataset_seed_propagates(
 
 
 @pytest.mark.benchmark
-def test_custom_dataset_same_seed_is_deterministic(
-    hf_tokenizer: PreTrainedTokenizerBase, tmp_path: Path
-) -> None:
+def test_custom_dataset_same_seed_is_deterministic(hf_tokenizer: PreTrainedTokenizerBase, tmp_path: Path) -> None:
     """Same --seed must yield the same CustomDataset subset."""
     jsonl = tmp_path / "data.jsonl"
     _write_jsonl(jsonl, n_rows=60)
