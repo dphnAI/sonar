@@ -5,11 +5,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from aphrodite.tokenizers import TokenizerLike
 from tests.tool_parsers.common_tests import (
     ToolParserTestConfig,
     ToolParserTests,
 )
-from aphrodite.tokenizers import TokenizerLike
 
 
 class TestLongCatToolParser(ToolParserTests):
@@ -35,8 +35,7 @@ class TestLongCatToolParser(ToolParserTests):
             # Test data
             no_tool_calls_output="This is a regular response without any tool calls.",
             single_tool_call_output=(
-                '<longcat_tool_call>{"name": "get_weather", '
-                '"arguments": {"city": "Tokyo"}}</longcat_tool_call>'
+                '<longcat_tool_call>{"name": "get_weather", "arguments": {"city": "Tokyo"}}</longcat_tool_call>'
             ),
             parallel_tool_calls_output=(
                 '<longcat_tool_call>{"name": "get_weather", '
@@ -58,10 +57,7 @@ class TestLongCatToolParser(ToolParserTests):
     "empty_object": {}
   }
 }</longcat_tool_call>""",
-            empty_arguments_output=(
-                '<longcat_tool_call>{"name": "refresh", "arguments": {}}'
-                "</longcat_tool_call>"
-            ),
+            empty_arguments_output=('<longcat_tool_call>{"name": "refresh", "arguments": {}}</longcat_tool_call>'),
             surrounding_text_output=(
                 "Let me check the weather for you.\n"
                 '<longcat_tool_call>{"name": "get_weather", '
@@ -79,10 +75,7 @@ class TestLongCatToolParser(ToolParserTests):
 }</longcat_tool_call>""",
             malformed_input_outputs=[
                 '<longcat_tool_call>{"name": "func", "arguments": {',
-                (
-                    '<longcat_tool_call>{"name": "func", '
-                    '"arguments": "not a dict"}</longcat_tool_call>'
-                ),
+                ('<longcat_tool_call>{"name": "func", "arguments": "not a dict"}</longcat_tool_call>'),
                 "Some text with <longcat_tool_call>invalid json",
             ],
             # Expected results

@@ -64,9 +64,7 @@ def test_create_tier_from_registry():
     primary_kv_view, offloading_spec = _make_mock_args()
     tier_config = {"type": "example"}
 
-    tier = SecondaryTierFactory.create_secondary_tier(
-        tier_config, primary_kv_view, offloading_spec
-    )
+    tier = SecondaryTierFactory.create_secondary_tier(tier_config, primary_kv_view, offloading_spec)
 
     assert isinstance(tier, SecondaryTierManager)
     assert tier.tier_type == "example"
@@ -81,10 +79,7 @@ def test_create_multiple_tiers():
     ]
 
     tiers = [
-        SecondaryTierFactory.create_secondary_tier(
-            cfg.copy(), primary_kv_view, offloading_spec
-        )
-        for cfg in configs
+        SecondaryTierFactory.create_secondary_tier(cfg.copy(), primary_kv_view, offloading_spec) for cfg in configs
     ]
 
     assert len(tiers) == 2
@@ -127,9 +122,7 @@ def test_missing_tier_type_raises():
     tier_config: dict[str, str] = {}
 
     with pytest.raises(ValueError, match="must include 'type'"):
-        SecondaryTierFactory.create_secondary_tier(
-            tier_config, primary_kv_view, offloading_spec
-        )
+        SecondaryTierFactory.create_secondary_tier(tier_config, primary_kv_view, offloading_spec)
 
 
 def test_unknown_tier_type_raises():
@@ -141,9 +134,7 @@ def test_unknown_tier_type_raises():
         ValueError,
         match=r"Unknown secondary tier type.*Supported types:",
     ):
-        SecondaryTierFactory.create_secondary_tier(
-            tier_config, primary_kv_view, offloading_spec
-        )
+        SecondaryTierFactory.create_secondary_tier(tier_config, primary_kv_view, offloading_spec)
 
 
 def test_duplicate_registration_raises():

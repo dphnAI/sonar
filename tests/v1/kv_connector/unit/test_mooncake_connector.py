@@ -40,7 +40,7 @@ from aphrodite.v1.kv_cache_interface import (
 )
 from aphrodite.v1.request import RequestStatus
 
-from .utils import create_request, create_scheduler, create_aphrodite_config
+from .utils import create_aphrodite_config, create_request, create_scheduler
 
 
 def _make_test_kv_cache_config() -> KVCacheConfig:
@@ -78,9 +78,7 @@ class FakeMooncakeWrapper:
     def get_rpc_port(self) -> int:
         return 12345
 
-    def batch_transfer_sync_write(
-        self, target_hostname, buffers, peer_buffer_addresses, lengths
-    ) -> int:
+    def batch_transfer_sync_write(self, target_hostname, buffers, peer_buffer_addresses, lengths) -> int:
         return 0
 
     def batch_register_memory(self, buffer_addresses, capacities) -> int:
@@ -130,9 +128,7 @@ def test_align_transfer_regions_uses_layer_name_occurrences():
         ),
     ]
 
-    aligned_local, aligned_remote, err = _align_transfer_regions(
-        local_regions, remote_regions
-    )
+    aligned_local, aligned_remote, err = _align_transfer_regions(local_regions, remote_regions)
 
     assert err is None
     assert [r.base_addr for r in aligned_local] == [0x1000, 0x1100]
@@ -237,17 +233,11 @@ async def test_build_transfer_params_separates_prefill_pp_layers():
     )
 
     for pp_rank, local_regions in producer_pp_regions.items():
-        aligned_local, aligned_remote, err = _align_transfer_regions(
-            local_regions, remote_regions
-        )
+        aligned_local, aligned_remote, err = _align_transfer_regions(local_regions, remote_regions)
 
         assert err is None
-        assert [r.layer_index for r in aligned_local] == (
-            expected_by_pp_rank[pp_rank]["layers"]
-        )
-        assert [r.layer_index for r in aligned_remote] == (
-            expected_by_pp_rank[pp_rank]["layers"]
-        )
+        assert [r.layer_index for r in aligned_local] == (expected_by_pp_rank[pp_rank]["layers"])
+        assert [r.layer_index for r in aligned_remote] == (expected_by_pp_rank[pp_rank]["layers"])
 
         (
             src_ptrs,
@@ -276,9 +266,7 @@ async def test_send_kv_to_decode_aligns_consumer_regions_by_layer_metadata(
     """Producer sends its PP layer shard to the matching consumer layer address."""
 
     monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    aphrodite_config = create_aphrodite_config(
-        kv_connector="MooncakeConnector", kv_role="kv_producer"
-    )
+    aphrodite_config = create_aphrodite_config(kv_connector="MooncakeConnector", kv_role="kv_producer")
 
     with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
         prefill_connector = MooncakeConnector(
@@ -332,9 +320,7 @@ async def test_send_kv_to_decode_aligns_consumer_regions_by_layer_metadata(
         mock_socket.send_multipart = AsyncMock()
         identity = b"consumer-layer-align"
 
-        with patch.object(
-            prefill_worker, "_send_blocks", return_value=0
-        ) as mock_send_blocks:
+        with patch.object(prefill_worker, "_send_blocks", return_value=0) as mock_send_blocks:
             await prefill_worker.send_kv_to_decode(identity, mock_socket, xfer_meta)
 
         src_ptrs, dst_ptrs, lengths = mock_send_blocks.call_args[0][1:]
@@ -361,9 +347,7 @@ async def test_send_kv_to_decode_aligns_consumer_regions_by_layer_metadata(
 def test_basic_interface():
     """Unit test for basic MooncakeConnector interface functionality."""
 
-    aphrodite_config = create_aphrodite_config(
-        kv_connector="MooncakeConnector", kv_role="kv_consumer"
-    )
+    aphrodite_config = create_aphrodite_config(kv_connector="MooncakeConnector", kv_role="kv_consumer")
     scheduler = create_scheduler(aphrodite_config)
 
     # 2 Full Blocks and 1 Half Block.
@@ -401,9 +385,7 @@ def test_basic_interface():
     all_block_ids = [bid for group in req_meta.local_block_ids for bid in group]
     for block_id, block in zip(
         all_block_ids,
-        scheduler.kv_cache_manager.coordinator.single_type_managers[0].req_to_blocks[
-            request_id
-        ],
+        scheduler.kv_cache_manager.coordinator.single_type_managers[0].req_to_blocks[request_id],
     ):
         assert block_id == block.block_id
 
@@ -411,9 +393,7 @@ def test_basic_interface():
 def test_prompt_less_than_block_size():
     """Test that we can handle case where prompt is < block."""
 
-    aphrodite_config = create_aphrodite_config(
-        kv_connector="MooncakeConnector", kv_role="kv_consumer"
-    )
+    aphrodite_config = create_aphrodite_config(kv_connector="MooncakeConnector", kv_role="kv_consumer")
     scheduler = create_scheduler(aphrodite_config)
 
     # Half of a block.
@@ -595,8 +575,7 @@ def test_should_launch_bootstrap_server_selects_single_owner(
             return_value=tp_rank,
         ),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake."
-            "mooncake_connector.get_pp_group"
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.get_pp_group"
         ) as mock_pp_group,
     ):
         mock_pp_group.return_value.rank_in_group = pp_rank
@@ -636,9 +615,7 @@ def test_scheduler_request_finished():
     and 'Aborted' (immediate free).
     """
 
-    aphrodite_config = create_aphrodite_config(
-        kv_connector="MooncakeConnector", kv_role="kv_producer"
-    )
+    aphrodite_config = create_aphrodite_config(kv_connector="MooncakeConnector", kv_role="kv_producer")
     scheduler = create_scheduler(aphrodite_config)
     scheduler_connector = scheduler.get_kv_connector().connector_scheduler
 
@@ -682,9 +659,7 @@ def patch_worker_dependencies():
             "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.get_tensor_model_parallel_world_size",
             return_value=1,
         ),
-        patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.get_pp_group"
-        ) as mock_pp,
+        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.get_pp_group") as mock_pp,
         patch(
             "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.should_launch_bootstrap_server",
             return_value=False,
@@ -734,9 +709,7 @@ async def test_receive_kv_selects_remote_pp_workers(
 ):
     """Decode workers should not hard-code producer pp_rank 0."""
 
-    aphrodite_config = create_aphrodite_config(
-        kv_connector="MooncakeConnector", kv_role="kv_consumer"
-    )
+    aphrodite_config = create_aphrodite_config(kv_connector="MooncakeConnector", kv_role="kv_consumer")
 
     with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
         decode_connector = MooncakeConnector(
@@ -819,9 +792,7 @@ async def test_kv_producer(monkeypatch):
     """
 
     monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    aphrodite_config = create_aphrodite_config(
-        kv_connector="MooncakeConnector", kv_role="kv_producer"
-    )
+    aphrodite_config = create_aphrodite_config(kv_connector="MooncakeConnector", kv_role="kv_producer")
 
     with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
         prefill_connector = MooncakeConnector(
@@ -871,9 +842,7 @@ async def test_kv_producer(monkeypatch):
         mock_socket.send_multipart = AsyncMock()
         identity = b"consumer-id"
 
-        with patch.object(
-            prefill_worker, "_send_blocks", return_value=0
-        ) as mock_send_blocks:
+        with patch.object(prefill_worker, "_send_blocks", return_value=0) as mock_send_blocks:
             # With blocks-first layout, each block is virtually split
             # into K and V halves, producing non-coalesced transfers.
             def expected_split_transfers(src_base, dst_base, src_blocks, dst_blocks):
@@ -889,9 +858,7 @@ async def test_kv_producer(monkeypatch):
 
             # Normal case: 2 blocks to 2 blocks
             await prefill_worker.send_kv_to_decode(identity, mock_socket, xfer_meta)
-            src, dst, lens = expected_split_transfers(
-                0x1000, 0x2000, [10, 11], [20, 21]
-            )
+            src, dst, lens = expected_split_transfers(0x1000, 0x2000, [10, 11], [20, 21])
             mock_send_blocks.assert_called_once_with(
                 "consumer-host:54321",
                 src,
@@ -967,9 +934,7 @@ async def test_kv_producer(monkeypatch):
             assert response.err_reqs == ["d-req-1"]
 
         # Transfer error
-        with patch.object(
-            prefill_worker, "_send_blocks", return_value=123
-        ) as mock_send_blocks:
+        with patch.object(prefill_worker, "_send_blocks", return_value=123) as mock_send_blocks:
             mock_socket.send_multipart.reset_mock()
             prefill_worker.reqs_need_send[transfer_id] = send_meta
             send_meta.sent = 0
@@ -997,9 +962,7 @@ async def test_kv_consumuer(monkeypatch):
     Verifies that MooncakeXferMetadata is correctly serialized and sent via ZMQ.
     """
 
-    aphrodite_config = create_aphrodite_config(
-        kv_connector="MooncakeConnector", kv_role="kv_consumer"
-    )
+    aphrodite_config = create_aphrodite_config(kv_connector="MooncakeConnector", kv_role="kv_consumer")
 
     with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies() as mocks:
         decode_connector = MooncakeConnector(
@@ -1030,9 +993,7 @@ async def test_kv_consumuer(monkeypatch):
         decode_worker._tp_size["p-engine"] = 1
 
         # Mock the response from the producer.
-        mock_response = MooncakeXferResponse(
-            status=MooncakeXferResponseStatus.FINISH, ok_reqs=["d-req-1"]
-        )
+        mock_response = MooncakeXferResponse(status=MooncakeXferResponseStatus.FINISH, ok_reqs=["d-req-1"])
         encoded_response = decode_worker._encoder.encode(mock_response)
         mocks["mock_socket_object"].recv.return_value = encoded_response
 
@@ -1070,9 +1031,7 @@ async def test_kv_consumuer(monkeypatch):
 async def test_worker_get_finished_timeout(monkeypatch):
     """Tests the cleanup mechanism for requests."""
 
-    aphrodite_config = create_aphrodite_config(
-        kv_connector="MooncakeConnector", kv_role="kv_producer"
-    )
+    aphrodite_config = create_aphrodite_config(kv_connector="MooncakeConnector", kv_role="kv_producer")
     with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
         prefill_connector = MooncakeConnector(
             aphrodite_config,
@@ -1110,16 +1069,12 @@ async def test_worker_get_finished_timeout(monkeypatch):
 def test_register_kv_caches():
     """Tests the memory registration logic with the underlying Mooncake engine."""
 
-    aphrodite_config = create_aphrodite_config(
-        kv_connector="MooncakeConnector", kv_role="kv_consumer"
-    )
+    aphrodite_config = create_aphrodite_config(kv_connector="MooncakeConnector", kv_role="kv_consumer")
 
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch_worker_dependencies(),
-        patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.threading.Event"
-        ),
+        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.threading.Event"),
         patch(
             "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.threading.Thread"
         ) as mock_thread,
@@ -1142,9 +1097,7 @@ def test_register_kv_caches():
             "model.layers.1.self_attn": tensor2,
         }
 
-        with patch.object(
-            worker.engine, "batch_register_memory", return_value=0
-        ) as mock_batch_register:
+        with patch.object(worker.engine, "batch_register_memory", return_value=0) as mock_batch_register:
             connector.register_kv_caches(kv_caches)
 
             mock_batch_register.assert_called_once()
@@ -1164,16 +1117,12 @@ def test_register_kv_caches():
 def test_register_kv_caches_supports_mixed_mla_and_eagle_shapes():
     """Mixed MLA+Eagle caches should register by byte length, not shape."""
 
-    aphrodite_config = create_aphrodite_config(
-        kv_connector="MooncakeConnector", kv_role="kv_consumer"
-    )
+    aphrodite_config = create_aphrodite_config(kv_connector="MooncakeConnector", kv_role="kv_consumer")
 
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch_worker_dependencies(),
-        patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.threading.Event"
-        ),
+        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.threading.Event"),
         patch(
             "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.threading.Thread"
         ) as mock_thread,
@@ -1198,9 +1147,7 @@ def test_register_kv_caches_supports_mixed_mla_and_eagle_shapes():
             "model.layers.1.eagle_attn": eagle_cache,
         }
 
-        with patch.object(
-            worker.engine, "batch_register_memory", return_value=0
-        ) as mock_batch_register:
+        with patch.object(worker.engine, "batch_register_memory", return_value=0) as mock_batch_register:
             connector.register_kv_caches(kv_caches)
 
         mock_batch_register.assert_called_once()
@@ -1220,8 +1167,7 @@ def test_register_kv_caches_supports_mixed_mla_and_eagle_shapes():
 
 @pytest.mark.asyncio
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake."
-    "mooncake_connector.TransferEngine",
+    "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.TransferEngine",
     FakeMooncakeWrapper,
 )
 @pytest.mark.parametrize("d_tp_size", [1, 4], ids=["p_tp2_d_tp1", "p_tp2_d_tp4"])
@@ -1245,9 +1191,7 @@ async def test_kv_producer_heterogeneous_tp(monkeypatch, d_tp_size):
     remote_block_len = LOCAL_BLOCK_LEN * P_TP_SIZE // d_tp_size
 
     monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    aphrodite_config = create_aphrodite_config(
-        kv_connector="MooncakeConnector", kv_role="kv_producer"
-    )
+    aphrodite_config = create_aphrodite_config(kv_connector="MooncakeConnector", kv_role="kv_producer")
 
     with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
         prefill_connector = MooncakeConnector(
@@ -1292,13 +1236,9 @@ async def test_kv_producer_heterogeneous_tp(monkeypatch, d_tp_size):
         identity = b"consumer-hetero"
 
         # Assign different remote block IDs per D rank (nested per-group)
-        d_rank_remote_blocks = {
-            rank: [[20 + i * 10, 21 + i * 10]] for i, rank in enumerate(target_d_ranks)
-        }
+        d_rank_remote_blocks = {rank: [[20 + i * 10, 21 + i * 10]] for i, rank in enumerate(target_d_ranks)}
 
-        with patch.object(
-            prefill_worker, "_send_blocks", return_value=0
-        ) as mock_send_blocks:
+        with patch.object(prefill_worker, "_send_blocks", return_value=0) as mock_send_blocks:
             for d_rank in target_d_ranks:
                 remote_block_ids = d_rank_remote_blocks[d_rank]
                 xfer_meta = MooncakeXferMetadata(
@@ -1362,20 +1302,10 @@ async def test_kv_producer_heterogeneous_tp(monkeypatch, d_tp_size):
                 for region_idx in range(2):
                     local_region_base = 0x1000 + region_idx * local_kv_block_len
                     remote_region_base = 0x2000 + region_idx * remote_kv_block_len
-                    for blk_idx, (lblk, rblk) in enumerate(
-                        zip(flat_local, flat_remote)
-                    ):
+                    for blk_idx, (lblk, rblk) in enumerate(zip(flat_local, flat_remote)):
                         idx = region_idx * num_blocks + blk_idx
-                        assert src_ptrs[idx] == (
-                            local_region_base
-                            + lblk * local_block_len
-                            + expected_src_off
-                        )
-                        assert dst_ptrs[idx] == (
-                            remote_region_base
-                            + rblk * remote_block_len
-                            + expected_dst_off
-                        )
+                        assert src_ptrs[idx] == (local_region_base + lblk * local_block_len + expected_src_off)
+                        assert dst_ptrs[idx] == (remote_region_base + rblk * remote_block_len + expected_dst_off)
                         assert lengths[idx] == expected_xfer_len
 
                 # Verify successful response sent back to consumer

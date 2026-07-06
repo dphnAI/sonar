@@ -5,7 +5,6 @@ import pytest
 import torch
 
 import aphrodite.envs as envs
-from tests.utils import TestFP8Layer, requires_fp8
 from aphrodite.model_executor.kernels.linear.scaled_mm.cutlass import (
     CutlassFP8ScaledMMLinearKernel,
 )
@@ -14,6 +13,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kFp8StaticTensorSym,
 )
 from aphrodite.platforms import current_platform
+from tests.utils import TestFP8Layer, requires_fp8
 
 pytest.importorskip("torch.cuda")
 
@@ -54,9 +54,7 @@ def test_cutlass_fp8_batch_invariant_fixed_config(
     needle = torch.randn((1, in_features), device="cuda", dtype=torch.bfloat16)
     baseline = layer(needle)[0]
 
-    filler = torch.randn(
-        (max(batch_size - 1, 0), in_features), device="cuda", dtype=torch.bfloat16
-    )
+    filler = torch.randn((max(batch_size - 1, 0), in_features), device="cuda", dtype=torch.bfloat16)
 
     front_batch = torch.cat([needle, filler], dim=0)
     back_batch = torch.cat([filler, needle], dim=0)

@@ -81,9 +81,7 @@ def test_oink_availability_checks(
     process.join()
 
     if process.exitcode != 0:
-        raise AssertionError(
-            f"Subprocess test failed with exit code {process.exitcode}"
-        )
+        raise AssertionError(f"Subprocess test failed with exit code {process.exitcode}")
 
 
 def test_can_view_as_2d_stride_guard():

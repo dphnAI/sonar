@@ -156,9 +156,7 @@ def test_init_weight_transfer_engine_calls_engine():
         assert all(results), "Weight transfer engine should be initialized"
 
         # Call init_weight_transfer_engine
-        llm.init_weight_transfer_engine(
-            WeightTransferInitRequest(init_info={"test_param": "hello"})
-        )
+        llm.init_weight_transfer_engine(WeightTransferInitRequest(init_info={"test_param": "hello"}))
 
         # Verify init_transfer_engine was called on the engine
         def check_init_called(self):
@@ -198,9 +196,7 @@ def test_update_weights_calls_engine():
         )
 
         # First init the weight transfer
-        llm.init_weight_transfer_engine(
-            WeightTransferInitRequest(init_info={"test_param": "init"})
-        )
+        llm.init_weight_transfer_engine(WeightTransferInitRequest(init_info={"test_param": "init"}))
         llm.start_weight_update()
 
         # Call update_weights
@@ -260,9 +256,7 @@ def test_full_weight_transfer_flow():
         )
 
         # Step 1: Initialize weight transfer engine
-        llm.init_weight_transfer_engine(
-            WeightTransferInitRequest(init_info={"test_param": "flow_test"})
-        )
+        llm.init_weight_transfer_engine(WeightTransferInitRequest(init_info={"test_param": "flow_test"}))
 
         # Step 2: Start weight update
         llm.start_weight_update()
@@ -287,12 +281,8 @@ def test_full_weight_transfer_flow():
             return {
                 "init_called": engine.init_transfer_engine_called,
                 "update_called": engine.receive_weights_called,
-                "init_param": (
-                    engine.last_init_info.test_param if engine.last_init_info else None
-                ),
-                "update_names": (
-                    engine.last_update_info.names if engine.last_update_info else None
-                ),
+                "init_param": (engine.last_init_info.test_param if engine.last_init_info else None),
+                "update_names": (engine.last_update_info.names if engine.last_update_info else None),
             }
 
         results = llm.collective_rpc(check_flow)

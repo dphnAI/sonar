@@ -103,10 +103,7 @@ class ServingEmbedding(PoolingServing):
         embed_dtype: EmbedDType,
         endianness: Endianness,
     ) -> JSONResponse:
-        use_ndarray_response = (
-            encoding_format == "float"
-            and self.json_response_cls.__name__ == "ORJSONResponse"
-        )
+        use_ndarray_response = encoding_format == "float" and self.json_response_cls.__name__ == "ORJSONResponse"
         if use_ndarray_response:
             ndarray_items: list[dict[str, object]] = []
 
@@ -115,9 +112,7 @@ class ServingEmbedding(PoolingServing):
                     index=idx,
                     embedding=[],
                 ).model_dump()
-                item_dict["embedding"] = encode_pooling_output_float_or_ndarray(
-                    final_res
-                )
+                item_dict["embedding"] = encode_pooling_output_float_or_ndarray(final_res)
                 ndarray_items.append(item_dict)
             ndarray_response = EmbeddingResponse(
                 id=request_id,
@@ -182,16 +177,11 @@ class ServingEmbedding(PoolingServing):
         request = ctx.request
         assert isinstance(request, CohereEmbedRequest)
 
-        all_floats = [
-            cast(list[float], encode_pooling_output_float(out))
-            for out in ctx.final_res_batch
-        ]
+        all_floats = [cast(list[float], encode_pooling_output_float(out)) for out in ctx.final_res_batch]
         total_tokens = get_pooling_usage(ctx.final_res_batch).prompt_tokens
 
         has_image_input = request.images is not None or any(
-            content.type == "image_url"
-            for input_item in request.inputs or []
-            for content in input_item.content
+            content.type == "image_url" for input_item in request.inputs or [] for content in input_item.content
         )
         image_tokens = total_tokens if has_image_input else 0
         texts_echo = request.texts

@@ -61,12 +61,7 @@ def _minimax_m2_arg_converter(raw_args: str, partial: bool) -> str:
     params: dict[str, object] = {}
 
     for match in _PARAM_RE.finditer(raw_args):
-        name = (
-            match.group("dq_name")
-            or match.group("sq_name")
-            or match.group("bare_name")
-            or ""
-        ).strip()
+        name = (match.group("dq_name") or match.group("sq_name") or match.group("bare_name") or "").strip()
         if not name:
             continue
         params[name] = match.group("value").strip()
@@ -75,12 +70,7 @@ def _minimax_m2_arg_converter(raw_args: str, partial: bool) -> str:
         remaining = _PARAM_RE.sub("", raw_args)
         match = _PARTIAL_PARAM_RE.search(remaining)
         if match:
-            name = (
-                match.group("dq_name")
-                or match.group("sq_name")
-                or match.group("bare_name")
-                or ""
-            ).strip()
+            name = (match.group("dq_name") or match.group("sq_name") or match.group("bare_name") or "").strip()
             if name:
                 params[name] = match.group("value").strip()
 

@@ -47,8 +47,7 @@ def test_full_mode_emits_only_non_trivial_parallelism():
     assert fp.build_system_fingerprint(_cfg(), "full") == f"aphrodite-{v}-a3b21f94"
     # All parallelism axes.
     assert (
-        fp.build_system_fingerprint(_cfg(tp=8, pp=2, dp=4, ep=True), "full")
-        == f"aphrodite-{v}-tp8-pp2-dp4-ep-a3b21f94"
+        fp.build_system_fingerprint(_cfg(tp=8, pp=2, dp=4, ep=True), "full") == f"aphrodite-{v}-tp8-pp2-dp4-ep-a3b21f94"
     )
 
 

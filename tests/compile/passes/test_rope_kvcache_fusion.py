@@ -6,8 +6,6 @@ import torch
 from torch._higher_order_ops import auto_functionalized
 
 import aphrodite.config
-from tests.compile.backend import TestBackend
-from tests.v1.attention.utils import BatchSpec, create_common_attn_metadata
 from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
 from aphrodite.compilation.passes.fusion import rope_kvcache_fusion
 from aphrodite.compilation.passes.fusion.matcher_utils import ROTARY_OP
@@ -19,12 +17,12 @@ from aphrodite.compilation.passes.utility.scatter_split_replace import (
 )
 from aphrodite.compilation.passes.utility.split_coalescing import SplitCoalescingPass
 from aphrodite.config import (
+    AphroditeConfig,
     CacheConfig,
     CompilationConfig,
     CompilationMode,
     ModelConfig,
     PassConfig,
-    AphroditeConfig,
 )
 from aphrodite.config.utils import Range
 from aphrodite.forward_context import get_forward_context, set_forward_context
@@ -37,6 +35,8 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
 )
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from tests.compile.backend import TestBackend
+from tests.v1.attention.utils import BatchSpec, create_common_attn_metadata
 
 INDEX_SELECT_OP = torch.ops.aten.index.Tensor
 APHRODITE_UNIFIED_KV_CACHE_UPDATE_OP = torch.ops.aphrodite.unified_kv_cache_update
@@ -113,9 +113,7 @@ class QKRoPEKVCacheTestModel(torch.nn.Module):
         self.attn._v_scale = self.attn._v_scale.to(device)
 
         kv_cache_dtype_str = aphrodite_config.cache_config.cache_dtype
-        self.kv_cache_dtype = (
-            FP8_DTYPE if kv_cache_dtype_str.startswith("fp8") else self.dtype
-        )
+        self.kv_cache_dtype = FP8_DTYPE if kv_cache_dtype_str.startswith("fp8") else self.dtype
 
         # Initialize attn MetadataBuilder
         self.builder = self.attn_backend.get_builder_cls()(
@@ -146,9 +144,7 @@ class QKRoPEKVCacheTestModel(torch.nn.Module):
             kv_cache_stride_order = tuple(range(len(kv_cache_shape)))
 
         kv_cache_shape = tuple(kv_cache_shape[i] for i in kv_cache_stride_order)
-        inv_order = [
-            kv_cache_stride_order.index(i) for i in range(len(kv_cache_stride_order))
-        ]
+        inv_order = [kv_cache_stride_order.index(i) for i in range(len(kv_cache_stride_order))]
 
         # Create dummy KV cache
         raw_tensor = torch.zeros(
@@ -162,9 +158,7 @@ class QKRoPEKVCacheTestModel(torch.nn.Module):
         self.attn.kv_cache = kv_cache
 
         # Build attn metadata
-        attn_metadata = self.builder.build(
-            common_prefix_len=0, common_attn_metadata=common_attn_metadata
-        )
+        attn_metadata = self.builder.build(common_prefix_len=0, common_attn_metadata=common_attn_metadata)
 
         return attn_metadata
 
@@ -180,9 +174,7 @@ class QKRoPEKVCacheTestModel(torch.nn.Module):
         q = q.view(-1, self.num_heads, self.head_size)
         k = k.view(-1, self.num_kv_heads, self.head_size)
         v = v.view(-1, self.num_kv_heads, self.head_size)
-        kv_cache_dummy_dep = torch.ops.aphrodite.unified_kv_cache_update(
-            k, v, _encode_layer_name(self.layer_name)
-        )
+        kv_cache_dummy_dep = torch.ops.aphrodite.unified_kv_cache_update(k, v, _encode_layer_name(self.layer_name))
         return q, k, v, kv_cache_dummy_dep
 
     def ops_in_model_before(self) -> list[torch._ops.OpOverload]:
@@ -225,9 +217,7 @@ class QKRoPEStaticQKVCacheTestModel(QKRoPEKVCacheTestModel):
         q = q_fp8.view(-1, self.num_heads, self.head_size)
         k = k.view(-1, self.num_kv_heads, self.head_size)
         v = v.view(-1, self.num_kv_heads, self.head_size)
-        kv_cache_dummy_dep = torch.ops.aphrodite.unified_kv_cache_update(
-            k, v, _encode_layer_name(self.layer_name)
-        )
+        kv_cache_dummy_dep = torch.ops.aphrodite.unified_kv_cache_update(k, v, _encode_layer_name(self.layer_name))
         return q, k, v, kv_cache_dummy_dep
 
     def ops_in_model_before(self) -> list[torch._ops.OpOverload]:
@@ -307,9 +297,7 @@ def test_rope_kvcache_fusion(
 
     with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
         m.setenv("APHRODITE_ROCM_USE_AITER", "1")
-        m.setenv(
-            "APHRODITE_ROCM_USE_AITER_TRITON_ROPE", "1" if enable_aiter_triton_rope else "0"
-        )
+        m.setenv("APHRODITE_ROCM_USE_AITER_TRITON_ROPE", "1" if enable_aiter_triton_rope else "0")
         rocm_aiter_ops.refresh_env_variables()
 
         model = QKRoPEKVCacheTestModel(
@@ -335,9 +323,7 @@ def test_rope_kvcache_fusion(
 
         T = 5
 
-        qkv = torch.randn(
-            T, num_heads * head_size + 2 * num_kv_heads * head_size, dtype=dtype
-        )
+        qkv = torch.randn(T, num_heads * head_size + 2 * num_kv_heads * head_size, dtype=dtype)
         pos = torch.arange(T, dtype=torch.long)
 
         qkv_unfused = qkv.clone()
@@ -346,9 +332,7 @@ def test_rope_kvcache_fusion(
         with set_forward_context(None, aphrodite_config):
             forward_context = get_forward_context()
             attn_metadata = model.build_attn_metadata(T)
-            forward_context.slot_mapping = {
-                model.layer_name: attn_metadata.slot_mapping
-            }
+            forward_context.slot_mapping = {model.layer_name: attn_metadata.slot_mapping}
             q_unfused, k_unfused, v_unfused, dummy = model(qkv_unfused, pos_unfused)
             attn_layer = forward_context.no_compile_layers[model.layer_name]
             kv_cache_unfused = attn_layer.kv_cache
@@ -360,9 +344,7 @@ def test_rope_kvcache_fusion(
             model_fused = torch.compile(model, backend=backend)
             forward_context = get_forward_context()
             attn_metadata = model_fused.build_attn_metadata(T)
-            forward_context.slot_mapping = {
-                model.layer_name: attn_metadata.slot_mapping
-            }
+            forward_context.slot_mapping = {model.layer_name: attn_metadata.slot_mapping}
             q_fused, k_fused, v_fused, dummy = model_fused(qkv, pos)
             attn_layer = forward_context.no_compile_layers[model.layer_name]
             kv_cache_fused = attn_layer.kv_cache
@@ -451,9 +433,7 @@ def test_rope_static_qquant_kvcache_fusion(
 
     with aphrodite.config.set_current_aphrodite_config(aphrodite_config), monkeypatch.context() as m:
         m.setenv("APHRODITE_ROCM_USE_AITER", "1")
-        m.setenv(
-            "APHRODITE_ROCM_USE_AITER_TRITON_ROPE", "1" if enable_aiter_triton_rope else "0"
-        )
+        m.setenv("APHRODITE_ROCM_USE_AITER_TRITON_ROPE", "1" if enable_aiter_triton_rope else "0")
         rocm_aiter_ops.refresh_env_variables()
 
         model = QKRoPEStaticQKVCacheTestModel(
@@ -478,9 +458,7 @@ def test_rope_static_qquant_kvcache_fusion(
         backend = TestBackend(*passes)
 
         T = 5
-        qkv = torch.randn(
-            T, num_heads * head_size + 2 * num_kv_heads * head_size, dtype=dtype
-        )
+        qkv = torch.randn(T, num_heads * head_size + 2 * num_kv_heads * head_size, dtype=dtype)
         pos = torch.arange(T, dtype=torch.long)
 
         qkv_unfused = qkv.clone()
@@ -489,9 +467,7 @@ def test_rope_static_qquant_kvcache_fusion(
         with set_forward_context(None, aphrodite_config):
             forward_context = get_forward_context()
             attn_metadata = model.build_attn_metadata(T)
-            forward_context.slot_mapping = {
-                model.layer_name: attn_metadata.slot_mapping
-            }
+            forward_context.slot_mapping = {model.layer_name: attn_metadata.slot_mapping}
             q_unfused, k_unfused, v_unfused, dummy = model(qkv_unfused, pos_unfused)
             attn_layer = forward_context.no_compile_layers[model.layer_name]
             kv_cache_unfused = attn_layer.kv_cache
@@ -503,9 +479,7 @@ def test_rope_static_qquant_kvcache_fusion(
             model_fused = torch.compile(model, backend=backend)
             forward_context = get_forward_context()
             attn_metadata = model_fused.build_attn_metadata(T)
-            forward_context.slot_mapping = {
-                model.layer_name: attn_metadata.slot_mapping
-            }
+            forward_context.slot_mapping = {model.layer_name: attn_metadata.slot_mapping}
             q_fused, k_fused, v_fused, dummy = model_fused(qkv, pos)
             attn_layer = forward_context.no_compile_layers[model.layer_name]
             kv_cache_fused = attn_layer.kv_cache
@@ -514,12 +488,8 @@ def test_rope_static_qquant_kvcache_fusion(
         assert fusion_pass.matched_count == 1
         backend.check_before_ops(model.ops_in_model_before())
         backend.check_after_ops(model.ops_in_model_after())
-        static_quant_pre = backend.op_count(
-            torch.ops._C.static_scaled_fp8_quant.default, before=True
-        )
-        static_quant_post = backend.op_count(
-            torch.ops._C.static_scaled_fp8_quant.default
-        )
+        static_quant_pre = backend.op_count(torch.ops._C.static_scaled_fp8_quant.default, before=True)
+        static_quant_post = backend.op_count(torch.ops._C.static_scaled_fp8_quant.default)
         assert static_quant_pre > 0
         # The replacement still emits static quant, so count is expected to
         # remain non-zero after fusion.
@@ -551,19 +521,12 @@ def test_rope_static_qquant_kvcache_fusion(
                 model_generic = torch.compile(model, backend=generic_backend)
                 forward_context = get_forward_context()
                 attn_metadata = model_generic.build_attn_metadata(T)
-                forward_context.slot_mapping = {
-                    model.layer_name: attn_metadata.slot_mapping
-                }
+                forward_context.slot_mapping = {model.layer_name: attn_metadata.slot_mapping}
                 model_generic(qkv, pos)
             # op_count reads the post-pass graph, so it also confirms the pass ran
             # (a no-op pass would raise instead of silently passing on count 0).
             assert generic_pass.matched_count == 0
-            assert (
-                generic_backend.op_count(
-                    torch.ops.aphrodite.fused_rope_and_unified_kv_cache_update.default
-                )
-                == 0
-            )
+            assert generic_backend.op_count(torch.ops.aphrodite.fused_rope_and_unified_kv_cache_update.default) == 0
 
         if dtype == torch.float16:
             ATOL, RTOL = (2e-3, 2e-3)

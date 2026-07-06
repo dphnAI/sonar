@@ -57,12 +57,8 @@ def test_triton_matches_native(
         * 0.25
     )
 
-    native_out = pos_embed_interpolate_native(
-        embed_weight, t, h, w, NUM_GRID_PER_SIDE, SPATIAL_MERGE_SIZE, dtype
-    )
-    triton_out = triton_pos_embed_interpolate(
-        embed_weight, t, h, w, NUM_GRID_PER_SIDE, SPATIAL_MERGE_SIZE, dtype
-    )
+    native_out = pos_embed_interpolate_native(embed_weight, t, h, w, NUM_GRID_PER_SIDE, SPATIAL_MERGE_SIZE, dtype)
+    triton_out = triton_pos_embed_interpolate(embed_weight, t, h, w, NUM_GRID_PER_SIDE, SPATIAL_MERGE_SIZE, dtype)
 
     assert native_out.shape == triton_out.shape, (
         f"Shape mismatch: native {native_out.shape} vs triton {triton_out.shape}"

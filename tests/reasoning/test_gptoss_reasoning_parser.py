@@ -29,15 +29,10 @@ END = "<|end|>"
 ASSISTANT_START = "<|start|>assistant"
 ASSISTANT_CONTENT_START_PREFIX = END + ASSISTANT_START + "<|channel|>final"
 ASSISTANT_CONTENT_START_SUFFIX = "<|message|>"
-ASSISTANT_CONTENT_START = (
-    ASSISTANT_CONTENT_START_PREFIX + ASSISTANT_CONTENT_START_SUFFIX
-)
+ASSISTANT_CONTENT_START = ASSISTANT_CONTENT_START_PREFIX + ASSISTANT_CONTENT_START_SUFFIX
 
 BASIC_CONTENT = {
-    "output": REASONING_SECTION_START
-    + "This is reasoning"
-    + ASSISTANT_CONTENT_START
-    + "This is the rest",
+    "output": REASONING_SECTION_START + "This is reasoning" + ASSISTANT_CONTENT_START + "This is the rest",
     "is_reasoning_end": True,
 }
 
@@ -57,24 +52,17 @@ BASIC_NO_REASONING_ASSISTANT = {
 }
 
 COMPLEX_CONTENT_INCOMPLETE_PREFIX_ONLY = {
-    "output": REASONING_SECTION_START
-    + "This is reasoning"
-    + ASSISTANT_CONTENT_START_PREFIX,
+    "output": REASONING_SECTION_START + "This is reasoning" + ASSISTANT_CONTENT_START_PREFIX,
     "is_reasoning_end": False,
 }
 
 COMPLEX_CONTENT_SUFFIX_ONLY = {
-    "output": REASONING_SECTION_START
-    + "This is reasoning"
-    + ASSISTANT_CONTENT_START_SUFFIX,
+    "output": REASONING_SECTION_START + "This is reasoning" + ASSISTANT_CONTENT_START_SUFFIX,
     "is_reasoning_end": False,
 }
 
 COMPLEX_CONTENT_1_NO_SUFFIX = {
-    "output": REASONING_SECTION_START
-    + "This is reasoning"
-    + ASSISTANT_CONTENT_START_PREFIX
-    + "<|constrain|> JSON ",
+    "output": REASONING_SECTION_START + "This is reasoning" + ASSISTANT_CONTENT_START_PREFIX + "<|constrain|> JSON ",
     "is_reasoning_end": False,
 }
 
@@ -266,9 +254,7 @@ class TestGptOssStructuralTags:
         """Test that all generated tags follow consistent format,
         catching malformed tags from from_builtin_tool_to_tag."""
         tool_server = Mock(spec=ToolServer)
-        tool_server.has_tool = Mock(
-            side_effect=lambda tool: tool in ["python", "browser"]
-        )
+        tool_server.has_tool = Mock(side_effect=lambda tool: tool in ["python", "browser"])
 
         result = reasoning_parser.prepare_structured_tag(None, tool_server)
         parsed_result = json.loads(result)

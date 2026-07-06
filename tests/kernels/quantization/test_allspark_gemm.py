@@ -3,7 +3,6 @@
 import pytest
 import torch
 
-from tests.kernels.utils import DEFAULT_OPCHECK_TEST_UTILS, opcheck
 from aphrodite import _custom_ops as ops
 from aphrodite.model_executor.layers.quantization.utils.allspark_utils import (
     ALLSPARK_AMPERE_K_ALIGN,
@@ -14,6 +13,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import quant
 from aphrodite.platforms import current_platform
 from aphrodite.scalar_type import scalar_types
 from aphrodite.utils.platform_utils import num_compute_units
+from tests.kernels.utils import DEFAULT_OPCHECK_TEST_UTILS, opcheck
 
 
 def is_gptq_allspark_supported(min_capability: int, max_capability: int) -> bool:
@@ -23,9 +23,7 @@ def is_gptq_allspark_supported(min_capability: int, max_capability: int) -> bool
     capability = current_platform.get_device_capability()
     assert capability is not None
 
-    return (
-        capability.to_int() >= min_capability and capability.to_int() <= max_capability
-    )
+    return capability.to_int() >= min_capability and capability.to_int() <= max_capability
 
 
 MNK_FACTORS = [
@@ -44,9 +42,7 @@ HAS_ZP_OPTS = [False, True]
 
 
 def compute_max_diff(output, output_ref):
-    return torch.mean(torch.abs(output - output_ref)) / torch.mean(
-        torch.abs(output_ref)
-    )
+    return torch.mean(torch.abs(output - output_ref)) / torch.mean(torch.abs(output_ref))
 
 
 def rand_data(shape, dtype=torch.float16):
@@ -71,9 +67,7 @@ def test_gptq_allspark_gemm_ampere(mnk_factors, group_size, has_zp, dtype):
     weight = rand_data((k, n), dtype=dtype)
 
     # Quantize (and apply act_order if provided)
-    w_ref, qw, s, zp = quantize_weights(
-        weight, scalar_types.uint8b128, group_size, has_zp
-    )
+    w_ref, qw, s, zp = quantize_weights(weight, scalar_types.uint8b128, group_size, has_zp)
 
     qw = qw.to(torch.uint8)
     if has_zp:

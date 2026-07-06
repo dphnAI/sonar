@@ -89,9 +89,7 @@ class FakeDataTransport:
     def get_agent_metadata(self) -> bytes:
         return b"fake-metadata"
 
-    def add_remote_peer(
-        self, peer_id, agent_metadata, base_addr, num_blocks, block_len
-    ) -> None:
+    def add_remote_peer(self, peer_id, agent_metadata, base_addr, num_blocks, block_len) -> None:
         self._remote_peers[peer_id] = {
             ConnectMsg.AGENT_METADATA: agent_metadata,
             ConnectMsg.BASE_ADDR: base_addr,
@@ -208,9 +206,7 @@ def _make_session(
     return session, conn, transport
 
 
-def _activate(
-    session: P2PSession, conn: FakeConnection, peer_id: str = "peer:8000"
-) -> None:
+def _activate(session: P2PSession, conn: FakeConnection, peer_id: str = "peer:8000") -> None:
     """Drive the handshake: peer sends ConnectMsg + ConnectAckMsg."""
     conn.enqueue(_peer_connect_msg(peer_id=peer_id))
     conn.enqueue({TYPE_KEY: ConnectAckMsg.TYPE, ConnectAckMsg.PEER_ID: peer_id})
@@ -254,9 +250,7 @@ class TestConnectHandshake:
     def test_messages_queued_before_ack_flush_on_ack(self):
         """Outgoing messages sent before ConnectAck are flushed after."""
         session, conn, _ = _make_session()
-        session.request_blocks(
-            job_id=1, kv_request_id="req-1", keys=[b"k"], block_ids=[0]
-        )
+        session.request_blocks(job_id=1, kv_request_id="req-1", keys=[b"k"], block_ids=[0])
         # Before ack: only our ConnectMsg was sent.
         assert len(conn._sent) == 1
         assert conn._sent[0][TYPE_KEY] == ConnectMsg.TYPE
@@ -310,9 +304,7 @@ class TestClientFlows:
     def test_request_blocks_sends_fetch(self):
         session, conn, _ = _make_session()
         _activate(session, conn)
-        session.request_blocks(
-            job_id=1, kv_request_id="req-1", keys=[b"k1", b"k2"], block_ids=[0, 1]
-        )
+        session.request_blocks(job_id=1, kv_request_id="req-1", keys=[b"k1", b"k2"], block_ids=[0, 1])
         lookup = conn._sent[-1]
         assert lookup[TYPE_KEY] == FetchMsg.TYPE
         assert lookup[FetchMsg.KV_REQUEST_ID] == "req-1"
@@ -322,9 +314,7 @@ class TestClientFlows:
     def test_transfer_done_success(self):
         session, conn, _ = _make_session()
         _activate(session, conn)
-        session.request_blocks(
-            job_id=1, kv_request_id="req-1", keys=[b"k"], block_ids=[0]
-        )
+        session.request_blocks(job_id=1, kv_request_id="req-1", keys=[b"k"], block_ids=[0])
         conn.enqueue(
             {
                 TYPE_KEY: TransferDoneMsg.TYPE,
@@ -338,9 +328,7 @@ class TestClientFlows:
     def test_transfer_done_failure(self):
         session, conn, _ = _make_session()
         _activate(session, conn)
-        session.request_blocks(
-            job_id=1, kv_request_id="req-1", keys=[b"k"], block_ids=[0]
-        )
+        session.request_blocks(job_id=1, kv_request_id="req-1", keys=[b"k"], block_ids=[0])
         conn.enqueue(
             {
                 TYPE_KEY: TransferDoneMsg.TYPE,
@@ -354,9 +342,7 @@ class TestClientFlows:
     def test_finish_request_sends_abort(self):
         session, conn, _ = _make_session()
         _activate(session, conn)
-        session.request_blocks(
-            job_id=1, kv_request_id="req-1", keys=[b"k"], block_ids=[0]
-        )
+        session.request_blocks(job_id=1, kv_request_id="req-1", keys=[b"k"], block_ids=[0])
         session.finish_request("req-1")
         abort = conn._sent[-1]
         assert abort[TYPE_KEY] == AbortFetchMsg.TYPE
@@ -365,9 +351,7 @@ class TestClientFlows:
     def test_load_timeout_sends_abort(self):
         session, conn, _ = _make_session()
         _activate(session, conn)
-        session.request_blocks(
-            job_id=1, kv_request_id="req-1", keys=[b"k"], block_ids=[0]
-        )
+        session.request_blocks(job_id=1, kv_request_id="req-1", keys=[b"k"], block_ids=[0])
         session._client._inbound["req-1"].submitted_at = time.monotonic() - 60.0
         session.poll()
         abort = conn._sent[-1]
@@ -381,27 +365,19 @@ class TestClientFlows:
         """
         session, conn, _ = _make_session()
         _activate(session, conn)
-        session.request_blocks(
-            job_id=7, kv_request_id="req-7", keys=[b"k"], block_ids=[0]
-        )
+        session.request_blocks(job_id=7, kv_request_id="req-7", keys=[b"k"], block_ids=[0])
         # 1) Trip the load timeout to send AbortFetch and stamp aborted_at.
-        session._client._inbound["req-7"].submitted_at = (
-            time.monotonic() - _LOAD_TIMEOUT_S - 1.0
-        )
+        session._client._inbound["req-7"].submitted_at = time.monotonic() - _LOAD_TIMEOUT_S - 1.0
         loads = session.poll().loads
         assert loads == []
         assert any(
-            m.get(TYPE_KEY) == AbortFetchMsg.TYPE
-            and m[AbortFetchMsg.KV_REQUEST_ID] == "req-7"
-            for m in conn._sent
+            m.get(TYPE_KEY) == AbortFetchMsg.TYPE and m[AbortFetchMsg.KV_REQUEST_ID] == "req-7" for m in conn._sent
         )
         assert session._client._inbound["req-7"].aborted_at is not None
 
         # 2) Now backdate aborted_at past the abort-ack timeout. No ack ever
         # arrived from the peer.
-        session._client._inbound["req-7"].aborted_at = (
-            time.monotonic() - _ABORT_ACK_TIMEOUT_S - 1.0
-        )
+        session._client._inbound["req-7"].aborted_at = time.monotonic() - _ABORT_ACK_TIMEOUT_S - 1.0
         loads = session.poll().loads
         assert loads == [LoadResult(job_id=7, kv_request_id="req-7", success=False)]
         assert "req-7" not in session._client._inbound
@@ -412,12 +388,8 @@ class TestClientFlows:
         _inbound — covers the on_abort_ack arrival path."""
         session, conn, _ = _make_session()
         _activate(session, conn)
-        session.request_blocks(
-            job_id=8, kv_request_id="req-8", keys=[b"k"], block_ids=[0]
-        )
-        session._client._inbound["req-8"].submitted_at = (
-            time.monotonic() - _LOAD_TIMEOUT_S - 1.0
-        )
+        session.request_blocks(job_id=8, kv_request_id="req-8", keys=[b"k"], block_ids=[0])
+        session._client._inbound["req-8"].submitted_at = time.monotonic() - _LOAD_TIMEOUT_S - 1.0
         # First poll: AbortFetch goes out.
         session.poll()
         assert session._client._inbound["req-8"].aborted_at is not None
@@ -593,9 +565,7 @@ class TestServerFlows:
         session.poll()
         assert "req-1" in session._server._pending_aborts
         # Backdate past the drain deadline.
-        session._server._pending_aborts["req-1"] = (
-            time.monotonic() - _CANCEL_DRAIN_TIMEOUT_S - 1.0
-        )
+        session._server._pending_aborts["req-1"] = time.monotonic() - _CANCEL_DRAIN_TIMEOUT_S - 1.0
         # Even if the transport still claims it can't cancel, the
         # session must force-pop and ack.
         transport._cancel_calls.clear()
@@ -686,9 +656,7 @@ class TestServerFlows:
         # emit a second (contradictory) StoreResult for job_id=1.
         transport._poll_done.append(tid)
         stores = session.poll().stores
-        assert all(s.job_id != 1 for s in stores), (
-            f"unexpected duplicate StoreResult after timeout: {stores}"
-        )
+        assert all(s.job_id != 1 for s in stores), f"unexpected duplicate StoreResult after timeout: {stores}"
 
     def test_store_timeout_then_late_failure_no_duplicate(self):
         """Symmetric guard: a timed-out job must not also emit a second
@@ -710,15 +678,11 @@ class TestServerFlows:
 
         session._server._store_jobs[1] = time.monotonic() - 60.0
         stores = session.poll().stores
-        assert [s for s in stores if s.job_id == 1] == [
-            StoreResult(job_id=1, success=False)
-        ]
+        assert [s for s in stores if s.job_id == 1] == [StoreResult(job_id=1, success=False)]
 
         transport._poll_failed.append(tid)
         stores = session.poll().stores
-        assert all(s.job_id != 1 for s in stores), (
-            f"unexpected duplicate StoreResult after timeout: {stores}"
-        )
+        assert all(s.job_id != 1 for s in stores), f"unexpected duplicate StoreResult after timeout: {stores}"
 
 
 # ---------------------------------------------------------------------------
@@ -1129,9 +1093,7 @@ class TestBidirectional:
         )
 
         # Client role: we ask the peer for a different block.
-        session.request_blocks(
-            job_id=200, kv_request_id="req-cli", keys=[b"loaded"], block_ids=[3]
-        )
+        session.request_blocks(job_id=200, kv_request_id="req-cli", keys=[b"loaded"], block_ids=[3])
 
         # Both flows progress in the same poll.
         session.poll()
@@ -1139,10 +1101,7 @@ class TestBidirectional:
         # Server side: write_blocks was submitted.
         assert len(transport._transfers) == 1
         # Client side: the lookup was sent.
-        assert any(
-            m[TYPE_KEY] == FetchMsg.TYPE and m[FetchMsg.KV_REQUEST_ID] == "req-cli"
-            for m in conn._sent
-        )
+        assert any(m[TYPE_KEY] == FetchMsg.TYPE and m[FetchMsg.KV_REQUEST_ID] == "req-cli" for m in conn._sent)
 
         # Peer now signals: server-side transfer completes AND a
         # TransferDoneMsg arrives for our client-side request, all in
@@ -1482,11 +1441,7 @@ class TestInflightPerReqInvariant:
         assert not session._server._has_inflight_for("req-C")
 
         # Complete req-A's transfer first; req-B should still be inflight.
-        a_tids = [
-            tid
-            for tid, x in session._server._inflight.items()
-            if x.kv_request_id == "req-A"
-        ]
+        a_tids = [tid for tid, x in session._server._inflight.items() if x.kv_request_id == "req-A"]
         for tid in a_tids:
             transport._poll_done.append(tid)
         session.poll()
@@ -1497,11 +1452,7 @@ class TestInflightPerReqInvariant:
         assert session._server._has_inflight_for("req-B")
 
         # Complete req-B; counter must drain to empty.
-        b_tids = [
-            tid
-            for tid, x in session._server._inflight.items()
-            if x.kv_request_id == "req-B"
-        ]
+        b_tids = [tid for tid, x in session._server._inflight.items() if x.kv_request_id == "req-B"]
         for tid in b_tids:
             transport._poll_done.append(tid)
         session.poll()
@@ -1524,19 +1475,13 @@ class TestInflightPerReqInvariant:
                     tid,
                     _InflightXfer(kv_request_id=kv_id, block_count=1, job_ids={tid}),
                 )
-        assert sum(session._server._inflight_per_req.values()) == len(
-            session._server._inflight
-        )
+        assert sum(session._server._inflight_per_req.values()) == len(session._server._inflight)
         assert session._server._has_inflight_for("req-0")
         assert session._server._has_inflight_for("req-99")
         assert not session._server._has_inflight_for("req-missing")
 
         # Drain all entries for req-50 and confirm the entry disappears.
-        tids_50 = [
-            tid
-            for tid, x in session._server._inflight.items()
-            if x.kv_request_id == "req-50"
-        ]
+        tids_50 = [tid for tid, x in session._server._inflight.items() if x.kv_request_id == "req-50"]
         for tid in tids_50:
             session._server._inflight_pop(tid)
         assert "req-50" not in session._server._inflight_per_req

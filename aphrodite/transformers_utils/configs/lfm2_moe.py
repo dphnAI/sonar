@@ -148,9 +148,7 @@ class Lfm2MoeConfig(PretrainedConfig):
         self.norm_topk_prob = norm_topk_prob
         self.layer_types = layer_types
 
-        tie_word_embeddings = kwargs.get(
-            "tie_embedding", tie_word_embeddings
-        )  # to fit original config keys
+        tie_word_embeddings = kwargs.get("tie_embedding", tie_word_embeddings)  # to fit original config keys
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

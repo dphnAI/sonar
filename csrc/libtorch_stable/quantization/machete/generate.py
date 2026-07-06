@@ -12,19 +12,19 @@ from functools import reduce
 
 import jinja2
 from aphrodite_cutlass_library_extension import (
+    APHRODITEDataType,
+    APHRODITEDataTypeAPHRODITEScalarTypeTag,
+    APHRODITEDataTypeNames,
+    APHRODITEDataTypeSize,
+    APHRODITEDataTypeTag,
+    APHRODITEDataTypeTorchDataTypeTag,
+    APHRODITEKernelScheduleTag,
     DataType,
     EpilogueScheduleTag,
     EpilogueScheduleType,
     MixedInputKernelScheduleType,
     TileSchedulerTag,
     TileSchedulerType,
-    APHRODITEDataType,
-    APHRODITEDataTypeNames,
-    APHRODITEDataTypeSize,
-    APHRODITEDataTypeTag,
-    APHRODITEDataTypeTorchDataTypeTag,
-    APHRODITEDataTypeAPHRODITEScalarTypeTag,
-    APHRODITEKernelScheduleTag,
 )
 
 #
@@ -283,26 +283,17 @@ class ImplConfig:
 
 
 def generate_sch_sig(schedule_config: ScheduleConfig) -> str:
-    tile_shape = (
-        f"{schedule_config.tile_shape_mn[0]}x{schedule_config.tile_shape_mn[1]}"
-    )
+    tile_shape = f"{schedule_config.tile_shape_mn[0]}x{schedule_config.tile_shape_mn[1]}"
     cluster_shape = (
         f"{schedule_config.cluster_shape_mnk[0]}"
         f"x{schedule_config.cluster_shape_mnk[1]}"
         f"x{schedule_config.cluster_shape_mnk[2]}"
     )
-    kernel_schedule = APHRODITEKernelScheduleTag[schedule_config.kernel_schedule].split(
-        "::"
-    )[-1]
-    epilogue_schedule = EpilogueScheduleTag[schedule_config.epilogue_schedule].split(
-        "::"
-    )[-1]
+    kernel_schedule = APHRODITEKernelScheduleTag[schedule_config.kernel_schedule].split("::")[-1]
+    epilogue_schedule = EpilogueScheduleTag[schedule_config.epilogue_schedule].split("::")[-1]
     tile_scheduler = TileSchedulerTag[schedule_config.tile_scheduler].split("::")[-1]
 
-    return (
-        f"{tile_shape}_{cluster_shape}_{kernel_schedule}"
-        f"_{epilogue_schedule}_{tile_scheduler}"
-    )
+    return f"{tile_shape}_{cluster_shape}_{kernel_schedule}_{epilogue_schedule}_{tile_scheduler}"
 
 
 # mostly unique shorter sch_sig
@@ -321,14 +312,7 @@ def generate_terse_sch_sig(schedule_config: ScheduleConfig) -> str:
 
 # unique type_name
 def generate_type_signature(kernel_types: TypeConfig):
-    return str(
-        "".join(
-            [
-                APHRODITEDataTypeNames[getattr(kernel_types, field.name)]
-                for field in fields(TypeConfig)
-            ]
-        )
-    )
+    return str("".join([APHRODITEDataTypeNames[getattr(kernel_types, field.name)] for field in fields(TypeConfig)]))
 
 
 def generate_type_option_name(kernel_types: TypeConfig):
@@ -360,11 +344,7 @@ def to_cute_constant(value: list[int]):
 
 def unique_schedules(impl_configs: list[ImplConfig]):
     # Use dict over set for deterministic ordering
-    return list(
-        {
-            sch: None for impl_config in impl_configs for sch in impl_config.schedules
-        }.keys()
-    )
+    return list({sch: None for impl_config in impl_configs for sch in impl_config.schedules}.keys())
 
 
 def unsigned_type_with_bitwidth(num_bits):
@@ -418,9 +398,7 @@ def create_sources(impl_configs: list[ImplConfig], num_impl_files=8):
     prepack_types = []
     for impl_config in impl_configs:
         convert_type = (
-            impl_config.types.a
-            if impl_config.types.b_group_scale == DataType.void
-            else impl_config.types.b_group_scale
+            impl_config.types.a if impl_config.types.b_group_scale == DataType.void else impl_config.types.b_group_scale
         )
         prepack_types.append(
             PrepackTypeConfig(

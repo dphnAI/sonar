@@ -20,9 +20,7 @@ class FlashInferCutlassMxfp8LinearKernel(Mxfp8LinearKernel):
     """MXFP8 W8A8 GEMM via FlashInfer CUTLASS (SM100+)."""
 
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if current_platform.has_device_capability(100):
             return True, None
         return False, "requires >=sm_100 (Blackwell)"
@@ -40,9 +38,7 @@ class FlashInferCutlassMxfp8LinearKernel(Mxfp8LinearKernel):
         weight_scale_swizzled = swizzle_mxfp8_scale(weight_scale_2d, M=N, K=K)
 
         layer.weight = Parameter(weight.contiguous(), requires_grad=False)
-        layer.weight_scale = Parameter(
-            weight_scale_swizzled.contiguous(), requires_grad=False
-        )
+        layer.weight_scale = Parameter(weight_scale_swizzled.contiguous(), requires_grad=False)
 
     def apply_weights(
         self,
@@ -59,21 +55,11 @@ class FlashInferCutlassMxfp8LinearKernel(Mxfp8LinearKernel):
         input_2d = x.view(-1, K)
         min_dim = 128
 
-        assert min_dim <= K, (
-            f"mm_mxfp8 requires K >= {min_dim}, got K={K}. "
-            f"in_features is too small for mm_mxfp8."
-        )
-        assert K % MXFP8_BLOCK_SIZE == 0, (
-            f"mm_mxfp8 requires K to be divisible by {MXFP8_BLOCK_SIZE}, got K={K}."
-        )
-        assert min_dim <= N, (
-            f"mm_mxfp8 requires N >= {min_dim}, got N={N}. "
-            f"out_features is too small for mm_mxfp8."
-        )
+        assert min_dim <= K, f"mm_mxfp8 requires K >= {min_dim}, got K={K}. in_features is too small for mm_mxfp8."
+        assert K % MXFP8_BLOCK_SIZE == 0, f"mm_mxfp8 requires K to be divisible by {MXFP8_BLOCK_SIZE}, got K={K}."
+        assert min_dim <= N, f"mm_mxfp8 requires N >= {min_dim}, got N={N}. out_features is too small for mm_mxfp8."
 
-        input_mxfp8, input_scale = mxfp8_e4m3_quantize(
-            input_2d, is_sf_swizzled_layout=True
-        )
+        input_mxfp8, input_scale = mxfp8_e4m3_quantize(input_2d, is_sf_swizzled_layout=True)
 
         if not weight.is_contiguous():
             weight = weight.contiguous()
@@ -98,13 +84,8 @@ class FlashInferCutedslMxfp8LinearKernel(Mxfp8LinearKernel):
     """MXFP8 W8A8 GEMM via FlashInfer CuTe-DSL (SM100/SM103)."""
 
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
-        if not (
-            current_platform.is_cuda()
-            and current_platform.is_device_capability_family(100)
-        ):
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
+        if not (current_platform.is_cuda() and current_platform.is_device_capability_family(100)):
             return False, "requires sm_100/sm_103 (Blackwell)"
         if not has_flashinfer_cutedsl():
             return False, "requires FlashInfer CuTe-DSL module"
@@ -124,9 +105,7 @@ class FlashInferCutedslMxfp8LinearKernel(Mxfp8LinearKernel):
 
         # Store weight column-major [K, N] as mm_mxfp8 expects for operand B.
         layer.weight = Parameter(weight.contiguous().t(), requires_grad=False)
-        layer.weight_scale = Parameter(
-            weight_scale_swizzled.contiguous(), requires_grad=False
-        )
+        layer.weight_scale = Parameter(weight_scale_swizzled.contiguous(), requires_grad=False)
 
     def apply_weights(
         self,
@@ -143,21 +122,11 @@ class FlashInferCutedslMxfp8LinearKernel(Mxfp8LinearKernel):
         input_2d = x.view(-1, K)
         min_dim = 128
 
-        assert min_dim <= K, (
-            f"mm_mxfp8 requires K >= {min_dim}, got K={K}. "
-            f"in_features is too small for mm_mxfp8."
-        )
-        assert K % MXFP8_BLOCK_SIZE == 0, (
-            f"mm_mxfp8 requires K to be divisible by {MXFP8_BLOCK_SIZE}, got K={K}."
-        )
-        assert min_dim <= N, (
-            f"mm_mxfp8 requires N >= {min_dim}, got N={N}. "
-            f"out_features is too small for mm_mxfp8."
-        )
+        assert min_dim <= K, f"mm_mxfp8 requires K >= {min_dim}, got K={K}. in_features is too small for mm_mxfp8."
+        assert K % MXFP8_BLOCK_SIZE == 0, f"mm_mxfp8 requires K to be divisible by {MXFP8_BLOCK_SIZE}, got K={K}."
+        assert min_dim <= N, f"mm_mxfp8 requires N >= {min_dim}, got N={N}. out_features is too small for mm_mxfp8."
 
-        input_mxfp8, input_scale = mxfp8_e4m3_quantize(
-            input_2d, is_sf_swizzled_layout=True
-        )
+        input_mxfp8, input_scale = mxfp8_e4m3_quantize(input_2d, is_sf_swizzled_layout=True)
 
         output = aphrodite_flashinfer.mm_mxfp8(
             input_mxfp8,

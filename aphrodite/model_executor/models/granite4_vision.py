@@ -24,7 +24,7 @@ from transformers.models.llava_next.modeling_llava_next import (
 )
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed.parallel_state import get_pp_group
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
@@ -71,12 +71,8 @@ class InterpolateDownsampler:
     """Spatial downsampling via area interpolation."""
 
     def __init__(self, config, mode="area"):
-        self.orig_image_side = (
-            config.vision_config.image_size // config.vision_config.patch_size
-        )
-        self.new_image_side = int(
-            self.orig_image_side * Fraction(config.downsample_rate)
-        )
+        self.orig_image_side = config.vision_config.image_size // config.vision_config.patch_size
+        self.new_image_side = int(self.orig_image_side * Fraction(config.downsample_rate))
         self.mode = mode
 
     def __call__(self, image_features: torch.Tensor) -> torch.Tensor:
@@ -95,18 +91,14 @@ class SpatialOffsetDownsampler:
     """Sample one position from each 2x2 block (offset 0-3 = TL/TR/BL/BR)."""
 
     def __init__(self, config, offset: int = 0):
-        self.orig_image_side = (
-            config.vision_config.image_size // config.vision_config.patch_size
-        )
+        self.orig_image_side = config.vision_config.image_size // config.vision_config.patch_size
         self.new_image_side = self.orig_image_side // 2
         offsets = [(0, 0), (0, 1), (1, 0), (1, 1)]
         self.offset_h, self.offset_w = offsets[offset]
 
     def __call__(self, image_features: torch.Tensor) -> torch.Tensor:
         B, _, C = image_features.shape
-        features_2d = image_features.reshape(
-            B, self.orig_image_side, self.orig_image_side, C
-        )
+        features_2d = image_features.reshape(B, self.orig_image_side, self.orig_image_side, C)
         n = self.new_image_side
         blocks = features_2d.reshape(B, n, 2, n, 2, C)
         sampled = blocks[:, :, self.offset_h, :, self.offset_w, :]
@@ -152,47 +144,29 @@ class WindowQFormerDownsampler(nn.Module):
             prefix=maybe_prefix(prefix, "qformer"),
         )
 
-        self.image_side = (
-            config.vision_config.image_size // config.vision_config.patch_size
-        )
+        self.image_side = config.vision_config.image_size // config.vision_config.patch_size
         q, w = config.downsample_rate.split("/")
         self.query_side, self.window_side = int(q), int(w)
         self.query_length = self.query_side**2
 
         embed_std = 1 / math.sqrt(vision_hidden_size)
         self.norm = nn.LayerNorm(vision_hidden_size, eps=1e-6)
-        self.query = nn.Parameter(
-            torch.randn(1, self.query_length, vision_hidden_size) * embed_std
-        )
-        self.image_positions = nn.Parameter(
-            torch.randn(1, self.window_side**2, vision_hidden_size) * embed_std
-        )
+        self.query = nn.Parameter(torch.randn(1, self.query_length, vision_hidden_size) * embed_std)
+        self.image_positions = nn.Parameter(torch.randn(1, self.window_side**2, vision_hidden_size) * embed_std)
         self.out_linear = nn.Linear(vision_hidden_size, llm_hidden_size, bias=True)
 
     def _win(self, x: torch.Tensor, side: int, win: int) -> torch.Tensor:
         """(B, side*side, C) → (B*n*n, win*win, C) where n=side//win."""
         B, _, C = x.shape
         n = side // win
-        return (
-            x.view(B, side, side, C)
-            .view(B, n, win, n, win, C)
-            .transpose(2, 3)
-            .flatten(0, 2)
-            .flatten(1, 2)
-        )
+        return x.view(B, side, side, C).view(B, n, win, n, win, C).transpose(2, 3).flatten(0, 2).flatten(1, 2)
 
     def _unwin(self, xw: torch.Tensor, n: int, win: int) -> torch.Tensor:
         """(B*n*n, win*win, C) → (B, (n*win)^2, C)."""
         Bnn, _, C = xw.shape
         B = Bnn // (n * n)
         side = n * win
-        return (
-            xw.view(B, n, n, win, win, C)
-            .transpose(2, 3)
-            .contiguous()
-            .view(B, side, side, C)
-            .flatten(1, 2)
-        )
+        return xw.view(B, n, n, win, win, C).transpose(2, 3).contiguous().view(B, side, side, C).flatten(1, 2)
 
     def forward(self, image_features: torch.Tensor) -> torch.Tensor:
         B, HW, C = image_features.shape
@@ -254,17 +228,11 @@ class Granite4VisionLLMModel(GraniteModel):
             hidden_states = intermediate_tensors["hidden_states"]
             # Recover deepstack features forwarded from the previous PP rank.
             if deepstack_input_embeds is None:
-                ds_keys = [
-                    k for k in intermediate_tensors.tensors if k.startswith("ds_")
-                ]
+                ds_keys = [k for k in intermediate_tensors.tensors if k.startswith("ds_")]
                 if ds_keys:
-                    deepstack_input_embeds = IntermediateTensors(
-                        {k: intermediate_tensors[k] for k in ds_keys}
-                    )
+                    deepstack_input_embeds = IntermediateTensors({k: intermediate_tensors[k] for k in ds_keys})
 
-        for layer_idx, layer in islice(
-            enumerate(self.layers), self.start_layer, self.end_layer
-        ):
+        for layer_idx, layer in islice(enumerate(self.layers), self.start_layer, self.end_layer):
             if deepstack_input_embeds is not None:
                 key = f"ds_{layer_idx}"
                 if key in deepstack_input_embeds.tensors:
@@ -285,9 +253,7 @@ class Granite4VisionLLMModel(GraniteModel):
             it = {"hidden_states": hidden_states}
             if deepstack_input_embeds is not None:
                 remaining = {
-                    k: v
-                    for k, v in deepstack_input_embeds.tensors.items()
-                    if int(k.split("_")[1]) >= self.end_layer
+                    k: v for k, v in deepstack_input_embeds.tensors.items() if int(k.split("_")[1]) >= self.end_layer
                 }
                 it.update(remaining)
             return IntermediateTensors(it)
@@ -305,9 +271,7 @@ class Granite4VisionLLMForCausalLM(GraniteForCausalLM):
         quant_config = aphrodite_config.quant_config
         self.config = config
         self.quant_config = quant_config
-        self.model = Granite4VisionLLMModel(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = Granite4VisionLLMModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
@@ -320,9 +284,7 @@ class Granite4VisionLLMForCausalLM(GraniteForCausalLM):
             logit_scale = getattr(config, "logit_scale", 1.0)
             if hasattr(config, "logits_scaling"):
                 logit_scale /= config.logits_scaling
-            self.logits_processor = LogitsProcessor(
-                config.vocab_size, scale=logit_scale
-            )
+            self.logits_processor = LogitsProcessor(config.vocab_size, scale=logit_scale)
         else:
             self.lm_head = PPMissingLayer()
 
@@ -388,9 +350,7 @@ class Granite4VisionProcessingInfo(LlavaNextProcessingInfo):
         return unpadded_feature_size + newline_feature_size + base_feature_size
 
 
-class Granite4VisionMultiModalProcessor(
-    BaseLlavaNextMultiModalProcessor[Granite4VisionProcessingInfo]
-):
+class Granite4VisionMultiModalProcessor(BaseLlavaNextMultiModalProcessor[Granite4VisionProcessingInfo]):
     def _get_mm_fields_config(
         self,
         hf_inputs: BatchFeature,
@@ -412,9 +372,7 @@ class Granite4VisionMultiModalProcessor(
     info=Granite4VisionProcessingInfo,
     dummy_inputs=LlavaDummyInputsBuilder,
 )
-class Granite4VisionForConditionalGeneration(
-    nn.Module, SupportsLoRA, SupportsMultiModal, SupportsPP
-):
+class Granite4VisionForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMultiModal, SupportsPP):
     """Aphrodite implementation of Granite 4 Vision.
 
     Architecture:
@@ -494,9 +452,7 @@ class Granite4VisionForConditionalGeneration(
 
             # image_newline parameter
             if config.use_image_newline_parameter:
-                self.image_newline = nn.Parameter(
-                    torch.empty(config.text_config.hidden_size)
-                )
+                self.image_newline = nn.Parameter(torch.empty(config.text_config.hidden_size))
             else:
                 self.image_newline = None
 
@@ -538,26 +494,22 @@ class Granite4VisionForConditionalGeneration(
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
         # Store config values we need
         self._deepstack_layer_map = config.deepstack_layer_map  # [[-19, 9], ...]
         self._use_spatial_sampling = getattr(config, "use_spatial_sampling", False)
         self._spatial_vision_layer = getattr(config, "spatial_vision_layer", -1)
         self._spatial_target_layers = getattr(config, "spatial_target_layers", [])
-        self._vision_feature_select_strategy = getattr(
-            config, "vision_feature_select_strategy", "full"
-        )
+        self._vision_feature_select_strategy = getattr(config, "vision_feature_select_strategy", "full")
         self._downsample_rate = Fraction(config.downsample_rate)
 
         # Ordered list of LLM layer indices for each deepstack level.
         # Pre-populated from config so it's available during CUDA graph capture
         # (before any embed_multimodal call).
-        self._ds_layer_indices: list[int] = [
-            llm_layer for _, llm_layer in config.deepstack_layer_map
-        ] + list(getattr(config, "spatial_target_layers", []))
+        self._ds_layer_indices: list[int] = [llm_layer for _, llm_layer in config.deepstack_layer_map] + list(
+            getattr(config, "spatial_target_layers", [])
+        )
 
         # Share ds_layer_indices with the LLM causal model so
         # make_empty_intermediate_tensors includes the correct keys
@@ -575,16 +527,12 @@ class Granite4VisionForConditionalGeneration(
         lm_hidden = config.text_config.hidden_size
         max_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
         # Allocated on CPU first; moved to GPU in embed_input_ids on first use.
-        self._ds_buffers: list[torch.Tensor] = [
-            torch.zeros(max_tokens, lm_hidden) for _ in range(num_ds_levels)
-        ]
+        self._ds_buffers: list[torch.Tensor] = [torch.zeros(max_tokens, lm_hidden) for _ in range(num_ds_levels)]
         self._ds_num_tokens: int = 0  # tokens written in last embed_input_ids call
 
     # ----- Vision feature extraction -----
 
-    def _get_vision_hidden_states(
-        self, pixel_values: torch.Tensor
-    ) -> list[torch.Tensor]:
+    def _get_vision_hidden_states(self, pixel_values: torch.Tensor) -> list[torch.Tensor]:
         """Run vision tower and return all hidden states (including input embeddings).
 
         Uses SiglipEncoder's built-in return_all_hidden_states support.
@@ -619,9 +567,7 @@ class Granite4VisionForConditionalGeneration(
                 base_image_feature = image_feature[0]
                 image_feature = image_feature[1:]
 
-                height = width = (
-                    config.vision_config.image_size // config.vision_config.patch_size
-                )
+                height = width = config.vision_config.image_size // config.vision_config.patch_size
                 # After QFormer downsampling
                 height = int(height * ds_rate)
                 width = int(width * ds_rate)
@@ -632,15 +578,8 @@ class Granite4VisionForConditionalGeneration(
                     config.vision_config.image_size,
                 )
 
-                image_feature = image_feature.view(
-                    num_patch_height, num_patch_width, height, width, -1
-                )
-                image_feature = (
-                    image_feature.permute(4, 0, 2, 1, 3)
-                    .contiguous()
-                    .flatten(1, 2)
-                    .flatten(2, 3)
-                )
+                image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
+                image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous().flatten(1, 2).flatten(2, 3)
                 image_feature = unpad_image(image_feature, image_sizes[image_idx])
 
                 if self.image_newline is not None:
@@ -730,17 +669,14 @@ class Granite4VisionForConditionalGeneration(
         llm_layer_indices = [llm_layer for llm_layer, _ in levels]
         num_images = len(image_sizes)
         per_image_packed = [
-            torch.cat([levels[lvl][1][img] for lvl in range(len(levels))], dim=-1)
-            for img in range(num_images)
+            torch.cat([levels[lvl][1][img] for lvl in range(len(levels))], dim=-1) for img in range(num_images)
         ]
 
         return llm_layer_indices, per_image_packed
 
     # ----- Multimodal interface -----
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> LlavaNextImageInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> LlavaNextImageInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         image_sizes = kwargs.pop("image_sizes", None)
         image_embeds = kwargs.pop("image_embeds", None)
@@ -788,9 +724,7 @@ class Granite4VisionForConditionalGeneration(
         if isinstance(pixel_values, list):
             pixel_values = torch.cat(pixel_values, dim=0)
 
-        llm_layer_indices, per_image_packed = self._get_all_layer_features(
-            pixel_values, image_sizes
-        )
+        llm_layer_indices, per_image_packed = self._get_all_layer_features(pixel_values, image_sizes)
         self._ds_layer_indices = llm_layer_indices
         return per_image_packed
 
@@ -852,10 +786,7 @@ class Granite4VisionForConditionalGeneration(
         # Ensure persistent buffers are on the right device/dtype (first call).
         buf0 = self._ds_buffers[0]
         if buf0.device != inputs_embeds.device or buf0.dtype != inputs_embeds.dtype:
-            self._ds_buffers = [
-                b.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
-                for b in self._ds_buffers
-            ]
+            self._ds_buffers = [b.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype) for b in self._ds_buffers]
 
         for level_idx in range(len(self._ds_layer_indices)):
             target = self._ds_buffers[level_idx][:N]
@@ -882,17 +813,10 @@ class Granite4VisionForConditionalGeneration(
         # Always pass deepstack when inputs_embeds is non-None (prefill path),
         # including during CUDA graph capture (buffers are zero → no-op injection).
         # This ensures the graph captures the injection code path.
-        if (
-            inputs_embeds is not None
-            and get_pp_group().is_first_rank
-            and self._ds_layer_indices
-        ):
+        if inputs_embeds is not None and get_pp_group().is_first_rank and self._ds_layer_indices:
             n = inputs_embeds.size(0)
             ds: IntermediateTensors | None = IntermediateTensors(
-                {
-                    f"ds_{llm_layer}": self._ds_buffers[lvl][:n]
-                    for lvl, llm_layer in enumerate(self._ds_layer_indices)
-                }
+                {f"ds_{llm_layer}": self._ds_buffers[lvl][:n] for lvl, llm_layer in enumerate(self._ds_layer_indices)}
             )
         else:
             ds = None
@@ -906,11 +830,7 @@ class Granite4VisionForConditionalGeneration(
         )
 
         # Clear buffers after use so stale features don't leak into the next request.
-        if (
-            inputs_embeds is not None
-            and get_pp_group().is_first_rank
-            and self._ds_num_tokens > 0
-        ):
+        if inputs_embeds is not None and get_pp_group().is_first_rank and self._ds_num_tokens > 0:
             n = self._ds_num_tokens
             for buf in self._ds_buffers:
                 buf[:n].zero_()

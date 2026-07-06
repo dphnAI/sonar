@@ -34,7 +34,7 @@ import torch
 
 import aphrodite.envs as envs
 from aphrodite.compilation.monitor import validate_cudagraph_capturing_enabled
-from aphrodite.config import CUDAGraphMode, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CUDAGraphMode
 from aphrodite.distributed.device_communicators.pynccl_allocator import set_graph_pool_id
 from aphrodite.forward_context import (
     BatchDescriptor,
@@ -105,13 +105,8 @@ def eager_break_during_capture(fn: F) -> F:
         # Weak-ref args: strong refs in the replay lambda pin cudagraph-pool
         # slots across batch descriptors. cudagraph owns the slot, so the
         # weak_ref is safe to deref on replay.
-        weak_args = tuple(
-            weak_ref_tensor(a) if isinstance(a, torch.Tensor) else a for a in args
-        )
-        weak_kwargs = {
-            k: weak_ref_tensor(v) if isinstance(v, torch.Tensor) else v
-            for k, v in kwargs.items()
-        }
+        weak_args = tuple(weak_ref_tensor(a) if isinstance(a, torch.Tensor) else a for a in args)
+        weak_kwargs = {k: weak_ref_tensor(v) if isinstance(v, torch.Tensor) else v for k, v in kwargs.items()}
         return capture.add_eager(lambda: fn(*weak_args, **weak_kwargs))
 
     return wrapper  # type: ignore[return-value]
@@ -224,10 +219,7 @@ class BreakableCUDAGraphCapture:
         return self._num_eager_breaks
 
     def __repr__(self) -> str:
-        return (
-            f"BreakableCUDAGraphCapture(graphs={self.num_graphs}, "
-            f"eager_breaks={self.num_eager_breaks})"
-        )
+        return f"BreakableCUDAGraphCapture(graphs={self.num_graphs}, eager_breaks={self.num_eager_breaks})"
 
 
 # ---------------------------------------------------------------------------
@@ -256,9 +248,7 @@ class BreakableCUDAGraphWrapper:
           on subsequent invocations with the same descriptor.
     """
 
-    _all_instances: ClassVar[weakref.WeakSet[BreakableCUDAGraphWrapper]] = (
-        weakref.WeakSet()
-    )
+    _all_instances: ClassVar[weakref.WeakSet[BreakableCUDAGraphWrapper]] = weakref.WeakSet()
 
     @classmethod
     def clear_all_graphs(cls) -> None:
@@ -335,9 +325,7 @@ class BreakableCUDAGraphWrapper:
     # --- capture / replay paths -----------------------------------------
 
     @staticmethod
-    def _collect_tensor_addresses(
-        args: tuple[Any, ...], kwargs: dict[str, Any]
-    ) -> list[int]:
+    def _collect_tensor_addresses(args: tuple[Any, ...], kwargs: dict[str, Any]) -> list[int]:
         """Flatten tensor data_ptrs from positional and keyword args in a
         stable order (positionals first, then kwargs in insertion order).
 
@@ -345,9 +333,7 @@ class BreakableCUDAGraphWrapper:
         styles since Aphrodite models are typically invoked with kwargs.
         """
         addrs = [x.data_ptr() for x in args if isinstance(x, torch.Tensor)]
-        addrs.extend(
-            v.data_ptr() for v in kwargs.values() if isinstance(v, torch.Tensor)
-        )
+        addrs.extend(v.data_ptr() for v in kwargs.values() if isinstance(v, torch.Tensor))
         return addrs
 
     def _capture(

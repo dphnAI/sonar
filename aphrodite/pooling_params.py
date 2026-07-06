@@ -229,7 +229,4 @@ class PoolingParams(
 
     def __post_init__(self) -> None:
         if self.output_kind != RequestOutputKind.FINAL_ONLY:
-            raise ValueError(
-                "For pooling output_kind has to be FINAL_ONLY, "
-                f"got {self.output_kind!r}"
-            )
+            raise ValueError(f"For pooling output_kind has to be FINAL_ONLY, got {self.output_kind!r}")

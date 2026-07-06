@@ -10,7 +10,6 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 
 import aphrodite.envs as envs
-from tests.utils import ensure_current_aphrodite_config
 from aphrodite.distributed import cleanup_dist_env_and_memory
 from aphrodite.distributed.device_communicators.cuda_communicator import CudaCommunicator
 from aphrodite.distributed.device_communicators.pynccl import register_nccl_symmetric_ops
@@ -25,6 +24,7 @@ from aphrodite.distributed.parallel_state import (
 )
 from aphrodite.platforms import current_platform
 from aphrodite.utils.system_utils import update_environment_variables
+from tests.utils import ensure_current_aphrodite_config
 
 torch.manual_seed(42)
 random.seed(44)
@@ -55,14 +55,10 @@ def nccl_symm_mem_allreduce_worker(local_rank: int, world_size: int):
         with ensure_current_aphrodite_config():
             initialize_model_parallel(tensor_model_parallel_size=world_size)
 
-        cuda_communicator = typing.cast(
-            CudaCommunicator, get_tp_group().device_communicator
-        )
+        cuda_communicator = typing.cast(CudaCommunicator, get_tp_group().device_communicator)
         pynccl_comm = cuda_communicator.pynccl_comm
         if get_nccl_mem_pool() is None:
-            pytest.skip(
-                "NCCL allocator compilation failed (probably missing NCCL headers)."
-            )
+            pytest.skip("NCCL allocator compilation failed (probably missing NCCL headers).")
         if not is_symmetric_memory_enabled():
             pytest.skip("NCCL symmetric memory allreduce is disabled.")
 
@@ -119,20 +115,14 @@ def nccl_symm_mem_allgather_worker(local_rank: int, world_size: int):
         with ensure_current_aphrodite_config():
             initialize_model_parallel(tensor_model_parallel_size=world_size)
 
-        cuda_communicator = typing.cast(
-            CudaCommunicator, get_tp_group().device_communicator
-        )
+        cuda_communicator = typing.cast(CudaCommunicator, get_tp_group().device_communicator)
         if get_nccl_mem_pool() is None:
-            pytest.skip(
-                "NCCL allocator compilation failed (probably missing NCCL headers)."
-            )
+            pytest.skip("NCCL allocator compilation failed (probably missing NCCL headers).")
         if not is_symmetric_memory_enabled():
             pytest.skip("NCCL symmetric memory is disabled.")
 
         per_rank_size = test_size_elements // world_size
-        input_tensor = torch.randint(
-            1, 23, (per_rank_size,), dtype=dtype, device=device
-        )
+        input_tensor = torch.randint(1, 23, (per_rank_size,), dtype=dtype, device=device)
         output = cuda_communicator.all_gatherv(input_tensor, dim=0)
 
         group = get_tp_group().device_group
@@ -182,20 +172,14 @@ def nccl_symm_mem_reduce_scatter_worker(local_rank: int, world_size: int):
         with ensure_current_aphrodite_config():
             initialize_model_parallel(tensor_model_parallel_size=world_size)
 
-        cuda_communicator = typing.cast(
-            CudaCommunicator, get_tp_group().device_communicator
-        )
+        cuda_communicator = typing.cast(CudaCommunicator, get_tp_group().device_communicator)
         if get_nccl_mem_pool() is None:
-            pytest.skip(
-                "NCCL allocator compilation failed (probably missing NCCL headers)."
-            )
+            pytest.skip("NCCL allocator compilation failed (probably missing NCCL headers).")
         if not is_symmetric_memory_enabled():
             pytest.skip("NCCL symmetric memory is disabled.")
 
         per_rank_size = test_size_elements // world_size
-        input_tensor = torch.randint(
-            1, 23, (test_size_elements,), dtype=dtype, device=device
-        )
+        input_tensor = torch.randint(1, 23, (test_size_elements,), dtype=dtype, device=device)
         input_clone = input_tensor.clone()
         output = cuda_communicator.reduce_scatter(input_tensor, dim=0)
 

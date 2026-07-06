@@ -236,11 +236,7 @@ def encode_output_frames(obj, *, size_threshold: int = 256) -> list[bytes]:
     def transform(value):
         if isinstance(value, np.ndarray):
             return encode_ndarray(value, buffers, size_threshold=size_threshold)
-        if (
-            isinstance(value, tuple)
-            and len(value) == 3
-            and value[0] in ("int32", "int64", "float32")
-        ):
+        if isinstance(value, tuple) and len(value) == 3 and value[0] in ("int32", "int64", "float32"):
             dtype, shape, payload = value
             return encode_tensor_like(
                 dtype,
@@ -382,17 +378,7 @@ print(msgspec.msgpack.encode(defaults_request).hex())
 print(msgpack.packb(multimodal_request_wire, use_bin_type=True).hex())
 print(msgspec.msgpack.encode(outputs).hex())
 print(" ".join(frame.hex() for frame in encode_output_frames(inline_logprobs)))
-print(
-    " ".join(
-        frame.hex()
-        for frame in encode_output_frames(multipart_logprobs, size_threshold=1)
-    )
-)
+print(" ".join(frame.hex() for frame in encode_output_frames(multipart_logprobs, size_threshold=1)))
 print(" ".join(frame.hex() for frame in encode_output_frames(inline_prompt_logprobs)))
-print(
-    " ".join(
-        frame.hex()
-        for frame in encode_output_frames(multipart_prompt_logprobs, size_threshold=1)
-    )
-)
+print(" ".join(frame.hex() for frame in encode_output_frames(multipart_prompt_logprobs, size_threshold=1)))
 print(msgspec.msgpack.encode(ready_response).hex())

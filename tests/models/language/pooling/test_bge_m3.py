@@ -15,8 +15,7 @@ MAX_MODEL_LEN = 512
 # Example from https://huggingface.co/BAAI/bge-m3
 sentences_1 = ["What is BGE M3?", "Definition of BM25"]
 sentences_2 = [
-    "BGE M3 is an embedding model supporting dense retrieval, "
-    "lexical matching and multi-vector interaction.",
+    "BGE M3 is an embedding model supporting dense retrieval, lexical matching and multi-vector interaction.",
     "BM25 is a bag-of-words retrieval function that ranks a set "
     "of documents based on the query terms appearing in each document",
 ]
@@ -94,9 +93,7 @@ async def tokenize(client: openai.AsyncOpenAI, sentences: list[str]) -> list[lis
     return [(await future).json()["tokens"] for future in futures]
 
 
-async def sparse_embeddings(
-    client: openai.AsyncOpenAI, sentences: list[str]
-) -> list[dict[int, float]]:
+async def sparse_embeddings(client: openai.AsyncOpenAI, sentences: list[str]) -> list[dict[int, float]]:
     all_tokens = await tokenize(client, sentences)
     result = await client.post(
         "../pooling",
@@ -118,9 +115,7 @@ async def sparse_embeddings(
 
 
 # Based on https://github.com/FlagOpen/FlagEmbedding/blob/6fd176266f2382878bcc69cd656cff425d52f49b/FlagEmbedding/inference/embedder/encoder_only/m3.py#L129
-def compute_lexical_matching_score(
-    lw1: dict[int, float], lw2: dict[int, float]
-) -> float:
+def compute_lexical_matching_score(lw1: dict[int, float], lw2: dict[int, float]) -> float:
     scores = 0.0
     for token, weight in lw1.items():
         if token in lw2:
@@ -140,19 +135,11 @@ async def test_bge_m3_api_server_sparse_embedding(server, pooling_task):
     embeddings_1 = await sparse_embeddings(client, sentences_1)
     embeddings_2 = await sparse_embeddings(client, sentences_2)
 
-    lexical_scores_1_0_x_2_0 = compute_lexical_matching_score(
-        embeddings_1[0], embeddings_2[0]
-    )
-    assert lexical_scores_1_0_x_2_0 == pytest.approx(
-        lexical_score_reference[0], rel=0.01
-    )
+    lexical_scores_1_0_x_2_0 = compute_lexical_matching_score(embeddings_1[0], embeddings_2[0])
+    assert lexical_scores_1_0_x_2_0 == pytest.approx(lexical_score_reference[0], rel=0.01)
 
-    lexical_scores_1_0_x_1_1 = compute_lexical_matching_score(
-        embeddings_1[0], embeddings_1[1]
-    )
-    assert lexical_scores_1_0_x_1_1 == pytest.approx(
-        lexical_score_reference[1], rel=0.01
-    )
+    lexical_scores_1_0_x_1_1 = compute_lexical_matching_score(embeddings_1[0], embeddings_1[1])
+    assert lexical_scores_1_0_x_1_1 == pytest.approx(lexical_score_reference[1], rel=0.01)
 
 
 @pytest.mark.asyncio
@@ -203,10 +190,6 @@ async def test_bge_m3_api_server_multi_vector(server, pooling_task):
     embeddings_2 = [torch.tensor(data["data"]) for data in result_2.json()["data"]]
 
     colbert_score_1_0_x_2_0 = colbert_score(embeddings_1[0], embeddings_2[0])
-    assert colbert_score_1_0_x_2_0 == pytest.approx(
-        colbert_score_reference[0], rel=0.01
-    )
+    assert colbert_score_1_0_x_2_0 == pytest.approx(colbert_score_reference[0], rel=0.01)
     colbert_score_1_0_x_2_1 = colbert_score(embeddings_1[0], embeddings_2[1])
-    assert colbert_score_1_0_x_2_1 == pytest.approx(
-        colbert_score_reference[1], rel=0.01
-    )
+    assert colbert_score_1_0_x_2_1 == pytest.approx(colbert_score_reference[1], rel=0.01)

@@ -76,9 +76,7 @@ def _allocate_and_reshape_kv_caches(
         runner.shared_kv_cache_layers = {}
         runner.model_config = MagicMock()
         runner.model_config.hf_config.model_type = ""
-        runner.compilation_config = MagicMock(
-            static_forward_context=defaultdict(MagicMock)
-        )
+        runner.compilation_config = MagicMock(static_forward_context=defaultdict(MagicMock))
         runner.kv_caches = []
 
         kernel_block_sizes = [BLOCK_SIZE] * len(kv_cache_config.kv_cache_groups)
@@ -227,12 +225,8 @@ def test_register_kv_caches(backend):
     kv_cache_groups = [
         KVCacheGroupSpec(layer_names=attn_layer_names, kv_cache_spec=attn_spec),
         KVCacheGroupSpec(layer_names=mla_layer_names, kv_cache_spec=mla_spec),
-        KVCacheGroupSpec(
-            layer_names=unaligned_mamba_layer_names, kv_cache_spec=unaligned_mamba_spec
-        ),
-        KVCacheGroupSpec(
-            layer_names=aligned_mamba_layer_names, kv_cache_spec=aligned_mamba_spec
-        ),
+        KVCacheGroupSpec(layer_names=unaligned_mamba_layer_names, kv_cache_spec=unaligned_mamba_spec),
+        KVCacheGroupSpec(layer_names=aligned_mamba_layer_names, kv_cache_spec=aligned_mamba_spec),
     ]
 
     attn_groups = [
@@ -324,9 +318,7 @@ def test_register_kv_caches(backend):
 
     # Verify block tensors
     assert len(canonical.tensors) == len(expected_tensors)
-    for block_tensor, (exp_num_blocks, exp_page_size) in zip(
-        canonical.tensors, expected_tensors
-    ):
+    for block_tensor, (exp_num_blocks, exp_page_size) in zip(canonical.tensors, expected_tensors):
         tensor = block_tensor.tensor
         assert tensor.dtype == torch.int8
         assert tensor.shape == (exp_num_blocks, exp_page_size)
@@ -439,9 +431,5 @@ def test_register_kv_caches_uniform_type(backend):
     assert canonical.tensors[0].tensor.shape == (NUM_BLOCKS, spec_a.page_size_bytes)
     assert canonical.tensors[1].tensor.shape == (NUM_BLOCKS, spec_b.page_size_bytes)
 
-    assert group_refs[0] == CanonicalKVCacheRef(
-        tensor_idx=0, page_size_bytes=spec_a.page_size_bytes
-    )
-    assert group_refs[1] == CanonicalKVCacheRef(
-        tensor_idx=1, page_size_bytes=spec_b.page_size_bytes
-    )
+    assert group_refs[0] == CanonicalKVCacheRef(tensor_idx=0, page_size_bytes=spec_a.page_size_bytes)
+    assert group_refs[1] == CanonicalKVCacheRef(tensor_idx=1, page_size_bytes=spec_b.page_size_bytes)

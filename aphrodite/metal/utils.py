@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Metal utility functions for Aphrodite Metal plugin."""
 
 import logging
@@ -38,16 +39,14 @@ def get_model_download_path(model_repo_name: str) -> str:
 
             model_cache_dir = envs.APHRODITE_METAL_MODELSCOPE_CACHE
 
-            logger.info(f"Downloading model {model_repo_name} from ModelScope...")
+            logger.info("Downloading model %s from ModelScope...", model_repo_name)
             model_path = snapshot_download(model_repo_name, cache_dir=model_cache_dir)
-            logger.info(f"Model downloaded to {model_path}")
+            logger.info("Model downloaded to %s", model_path)
             return str(model_path)
         except ImportError:
-            logger.warning(
-                "modelscope not installed, falling back to default loader (HuggingFace)"
-            )
+            logger.warning("modelscope not installed, falling back to default loader (HuggingFace)")
         except Exception as e:
-            logger.warning(f"Failed to download from ModelScope: {e}")
+            logger.warning("Failed to download from ModelScope: %s", e)
 
     # Fallback: Let mlx_lm or mlx_vlm handle the download natively from HuggingFace
     return model_repo_name
@@ -70,11 +69,11 @@ def set_wired_limit() -> None:
         if max_wired > 0:
             if hasattr(mx, "set_wired_limit"):
                 mx.set_wired_limit(max_wired)
-                logger.info(f"Set Metal wired_limit to {max_wired / (1024**3):.1f} GB")
+                logger.info("Set Metal wired_limit to %.1f GB", max_wired / (1024**3))
             elif hasattr(mx.metal, "set_wired_limit"):
                 mx.metal.set_wired_limit(max_wired)
-                logger.info(f"Set Metal wired_limit to {max_wired / (1024**3):.1f} GB")
+                logger.info("Set Metal wired_limit to %.1f GB", max_wired / (1024**3))
             else:
                 logger.debug("No set_wired_limit API available, skipping")
     except Exception as e:
-        logger.warning(f"Failed to set wired_limit: {e}")
+        logger.warning("Failed to set wired_limit: %s", e)

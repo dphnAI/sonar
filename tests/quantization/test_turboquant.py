@@ -141,9 +141,7 @@ class TestTurboQuantConfig:
     def test_padded_slot_is_even(self, preset):
         cfg = TurboQuantConfig.from_cache_dtype(preset, head_dim=128)
         assert cfg.slot_size_aligned >= cfg.slot_size
-        assert cfg.slot_size_aligned % 2 == 0, (
-            f"slot_size_aligned={cfg.slot_size_aligned} is not even"
-        )
+        assert cfg.slot_size_aligned % 2 == 0, f"slot_size_aligned={cfg.slot_size_aligned} is not even"
 
     @pytest.mark.parametrize("preset", ALL_PRESETS)
     def test_key_value_packed_sizes_positive(self, preset):
@@ -303,9 +301,7 @@ class TestTurboQuantWorkspaceReservation:
                 tensor_parallel_size=2,
                 decode_context_parallel_size=1,
             ),
-            attention_config=SimpleNamespace(
-                tq_max_kv_splits_for_cuda_graph=max_num_kv_splits
-            ),
+            attention_config=SimpleNamespace(tq_max_kv_splits_for_cuda_graph=max_num_kv_splits),
         )
 
     @staticmethod
@@ -321,9 +317,7 @@ class TestTurboQuantWorkspaceReservation:
             tq_slot_size=102,
         )
 
-    def test_metadata_builder_reserves_decode_and_continuation_prefill_workspace(
-        self, monkeypatch
-    ):
+    def test_metadata_builder_reserves_decode_and_continuation_prefill_workspace(self, monkeypatch):
         from aphrodite.v1.attention.backends import turboquant_attn
 
         calls = []
@@ -362,9 +356,7 @@ class TestTurboQuantWorkspaceReservation:
             ),
         ]
 
-    def test_metadata_builder_skips_continuation_prefill_when_disabled(
-        self, monkeypatch
-    ):
+    def test_metadata_builder_skips_continuation_prefill_when_disabled(self, monkeypatch):
         from aphrodite.v1.attention.backends import turboquant_attn
 
         calls = []
@@ -438,9 +430,7 @@ class TestCentroids:
         sigma = math.sqrt(1.0 / 128)
         c = get_centroids(128, bits)
         for i, val in enumerate(c):
-            assert abs(val.item()) < 4 * sigma, (
-                f"Centroid {i}={val:.6f} outside 4*sigma={4 * sigma:.6f}"
-            )
+            assert abs(val.item()) < 4 * sigma, f"Centroid {i}={val:.6f} outside 4*sigma={4 * sigma:.6f}"
 
 
 class TestLloydMax:
@@ -504,18 +494,13 @@ class TestLloydMax:
         sigma = math.sqrt(sigma2)
 
         def pdf(x):
-            return (1.0 / math.sqrt(2 * math.pi * sigma2)) * math.exp(
-                -x * x / (2 * sigma2)
-            )
+            return (1.0 / math.sqrt(2 * math.pi * sigma2)) * math.exp(-x * x / (2 * sigma2))
 
         n_levels = 2**bits
         lo, hi = -3.5 * sigma, 3.5 * sigma
         ref_centroids = [lo + (hi - lo) * (i + 0.5) / n_levels for i in range(n_levels)]
         for _ in range(200):
-            boundaries = [
-                (ref_centroids[i] + ref_centroids[i + 1]) / 2.0
-                for i in range(n_levels - 1)
-            ]
+            boundaries = [(ref_centroids[i] + ref_centroids[i + 1]) / 2.0 for i in range(n_levels - 1)]
             edges = [lo * 3] + boundaries + [hi * 3]
             new_centroids = []
             for i in range(n_levels):
@@ -523,10 +508,7 @@ class TestLloydMax:
                 num, _ = quad(lambda x: x * pdf(x), a, b)
                 den, _ = quad(pdf, a, b)
                 new_centroids.append(num / den if den > 1e-15 else ref_centroids[i])
-            if (
-                max(abs(new_centroids[i] - ref_centroids[i]) for i in range(n_levels))
-                < 1e-10
-            ):
+            if max(abs(new_centroids[i] - ref_centroids[i]) for i in range(n_levels)) < 1e-10:
                 break
             ref_centroids = new_centroids
 
@@ -536,9 +518,7 @@ class TestLloydMax:
         max_err = (our_centroids - ref_t).abs().max().item()
         # _trapz(n=200) has ~O(h^2) error vs adaptive quad; 1e-3 is tight
         # enough to catch regression while allowing trapezoid approximation.
-        assert max_err < 1e-3, (
-            f"d={d}, bits={bits}: max centroid error vs scipy = {max_err:.2e}"
-        )
+        assert max_err < 1e-3, f"d={d}, bits={bits}: max centroid error vs scipy = {max_err:.2e}"
 
 
 # ============================================================================
@@ -573,9 +553,7 @@ class TestRotationMatrix:
         Pi = generate_rotation_matrix(dim, seed=42, device=DEVICE_TYPE)
         assert Pi.shape == (dim, dim)
         eye = Pi @ Pi.T
-        assert torch.allclose(eye, torch.eye(dim, device=DEVICE_TYPE), atol=1e-5), (
-            f"Pi not orthogonal for dim={dim}"
-        )
+        assert torch.allclose(eye, torch.eye(dim, device=DEVICE_TYPE), atol=1e-5), f"Pi not orthogonal for dim={dim}"
 
     def test_rotation_matrix_deterministic(self):
         Pi1 = generate_rotation_matrix(128, seed=42)
@@ -624,9 +602,7 @@ class TestHadamardRotation:
     def test_hadamard_symmetric(self, dim):
         """Sylvester Hadamard must be symmetric: H = H^T."""
         H = _build_hadamard(dim, DEVICE_TYPE)
-        assert torch.allclose(H, H.T, atol=1e-6), (
-            f"Hadamard not symmetric for dim={dim}"
-        )
+        assert torch.allclose(H, H.T, atol=1e-6), f"Hadamard not symmetric for dim={dim}"
 
 
 # ============================================================================
@@ -744,6 +720,4 @@ class TestStoreDecodeRoundTrip:
             ).item()
             # FP8 keys should be very accurate; MSE keys have more error
             threshold = 0.95 if cfg.key_fp8 else 0.85
-            assert cos_sim > threshold, (
-                f"Preset {preset} head {h}: cosine_sim={cos_sim:.4f} < {threshold}"
-            )
+            assert cos_sim > threshold, f"Preset {preset} head {h}: cosine_sim={cos_sim:.4f} < {threshold}"

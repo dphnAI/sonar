@@ -47,9 +47,7 @@ class HadamardTransform(torch.nn.Module):
         self.scales = {}
 
         if get_tensor_model_parallel_world_size() > 1:
-            raise NotImplementedError(
-                "Online transforms with tensor parallelism is not supported"
-            )
+            raise NotImplementedError("Online transforms with tensor parallelism is not supported")
 
         # Similar to row/col parallel params, but tensors are separate
         # to allow for loading with shared memory
@@ -59,9 +57,7 @@ class HadamardTransform(torch.nn.Module):
         input_size = input_size_per_partition
         for part_index, (_scheme_name, scheme, args) in self.transforms.items():
             output_size = output_partition_sizes[part_index]
-            weight_size = self._get_weight_size(
-                layer, scheme, args, input_size, output_size
-            )
+            weight_size = self._get_weight_size(layer, scheme, args, input_size, output_size)
 
             data_key = self._get_data_key(scheme, weight_size)
             self.weight.add_partition(
@@ -108,29 +104,17 @@ class HadamardTransform(torch.nn.Module):
         # fall back to dense
         else:
             weight = self.weight.partitions[part_id]
-            weight = (
-                weight if self.transforms[part_id].args.inverse else weight.T
-            )  # linear := x(W.T)
+            weight = weight if self.transforms[part_id].args.inverse else weight.T  # linear := x(W.T)
             scale = self.scales[part_id]
 
             if self.transforms[part_id].scheme.head_dim is not None:
                 value = value.unflatten(-1, (-1, weight.size(0)))
-                value = (
-                    dispatch_unquantized_gemm()(
-                        self, value.to(weight.dtype), weight, None
-                    ).to(value.dtype)
-                    * scale
-                )
+                value = dispatch_unquantized_gemm()(self, value.to(weight.dtype), weight, None).to(value.dtype) * scale
                 value = value.flatten(-2, -1)
 
                 return value
 
-            return (
-                dispatch_unquantized_gemm()(
-                    self, value.to(weight.dtype), weight, None
-                ).to(value.dtype)
-                * scale
-            )
+            return dispatch_unquantized_gemm()(self, value.to(weight.dtype), weight, None).to(value.dtype) * scale
 
     def _get_data_key(self, scheme: TransformScheme, weight_size: int) -> Hashable:
         return (id(scheme), weight_size)

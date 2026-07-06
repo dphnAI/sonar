@@ -11,9 +11,9 @@ import os
 
 import pytest
 
-from tests.quantization.utils import is_quant_method_supported
 from aphrodite.model_executor.layers.rotary_embedding import _ROPE_DICT
 from aphrodite.platforms import current_platform
+from tests.quantization.utils import is_quant_method_supported
 
 from ..utils import check_logprobs_close
 
@@ -33,9 +33,7 @@ MODELS = [
 
 @pytest.mark.flaky(reruns=3)
 @pytest.mark.skipif(
-    not is_quant_method_supported("auto_gptq")
-    or current_platform.is_rocm()
-    or not current_platform.is_cuda(),
+    not is_quant_method_supported("auto_gptq") or current_platform.is_rocm() or not current_platform.is_cuda(),
     reason="auto_gptq is not supported on this GPU type.",
 )
 @pytest.mark.parametrize("model", MODELS)
@@ -61,9 +59,7 @@ def test_models(
         max_model_len=MAX_MODEL_LEN,
         tensor_parallel_size=1,
     ) as gptq_marlin_model:
-        gptq_marlin_outputs = gptq_marlin_model.generate_greedy_logprobs(
-            example_prompts[:-1], max_tokens, num_logprobs
-        )
+        gptq_marlin_outputs = gptq_marlin_model.generate_greedy_logprobs(example_prompts[:-1], max_tokens, num_logprobs)
     _ROPE_DICT.clear()  # clear rope cache to avoid rope dtype error
 
     # Run gptq.
@@ -78,9 +74,7 @@ def test_models(
         max_model_len=MAX_MODEL_LEN,
         tensor_parallel_size=1,
     ) as gptq_model:
-        gptq_outputs = gptq_model.generate_greedy_logprobs(
-            example_prompts[:-1], max_tokens, num_logprobs
-        )
+        gptq_outputs = gptq_model.generate_greedy_logprobs(example_prompts[:-1], max_tokens, num_logprobs)
 
     check_logprobs_close(
         outputs_0_lst=gptq_outputs,

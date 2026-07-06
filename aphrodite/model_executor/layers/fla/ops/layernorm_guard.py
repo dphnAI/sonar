@@ -207,11 +207,7 @@ def layer_norm_fwd(
     else:
         out = torch.empty_like(x)
     assert out.stride(-1) == 1
-    mean = (
-        torch.empty((ngroups * M,), dtype=torch.float32, device=x.device)
-        if not is_rms_norm
-        else None
-    )
+    mean = torch.empty((ngroups * M,), dtype=torch.float32, device=x.device) if not is_rms_norm else None
     rstd = torch.empty((ngroups * M,), dtype=torch.float32, device=x.device)
     # Less than 64KB per feature: enqueue fused kernel
     MAX_FUSED_SIZE = 65536 // x.element_size()
@@ -310,9 +306,7 @@ def layernorm_fn(
     is_rms_norm=False,
     activation: str = "swish",
 ):
-    return _layer_norm_fn_impl(
-        x, weight, bias, z, eps, group_size, norm_before_gate, is_rms_norm, activation
-    )
+    return _layer_norm_fn_impl(x, weight, bias, z, eps, group_size, norm_before_gate, is_rms_norm, activation)
 
 
 @input_guard
@@ -326,9 +320,7 @@ def rmsnorm_fn(
     norm_before_gate=True,
     activation: str = "swish",
 ):
-    return _layer_norm_fn_impl(
-        x, weight, bias, z, eps, group_size, norm_before_gate, True, activation
-    )
+    return _layer_norm_fn_impl(x, weight, bias, z, eps, group_size, norm_before_gate, True, activation)
 
 
 class LayerNormGated(nn.Module):

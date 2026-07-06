@@ -150,9 +150,7 @@ class NemotronConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         head_dim = head_dim or kwargs.get("kv_channels")
-        self.head_dim = (
-            head_dim if head_dim is not None else (hidden_size // num_attention_heads)
-        )
+        self.head_dim = head_dim if head_dim is not None else (hidden_size // num_attention_heads)
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -171,10 +169,7 @@ class NemotronConfig(PretrainedConfig):
             rope_parameters["rope_theta"] = rope_theta
         # for backward compatibility
         partial_rotary_factor = (
-            kwargs.get("rope_percent")
-            or kwargs.get("rope_percentage")
-            or kwargs.get("partial_rotary_factor")
-            or 0.5
+            kwargs.get("rope_percent") or kwargs.get("rope_percentage") or kwargs.get("partial_rotary_factor") or 0.5
         )
         if "partial_rotary_factor" not in rope_parameters:
             rope_parameters["partial_rotary_factor"] = partial_rotary_factor
@@ -203,18 +198,11 @@ class NemotronConfig(PretrainedConfig):
         factor: float | None = self.rope_parameters.get("factor", None)
 
         if rope_type not in {"default", "linear", "dynamic"}:
-            raise ValueError(
-                "`rope_type` must be one of ['default', 'linear', 'dynamic'], "
-                f"got {rope_type}"
-            )
+            raise ValueError(f"`rope_type` must be one of ['default', 'linear', 'dynamic'], got {rope_type}")
         if rope_type != "default":
             if factor is None:
                 raise ValueError(
-                    "If `rope_type` is not 'default', `rope_parameters` "
-                    "must include a `factor` field. Got `None`."
+                    "If `rope_type` is not 'default', `rope_parameters` must include a `factor` field. Got `None`."
                 )
             if not isinstance(factor, float) or factor <= 1.0:
-                raise ValueError(
-                    "`rope_parameters`'s factor field must be a float > 1, got "
-                    f"{factor}"
-                )
+                raise ValueError(f"`rope_parameters`'s factor field must be a float > 1, got {factor}")

@@ -21,11 +21,7 @@ def is_supported(weight_quant) -> bool:
     from aphrodite.platforms.rocm import on_gfx1100
 
     # RDNA3 (gfx1100). Future: add RDNA4 (gfx12x), CDNA (gfx94x), etc.
-    return (
-        on_gfx1100()
-        and hasattr(torch.ops, "_rocm_C")
-        and hasattr(torch.ops._rocm_C, "moe_gptq_gemm_rdna3")
-    )
+    return on_gfx1100() and hasattr(torch.ops, "_rocm_C") and hasattr(torch.ops._rocm_C, "moe_gptq_gemm_rdna3")
 
 
 def make_method(weight_quant, input_quant, moe_config):
@@ -37,12 +33,8 @@ def make_method(weight_quant, input_quant, moe_config):
             CompressedTensorsWNA16RDNA3MoEMethod,
         )
 
-        logger.info_once(
-            "Using CompressedTensorsWNA16RDNA3MoEMethod (native RDNA3 HIP kernel)"
-        )
-        return CompressedTensorsWNA16RDNA3MoEMethod(
-            weight_quant, input_quant, moe_config
-        )
+        logger.info_once("Using CompressedTensorsWNA16RDNA3MoEMethod (native RDNA3 HIP kernel)")
+        return CompressedTensorsWNA16RDNA3MoEMethod(weight_quant, input_quant, moe_config)
 
     # Future: RDNA4, CDNA, etc.
     raise RuntimeError("is_supported() returned True but no kernel matched")

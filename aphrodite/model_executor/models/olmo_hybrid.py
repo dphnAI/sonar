@@ -94,9 +94,7 @@ class OlmoHybridAttention(nn.Module):
         assert self.total_num_heads % self.tp_size == 0
 
         self.num_heads = self.total_num_heads // self.tp_size
-        self.total_num_kv_heads = (
-            self.config.num_key_value_heads or self.total_num_heads
-        )
+        self.total_num_kv_heads = self.config.num_key_value_heads or self.total_num_heads
         if self.total_num_kv_heads >= self.tp_size:
             assert self.total_num_kv_heads % self.tp_size == 0
         else:
@@ -142,9 +140,7 @@ class OlmoHybridAttention(nn.Module):
         )
 
         rope_parameters = getattr(self.config, "rope_parameters", None)
-        self._use_rope = (rope_parameters is not None) and (
-            rope_parameters["rope_theta"] is not None
-        )
+        self._use_rope = (rope_parameters is not None) and (rope_parameters["rope_theta"] is not None)
 
         if self._use_rope:
             self.rotary_emb = get_rope(
@@ -163,9 +159,7 @@ class OlmoHybridAttention(nn.Module):
             prefix=f"{prefix}.o_proj",
         )
 
-    def _apply_qk_norm(
-        self, q: torch.Tensor, k: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def _apply_qk_norm(self, q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         if self.tp_size > 1:
             q = tensor_model_parallel_all_gather(q.contiguous())
             k = tensor_model_parallel_all_gather(k.contiguous())
@@ -314,9 +308,7 @@ class OlmoHybridModel(nn.Module):
 
         self.start_layer, self.end_layer, self.layers = make_layers(
             self.config.num_hidden_layers,
-            lambda prefix: OlmoHybridDecoderLayer(
-                aphrodite_config=aphrodite_config, prefix=prefix
-            ),
+            lambda prefix: OlmoHybridDecoderLayer(aphrodite_config=aphrodite_config, prefix=prefix),
             prefix=f"{prefix}.layers",
         )
 
@@ -395,9 +387,7 @@ class OlmoHybridModel(nn.Module):
                     if weight_name not in name:
                         continue
                     mapped_name = name.replace(weight_name, param_name)
-                    if mapped_name.endswith(".bias") and (
-                        mapped_name not in params_dict
-                    ):
+                    if mapped_name.endswith(".bias") and (mapped_name not in params_dict):
                         continue
                     if mapped_name not in params_dict:
                         continue
@@ -434,9 +424,7 @@ class OlmoHybridModel(nn.Module):
         return loaded_params
 
 
-class OlmoHybridForCausalLM(
-    nn.Module, HasInnerState, SupportsPP, SupportsLoRA, IsHybrid
-):
+class OlmoHybridForCausalLM(nn.Module, HasInnerState, SupportsPP, SupportsLoRA, IsHybrid):
     packed_modules_mapping = {
         "qkv_proj": ["q_proj", "k_proj", "v_proj"],
         "gate_up_proj": ["gate_proj", "up_proj"],
@@ -450,9 +438,7 @@ class OlmoHybridForCausalLM(
         self.aphrodite_config = aphrodite_config
         self.model_config = aphrodite_config.model_config
 
-        self.model = OlmoHybridModel(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = OlmoHybridModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
 
         if config.tie_word_embeddings:
             self.lm_head = self.model.embed_tokens
@@ -465,9 +451,7 @@ class OlmoHybridForCausalLM(
             )
 
         self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -513,9 +497,7 @@ class OlmoHybridForCausalLM(
         hf_config = aphrodite_config.model_config.hf_config
         tp_size = parallel_config.tensor_parallel_size
         num_spec = (
-            aphrodite_config.speculative_config.num_speculative_tokens
-            if aphrodite_config.speculative_config
-            else 0
+            aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
         )
         return MambaStateShapeCalculator.gated_delta_net_state_shape(
             tp_size,
@@ -534,8 +516,6 @@ class OlmoHybridForCausalLM(
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
         loader = AutoWeightsLoader(
             self,
-            skip_prefixes=(
-                ["lm_head.weight"] if self.config.tie_word_embeddings else None
-            ),
+            skip_prefixes=(["lm_head.weight"] if self.config.tie_word_embeddings else None),
         )
         return loader.load_weights(weights)

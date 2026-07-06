@@ -133,9 +133,7 @@ class DeepseekV4FlashMLAMetadata(AttentionMetadata):
     c128a_prefill_topk_indices: torch.Tensor | None = None
 
 
-class DeepseekV4FlashMLAMetadataBuilder(
-    AttentionMetadataBuilder[DeepseekV4FlashMLAMetadata]
-):
+class DeepseekV4FlashMLAMetadataBuilder(AttentionMetadataBuilder[DeepseekV4FlashMLAMetadata]):
     _cudagraph_support: ClassVar[AttentionCGSupport] = AttentionCGSupport.UNIFORM_BATCH
 
     def __init__(
@@ -153,9 +151,7 @@ class DeepseekV4FlashMLAMetadataBuilder(
         self.topk_tokens = self.model_config.hf_config.index_topk
 
         max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
-        self.req_id_per_token_buffer = torch.empty(
-            (max_num_batched_tokens,), dtype=torch.int32, device=device
-        )
+        self.req_id_per_token_buffer = torch.empty((max_num_batched_tokens,), dtype=torch.int32, device=device)
 
         assert hasattr(self.kv_cache_spec, "compress_ratio")
         self.compress_ratio = self.kv_cache_spec.compress_ratio
@@ -163,19 +159,12 @@ class DeepseekV4FlashMLAMetadataBuilder(
         # Pre-allocate compressed slot mapping buffer for CUDA graph address
         # stability when compress_ratio > 1.
         if self.compress_ratio > 1:
-            self.compressed_slot_mapping_buffer = torch.empty(
-                max_num_batched_tokens, dtype=torch.int64, device=device
-            )
+            self.compressed_slot_mapping_buffer = torch.empty(max_num_batched_tokens, dtype=torch.int64, device=device)
 
         # Pre-allocate C128A topk buffers for CUDA graph address stability.
         if self.compress_ratio == 128:
-            c128a_max_compressed = cdiv(
-                self.model_config.max_model_len, self.compress_ratio
-            )
-            c128a_max_compressed = (
-                cdiv(c128a_max_compressed, _C128A_TOPK_ALIGNMENT)
-                * _C128A_TOPK_ALIGNMENT
-            )
+            c128a_max_compressed = cdiv(self.model_config.max_model_len, self.compress_ratio)
+            c128a_max_compressed = cdiv(c128a_max_compressed, _C128A_TOPK_ALIGNMENT) * _C128A_TOPK_ALIGNMENT
             # Stored so _build_c128a_metadata passes it as the kernel's
             # max_compressed_tokens, matching the buffer stride. Otherwise the
             # kernel's default 8192 iterates past row width and spills writes
@@ -187,9 +176,7 @@ class DeepseekV4FlashMLAMetadataBuilder(
                 dtype=torch.int32,
                 device=device,
             )
-            self.c128a_decode_lens_buffer = torch.empty(
-                max_num_batched_tokens, dtype=torch.int32, device=device
-            )
+            self.c128a_decode_lens_buffer = torch.empty(max_num_batched_tokens, dtype=torch.int32, device=device)
             self.c128a_prefill_buffer = torch.empty(
                 (max_num_batched_tokens, c128a_max_compressed),
                 dtype=torch.int32,
@@ -206,9 +193,7 @@ class DeepseekV4FlashMLAMetadataBuilder(
         num_tokens = cm.num_actual_tokens
         starts = np.asarray(cm.query_start_loc_cpu, dtype=np.int32)
         seg_lengths = np.diff(starts)
-        req_id_per_token = np.repeat(
-            np.arange(seg_lengths.shape[0], dtype=np.int32), seg_lengths
-        )
+        req_id_per_token = np.repeat(np.arange(seg_lengths.shape[0], dtype=np.int32), seg_lengths)
         # Zero-fill for cudagraphs
         self.req_id_per_token_buffer.fill_(0)
         self.req_id_per_token_buffer[: req_id_per_token.shape[0]].copy_(
@@ -243,9 +228,7 @@ class DeepseekV4FlashMLAMetadataBuilder(
             req_id_per_token=req_id_per_token,
             block_size=self.kv_cache_spec.block_size,
             topk_tokens=self.topk_tokens,
-            c128a_global_decode_topk_indices=c128a_fields.get(
-                "c128a_global_decode_topk_indices"
-            ),
+            c128a_global_decode_topk_indices=c128a_fields.get("c128a_global_decode_topk_indices"),
             c128a_decode_topk_lens=c128a_fields.get("c128a_decode_topk_lens"),
             c128a_prefill_topk_indices=c128a_fields.get("c128a_prefill_topk_indices"),
         )
@@ -260,20 +243,16 @@ class DeepseekV4FlashMLAMetadataBuilder(
         # `c128a_global_decode_topk_indices.shape[0]` lines up with q in
         # `_forward_decode`. The per-token C128A kernel handles non-uniform
         # query lengths.
-        (num_decodes, _, num_decode_tokens, num_prefill_tokens) = (
-            split_decodes_and_prefills(
-                cm,
-                decode_threshold=self.reorder_batch_threshold or 1,
-            )
+        (num_decodes, _, num_decode_tokens, num_prefill_tokens) = split_decodes_and_prefills(
+            cm,
+            decode_threshold=self.reorder_batch_threshold or 1,
         )
 
         num_total = num_decode_tokens + num_prefill_tokens
         if num_total == 0:
             return {}
 
-        assert cm.positions is not None, (
-            "positions is required for C128A metadata build"
-        )
+        assert cm.positions is not None, "positions is required for C128A metadata build"
         block_size = self.kv_cache_spec.block_size // self.compress_ratio
         global_decode, decode_lens, prefill_local = build_c128a_topk_metadata(
             cm.positions[:num_total],
@@ -291,9 +270,7 @@ class DeepseekV4FlashMLAMetadataBuilder(
 
         result: dict[str, torch.Tensor | None] = {}
         if num_decode_tokens > 0:
-            result["c128a_global_decode_topk_indices"] = global_decode.view(
-                num_decode_tokens, 1, -1
-            )
+            result["c128a_global_decode_topk_indices"] = global_decode.view(num_decode_tokens, 1, -1)
             result["c128a_decode_topk_lens"] = decode_lens
         if num_prefill_tokens > 0:
             result["c128a_prefill_topk_indices"] = prefill_local

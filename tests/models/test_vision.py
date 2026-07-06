@@ -6,7 +6,6 @@ import pytest
 import torch
 import torch.multiprocessing as mp
 
-from tests.utils import ensure_current_aphrodite_config, multi_gpu_test
 from aphrodite.distributed import get_tensor_model_parallel_world_size
 from aphrodite.distributed.parallel_state import (
     init_distributed_environment,
@@ -22,6 +21,7 @@ from aphrodite.platforms import current_platform
 from aphrodite.utils.network_utils import get_open_port
 from aphrodite.utils.system_utils import update_environment_variables
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.utils import ensure_current_aphrodite_config, multi_gpu_test
 
 pytestmark = pytest.mark.cpu_test
 
@@ -37,9 +37,7 @@ pytestmark = pytest.mark.cpu_test
         ([-20, -11], 10, 20, [1, 10]),
     ],
 )
-def test_resolve_visual_encoder_outputs(
-    select_layers, num_layers_loaded, max_possible_layers, expected_features
-):
+def test_resolve_visual_encoder_outputs(select_layers, num_layers_loaded, max_possible_layers, expected_features):
     """
     Test that offsets are correctly handled for vision feature layers.
     """
@@ -90,9 +88,7 @@ def test_run_dp_sharded_vision_model(batch_size: int):
     )
 
 
-def run_dp_sharded_vision_model_vs_direct(
-    local_rank: int, world_size: int, batch_size: int, master_port: int
-):
+def run_dp_sharded_vision_model_vs_direct(local_rank: int, world_size: int, batch_size: int, master_port: int):
     """
     Test that run_dp_sharded_vision_model produces the same results as
     calling the model directly.
@@ -237,9 +233,7 @@ class SimpleMRopeVisionModel(torch.nn.Module):
             merged_patches = num_patches // merge_factor
             if merged_patches > 0:
                 # Reshape and average to simulate merging
-                reshaped = image_patches[: merged_patches * merge_factor].view(
-                    merged_patches, merge_factor, -1
-                )
+                reshaped = image_patches[: merged_patches * merge_factor].view(merged_patches, merge_factor, -1)
                 merged = reshaped.mean(dim=1)
                 merged_embeddings.append(merged)
 
@@ -278,9 +272,7 @@ def test_run_dp_sharded_mrope_vision_model(batch_size: int):
     )
 
 
-def run_dp_sharded_mrope_vision_model_vs_direct(
-    local_rank: int, world_size: int, batch_size: int, master_port: int
-):
+def run_dp_sharded_mrope_vision_model_vs_direct(local_rank: int, world_size: int, batch_size: int, master_port: int):
     """
     Test that run_dp_sharded_mrope_vision_model produces the same results as
     calling the model directly.
@@ -359,9 +351,7 @@ def test_run_dp_sharded_mrope_vision_model_empty_input():
     )
 
 
-def run_dp_sharded_mrope_vision_model_empty_input_worker(
-    local_rank: int, world_size: int, master_port: int
-):
+def run_dp_sharded_mrope_vision_model_empty_input_worker(local_rank: int, world_size: int, master_port: int):
     """Test run_dp_sharded_mrope_vision_model with empty input."""
     # Set up distributed environment
     device = f"{current_platform.device_name}:{local_rank}"
@@ -390,9 +380,7 @@ def run_dp_sharded_mrope_vision_model_empty_input_worker(
 
     # Should handle empty input gracefully
     with torch.inference_mode():
-        output = run_dp_sharded_mrope_vision_model(
-            vision_model, pixel_values, grid_thw_list, rope_type="rope_3d"
-        )
+        output = run_dp_sharded_mrope_vision_model(vision_model, pixel_values, grid_thw_list, rope_type="rope_3d")
 
     assert len(output) == 0
 
@@ -407,9 +395,7 @@ def test_run_dp_sharded_mrope_vision_model_uneven_load():
     )
 
 
-def run_dp_sharded_mrope_vision_model_uneven_load_worker(
-    local_rank: int, world_size: int, master_port: int
-):
+def run_dp_sharded_mrope_vision_model_uneven_load_worker(local_rank: int, world_size: int, master_port: int):
     """Test run_dp_sharded_mrope_vision_model with uneven load distribution."""
     # Set up distributed environment
     set_random_seed(123)
@@ -449,15 +435,11 @@ def run_dp_sharded_mrope_vision_model_uneven_load_worker(
 
     # Should handle uneven distribution without errors
     with torch.inference_mode():
-        output_tuple = run_dp_sharded_mrope_vision_model(
-            vision_model, pixel_values, grid_thw_list, rope_type="rope_3d"
-        )
+        output_tuple = run_dp_sharded_mrope_vision_model(vision_model, pixel_values, grid_thw_list, rope_type="rope_3d")
 
     # Verify output shape is reasonable
     merge_factor = vision_model.spatial_merge_size**2
-    expected_output_patches = list(
-        math.prod(grid_thw) // merge_factor for grid_thw in grid_thw_list
-    )
+    expected_output_patches = list(math.prod(grid_thw) // merge_factor for grid_thw in grid_thw_list)
 
     for i, output in enumerate(output_tuple):
         assert output.shape[0] == expected_output_patches[i]
@@ -478,9 +460,7 @@ def test_simple_mrope_vision_model_spatial_merge(spatial_merge_size: int):
         pixel_values_list.append(image_pixels)
 
     pixel_values = torch.cat(pixel_values_list, dim=0)
-    vision_model = SimpleMRopeVisionModel(spatial_merge_size=spatial_merge_size).to(
-        device
-    )
+    vision_model = SimpleMRopeVisionModel(spatial_merge_size=spatial_merge_size).to(device)
 
     with torch.inference_mode():
         output = vision_model(pixel_values, grid_thw_list)

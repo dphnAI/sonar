@@ -66,12 +66,8 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
 
         self.gemm1_clamp_limit = quant_config.gemm1_clamp_limit
         # Gated-activation params: silu == swigluoai with alpha=1, beta=0.
-        self.gemm1_alpha = (
-            quant_config.gemm1_alpha if quant_config.gemm1_alpha is not None else 1.0
-        )
-        self.gemm1_beta = (
-            quant_config.gemm1_beta if quant_config.gemm1_beta is not None else 0.0
-        )
+        self.gemm1_alpha = quant_config.gemm1_alpha if quant_config.gemm1_alpha is not None else 1.0
+        self.gemm1_beta = quant_config.gemm1_beta if quant_config.gemm1_beta is not None else 0.0
 
     @staticmethod
     def activation_format() -> mk.FusedMoEActivationFormat:
@@ -101,10 +97,7 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
         activation_key: QuantKey | None,
     ) -> bool:
         # INT8 requires at least 7.5 (Turing).
-        device_supports_int8 = (
-            current_platform.is_cuda()
-            and current_platform.has_device_capability((7, 5))
-        )
+        device_supports_int8 = current_platform.is_cuda() and current_platform.has_device_capability((7, 5))
 
         supported: list[tuple[QuantKey | None, QuantKey | None]] = [(None, None)]
         if device_supports_int8:
@@ -137,8 +130,7 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
     @staticmethod
     def _supports_parallel_config(moe_parallel_config: FusedMoEParallelConfig) -> bool:
         return not (
-            moe_parallel_config.use_fi_nvl_two_sided_kernels
-            or moe_parallel_config.use_fi_nvl_one_sided_kernels
+            moe_parallel_config.use_fi_nvl_two_sided_kernels or moe_parallel_config.use_fi_nvl_one_sided_kernels
         )
 
     @staticmethod
@@ -165,9 +157,7 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
         # the quant config in __init__) forwarded; without a clamp_limit it
         # asserts. Other activations ignore alpha/beta/clamp_limit.
         if activation == MoEActivation.SWIGLUOAI_UNINTERLEAVE:
-            assert gemm1_clamp_limit is not None, (
-                "SWIGLUOAI_UNINTERLEAVE requires gemm1_clamp_limit"
-            )
+            assert gemm1_clamp_limit is not None, "SWIGLUOAI_UNINTERLEAVE requires gemm1_clamp_limit"
 
         super().activation(
             activation,
@@ -252,9 +242,7 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
                 quantization_emulation=self.quantization_emulation,
             )
 
-        E, num_tokens, N, K, top_k_num = self.moe_problem_size(
-            hidden_states, w1, w2, topk_ids
-        )
+        E, num_tokens, N, K, top_k_num = self.moe_problem_size(hidden_states, w1, w2, topk_ids)
 
         if global_num_experts == -1:
             global_num_experts = E
@@ -274,10 +262,7 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
             compute_type = tl.float16
         elif hidden_states.dtype == torch.float32:
             compute_type = tl.float32
-        elif (
-            hidden_states.dtype == torch.float8_e4m3fn
-            or hidden_states.dtype == torch.float8_e4m3fnuz
-        ):
+        elif hidden_states.dtype == torch.float8_e4m3fn or hidden_states.dtype == torch.float8_e4m3fnuz:
             compute_type = tl.bfloat16
         else:
             raise ValueError(f"Unsupported compute_type: {hidden_states.dtype}")
@@ -285,23 +270,19 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
         # Note that the output tensor might be in workspace1
         intermediate_cache1 = _resize_cache(workspace2, (num_tokens, top_k_num, N))
         cache2_dim = self.adjust_N_for_activation(N, activation)
-        intermediate_cache2 = _resize_cache(
-            workspace13, (num_tokens * top_k_num, cache2_dim)
-        )
+        intermediate_cache2 = _resize_cache(workspace13, (num_tokens * top_k_num, cache2_dim))
         intermediate_cache3 = _resize_cache(workspace2, (num_tokens, top_k_num, K))
 
-        sorted_token_ids, expert_ids, num_tokens_post_padded = (
-            _prepare_expert_assignment(
-                topk_ids,
-                config,
-                num_tokens,
-                top_k_num,
-                global_num_experts,
-                expert_map,
-                use_int8_w8a16=self.quant_config.use_int8_w8a16,
-                use_int4_w4a16=self.quant_config.use_int4_w4a16,
-                block_shape=self.block_shape,
-            )
+        sorted_token_ids, expert_ids, num_tokens_post_padded = _prepare_expert_assignment(
+            topk_ids,
+            config,
+            num_tokens,
+            top_k_num,
+            global_num_experts,
+            expert_map,
+            use_int8_w8a16=self.quant_config.use_int8_w8a16,
+            use_int4_w4a16=self.quant_config.use_int4_w4a16,
+            block_shape=self.block_shape,
         )
 
         # LoRA w13: applied to intermediate_cache1 before activation. When
@@ -338,9 +319,7 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
         # `moe_kernel_quantize_input` - this should be adapted to
         # always solely rely on `a1q_scale`.
         input_scale = (
-            a1q_scale
-            if self.quantization_emulation
-            else (a1q_scale if a1q_scale is not None else self.a1_scale)
+            a1q_scale if self.quantization_emulation else (a1q_scale if a1q_scale is not None else self.a1_scale)
         )
 
         def _base_w13_fn():
@@ -443,9 +422,7 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
                 quant_dtype=current_platform.fp8_dtype(),
             )
         else:
-            self.activation(
-                activation, intermediate_cache2, intermediate_cache1.view(-1, N)
-            )
+            self.activation(activation, intermediate_cache2, intermediate_cache1.view(-1, N))
 
             qintermediate_cache2, a2q_scale = moe_kernel_quantize_input(
                 intermediate_cache2,
@@ -542,41 +519,26 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
 class TritonWNA16Experts(TritonExperts):
     @staticmethod
     def _supports_current_device() -> bool:
-        raise NotImplementedError(
-            "TritonWNA16Experts is not yet used by an Oracle. "
-            "This method should not be called."
-        )
+        raise NotImplementedError("TritonWNA16Experts is not yet used by an Oracle. This method should not be called.")
 
     @staticmethod
     def _supports_no_act_and_mul() -> bool:
-        raise NotImplementedError(
-            "TritonWNA16Experts is not yet used by an Oracle. "
-            "This method should not be called."
-        )
+        raise NotImplementedError("TritonWNA16Experts is not yet used by an Oracle. This method should not be called.")
 
     @staticmethod
     def _supports_quant_scheme(
         weight_key: QuantKey | None,
         activation_key: QuantKey | None,
     ) -> bool:
-        raise NotImplementedError(
-            "TritonWNA16Experts is not yet used by an Oracle. "
-            "This method should not be called."
-        )
+        raise NotImplementedError("TritonWNA16Experts is not yet used by an Oracle. This method should not be called.")
 
     @staticmethod
     def _supports_activation(activation: MoEActivation) -> bool:
-        raise NotImplementedError(
-            "TritonWNA16Experts is not yet used by an Oracle. "
-            "This method should not be called."
-        )
+        raise NotImplementedError("TritonWNA16Experts is not yet used by an Oracle. This method should not be called.")
 
     @staticmethod
     def _supports_parallel_config(moe_parallel_config: FusedMoEParallelConfig) -> bool:
-        raise NotImplementedError(
-            "TritonWNA16Experts is not yet used by an Oracle. "
-            "This method should not be called."
-        )
+        raise NotImplementedError("TritonWNA16Experts is not yet used by an Oracle. This method should not be called.")
 
     def apply(
         self,
@@ -616,9 +578,7 @@ class TritonWNA16Experts(TritonExperts):
             torch.float8_e4m3fnuz,
         ]
 
-        E, num_tokens, N, K, top_k_num = self.moe_problem_size(
-            hidden_states, w1, w2, topk_ids
-        )
+        E, num_tokens, N, K, top_k_num = self.moe_problem_size(hidden_states, w1, w2, topk_ids)
 
         if global_num_experts == -1:
             global_num_experts = E
@@ -638,10 +598,7 @@ class TritonWNA16Experts(TritonExperts):
             compute_type = tl.float16
         elif hidden_states.dtype == torch.float32:
             compute_type = tl.float32
-        elif (
-            hidden_states.dtype == torch.float8_e4m3fn
-            or hidden_states.dtype == torch.float8_e4m3fnuz
-        ):
+        elif hidden_states.dtype == torch.float8_e4m3fn or hidden_states.dtype == torch.float8_e4m3fnuz:
             compute_type = tl.bfloat16
         else:
             raise ValueError(f"Unsupported compute_type: {hidden_states.dtype}")
@@ -649,9 +606,7 @@ class TritonWNA16Experts(TritonExperts):
         # Note that the output tensor might be in workspace1
         intermediate_cache1 = _resize_cache(workspace2, (num_tokens, top_k_num, N))
         activation_out_dim = self.adjust_N_for_activation(N, activation)
-        intermediate_cache2 = _resize_cache(
-            workspace13, (num_tokens * top_k_num, activation_out_dim)
-        )
+        intermediate_cache2 = _resize_cache(workspace13, (num_tokens * top_k_num, activation_out_dim))
         intermediate_cache3 = _resize_cache(workspace2, (num_tokens, top_k_num, K))
 
         sorted_token_ids, expert_ids, num_tokens_post_padded = moe_align_block_size(
@@ -677,9 +632,7 @@ class TritonWNA16Experts(TritonExperts):
             block_shape=self.block_shape,
         )
 
-        self.activation(
-            activation, intermediate_cache2, intermediate_cache1.view(-1, N)
-        )
+        self.activation(activation, intermediate_cache2, intermediate_cache1.view(-1, N))
 
         a2q_scale: torch.Tensor | None = None
 

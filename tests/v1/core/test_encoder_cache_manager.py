@@ -227,9 +227,7 @@ def test_encoder_cache_mask_based_retrieval():
         def get_num_encoder_embeds(self, input_id: int) -> int:
             return self.mm_features[input_id].mm_position.get_num_embeds()
 
-    is_embed = torch.tensor(
-        [False, False, True, True, False, True, True, True, False, False]
-    )
+    is_embed = torch.tensor([False, False, True, True, False, True, True, True, False, False])
 
     request = MockRequestWithMask("r1", ["img1"], [10])
     request.mm_features[0] = MultiModalFeatureSpec(

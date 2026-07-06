@@ -26,8 +26,8 @@ from torch._higher_order_ops.auto_functionalize import auto_functionalized
 
 from aphrodite.logger import init_logger
 
-from ..fx_utils import is_func
 from ..aphrodite_inductor_pass import AphroditeInductorPass
+from ..fx_utils import is_func
 
 logger = init_logger(__name__)
 
@@ -97,16 +97,12 @@ class ScatterSplitReplacementPass(AphroditeInductorPass):
                     # the slice_scatter+split nodes with the original results.
                     for user in getitem_nodes[1].users:
                         slice_scatter_1_node = user
-                    if not is_func(
-                        slice_scatter_1_node, torch.ops.aten.slice_scatter.default
-                    ):
+                    if not is_func(slice_scatter_1_node, torch.ops.aten.slice_scatter.default):
                         continue
 
                     for user in getitem_nodes[2].users:
                         slice_scatter_2_node = user
-                    if not is_func(
-                        slice_scatter_2_node, torch.ops.aten.slice_scatter.default
-                    ):
+                    if not is_func(slice_scatter_2_node, torch.ops.aten.slice_scatter.default):
                         continue
 
                     for user in slice_scatter_2_node.users:

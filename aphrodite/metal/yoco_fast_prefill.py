@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Gemma4 YOCO fast-prefill helpers.
 
 This module owns the reduced-query metadata contract and the default-on
@@ -85,10 +86,7 @@ def _yoco_fast_prefill_skip_reason(
     if num_shared <= 0:
         return "num_kv_shared_layers must be positive"
     if num_shared >= num_layers:
-        return (
-            "num_kv_shared_layers must be smaller than num_hidden_layers "
-            f"({num_shared} >= {num_layers})"
-        )
+        return f"num_kv_shared_layers must be smaller than num_hidden_layers ({num_shared} >= {num_layers})"
     if num_paged_layers is not None and num_paged_layers < num_layers:
         return f"only {num_paged_layers}/{num_layers} layers use paged attention"
     return None
@@ -97,8 +95,7 @@ def _yoco_fast_prefill_skip_reason(
 def _log_fast_prefill_skip(reason: str, *, warn_on_skip: bool) -> None:
     if warn_on_skip:
         logger.warning(
-            "Gemma4 YOCO fast prefill is enabled, but %s; "
-            "continuing without fast prefill",
+            "Gemma4 YOCO fast prefill is enabled, but %s; continuing without fast prefill",
             reason,
         )
     else:
@@ -144,14 +141,8 @@ def build_yoco_reduced_context_from_full_metadata(
         raise ValueError("cu_seqlens must start with 0")
 
     num_segments = len(cu_seqlens) - 1
-    if (
-        len(block_tables) != num_segments
-        or len(context_lens) != num_segments
-        or len(offsets) != num_segments
-    ):
-        raise ValueError(
-            "block_tables, context_lens, and offsets must match cu_seqlens segments"
-        )
+    if len(block_tables) != num_segments or len(context_lens) != num_segments or len(offsets) != num_segments:
+        raise ValueError("block_tables, context_lens, and offsets must match cu_seqlens segments")
     selected_query_indices: list[int] = []
     reduced_slot_mapping: list[int] = []
     reduced_block_tables: list[list[int]] = []
@@ -171,9 +162,7 @@ def build_yoco_reduced_context_from_full_metadata(
         selected_query_index = q_end - 1
         selected_query_indices.append(selected_query_index)
         reduced_slot_mapping.append(int(slot_mapping[selected_query_index]))
-        reduced_block_tables.append(
-            [int(block_id) for block_id in block_tables[segment_idx]]
-        )
+        reduced_block_tables.append([int(block_id) for block_id in block_tables[segment_idx]])
         reduced_context_lens.append(int(context_lens[segment_idx]))
         reduced_offsets.append(int(offsets[segment_idx]) + segment_len - 1)
         reduced_cu_seqlens.append(reduced_cu_seqlens[-1] + 1)
@@ -398,9 +387,7 @@ def _gemma4_text_fast_prefill_call(
         per_layer_inputs = model._project_per_layer_inputs(h, per_layer_inputs)
 
     if per_layer_inputs is not None:
-        layer_inputs = [
-            per_layer_inputs[:, :, i, :] for i, _ in enumerate(model.layers)
-        ]
+        layer_inputs = [per_layer_inputs[:, :, i, :] for i, _ in enumerate(model.layers)]
     else:
         layer_inputs = [None] * num_layers
 

@@ -120,14 +120,8 @@ def select_wna16_moe_backend(
 
     def _make_log_unsupported(backend: WNA16MoEBackend, reason: str | None) -> str:
         if reason:
-            return (
-                f"WNA16 MoE backend '{backend.value}' does not support the "
-                f"deployment configuration since {reason}."
-            )
-        return (
-            f"WNA16 MoE backend '{backend.value}' does not support the "
-            "deployment configuration."
-        )
+            return f"WNA16 MoE backend '{backend.value}' does not support the deployment configuration since {reason}."
+        return f"WNA16 MoE backend '{backend.value}' does not support the deployment configuration."
 
     def _return_or_raise(
         backend: WNA16MoEBackend,
@@ -138,9 +132,7 @@ def select_wna16_moe_backend(
     ) -> tuple[WNA16MoEBackend, type[mk.FusedMoEExperts]]:
         reason: str | None = None
         for k_cls in backend_to_kernel_cls(backend):
-            supported, reason = k_cls.is_supported_config(
-                k_cls, config, weight_key, activation_key, activation_format
-            )
+            supported, reason = k_cls.is_supported_config(k_cls, config, weight_key, activation_key, activation_format)
             if supported:
                 logger.info_once(_make_log_backend(backend), scope="local")
                 return backend, k_cls
@@ -152,18 +144,14 @@ def select_wna16_moe_backend(
     for backend in AVAILABLE_BACKENDS:
         activation_key = None  # always BF16 activation for WNA16 MoE
         for k_cls in backend_to_kernel_cls(backend):
-            supported, reason = k_cls.is_supported_config(
-                k_cls, config, weight_key, activation_key, activation_format
-            )
+            supported, reason = k_cls.is_supported_config(k_cls, config, weight_key, activation_key, activation_format)
             if supported:
                 logger.info_once(_make_log_backend(backend), scope="local")
                 return backend, k_cls
             else:
                 logger.debug_once(_make_log_unsupported(backend, reason), scope="local")
 
-    raise NotImplementedError(
-        "No WNA16 MoE backend supports the deployment configuration."
-    )
+    raise NotImplementedError("No WNA16 MoE backend supports the deployment configuration.")
 
 
 def make_wna16_moe_quant_config(
@@ -261,9 +249,7 @@ def make_wna16_moe_kernel(
         }
 
     if experts_cls is XPUExpertsWNA16:
-        assert (
-            prepare_finalize.activation_format == mk.FusedMoEActivationFormat.Standard
-        ), (
+        assert prepare_finalize.activation_format == mk.FusedMoEActivationFormat.Standard, (
             "XPUExpertsWNA16 only supports the Standard activation format; "
             "xpu_fused_moe(is_int4=True) does not implement BatchedExperts."
         )
@@ -271,9 +257,7 @@ def make_wna16_moe_kernel(
             moe_config=moe_config,
             quant_config=moe_quant_config,
         )
-    elif (
-        prepare_finalize.activation_format == mk.FusedMoEActivationFormat.BatchedExperts
-    ):
+    elif prepare_finalize.activation_format == mk.FusedMoEActivationFormat.BatchedExperts:
         max_num_tokens = prepare_finalize.max_num_tokens_per_rank()
         assert max_num_tokens is not None
         experts = experts_cls(
@@ -466,18 +450,14 @@ def _process_weights_marlin(
     N = layer.intermediate_size_per_partition
     padded_N = marlin_moe_padded_intermediate(N, group_size)
     if padded_N != N:
-        assert actorder != "group", (
-            "Marlin MoE thread-tile padding is unsupported with act-order"
-        )
+        assert actorder != "group", "Marlin MoE thread-tile padding is unsupported with act-order"
         marlin_w13_qweight = _pad_w13_shard_cols(marlin_w13_qweight, N, padded_N)
         marlin_w2_qweight = _pad_rows(marlin_w2_qweight, padded_N // pack_factor)
         marlin_w13_scales = _pad_w13_shard_cols(marlin_w13_scales, N, padded_N)
         if group_size > 0:
             marlin_w2_scales = _pad_rows(marlin_w2_scales, padded_N // group_size)
         if w13_qzeros is not None:
-            w13_qzeros = _pad_w13_shard_cols(
-                w13_qzeros, N // pack_factor, padded_N // pack_factor
-            )
+            w13_qzeros = _pad_w13_shard_cols(w13_qzeros, N // pack_factor, padded_N // pack_factor)
         if w2_qzeros is not None and group_size > 0:
             w2_qzeros = _pad_rows(w2_qzeros, padded_N // group_size)
         if w13_bias is not None:
@@ -554,13 +534,9 @@ def _process_weights_marlin(
 
     if input_dtype == torch.int8:
         if layer.num_groups_w13 > 1:
-            marlin_w13_scales, w13_input_global_scale = marlin_act_int8_process_scales(
-                marlin_w13_scales
-            )
+            marlin_w13_scales, w13_input_global_scale = marlin_act_int8_process_scales(marlin_w13_scales)
         if layer.num_groups_w2 > 1:
-            marlin_w2_scales, w2_input_global_scale = marlin_act_int8_process_scales(
-                marlin_w2_scales
-            )
+            marlin_w2_scales, w2_input_global_scale = marlin_act_int8_process_scales(marlin_w2_scales)
 
     # --- Permute zero points ---
     if w13_qzeros is not None and w2_qzeros is not None:
@@ -665,14 +641,10 @@ def _process_awq_weights_marlin(
     N = layer.intermediate_size_per_partition
     padded_N = marlin_moe_padded_intermediate(N, group_size)
     if padded_N != N:
-        w13_qweight = _pad_w13_shard_cols(
-            w13_qweight, N // pack_factor, padded_N // pack_factor
-        )
+        w13_qweight = _pad_w13_shard_cols(w13_qweight, N // pack_factor, padded_N // pack_factor)
         w2_qweight = _pad_rows(w2_qweight, padded_N)
         w13_scales = _pad_w13_shard_cols(w13_scales, N, padded_N)
-        w13_qzeros = _pad_w13_shard_cols(
-            w13_qzeros, N // pack_factor, padded_N // pack_factor
-        )
+        w13_qzeros = _pad_w13_shard_cols(w13_qzeros, N // pack_factor, padded_N // pack_factor)
         if group_size > 0:
             w2_scales = _pad_rows(w2_scales, padded_N // group_size)
             w2_qzeros = _pad_rows(w2_qzeros, padded_N // group_size)
@@ -713,9 +685,7 @@ def _process_awq_weights_marlin(
         is_a_8bit=is_a_8bit,
     )
     if input_dtype == torch.int8 and layer.num_groups_w13 > 1:
-        marlin_w13_scales, w13_input_global_scale = marlin_act_int8_process_scales(
-            marlin_w13_scales
-        )
+        marlin_w13_scales, w13_input_global_scale = marlin_act_int8_process_scales(marlin_w13_scales)
 
     marlin_w2_scales = marlin_moe_permute_scales(
         s=w2_scales,
@@ -725,9 +695,7 @@ def _process_awq_weights_marlin(
         is_a_8bit=is_a_8bit,
     )
     if input_dtype == torch.int8 and layer.num_groups_w2 > 1:
-        marlin_w2_scales, w2_input_global_scale = marlin_act_int8_process_scales(
-            marlin_w2_scales
-        )
+        marlin_w2_scales, w2_input_global_scale = marlin_act_int8_process_scales(marlin_w2_scales)
 
     marlin_w13_qzeros = moe_awq_to_marlin_zero_points(
         w13_qzeros,
@@ -832,17 +800,9 @@ def _process_weights_cpu(
     w13_zeros: torch.Tensor | None = None
     w2_zeros: torch.Tensor | None = None
     if w13_qzeros is not None:
-        w13_zeros = (
-            w13_qzeros.data.view(torch.int32)
-            if w13_qzeros.dtype != torch.int32
-            else w13_qzeros.data
-        )
+        w13_zeros = w13_qzeros.data.view(torch.int32) if w13_qzeros.dtype != torch.int32 else w13_qzeros.data
     if w2_qzeros is not None:
-        w2_zeros = (
-            w2_qzeros.data.view(torch.int32)
-            if w2_qzeros.dtype != torch.int32
-            else w2_qzeros.data
-        )
+        w2_zeros = w2_qzeros.data.view(torch.int32) if w2_qzeros.dtype != torch.int32 else w2_qzeros.data
 
     (
         blocked_w13,

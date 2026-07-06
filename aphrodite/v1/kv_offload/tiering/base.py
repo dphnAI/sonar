@@ -240,9 +240,7 @@ class SecondaryTierManager(ABC):
         return
 
     @classmethod
-    def build_metric_definitions(
-        cls, extra_config: dict[str, Any]
-    ) -> dict[str, OffloadingMetricMetadata]:
+    def build_metric_definitions(cls, extra_config: dict[str, Any]) -> dict[str, OffloadingMetricMetadata]:
         """Return Prometheus metric definitions emitted by this tier."""
         return {}
 

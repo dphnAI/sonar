@@ -15,9 +15,7 @@ class EmulationNvFp4LinearKernel(NvFp4LinearKernel):
     """Software emulation fallback for NVFP4 (dequant → BF16 matmul)."""
 
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         # Always available as a last-resort fallback.
         return True, None
 

@@ -54,18 +54,14 @@ class OffloadingSpecFactory:
     ) -> OffloadingSpec:
         kv_transfer_config = config.kv_transfer_config
         assert kv_transfer_config is not None
-        spec_name = kv_transfer_config.kv_connector_extra_config.get(
-            "spec_name", "CPUOffloadingSpec"
-        )
+        spec_name = kv_transfer_config.kv_connector_extra_config.get("spec_name", "CPUOffloadingSpec")
         spec_cls = cls.get_spec_cls(config)
         logger.info("Creating offloading spec with name: %s", spec_name)
         return spec_cls(config, kv_cache_config)
 
 
 # Register various specs here.
-OffloadingSpecFactory.register_spec(
-    "CPUOffloadingSpec", "aphrodite.v1.kv_offload.cpu.spec", "CPUOffloadingSpec"
-)
+OffloadingSpecFactory.register_spec("CPUOffloadingSpec", "aphrodite.v1.kv_offload.cpu.spec", "CPUOffloadingSpec")
 OffloadingSpecFactory.register_spec(
     "TieringOffloadingSpec",
     "aphrodite.v1.kv_offload.tiering.spec",

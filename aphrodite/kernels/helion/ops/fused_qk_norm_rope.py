@@ -11,10 +11,7 @@ from aphrodite.logger import init_logger
 from aphrodite.utils.import_utils import has_helion
 
 if not has_helion():
-    raise ImportError(
-        "Helion kernel requires helion to be installed. "
-        "Install it with: pip install helion"
-    )
+    raise ImportError("Helion kernel requires helion to be installed. Install it with: pip install helion")
 
 import helion
 import helion.language as hl
@@ -26,13 +23,8 @@ from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
 logger = init_logger(__name__)
 
 
-def _compute_cos_sin_cache(
-    max_position_embeddings, rotary_dim, device="cuda", dtype=torch.float
-):
-    inv_freq = 1.0 / (
-        10000
-        ** (torch.arange(0, rotary_dim, 2, device=device, dtype=dtype) / rotary_dim)
-    )
+def _compute_cos_sin_cache(max_position_embeddings, rotary_dim, device="cuda", dtype=torch.float):
+    inv_freq = 1.0 / (10000 ** (torch.arange(0, rotary_dim, 2, device=device, dtype=dtype) / rotary_dim))
 
     t = torch.arange(max_position_embeddings, device=device, dtype=dtype)
 
@@ -61,20 +53,12 @@ def generate_inputs() -> dict[CaseKey, tuple[Any, ...]]:
     device = "cuda"
     inputs = {}
 
-    for num_tokens, (num_q_heads, num_kv_heads) in product(
-        num_tokens_list, num_heads_pair
-    ):
+    for num_tokens, (num_q_heads, num_kv_heads) in product(num_tokens_list, num_heads_pair):
         total_dim = (num_q_heads + 2 * num_kv_heads) * head_dim
-        qkv = torch.empty(
-            num_tokens, total_dim, dtype=in_dtype, device=device
-        ).uniform_(-0.1, 0.1)
+        qkv = torch.empty(num_tokens, total_dim, dtype=in_dtype, device=device).uniform_(-0.1, 0.1)
         positions = torch.arange(num_tokens, dtype=torch.long, device=device)
-        q_weight = torch.empty(head_dim, dtype=in_dtype, device=device).uniform_(
-            0.8, 1.2
-        )
-        k_weight = torch.empty(head_dim, dtype=in_dtype, device=device).uniform_(
-            0.8, 1.2
-        )
+        q_weight = torch.empty(head_dim, dtype=in_dtype, device=device).uniform_(0.8, 1.2)
+        k_weight = torch.empty(head_dim, dtype=in_dtype, device=device).uniform_(0.8, 1.2)
         rotary_dim = int(head_dim * rotary_ratio)
         cos_sin_cache = _compute_cos_sin_cache(40960, rotary_dim)
         cos_sin_cache = cos_sin_cache.to(in_dtype)
@@ -134,9 +118,7 @@ def pick_config(args: tuple[Any, ...], config_keys: list[CaseKey]) -> CaseKey | 
     for key in config_keys:
         if key.is_default():
             continue
-        configs.setdefault(key["q_heads"], {}).setdefault(key["kv_heads"], []).append(
-            key["num_tokens"]
-        )
+        configs.setdefault(key["q_heads"], {}).setdefault(key["kv_heads"], []).append(key["num_tokens"])
 
     if not configs:
         return None
@@ -144,9 +126,7 @@ def pick_config(args: tuple[Any, ...], config_keys: list[CaseKey]) -> CaseKey | 
     best_q_heads = min(configs, key=lambda s: abs(s - q_heads))
     best_kv_heads = min(configs[best_q_heads], key=lambda s: abs(s - kv_heads))
     available_num_tokens = sorted(configs[best_q_heads][best_kv_heads])
-    best_num_tokens = next(
-        (n for n in available_num_tokens if n >= num_tokens), available_num_tokens[-1]
-    )
+    best_num_tokens = next((n for n in available_num_tokens if n >= num_tokens), available_num_tokens[-1])
 
     result = CaseKey(
         {
@@ -203,9 +183,7 @@ def baseline(
     k_by_head = ir.ops.rms_norm(k_by_head, k_weight, eps)
     k = k_by_head.view(k.shape)
 
-    q, k = RotaryEmbedding.forward_static(
-        position_ids, q, k, head_dim, cos_sin_cache.shape[1], cos_sin_cache, is_neox
-    )
+    q, k = RotaryEmbedding.forward_static(position_ids, q, k, head_dim, cos_sin_cache.shape[1], cos_sin_cache, is_neox)
     qkv[:, :q_size].copy_(q)
     qkv[:, q_size : q_size + kv_size].copy_(k)
 
@@ -278,18 +256,14 @@ def fused_qk_norm_rope(
 
     qkv = qkv.view(num_tokens, -1, head_dim)
 
-    for tile_m, tile_gn, tile_n in hl.tile(
-        [num_tokens, qk_heads, head_dim], block_size=[1, None, head_dim]
-    ):
+    for tile_m, tile_gn, tile_n in hl.tile([num_tokens, qk_heads, head_dim], block_size=[1, None, head_dim]):
         x_blk = qkv[tile_m, tile_gn, tile_n].to(dtype=torch.float32)
 
         rms = x_blk.pow(2).sum(dim=-1)
         rms = torch.rsqrt(rms * (1.0 / head_dim) + eps)
 
         use_q_weight = (tile_gn.index < num_heads_q)[None, :, None]
-        w_blk = torch.where(
-            use_q_weight, q_weight[None, None, tile_n], k_weight[None, None, tile_n]
-        )
+        w_blk = torch.where(use_q_weight, q_weight[None, None, tile_n], k_weight[None, None, tile_n])
 
         x_blk = (x_blk * rms[:, :, None]).to(qkv.dtype) * w_blk
 

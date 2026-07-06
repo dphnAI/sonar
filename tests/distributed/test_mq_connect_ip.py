@@ -34,10 +34,7 @@ def test_mq_bind_with_local_ip():
     assert handle.remote_subscribe_addr is not None
     # The bound address should contain our local IP
     local_ip = get_ip()
-    assert (
-        local_ip in handle.remote_subscribe_addr
-        or f"[{local_ip}]" in handle.remote_subscribe_addr
-    )
+    assert local_ip in handle.remote_subscribe_addr or f"[{local_ip}]" in handle.remote_subscribe_addr
     del mq
 
 

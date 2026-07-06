@@ -226,9 +226,7 @@ def eagle_prepare_next_token_padded_kernel(
 
             # Select the token at that index, using a sum trick since
             # we don't want to load again to access token_ids[last_valid_index].
-            last_valid_token = tl.sum(
-                tl.where(token_offs == last_valid_index, token_ids, 0)
-            )
+            last_valid_token = tl.sum(tl.where(token_offs == last_valid_index, token_ids, 0))
             tl.store(next_token_ids_ptr + req_idx, last_valid_token)
         else:
             # No valid tokens found, use backup token
@@ -256,9 +254,7 @@ def compute_new_slot_mapping(
     # Clamp the positions to prevent an out-of-bounds error when indexing
     # into block_table_tensor.
     clamped_positions = torch.clamp(new_positions, max=max_model_len - 1)
-    block_table_indices = (
-        req_indices * n_blocks_per_req + clamped_positions // block_size
-    )
+    block_table_indices = req_indices * n_blocks_per_req + clamped_positions // block_size
     block_nums = cad.block_table_tensor.view(-1)[block_table_indices]
     block_offsets = clamped_positions % block_size
     new_slot_mapping = block_nums * block_size + block_offsets
@@ -348,9 +344,7 @@ def copy_and_expand_eagle_inputs_kernel(
     if shift_input_ids:
         num_valid_tokens = query_end_loc - query_start_loc
         input_offset = 1
-        output_start = query_start_loc + request_idx * (
-            num_padding_slots_per_request - 1
-        )
+        output_start = query_start_loc + request_idx * (num_padding_slots_per_request - 1)
     else:
         num_valid_tokens = query_end_loc - query_start_loc + 1
         input_offset = 0
@@ -360,9 +354,7 @@ def copy_and_expand_eagle_inputs_kernel(
     num_rejected = next_query_start_loc - query_end_loc - 1
 
     # Total output tokens for this request
-    total_output_tokens = (
-        num_valid_tokens + num_padding_slots_per_request + num_rejected
-    )
+    total_output_tokens = num_valid_tokens + num_padding_slots_per_request + num_rejected
 
     # Process tokens in this block
     j = token_batch_idx * BLOCK_SIZE_TOKENS + tl.arange(0, BLOCK_SIZE_TOKENS)
@@ -377,9 +369,7 @@ def copy_and_expand_eagle_inputs_kernel(
     in_bounds = j < total_output_tokens
     is_valid_region = j < num_valid_tokens
     is_bonus_region = j == num_valid_tokens
-    is_parallel_draft_region = (j > num_valid_tokens) & (
-        j < num_valid_tokens + num_padding_slots_per_request
-    )
+    is_parallel_draft_region = (j > num_valid_tokens) & (j < num_valid_tokens + num_padding_slots_per_request)
     is_rejected_region = j >= num_valid_tokens + num_padding_slots_per_request
 
     # Compute output indices
@@ -391,9 +381,7 @@ def copy_and_expand_eagle_inputs_kernel(
     in_idx_clamped = tl.minimum(in_idx, total_input_tokens - 1)
 
     # Load input tokens (masked to valid region)
-    token_ids = tl.load(
-        target_token_ids_ptr + in_idx_clamped, mask=is_valid_region & in_bounds, other=0
-    )
+    token_ids = tl.load(target_token_ids_ptr + in_idx_clamped, mask=is_valid_region & in_bounds, other=0)
 
     # Load the starting position for this request (first position in the sequence)
     start_pos = tl.load(target_positions_ptr + query_start_loc)
@@ -403,9 +391,7 @@ def copy_and_expand_eagle_inputs_kernel(
 
     # Build final token_ids based on region
     token_ids = tl.where(is_bonus_region, bonus_token, token_ids)
-    token_ids = tl.where(
-        is_parallel_draft_region, parallel_drafting_token_id, token_ids
-    )
+    token_ids = tl.where(is_parallel_draft_region, parallel_drafting_token_id, token_ids)
     token_ids = tl.where(is_rejected_region, padding_token_id, token_ids)
 
     # Build final positions:
@@ -423,15 +409,9 @@ def copy_and_expand_eagle_inputs_kernel(
     # Compute indices of new tokens (bonus + parallel drafting) for sampling
     # New tokens are at positions
     #     [num_valid_tokens, num_valid_tokens + num_padding_slots_per_request)
-    is_new_token_region = (j >= num_valid_tokens) & (
-        j < num_valid_tokens + num_padding_slots_per_request
-    )
-    new_token_local_idx = (
-        j - num_valid_tokens
-    )  # 0 for bonus, 1, 2, ... for parallel drafting
-    new_token_out_idx = (
-        request_idx * num_padding_slots_per_request + new_token_local_idx
-    )
+    is_new_token_region = (j >= num_valid_tokens) & (j < num_valid_tokens + num_padding_slots_per_request)
+    new_token_local_idx = j - num_valid_tokens  # 0 for bonus, 1, 2, ... for parallel drafting
+    new_token_out_idx = request_idx * num_padding_slots_per_request + new_token_local_idx
 
     # Compute hidden state mapping (source index -> destination index)
     # This maps each input position to its corresponding output position
@@ -587,12 +567,8 @@ def update_num_computed_tokens_for_batch_change(
     corrected = prev_computed + valid_counts.int()
 
     n = prev_positions.shape[0]
-    num_computed_tokens[:n].copy_(
-        torch.where(participating, corrected, cpu_num_computed_tokens)
-    )
-    num_accepted_tokens.copy_(
-        torch.where(participating, valid_counts, num_accepted_tokens)
-    )
+    num_computed_tokens[:n].copy_(torch.where(participating, corrected, cpu_num_computed_tokens))
+    num_accepted_tokens.copy_(torch.where(participating, valid_counts, num_accepted_tokens))
 
 
 def unconditional_to_conditional_rates(rates: list[float]) -> list[float]:

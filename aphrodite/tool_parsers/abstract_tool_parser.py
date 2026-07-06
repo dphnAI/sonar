@@ -64,10 +64,7 @@ class ToolParser:
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        if (
-            cls.structural_tag_model is not None
-            and envs.APHRODITE_ENFORCE_STRICT_TOOL_CALLING
-        ):
+        if cls.structural_tag_model is not None and envs.APHRODITE_ENFORCE_STRICT_TOOL_CALLING:
             cls.supports_required_and_named = False
 
     def __init__(
@@ -84,9 +81,7 @@ class ToolParser:
         self.model_tokenizer = tokenizer
         if tools:
             self.tools: list[ChatCompletionToolsParam | FunctionTool] = [
-                tool
-                for tool in tools
-                if isinstance(tool, (ChatCompletionToolsParam, FunctionTool))
+                tool for tool in tools if isinstance(tool, (ChatCompletionToolsParam, FunctionTool))
             ]
         else:
             self.tools = []
@@ -101,11 +96,7 @@ class ToolParser:
             expected = args
         else:
             expected = json.dumps(args, ensure_ascii=False)
-        actual = (
-            self.streamed_args_for_tool[index]
-            if index < len(self.streamed_args_for_tool)
-            else ""
-        )
+        actual = self.streamed_args_for_tool[index] if index < len(self.streamed_args_for_tool) else ""
         if expected.startswith(actual):
             return expected[len(actual) :]
         return ""
@@ -128,15 +119,10 @@ class ToolParser:
         # the tool schema. Unified parsers handle model-specific structural
         # tags before calling into the tool parser.
         structured_outputs = getattr(request, "structured_outputs", None)
-        if (
-            structured_outputs is not None
-            and structured_outputs.structural_tag is not None
-        ):
+        if structured_outputs is not None and structured_outputs.structural_tag is not None:
             return request
 
-        json_schema_from_tool = get_json_schema_from_tools(
-            tool_choice=request.tool_choice, tools=request.tools
-        )
+        json_schema_from_tool = get_json_schema_from_tools(tool_choice=request.tool_choice, tools=request.tools)
         # Set structured output params for tool calling
         if json_schema_from_tool is not None:
             if isinstance(request, ChatCompletionRequest):
@@ -184,9 +170,7 @@ class ToolParser:
             reasoning=reasoning,
         )
 
-    def extract_tool_calls(
-        self, model_output: str, request: ChatCompletionRequest
-    ) -> ExtractedToolCallInformation:
+    def extract_tool_calls(self, model_output: str, request: ChatCompletionRequest) -> ExtractedToolCallInformation:
         """
         Static method that should be implemented for extracting tool calls from
         a complete model-generated string.
@@ -194,9 +178,7 @@ class ToolParser:
         available before sending to the client.
         Static because it's stateless.
         """
-        raise NotImplementedError(
-            "AbstractToolParser.extract_tool_calls has not been implemented!"
-        )
+        raise NotImplementedError("AbstractToolParser.extract_tool_calls has not been implemented!")
 
     def extract_tool_calls_streaming(
         self,
@@ -215,9 +197,7 @@ class ToolParser:
         the current tokens/diffs, but also the information about what has
         previously been parsed and extracted (see constructor)
         """
-        raise NotImplementedError(
-            "AbstractToolParser.extract_tool_calls_streaming has not been implemented!"
-        )
+        raise NotImplementedError("AbstractToolParser.extract_tool_calls_streaming has not been implemented!")
 
 
 class ToolParserManager:
@@ -257,9 +237,7 @@ class ToolParserManager:
             mod = importlib.import_module(module_path)
             parser_cls = getattr(mod, class_name)
             if not issubclass(parser_cls, ToolParser):
-                raise TypeError(
-                    f"{class_name} in {module_path} is not a ToolParser subclass."
-                )
+                raise TypeError(f"{class_name} in {module_path} is not a ToolParser subclass.")
             cls.tool_parsers[name] = parser_cls  # cache
             return parser_cls
         except Exception as e:
@@ -280,9 +258,7 @@ class ToolParserManager:
     ) -> None:
         """Register a ToolParser class immediately."""
         if not issubclass(module, ToolParser):
-            raise TypeError(
-                f"module must be subclass of ToolParser, but got {type(module)}"
-            )
+            raise TypeError(f"module must be subclass of ToolParser, but got {type(module)}")
 
         if module_name is None:
             module_name = module.__name__
@@ -373,6 +349,4 @@ class ToolParserManager:
         try:
             import_from_path(module_name, plugin_path)
         except Exception:
-            logger.exception(
-                "Failed to load module '%s' from %s.", module_name, plugin_path
-            )
+            logger.exception("Failed to load module '%s' from %s.", module_name, plugin_path)

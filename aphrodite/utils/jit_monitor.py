@@ -70,8 +70,7 @@ def activate(*, mode: JitMonitorMode = "warn", verbose: bool = False) -> None:
     _setup_cutedsl_jit_hook()
 
     logger.info(
-        "Kernel JIT monitor activated; monitored JIT compilations during "
-        "inference will use mode=%s.",
+        "Kernel JIT monitor activated; monitored JIT compilations during inference will use mode=%s.",
         mode,
     )
 
@@ -89,10 +88,7 @@ def _setup_triton_autotuning_print() -> None:
 
     user_val = os.environ.get("TRITON_PRINT_AUTOTUNING")
     if user_val == "0":
-        logger.debug(
-            "TRITON_PRINT_AUTOTUNING=0 set by user; "
-            "autotuning messages will stay suppressed."
-        )
+        logger.debug("TRITON_PRINT_AUTOTUNING=0 set by user; autotuning messages will stay suppressed.")
         return
 
     knobs.autotuning.print = True
@@ -166,10 +162,7 @@ def _format_constants(fn: object, compile_info: Mapping[str, object]) -> str:
         return "{}"
 
     items = sorted(
-        (
-            (_constant_name(fn, path), _safe_repr(value))
-            for path, value in constants.items()
-        ),
+        ((_constant_name(fn, path), _safe_repr(value)) for path, value in constants.items()),
         key=lambda item: item[0],
     )
     return "{" + ", ".join(f"{name}={value}" for name, value in items) + "}"
@@ -193,11 +186,7 @@ def _format_extra_compile_info(compile_info: Mapping[str, object]) -> str:
             "name",
         }
     )
-    items = [
-        f"{name}={_safe_repr(value)}"
-        for name, value in sorted(compile_info.items())
-        if name not in skip_keys
-    ]
+    items = [f"{name}={_safe_repr(value)}" for name, value in sorted(compile_info.items()) if name not in skip_keys]
     return "{" + ", ".join(items) + "}"
 
 
@@ -279,9 +268,7 @@ def _setup_cutedsl_jit_hook() -> None:
         kernel = args[0] if args else kwargs.get("function")
         kernel_name = getattr(kernel, "__name__", None)
         if kernel_name is None:
-            kernel_name = (
-                kernel.__class__.__name__ if kernel is not None else "<unknown>"
-            )
+            kernel_name = kernel.__class__.__name__ if kernel is not None else "<unknown>"
         _log_cutedsl_jit_compile(kernel_name)
         return original_compile(*args, **kwargs)
 

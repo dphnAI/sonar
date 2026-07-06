@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Metal Worker for Aphrodite's v1 engine."""
 
 from __future__ import annotations
@@ -8,6 +9,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 import mlx.core as mx
+
 from aphrodite.config import AphroditeConfig
 from aphrodite.distributed import (
     ensure_model_parallel_initialized,
@@ -15,13 +17,6 @@ from aphrodite.distributed import (
 )
 from aphrodite.logger import init_logger
 from aphrodite.lora.request import LoRARequest
-from aphrodite.tasks import SupportedTask
-from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.core.sched.output import GrammarOutput, SchedulerOutput
-from aphrodite.v1.kv_cache_interface import KVCacheConfig, KVCacheSpec
-from aphrodite.v1.outputs import ModelRunnerOutput
-from aphrodite.v1.worker.worker_base import CompilationTimes, WorkerBase
-
 from aphrodite.metal.config import (
     enable_contiguous_kv_fast_path,
     get_config,
@@ -30,6 +25,12 @@ from aphrodite.metal.config import (
 from aphrodite.metal.platform import MetalPlatform
 from aphrodite.metal.utils import set_wired_limit
 from aphrodite.metal.v1.cache_policy import WorkerCachePlanner
+from aphrodite.tasks import SupportedTask
+from aphrodite.utils.torch_utils import set_random_seed
+from aphrodite.v1.core.sched.output import GrammarOutput, SchedulerOutput
+from aphrodite.v1.kv_cache_interface import KVCacheConfig, KVCacheSpec
+from aphrodite.v1.outputs import ModelRunnerOutput
+from aphrodite.v1.worker.worker_base import CompilationTimes, WorkerBase
 
 if TYPE_CHECKING:
     from aphrodite.metal.profiler.wrapper import MetalProfilerWrapper
@@ -123,13 +124,9 @@ class MetalWorker(WorkerBase):
         """Initialize the Metal device and distributed environment."""
         # Set up MLX device
         if self.metal_config.use_mlx:
-            device_type = (
-                mx.DeviceType.gpu
-                if self.metal_config.mlx_device == "gpu"
-                else mx.DeviceType.cpu
-            )
+            device_type = mx.DeviceType.gpu if self.metal_config.mlx_device == "gpu" else mx.DeviceType.cpu
             mx.set_default_device(mx.Device(device_type))
-            logger.info(f"MLX device set to: {mx.default_device()}")
+            logger.info("MLX device set to: %s", mx.default_device())
             set_wired_limit()
 
         # Use MetalPlatform.get_torch_device() to properly support MPS when available.
@@ -137,7 +134,7 @@ class MetalWorker(WorkerBase):
         # allows using MPS for PyTorch operations (like vLLM's sampler) when supported,
         # while falling back to CPU if MPS is not available.
         self.device = MetalPlatform.get_torch_device(0)
-        logger.info(f"PyTorch device set to: {self.device}")
+        logger.info("PyTorch device set to: %s", self.device)
 
         # Initialize distributed environment
         init_worker_distributed_environment(
@@ -268,9 +265,7 @@ class MetalWorker(WorkerBase):
         self.model_runner.warm_up()
         return CompilationTimes(language_model=time.perf_counter() - start, encoder=0.0)
 
-    def execute_model(
-        self, scheduler_output: SchedulerOutput
-    ) -> ModelRunnerOutput | None:
+    def execute_model(self, scheduler_output: SchedulerOutput) -> ModelRunnerOutput | None:
         """Execute model inference.
 
         Args:
@@ -281,9 +276,7 @@ class MetalWorker(WorkerBase):
         """
         return self.model_runner.execute_model(scheduler_output)
 
-    def sample_tokens(
-        self, grammar_output: GrammarOutput | None
-    ) -> ModelRunnerOutput | None:
+    def sample_tokens(self, grammar_output: GrammarOutput | None) -> ModelRunnerOutput | None:  # type: ignore[override]
         """Return sampled tokens for the previously executed batch."""
         return self.model_runner.sample_tokens(grammar_output)
 
@@ -400,13 +393,10 @@ class MetalWorker(WorkerBase):
         if is_start:
             if self._metal_profiler is None:
                 from aphrodite.distributed.utils import get_worker_rank_suffix
-
                 from aphrodite.metal.profiler.wrapper import MetalProfilerWrapper
 
                 rank_suffix = get_worker_rank_suffix(global_rank=self.rank)
-                trace_name = (
-                    f"{profile_prefix}_{rank_suffix}" if profile_prefix else rank_suffix
-                )
+                trace_name = f"{profile_prefix}_{rank_suffix}" if profile_prefix else rank_suffix
                 self._metal_profiler = MetalProfilerWrapper(profiler_config, trace_name)
             self._metal_profiler.start()
         else:
@@ -423,7 +413,7 @@ class MetalWorker(WorkerBase):
 
         if hasattr(self, "model_runner") and self.model_runner is not None:
             del self.model_runner
-            self.model_runner = None
+            self.model_runner = None  # type: ignore[assignment]
 
         gc.collect()
         logger.info("Metal worker shutdown complete")

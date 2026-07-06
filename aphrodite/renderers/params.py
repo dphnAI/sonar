@@ -59,9 +59,7 @@ def recursively_merge_kwargs(
             continue
 
         if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):
-            merged[k] = recursively_merge_kwargs(
-                merged[k], v, unset_values=unset_values
-            )
+            merged[k] = recursively_merge_kwargs(merged[k], v, unset_values=unset_values)
         else:
             merged[k] = v
 
@@ -96,11 +94,7 @@ class ChatParams:
         default_media_io_kwargs: dict[str, dict[str, Any]] | None = None,
         default_mm_processor_kwargs: dict[str, Any] | None = None,
     ):
-        if (
-            not default_chat_template_kwargs
-            and not default_media_io_kwargs
-            and not default_mm_processor_kwargs
-        ):
+        if not default_chat_template_kwargs and not default_media_io_kwargs and not default_mm_processor_kwargs:
             return self
 
         return ChatParams(
@@ -214,11 +208,7 @@ class TokenizeParams:
                 value=self.truncation_side,
             )
 
-        if (
-            max_output_tokens is not None
-            and max_total_tokens is not None
-            and max_output_tokens > max_total_tokens
-        ):
+        if max_output_tokens is not None and max_total_tokens is not None and max_output_tokens > max_total_tokens:
             raise APHRODITEValidationError(
                 f"{self.max_output_tokens_param}={max_output_tokens} "
                 f"cannot be greater than "
@@ -244,22 +234,12 @@ class TokenizeParams:
 
     def with_kwargs(self, **tokenization_kwargs: Any):
         max_length = tokenization_kwargs.pop("max_length", self.max_input_tokens)
-        pad_prompt_tokens = tokenization_kwargs.pop(
-            "pad_prompt_tokens", self.pad_prompt_tokens
-        )
-        truncate_prompt_tokens = tokenization_kwargs.pop(
-            "truncate_prompt_tokens", self.truncate_prompt_tokens
-        )
-        truncation_side = tokenization_kwargs.pop(
-            "truncation_side", self.truncation_side
-        )
+        pad_prompt_tokens = tokenization_kwargs.pop("pad_prompt_tokens", self.pad_prompt_tokens)
+        truncate_prompt_tokens = tokenization_kwargs.pop("truncate_prompt_tokens", self.truncate_prompt_tokens)
+        truncation_side = tokenization_kwargs.pop("truncation_side", self.truncation_side)
         do_lower_case = tokenization_kwargs.pop("do_lower_case", self.do_lower_case)
-        add_special_tokens = tokenization_kwargs.pop(
-            "add_special_tokens", self.add_special_tokens
-        )
-        needs_detokenization = tokenization_kwargs.pop(
-            "needs_detokenization", self.needs_detokenization
-        )
+        add_special_tokens = tokenization_kwargs.pop("add_special_tokens", self.add_special_tokens)
+        needs_detokenization = tokenization_kwargs.pop("needs_detokenization", self.needs_detokenization)
 
         # https://huggingface.co/docs/transformers/en/pad_truncation
         if padding := tokenization_kwargs.pop("padding", None):
@@ -282,8 +262,7 @@ class TokenizeParams:
 
         if tokenization_kwargs:
             logger.warning(
-                "The following tokenization arguments are not supported "
-                "by Aphrodite Renderer and will be ignored: %s",
+                "The following tokenization arguments are not supported by Aphrodite Renderer and will be ignored: %s",
                 tokenization_kwargs,
             )
 
@@ -291,11 +270,7 @@ class TokenizeParams:
 
         return TokenizeParams(
             max_total_tokens=max_total_tokens,
-            max_output_tokens=(
-                0
-                if max_total_tokens is None or max_length is None
-                else max_total_tokens - max_length
-            ),
+            max_output_tokens=(0 if max_total_tokens is None or max_length is None else max_total_tokens - max_length),
             pad_prompt_tokens=pad_prompt_tokens,
             truncate_prompt_tokens=truncate_prompt_tokens,
             truncation_side=truncation_side,
@@ -417,9 +392,7 @@ class TokenizeParams:
         if max_length == 0:
             return tokens[:0]
 
-        side = self.truncation_side or (
-            tokenizer.truncation_side if tokenizer is not None else None
-        )
+        side = self.truncation_side or (tokenizer.truncation_side if tokenizer is not None else None)
         if side == "left":
             return tokens[-max_length:]
 

@@ -17,7 +17,7 @@ import torch
 import torch.nn as nn
 
 import aphrodite.envs as envs
-from aphrodite.config import CUDAGraphMode, AphroditeConfig, set_current_aphrodite_config
+from aphrodite.config import AphroditeConfig, CUDAGraphMode, set_current_aphrodite_config
 from aphrodite.config.compilation import CompilationMode
 from aphrodite.device_allocator import get_mem_allocator_instance
 from aphrodite.distributed import (
@@ -179,9 +179,7 @@ class Worker(WorkerBase):
                 SleepModeBackendFactory,
             )
 
-            self._sleep_mode_backend = SleepModeBackendFactory.create_backend(
-                self.aphrodite_config.model_config
-            )
+            self._sleep_mode_backend = SleepModeBackendFactory.create_backend(self.aphrodite_config.model_config)
         return self._sleep_mode_backend
 
     def sleep(self, level: int = 1) -> None:
@@ -191,9 +189,7 @@ class Worker(WorkerBase):
         # Save the buffers before level 2 sleep
         if level == 2:
             model = self.model_runner.model
-            self._sleep_saved_buffers = {
-                name: buffer.cpu().clone() for name, buffer in model.named_buffers()
-            }
+            self._sleep_saved_buffers = {name: buffer.cpu().clone() for name, buffer in model.named_buffers()}
 
         self._get_sleep_mode_backend().suspend(level)
 
@@ -229,16 +225,10 @@ class Worker(WorkerBase):
             self.model_runner.post_kv_cache_wake_up()
 
     def _maybe_get_memory_pool_context(self, tag: str) -> AbstractContextManager:
-        if (
-            current_platform.is_cuda_alike()
-            and not self.aphrodite_config.model_config.enable_cumem_allocator
-        ):
+        if current_platform.is_cuda_alike() and not self.aphrodite_config.model_config.enable_cumem_allocator:
             return nullcontext()
 
-        if (
-            current_platform.is_xpu()
-            and not self.aphrodite_config.model_config.enable_sleep_mode
-        ):
+        if current_platform.is_xpu() and not self.aphrodite_config.model_config.enable_sleep_mode:
             return nullcontext()
 
         if current_platform.is_cpu():
@@ -246,9 +236,7 @@ class Worker(WorkerBase):
 
         allocator = get_mem_allocator_instance()
         if tag == "weights":
-            assert allocator.get_current_usage() == 0, (
-                "CuMem allocator can only be used for one instance per process."
-            )
+            assert allocator.get_current_usage() == 0, "CuMem allocator can only be used for one instance per process."
         return allocator.use_memory_pool(tag=tag)
 
     @contextmanager
@@ -264,9 +252,7 @@ class Worker(WorkerBase):
         match = re.search(r"max_split_size_mb:(\d+)", conf)
         original_value = match.group(1) if match else None
 
-        torch._C._accelerator_setAllocatorSettings(
-            f"max_split_size_mb:{max_split_size_mb}"
-        )
+        torch._C._accelerator_setAllocatorSettings(f"max_split_size_mb:{max_split_size_mb}")
         try:
             yield
         finally:
@@ -282,8 +268,7 @@ class Worker(WorkerBase):
             os.environ.pop("NCCL_ASYNC_ERROR_HANDLING", None)
             parallel_config = self.parallel_config
             if (
-                parallel_config.distributed_executor_backend
-                not in ("ray", "external_launcher")
+                parallel_config.distributed_executor_backend not in ("ray", "external_launcher")
                 and parallel_config.data_parallel_backend != "ray"
                 and parallel_config.nnodes_within_dp == 1
             ):
@@ -293,8 +278,7 @@ class Worker(WorkerBase):
                     dp_local_rank = self.parallel_config.data_parallel_index
 
                 tp_pp_world_size = (
-                    self.parallel_config.pipeline_parallel_size
-                    * self.parallel_config.tensor_parallel_size
+                    self.parallel_config.pipeline_parallel_size * self.parallel_config.tensor_parallel_size
                 )
 
                 # DP_LOCAL_RANK * TP_PP_WORLD_SIZE + TP_LOCAL_RANK
@@ -323,9 +307,7 @@ class Worker(WorkerBase):
                     "ray",
                     "external_launcher",
                 ):
-                    assert self.parallel_config.local_world_size <= len(
-                        assigned_physical_gpu_ids
-                    ), (
+                    assert self.parallel_config.local_world_size <= len(assigned_physical_gpu_ids), (
                         f"local_world_size ({self.parallel_config.local_world_size})"
                         " exceeds assigned_physical_gpu_ids count "
                         f"({len(assigned_physical_gpu_ids)})"
@@ -336,9 +318,7 @@ class Worker(WorkerBase):
                     f"bounds for {torch.accelerator.device_count()} devices."
                 )
 
-            visible_device_index = (
-                current_platform.logical_device_id_to_visible_device_id(self.local_rank)
-            )
+            visible_device_index = current_platform.logical_device_id_to_visible_device_id(self.local_rank)
             self.device = torch.device(f"cuda:{visible_device_index}")
             torch.accelerator.set_device_index(self.device)
 
@@ -370,9 +350,7 @@ class Worker(WorkerBase):
             self.init_snapshot = init_snapshot = MemorySnapshot(device=self.device)
             self.requested_memory = request_memory(init_snapshot, self.cache_config)
             logger.debug("worker init memory snapshot: %r", self.init_snapshot)
-            logger.debug(
-                "worker requested memory: %sGiB", format_gib(self.requested_memory)
-            )
+            logger.debug("worker requested memory: %sGiB", format_gib(self.requested_memory))
         else:
             raise RuntimeError(f"Not support device type: {self.device_config.device}")
 
@@ -467,9 +445,7 @@ class Worker(WorkerBase):
         ) as profile_result:
             self.model_runner.profile_run()
 
-            profile_torch_peak = torch.accelerator.memory_stats(self.device).get(
-                "allocated_bytes.all.peak", 0
-            )
+            profile_torch_peak = torch.accelerator.memory_stats(self.device).get("allocated_bytes.all.peak", 0)
 
             # Profile CUDA graph memory if graphs will be captured.
             # Skip on ROCm/HIP/XPU as graph pool handles and get_memory_info
@@ -477,27 +453,20 @@ class Worker(WorkerBase):
             cudagraph_memory_estimate = 0
             if (
                 current_platform.is_cuda()
-                and self.aphrodite_config.compilation_config.cudagraph_mode
-                != CUDAGraphMode.NONE
+                and self.aphrodite_config.compilation_config.cudagraph_mode != CUDAGraphMode.NONE
             ):
                 cudagraph_memory_estimate = self.model_runner.profile_cudagraph_memory()
 
         # Use the pre-cudagraph torch peak to avoid double-counting.
-        profile_result.torch_peak_increase = (
-            profile_torch_peak - profile_result.before_profile.torch_peak
-        )
+        profile_result.torch_peak_increase = profile_torch_peak - profile_result.before_profile.torch_peak
         profile_result.non_kv_cache_memory = (
-            profile_result.non_torch_increase
-            + profile_result.torch_peak_increase
-            + profile_result.weights_memory
+            profile_result.non_torch_increase + profile_result.torch_peak_increase + profile_result.weights_memory
         )
 
         # On ROCm, cudagraph_memory_estimate is always 0 so this is a no-op.
         # On CUDA, respect the opt-in flag as originally designed.
         cudagraph_memory_estimate_applied = (
-            cudagraph_memory_estimate
-            if envs.APHRODITE_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS
-            else 0
+            cudagraph_memory_estimate if envs.APHRODITE_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS else 0
         )
 
         self.non_torch_memory = profile_result.non_torch_increase
@@ -517,9 +486,7 @@ class Worker(WorkerBase):
             "isolate Aphrodite in its own container."
         )
         self.available_kv_cache_memory_bytes = (
-            self.requested_memory
-            - profile_result.non_kv_cache_memory
-            - cudagraph_memory_estimate_applied
+            self.requested_memory - profile_result.non_kv_cache_memory - cudagraph_memory_estimate_applied
         )
 
         unrequested_memory = self.init_snapshot.free_memory - self.requested_memory
@@ -579,21 +546,14 @@ class Worker(WorkerBase):
                     suggested_util,
                 )
 
-        return self._reserve_mm_ipc_gpu_memory(
-            int(self.available_kv_cache_memory_bytes)
-        )
+        return self._reserve_mm_ipc_gpu_memory(int(self.available_kv_cache_memory_bytes))
 
     @staticmethod
     def _uses_pynvvideocodec_video_backend(mm_config) -> bool:
         video_kwargs = mm_config.media_io_kwargs.get("video", {})
-        video_loader_backend = (
-            video_kwargs.get("video_backend") or envs.APHRODITE_VIDEO_LOADER_BACKEND
-        )
+        video_loader_backend = video_kwargs.get("video_backend") or envs.APHRODITE_VIDEO_LOADER_BACKEND
         codec_backend = video_kwargs.get("backend")
-        return (
-            video_loader_backend == PYNVVIDEOCODEC_VIDEO_BACKEND
-            or codec_backend == PYNVVIDEOCODEC_VIDEO_BACKEND
-        )
+        return video_loader_backend == PYNVVIDEOCODEC_VIDEO_BACKEND or codec_backend == PYNVVIDEOCODEC_VIDEO_BACKEND
 
     def _reserve_mm_ipc_gpu_memory(self, available_kv_cache_memory_bytes: int) -> int:
         """Carve frontend multimodal GPU memory out of the KV cache.
@@ -617,14 +577,11 @@ class Worker(WorkerBase):
         # OOMs at high gmu, while SW decode (no per-server GPU allocation) does not.
         num_api_servers = max(1, getattr(self.parallel_config, "_api_process_count", 1))
         per_server_decoder_bytes = (
-            PYNVVIDEOCODEC_DECODER_GPU_MEMORY_BYTES
-            * PYNVVIDEOCODEC_MAX_RETAINED_DECODERS
+            PYNVVIDEOCODEC_DECODER_GPU_MEMORY_BYTES * PYNVVIDEOCODEC_MAX_RETAINED_DECODERS
             + PYNVVIDEOCODEC_CUDA_CONTEXT_BYTES
         )
         decoder_reserved_bytes = (
-            num_api_servers * per_server_decoder_bytes
-            if self._uses_pynvvideocodec_video_backend(mm_config)
-            else 0
+            num_api_servers * per_server_decoder_bytes if self._uses_pynvvideocodec_video_backend(mm_config) else 0
         )
         reserved_bytes = raw_frame_reserved_bytes + decoder_reserved_bytes
         if reserved_bytes <= 0:
@@ -715,9 +672,7 @@ class Worker(WorkerBase):
         # Build KV-zero metadata outside the CuMem pool so the bookkeeping
         # GPU tensors (seg_addrs, block-id buffers) use the standard PyTorch
         # allocator and are not discarded during sleep/wake cycles.
-        if kv_cache_config.needs_kv_cache_zeroing and hasattr(
-            self.model_runner, "_init_kv_zero_meta"
-        ):
+        if kv_cache_config.needs_kv_cache_zeroing and hasattr(self.model_runner, "_init_kv_zero_meta"):
             self.model_runner._init_kv_zero_meta()
 
     @instrument(span_name="Warmup (GPU)")
@@ -762,24 +717,18 @@ class Worker(WorkerBase):
             cuda_graph_memory_bytes = self.model_runner.capture_model()
 
         # Compare actual vs estimated CUDA graph memory (if we did profiling)
-        if (
-            hasattr(self, "cudagraph_memory_estimate")
-            and self.cudagraph_memory_estimate > 0
-        ):
+        if hasattr(self, "cudagraph_memory_estimate") and self.cudagraph_memory_estimate > 0:
             GiB = lambda b: round(b / GiB_bytes, 2)
             diff = abs(cuda_graph_memory_bytes - self.cudagraph_memory_estimate)
             logger.info(
-                "CUDA graph pool memory: %s GiB (actual), %s GiB (estimated), "
-                "difference: %s GiB (%.1f%%).",
+                "CUDA graph pool memory: %s GiB (actual), %s GiB (estimated), difference: %s GiB (%.1f%%).",
                 GiB(cuda_graph_memory_bytes),
                 GiB(self.cudagraph_memory_estimate),
                 GiB(diff),
                 100 * diff / max(cuda_graph_memory_bytes, 1),
             )
 
-        if self.cache_config.kv_cache_memory_bytes is None and hasattr(
-            self, "peak_activation_memory"
-        ):
+        if self.cache_config.kv_cache_memory_bytes is None and hasattr(self, "peak_activation_memory"):
             # Suggests optimal kv cache memory size if we rely on
             # memory_profiling to guess the kv cache memory size which
             # provides peak_activation_memory and a few other memory
@@ -800,14 +749,10 @@ class Worker(WorkerBase):
                 + cuda_graph_memory_bytes
             )
             kv_cache_memory_bytes_to_gpu_limit = (
-                self.init_snapshot.free_memory
-                - non_kv_cache_memory
-                - redundancy_buffer_memory
+                self.init_snapshot.free_memory - non_kv_cache_memory - redundancy_buffer_memory
             )
             kv_cache_memory_bytes_to_requested_limit = (
-                int(self.requested_memory)
-                - non_kv_cache_memory
-                - redundancy_buffer_memory
+                int(self.requested_memory) - non_kv_cache_memory - redundancy_buffer_memory
             )
 
             msg = (
@@ -945,16 +890,12 @@ class Worker(WorkerBase):
 
     @torch.inference_mode()
     @with_gpu_sync_check
-    def sample_tokens(
-        self, grammar_output: "GrammarOutput | None"
-    ) -> ModelRunnerOutput | AsyncModelRunnerOutput:
+    def sample_tokens(self, grammar_output: "GrammarOutput | None") -> ModelRunnerOutput | AsyncModelRunnerOutput:
         return self.model_runner.sample_tokens(grammar_output)
 
     @torch.inference_mode()
     @with_gpu_sync_check
-    def execute_model(
-        self, scheduler_output: "SchedulerOutput"
-    ) -> ModelRunnerOutput | AsyncModelRunnerOutput | None:
+    def execute_model(self, scheduler_output: "SchedulerOutput") -> ModelRunnerOutput | AsyncModelRunnerOutput | None:
         # ensure any previous non-blocking PP sends are complete
         if self._pp_send_work:
             for handle in self._pp_send_work:
@@ -968,11 +909,7 @@ class Worker(WorkerBase):
         compilation_config = self.aphrodite_config.compilation_config
         parallel_config = self.aphrodite_config.parallel_config
 
-        if (
-            parallel_config.pipeline_parallel_size > 1
-            and compilation_config.pass_config.enable_sp
-            and forward_pass
-        ):
+        if parallel_config.pipeline_parallel_size > 1 and compilation_config.pass_config.enable_sp and forward_pass:
             # currently only supported by V1 GPUModelRunner
             assert not self.use_v2_model_runner
             num_scheduled_tokens_np = np.array(
@@ -982,27 +919,21 @@ class Worker(WorkerBase):
             # TODO(lucas): This is pretty gross; ideally we should only ever call
             # `_determine_batch_execution_and_padding` once (will get called again
             # in `execute_model`) but this requires a larger refactor of PP.
-            _, batch_desc, _, _, _ = (
-                self.model_runner._determine_batch_execution_and_padding(
-                    num_tokens=num_scheduled_tokens,
-                    num_reqs=len(num_scheduled_tokens_np),
-                    num_scheduled_tokens_np=num_scheduled_tokens_np,
-                    max_num_scheduled_tokens=num_scheduled_tokens_np.max(),
-                    use_cascade_attn=False,  # TODO(lucas): Handle cascade attention
-                )
+            _, batch_desc, _, _, _ = self.model_runner._determine_batch_execution_and_padding(
+                num_tokens=num_scheduled_tokens,
+                num_reqs=len(num_scheduled_tokens_np),
+                num_scheduled_tokens_np=num_scheduled_tokens_np,
+                max_num_scheduled_tokens=num_scheduled_tokens_np.max(),
+                use_cascade_attn=False,  # TODO(lucas): Handle cascade attention
             )
             all_gather_tensors = {
-                "residual": not is_residual_scattered_for_sp(
-                    self.aphrodite_config, batch_desc.num_tokens
-                )
+                "residual": not is_residual_scattered_for_sp(self.aphrodite_config, batch_desc.num_tokens)
             }
 
         if forward_pass and not get_pp_group().is_first_rank:
-            tensor_dict, comm_handles, comm_postprocess = (
-                get_pp_group().irecv_tensor_dict(
-                    all_gather_group=get_tp_group(),
-                    all_gather_tensors=all_gather_tensors,
-                )
+            tensor_dict, comm_handles, comm_postprocess = get_pp_group().irecv_tensor_dict(
+                all_gather_group=get_tp_group(),
+                all_gather_tensors=all_gather_tensors,
             )
             assert tensor_dict is not None
             intermediate_tensors = AsyncIntermediateTensors(
@@ -1012,26 +943,15 @@ class Worker(WorkerBase):
             )
 
         with self.annotate_profile(scheduler_output):
-            output = self.model_runner.execute_model(
-                scheduler_output, intermediate_tensors
-            )
-            if (
-                self.use_v2_model_runner
-                and self.model_runner.is_pooling_model
-                and output is None
-            ):
+            output = self.model_runner.execute_model(scheduler_output, intermediate_tensors)
+            if self.use_v2_model_runner and self.model_runner.is_pooling_model and output is None:
                 output = self.model_runner.pool()  # type: ignore
-            if isinstance(
-                output, ModelRunnerOutput | AsyncModelRunnerOutput | NoneType
-            ):
+            if isinstance(output, ModelRunnerOutput | AsyncModelRunnerOutput | NoneType):
                 return output
 
         assert isinstance(output, IntermediateTensors)
         parallel_config = self.aphrodite_config.parallel_config
-        assert (
-            parallel_config.distributed_executor_backend != "external_launcher"
-            and not get_pp_group().is_last_rank
-        )
+        assert parallel_config.distributed_executor_backend != "external_launcher" and not get_pp_group().is_last_rank
 
         # launch non-blocking send of intermediate tensors
         self._pp_send_work = get_pp_group().isend_tensor_dict(
@@ -1077,17 +997,13 @@ class Worker(WorkerBase):
                         local_rank=self.local_rank,
                         activities=["CPU", "CUDA"],
                     )
-                    logger.debug(
-                        "Starting torch profiler with trace name: %s", trace_name
-                    )
+                    logger.debug("Starting torch profiler with trace name: %s", trace_name)
                 elif profiler_type == "cuda":
                     self.profiler = CudaProfilerWrapper(self.profiler_config)
                     logger.debug("Starting CUDA profiler")
                 else:
                     # Config validation should prevent this code being reached
-                    raise ValueError(
-                        f"Invalid profiler value of {self.profiler_config.profiler}"
-                    )
+                    raise ValueError(f"Invalid profiler value of {self.profiler_config.profiler}")
 
             # If profiler already initialized, restart profiling but keep
             # the original trace name from the first initialization.
@@ -1143,8 +1059,7 @@ class Worker(WorkerBase):
     def _check_weight_transfer_engine(self) -> None:
         if self.weight_transfer_engine is None:
             raise RuntimeError(
-                "Weight transfer not configured. "
-                "Please set weight_transfer_config to enable weight transfer."
+                "Weight transfer not configured. Please set weight_transfer_config to enable weight transfer."
             )
 
     def init_weight_transfer_engine(self, init_info: dict) -> None:
@@ -1174,8 +1089,7 @@ class Worker(WorkerBase):
 
         if self._weight_update_active:
             raise RuntimeError(
-                "start_weight_update called while a weight update is already "
-                "active. Call finish_weight_update first."
+                "start_weight_update called while a weight update is already active. Call finish_weight_update first."
             )
 
         self.weight_transfer_engine.start_weight_update()
@@ -1195,9 +1109,7 @@ class Worker(WorkerBase):
         assert self.weight_transfer_engine is not None
 
         if not self._weight_update_active:
-            raise RuntimeError(
-                "start_weight_update must be called before update_weights."
-            )
+            raise RuntimeError("start_weight_update must be called before update_weights.")
 
         try:
             self.weight_transfer_engine.update_weights(update_info)
@@ -1211,9 +1123,7 @@ class Worker(WorkerBase):
         assert self.weight_transfer_engine is not None
 
         if not self._weight_update_active:
-            raise RuntimeError(
-                "finish_weight_update called without a matching start_weight_update."
-            )
+            raise RuntimeError("finish_weight_update called without a matching start_weight_update.")
 
         self.weight_transfer_engine.finish_weight_update()
         self._weight_update_active = False

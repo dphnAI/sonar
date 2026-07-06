@@ -76,10 +76,7 @@ class AuthenticationMiddleware:
         return token_match
 
     def __call__(self, scope: Scope, receive: Receive, send: Send) -> Awaitable[None]:
-        if (
-            scope["type"] not in ("http", "websocket")
-            or scope.get("method") == "OPTIONS"
-        ):
+        if scope["type"] not in ("http", "websocket") or scope.get("method") == "OPTIONS":
             # scope["type"] can be "lifespan" or "startup" for example,
             # in which case we don't need to do anything
             return self.app(scope, receive, send)
@@ -131,9 +128,7 @@ def load_log_config(log_config_file: str | None) -> dict | None:
         with open(log_config_file) as f:
             return json.load(f)
     except Exception as e:
-        logger.warning(
-            "Failed to load log config from file %s: error %s", log_config_file, e
-        )
+        logger.warning("Failed to load log config from file %s: error %s", log_config_file, e)
         return None
 
 
@@ -157,11 +152,7 @@ def get_uvicorn_log_config(args: Namespace) -> dict | None:
         from aphrodite.logging_utils import create_uvicorn_log_config
 
         # Parse comma-separated string into list
-        excluded_paths = [
-            p.strip()
-            for p in args.disable_access_log_for_endpoints.split(",")
-            if p.strip()
-        ]
+        excluded_paths = [p.strip() for p in args.disable_access_log_for_endpoints.split(",") if p.strip()]
         return create_uvicorn_log_config(
             excluded_paths=excluded_paths,
             log_level=args.uvicorn_log_level,
@@ -325,9 +316,7 @@ async def log_response(request: Request, call_next):
     return response
 
 
-async def engine_error_handler(
-    req: Request, exc: EngineDeadError | EngineGenerateError
-):
+async def engine_error_handler(req: Request, exc: EngineDeadError | EngineGenerateError):
     """
     APHRODITE V1 AsyncLLM catches exceptions and returns
     only two types: EngineGenerateError and EngineDeadError.
@@ -355,9 +344,7 @@ async def engine_error_handler(
     if req.app.state.args.log_error_stack:
         logger.exception(
             "Engine Exception caught. Request id: %s",
-            req.state.request_metadata.request_id
-            if hasattr(req.state, "request_metadata")
-            else None,
+            req.state.request_metadata.request_id if hasattr(req.state, "request_metadata") else None,
         )
 
     terminate_if_errored(
@@ -383,9 +370,7 @@ async def exception_handler(req: Request, exc: Exception):
     if req.app.state.args.log_error_stack:
         logger.error(
             "Exception caught. Request id: %s",
-            req.state.request_metadata.request_id
-            if hasattr(req.state, "request_metadata")
-            else None,
+            req.state.request_metadata.request_id if hasattr(req.state, "request_metadata") else None,
         )
 
     err = create_error_response(exc)
@@ -396,9 +381,7 @@ async def http_exception_handler(req: Request, exc: HTTPException):
     if req.app.state.args.log_error_stack:
         logger.exception(
             "HTTPException caught. Request id: %s",
-            req.state.request_metadata.request_id
-            if hasattr(req.state, "request_metadata")
-            else None,
+            req.state.request_metadata.request_id if hasattr(req.state, "request_metadata") else None,
         )
     err = ErrorResponse(
         error=ErrorInfo(
@@ -489,9 +472,7 @@ async def validation_exception_handler(req: Request, exc: RequestValidationError
     if req.app.state.args.log_error_stack:
         logger.exception(
             "RequestValidationError caught. Request id: %s",
-            req.state.request_metadata.request_id
-            if hasattr(req.state, "request_metadata")
-            else None,
+            req.state.request_metadata.request_id if hasattr(req.state, "request_metadata") else None,
         )
 
     param = None

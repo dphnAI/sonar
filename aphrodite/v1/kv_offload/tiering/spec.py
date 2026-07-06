@@ -73,9 +73,7 @@ class TieringOffloadingSpec(CPUOffloadingSpec):
 
     @classmethod
     @override
-    def build_metric_definitions(
-        cls, extra_config: dict[str, Any]
-    ) -> dict[str, OffloadingMetricMetadata]:
+    def build_metric_definitions(cls, extra_config: dict[str, Any]) -> dict[str, OffloadingMetricMetadata]:
         metrics = super().build_metric_definitions(extra_config)
         secondary_tier_configs = extra_config.get("secondary_tiers", [])
         if not isinstance(secondary_tier_configs, list):
@@ -145,9 +143,7 @@ class TieringOffloadingSpec(CPUOffloadingSpec):
             secondary_tiers = []
             for i, tier_config in enumerate(self.secondary_tier_configs):
                 try:
-                    tier = SecondaryTierFactory.create_secondary_tier(
-                        tier_config, primary_kv_view, self
-                    )
+                    tier = SecondaryTierFactory.create_secondary_tier(tier_config, primary_kv_view, self)
                     secondary_tiers.append(tier)
                     logger.info(
                         "Created secondary tier #%d (%s)",
@@ -171,14 +167,11 @@ class TieringOffloadingSpec(CPUOffloadingSpec):
                 enable_events=self.kv_events_config.enable_kv_cache_events,
             )
             if int(self.extra_config.get("store_threshold", 0)) >= 2:
-                raise ValueError(
-                    "store_threshold is not supported for TieringOffloadingSpec"
-                )
+                raise ValueError("store_threshold is not supported for TieringOffloadingSpec")
             self._manager = tiering_manager
 
             logger.info(
-                "Created TieringOffloadingManager with primary tier "
-                "(%s, %s blocks) and %s secondary tier(s)",
+                "Created TieringOffloadingManager with primary tier (%s, %s blocks) and %s secondary tier(s)",
                 self.eviction_policy,
                 self.num_blocks,
                 len(secondary_tiers),

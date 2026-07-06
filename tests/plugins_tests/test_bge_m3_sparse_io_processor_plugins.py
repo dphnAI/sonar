@@ -6,17 +6,16 @@ import json
 import pytest
 import requests
 
+from aphrodite.entrypoints.pooling.pooling.protocol import IOProcessorResponse
+
 # Test configuration for BGE-M3 sparse plugin
 from tests.utils import RemoteOpenAIServer
-from aphrodite.entrypoints.pooling.pooling.protocol import IOProcessorResponse
 
 model_config = {
     "model_name": "BAAI/bge-m3",
     "plugin": "bge_m3_sparse_plugin",
     "test_input": "What is the capital of France?",
-    "hf_overrides": json.dumps(
-        {"architectures": ["BgeM3EmbeddingModel"], "head_dtype": "float16"}
-    ),
+    "hf_overrides": json.dumps({"architectures": ["BgeM3EmbeddingModel"], "head_dtype": "float16"}),
 }
 
 dense_embedding_sum = [
@@ -27,9 +26,7 @@ dense_embedding_sum = [
 
 
 def _float_close(expected: object, result: object):
-    assert isinstance(expected, float) and isinstance(result, float), (
-        f"{expected=}  or {result=} is not float"
-    )
+    assert isinstance(expected, float) and isinstance(result, float), f"{expected=}  or {result=} is not float"
     return (expected - result) < 1e-3 or abs(expected / result - 1) < 1e-3
 
 
@@ -40,9 +37,7 @@ def _get_attr_or_val(obj: object | dict, key: str):
 
 
 def _check_dense_embedding(data, index=0):
-    assert _float_close(sum(data), dense_embedding_sum[index]), (
-        "dense-embedding result not match"
-    )
+    assert _float_close(sum(data), dense_embedding_sum[index]), "dense-embedding result not match"
 
 
 def _check_sparse_embedding(data, check_tokens=False):
@@ -60,17 +55,15 @@ def _check_sparse_embedding(data, check_tokens=False):
     assert len(data) == len(expected_embed)
     for entry in data:
         expected_val = expected_embed[_get_attr_or_val(entry, "token_id")]
-        assert _float_close(
-            expected_val["weight"], _get_attr_or_val(entry, "weight")
-        ), f"actual embed {entry} not equal to {expected_val}"
+        assert _float_close(expected_val["weight"], _get_attr_or_val(entry, "weight")), (
+            f"actual embed {entry} not equal to {expected_val}"
+        )
         if check_tokens:
             assert expected_val["token"] == _get_attr_or_val(entry, "token"), (
                 f"actual embed {entry} not equal to {expected_val}"
             )
         else:
-            assert _get_attr_or_val(entry, "token") is None, (
-                f"{entry} should not return token"
-            )
+            assert _get_attr_or_val(entry, "token") is None, f"{entry} should not return token"
 
 
 @pytest.fixture(scope="function")
@@ -96,9 +89,7 @@ def server():
     "return_tokens",
     [True, False],
 )
-async def test_bge_m3_sparse_plugin_online(
-    server: RemoteOpenAIServer, return_tokens: bool
-):
+async def test_bge_m3_sparse_plugin_online(server: RemoteOpenAIServer, return_tokens: bool):
     """Test BGE-M3 sparse plugin in online mode via API."""
     request_payload = {
         "model": model_config["model_name"],
@@ -138,9 +129,7 @@ async def test_bge_m3_sparse_plugin_online(
     usage = _get_attr_or_val(parsed_response, "usage")
     assert usage, f"usage not found for {parsed_response}"
     assert _get_attr_or_val(usage, "prompt_tokens") > 0
-    assert _get_attr_or_val(usage, "total_tokens") == _get_attr_or_val(
-        usage, "prompt_tokens"
-    )
+    assert _get_attr_or_val(usage, "total_tokens") == _get_attr_or_val(usage, "prompt_tokens")
 
 
 @pytest.mark.parametrize(

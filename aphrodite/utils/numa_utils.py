@@ -48,9 +48,7 @@ def _can_set_mempolicy() -> bool:
         if libnuma is None or libnuma.numa_available() < 0:
             return False
         mode = ctypes.c_int()
-        ret = libnuma.get_mempolicy(
-            ctypes.byref(mode), None, ctypes.c_ulong(0), None, ctypes.c_ulong(0)
-        )
+        ret = libnuma.get_mempolicy(ctypes.byref(mode), None, ctypes.c_ulong(0), None, ctypes.c_ulong(0))
         return ret == 0
     except Exception:
         return False
@@ -223,9 +221,7 @@ def _pct_sku_config() -> _PctSku | None:
     return sku
 
 
-def _get_gpu_index(
-    parallel_config, local_rank: int, dp_local_rank: int | None = None
-) -> int:
+def _get_gpu_index(parallel_config, local_rank: int, dp_local_rank: int | None = None) -> int:
     """Compute the physical GPU index used for NUMA lookup."""
     if (
         parallel_config.distributed_executor_backend not in ("ray", "external_launcher")
@@ -237,10 +233,7 @@ def _get_gpu_index(
             if dp_local_rank is None:
                 dp_local_rank = parallel_config.data_parallel_index
 
-        tp_pp_world_size = (
-            parallel_config.pipeline_parallel_size
-            * parallel_config.tensor_parallel_size
-        )
+        tp_pp_world_size = parallel_config.pipeline_parallel_size * parallel_config.tensor_parallel_size
         return local_rank + dp_local_rank * tp_pp_world_size
 
     return local_rank
@@ -311,8 +304,7 @@ def _maybe_get_pct_cpu_binding(numa_nodes: list[int]) -> list[int] | None:
             continue
         union_cpus.update(priority)
         logger.info(
-            "Detected PCT-capable Granite Rapids Xeon (stride=%d); "
-            "NUMA node %d priority cores: %s",
+            "Detected PCT-capable Granite Rapids Xeon (stride=%d); NUMA node %d priority cores: %s",
             stride,
             numa_node,
             ",".join(str(c) for c in priority),
@@ -323,9 +315,7 @@ def _maybe_get_pct_cpu_binding(numa_nodes: list[int]) -> list[int] | None:
     return sorted(union_cpus)
 
 
-def _get_cpu_binding(
-    parallel_config, gpu_index: int, numa_nodes: list[int]
-) -> str | None:
+def _get_cpu_binding(parallel_config, gpu_index: int, numa_nodes: list[int]) -> str | None:
     """Return the CPU list a process should be pinned to (or None)."""
     cpu_bindings = parallel_config.numa_bind_cpus
     if cpu_bindings is None:
@@ -342,9 +332,7 @@ def _get_cpu_binding(
     return cpu_bindings[gpu_index]
 
 
-def _get_numactl_worker_args(
-    parallel_config, local_rank: int, dp_local_rank: int | None = None
-) -> str:
+def _get_numactl_worker_args(parallel_config, local_rank: int, dp_local_rank: int | None = None) -> str:
     """Compute the numactl args for a single TP/PP worker subprocess."""
     gpu_index = _get_gpu_index(parallel_config, local_rank, dp_local_rank)
     numa_node = _get_numa_node(parallel_config, gpu_index)
@@ -369,9 +357,7 @@ def _get_numactl_worker_args(
     return f"--cpunodebind={numa_node} --membind={numa_node}"
 
 
-def _get_enginecore_numa_nodes(
-    parallel_config, dp_local_rank: int | None = None
-) -> list[int]:
+def _get_enginecore_numa_nodes(parallel_config, dp_local_rank: int | None = None) -> list[int]:
     """Return the sorted, unique NUMA nodes of the EngineCore's DP shard."""
     numa_nodes = parallel_config.numa_bind_nodes
     if numa_nodes is None:
@@ -389,10 +375,7 @@ def _get_enginecore_numa_nodes(
             if dp_local_rank is None:
                 dp_local_rank = parallel_config.data_parallel_index
 
-        tp_pp_world_size = (
-            parallel_config.pipeline_parallel_size
-            * parallel_config.tensor_parallel_size
-        )
+        tp_pp_world_size = parallel_config.pipeline_parallel_size * parallel_config.tensor_parallel_size
         shard_start = dp_local_rank * tp_pp_world_size
         shard_end = min(shard_start + tp_pp_world_size, len(numa_nodes))
         shard_indices: range | tuple[int, ...] = range(shard_start, shard_end)
@@ -404,9 +387,7 @@ def _get_enginecore_numa_nodes(
     return sorted({numa_nodes[i] for i in shard_indices})
 
 
-def _get_numactl_enginecore_args(
-    parallel_config, local_rank: int, dp_local_rank: int | None = None
-) -> str:
+def _get_numactl_enginecore_args(parallel_config, local_rank: int, dp_local_rank: int | None = None) -> str:
     """Compute the numactl args for an EngineCore subprocess.
 
     ``--numa-bind-cpus`` is deliberately ignored here: the user provides a
@@ -421,17 +402,12 @@ def _get_numactl_enginecore_args(
     shard_nodes = _get_enginecore_numa_nodes(parallel_config, dp_local_rank)
     membind_arg = ",".join(str(n) for n in shard_nodes)
 
-    pct_cpus = (
-        None
-        if parallel_config.numa_bind_cpus is not None
-        else _maybe_get_pct_cpu_binding(shard_nodes)
-    )
+    pct_cpus = None if parallel_config.numa_bind_cpus is not None else _maybe_get_pct_cpu_binding(shard_nodes)
 
     if pct_cpus is not None:
         cpu_binding = ",".join(str(c) for c in pct_cpus)
         logger.info(
-            "Binding EngineCore subprocess (local_rank=%s) to CPUs %s "
-            "and NUMA nodes %s",
+            "Binding EngineCore subprocess (local_rank=%s) to CPUs %s and NUMA nodes %s",
             local_rank,
             cpu_binding,
             membind_arg,
@@ -488,15 +464,12 @@ def _probe_numactl_args(numactl_args: str) -> bool:
 
 def _resolve_numactl_args(numactl_args: str) -> str:
     """Drop ``--membind`` if the container rejects it, keeping CPU binding."""
-    cpu_only = " ".join(
-        t for t in numactl_args.split() if not t.startswith("--membind=")
-    )
+    cpu_only = " ".join(t for t in numactl_args.split() if not t.startswith("--membind="))
     for candidate in (numactl_args, cpu_only, ""):
         if _probe_numactl_args(candidate):
             if candidate != numactl_args:
                 logger.warning(
-                    "numactl args %r rejected; falling back to %r. Add "
-                    "--cap-add SYS_NICE for full NUMA binding.",
+                    "numactl args %r rejected; falling back to %r. Add --cap-add SYS_NICE for full NUMA binding.",
                     numactl_args,
                     candidate or "no binding",
                 )
@@ -518,17 +491,11 @@ def configure_subprocess(
         return
 
     if process_kind == "EngineCore":
-        numactl_args = _get_numactl_enginecore_args(
-            parallel_config, local_rank, dp_local_rank
-        )
+        numactl_args = _get_numactl_enginecore_args(parallel_config, local_rank, dp_local_rank)
     elif process_kind == "worker":
-        numactl_args = _get_numactl_worker_args(
-            parallel_config, local_rank, dp_local_rank
-        )
+        numactl_args = _get_numactl_worker_args(parallel_config, local_rank, dp_local_rank)
     else:
-        raise ValueError(
-            f"Unknown process_kind {process_kind!r}; expected 'worker' or 'EngineCore'."
-        )
+        raise ValueError(f"Unknown process_kind {process_kind!r}; expected 'worker' or 'EngineCore'.")
 
     executable, debug_str = _get_numactl_executable()
     numactl_args = _resolve_numactl_args(numactl_args)
@@ -549,10 +516,7 @@ def _get_numactl_executable() -> tuple[str, str]:
     from shutil import which
 
     if which("numactl") is None:
-        raise RuntimeError(
-            "numactl is required for NUMA binding but is not installed or "
-            "not available on PATH."
-        )
+        raise RuntimeError("numactl is required for NUMA binding but is not installed or not available on PATH.")
 
     script_path = Path(__file__).with_name("numa_wrapper.sh")
     return str(script_path), f"{script_path} via {_NUMACTL_ARGS_ENV}"

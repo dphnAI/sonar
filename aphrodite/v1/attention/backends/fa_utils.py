@@ -46,8 +46,7 @@ elif current_platform.is_rocm():
 
         def flash_attn_varlen_func(*args: Any, **kwargs: Any) -> Any:  # type: ignore[no-redef,misc]
             raise ImportError(
-                "ROCm platform requires upstream flash-attn "
-                "to be installed. Please install flash-attn first."
+                "ROCm platform requires upstream flash-attn to be installed. Please install flash-attn first."
             )
 
         compile_flash_attn_varlen_func_from_specs = None  # type: ignore[assignment]
@@ -165,47 +164,30 @@ def get_flash_attn_version(
         from aphrodite.config import get_current_aphrodite_config_or_none
 
         aphrodite_config = get_current_aphrodite_config_or_none()
-        if (
-            aphrodite_config is not None
-            and aphrodite_config.attention_config.flash_attn_version is not None
-        ):
+        if aphrodite_config is not None and aphrodite_config.attention_config.flash_attn_version is not None:
             fa_version = aphrodite_config.attention_config.flash_attn_version
 
         # 3. fallback for unsupported combinations
         if device_capability.major >= 10 and fa_version == 3:
             logger.warning_once(
-                "Cannot use FA version 3 on Blackwell platform, "
-                "defaulting to FA version 4 if supported, otherwise FA2."
+                "Cannot use FA version 3 on Blackwell platform, defaulting to FA version 4 if supported, otherwise FA2."
             )
             fa_version = 4 if is_fa_version_supported(4) else 2
 
         if requires_alibi and fa_version == 3:
-            logger.warning_once(
-                "Cannot use FA version 3 with ALiBi, defaulting to FA version 2."
-            )
+            logger.warning_once("Cannot use FA version 3 with ALiBi, defaulting to FA version 2.")
             fa_version = 2
 
         if requires_alibi and fa_version == 4:
-            logger.warning_once(
-                "Cannot use FA version 4 with ALiBi, defaulting to FA version 2."
-            )
+            logger.warning_once("Cannot use FA version 4 with ALiBi, defaulting to FA version 2.")
             fa_version = 2
 
         # Some FA3 unsupported SM90 cases can use FA4 when available.
-        if (
-            fa_version == 3
-            and device_capability.major == 9
-            and is_fa_version_supported(4)
-        ):
+        if fa_version == 3 and device_capability.major == 9 and is_fa_version_supported(4):
             upgrade_reason = None
             if head_size is not None and head_size > 256:
                 upgrade_reason = f"FA3 does not support head_size={head_size} on SM90"
-            elif (
-                has_sinks
-                and head_size is not None
-                and head_size_v is not None
-                and head_size != head_size_v
-            ):
+            elif has_sinks and head_size is not None and head_size_v is not None and head_size != head_size_v:
                 upgrade_reason = "Diff-KV with sinks"
             elif (
                 aphrodite_config is not None
@@ -225,8 +207,7 @@ def get_flash_attn_version(
         # heuristics on SM100+, which breaks batch invariance.
         if envs.APHRODITE_BATCH_INVARIANT and fa_version == 4:
             logger.warning_once(
-                "Cannot use FA version 4 with batch invariance, "
-                "defaulting to FA version 2.",
+                "Cannot use FA version 4 with batch invariance, defaulting to FA version 2.",
             )
             fa_version = 2
 
@@ -292,9 +273,7 @@ def flash_attn_supports_mla():
                 is_fa_version_supported,
             )
 
-            return is_fa_version_supported(
-                3
-            ) and current_platform.is_device_capability_family(90)
+            return is_fa_version_supported(3) and current_platform.is_device_capability_family(90)
 
             # NOTE(Lucas): FA4 CuteDSL does NOT currently support MLA's non-standard
             # head dimensions (576 for qk, 512 for v) due to TMEM capacity limits.

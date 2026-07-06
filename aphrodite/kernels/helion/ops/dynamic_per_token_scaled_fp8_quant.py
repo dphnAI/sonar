@@ -16,10 +16,7 @@ from aphrodite.platforms import current_platform
 from aphrodite.utils.import_utils import has_helion
 
 if not has_helion():
-    raise ImportError(
-        "Helion kernel requires helion to be installed. "
-        "Install it with: pip install helion"
-    )
+    raise ImportError("Helion kernel requires helion to be installed. Install it with: pip install helion")
 
 import helion
 import helion.language as hl
@@ -85,9 +82,7 @@ def pick_config(args: tuple[Any, ...], config_keys: list[CaseKey]) -> CaseKey | 
 
     best_hidden_size = min(configs, key=lambda s: abs(s - hidden_size))
     available_num_tokens = sorted(configs[best_hidden_size])
-    best_num_tokens = next(
-        (n for n in available_num_tokens if n >= num_tokens), available_num_tokens[-1]
-    )
+    best_num_tokens = next((n for n in available_num_tokens if n >= num_tokens), available_num_tokens[-1])
 
     result = CaseKey({"hidden_size": best_hidden_size, "num_tokens": best_num_tokens})
     _pick_cache[cache_key] = result

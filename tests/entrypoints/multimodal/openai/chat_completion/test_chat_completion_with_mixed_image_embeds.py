@@ -16,10 +16,10 @@ import torch.nn as nn
 from huggingface_hub import hf_hub_download
 from transformers import AutoTokenizer
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.assets.image import ImageAsset
 from aphrodite.multimodal.utils import encode_image_url
 from aphrodite.utils.serial_utils import tensor2base64
+from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "Qwen/Qwen2-VL-2B-Instruct"
 
@@ -156,9 +156,7 @@ def image_embeds_b64() -> dict[str, str]:
     text_hidden_size = 1536  # Qwen2-VL-2B
     torch.manual_seed(0)
     return {
-        "image_embeds": tensor2base64(
-            torch.randn(num_patches, text_hidden_size, dtype=MODEL_DTYPE)
-        ),
+        "image_embeds": tensor2base64(torch.randn(num_patches, text_hidden_size, dtype=MODEL_DTYPE)),
         "image_grid_thw": tensor2base64(torch.tensor(grid)),
     }
 

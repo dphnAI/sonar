@@ -9,9 +9,7 @@ from typing_extensions import Self
 from aphrodite.config.utils import config
 from aphrodite.utils.hashing import safe_hash
 
-StructuredOutputsBackend = Literal[
-    "auto", "xgrammar", "guidance", "outlines", "lm-format-enforcer"
-]
+StructuredOutputsBackend = Literal["auto", "xgrammar", "guidance", "outlines", "lm-format-enforcer"]
 
 
 @config
@@ -62,13 +60,7 @@ class StructuredOutputsConfig:
     @model_validator(mode="after")
     def _validate_structured_output_config(self) -> Self:
         if self.disable_any_whitespace and self.backend not in ("xgrammar", "guidance"):
-            raise ValueError(
-                "disable_any_whitespace is only supported for "
-                "xgrammar and guidance backends."
-            )
+            raise ValueError("disable_any_whitespace is only supported for xgrammar and guidance backends.")
         if self.disable_additional_properties and self.backend != "guidance":
-            raise ValueError(
-                "disable_additional_properties is only supported "
-                "for the guidance backend."
-            )
+            raise ValueError("disable_additional_properties is only supported for the guidance backend.")
         return self

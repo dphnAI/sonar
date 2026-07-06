@@ -69,8 +69,7 @@ def test_custom_is_not_alias_of_any_backend():
     assert len(aliases) == 0, (
         f"BUG! CUSTOM is an alias of: {', '.join(aliases)}!\n"
         f"CUSTOM.value = {repr(MLAPrefillBackendEnum.CUSTOM.value)}\n"
-        f"All MLA prefill backend values:\n"
-        + "\n".join(f"  {b.name}: {repr(b.value)}" for b in all_backends)
+        f"All MLA prefill backend values:\n" + "\n".join(f"  {b.name}: {repr(b.value)}" for b in all_backends)
     )
 
     assert MLAPrefillBackendEnum.CUSTOM.name == "CUSTOM"
@@ -84,17 +83,13 @@ def test_custom_unregistered_raises():
 def test_register_custom_backend_with_class_path():
     register_mla_prefill_backend(
         backend=MLAPrefillBackendEnum.CUSTOM,
-        class_path=(
-            "tests.v1.attention.test_mla_prefill_registry.CustomMLAPrefillBackend"
-        ),
+        class_path=("tests.v1.attention.test_mla_prefill_registry.CustomMLAPrefillBackend"),
     )
 
     assert MLAPrefillBackendEnum.CUSTOM.is_overridden()
 
     class_path = MLAPrefillBackendEnum.CUSTOM.get_path()
-    assert class_path == (
-        "tests.v1.attention.test_mla_prefill_registry.CustomMLAPrefillBackend"
-    )
+    assert class_path == ("tests.v1.attention.test_mla_prefill_registry.CustomMLAPrefillBackend")
 
     backend_cls = MLAPrefillBackendEnum.CUSTOM.get_class()
     assert backend_cls.get_name() == "CUSTOM"
@@ -124,9 +119,7 @@ def test_override_existing_backend():
 
     register_mla_prefill_backend(
         backend=MLAPrefillBackendEnum.FLASH_ATTN,
-        class_path=(
-            "tests.v1.attention.test_mla_prefill_registry.CustomMLAPrefillBackend"
-        ),
+        class_path=("tests.v1.attention.test_mla_prefill_registry.CustomMLAPrefillBackend"),
     )
 
     assert MLAPrefillBackendEnum.FLASH_ATTN.is_overridden()
@@ -141,9 +134,7 @@ def test_clear_override():
 
     register_mla_prefill_backend(
         backend=MLAPrefillBackendEnum.FLASH_ATTN,
-        class_path=(
-            "tests.v1.attention.test_mla_prefill_registry.CustomMLAPrefillBackend"
-        ),
+        class_path=("tests.v1.attention.test_mla_prefill_registry.CustomMLAPrefillBackend"),
     )
     assert MLAPrefillBackendEnum.FLASH_ATTN.is_overridden()
 
@@ -162,10 +153,7 @@ def test_rocm_aiter_fa_registered():
     assert "ROCM_AITER_FA" in MLAPrefillBackendEnum.__members__
 
     path = MLAPrefillBackendEnum.ROCM_AITER_FA.get_path()
-    assert path == (
-        "aphrodite.v1.attention.backends.mla.prefill.aiter_flash_attn."
-        "AiterFlashAttnPrefillBackend"
-    )
+    assert path == ("aphrodite.v1.attention.backends.mla.prefill.aiter_flash_attn.AiterFlashAttnPrefillBackend")
 
     backend_cls = MLAPrefillBackendEnum.ROCM_AITER_FA.get_class()
     assert backend_cls.get_name() == "ROCM_AITER_FA"

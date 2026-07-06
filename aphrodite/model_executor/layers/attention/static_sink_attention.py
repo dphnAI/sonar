@@ -4,7 +4,7 @@ import functools
 
 import torch
 
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.forward_context import ForwardContext, get_forward_context
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.custom_op import CustomOp
@@ -59,9 +59,7 @@ def create_static_sink_attention_backend(
             self.sink_len = sink_len
             self.block_size = aphrodite_config.cache_config.block_size
             self.num_sink_blocks = self.sink_len // aphrodite_config.cache_config.block_size
-            self.max_num_blocks = cdiv(
-                model_config.max_model_len, aphrodite_config.cache_config.block_size
-            )
+            self.max_num_blocks = cdiv(model_config.max_model_len, aphrodite_config.cache_config.block_size)
             self.block_table_with_sink = torch.zeros(
                 (
                     scheduler_config.max_num_seqs,
@@ -83,23 +81,15 @@ def create_static_sink_attention_backend(
             common_attn_metadata: CommonAttentionMetadata,
             fast_build: bool = False,
         ) -> AttentionMetadata:
-            common_attn_metadata.seq_lens[:] = (
-                common_attn_metadata.seq_lens + self.sink_len
-            )
-            common_attn_metadata.seq_lens[
-                common_attn_metadata.seq_lens == self.sink_len
-            ] = 0
-            common_attn_metadata.max_seq_len = (
-                common_attn_metadata.max_seq_len + self.sink_len
-            )
+            common_attn_metadata.seq_lens[:] = common_attn_metadata.seq_lens + self.sink_len
+            common_attn_metadata.seq_lens[common_attn_metadata.seq_lens == self.sink_len] = 0
+            common_attn_metadata.max_seq_len = common_attn_metadata.max_seq_len + self.sink_len
             max_num_blocks = cdiv(common_attn_metadata.max_seq_len, self.block_size)
             num_reqs = common_attn_metadata.num_reqs
-            self.block_table_with_sink[
-                :num_reqs, self.num_sink_blocks : self.num_sink_blocks + max_num_blocks
-            ] = common_attn_metadata.block_table_tensor[:, :max_num_blocks]
-            common_attn_metadata.block_table_tensor = self.block_table_with_sink[
-                :num_reqs
-            ]
+            self.block_table_with_sink[:num_reqs, self.num_sink_blocks : self.num_sink_blocks + max_num_blocks] = (
+                common_attn_metadata.block_table_tensor[:, :max_num_blocks]
+            )
+            common_attn_metadata.block_table_tensor = self.block_table_with_sink[:num_reqs]
 
             return super().build(common_prefix_len, common_attn_metadata, fast_build)
 
@@ -175,9 +165,7 @@ class StaticSinkAttention(Attention, CustomOp):
         )
         if not self.sink_populated:
             self_kv_cache = self.kv_cache
-            torch.ops.aphrodite.maybe_populate_sink(
-                self_kv_cache, _encode_layer_name(self.layer_name)
-            )
+            torch.ops.aphrodite.maybe_populate_sink(self_kv_cache, _encode_layer_name(self.layer_name))
 
         return super().forward(query, key, value, output_shape)
 

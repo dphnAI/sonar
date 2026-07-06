@@ -122,9 +122,7 @@ def should_nccl_symm_mem_allreduce(world_size: int, input_tensor: torch.Tensor) 
         return False
 
     tensor_size = input_tensor.nbytes
-    custom_ar_range = NCCL_SYMM_MEM_ALL_REDUCE_CONFIG["custom_ar_preferred_ranges"].get(
-        world_size
-    )
+    custom_ar_range = NCCL_SYMM_MEM_ALL_REDUCE_CONFIG["custom_ar_preferred_ranges"].get(world_size)
 
     if custom_ar_range is not None:
         lower_bound, upper_bound = custom_ar_range
@@ -295,8 +293,7 @@ def can_actually_p2p(
         b = result_queue.get()
         if a != b:
             logger.warning(
-                "Two processes do not agree on the P2P access"
-                " status on %d -> %d, treat as disabled.",
+                "Two processes do not agree on the P2P access status on %d -> %d, treat as disabled.",
                 src,
                 tgt,
             )
@@ -345,15 +342,11 @@ def gpu_p2p_access_check(src: int, tgt: int) -> bool:
         cuda_visible_devices = envs.CUDA_VISIBLE_DEVICES
         cache_key = cuda_visible_devices or ",".join(str(i) for i in range(num_dev))
 
-    path = os.path.join(
-        envs.APHRODITE_CACHE_ROOT, f"gpu_p2p_access_cache_for_{cache_key}.json"
-    )
+    path = os.path.join(envs.APHRODITE_CACHE_ROOT, f"gpu_p2p_access_cache_for_{cache_key}.json")
     os.makedirs(os.path.dirname(path), exist_ok=True)
     from aphrodite.distributed.parallel_state import get_world_group
 
-    if (not is_distributed or get_world_group().local_rank == 0) and (
-        not os.path.exists(path)
-    ):
+    if (not is_distributed or get_world_group().local_rank == 0) and (not os.path.exists(path)):
         # only the local master process (with local_rank == 0) can
         #  enter this block to calculate the cache
         logger.info("generating GPU P2P access cache in %s", path)
@@ -361,10 +354,7 @@ def gpu_p2p_access_check(src: int, tgt: int) -> bool:
         # The probe subprocesses inherit this process's device-control env
         # var, so they must be given visible ordinals, not physical IDs.
         if assigned_physical_gpu_ids is not None:
-            ids = [
-                current_platform.logical_device_id_to_visible_device_id(local)
-                for local in range(num_dev)
-            ]
+            ids = [current_platform.logical_device_id_to_visible_device_id(local) for local in range(num_dev)]
         else:
             ids = list(range(num_dev))
         # batch of all pairs of GPUs
@@ -381,9 +371,7 @@ def gpu_p2p_access_check(src: int, tgt: int) -> bool:
         # because the subprocess might produce logging output
         with tempfile.NamedTemporaryFile() as output_file:
             input_bytes = pickle.dumps((batch_src, batch_tgt, output_file.name))
-            returned = subprocess.run(
-                [sys.executable, __file__], input=input_bytes, capture_output=True
-            )
+            returned = subprocess.run([sys.executable, __file__], input=input_bytes, capture_output=True)
             # check if the subprocess is successful
             try:
                 returned.check_returncode()

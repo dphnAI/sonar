@@ -7,9 +7,9 @@ import torch
 import aphrodite.envs as envs
 from aphrodite.compilation.decorators import support_torch_compile
 from aphrodite.config import (
+    AphroditeConfig,
     CompilationConfig,
     ModelConfig,
-    AphroditeConfig,
     set_current_aphrodite_config,
 )
 from aphrodite.config.compilation import CompilationMode, CUDAGraphMode
@@ -31,9 +31,7 @@ class RotaryEmbeddingCompileModule(torch.nn.Module):
             is_neox_style=True,
         )
 
-    def forward(
-        self, positions: torch.Tensor, query: torch.Tensor, key: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, positions: torch.Tensor, query: torch.Tensor, key: torch.Tensor) -> torch.Tensor:
         q_rot, k_rot = self.rotary_emb(positions, query, key)
         return q_rot + k_rot
 

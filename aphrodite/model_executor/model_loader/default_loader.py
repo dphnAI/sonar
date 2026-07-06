@@ -91,28 +91,17 @@ class DefaultModelLoader(BaseModelLoader):
 
         if unexpected_keys:
             raise ValueError(
-                f"Unexpected extra config keys for load format "
-                f"{load_config.load_format}: "
-                f"{unexpected_keys}"
+                f"Unexpected extra config keys for load format {load_config.load_format}: {unexpected_keys}"
             )
 
         enable_multithread_load = extra_config.get("enable_multithread_load", False)
         if not isinstance(enable_multithread_load, bool):
-            raise ValueError(
-                f"enable_multithread_load must be a bool, got "
-                f"{type(enable_multithread_load).__name__}"
-            )
+            raise ValueError(f"enable_multithread_load must be a bool, got {type(enable_multithread_load).__name__}")
         num_threads = extra_config.get("num_threads")
-        if num_threads is not None and not (
-            isinstance(num_threads, int) and num_threads > 0
-        ):
-            raise ValueError(
-                f"num_threads must be a positive integer, got {num_threads!r}"
-            )
+        if num_threads is not None and not (isinstance(num_threads, int) and num_threads > 0):
+            raise ValueError(f"num_threads must be a positive integer, got {num_threads!r}")
 
-        self.enable_weights_track: bool | None = extra_config.get(
-            "enable_weights_track", None
-        )
+        self.enable_weights_track: bool | None = extra_config.get("enable_weights_track", None)
 
         # The multi-thread loader ignores safetensors_load_strategy, so reject
         # the combination instead of silently dropping the requested strategy.
@@ -137,10 +126,7 @@ class DefaultModelLoader(BaseModelLoader):
         """Prepare weights for the model.
 
         If the model is not local, it will be downloaded."""
-        model_name_or_path = (
-            maybe_download_from_modelscope(model_name_or_path, revision)
-            or model_name_or_path
-        )
+        model_name_or_path = maybe_download_from_modelscope(model_name_or_path, revision) or model_name_or_path
 
         is_local = os.path.isdir(model_name_or_path)
         load_format = self.load_config.load_format
@@ -166,11 +152,7 @@ class DefaultModelLoader(BaseModelLoader):
         # Some quantized models use .pt files for storing the weights.
         if load_format == "hf":
             allow_patterns = ["*.safetensors", "*.bin"]
-        elif (
-            load_format == "safetensors"
-            or load_format == "fastsafetensors"
-            or load_format == "instanttensor"
-        ):
+        elif load_format == "safetensors" or load_format == "fastsafetensors" or load_format == "instanttensor":
             use_safetensors = True
             allow_patterns = ["*.safetensors"]
         elif load_format == "mistral":
@@ -229,16 +211,12 @@ class DefaultModelLoader(BaseModelLoader):
                     subfolder=subfolder,
                     revision=revision,
                 )
-            hf_weights_files = filter_duplicate_safetensors_files(
-                hf_weights_files, hf_folder, index_file
-            )
+            hf_weights_files = filter_duplicate_safetensors_files(hf_weights_files, hf_folder, index_file)
         else:
             hf_weights_files = filter_files_not_needed_for_inference(hf_weights_files)
 
         if len(hf_weights_files) == 0:
-            raise RuntimeError(
-                f"Cannot find any model weights with `{model_name_or_path}`"
-            )
+            raise RuntimeError(f"Cannot find any model weights with `{model_name_or_path}`")
 
         return hf_folder, hf_weights_files, use_safetensors
 
@@ -283,9 +261,7 @@ class DefaultModelLoader(BaseModelLoader):
                     weights_iterator = multi_thread_safetensors_weights_iterator(
                         hf_weights_files,
                         self.load_config.use_tqdm_on_load,
-                        max_workers=extra_config.get(
-                            "num_threads", self.DEFAULT_NUM_THREADS
-                        ),
+                        max_workers=extra_config.get("num_threads", self.DEFAULT_NUM_THREADS),
                     )
                 else:
                     weights_iterator = safetensors_weights_iterator(
@@ -293,12 +269,8 @@ class DefaultModelLoader(BaseModelLoader):
                         self.load_config.use_tqdm_on_load,
                         self.load_config.safetensors_load_strategy,
                         local_expert_ids=self.local_expert_ids,
-                        safetensors_prefetch_num_threads=(
-                            self.load_config.safetensors_prefetch_num_threads
-                        ),
-                        safetensors_prefetch_block_size=(
-                            self.load_config.safetensors_prefetch_block_size
-                        ),
+                        safetensors_prefetch_num_threads=(self.load_config.safetensors_prefetch_num_threads),
+                        safetensors_prefetch_block_size=(self.load_config.safetensors_prefetch_block_size),
                     )
         else:
             if extra_config.get("enable_multithread_load"):
@@ -306,9 +278,7 @@ class DefaultModelLoader(BaseModelLoader):
                     hf_weights_files,
                     self.load_config.use_tqdm_on_load,
                     self.load_config.pt_load_map_location,
-                    max_workers=extra_config.get(
-                        "num_threads", self.DEFAULT_NUM_THREADS
-                    ),
+                    max_workers=extra_config.get("num_threads", self.DEFAULT_NUM_THREADS),
                 )
             else:
                 weights_iterator = pt_weights_iterator(
@@ -325,9 +295,7 @@ class DefaultModelLoader(BaseModelLoader):
             total_bytes,
         )
 
-    def _get_weights_iterator(
-        self, source: "Source"
-    ) -> Generator[tuple[str, torch.Tensor], None, None]:
+    def _get_weights_iterator(self, source: "Source") -> Generator[tuple[str, torch.Tensor], None, None]:
         """Get an iterator for the model weights based on the load format."""
         iterator, _ = self._get_weights_iterator_with_size(source)
         return iterator
@@ -345,21 +313,15 @@ class DefaultModelLoader(BaseModelLoader):
             fall_back_to_pt=getattr(model, "fall_back_to_pt_during_load", True),
             allow_patterns_overrides=getattr(model, "allow_patterns_overrides", None),
         )
-        primary_iterator, total_bytes = self._get_weights_iterator_with_size(
-            primary_weights
-        )
+        primary_iterator, total_bytes = self._get_weights_iterator_with_size(primary_weights)
 
         secondary_weights = cast(
             Iterable[DefaultModelLoader.Source],
             getattr(model, "secondary_weights", ()),
         )
-        secondary_iterators: list[
-            Generator[tuple[str, torch.Tensor], None, None]
-        ] = []
+        secondary_iterators: list[Generator[tuple[str, torch.Tensor], None, None]] = []
         for source in secondary_weights:
-            secondary_iterator, secondary_bytes = self._get_weights_iterator_with_size(
-                source
-            )
+            secondary_iterator, secondary_bytes = self._get_weights_iterator_with_size(source)
             secondary_iterators.append(secondary_iterator)
             total_bytes += secondary_bytes
 
@@ -392,9 +354,7 @@ class DefaultModelLoader(BaseModelLoader):
         parallel_config = aphrodite_config.parallel_config
 
         if not (
-            model_config.is_moe
-            and parallel_config.enable_expert_parallel
-            and parallel_config.enable_ep_weight_filter
+            model_config.is_moe and parallel_config.enable_expert_parallel and parallel_config.enable_ep_weight_filter
         ):
             return
 
@@ -459,9 +419,7 @@ class DefaultModelLoader(BaseModelLoader):
 
         weights_iter, total_bytes = self.get_all_weights(model_config, model)
         if self.load_config.use_tqdm_on_load:
-            weights_iter = tensor_progress_bar(
-                weights_iter, total_bytes, "Loading model weights"
-            )
+            weights_iter = tensor_progress_bar(weights_iter, total_bytes, "Loading model weights")
         loaded_weights = model.load_weights(weights_iter)
 
         self.counter_after_loading_weights = time.perf_counter()
@@ -471,29 +429,21 @@ class DefaultModelLoader(BaseModelLoader):
         )
         # We only enable strict check for non-quantized models
         # that have loaded weights tracking by default.
-        default_enable_weights_track = (
-            model_config.quantization is None and loaded_weights is not None
-        )
+        default_enable_weights_track = model_config.quantization is None and loaded_weights is not None
         enable_weights_track = (
-            self.enable_weights_track
-            if self.enable_weights_track is not None
-            else default_enable_weights_track
+            self.enable_weights_track if self.enable_weights_track is not None else default_enable_weights_track
         )
         if enable_weights_track:
             self.track_weights_loading(model, loaded_weights)
 
-    def track_weights_loading(
-        self, model: nn.Module, loaded_weights: set[str] | None
-    ) -> None:
+    def track_weights_loading(self, model: nn.Module, loaded_weights: set[str] | None) -> None:
         weights_to_load = {name for name, _ in model.named_parameters()}
         if loaded_weights is not None:
             # ignore online quantization scales
             for name, module in model.named_modules():
                 quant_method = getattr(module, "quant_method", None)
                 has_online_quant = getattr(quant_method, "uses_meta_device", False)
-                has_postprocess_quant = getattr(
-                    quant_method, "process_weights_after_loading", None
-                )
+                has_postprocess_quant = getattr(quant_method, "process_weights_after_loading", None)
                 # ignore kv_cache scale and online quant scale,
                 # which can be missing in checkpoints
                 if has_online_quant or has_postprocess_quant:
@@ -502,7 +452,4 @@ class DefaultModelLoader(BaseModelLoader):
                         loaded_weights.add(full_name)
             weights_not_loaded = weights_to_load - loaded_weights
             if weights_not_loaded:
-                raise ValueError(
-                    "Following weights were not initialized from "
-                    f"checkpoint: {weights_not_loaded}"
-                )
+                raise ValueError(f"Following weights were not initialized from checkpoint: {weights_not_loaded}")

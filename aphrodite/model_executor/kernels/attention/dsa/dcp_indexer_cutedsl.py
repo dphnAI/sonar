@@ -25,9 +25,7 @@ def stable_topk_from_gathered_candidates_cutedsl(
             dtype=torch.int32,
             device=gathered.device,
         )
-    StableTopKFromGatheredCandidatesKernel.compile(topk, gathered.shape[1])(
-        gathered, out
-    )
+    StableTopKFromGatheredCandidatesKernel.compile(topk, gathered.shape[1])(gathered, out)
     return out
 
 
@@ -264,9 +262,7 @@ class StableTopKFromGatheredCandidatesKernel:
         threshold_found_smem = storage.threshold_found.data_ptr()
         include_threshold_bin_smem = storage.include_threshold_bin.data_ptr()
         prefix_smem = storage.prefix_s.data_ptr()
-        warp_totals_smem = storage.warp_totals.get_tensor(
-            cute.make_layout((1, self.warps_per_block))
-        )
+        warp_totals_smem = storage.warp_totals.get_tensor(cute.make_layout((1, self.warps_per_block)))
 
         prefix_bits = step * Int32(self.radix_bits)
         num_bins = 1 << bits

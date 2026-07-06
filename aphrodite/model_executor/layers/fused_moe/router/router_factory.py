@@ -118,12 +118,8 @@ def create_fused_moe_router(
         )
 
     if zero_expert_type is not None:
-        assert num_logical_experts is not None, (
-            "num_logical_experts is required when zero_expert_type is set"
-        )
-        assert e_score_correction_bias is not None, (
-            "e_score_correction_bias is required when zero_expert_type is set"
-        )
+        assert num_logical_experts is not None, "num_logical_experts is required when zero_expert_type is set"
+        assert e_score_correction_bias is not None, "e_score_correction_bias is required when zero_expert_type is set"
         return ZeroExpertRouter(
             top_k=top_k,
             global_num_experts=global_num_experts,
@@ -139,10 +135,7 @@ def create_fused_moe_router(
     if use_grouped_topk:
         assert custom_routing_function is None
         if num_expert_group is None or topk_group is None:
-            raise ValueError(
-                "num_expert_group and topk_group must be provided when "
-                "use_grouped_topk is True"
-            )
+            raise ValueError("num_expert_group and topk_group must be provided when use_grouped_topk is True")
         grouped_topk_router = GroupedTopKRouter(
             top_k=top_k,
             global_num_experts=global_num_experts,

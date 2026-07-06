@@ -13,12 +13,6 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from tests.v1.kv_connector.unit.utils import (
-    create_model_runner_output,
-    create_request,
-    create_scheduler,
-    create_aphrodite_config,
-)
 from aphrodite import SamplingParams
 from aphrodite.distributed.kv_transfer.kv_connector.v1.multi_connector import (
     MultiConnector,
@@ -42,10 +36,14 @@ from aphrodite.v1.simple_kv_offload.metadata import (
     SimpleCPUOffloadMetadata,
     SimpleCPUOffloadWorkerMetadata,
 )
-
-NIXL_WRAPPER_PATCH = (
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper"
+from tests.v1.kv_connector.unit.utils import (
+    create_aphrodite_config,
+    create_model_runner_output,
+    create_request,
+    create_scheduler,
 )
+
+NIXL_WRAPPER_PATCH = "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_worker.NixlWrapper"
 
 
 class FakeNixlWrapper:
@@ -269,9 +267,7 @@ def test_cpu_offload_wins_when_nixl_has_no_match():
 
     cpu_connector = mc._connectors[1]
     worker_meta = SimpleCPUOffloadWorkerMetadata(
-        completed_store_events={
-            cpu_meta.store_event: cpu_connector.scheduler_manager._expected_worker_count
-        },
+        completed_store_events={cpu_meta.store_event: cpu_connector.scheduler_manager._expected_worker_count},
     )
     output = KVConnectorOutput(
         finished_recving=set(),

@@ -46,10 +46,7 @@ def _indexer_k_quant_and_cache_kernel(
     tid = tl.program_id(0)
     offset = tl.arange(0, head_dim)
     if LAYOUT == "SHUFFLE":
-        tile_offset = (
-            offset // HEAD_TILE_SIZE * BLOCK_TILE_SIZE * HEAD_TILE_SIZE
-            + offset % HEAD_TILE_SIZE
-        )
+        tile_offset = offset // HEAD_TILE_SIZE * BLOCK_TILE_SIZE * HEAD_TILE_SIZE + offset % HEAD_TILE_SIZE
     else:
         tile_offset = offset
     tile_store_offset = tile_offset
@@ -83,9 +80,7 @@ def _indexer_k_quant_and_cache_kernel(
             + tile_block_offset * HEAD_TILE_SIZE
         )
     else:
-        dst_ptr = (
-            kv_cache_ptr + block_id * kv_cache_value_stride + block_offset * head_dim
-        )
+        dst_ptr = kv_cache_ptr + block_id * kv_cache_value_stride + block_offset * head_dim
     tl.store(dst_ptr + tile_store_offset, fp8_val)
     dst_scale_ptr = kv_cache_scale_ptr + block_id * kv_cache_scale_stride + block_offset
     tl.store(dst_scale_ptr, scale)
@@ -177,9 +172,7 @@ def _cp_gather_indexer_quant_cache_kernel(
     )
     safe_block_table_id = tl.where(valid_block_table, block_table_id, 0)
     block_table_offset = safe_batch_id * block_table_stride + safe_block_table_id
-    block_id = tl.load(
-        block_table_ptr + block_table_offset, mask=valid_block_table, other=-1
-    )
+    block_id = tl.load(block_table_ptr + block_table_offset, mask=valid_block_table, other=-1)
     valid_block = valid_block_table & (block_id >= 0) & (block_id < NUM_BLOCKS)
     # The packed KV layout makes per-block strides large
     # enough that block_id * stride can exceed 32-bit range.
@@ -193,9 +186,7 @@ def _cp_gather_indexer_quant_cache_kernel(
             + tiled_block_offset * HEAD_TILE_SIZE
         )
     else:
-        src_cache_offset = (
-            safe_block_id * kv_cache_stride + safe_block_offset * HEAD_DIM
-        )
+        src_cache_offset = safe_block_id * kv_cache_stride + safe_block_offset * HEAD_DIM
     src_scale_offset = safe_block_id * kv_cache_scale_stride + safe_block_offset
     dst_offset = tid * HEAD_DIM
     src_scale_ptr = kv_cache_scale_ptr + src_scale_offset
@@ -204,10 +195,7 @@ def _cp_gather_indexer_quant_cache_kernel(
     scale_val = tl.load(src_scale_ptr, mask=valid_block, other=0.0)
     tl.store(k_scale_ptr + tid, scale_val)
     if LAYOUT == "SHUFFLE":
-        tiled_src_offset = (
-            offset // HEAD_TILE_SIZE * HEAD_TILE_SIZE * BLOCK_TILE_SIZE
-            + offset % HEAD_TILE_SIZE
-        )
+        tiled_src_offset = offset // HEAD_TILE_SIZE * HEAD_TILE_SIZE * BLOCK_TILE_SIZE + offset % HEAD_TILE_SIZE
     else:
         tiled_src_offset = offset
     val = tl.load(src_cache_ptr + tiled_src_offset)
@@ -294,12 +282,8 @@ def fp8_paged_mqa_logits_torch(
             pages = block_tables[i, :num_pages]
             cache = kv_cache_flat[pages]
             scale_offset = block_size * dim
-            cache_value = (
-                cache[..., :scale_offset].view(dtype=fp8_dtype).to(torch.float32)
-            )
-            cache_scale = (
-                cache[..., scale_offset:].view(dtype=torch.float32).contiguous()
-            )
+            cache_value = cache[..., :scale_offset].view(dtype=fp8_dtype).to(torch.float32)
+            cache_scale = cache[..., scale_offset:].view(dtype=torch.float32).contiguous()
             cache_value = cache_value.view(padded_seq_len, dim)
             cache_scale = cache_scale.view(padded_seq_len)
             score = F.linear(cache_value, q_i)
@@ -325,33 +309,21 @@ def fp8_paged_mqa_logits_torch(
         context_len = context_lens[i]
         if context_len.ndim == 0:
             context_len_i = int(context_len.item())
-            q_offsets = torch.arange(
-                context_len_i - next_n, context_len_i, device=q.device
-            )
-            context_limit = torch.full(
-                (next_n,), context_len_i, dtype=torch.int32, device=q.device
-            )
+            q_offsets = torch.arange(context_len_i - next_n, context_len_i, device=q.device)
+            context_limit = torch.full((next_n,), context_len_i, dtype=torch.int32, device=q.device)
         else:
             context_limit = context_len.to(device=q.device, dtype=torch.int32)
             q_offsets = context_limit - 1
-        weight_slice = (
-            weights[i * next_n : (i + 1) * next_n, :].transpose(0, 1).contiguous()
-        )
+        weight_slice = weights[i * next_n : (i + 1) * next_n, :].transpose(0, 1).contiguous()
         max_context_len = int(context_limit.max().item())
         for block_rk in range(cdiv(max_context_len, block_size)):
             block_idx = block_tables[i][block_rk]
             qx, kx = q[i], kv_cache[block_idx]
-            k_offsets = torch.arange(
-                block_rk * block_size, (block_rk + 1) * block_size, device=q.device
-            )
-            mask = (k_offsets[None, :] < context_limit[:, None]) & (
-                k_offsets[None, :] <= q_offsets[:, None]
-            )
+            k_offsets = torch.arange(block_rk * block_size, (block_rk + 1) * block_size, device=q.device)
+            mask = (k_offsets[None, :] < context_limit[:, None]) & (k_offsets[None, :] <= q_offsets[:, None])
             s = torch.where(
                 mask[None, :, :],
-                (qx.transpose(0, 1) @ kx.transpose(0, 1).transpose(1, 2)).to(
-                    logits.dtype
-                ),
+                (qx.transpose(0, 1) @ kx.transpose(0, 1).transpose(1, 2)).to(logits.dtype),
                 float("-inf"),
             )
             s = torch.relu(s) * weight_slice[..., None]
@@ -422,9 +394,7 @@ def rocm_fp8_paged_mqa_logits(
 
     if aiter_paged_mqa_logits_module is not None:
         if _ON_GFX942 or _ON_GFX950:
-            deepgemm_fp8_paged_mqa_logits = (
-                aiter_paged_mqa_logits_module.deepgemm_fp8_paged_mqa_logits
-            )
+            deepgemm_fp8_paged_mqa_logits = aiter_paged_mqa_logits_module.deepgemm_fp8_paged_mqa_logits
             batch_size, next_n, heads, _ = q_fp8.shape
             (out_logits,) = current_workspace_manager().get_simultaneous(
                 ((batch_size * next_n, max_model_len), torch.float32),
@@ -444,9 +414,7 @@ def rocm_fp8_paged_mqa_logits(
                 WavePerEU=2,
             )
             return out_logits
-        deepgemm_fp8_paged_mqa_logits_stage1 = (
-            aiter_paged_mqa_logits_module.deepgemm_fp8_paged_mqa_logits_stage1
-        )
+        deepgemm_fp8_paged_mqa_logits_stage1 = aiter_paged_mqa_logits_module.deepgemm_fp8_paged_mqa_logits_stage1
         batch_size, next_n, heads, _ = q_fp8.shape
         (out_qk,) = current_workspace_manager().get_simultaneous(
             ((heads, batch_size * next_n, max_model_len), torch.float32),
@@ -464,9 +432,7 @@ def rocm_fp8_paged_mqa_logits(
         )
         return out_qk.sum(dim=0)
     else:
-        return fp8_paged_mqa_logits_torch(
-            q_fp8, kv_cache_fp8, weights, context_lens, block_tables, max_model_len
-        )
+        return fp8_paged_mqa_logits_torch(q_fp8, kv_cache_fp8, weights, context_lens, block_tables, max_model_len)
 
 
 # Take from https://github.com/deepseek-ai/DeepGEMM/blob/main/tests/test_attention.py#L84
@@ -500,12 +466,8 @@ def fp8_mqa_logits_torch(
     q = q.to(torch.bfloat16)
     device = q.device
 
-    mask_lo = (
-        torch.arange(0, seq_len_kv, device=device)[None, :] >= cu_seqlen_ks[:, None]
-    )
-    mask_hi = (
-        torch.arange(0, seq_len_kv, device=device)[None, :] < cu_seqlen_ke[:, None]
-    )
+    mask_lo = torch.arange(0, seq_len_kv, device=device)[None, :] >= cu_seqlen_ks[:, None]
+    mask_hi = torch.arange(0, seq_len_kv, device=device)[None, :] < cu_seqlen_ke[:, None]
     mask = mask_lo & mask_hi
 
     # ``score`` is [H, M, N]; ``scale`` is the per-KV-token scale, which
@@ -577,9 +539,7 @@ def rocm_fp8_mqa_logits(
             fp8_mqa_logits_gfx942,
         )
 
-        return fp8_mqa_logits_gfx942(
-            q, k_fp8, scale, weights, cu_seqlen_ks, cu_seqlen_ke
-        )
+        return fp8_mqa_logits_gfx942(q, k_fp8, scale, weights, cu_seqlen_ks, cu_seqlen_ke)
 
     aiter_mqa_logits_module = None
     if rocm_aiter_ops.is_enabled():
@@ -700,9 +660,7 @@ def rocm_aiter_sparse_attn_indexer(
         # APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB via chunking in
         # split_indexer_prefill_chunks; decode logits are smaller.
         max_logits_elems = envs.APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
-        _ = torch.empty(
-            max_logits_elems, dtype=torch.uint8, device=hidden_states.device
-        )
+        _ = torch.empty(max_logits_elems, dtype=torch.uint8, device=hidden_states.device)
 
         return rocm_aiter_sparse_attn_indexer_fake(
             hidden_states,
@@ -774,9 +732,7 @@ def rocm_aiter_sparse_attn_indexer(
                 chunk.cu_seqlen_ks,
                 chunk.cu_seqlen_ke,
             )
-            topk_indices = topk_indices_buffer[
-                chunk.token_start : chunk.token_end, :topk_tokens
-            ]
+            topk_indices = topk_indices_buffer[chunk.token_start : chunk.token_end, :topk_tokens]
 
             num_rows = logits.shape[0]
 
@@ -803,13 +759,9 @@ def rocm_aiter_sparse_attn_indexer(
             # decode_threshold since we unstrictly split
             # prefill and decode by decode_threshold
             # (currently set to 1 + speculative tokens)
-            padded_q_fp8_decode_tokens = pack_seq_triton(
-                q_fp8[:num_decode_tokens], decode_lens
-            )
+            padded_q_fp8_decode_tokens = pack_seq_triton(q_fp8[:num_decode_tokens], decode_lens)
         else:
-            padded_q_fp8_decode_tokens = q_fp8[:num_decode_tokens].reshape(
-                decode_lens.shape[0], -1, *q_fp8.shape[1:]
-            )
+            padded_q_fp8_decode_tokens = q_fp8[:num_decode_tokens].reshape(decode_lens.shape[0], -1, *q_fp8.shape[1:])
         # TODO: move and optimize below logic with triton kernels
         batch_size = padded_q_fp8_decode_tokens.shape[0]
         next_n = padded_q_fp8_decode_tokens.shape[1]
@@ -847,9 +799,7 @@ def rocm_aiter_sparse_attn_indexer(
                 topk_indices.reshape(batch_size, next_n, topk_indices.shape[-1]),
                 decode_lens,
             )
-            topk_indices_buffer[:num_decode_tokens, : topk_indices.shape[-1]] = (
-                topk_indices
-            )
+            topk_indices_buffer[:num_decode_tokens, : topk_indices.shape[-1]] = topk_indices
 
     return topk_indices_buffer
 
@@ -945,9 +895,7 @@ def _fused_inverse_rope_gptj(
         f"[P, {rope_head_dim}] = cos | sin, got {tuple(cos_sin_cache.shape)}"
     )
     num_tokens, num_heads, head_dim = o.shape
-    out = torch.empty(
-        (num_tokens, num_heads, head_dim), dtype=torch.bfloat16, device=o.device
-    )
+    out = torch.empty((num_tokens, num_heads, head_dim), dtype=torch.bfloat16, device=o.device)
     if num_tokens == 0:
         return out
     _inverse_rope_gptj_kernel[(num_tokens, num_heads)](
@@ -986,21 +934,15 @@ def _get_cached_wo_a_bf16(
     if cached is not None:
         return cached
     if hasattr(wo_a, "weight_scale_inv"):
-        wo_a_weight = wo_a.weight.view(n_local_groups, o_lora_rank, hidden_dim).to(
-            torch.float32
-        )
+        wo_a_weight = wo_a.weight.view(n_local_groups, o_lora_rank, hidden_dim).to(torch.float32)
         wo_a_scale = _expand_2d_block_scales(
-            wo_a.weight_scale_inv.view(
-                n_local_groups, -1, wo_a.weight_scale_inv.shape[-1]
-            ),
+            wo_a.weight_scale_inv.view(n_local_groups, -1, wo_a.weight_scale_inv.shape[-1]),
             o_lora_rank,
             hidden_dim,
         )
         cached = (wo_a_weight * wo_a_scale).to(torch.bfloat16)
     else:
-        cached = wo_a.weight.view(n_local_groups, o_lora_rank, hidden_dim).to(
-            torch.bfloat16
-        )
+        cached = wo_a.weight.view(n_local_groups, o_lora_rank, hidden_dim).to(torch.bfloat16)
     wo_a._dsv4_wo_a_bf16 = cached
     return cached
 
@@ -1019,14 +961,10 @@ def rocm_inv_rope_einsum(
     Fuses the inverse GPT-J RoPE into one Triton kernel and caches the bf16
     wo_a weight so the per-step dequant disappears.
     """
-    o_ref = _fused_inverse_rope_gptj(
-        o, positions, rotary_emb.cos_sin_cache, rope_head_dim
-    )
+    o_ref = _fused_inverse_rope_gptj(o, positions, rotary_emb.cos_sin_cache, rope_head_dim)
     o_ref = o_ref.view(o.shape[0], n_local_groups, -1)
 
-    wo_a_weight = _get_cached_wo_a_bf16(
-        wo_a, n_local_groups, o_lora_rank, o_ref.shape[-1]
-    )
+    wo_a_weight = _get_cached_wo_a_bf16(wo_a, n_local_groups, o_lora_rank, o_ref.shape[-1])
 
     return torch.einsum("tgd,grd->tgr", o_ref, wo_a_weight)
 
@@ -1044,12 +982,8 @@ def _validate_dsv4_sparse_dims(
     assert head_dim == nope_head_dim + rope_head_dim, (
         f"{op_name} expected head_dim={nope_head_dim + rope_head_dim}, got {head_dim}"
     )
-    assert (
-        nope_head_dim == _DSV4_SPARSE_NOPE_DIM
-        and rope_head_dim == _DSV4_SPARSE_ROPE_DIM
-    ), (
-        f"{op_name} expects {_DSV4_SPARSE_NOPE_DIM} NoPE dims and "
-        f"{_DSV4_SPARSE_ROPE_DIM} RoPE dims"
+    assert nope_head_dim == _DSV4_SPARSE_NOPE_DIM and rope_head_dim == _DSV4_SPARSE_ROPE_DIM, (
+        f"{op_name} expects {_DSV4_SPARSE_NOPE_DIM} NoPE dims and {_DSV4_SPARSE_ROPE_DIM} RoPE dims"
     )
 
 
@@ -1113,9 +1047,7 @@ def build_ragged_indices_from_dense(
         )
         if flat.numel() > 0:
             block_size = 128
-            _pack_dense_prefix_to_ragged_kernel[
-                (indices.shape[0], triton.cdiv(max_width, block_size))
-            ](
+            _pack_dense_prefix_to_ragged_kernel[(indices.shape[0], triton.cdiv(max_width, block_size))](
                 indices,
                 lengths,
                 indptr,
@@ -1169,10 +1101,7 @@ def _sparse_attn_prefill_ragged_kernel(
     dim_mask = dim_offsets < head_dim
 
     q = tl.load(
-        q_ptr
-        + query_idx * q_stride_t
-        + head_offsets[:, None] * q_stride_h
-        + dim_offsets[None, :] * q_stride_d,
+        q_ptr + query_idx * q_stride_t + head_offsets[:, None] * q_stride_h + dim_offsets[None, :] * q_stride_d,
         mask=head_mask[:, None] & dim_mask[None, :],
         other=0.0,
     )
@@ -1195,9 +1124,7 @@ def _sparse_attn_prefill_ragged_kernel(
         safe_slot = tl.where(valid, slot, 0)
 
         kv = tl.load(
-            kv_ptr
-            + safe_slot[:, None] * kv_stride_n
-            + dim_offsets[None, :] * kv_stride_d,
+            kv_ptr + safe_slot[:, None] * kv_stride_n + dim_offsets[None, :] * kv_stride_d,
             mask=valid[:, None] & dim_mask[None, :],
             other=0.0,
         )
@@ -1218,9 +1145,7 @@ def _sparse_attn_prefill_ragged_kernel(
         l_i = l_new
 
     if HAS_ATTN_SINK:
-        sink = tl.load(
-            attn_sink_ptr + head_offsets, mask=head_mask, other=neg_large
-        ).to(tl.float32)
+        sink = tl.load(attn_sink_ptr + head_offsets, mask=head_mask, other=neg_large).to(tl.float32)
         m_final = tl.maximum(m_i, sink)
         alpha = tl.exp(m_i - m_final)
         l_final = l_i * alpha + tl.exp(sink - m_final)
@@ -1235,10 +1160,7 @@ def _sparse_attn_prefill_ragged_kernel(
         out = tl.where(l_i[:, None] > 0.0, acc / denom[:, None], 0.0)
 
     tl.store(
-        out_ptr
-        + query_idx * out_stride_t
-        + head_offsets[:, None] * out_stride_h
-        + dim_offsets[None, :] * out_stride_d,
+        out_ptr + query_idx * out_stride_t + head_offsets[:, None] * out_stride_h + dim_offsets[None, :] * out_stride_d,
         out,
         mask=head_mask[:, None] & dim_mask[None, :],
     )
@@ -1379,21 +1301,15 @@ def _sparse_attn_decode_ragged_kernel(
         for k_start in tl.range(0, extra_len, BLOCK_K):
             k_pos = k_start + k_offsets
             in_range = k_pos < extra_len
-            slot = tl.load(
-                extra_indices_ptr + extra_start + k_pos, mask=in_range, other=-1
-            )
+            slot = tl.load(extra_indices_ptr + extra_start + k_pos, mask=in_range, other=-1)
             valid = in_range & (slot >= 0) & (slot < extra_num_rows)
             safe_slot = tl.where(valid, slot, 0)
 
             block_idx = safe_slot // extra_block_size
             pos_in_block = safe_slot % extra_block_size
-            cache_block_ptr = (
-                extra_cache_ptr + block_idx.to(tl.int64) * extra_cache_stride0
-            )
+            cache_block_ptr = extra_cache_ptr + block_idx.to(tl.int64) * extra_cache_stride0
             token_data_ptr = cache_block_ptr + pos_in_block * 576
-            token_scale_ptr = (
-                cache_block_ptr + extra_block_size * 576 + pos_in_block * 8
-            )
+            token_scale_ptr = cache_block_ptr + extra_block_size * 576 + pos_in_block * 8
 
             x_uint8 = tl.load(
                 token_data_ptr[:, None] + nope_offsets[None, :],
@@ -1443,9 +1359,7 @@ def _sparse_attn_decode_ragged_kernel(
             l_i = l_new
 
     if HAS_ATTN_SINK:
-        sink = tl.load(
-            attn_sink_ptr + head_offsets, mask=head_mask, other=neg_large
-        ).to(tl.float32)
+        sink = tl.load(attn_sink_ptr + head_offsets, mask=head_mask, other=neg_large).to(tl.float32)
         m_final = tl.maximum(m_i, sink)
         alpha = tl.exp(m_i - m_final)
         l_final = l_i * alpha + tl.exp(sink - m_final)
@@ -1465,9 +1379,7 @@ def _sparse_attn_decode_ragged_kernel(
         out_nope = tl.where(l_i[:, None] > 0.0, acc_nope / denom[:, None], 0.0)
         out_rope = tl.where(l_i[:, None] > 0.0, acc_rope / denom[:, None], 0.0)
 
-    out_row_ptr = (
-        out_ptr + query_idx * out_stride0 + head_offsets[:, None] * out_stride1
-    )
+    out_row_ptr = out_ptr + query_idx * out_stride0 + head_offsets[:, None] * out_stride1
     tl.store(
         out_row_ptr + nope_offsets[None, :],
         out_nope,
@@ -1632,21 +1544,15 @@ def _sparse_attn_decode_partial_kernel(
         for k_start in tl.range(extra_lo, extra_hi, BLOCK_K, num_stages=NUM_STAGES):
             k_pos = k_start + k_offsets
             in_range = k_pos < extra_hi
-            slot = tl.load(
-                extra_indices_ptr + extra_start + k_pos, mask=in_range, other=-1
-            )
+            slot = tl.load(extra_indices_ptr + extra_start + k_pos, mask=in_range, other=-1)
             valid = in_range & (slot >= 0) & (slot < extra_num_rows)
             safe_slot = tl.where(valid, slot, 0)
 
             block_idx = safe_slot // extra_block_size
             pos_in_block = safe_slot % extra_block_size
-            cache_block_ptr = (
-                extra_cache_ptr + block_idx.to(tl.int64) * extra_cache_stride0
-            )
+            cache_block_ptr = extra_cache_ptr + block_idx.to(tl.int64) * extra_cache_stride0
             token_data_ptr = cache_block_ptr + pos_in_block * 576
-            token_scale_ptr = (
-                cache_block_ptr + extra_block_size * 576 + pos_in_block * 8
-            )
+            token_scale_ptr = cache_block_ptr + extra_block_size * 576 + pos_in_block * 8
 
             x_uint8 = tl.load(
                 token_data_ptr[:, None] + nope_offsets[None, :],
@@ -1700,12 +1606,7 @@ def _sparse_attn_decode_partial_kernel(
     pm_base = query_idx * pm_stride0 + split_id * pm_stride_s + head_offsets
     tl.store(part_m_ptr + pm_base, m_i, mask=head_mask)
     tl.store(part_l_ptr + pm_base, l_i, mask=head_mask)
-    acc_base = (
-        part_acc_ptr
-        + query_idx * pa_stride0
-        + split_id * pa_stride_s
-        + head_offsets[:, None] * pa_stride_h
-    )
+    acc_base = part_acc_ptr + query_idx * pa_stride0 + split_id * pa_stride_s + head_offsets[:, None] * pa_stride_h
     tl.store(
         acc_base + nope_offsets[None, :],
         acc_nope,
@@ -1758,27 +1659,17 @@ def _sparse_attn_decode_reduce_kernel(
     # serially. This breaks the long online-softmax dependency chain that made
     # the reduce latency-bound.
     load_mask = split_mask[:, None] & head_mask[None, :]
-    pm_split = (
-        part_m_ptr
-        + query_idx * pm_stride0
-        + split_offsets[:, None] * pm_stride_s
-        + head_offsets[None, :]
-    )
+    pm_split = part_m_ptr + query_idx * pm_stride0 + split_offsets[:, None] * pm_stride_s + head_offsets[None, :]
     m_all = tl.load(pm_split, mask=load_mask, other=neg_large)  # [S, H]
     l_all = tl.load(
-        part_l_ptr
-        + query_idx * pm_stride0
-        + split_offsets[:, None] * pm_stride_s
-        + head_offsets[None, :],
+        part_l_ptr + query_idx * pm_stride0 + split_offsets[:, None] * pm_stride_s + head_offsets[None, :],
         mask=load_mask,
         other=0.0,
     )
 
     m_comb = tl.max(m_all, axis=0)  # [H]
     if HAS_ATTN_SINK:
-        sink = tl.load(
-            attn_sink_ptr + head_offsets, mask=head_mask, other=neg_large
-        ).to(tl.float32)
+        sink = tl.load(attn_sink_ptr + head_offsets, mask=head_mask, other=neg_large).to(tl.float32)
         m_final = tl.maximum(m_comb, sink)
     else:
         m_final = m_comb
@@ -1802,12 +1693,7 @@ def _sparse_attn_decode_reduce_kernel(
             other=neg_large,
         )
         w_s = tl.exp(m_s - m_final)
-        acc_base = (
-            part_acc_ptr
-            + query_idx * pa_stride0
-            + s * pa_stride_s
-            + head_offsets[:, None] * pa_stride_h
-        )
+        acc_base = part_acc_ptr + query_idx * pa_stride0 + s * pa_stride_s + head_offsets[:, None] * pa_stride_h
         acc_s = tl.load(
             acc_base + comb_offsets[None, :],
             mask=head_mask[:, None],
@@ -1817,9 +1703,7 @@ def _sparse_attn_decode_reduce_kernel(
 
     out = tl.where(l_final[:, None] > 0.0, acc / denom[:, None], 0.0)
 
-    out_row_ptr = (
-        out_ptr + query_idx * out_stride0 + head_offsets[:, None] * out_stride1
-    )
+    out_row_ptr = out_ptr + query_idx * out_stride0 + head_offsets[:, None] * out_stride1
     tl.store(
         out_row_ptr + comb_offsets[None, :],
         out,
@@ -1852,9 +1736,7 @@ def _rocm_sparse_attn_prefill_ragged_triton(
         attn_sink = attn_sink.contiguous()
 
     num_queries, num_heads, head_dim = q.shape
-    assert indptr.numel() == num_queries + 1, (
-        f"expected indptr shape [{num_queries + 1}], got {indptr.shape}"
-    )
+    assert indptr.numel() == num_queries + 1, f"expected indptr shape [{num_queries + 1}], got {indptr.shape}"
     _validate_dsv4_sparse_dims(
         head_dim,
         nope_head_dim,
@@ -1906,9 +1788,7 @@ def _rocm_sparse_attn_prefill_triton(
 ) -> torch.Tensor:
     ragged_indices, ragged_indptr = build_ragged_indices_from_dense(
         indices,
-        topk_length
-        if topk_length is not None
-        else (indices >= 0).sum(dim=-1, dtype=torch.int32),
+        topk_length if topk_length is not None else (indices >= 0).sum(dim=-1, dtype=torch.int32),
         num_rows=kv.shape[0],
     )
     return _rocm_sparse_attn_prefill_ragged_triton(
@@ -1931,22 +1811,14 @@ def _decode_cu_count() -> int:
         return 256  # For gfx950 arch, gated behind a fallback path for other archs.
 
 
-def _decode_partial_iters(
-    avg_main_len: float, avg_extra_len: float, splits: int, block_k: int
-) -> int:
+def _decode_partial_iters(avg_main_len: float, avg_extra_len: float, splits: int, block_k: int) -> int:
     """BLOCK_K iterations one partial workgroup walks for ``splits`` splits.
 
     Each split processes ``ceil(seg_len / splits)`` tokens of a segment, walked
     ``BLOCK_K`` at a time, and the main/extra segments are handled separately.
     """
-    main_iters = (
-        math.ceil(math.ceil(avg_main_len / splits) / block_k) if avg_main_len > 0 else 0
-    )
-    extra_iters = (
-        math.ceil(math.ceil(avg_extra_len / splits) / block_k)
-        if avg_extra_len > 0
-        else 0
-    )
+    main_iters = math.ceil(math.ceil(avg_main_len / splits) / block_k) if avg_main_len > 0 else 0
+    extra_iters = math.ceil(math.ceil(avg_extra_len / splits) / block_k) if avg_extra_len > 0 else 0
     return main_iters + extra_iters
 
 
@@ -2006,9 +1878,7 @@ def _decode_num_splits(
 
     if best_splits > 1 and (avg_main_len > 0 or avg_extra_len > 0):
         target_waves = (base * best_splits + cu - 1) // cu
-        target_iters = _decode_partial_iters(
-            avg_main_len, avg_extra_len, best_splits, block_k
-        )
+        target_iters = _decode_partial_iters(avg_main_len, avg_extra_len, best_splits, block_k)
         for splits in range(1, best_splits):
             waves = (base * splits + cu - 1) // cu
             iters = _decode_partial_iters(avg_main_len, avg_extra_len, splits, block_k)
@@ -2032,19 +1902,10 @@ def _rocm_sparse_attn_decode_ragged_triton(
     extra_indptr: torch.Tensor | None = None,
 ) -> torch.Tensor:
     assert q.ndim == 3, f"expected q=[b,h,d], got {q.shape}"
-    assert main_cache.ndim == 3, (
-        f"expected main_cache=[blocks,block,bytes], got {main_cache.shape}"
-    )
-    assert main_indices.ndim == 1, (
-        f"expected main_indices=[nnz], got {main_indices.shape}"
-    )
+    assert main_cache.ndim == 3, f"expected main_cache=[blocks,block,bytes], got {main_cache.shape}"
+    assert main_indices.ndim == 1, f"expected main_indices=[nnz], got {main_indices.shape}"
     assert main_indptr.ndim == 1, f"expected main_indptr=[b+1], got {main_indptr.shape}"
-    assert (
-        not q.is_cpu
-        and not main_cache.is_cpu
-        and not main_indices.is_cpu
-        and not main_indptr.is_cpu
-    )
+    assert not q.is_cpu and not main_cache.is_cpu and not main_indices.is_cpu and not main_indptr.is_cpu
 
     main_indices = _as_int32_contiguous_1d(main_indices)
     main_indptr = _as_int32_contiguous_1d(main_indptr)
@@ -2065,21 +1926,13 @@ def _rocm_sparse_attn_decode_ragged_triton(
         "_rocm_sparse_attn_decode_ragged_triton",
     )
 
-    has_extra = (
-        extra_cache is not None
-        and extra_indices is not None
-        and extra_indptr is not None
-    )
+    has_extra = extra_cache is not None and extra_indices is not None and extra_indptr is not None
     if has_extra:
         assert extra_cache is not None
         assert extra_indices is not None
         assert extra_indptr is not None
-        assert extra_indices.ndim == 1, (
-            f"expected extra_indices=[nnz], got {extra_indices.shape}"
-        )
-        assert extra_indptr.ndim == 1, (
-            f"expected extra_indptr=[b+1], got {extra_indptr.shape}"
-        )
+        assert extra_indices.ndim == 1, f"expected extra_indices=[nnz], got {extra_indices.shape}"
+        assert extra_indptr.ndim == 1, f"expected extra_indptr=[b+1], got {extra_indptr.shape}"
         extra_indices = _as_int32_contiguous_1d(extra_indices)
         extra_indptr = _as_int32_contiguous_1d(extra_indptr)
         assert extra_indptr.numel() == num_queries + 1, (
@@ -2141,13 +1994,9 @@ def _rocm_sparse_attn_decode_ragged_triton(
     inv_q = 1.0 / max(1, num_queries)
     avg_main_len = main_indices.numel() * inv_q
     avg_extra_len = (extra_indices.numel() * inv_q) if has_extra else 0.0
-    num_splits = _decode_num_splits(
-        num_queries, heads_blocks, avg_main_len, avg_extra_len, block_k
-    )
+    num_splits = _decode_num_splits(num_queries, heads_blocks, avg_main_len, avg_extra_len, block_k)
 
-    part_m = torch.empty(
-        (num_queries, num_splits, num_heads), dtype=torch.float32, device=q.device
-    )
+    part_m = torch.empty((num_queries, num_splits, num_heads), dtype=torch.float32, device=q.device)
     part_l = torch.empty_like(part_m)
     part_acc = torch.empty(
         (num_queries, num_splits, num_heads, comb_dim),
@@ -2242,9 +2091,7 @@ def _rocm_sparse_attn_decode_triton(
     if main_ragged_indices is None or main_ragged_indptr is None:
         main_ragged_indices, main_ragged_indptr = build_ragged_indices_from_dense(
             main_indices,
-            main_lengths
-            if main_lengths is not None
-            else (main_indices >= 0).sum(dim=-1, dtype=torch.int32),
+            main_lengths if main_lengths is not None else (main_indices >= 0).sum(dim=-1, dtype=torch.int32),
             num_rows=main_cache.shape[0] * main_cache.shape[1],
         )
 
@@ -2255,9 +2102,7 @@ def _rocm_sparse_attn_decode_triton(
     ):
         extra_ragged_indices, extra_ragged_indptr = build_ragged_indices_from_dense(
             extra_indices,
-            extra_lengths
-            if extra_lengths is not None
-            else (extra_indices >= 0).sum(dim=-1, dtype=torch.int32),
+            extra_lengths if extra_lengths is not None else (extra_indices >= 0).sum(dim=-1, dtype=torch.int32),
             num_rows=extra_cache.shape[0] * extra_cache.shape[1],
         )
 
@@ -2290,9 +2135,7 @@ def rocm_sparse_attn_prefill(
     ragged_indices: torch.Tensor | None = None,
     ragged_indptr: torch.Tensor | None = None,
 ) -> None:
-    assert kv.ndim == 3 and kv.shape[1] == 1, (
-        f"ROCm Triton sparse prefill expects kv=[skv,1,d], got {kv.shape}"
-    )
+    assert kv.ndim == 3 and kv.shape[1] == 1, f"ROCm Triton sparse prefill expects kv=[skv,1,d], got {kv.shape}"
     _validate_dsv4_sparse_dims(
         head_dim,
         nope_head_dim,
@@ -2346,8 +2189,7 @@ def rocm_sparse_attn_decode(
     output: torch.Tensor,
 ) -> None:
     assert swa_k_cache.dtype == torch.uint8, (
-        "ROCm Triton sparse decode expects uint8 fp8_ds_mla SWA cache, "
-        f"got {swa_k_cache.dtype}"
+        f"ROCm Triton sparse decode expects uint8 fp8_ds_mla SWA cache, got {swa_k_cache.dtype}"
     )
     _validate_dsv4_sparse_dims(
         head_dim,
@@ -2362,12 +2204,9 @@ def rocm_sparse_attn_decode(
     extra_indices = None
     if not swa_only:
         assert kv_cache is not None
-        assert topk_indices is not None or (
-            topk_ragged_indices is not None and topk_ragged_indptr is not None
-        )
+        assert topk_indices is not None or (topk_ragged_indices is not None and topk_ragged_indptr is not None)
         assert kv_cache.dtype == torch.uint8, (
-            "ROCm Triton sparse decode expects uint8 fp8_ds_mla extra cache, "
-            f"got {kv_cache.dtype}"
+            f"ROCm Triton sparse decode expects uint8 fp8_ds_mla extra cache, got {kv_cache.dtype}"
         )
         extra_cache = kv_cache
         if topk_indices is not None:

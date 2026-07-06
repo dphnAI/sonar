@@ -85,14 +85,9 @@ def _hc_head_reduce_store_kernel(
 
     acc = tl.zeros((BLOCK_H,), dtype=tl.float32)
     for mix_idx in tl.static_range(0, hc_mult):
-        pre = tl.load(pre_ptr + token_idx * pre_stride_t + mix_idx * pre_stride_m).to(
-            tl.float32
-        )
+        pre = tl.load(pre_ptr + token_idx * pre_stride_t + mix_idx * pre_stride_m).to(tl.float32)
         x = tl.load(
-            x_ptr
-            + token_idx * x_stride_t
-            + mix_idx * x_stride_m
-            + offsets * x_stride_h,
+            x_ptr + token_idx * x_stride_t + mix_idx * x_stride_m + offsets * x_stride_h,
             mask=mask,
             other=0.0,
         ).to(tl.float32)

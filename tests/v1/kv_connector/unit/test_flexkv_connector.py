@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.config import KVTransferConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, KVTransferConfig
 from aphrodite.distributed.kv_transfer.kv_connector.v1 import KVConnectorRole
 from aphrodite.v1.kv_cache_interface import KVCacheConfig
 

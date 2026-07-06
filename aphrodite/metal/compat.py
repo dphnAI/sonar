@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Compatibility patches for Aphrodite + transformers version mismatches.
 
 Applied once at platform registration time. Optional missing dependencies are
@@ -92,9 +93,7 @@ def _dequantize_qwen35_fp8_weight(
     weight = mx.pad(weight, pad_width)
     block_rows = (rows + pad_rows) // block_size
     block_cols = (cols + pad_cols) // block_size
-    weight = weight.reshape(
-        (*leading_shape, block_rows, block_size, block_cols, block_size)
-    )
+    weight = weight.reshape((*leading_shape, block_rows, block_size, block_cols, block_size))
     weight = (weight * scale_inv[..., :, None, :, None]).reshape(
         *leading_shape,
         rows + pad_rows,
@@ -103,9 +102,7 @@ def _dequantize_qwen35_fp8_weight(
     return weight[..., :rows, :cols].astype(mx.bfloat16)
 
 
-def _dequantize_qwen35_fp8_weights(
-    weights: Mapping[str, Any], mx: Any
-) -> Mapping[str, Any]:
+def _dequantize_qwen35_fp8_weights(weights: Mapping[str, Any], mx: Any) -> Mapping[str, Any]:
     if not any("weight_scale_inv" in key for key in weights):
         return weights
 
@@ -115,8 +112,7 @@ def _dequantize_qwen35_fp8_weights(
             weight_key = key.replace("_scale_inv", "")
             if weight_key not in weights:
                 raise ValueError(
-                    "Qwen3.5/Qwen3.6 FP8 checkpoint has "
-                    f"{key!r} but is missing matching weight {weight_key!r}."
+                    f"Qwen3.5/Qwen3.6 FP8 checkpoint has {key!r} but is missing matching weight {weight_key!r}."
                 )
             weight = weights[weight_key]
             new_weights[weight_key] = _dequantize_qwen35_fp8_weight(
@@ -131,9 +127,7 @@ def _dequantize_qwen35_fp8_weights(
     return new_weights
 
 
-def _stack_qwen36_moe_per_expert_weights(
-    weights: Mapping[str, Any], mx: Any
-) -> Mapping[str, Any]:
+def _stack_qwen36_moe_per_expert_weights(weights: Mapping[str, Any], mx: Any) -> Mapping[str, Any]:
     """Combine per-expert MoE tensors into the stacked layout mlx_lm expects.
 
     ``Qwen/Qwen3.6-35B-A3B-FP8`` ships expert MLPs as one tensor per expert
@@ -188,10 +182,7 @@ def _stack_qwen36_moe_per_expert_weights(
         # all three must share the same contiguous {0..N-1} index set.
         missing_projs = [p for p in required_projs if p not in proj_to_indices]
         if missing_projs:
-            raise ValueError(
-                f"Per-expert MoE weights at {prefix!r} are missing "
-                f"projection families: {missing_projs}."
-            )
+            raise ValueError(f"Per-expert MoE weights at {prefix!r} are missing projection families: {missing_projs}.")
         gate_indices = proj_to_indices["gate_proj"]
         expected = set(range(len(gate_indices)))
         if gate_indices != expected:
@@ -218,9 +209,7 @@ def _stack_qwen36_moe_per_expert_weights(
             gates.append(new_weights.pop(f"{prefix}.{e}.gate_proj.weight"))
             ups.append(new_weights.pop(f"{prefix}.{e}.up_proj.weight"))
             downs.append(new_weights.pop(f"{prefix}.{e}.down_proj.weight"))
-        new_weights[f"{prefix}.gate_up_proj"] = mx.concatenate(
-            [mx.stack(gates), mx.stack(ups)], axis=-2
-        )
+        new_weights[f"{prefix}.gate_up_proj"] = mx.concatenate([mx.stack(gates), mx.stack(ups)], axis=-2)
         new_weights[f"{prefix}.down_proj"] = mx.stack(downs)
     return new_weights
 
@@ -259,15 +248,13 @@ def _patch_mlx_lm_qwen35_fp8_sanitize() -> None:
             model_modules.append(import_module(module_name))
         except ImportError as exc:
             logger.warning(
-                "Could not import %s while installing mlx_lm Qwen3.5/Qwen3.6 "
-                "FP8 sanitize compatibility patch: %s",
+                "Could not import %s while installing mlx_lm Qwen3.5/Qwen3.6 FP8 sanitize compatibility patch: %s",
                 module_name,
                 exc,
             )
     if not model_modules:
         logger.warning(
-            "Could not install mlx_lm Qwen3.5/Qwen3.6 FP8 sanitize "
-            "compatibility patch: no qwen3_5 model modules found."
+            "Could not install mlx_lm Qwen3.5/Qwen3.6 FP8 sanitize compatibility patch: no qwen3_5 model modules found."
         )
         return
 
@@ -402,8 +389,7 @@ def _patch_mlx_lm_gemma4_kv_shared_sanitize() -> None:
         module = import_module("mlx_lm.models.gemma4_text")
     except ImportError as exc:
         logger.warning(
-            "Could not install mlx_lm Gemma 4 KV-shared sanitize "
-            "compatibility patch: %s",
+            "Could not install mlx_lm Gemma 4 KV-shared sanitize compatibility patch: %s",
             exc,
         )
         return
@@ -423,7 +409,5 @@ def _patch_mlx_lm_gemma4_kv_shared_sanitize() -> None:
             self.args.num_kv_shared_layers,
         )
 
-    if _wrap_model_sanitize(
-        model_cls, "_aphrodite.metal_gemma4_kv_shared_patch", _transform
-    ):
+    if _wrap_model_sanitize(model_cls, "_aphrodite.metal_gemma4_kv_shared_patch", _transform):
         logger.debug("Patched mlx_lm gemma4_text KV-shared sanitize compatibility")

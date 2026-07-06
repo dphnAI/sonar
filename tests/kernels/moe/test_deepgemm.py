@@ -13,7 +13,6 @@ import torch
 
 # Aphrodite fused-expert reference (Triton fallback + DeepGEMM option)
 import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from tests.kernels.moe.utils import make_dummy_moe_config
 from aphrodite.model_executor.layers.fused_moe.activation import (
     MoEActivation,
 )
@@ -37,6 +36,7 @@ from aphrodite.utils.deep_gemm import (
     is_deep_gemm_supported,
     per_block_cast_to_fp8,
 )
+from tests.kernels.moe.utils import make_dummy_moe_config
 
 BLOCK_SIZE = [128, 128]
 
@@ -78,12 +78,8 @@ def make_block_quant_fp8_weights(
     w2_s = torch.empty(e, n_tiles_w2, k_tiles_w2, device="cuda", dtype=torch.float32)
 
     for i in range(e):
-        w1[i], w1_s[i] = per_block_cast_to_fp8(
-            w1_bf16[i], block_size=block_size, use_ue8m0=True
-        )
-        w2[i], w2_s[i] = per_block_cast_to_fp8(
-            w2_bf16[i], block_size=block_size, use_ue8m0=True
-        )
+        w1[i], w1_s[i] = per_block_cast_to_fp8(w1_bf16[i], block_size=block_size, use_ue8m0=True)
+        w2[i], w2_s[i] = per_block_cast_to_fp8(w2_bf16[i], block_size=block_size, use_ue8m0=True)
 
     return w1, w2, w1_s, w2_s
 
@@ -93,11 +89,7 @@ def run_single_case(m, n, k, topk, num_experts, block_size):
     Run one (M,N,K) configuration on a single GPU and assert DeepGEMM ==
     Triton baseline within tolerance.
     """
-    tokens_bf16 = (
-        torch.randn(m, k, device="cuda", dtype=torch.bfloat16)
-        .clamp_min_(-1)
-        .clamp_max_(1)
-    )
+    tokens_bf16 = torch.randn(m, k, device="cuda", dtype=torch.bfloat16).clamp_min_(-1).clamp_max_(1)
     _, a1_scale = per_token_group_quant_fp8(tokens_bf16, block_size[1])
 
     # expert weight tensors
@@ -201,8 +193,7 @@ def test_deepgemm_vs_triton(m, n, k, topk, num_experts, monkeypatch, workspace_i
 
         # ensure that the DeepGEMM path was indeed taken.
         assert call_counter["cnt"] == 1, (
-            f"DeepGEMM path was not executed during the test. "
-            f"Call counter: {call_counter['cnt']}"
+            f"DeepGEMM path was not executed during the test. Call counter: {call_counter['cnt']}"
         )
 
 
@@ -239,18 +230,12 @@ def make_mxfp4_weights(
     # Quantize per-expert to FP4
     w1 = torch.empty(e, 2 * n, k // 2, device="cuda", dtype=torch.uint8)
     w2 = torch.empty(e, k, n // 2, device="cuda", dtype=torch.uint8)
-    w1_s = torch.empty(
-        e, 2 * n, math.ceil(k / gran_k), device="cuda", dtype=torch.float32
-    )
+    w1_s = torch.empty(e, 2 * n, math.ceil(k / gran_k), device="cuda", dtype=torch.float32)
     w2_s = torch.empty(e, k, math.ceil(n / gran_k), device="cuda", dtype=torch.float32)
 
     for i in range(e):
-        w1[i], w1_s[i] = per_token_cast_to_fp4(
-            w1_bf16[i].float(), use_ue8m0=True, gran_k=gran_k
-        )
-        w2[i], w2_s[i] = per_token_cast_to_fp4(
-            w2_bf16[i].float(), use_ue8m0=True, gran_k=gran_k
-        )
+        w1[i], w1_s[i] = per_token_cast_to_fp4(w1_bf16[i].float(), use_ue8m0=True, gran_k=gran_k)
+        w2[i], w2_s[i] = per_token_cast_to_fp4(w2_bf16[i].float(), use_ue8m0=True, gran_k=gran_k)
 
     return w1, w2, w1_s, w2_s, w1_bf16, w2_bf16
 
@@ -359,9 +344,7 @@ FP4_NUM_EXPERTS = [8]
 @pytest.mark.parametrize("topk", FP4_TOPKS)
 @pytest.mark.parametrize("num_experts", FP4_NUM_EXPERTS)
 @pytest.mark.skipif(not is_deep_gemm_supported(), reason="Requires deep_gemm kernels")
-def test_deepgemm_fp4_vs_triton(
-    m, n, k, topk, num_experts, monkeypatch, workspace_init
-):
+def test_deepgemm_fp4_vs_triton(m, n, k, topk, num_experts, monkeypatch, workspace_init):
     pytest.importorskip("deep_gemm.utils.math")
     with monkeypatch.context() as mp:
         mp.setenv("APHRODITE_USE_DEEP_GEMM", "1")
@@ -392,6 +375,5 @@ def test_deepgemm_fp4_vs_triton(
 
         # ensure that the DeepGEMM FP4 path was indeed taken.
         assert call_counter["cnt"] == 1, (
-            f"DeepGEMM FP4 path was not executed during the test. "
-            f"Call counter: {call_counter['cnt']}"
+            f"DeepGEMM FP4 path was not executed during the test. Call counter: {call_counter['cnt']}"
         )

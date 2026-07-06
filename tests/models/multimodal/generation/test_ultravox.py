@@ -9,7 +9,7 @@ import pytest
 import pytest_asyncio
 from transformers import AutoTokenizer
 
-from ....conftest import AUDIO_ASSETS, AudioTestAssets, AphroditeRunner
+from ....conftest import AUDIO_ASSETS, AphroditeRunner, AudioTestAssets
 from ....utils import RemoteOpenAIServer
 from ...registry import HF_EXAMPLE_MODELS
 
@@ -67,9 +67,7 @@ def server(request, audio_assets: AudioTestAssets):
         "--trust-remote-code",
     ] + params_kwargs_to_cli_args(request.param)
 
-    with RemoteOpenAIServer(
-        MODEL_NAME, args, env_dict={"APHRODITE_AUDIO_FETCH_TIMEOUT": "30"}
-    ) as remote_server:
+    with RemoteOpenAIServer(MODEL_NAME, args, env_dict={"APHRODITE_AUDIO_FETCH_TIMEOUT": "30"}) as remote_server:
         yield remote_server
 
 
@@ -108,9 +106,7 @@ def run_multi_audio_test(
         model,
         dtype=dtype,
         enforce_eager=True,
-        limit_mm_per_prompt={
-            "audio": max((len(audio) for _, audio in prompts_and_audios))
-        },
+        limit_mm_per_prompt={"audio": max((len(audio) for _, audio in prompts_and_audios))},
         **kwargs,
     ) as aphrodite_model:
         aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
@@ -209,10 +205,7 @@ async def test_online_serving(client, audio_assets: AudioTestAssets):
         {
             "role": "user",
             "content": [
-                *[
-                    {"type": "audio_url", "audio_url": {"url": audio.url}}
-                    for audio in audio_assets
-                ],
+                *[{"type": "audio_url", "audio_url": {"url": audio.url}} for audio in audio_assets],
                 {
                     "type": "text",
                     "text": f"What's happening in these {len(audio_assets)} audio clips?",  # noqa: E501
@@ -221,9 +214,7 @@ async def test_online_serving(client, audio_assets: AudioTestAssets):
         }
     ]
 
-    chat_completion = await client.chat.completions.create(
-        model=MODEL_NAME, messages=messages, max_tokens=10
-    )
+    chat_completion = await client.chat.completions.create(model=MODEL_NAME, messages=messages, max_tokens=10)
 
     assert len(chat_completion.choices) == 1
     choice = chat_completion.choices[0]

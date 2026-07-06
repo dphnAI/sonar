@@ -42,21 +42,14 @@ def _coerce_quant_key(v: Any) -> QuantKey | None:
     try:
         return QUANT_KEY_NAMES[v]
     except KeyError:
-        raise ValueError(
-            f"unknown quantization name {v!r}; "
-            f"expected one of {sorted(QUANT_KEY_NAMES)}"
-        ) from None
+        raise ValueError(f"unknown quantization name {v!r}; expected one of {sorted(QUANT_KEY_NAMES)}") from None
 
 
 # Stop pydantic from introspecting QuantKey: it transitively contains a
 # NamedTuple with `ClassVar[GroupShape]` declarations that pydantic refuses.
 QuantKeyField = Annotated[
     QuantKey | None,
-    GetPydanticSchema(
-        lambda _src, _handler: core_schema.no_info_plain_validator_function(
-            _coerce_quant_key
-        )
-    ),
+    GetPydanticSchema(lambda _src, _handler: core_schema.no_info_plain_validator_function(_coerce_quant_key)),
 ]
 
 
@@ -102,9 +95,7 @@ class QuantizationConfigArgs:
         if v in _ONLINE_SHORTHANDS:
             spec = getattr(_ONLINE_SHORTHANDS[v], field_name)
             if spec is None:
-                raise ValueError(
-                    f"online shorthand {v!r} does not define a {field_name} spec"
-                )
+                raise ValueError(f"online shorthand {v!r} does not define a {field_name} spec")
             return spec
         return QuantSpec(weight=_coerce_quant_key(v))
 

@@ -15,9 +15,7 @@ from .common import FUSION_LOG_PATTERNS, AttentionBackendCase, Matches
 def run_model(compile_config: int | CompilationConfig, model: str, **model_kwargs):
     """Run a model with the given compilation config for E2E fusion tests."""
     compilation_config = (
-        compile_config
-        if isinstance(compile_config, CompilationConfig)
-        else CompilationConfig(mode=compile_config)
+        compile_config if isinstance(compile_config, CompilationConfig) else CompilationConfig(mode=compile_config)
     )
 
     prompts = [
@@ -54,9 +52,7 @@ def run_model(compile_config: int | CompilationConfig, model: str, **model_kwarg
     )
 
     # Fetch match table from each worker via RPC and sum across workers.
-    worker_tables = llm.llm_engine.engine_core.collective_rpc(
-        "get_compilation_match_table"
-    )
+    worker_tables = llm.llm_engine.engine_core.collective_rpc("get_compilation_match_table")
     combined: defaultdict[str, int] = defaultdict(int)
     for table in worker_tables:
         for k, v in table.items():
@@ -92,15 +88,10 @@ def run_e2e_fusion_test(monkeypatch, caplog_mp_spawn):
         is_sparse = "sparse" in backend_name
 
         if requires_mla != is_mla or requires_sparse != is_sparse:
-            pytest.skip(
-                f"Incompatible model '{model_name}' and "
-                f"attention backend '{attn_backend.backend.name}'"
-            )
+            pytest.skip(f"Incompatible model '{model_name}' and attention backend '{attn_backend.backend.name}'")
 
         if backend_name == "rocm_attn" and model_name == "openai/gpt-oss-20b":
-            pytest.skip(
-                "ROCM_ATTN does not support attention sinks (required by gpt-oss-20b)"
-            )
+            pytest.skip("ROCM_ATTN does not support attention sinks (required by gpt-oss-20b)")
 
         if attn_backend.backend.name == "FLASHINFER":
             from aphrodite.utils.flashinfer import supports_trtllm_attention
@@ -137,9 +128,7 @@ def run_e2e_fusion_test(monkeypatch, caplog_mp_spawn):
             # DSv3.2 sparse indexer uses persistent_topk with k=config.index_topk
             # (2048 for the default config). max_model_len must be >= index_topk
             # or the topk kernel raises "k out of range" at runtime.
-            model_kwargs["max_model_len"] = max(
-                model_kwargs.get("max_model_len", 0), 2048
-            )
+            model_kwargs["max_model_len"] = max(model_kwargs.get("max_model_len", 0), 2048)
 
         # Always compile the full graph instead of piecewise
         if not compilation_config["use_inductor_graph_partition"]:
@@ -175,22 +164,12 @@ def run_e2e_fusion_test(monkeypatch, caplog_mp_spawn):
             # When both are enabled, AR+RMS activation count is
             # model-dependent (hidden_size affects threshold), so derive
             # from log data.
-            if (
-                match_name == "ar_rms_fusion"
-                and "sequence_parallel" in matches_check
-                and num_compile_ranges >= 2
-            ):
-                assert (
-                    len(log_matches) >= tp_size and len(log_matches) % tp_size == 0
-                ), (
-                    f"Expected multiple of {tp_size} ar_rms log entries, "
-                    f"found {len(log_matches)}"
+            if match_name == "ar_rms_fusion" and "sequence_parallel" in matches_check and num_compile_ranges >= 2:
+                assert len(log_matches) >= tp_size and len(log_matches) % tp_size == 0, (
+                    f"Expected multiple of {tp_size} ar_rms log entries, found {len(log_matches)}"
                 )
                 num_ranges_activated = len(log_matches) // tp_size
-            elif (
-                match_name in ("ar_rms_fusion", "sequence_parallel")
-                and num_compile_ranges >= 2
-            ):
+            elif match_name in ("ar_rms_fusion", "sequence_parallel") and num_compile_ranges >= 2:
                 num_ranges_activated = num_compile_ranges - 1
             else:
                 num_ranges_activated = num_compile_ranges
@@ -200,8 +179,7 @@ def run_e2e_fusion_test(monkeypatch, caplog_mp_spawn):
             n_expected = tp_size * num_ranges_activated
             if match_name not in ("attn_quant_fusion", "act_quant_fusion"):
                 assert len(log_matches) == n_expected, (
-                    f"Could not find {n_expected} {match_name} "
-                    f"(found {len(log_matches)}) in:\n {log_holder.text}"
+                    f"Could not find {n_expected} {match_name} (found {len(log_matches)}) in:\n {log_holder.text}"
                 )
 
             expected_matches = getattr(matches, match_name)
@@ -210,50 +188,31 @@ def run_e2e_fusion_test(monkeypatch, caplog_mp_spawn):
                 # AR+rms+quant takes precedence over rms+quant if activated.
                 # That means we get full matching where ar+rms+quant was not
                 # activated, and less where it was (only the smallest range).
-                assert sum(m == expected_matches for m in log_matches) == tp_size * (
-                    num_ranges_activated - 1
-                ), "Expecting full rms+quant fusion where ar+rms+quant not activated"
-
-                assert all(
-                    expected_matches - matches.ar_rms_fusion <= m <= expected_matches
-                    for m in log_matches
-                ), (
-                    f"Expecting at least {expected_matches - matches.ar_rms_fusion} "
-                    f"where ar+rms+quant was activated"
+                assert sum(m == expected_matches for m in log_matches) == tp_size * (num_ranges_activated - 1), (
+                    "Expecting full rms+quant fusion where ar+rms+quant not activated"
                 )
-            elif (
-                match_name == "async_tp"
-                and "sequence_parallel" in matches_check
-                and num_compile_ranges >= 2
-            ):
+
+                assert all(expected_matches - matches.ar_rms_fusion <= m <= expected_matches for m in log_matches), (
+                    f"Expecting at least {expected_matches - matches.ar_rms_fusion} where ar+rms+quant was activated"
+                )
+            elif match_name == "async_tp" and "sequence_parallel" in matches_check and num_compile_ranges >= 2:
                 # AsyncTP only finds patterns on ranges where SP ran.
                 n_sp_ranges = num_compile_ranges - 1
-                assert (
-                    sum(m == expected_matches for m in log_matches)
-                    == tp_size * n_sp_ranges
-                ), (
+                assert sum(m == expected_matches for m in log_matches) == tp_size * n_sp_ranges, (
                     f"Expecting {expected_matches} async_tp on "
                     f"{tp_size * n_sp_ranges} SP-range entries, "
                     f"found: {log_matches}"
                 )
                 assert sum(m == 0 for m in log_matches) == tp_size, (
-                    f"Expecting 0 async_tp on {tp_size} small-range entries "
-                    f"(no SP), found: {log_matches}"
+                    f"Expecting 0 async_tp on {tp_size} small-range entries (no SP), found: {log_matches}"
                 )
-            elif (
-                match_name == "ar_rms_fusion"
-                and "sequence_parallel" in matches_check
-                and num_compile_ranges >= 2
-            ):
+            elif match_name == "ar_rms_fusion" and "sequence_parallel" in matches_check and num_compile_ranges >= 2:
                 # SP consumes allreduce patterns first, so AR+RMS finds
                 # full matches only on the smallest range (no SP).
                 assert sum(m == expected_matches for m in log_matches) == tp_size, (
-                    f"Expecting {expected_matches} ar_rms on "
-                    f"{tp_size} small-range entries, found: {log_matches}"
+                    f"Expecting {expected_matches} ar_rms on {tp_size} small-range entries, found: {log_matches}"
                 )
-                assert sum(m == 0 for m in log_matches) == tp_size * (
-                    num_ranges_activated - 1
-                ), (
+                assert sum(m == 0 for m in log_matches) == tp_size * (num_ranges_activated - 1), (
                     f"Expecting 0 ar_rms on "
                     f"{tp_size * (num_ranges_activated - 1)} large-range "
                     f"entries (SP took precedence), found: {log_matches}"
@@ -262,22 +221,17 @@ def run_e2e_fusion_test(monkeypatch, caplog_mp_spawn):
             elif match_name == "act_quant_fusion":
                 actual_match = match_table.get("activation_quant_fusion_pass", 0)
                 assert actual_match == expected_matches * n_expected, (
-                    f"Could not find {expected_matches * n_expected} "
-                    f"{match_name} (found {actual_match})."
+                    f"Could not find {expected_matches * n_expected} {match_name} (found {actual_match})."
                 )
             elif match_name == "attn_quant_fusion":
-                actual_match = match_table.get(
-                    "attn_quant_fusion", 0
-                ) + match_table.get("mla_attn_quant_fusion", 0)
+                actual_match = match_table.get("attn_quant_fusion", 0) + match_table.get("mla_attn_quant_fusion", 0)
                 assert actual_match == expected_matches * n_expected, (
-                    f"Could not find {expected_matches * n_expected} "
-                    f"{match_name} (found {actual_match})."
+                    f"Could not find {expected_matches * n_expected} {match_name} (found {actual_match})."
                 )
             else:
                 expected_matches_list = [expected_matches] * n_expected
                 assert sorted(log_matches) == expected_matches_list, (
-                    f"{match_name} expected: {expected_matches_list}, "
-                    f"found: {sorted(log_matches)}"
+                    f"{match_name} expected: {expected_matches_list}, found: {sorted(log_matches)}"
                 )
 
             if match_name == "ar_rms_fusion" and num_compile_ranges >= 2:

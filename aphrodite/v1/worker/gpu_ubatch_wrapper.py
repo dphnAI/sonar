@@ -10,7 +10,7 @@ import torch
 
 import aphrodite.envs as envs
 from aphrodite.compilation.cuda_graph import CUDAGraphWrapper
-from aphrodite.config import CUDAGraphMode, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CUDAGraphMode
 from aphrodite.distributed import get_ep_group
 from aphrodite.distributed.device_communicators.pynccl_allocator import set_graph_pool_id
 from aphrodite.forward_context import (
@@ -123,17 +123,13 @@ class UBatchWrapper:
         self.compilation_config = aphrodite_config.compilation_config
         self.comm_stream = torch.cuda.Stream(device=device)
         # Ubatch threads plus the main thread
-        self.ready_barrier = threading.Barrier(
-            self.aphrodite_config.parallel_config.num_ubatches + 1
-        )
+        self.ready_barrier = threading.Barrier(self.aphrodite_config.parallel_config.num_ubatches + 1)
 
         self.cudagraphs: dict[int, CUDAGraphMetaData] = {}
 
         self.cudagraph_wrapper = None
         if runtime_mode is not CUDAGraphMode.NONE:
-            self.cudagraph_wrapper = CUDAGraphWrapper(
-                runnable, aphrodite_config, runtime_mode=runtime_mode
-            )
+            self.cudagraph_wrapper = CUDAGraphWrapper(runnable, aphrodite_config, runtime_mode=runtime_mode)
 
         self.sm_control = self._create_sm_control_context(aphrodite_config)
         self.device = device
@@ -200,8 +196,7 @@ class UBatchWrapper:
             return getattr(self.runnable, key)
         if self.is_debugging_mode:
             raise AttributeError(
-                f"Attribute {key} not exists in the runnable of "
-                f"cudagraph wrapper: {self._runnable_str}"
+                f"Attribute {key} not exists in the runnable of cudagraph wrapper: {self._runnable_str}"
             )
         raise AttributeError
 
@@ -400,8 +395,7 @@ class UBatchWrapper:
                     positions=sliced_positions,
                     inputs_embeds=sliced_inputs_embeds,
                     intermediate_tensors=sliced_intermediate_tensors,
-                    num_tokens=ubatch_slice.token_slice.stop
-                    - ubatch_slice.token_slice.start,
+                    num_tokens=ubatch_slice.token_slice.stop - ubatch_slice.token_slice.start,
                 )
             )
 
@@ -422,14 +416,8 @@ class UBatchWrapper:
             sliced_positions = positions[:, tokens_slice]
         else:
             sliced_positions = positions[tokens_slice]
-        sliced_inputs_embeds = (
-            inputs_embeds[tokens_slice] if inputs_embeds is not None else None
-        )
-        sliced_intermediate_tensors = (
-            intermediate_tensors[tokens_slice]
-            if intermediate_tensors is not None
-            else None
-        )
+        sliced_inputs_embeds = inputs_embeds[tokens_slice] if inputs_embeds is not None else None
+        sliced_intermediate_tensors = intermediate_tensors[tokens_slice] if intermediate_tensors is not None else None
 
         return (
             sliced_input_ids,
@@ -490,10 +478,7 @@ class UBatchWrapper:
                 )
             )
 
-        if (
-            num_tokens not in self.cudagraphs
-            and cudagraph_runtime_mode is CUDAGraphMode.FULL
-        ):
+        if num_tokens not in self.cudagraphs and cudagraph_runtime_mode is CUDAGraphMode.FULL:
             ubatch_metadata = self._make_ubatch_metadata(
                 ubatch_slices=ubatch_slices,
                 attn_metadata=attn_metadata,
@@ -509,10 +494,7 @@ class UBatchWrapper:
             )
             with self.sm_control:
                 return self._capture_ubatches(ubatch_metadata, self.runnable)
-        elif (
-            num_tokens in self.cudagraphs
-            and cudagraph_runtime_mode is CUDAGraphMode.FULL
-        ):
+        elif num_tokens in self.cudagraphs and cudagraph_runtime_mode is CUDAGraphMode.FULL:
             cudagraph_metadata = self.cudagraphs[num_tokens]
             # Sync offloader before replay - ensures any external dependencies
             # from pre-capture prefetches are satisfied.

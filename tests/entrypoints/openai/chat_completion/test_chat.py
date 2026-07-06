@@ -14,11 +14,11 @@ import requests
 import torch
 from openai import BadRequestError
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
 from aphrodite.sampling_params import SamplingParams
+from tests.utils import RemoteOpenAIServer
 
 # any model with a chat template should work here
 MODEL_NAME = "HuggingFaceH4/zephyr-7b-beta"
@@ -187,9 +187,7 @@ async def test_too_many_chat_logprobs(client: openai.AsyncOpenAI, model_name: st
     "model_name, prompt_logprobs",
     [(MODEL_NAME, 1), (MODEL_NAME, 0), (MODEL_NAME, -1), (MODEL_NAME, None)],
 )
-async def test_prompt_logprobs_chat(
-    client: openai.AsyncOpenAI, model_name: str, prompt_logprobs: int | None
-):
+async def test_prompt_logprobs_chat(client: openai.AsyncOpenAI, model_name: str, prompt_logprobs: int | None):
     params: dict = {
         "messages": [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -223,9 +221,7 @@ async def test_prompt_logprobs_chat(
     "model_name",
     [MODEL_NAME],
 )
-async def test_more_than_one_prompt_logprobs_chat(
-    client: openai.AsyncOpenAI, model_name: str
-):
+async def test_more_than_one_prompt_logprobs_chat(client: openai.AsyncOpenAI, model_name: str):
     params: dict = {
         "messages": [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -273,9 +269,7 @@ async def test_single_chat_session(client: openai.AsyncOpenAI, model_name: str):
     choice = chat_completion.choices[0]
 
     assert choice.finish_reason == "length"
-    assert chat_completion.usage == openai.types.CompletionUsage(
-        completion_tokens=5, prompt_tokens=37, total_tokens=42
-    )
+    assert chat_completion.usage == openai.types.CompletionUsage(completion_tokens=5, prompt_tokens=37, total_tokens=42)
 
     message = choice.message
     assert message.content is not None and len(message.content) >= 5
@@ -345,9 +339,7 @@ async def test_chat_streaming(client: openai.AsyncOpenAI, model_name: str):
     "model_name",
     ["HuggingFaceH4/zephyr-7b-beta", "zephyr-lora"],
 )
-async def test_chat_completion_stream_options(
-    client: openai.AsyncOpenAI, model_name: str
-):
+async def test_chat_completion_stream_options(client: openai.AsyncOpenAI, model_name: str):
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "What is the capital of France?"},
@@ -432,14 +424,9 @@ async def test_chat_completion_stream_options(
         assert (
             last_completion_tokens == 0
             or chunk.usage.completion_tokens > last_completion_tokens
-            or (
-                not chunk.choices
-                and chunk.usage.completion_tokens == last_completion_tokens
-            )
+            or (not chunk.choices and chunk.usage.completion_tokens == last_completion_tokens)
         )
-        assert chunk.usage.total_tokens == (
-            chunk.usage.prompt_tokens + chunk.usage.completion_tokens
-        )
+        assert chunk.usage.total_tokens == (chunk.usage.prompt_tokens + chunk.usage.completion_tokens)
         last_completion_tokens = chunk.usage.completion_tokens
 
     assert last_completion_tokens == 10
@@ -462,9 +449,7 @@ async def test_structured_outputs_choice_chat(
         messages=messages,
         max_completion_tokens=10,
         temperature=0.7,
-        extra_body=dict(
-            structured_outputs={"choice": sample_structured_outputs_choices}
-        ),
+        extra_body=dict(structured_outputs={"choice": sample_structured_outputs_choices}),
     )
     choice1 = chat_completion.choices[0].message.content
     assert choice1 in sample_structured_outputs_choices
@@ -476,9 +461,7 @@ async def test_structured_outputs_choice_chat(
         messages=messages,
         max_completion_tokens=10,
         temperature=0.7,
-        extra_body=dict(
-            structured_outputs={"choice": sample_structured_outputs_choices}
-        ),
+        extra_body=dict(structured_outputs={"choice": sample_structured_outputs_choices}),
     )
     choice2 = chat_completion.choices[0].message.content
     assert choice2 in sample_structured_outputs_choices
@@ -494,8 +477,7 @@ async def test_structured_outputs_json_chat(
         {"role": "system", "content": "you are a helpful assistant"},
         {
             "role": "user",
-            "content": f"Give an example JSON for an employee profile that "
-            f"fits this schema: {sample_json_schema}",
+            "content": f"Give an example JSON for an employee profile that fits this schema: {sample_json_schema}",
         },
     ]
     chat_completion = await client.chat.completions.create(
@@ -510,9 +492,7 @@ async def test_structured_outputs_json_chat(
     jsonschema.validate(instance=json1, schema=sample_json_schema)
 
     messages.append({"role": "assistant", "content": message.content})
-    messages.append(
-        {"role": "user", "content": "Give me another one with a different name and age"}
-    )
+    messages.append({"role": "user", "content": "Give me another one with a different name and age"})
     chat_completion = await client.chat.completions.create(
         model=MODEL_NAME,
         messages=messages,
@@ -582,9 +562,7 @@ async def test_structured_outputs_type_error(client: openai.AsyncOpenAI):
 
 
 @pytest.mark.asyncio
-async def test_structured_outputs_choice_chat_logprobs(
-    client: openai.AsyncOpenAI, sample_structured_outputs_choices
-):
+async def test_structured_outputs_choice_chat_logprobs(client: openai.AsyncOpenAI, sample_structured_outputs_choices):
     messages = [
         {"role": "system", "content": "you are a helpful assistant"},
         {
@@ -598,9 +576,7 @@ async def test_structured_outputs_choice_chat_logprobs(
         max_completion_tokens=10,
         logprobs=True,
         top_logprobs=5,
-        extra_body=dict(
-            structured_outputs={"choice": sample_structured_outputs_choices}
-        ),
+        extra_body=dict(structured_outputs={"choice": sample_structured_outputs_choices}),
     )
 
     assert chat_completion.choices[0].logprobs is not None
@@ -620,10 +596,7 @@ async def test_response_format_json_object(client: openai.AsyncOpenAI):
             messages=[
                 {
                     "role": "user",
-                    "content": (
-                        "what is 1+1? please respond with a JSON object, "
-                        'the format is {"result": 2}'
-                    ),
+                    "content": ('what is 1+1? please respond with a JSON object, the format is {"result": 2}'),
                 }
             ],
             response_format={"type": "json_object"},
@@ -787,10 +760,7 @@ async def test_long_seed(client: openai.AsyncOpenAI):
                 seed=seed,
             )
 
-        assert (
-            "greater_than_equal" in exc_info.value.message
-            or "less_than_equal" in exc_info.value.message
-        )
+        assert "greater_than_equal" in exc_info.value.message or "less_than_equal" in exc_info.value.message
 
 
 @pytest.mark.asyncio
@@ -811,14 +781,10 @@ async def test_invocations(server: RemoteOpenAIServer, client: openai.AsyncOpenA
     # Use raw HTTP for both endpoints so we compare server responses
     # directly, without the openai SDK injecting extra fields
     # (e.g. `moderation` added in newer SDK versions).
-    chat_response = requests.post(
-        server.url_for("v1/chat/completions"), json=request_args
-    )
+    chat_response = requests.post(server.url_for("v1/chat/completions"), json=request_args)
     chat_response.raise_for_status()
 
-    invocation_response = requests.post(
-        server.url_for("invocations"), json=request_args
-    )
+    invocation_response = requests.post(server.url_for("invocations"), json=request_args)
     invocation_response.raise_for_status()
 
     chat_output = chat_response.json()
@@ -841,9 +807,7 @@ async def test_invocations(server: RemoteOpenAIServer, client: openai.AsyncOpenA
     "model_name",
     [MODEL_NAME],
 )
-async def test_chat_completion_n_parameter_non_streaming(
-    client: openai.AsyncOpenAI, model_name: str
-):
+async def test_chat_completion_n_parameter_non_streaming(client: openai.AsyncOpenAI, model_name: str):
     """Test that n parameter returns multiple choices for non-streaming requests."""
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
@@ -878,9 +842,7 @@ async def test_chat_completion_n_parameter_non_streaming(
     "model_name",
     [MODEL_NAME],
 )
-async def test_chat_completion_n_parameter_streaming(
-    client: openai.AsyncOpenAI, model_name: str
-):
+async def test_chat_completion_n_parameter_streaming(client: openai.AsyncOpenAI, model_name: str):
     """Test that n parameter returns multiple choices for streaming requests."""
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
@@ -1051,9 +1013,7 @@ def test_chat_completion_request_n_parameter_various_values():
             default_sampling_params={},
         )
 
-        assert sampling_params.n == n_value, (
-            f"Expected n={n_value}, got n={sampling_params.n}"
-        )
+        assert sampling_params.n == n_value, f"Expected n={n_value}, got n={sampling_params.n}"
 
 
 def test_chat_completion_request_n_parameter_exceeds_default_limit(

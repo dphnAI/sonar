@@ -11,8 +11,6 @@ import pytest
 import torch.distributed
 from torch.distributed import ProcessGroup
 
-from tests.kernels.moe.utils import make_dummy_moe_config, make_test_weights
-from tests.kernels.utils import torch_experts
 from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.fused_moe import TritonExperts
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
@@ -23,6 +21,8 @@ from aphrodite.model_executor.layers.fused_moe.modular_kernel import FusedMoEKer
 from aphrodite.utils.import_utils import has_deep_ep_v2
 from aphrodite.utils.torch_utils import set_random_seed
 from aphrodite.v1.worker.workspace import init_workspace_manager
+from tests.kernels.moe.utils import make_dummy_moe_config, make_test_weights
+from tests.kernels.utils import torch_experts
 
 from ...utils import multi_gpu_test
 from .parallel_utils import ProcessGroupInfo, parallel_launch
@@ -57,18 +57,11 @@ class TestTensors:
     @staticmethod
     def make(config: TestConfig) -> "TestTensors":
         assert config.dtype in [torch.bfloat16, torch.float8_e4m3fn]
-        token_dtype = (
-            torch.bfloat16 if config.dtype == torch.float8_e4m3fn else config.dtype
-        )
-        rank_tokens = (
-            torch.randn((config.m, config.k), device="cuda", dtype=token_dtype) / 10
-        )
+        token_dtype = torch.bfloat16 if config.dtype == torch.float8_e4m3fn else config.dtype
+        rank_tokens = torch.randn((config.m, config.k), device="cuda", dtype=token_dtype) / 10
 
         topk = torch.stack(
-            [
-                torch.randperm(config.num_experts, device="cuda")[: config.topk]
-                for _ in range(config.m)
-            ]
+            [torch.randperm(config.num_experts, device="cuda")[: config.topk] for _ in range(config.m)]
         ).to(dtype=torch.int64)
         topk_weights = torch.randn(topk.shape, dtype=torch.float32, device="cuda")
         return TestTensors(
@@ -400,7 +393,6 @@ def _deep_ep_v2_moe_cudagraph(
         # shuffle), and selects the kernel.
         # Quantize weights using production helper, EP-slice, then
         # convert to TrtLLM format.
-        from tests.kernels.moe.test_moe_layer import _quantize_fp8_halves
         from aphrodite.model_executor.layers.fused_moe.experts.trtllm_fp8_moe import (
             TrtLlmFp8ExpertsModular,
         )
@@ -408,6 +400,7 @@ def _deep_ep_v2_moe_cudagraph(
             Fp8MoeBackend,
             convert_to_fp8_moe_kernel_format,
         )
+        from tests.kernels.moe.test_moe_layer import _quantize_fp8_halves
 
         block_shape = [128, 128]
         qw = _quantize_fp8_halves(w1_ref, w2_ref, block_shape)

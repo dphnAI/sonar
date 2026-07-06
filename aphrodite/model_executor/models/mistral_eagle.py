@@ -119,9 +119,7 @@ class EagleMistralForCausalLM(MistralForCausalLM):
         # and to avoid creating an lm_head.
         nn.Module.__init__(self)
         self.config = aphrodite_config.speculative_config.draft_model_config.hf_config
-        target_layer_num = aphrodite_config.model_config.get_num_layers(
-            aphrodite_config.parallel_config
-        )
+        target_layer_num = aphrodite_config.model_config.get_num_layers(aphrodite_config.parallel_config)
         self.model = EagleMistralModel(
             aphrodite_config=aphrodite_config,
             prefix=maybe_prefix(prefix, "model"),
@@ -129,9 +127,7 @@ class EagleMistralForCausalLM(MistralForCausalLM):
         )
 
         logit_scale = getattr(self.config, "logit_scale", 1.0)
-        self.logits_processor = LogitsProcessor(
-            self.config.vocab_size, scale=logit_scale
-        )
+        self.logits_processor = LogitsProcessor(self.config.vocab_size, scale=logit_scale)
 
     def forward(
         self,

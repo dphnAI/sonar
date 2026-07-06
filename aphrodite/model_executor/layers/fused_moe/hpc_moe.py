@@ -62,11 +62,7 @@ class HPCExperts(mk.FusedMoEExpertsModular):
     @staticmethod
     def _supports_current_device() -> bool:
         p = current_platform
-        return (
-            p.is_cuda()
-            and (p.is_device_capability(90) or p.is_device_capability_family(100))
-            and has_hpc()
-        )
+        return p.is_cuda() and (p.is_device_capability(90) or p.is_device_capability_family(100)) and has_hpc()
 
     @staticmethod
     def _supports_no_act_and_mul() -> bool:
@@ -168,12 +164,8 @@ class HPCExperts(mk.FusedMoEExpertsModular):
         apply_router_weight_on_input: bool | None,
     ):
         assert self._supports_activation(activation), f"{activation=} not supported"
-        assert self.quant_config.w1_scale is not None, (
-            "w13_weight_scale must be provided"
-        )
-        assert self.quant_config.w2_scale is not None, (
-            "w2_weight_scale must be provided"
-        )
+        assert self.quant_config.w1_scale is not None, "w13_weight_scale must be provided"
+        assert self.quant_config.w2_scale is not None, "w2_weight_scale must be provided"
 
         if self.quant_config.is_block_quantized:
             hpc_fuse_moe_blockwise(
@@ -190,12 +182,8 @@ class HPCExperts(mk.FusedMoEExpertsModular):
                 output=output,
             )
         else:
-            assert self.quant_config.a1_scale is not None, (
-                "w13_input_scale must be provided"
-            )
-            assert self.quant_config.a2_scale is not None, (
-                "w2_input_scale must be provided"
-            )
+            assert self.quant_config.a1_scale is not None, "w13_input_scale must be provided"
+            assert self.quant_config.a2_scale is not None, "w2_input_scale must be provided"
             hpc_fuse_moe(
                 x=hidden_states,
                 gate_up_weight=w1,

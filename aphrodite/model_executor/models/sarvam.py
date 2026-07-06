@@ -28,7 +28,7 @@ from itertools import islice
 import torch
 from torch import nn
 
-from aphrodite.config import CacheConfig, ParallelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig, ParallelConfig
 from aphrodite.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
@@ -77,9 +77,7 @@ def yarn_get_mscale(scale: float = 1, mscale: float = 1) -> float:
 
 
 def _is_gate_expert_bias_name(name: str) -> bool:
-    return name.endswith(".mlp.gate.e_score_correction_bias") or name.endswith(
-        ".gate.e_score_correction_bias"
-    )
+    return name.endswith(".mlp.gate.e_score_correction_bias") or name.endswith(".gate.e_score_correction_bias")
 
 
 def _zero_mean_tensor(t: torch.Tensor) -> torch.Tensor:
@@ -363,9 +361,7 @@ class SarvamMLAMoE(nn.Module):
         num_tokens, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         router_logits = self.gate(
-            hidden_states.to(self.router_dtype)
-            if self.router_dtype is not None
-            else hidden_states
+            hidden_states.to(self.router_dtype) if self.router_dtype is not None else hidden_states
         )
         router_logits = router_logits.to(hidden_states.dtype)
         final_hidden = self.experts(
@@ -404,9 +400,7 @@ class SarvamMLABlock(nn.Module):
         first_k_dense = getattr(config, "first_k_dense_replace", 1)
         moe_layer_freq = getattr(config, "moe_layer_freq", 1)
         if use_moe:
-            is_moe_layer = layer_idx >= first_k_dense and (
-                (layer_idx - first_k_dense) % moe_layer_freq == 0
-            )
+            is_moe_layer = layer_idx >= first_k_dense and ((layer_idx - first_k_dense) % moe_layer_freq == 0)
         else:
             is_moe_layer = False
 
@@ -463,9 +457,7 @@ class SarvamMLAModel(nn.Module):
         self.vocab_size = config.vocab_size
         self.embed_dim = config.hidden_size
         self.tie_word_embeddings = getattr(config, "tie_word_embeddings", False)
-        if get_pp_group().is_first_rank or (
-            self.tie_word_embeddings and get_pp_group().is_last_rank
-        ):
+        if get_pp_group().is_first_rank or (self.tie_word_embeddings and get_pp_group().is_last_rank):
             self.embed_tokens = VocabParallelEmbedding(
                 self.vocab_size,
                 self.embed_dim,
@@ -475,9 +467,7 @@ class SarvamMLAModel(nn.Module):
         else:
             self.embed_tokens = PPMissingLayer()
 
-        self.embedding_dropout = torch.nn.Dropout(
-            getattr(config, "embedding_dropout", 0.0)
-        )
+        self.embedding_dropout = torch.nn.Dropout(getattr(config, "embedding_dropout", 0.0))
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
             lambda prefix: SarvamMLABlock(
@@ -523,9 +513,7 @@ class SarvamMLAModel(nn.Module):
                 residual,
             )
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
         if residual is None:
             hidden_states = self.norm(hidden_states)
         else:
@@ -593,9 +581,7 @@ class SarvamMLAModel(nn.Module):
                         continue
 
                     param = params_dict[new_name]
-                    weight_loader = getattr(
-                        param, "weight_loader", default_weight_loader
-                    )
+                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
                     weight_loader(
                         param,
                         loaded_weight,
@@ -707,9 +693,7 @@ class SarvamMLAForCausalLM(nn.Module, SupportsPP, SupportsLoRA, SarvamMixtureOfE
             self.lm_head = PPMissingLayer()
             self.logits_processor = None  # type: ignore
 
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
         self.num_moe_layers = 0
 

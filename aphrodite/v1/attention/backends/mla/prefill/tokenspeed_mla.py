@@ -38,10 +38,7 @@ class TokenspeedMLAPrefillBackend(MLAPrefillBackend):
     def supports_compute_capability(cls, device_capability: "DeviceCapability") -> bool:
         return device_capability.major == 10
 
-    _INSTALL_HINT = (
-        "tokenspeed_mla package is not installed. "
-        "Install it with: `uv pip install tokenspeed-mla`"
-    )
+    _INSTALL_HINT = "tokenspeed_mla package is not installed. Install it with: `uv pip install tokenspeed-mla`"
 
     @classmethod
     def is_available(cls) -> bool:
@@ -65,10 +62,7 @@ class TokenspeedMLAPrefillBackend(MLAPrefillBackend):
         # exactly which package to install when they explicitly select this
         # backend without having tokenspeed_mla installed.
         reasons = super().validate_configuration(device_capability, selector_config)
-        return [
-            cls._INSTALL_HINT if r == "required dependencies not available" else r
-            for r in reasons
-        ]
+        return [cls._INSTALL_HINT if r == "required dependencies not available" else r for r in reasons]
 
     def __init__(
         self,
@@ -114,9 +108,7 @@ class TokenspeedMLAPrefillBackend(MLAPrefillBackend):
         # (gpu_model_runner.py:1905), so trailing diffs are 0 and padded batches
         # are kernel no-ops — same reason trtllm passes the padded length as
         # batch_size directly.
-        self._query_seq_lens = (
-            prefill_metadata.query_start_loc[1:] - prefill_metadata.query_start_loc[:-1]
-        )
+        self._query_seq_lens = prefill_metadata.query_start_loc[1:] - prefill_metadata.query_start_loc[:-1]
 
     def run_prefill_new_tokens(
         self,

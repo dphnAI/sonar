@@ -26,9 +26,7 @@ def _fake_request(log_error_stack: bool = False) -> SimpleNamespace:
     """Minimal stand-in for a FastAPI Request - just enough for the
     handler to read req.app.state.args.log_error_stack."""
     return SimpleNamespace(
-        app=SimpleNamespace(
-            state=SimpleNamespace(args=SimpleNamespace(log_error_stack=log_error_stack))
-        ),
+        app=SimpleNamespace(state=SimpleNamespace(args=SimpleNamespace(log_error_stack=log_error_stack))),
         state=SimpleNamespace(),  # no request_metadata -> hasattr(...) is False
     )
 

@@ -7,12 +7,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from aphrodite.entrypoints.openai.engine.protocol import FunctionCall, ToolCall
+from aphrodite.tool_parsers import ToolParser, ToolParserManager
 from tests.tool_parsers.utils import (
     run_tool_extraction,
     run_tool_extraction_streaming,
 )
-from aphrodite.entrypoints.openai.engine.protocol import FunctionCall, ToolCall
-from aphrodite.tool_parsers import ToolParser, ToolParserManager
 
 
 def make_tool_call(name, arguments):
@@ -33,20 +33,14 @@ def make_tool_call(name, arguments):
         # Single tool call, no content
         (
             '<tool_calls>[{"name": "get_weather", "arguments": {"city": "San Francisco", "metric": "celsius"}}]</tool_calls>',  # noqa: E501
-            [
-                make_tool_call(
-                    "get_weather", {"city": "San Francisco", "metric": "celsius"}
-                )
-            ],
+            [make_tool_call("get_weather", {"city": "San Francisco", "metric": "celsius"})],
             None,
         ),
         # Multiple tool calls
         (
             '<tool_calls>[{"name": "get_weather", "arguments": {"city": "San Francisco", "metric": "celsius"}}, {"name": "register_user", "arguments": {"name": "John Doe", "age": 37, "address": {"city": "San Francisco", "state": "CA"}, "role": null, "passed_test": true, "aliases": ["John", "Johnny"]}}]</tool_calls>',  # noqa: E501
             [
-                make_tool_call(
-                    "get_weather", {"city": "San Francisco", "metric": "celsius"}
-                ),
+                make_tool_call("get_weather", {"city": "San Francisco", "metric": "celsius"}),
                 make_tool_call(
                     "register_user",
                     {
@@ -75,25 +69,15 @@ def make_tool_call(name, arguments):
         ),
         (
             '<tool_calls>[{"name": "complex_tool", "arguments": {"level1": {"level2": {"level3": {"value": 123}}}}}]</tool_calls>',
-            [
-                make_tool_call(
-                    "complex_tool", {"level1": {"level2": {"level3": {"value": 123}}}}
-                )
-            ],
+            [make_tool_call("complex_tool", {"level1": {"level2": {"level3": {"value": 123}}}})],
             None,
         ),
     ],
 )
-def test_hunyuan_a13b_tool_parser_extract(
-    model_output, expected_tool_calls, expected_content
-):
+def test_hunyuan_a13b_tool_parser_extract(model_output, expected_tool_calls, expected_content):
     mock_tokenizer = MagicMock()
-    tool_parser: ToolParser = ToolParserManager.get_tool_parser("hunyuan_a13b")(
-        mock_tokenizer
-    )
-    content, tool_calls = run_tool_extraction(
-        tool_parser, model_output, streaming=False
-    )
+    tool_parser: ToolParser = ToolParserManager.get_tool_parser("hunyuan_a13b")(mock_tokenizer)
+    content, tool_calls = run_tool_extraction(tool_parser, model_output, streaming=False)
 
     # align the random id.
     for idx in range(len(tool_calls)):
@@ -113,11 +97,7 @@ def test_hunyuan_a13b_tool_parser_extract(
                 '"metric": "celsius"}}]',
                 "</tool_calls>",
             ],
-            [
-                make_tool_call(
-                    "get_weather", {"city": "San Francisco", "metric": "celsius"}
-                )
-            ],
+            [make_tool_call("get_weather", {"city": "San Francisco", "metric": "celsius"})],
         ),
         (
             [
@@ -151,26 +131,16 @@ def test_hunyuan_a13b_tool_parser_extract(
                 '{"level3": {"value": 123}}}}}',
                 "]</tool_calls>",
             ],
-            [
-                make_tool_call(
-                    "complex_tool", {"level1": {"level2": {"level3": {"value": 123}}}}
-                )
-            ],
-            marks=pytest.mark.xfail(
-                reason="stream parsing not support nested json yet."
-            ),
+            [make_tool_call("complex_tool", {"level1": {"level2": {"level3": {"value": 123}}}})],
+            marks=pytest.mark.xfail(reason="stream parsing not support nested json yet."),
         ),
     ],
 )
 def test_hunyuan_a13b_tool_parser_streaming(model_deltas, expected_tool_calls):
     mock_tokenizer = MagicMock()
 
-    tool_parser: ToolParser = ToolParserManager.get_tool_parser("hunyuan_a13b")(
-        mock_tokenizer
-    )
-    reconstructor = run_tool_extraction_streaming(
-        tool_parser, model_deltas, assert_one_tool_per_delta=False
-    )
+    tool_parser: ToolParser = ToolParserManager.get_tool_parser("hunyuan_a13b")(mock_tokenizer)
+    reconstructor = run_tool_extraction_streaming(tool_parser, model_deltas, assert_one_tool_per_delta=False)
 
     # align the random id.
     for idx in range(len(reconstructor.tool_calls)):
@@ -181,9 +151,7 @@ def test_hunyuan_a13b_tool_parser_streaming(model_deltas, expected_tool_calls):
 
 def test_hunyuan_a13b_tool_parser_non_ascii():
     mock_tokenizer = MagicMock()
-    tool_parser: ToolParser = ToolParserManager.get_tool_parser("hunyuan_a13b")(
-        mock_tokenizer
-    )
+    tool_parser: ToolParser = ToolParserManager.get_tool_parser("hunyuan_a13b")(mock_tokenizer)
     model_output = '<tool_calls>[{"name": "get_weather", "arguments": {"city": "北京"}}]</tool_calls>'
     _, tool_calls = run_tool_extraction(tool_parser, model_output, streaming=False)
     args = tool_calls[0].function.arguments

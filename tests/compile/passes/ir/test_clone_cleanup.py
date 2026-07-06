@@ -236,9 +236,7 @@ class TestCloneCleanup:
         graph_module = make_fx(f)(torch.randn(2, 3), torch.randn(2, 3))
         placeholders = [n for n in graph_module.graph.nodes if n.op == "placeholder"]
         add_node = [
-            n
-            for n in graph_module.graph.nodes
-            if n.op == "call_function" and n.target == torch.ops.aten.add.Tensor
+            n for n in graph_module.graph.nodes if n.op == "call_function" and n.target == torch.ops.aten.add.Tensor
         ][0]
 
         assert not user_writes_to_node(add_node, placeholders[0])
@@ -253,11 +251,7 @@ class TestCloneCleanup:
 
         graph_module = make_fx(f)(torch.randn(2, 3), torch.randn(2, 3))
         placeholders = [n for n in graph_module.graph.nodes if n.op == "placeholder"]
-        add_node = [
-            n
-            for n in graph_module.graph.nodes
-            if n.op == "call_function" and "add_" in str(n.target)
-        ][0]
+        add_node = [n for n in graph_module.graph.nodes if n.op == "call_function" and "add_" in str(n.target)][0]
 
         # add_ writes to first arg but not second
         assert user_writes_to_node(add_node, placeholders[0])
@@ -272,11 +266,7 @@ class TestCloneCleanup:
 
         graph_module = make_fx(f)(torch.randn(2, 3), torch.randn(2, 3))
         placeholders = [n for n in graph_module.graph.nodes if n.op == "placeholder"]
-        copy_node = [
-            n
-            for n in graph_module.graph.nodes
-            if n.op == "call_function" and "copy_" in str(n.target)
-        ][0]
+        copy_node = [n for n in graph_module.graph.nodes if n.op == "call_function" and "copy_" in str(n.target)][0]
 
         assert user_writes_to_node(copy_node, placeholders[0])
         assert not user_writes_to_node(copy_node, placeholders[1])
@@ -293,9 +283,7 @@ class TestCloneCleanup:
 
         # Create an auto_functionalized node in the graph
         with graph_module.graph.inserting_before(None):
-            af_node = graph_module.graph.call_function(
-                auto_functionalized, kwargs={"input": x_node}
-            )
+            af_node = graph_module.graph.call_function(auto_functionalized, kwargs={"input": x_node})
 
         # auto_functionalized should not be treated as a write
         assert not user_writes_to_node(af_node, x_node)
@@ -387,12 +375,8 @@ class TestCloneCleanupWithDonatedInputs:
         inp_x_before = inp_x.clone()
         inp_y_before = inp_y.clone()
         actual = graph_module(inp_x, inp_y)
-        torch.testing.assert_close(
-            inp_x, inp_x_before, msg="Input x should not be mutated"
-        )
-        torch.testing.assert_close(
-            inp_y, inp_y_before, msg="Input y should not be mutated"
-        )
+        torch.testing.assert_close(inp_x, inp_x_before, msg="Input x should not be mutated")
+        torch.testing.assert_close(inp_y, inp_y_before, msg="Input y should not be mutated")
         torch.testing.assert_close(actual[0], expected[0])
         torch.testing.assert_close(actual[1], expected[1])
 
@@ -424,8 +408,6 @@ class TestCloneCleanupWithDonatedInputs:
         # Verify y is not mutated (x can be mutated since it's donated)
         inp_y_before = inp_y.clone()
         actual = graph_module(inp_x.clone(), inp_y)
-        torch.testing.assert_close(
-            inp_y, inp_y_before, msg="Input y should not be mutated"
-        )
+        torch.testing.assert_close(inp_y, inp_y_before, msg="Input y should not be mutated")
         torch.testing.assert_close(actual[0], expected[0])
         torch.testing.assert_close(actual[1], expected[1])

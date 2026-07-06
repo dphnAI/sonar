@@ -41,9 +41,7 @@ class ShardedStateLoader(BaseModelLoader):
         super().__init__(load_config)
 
         extra_config = (
-            {}
-            if load_config.model_loader_extra_config is None
-            else copy(load_config.model_loader_extra_config)
+            {} if load_config.model_loader_extra_config is None else copy(load_config.model_loader_extra_config)
         )
         self.pattern = extra_config.pop("pattern", self.DEFAULT_PATTERN)
         if extra_config:
@@ -61,9 +59,7 @@ class ShardedStateLoader(BaseModelLoader):
         Filter out all tensors that share the same memory or a subset of the
         memory of another tensor.
         """
-        same_storage_groups: dict[Any, list[tuple[str, torch.Tensor]]] = (
-            collections.defaultdict(list)
-        )
+        same_storage_groups: dict[Any, list[tuple[str, torch.Tensor]]] = collections.defaultdict(list)
         for key, tensor in tensors.items():
             if tensor.numel():
                 ptr = tensor.untyped_storage().data_ptr()
@@ -130,8 +126,7 @@ class ShardedStateLoader(BaseModelLoader):
         if not filepaths:
             # TODO: support un-sharded checkpoints too
             raise ValueError(
-                f"Could not find checkpoint files '{pattern}', only "
-                f"pre-sharded checkpoints are currently supported!"
+                f"Could not find checkpoint files '{pattern}', only pre-sharded checkpoints are currently supported!"
             )
         state_dict = self._filter_subtensors(model.state_dict())
         counter_before_loading_weights = time.perf_counter()
@@ -161,9 +156,7 @@ class ShardedStateLoader(BaseModelLoader):
         if state_dict:
             raise ValueError(f"Missing keys {tuple(state_dict)} in loaded state!")
 
-    def iterate_over_files(
-        self, paths
-    ) -> Generator[tuple[str, torch.Tensor], None, None]:
+    def iterate_over_files(self, paths) -> Generator[tuple[str, torch.Tensor], None, None]:
         if self.load_config.load_format == "runai_streamer_sharded":
             yield from runai_safetensors_weights_iterator(paths, True)
         else:

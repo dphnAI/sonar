@@ -562,9 +562,7 @@ def test_reasoning_parser():
             assert line_dict["error"] is None
 
             # Check that reasoning is present and not empty
-            reasoning = line_dict["response"]["body"]["choices"][0]["message"][
-                "reasoning"
-            ]
+            reasoning = line_dict["response"]["body"]["choices"][0]["message"]["reasoning"]
             assert reasoning is not None
             assert len(reasoning) > 0
 
@@ -777,9 +775,7 @@ def _make_aiohttp_mocks(response_data: bytes = b"fake-data", status: int = 200):
 async def test_download_bytes_data_url_bypasses_domain_check():
     """data: URLs must work regardless of the domain allowlist."""
     data_url = f"data:audio/wav;base64,{MINIMAL_WAV_BASE64}"
-    result = await download_bytes_from_url(
-        data_url, allowed_media_domains=["example.com"]
-    )
+    result = await download_bytes_from_url(data_url, allowed_media_domains=["example.com"])
     assert isinstance(result, bytes)
     assert len(result) > 0
 
@@ -809,9 +805,7 @@ async def test_download_bytes_rejects_internal_ip():
         "http://127.0.0.1:8080/internal",
     ]:
         with pytest.raises(ValueError, match="allowed domains"):
-            await download_bytes_from_url(
-                internal_url, allowed_media_domains=["example.com"]
-            )
+            await download_bytes_from_url(internal_url, allowed_media_domains=["example.com"])
 
 
 @pytest.mark.asyncio
@@ -825,9 +819,7 @@ async def test_download_bytes_allows_permitted_domain():
         "aphrodite.entrypoints.openai.run_batch.aiohttp.ClientSession",
         return_value=mock_session,
     ):
-        result = await download_bytes_from_url(
-            url, allowed_media_domains=["example.com"]
-        )
+        result = await download_bytes_from_url(url, allowed_media_domains=["example.com"])
     assert result == expected
 
 
@@ -876,6 +868,4 @@ async def test_download_bytes_backslash_bypass():
     """
     bypass_url = "http://allowed.example.com\\@evil.internal/secret"
     with pytest.raises(ValueError, match="allowed domains"):
-        await download_bytes_from_url(
-            bypass_url, allowed_media_domains=["evil.internal"]
-        )
+        await download_bytes_from_url(bypass_url, allowed_media_domains=["evil.internal"])

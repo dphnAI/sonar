@@ -54,8 +54,7 @@ class OCP_MXQuantizationEmulationTritonExperts(TritonExperts):
 
         self.ocp_mx_scheme = quant_config.ocp_mx_scheme
         assert self.ocp_mx_scheme is not None, (
-            "ocp_mx_scheme must be set in quant_config for"
-            " OCP_MXQuantizationEmulationTritonExperts"
+            "ocp_mx_scheme must be set in quant_config for OCP_MXQuantizationEmulationTritonExperts"
         )
 
         # `TritonExperts.apply` expects pre-dequantized weights,
@@ -147,12 +146,8 @@ class OCP_MXQuantizationEmulationTritonExperts(TritonExperts):
         assert w2.dtype == torch.uint8
 
         # Dequantize w1 and w2 from packed OCP MX format to bf16/fp16
-        w1_dequant = self._dequantize_weights(
-            w1, self.w1_scale_val, hidden_states.dtype
-        )
-        w2_dequant = self._dequantize_weights(
-            w2, self.w2_scale_val, hidden_states.dtype
-        )
+        w1_dequant = self._dequantize_weights(w1, self.w1_scale_val, hidden_states.dtype)
+        w2_dequant = self._dequantize_weights(w2, self.w2_scale_val, hidden_states.dtype)
 
         # Activation quantization/dequantization is deferred to
         # `moe_kernel_quantize_input` in TritonExperts.apply.

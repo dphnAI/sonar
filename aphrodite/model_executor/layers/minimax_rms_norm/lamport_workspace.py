@@ -47,11 +47,7 @@ def _cuda_memset_zero(ptr: int, size: int):
 
 
 def _cuda_memcpy_d2d(dst: int, src: int, size: int):
-    _check(
-        cudart.cudaMemcpy(
-            dst, src, size, cudart.cudaMemcpyKind.cudaMemcpyDeviceToDevice
-        )[0]
-    )
+    _check(cudart.cudaMemcpy(dst, src, size, cudart.cudaMemcpyKind.cudaMemcpyDeviceToDevice)[0])
 
 
 # ---------------------------------------------------------------------------
@@ -84,9 +80,7 @@ class IpcBuffer:
         _check(err)
 
         all_handles: list[bytes | None] = [None] * world_size
-        torch.distributed.all_gather_object(
-            all_handles, bytes(local_handle.reserved), group=process_group
-        )
+        torch.distributed.all_gather_object(all_handles, bytes(local_handle.reserved), group=process_group)
 
         for r in range(world_size):
             if r == rank:
@@ -94,9 +88,7 @@ class IpcBuffer:
             else:
                 handle = cudart.cudaIpcMemHandle_t()
                 handle.reserved = all_handles[r]
-                err, ptr = cudart.cudaIpcOpenMemHandle(
-                    handle, cudart.cudaIpcMemLazyEnablePeerAccess
-                )
+                err, ptr = cudart.cudaIpcOpenMemHandle(handle, cudart.cudaIpcMemLazyEnablePeerAccess)
                 _check(err)
                 self.peer_ptrs[r] = ptr
 
@@ -194,9 +186,7 @@ class LamportWorkspace:
         # 3) layout_buffer on device: int64[2] = {clear_size, comm_size}
         #    clear_size — bytes to clear from *previous* slot (set by kernel)
         #    comm_size  — size of one triple-buffer slot
-        self._layout_buf = torch.tensor(
-            [0, comm_size], dtype=torch.int64, device="cuda"
-        )
+        self._layout_buf = torch.tensor([0, comm_size], dtype=torch.int64, device="cuda")
 
         # 4) Assemble device-side void* pointer array
         N = world_size
@@ -250,10 +240,7 @@ class LamportWorkspace:
             self.cleanup()
 
     def __repr__(self):
-        return (
-            f"LamportWorkspace(rank={self.rank}, world_size={self.world_size}, "
-            f"comm_size={self.comm_size})"
-        )
+        return f"LamportWorkspace(rank={self.rank}, world_size={self.world_size}, comm_size={self.comm_size})"
 
 
 # ---------------------------------------------------------------------------
@@ -290,9 +277,7 @@ def get_allreduce_workspace(
         ``torch.distributed`` process group.
     """
     if comm_size is None:
-        comm_size = LamportWorkspace.compute_comm_size_for_minimax(
-            max_tokens, world_size, fused_qk=True
-        )
+        comm_size = LamportWorkspace.compute_comm_size_for_minimax(max_tokens, world_size, fused_qk=True)
     pg_id = id(process_group) if process_group is not None else 0
     key = (rank, world_size, comm_size, pg_id)
     with _cache_lock:

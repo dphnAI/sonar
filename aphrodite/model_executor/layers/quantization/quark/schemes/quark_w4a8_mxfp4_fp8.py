@@ -68,16 +68,10 @@ class QuarkW4A8_MXFP4_FP8(QuarkScheme):
 
             kernel_supported_gpu = on_gfx950()
 
-        self.use_aiter_kernel = (
-            is_aiter_found_and_supported()
-            and self.is_static_input_scheme
-            and kernel_supported_gpu
-        )
+        self.use_aiter_kernel = is_aiter_found_and_supported() and self.is_static_input_scheme and kernel_supported_gpu
 
         if not self.use_aiter_kernel:
-            logger.warning_once(
-                "[W4A8 MXFP4+FP8] Aiter Triton kernel not found. Using emulation mode."
-            )
+            logger.warning_once("[W4A8 MXFP4+FP8] Aiter Triton kernel not found. Using emulation mode.")
 
     @classmethod
     def get_min_capability(cls) -> int:
@@ -145,9 +139,7 @@ class QuarkW4A8_MXFP4_FP8(QuarkScheme):
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         # Ensuring weights & scales are non-trainable
         layer.weight = torch.nn.Parameter(layer.weight.data, requires_grad=False)
-        layer.weight_scale = torch.nn.Parameter(
-            layer.weight_scale.data, requires_grad=False
-        )
+        layer.weight_scale = torch.nn.Parameter(layer.weight_scale.data, requires_grad=False)
 
         if self.is_static_input_scheme:
             input_scale = layer.input_scale.data
@@ -186,9 +178,7 @@ class QuarkW4A8_MXFP4_FP8(QuarkScheme):
         # Broadcast per-tensor scale to per-row (M, 1) for Aiter kernel
         x_scales = input_scale.expand(M, 1).to(dtype=torch.float32, device=x.device)
 
-        y = rocm_aiter_ops.gemm_a8wfp4(
-            x_fp8, layer.weight, x_scales, layer.weight_scale, out_dtype
-        )
+        y = rocm_aiter_ops.gemm_a8wfp4(x_fp8, layer.weight, x_scales, layer.weight_scale, out_dtype)
 
         if bias is not None:
             y = y + bias

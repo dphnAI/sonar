@@ -47,8 +47,7 @@ def apply_rotary_emb(freqs, t, start_index=0, scale=1.0, seq_dim=-2):
     end_index = start_index + rot_dim
 
     assert rot_dim <= t.shape[-1], (
-        "feature dimension {} is not of sufficient size to rotate in all the "
-        "positions {}".format(t.shape[-1], rot_dim)
+        "feature dimension {} is not of sufficient size to rotate in all the positions {}".format(t.shape[-1], rot_dim)
     )
 
     t_left, t, t_right = (
@@ -107,9 +106,7 @@ class PerceptionEncoderRope2D(nn.Module):
         freqs_w = self._compute_freqs(grid_w_range, inv_freq)[None, :].expand(
             self.max_grid_height, self.max_grid_width, -1
         )
-        freqs = torch.cat([freqs_w, freqs_h], dim=-1).reshape(
-            self.max_grid_height * self.max_grid_width, -1
-        )
+        freqs = torch.cat([freqs_w, freqs_h], dim=-1).reshape(self.max_grid_height * self.max_grid_width, -1)
         if self.use_cls_token:
             freqs = torch.cat([torch.zeros(1, freqs.shape[-1]), freqs], dim=0)
         freqs = freqs[None, None, ...]
@@ -121,9 +118,7 @@ class PerceptionEncoderRope2D(nn.Module):
             cols = torch.arange(grid_hw[1], device=q.device).view(1, -1)
             positions = (rows * self.max_grid_width + cols).reshape(-1).to(torch.long)
             if self.use_cls_token:
-                positions = torch.cat(
-                    [torch.zeros(1, device=q.device), positions + 1], dim=0
-                )
+                positions = torch.cat([torch.zeros(1, device=q.device), positions + 1], dim=0)
                 positions = positions.to(torch.long)
             freqs = self.freqs_cache.index_select(2, positions)
         else:
@@ -198,9 +193,7 @@ class PerceptionEncoderVisionAttention(nn.Module):
 
         use_data_parallel = is_vit_use_data_parallel()
         tp_size = 1 if use_data_parallel else get_tensor_model_parallel_world_size()
-        assert self.total_num_heads % tp_size == 0, (
-            "embed_dim must be divisible by num_heads"
-        )
+        assert self.total_num_heads % tp_size == 0, "embed_dim must be divisible by num_heads"
         self.num_heads = self.total_num_heads // tp_size
 
         self.qkv_proj = QKVParallelLinear(
@@ -274,16 +267,8 @@ class PerceptionEncoderVisionBlock(nn.Module):
             quant_config=quant_config,
             prefix=f"{prefix}.attn",
         )
-        self.ls_1 = (
-            PerceptionEncoderLayerScale(d_model, ls_init_value)
-            if ls_init_value is not None
-            else nn.Identity()
-        )
-        self.ls_2 = (
-            PerceptionEncoderLayerScale(d_model, ls_init_value)
-            if ls_init_value is not None
-            else nn.Identity()
-        )
+        self.ls_1 = PerceptionEncoderLayerScale(d_model, ls_init_value) if ls_init_value is not None else nn.Identity()
+        self.ls_2 = PerceptionEncoderLayerScale(d_model, ls_init_value) if ls_init_value is not None else nn.Identity()
         self.ln_1 = norm_layer(d_model)
         self.ln_2 = norm_layer(d_model)
         hidden_dim = int(d_model * mlp_ratio)
@@ -395,17 +380,11 @@ class PerceptionEncoder(nn.Module):
             prefix=f"{prefix}.transformer",
         )
 
-        self.vit_downsampler1 = Conv2dLayer(
-            config.width, config.width * 2, kernel_size=3, stride=2, padding=1
-        )
-        self.vit_downsampler2 = Conv2dLayer(
-            config.width * 2, config.width * 4, kernel_size=3, stride=2, padding=1
-        )
+        self.vit_downsampler1 = Conv2dLayer(config.width, config.width * 2, kernel_size=3, stride=2, padding=1)
+        self.vit_downsampler2 = Conv2dLayer(config.width * 2, config.width * 4, kernel_size=3, stride=2, padding=1)
 
         if self.use_cls_token:
-            self.class_embedding = nn.Parameter(
-                (self.width**-0.5) * torch.randn(self.width)
-            )
+            self.class_embedding = nn.Parameter((self.width**-0.5) * torch.randn(self.width))
 
         if self.use_abs_posemb:
             self.posemb_grid_size = self.image_size // self.patch_size
@@ -426,13 +405,9 @@ class PerceptionEncoder(nn.Module):
             cls_token_embed, pos_embed = pos_embed[:1], pos_embed[1:]
 
         pos_embed = (
-            pos_embed.reshape(1, self.posemb_grid_size, self.posemb_grid_size, -1)
-            .permute(0, 3, 1, 2)
-            .contiguous()
+            pos_embed.reshape(1, self.posemb_grid_size, self.posemb_grid_size, -1).permute(0, 3, 1, 2).contiguous()
         )
-        pos_embed = F.interpolate(
-            pos_embed, size=(grid_h, grid_w), mode="bilinear", align_corners=False
-        )
+        pos_embed = F.interpolate(pos_embed, size=(grid_h, grid_w), mode="bilinear", align_corners=False)
         pos_embed = pos_embed.permute(0, 2, 3, 1).reshape(-1, self.width)
 
         if self.use_cls_token:
@@ -448,9 +423,7 @@ class PerceptionEncoder(nn.Module):
         x = x.permute(0, 2, 3, 1).reshape(batch, -1, self.width)
 
         if self.use_cls_token:
-            x = torch.cat(
-                [self.class_embedding.view(1, 1, -1).expand(batch, -1, -1), x], dim=1
-            )
+            x = torch.cat([self.class_embedding.view(1, 1, -1).expand(batch, -1, -1), x], dim=1)
 
         if self.use_abs_posemb:
             x = x + self.sample_abs_posemb(grid_h, grid_w)
@@ -528,13 +501,9 @@ class StepVLForConditionalGeneration(Step3VLForConditionalGeneration):
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
-    def _get_vision_model_output(
-        self, input_tensor: torch.Tensor | None
-    ) -> torch.Tensor | None:
+    def _get_vision_model_output(self, input_tensor: torch.Tensor | None) -> torch.Tensor | None:
         if input_tensor is None:
             return None
         if self.use_data_parallel:

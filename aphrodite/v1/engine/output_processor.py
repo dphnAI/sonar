@@ -64,15 +64,11 @@ class RequestOutputCollector:
         if self.output is None or isinstance(output, Exception):
             self.output = output
             self.ready.set()
-        elif isinstance(self.output, RequestOutput) and isinstance(
-            output, RequestOutput
-        ):
+        elif isinstance(self.output, RequestOutput) and isinstance(output, RequestOutput):
             # This ensures that request outputs with different request indexes
             # (if n > 1) do not override each other.
             self.output.add(output, aggregate=self.aggregate)
-        elif isinstance(self.output, PoolingRequestOutput) and isinstance(
-            output, PoolingRequestOutput
-        ):
+        elif isinstance(self.output, PoolingRequestOutput) and isinstance(output, PoolingRequestOutput):
             self.output = output
 
     async def get(self) -> RequestOutput | PoolingRequestOutput:
@@ -160,9 +156,7 @@ class RequestState:
         self.prompt = prompt
         self.prompt_token_ids = prompt_token_ids
         self.prompt_embeds = prompt_embeds
-        self.prompt_len = length_from_prompt_token_ids_or_embeds(
-            self.prompt_token_ids, self.prompt_embeds
-        )
+        self.prompt_len = length_from_prompt_token_ids_or_embeds(self.prompt_token_ids, self.prompt_embeds)
         self.logprobs_processor = logprobs_processor
         self.detokenizer = detokenizer
         self.max_tokens_param = max_tokens_param
@@ -184,9 +178,7 @@ class RequestState:
 
         # Streaming input queue
         self.streaming_input = stream_input
-        self.input_chunk_queue: deque[StreamingUpdate] | None = (
-            deque() if stream_input else None
-        )
+        self.input_chunk_queue: deque[StreamingUpdate] | None = deque() if stream_input else None
 
     def apply_streaming_update(self, update: StreamingUpdate) -> None:
         # Apply the update to the request state.
@@ -194,9 +186,7 @@ class RequestState:
         # TODO also include relevant output tokens in new prompt here
         #     (match scheduler behavior).
         if update.prompt:
-            self.prompt = (
-                (self.prompt + update.prompt) if self.prompt else update.prompt
-            )
+            self.prompt = (self.prompt + update.prompt) if self.prompt else update.prompt
         if self.prompt_token_ids:
             self.prompt_token_ids.extend(update.prompt_token_ids or ())
         else:
@@ -294,17 +284,14 @@ class RequestState:
             if not (
                 finished
                 or self.sent_tokens_offset == 0
-                or self.detokenizer.num_output_tokens() - self.sent_tokens_offset
-                >= self.stream_interval
+                or self.detokenizer.num_output_tokens() - self.sent_tokens_offset >= self.stream_interval
             ):
                 return None
 
             if self.output_kind == RequestOutputKind.DELTA:
                 # Send tokens from the offset in DELTA mode, otherwise all
                 # tokens are sent.
-                new_token_ids = self.detokenizer.output_token_ids[
-                    self.sent_tokens_offset :
-                ]
+                new_token_ids = self.detokenizer.output_token_ids[self.sent_tokens_offset :]
                 self.sent_tokens_offset = self.detokenizer.num_output_tokens()
 
         external_req_id = self.external_req_id
@@ -326,9 +313,7 @@ class RequestState:
                 return None
             external_req_id = self.parent_req.external_req_id
 
-        return self._new_request_output(
-            external_req_id, outputs, finished, kv_transfer_params
-        )
+        return self._new_request_output(external_req_id, outputs, finished, kv_transfer_params)
 
     def _new_request_output(
         self,
@@ -491,9 +476,7 @@ class OutputProcessor:
                         new_token_ids=[],
                         # Set pooling_output is not None to
                         # correctly enter the abort pooling branch
-                        pooling_output=EMPTY_CPU_TENSOR
-                        if req_state.detokenizer is None
-                        else None,
+                        pooling_output=EMPTY_CPU_TENSOR if req_state.detokenizer is None else None,
                         finish_reason=FinishReason.ABORT,
                         stop_reason=None,
                         kv_transfer_params=None,
@@ -611,9 +594,7 @@ class OutputProcessor:
                 continue
 
             # 1) Compute stats for this iteration.
-            self._update_stats_from_output(
-                req_state, engine_core_output, engine_core_timestamp, iteration_stats
-            )
+            self._update_stats_from_output(req_state, engine_core_output, engine_core_timestamp, iteration_stats)
 
             new_token_ids = engine_core_output.new_token_ids
             pooling_output = engine_core_output.pooling_output
@@ -621,24 +602,18 @@ class OutputProcessor:
             stop_reason = engine_core_output.stop_reason
             kv_transfer_params = engine_core_output.kv_transfer_params
             if engine_core_output.routed_experts is not None:
-                req_state.routed_experts_chunks.append(
-                    engine_core_output.routed_experts
-                )
+                req_state.routed_experts_chunks.append(engine_core_output.routed_experts)
 
             if req_state.is_prefilling:
                 if engine_core_output.prefill_stats is not None:
-                    req_state.num_cached_tokens = (
-                        engine_core_output.prefill_stats.num_cached_tokens
-                    )
+                    req_state.num_cached_tokens = engine_core_output.prefill_stats.num_cached_tokens
                 req_state.is_prefilling = False
 
             if pooling_output is None:
                 assert req_state.detokenizer is not None
                 assert req_state.logprobs_processor is not None
                 # 2) Detokenize the token ids into text and perform stop checks.
-                stop_string = req_state.detokenizer.update(
-                    new_token_ids, finish_reason == FinishReason.STOP
-                )
+                stop_string = req_state.detokenizer.update(new_token_ids, finish_reason == FinishReason.STOP)
                 if stop_string:
                     finish_reason = FinishReason.STOP
                     stop_reason = stop_string
@@ -681,9 +656,7 @@ class OutputProcessor:
                         reqs_to_abort.append(req_id)
 
                     # Track per-request stats
-                    self._update_stats_from_finished(
-                        req_state, finish_reason, iteration_stats
-                    )
+                    self._update_stats_from_finished(req_state, finish_reason, iteration_stats)
                     if self.tracing_enabled:
                         self.do_tracing(engine_core_output, req_state, iteration_stats)
 
@@ -721,9 +694,7 @@ class OutputProcessor:
         metrics = req_state.stats
         arrival_time_ns = int(metrics.arrival_time * 1e9)
         trace_context = extract_trace_context(engine_core_output.trace_headers)
-        prompt_length = length_from_prompt_token_ids_or_embeds(
-            req_state.prompt_token_ids, req_state.prompt_embeds
-        )
+        prompt_length = length_from_prompt_token_ids_or_embeds(req_state.prompt_token_ids, req_state.prompt_embeds)
 
         # Calculate timing metrics
         e2e_time = iteration_stats.iteration_timestamp - metrics.arrival_time
@@ -734,15 +705,11 @@ class OutputProcessor:
 
         # Build attributes dict
         attributes: dict[str, Any] = {
-            SpanAttributes.GEN_AI_LATENCY_TIME_TO_FIRST_TOKEN: (
-                metrics.first_token_latency
-            ),
+            SpanAttributes.GEN_AI_LATENCY_TIME_TO_FIRST_TOKEN: (metrics.first_token_latency),
             SpanAttributes.GEN_AI_LATENCY_E2E: e2e_time,
             SpanAttributes.GEN_AI_LATENCY_TIME_IN_QUEUE: queued_time,
             SpanAttributes.GEN_AI_USAGE_PROMPT_TOKENS: prompt_length,
-            SpanAttributes.GEN_AI_USAGE_COMPLETION_TOKENS: (
-                metrics.num_generation_tokens
-            ),
+            SpanAttributes.GEN_AI_USAGE_COMPLETION_TOKENS: (metrics.num_generation_tokens),
             SpanAttributes.GEN_AI_LATENCY_TIME_IN_MODEL_PREFILL: prefill_time,
             SpanAttributes.GEN_AI_LATENCY_TIME_IN_MODEL_DECODE: decode_time,
             SpanAttributes.GEN_AI_LATENCY_TIME_IN_MODEL_INFERENCE: inference_time,
@@ -753,13 +720,9 @@ class OutputProcessor:
         if req_state.top_p:
             attributes[SpanAttributes.GEN_AI_REQUEST_TOP_P] = req_state.top_p
         if req_state.max_tokens_param:
-            attributes[SpanAttributes.GEN_AI_REQUEST_MAX_TOKENS] = (
-                req_state.max_tokens_param
-            )
+            attributes[SpanAttributes.GEN_AI_REQUEST_MAX_TOKENS] = req_state.max_tokens_param
         if req_state.temperature:
-            attributes[SpanAttributes.GEN_AI_REQUEST_TEMPERATURE] = (
-                req_state.temperature
-            )
+            attributes[SpanAttributes.GEN_AI_REQUEST_TEMPERATURE] = req_state.temperature
         if req_state.n:
             attributes[SpanAttributes.GEN_AI_REQUEST_N] = req_state.n
 

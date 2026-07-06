@@ -77,9 +77,7 @@ def test_sparse_flashmla_decode_smoke():
         dtype=torch.uint8,
         device=device,
     )
-    indices = torch.zeros(
-        (batch_size, seqlen_q, topk), dtype=torch.int32, device=device
-    )
+    indices = torch.zeros((batch_size, seqlen_q, topk), dtype=torch.int32, device=device)
 
     block_table = torch.zeros((batch_size, 128), dtype=torch.int32, device=device)
     out, lse = fm.flash_mla_with_kvcache(
@@ -160,17 +158,13 @@ def test_flashinfer_sparse_indices_cache(monkeypatch):
             torch.tensor([builder_calls], dtype=torch.int32),
         )
 
-    monkeypatch.setattr(
-        flashinfer_mod, "build_flashinfer_mixed_sparse_indices", fake_build
-    )
+    monkeypatch.setattr(flashinfer_mod, "build_flashinfer_mixed_sparse_indices", fake_build)
 
     def make_attn(compress_ratio: int, topk_width: int):
         attn = object.__new__(flashinfer_mod.DeepseekV4FlashInferMLAAttention)
         attn.compress_ratio = compress_ratio
         attn.window_size = 4
-        attn.topk_indices_buffer = torch.tensor(
-            [[0, 1], [2, 3], [4, 5]], dtype=torch.int32
-        )[:, :topk_width]
+        attn.topk_indices_buffer = torch.tensor([[0, 1], [2, 3], [4, 5]], dtype=torch.int32)[:, :topk_width]
         return attn
 
     def make_swa_metadata():
@@ -203,34 +197,26 @@ def test_flashinfer_sparse_indices_cache(monkeypatch):
             req_id_per_token=torch.tensor([0, 1, 1], dtype=torch.int32),
             block_size=256,
             topk_tokens=2,
-            c128a_global_decode_topk_indices=torch.tensor(
-                [[[9, 10]]], dtype=torch.int32
-            ),
+            c128a_global_decode_topk_indices=torch.tensor([[[9, 10]]], dtype=torch.int32),
             c128a_decode_topk_lens=torch.tensor([2], dtype=torch.int32),
-            c128a_prefill_topk_indices=torch.tensor(
-                [[0, 1], [1, 2]], dtype=torch.int32
-            ),
+            c128a_prefill_topk_indices=torch.tensor([[0, 1], [1, 2]], dtype=torch.int32),
         )
 
     swa_attn = make_attn(1, 0)
     swa_metadata = make_swa_metadata()
-    _, _, sparse_indices_first, sparse_lens_first = (
-        swa_attn._build_sparse_index_metadata(
-            kv_cache=None,
-            swa_k_cache=torch.empty((1, 64, 512), dtype=torch.bfloat16),
-            swa_metadata=swa_metadata,
-            attn_metadata=None,
-            swa_only=True,
-        )
+    _, _, sparse_indices_first, sparse_lens_first = swa_attn._build_sparse_index_metadata(
+        kv_cache=None,
+        swa_k_cache=torch.empty((1, 64, 512), dtype=torch.bfloat16),
+        swa_metadata=swa_metadata,
+        attn_metadata=None,
+        swa_only=True,
     )
-    _, _, sparse_indices_second, sparse_lens_second = (
-        swa_attn._build_sparse_index_metadata(
-            kv_cache=None,
-            swa_k_cache=torch.empty((1, 64, 512), dtype=torch.bfloat16),
-            swa_metadata=swa_metadata,
-            attn_metadata=None,
-            swa_only=True,
-        )
+    _, _, sparse_indices_second, sparse_lens_second = swa_attn._build_sparse_index_metadata(
+        kv_cache=None,
+        swa_k_cache=torch.empty((1, 64, 512), dtype=torch.bfloat16),
+        swa_metadata=swa_metadata,
+        attn_metadata=None,
+        swa_only=True,
     )
     assert builder_calls == 1
     assert sparse_indices_first is sparse_indices_second
@@ -239,23 +225,19 @@ def test_flashinfer_sparse_indices_cache(monkeypatch):
     c128a_attn = make_attn(128, 2)
     c128a_metadata = make_swa_metadata()
     c128a_flashmla_md = make_flashmla_metadata()
-    _, _, sparse_indices_first, sparse_lens_first = (
-        c128a_attn._build_sparse_index_metadata(
-            kv_cache=torch.empty((1, 2, 512), dtype=torch.bfloat16),
-            swa_k_cache=torch.empty((1, 64, 512), dtype=torch.bfloat16),
-            swa_metadata=c128a_metadata,
-            attn_metadata=c128a_flashmla_md,
-            swa_only=False,
-        )
+    _, _, sparse_indices_first, sparse_lens_first = c128a_attn._build_sparse_index_metadata(
+        kv_cache=torch.empty((1, 2, 512), dtype=torch.bfloat16),
+        swa_k_cache=torch.empty((1, 64, 512), dtype=torch.bfloat16),
+        swa_metadata=c128a_metadata,
+        attn_metadata=c128a_flashmla_md,
+        swa_only=False,
     )
-    _, _, sparse_indices_second, sparse_lens_second = (
-        c128a_attn._build_sparse_index_metadata(
-            kv_cache=torch.empty((1, 2, 512), dtype=torch.bfloat16),
-            swa_k_cache=torch.empty((1, 64, 512), dtype=torch.bfloat16),
-            swa_metadata=c128a_metadata,
-            attn_metadata=c128a_flashmla_md,
-            swa_only=False,
-        )
+    _, _, sparse_indices_second, sparse_lens_second = c128a_attn._build_sparse_index_metadata(
+        kv_cache=torch.empty((1, 2, 512), dtype=torch.bfloat16),
+        swa_k_cache=torch.empty((1, 64, 512), dtype=torch.bfloat16),
+        swa_metadata=c128a_metadata,
+        attn_metadata=c128a_flashmla_md,
+        swa_only=False,
     )
 
     assert builder_calls == 2
@@ -268,23 +250,19 @@ def test_flashinfer_sparse_indices_cache(monkeypatch):
     c4a_flashmla_md.c128a_global_decode_topk_indices = None
     c4a_flashmla_md.c128a_decode_topk_lens = None
     c4a_flashmla_md.c128a_prefill_topk_indices = None
-    _, _, sparse_indices_third, sparse_lens_third = (
-        c4a_attn._build_sparse_index_metadata(
-            kv_cache=torch.empty((1, 2, 512), dtype=torch.bfloat16),
-            swa_k_cache=torch.empty((1, 64, 512), dtype=torch.bfloat16),
-            swa_metadata=c4a_metadata,
-            attn_metadata=c4a_flashmla_md,
-            swa_only=False,
-        )
+    _, _, sparse_indices_third, sparse_lens_third = c4a_attn._build_sparse_index_metadata(
+        kv_cache=torch.empty((1, 2, 512), dtype=torch.bfloat16),
+        swa_k_cache=torch.empty((1, 64, 512), dtype=torch.bfloat16),
+        swa_metadata=c4a_metadata,
+        attn_metadata=c4a_flashmla_md,
+        swa_only=False,
     )
-    _, _, sparse_indices_fourth, sparse_lens_fourth = (
-        c4a_attn._build_sparse_index_metadata(
-            kv_cache=torch.empty((1, 2, 512), dtype=torch.bfloat16),
-            swa_k_cache=torch.empty((1, 64, 512), dtype=torch.bfloat16),
-            swa_metadata=c4a_metadata,
-            attn_metadata=c4a_flashmla_md,
-            swa_only=False,
-        )
+    _, _, sparse_indices_fourth, sparse_lens_fourth = c4a_attn._build_sparse_index_metadata(
+        kv_cache=torch.empty((1, 2, 512), dtype=torch.bfloat16),
+        swa_k_cache=torch.empty((1, 64, 512), dtype=torch.bfloat16),
+        swa_metadata=c4a_metadata,
+        attn_metadata=c4a_flashmla_md,
+        swa_only=False,
     )
 
     assert builder_calls == 4

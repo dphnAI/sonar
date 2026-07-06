@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Paged attention backend for hybrid models (SDPA + linear attention).
 
 Handles models like Qwen3.5 where some layers use standard dot-product
@@ -14,9 +15,8 @@ from __future__ import annotations
 import mlx.core as mx
 import mlx.nn as nn
 import torch
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_cache_interface import MambaSpec
 
+from aphrodite.logger import init_logger
 from aphrodite.metal.metal_kernel_backend.attention_linear import (
     GDNPagedAttentionWrapper,
     is_linear_attention,
@@ -29,6 +29,7 @@ from aphrodite.metal.metal_kernel_backend.paged_attention import (
 from aphrodite.metal.mlx_backend.gdn_cache import GDNPagedStateCache
 from aphrodite.metal.paged_attention_backend.mha import warm_up_paged_cache
 from aphrodite.metal.paged_attention_common import find_attn_attr, find_layers
+from aphrodite.v1.kv_cache_interface import MambaSpec
 
 logger = init_logger(__name__)
 
@@ -58,7 +59,9 @@ def _build_linear_layer_spec(
             (conv_kernel_dim - 1, conv_dim),
             (num_v_heads, value_head_dim, key_head_dim),
         ),
-        dtypes=(torch_dtype, torch_dtype),
+        # MambaSpec.dtypes is annotated as a 1-tuple upstream but is used as a
+        # variadic tuple (zipped with ``shapes``); pass both conv/ssm dtypes.
+        dtypes=(torch_dtype, torch_dtype),  # type: ignore[arg-type]
         block_size=block_size,
         page_size_padded=page_size_padded,
     )
@@ -156,8 +159,7 @@ class HybridPagedAttentionBackend:
         )
 
         logger.info(
-            "Hybrid cache initialized: %d SDPA layers (%d blocks), "
-            "%d linear layers (%d slots)",
+            "Hybrid cache initialized: %d SDPA layers (%d blocks), %d linear layers (%d slots)",
             len(self._sdpa_indices),
             num_blocks,
             len(self._linear_indices),
@@ -169,14 +171,8 @@ class HybridPagedAttentionBackend:
         if self._state_cache is None:
             raise RuntimeError("patch_model() called before initialize()")
 
-        sdpa_cache_map = {
-            layer_idx: cache_idx
-            for cache_idx, layer_idx in enumerate(self._sdpa_indices)
-        }
-        linear_cache_map = {
-            layer_idx: cache_idx
-            for cache_idx, layer_idx in enumerate(self._linear_indices)
-        }
+        sdpa_cache_map = {layer_idx: cache_idx for cache_idx, layer_idx in enumerate(self._sdpa_indices)}
+        linear_cache_map = {layer_idx: cache_idx for cache_idx, layer_idx in enumerate(self._linear_indices)}
 
         patched = 0
         for layer_idx, layer in enumerate(find_layers(model)):
@@ -208,9 +204,7 @@ class HybridPagedAttentionBackend:
                 patched += 1
             elif is_linear_attention(attn):
                 cache_idx = linear_cache_map.get(layer_idx, layer_idx)
-                wrapper = GDNPagedAttentionWrapper(
-                    attn, layer_idx, cache_idx, self._state_cache
-                )
+                wrapper = GDNPagedAttentionWrapper(attn, layer_idx, cache_idx, self._state_cache)
                 setattr(layer, attn_attr, wrapper)
                 patched += 1
 

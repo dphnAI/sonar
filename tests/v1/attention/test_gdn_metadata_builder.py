@@ -10,11 +10,6 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from tests.v1.attention.utils import (
-    BatchSpec,
-    create_common_attn_metadata,
-    create_aphrodite_config,
-)
 from aphrodite.config import SpeculativeConfig
 from aphrodite.config.compilation import CUDAGraphMode
 from aphrodite.v1.attention.backends.gdn_attn import (
@@ -22,6 +17,11 @@ from aphrodite.v1.attention.backends.gdn_attn import (
     GDNAttentionMetadataBuilder,
 )
 from aphrodite.v1.kv_cache_interface import MambaSpec
+from tests.v1.attention.utils import (
+    BatchSpec,
+    create_aphrodite_config,
+    create_common_attn_metadata,
+)
 
 BLOCK_SIZE = 16
 DEVICE = torch.device("cpu")
@@ -160,18 +160,12 @@ def _build(
     common = create_common_attn_metadata(batch_spec, BLOCK_SIZE, DEVICE)
     kwargs: dict = {}
     if num_decode_draft_tokens is not None:
-        kwargs["num_decode_draft_tokens_cpu"] = torch.tensor(
-            num_decode_draft_tokens, dtype=torch.int32
-        )
-        kwargs["num_accepted_tokens"] = torch.ones(
-            batch_spec.batch_size, dtype=torch.int32, device=DEVICE
-        )
+        kwargs["num_decode_draft_tokens_cpu"] = torch.tensor(num_decode_draft_tokens, dtype=torch.int32)
+        kwargs["num_accepted_tokens"] = torch.ones(batch_spec.batch_size, dtype=torch.int32, device=DEVICE)
     return builder.build(common_prefix_len=0, common_attn_metadata=common, **kwargs)
 
 
-@pytest.mark.parametrize(
-    "test_case", GDN_BUILD_TEST_CASES.values(), ids=GDN_BUILD_TEST_CASES.keys()
-)
+@pytest.mark.parametrize("test_case", GDN_BUILD_TEST_CASES.values(), ids=GDN_BUILD_TEST_CASES.keys())
 def test_gdn_build_classification(test_case: GDNBuildTestCase):
     """Test that GDN metadata builder classifies requests correctly."""
     builder = _create_gdn_builder(test_case.num_speculative_tokens)

@@ -7,12 +7,12 @@ import tempfile
 import pytest
 import torch
 
-from tests.utils import create_new_process_for_each_test, multi_gpu_test
 from aphrodite import LLM, ModelRegistry, SamplingParams
 from aphrodite.distributed.kv_transfer.kv_connector.v1 import (
     example_hidden_states_connector,
 )
 from aphrodite.platforms import current_platform
+from tests.utils import create_new_process_for_each_test, multi_gpu_test
 
 
 def get_and_check_output(output, expected_shape):
@@ -73,15 +73,11 @@ def register_predictable_model():
     from .predictable_llama import PredictableLlamaForCausalLM
 
     if "PredictableLlamaForCausalLM" not in ModelRegistry.get_supported_archs():
-        ModelRegistry.register_model(
-            "PredictableLlamaForCausalLM", PredictableLlamaForCausalLM
-        )
+        ModelRegistry.register_model("PredictableLlamaForCausalLM", PredictableLlamaForCausalLM)
     yield
 
 
-def test_extract_hidden_states_with_predictable_dummy_model(
-    predictable_llama_config_path, tmp_path, monkeypatch
-):
+def test_extract_hidden_states_with_predictable_dummy_model(predictable_llama_config_path, tmp_path, monkeypatch):
     """Test hidden-state extraction with a predictable dummy model.
 
     Tests 3 scenarios:
@@ -107,9 +103,7 @@ def test_extract_hidden_states_with_predictable_dummy_model(
         speculative_config={
             "method": "extract_hidden_states",
             "num_speculative_tokens": 1,
-            "draft_model_config": {
-                "hf_config": {"eagle_aux_hidden_state_layer_ids": layer_ids}
-            },
+            "draft_model_config": {"hf_config": {"eagle_aux_hidden_state_layer_ids": layer_ids}},
         },
         kv_transfer_config={
             "kv_connector": "ExampleHiddenStatesConnector",
@@ -260,9 +254,7 @@ def test_extract_hidden_states_qwen35_hybrid_smoke(tmp_path):
         speculative_config={
             "method": "extract_hidden_states",
             "num_speculative_tokens": 1,
-            "draft_model_config": {
-                "hf_config": {"eagle_aux_hidden_state_layer_ids": layer_ids}
-            },
+            "draft_model_config": {"hf_config": {"eagle_aux_hidden_state_layer_ids": layer_ids}},
         },
         kv_transfer_config={
             "kv_connector": "ExampleHiddenStatesConnector",
@@ -312,9 +304,7 @@ def test_extract_hidden_states_tp2():
         speculative_config={
             "method": "extract_hidden_states",
             "num_speculative_tokens": 1,
-            "draft_model_config": {
-                "hf_config": {"eagle_aux_hidden_state_layer_ids": layer_ids}
-            },
+            "draft_model_config": {"hf_config": {"eagle_aux_hidden_state_layer_ids": layer_ids}},
         },
         kv_transfer_config={
             "kv_connector": "ExampleHiddenStatesConnector",

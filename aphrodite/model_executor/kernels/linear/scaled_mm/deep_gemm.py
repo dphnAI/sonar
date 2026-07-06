@@ -63,8 +63,7 @@ class DeepGemmFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
         if act_quant_desc.group_shape != GroupShape(1, 128):
             return (
                 False,
-                "Supports only dynamic per token group activation "
-                "quantization with group_shape=(1,128).",
+                "Supports only dynamic per token group activation quantization with group_shape=(1,128).",
             )
         model_config = get_current_aphrodite_config().model_config
 
@@ -75,9 +74,7 @@ class DeepGemmFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
         if should_auto_disable_deep_gemm(model_type):
             return False, f"Should not use deepgemm for model {model_type}"
 
-        if not should_use_deepgemm_for_fp8_linear(
-            config.out_dtype, config.weight_shape
-        ):
+        if not should_use_deepgemm_for_fp8_linear(config.out_dtype, config.weight_shape):
             return False, "The provided metadata is not supported."
         return True, None
 
@@ -88,16 +85,10 @@ class DeepGemmFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
 
         if self.is_deep_gemm_supported:
             weight_scale_invs = params.weight_scale_inv
-            scale_attr = (
-                params.WEIGHT_SCALE_INV
-                if weight_scale_invs is not None
-                else params.WEIGHT_SCALE
-            )
+            scale_attr = params.WEIGHT_SCALE_INV if weight_scale_invs is not None else params.WEIGHT_SCALE
             dg_weight, dg_weight_scale = deepgemm_post_process_fp8_weight_block(
                 wq=params.weight,
-                ws=weight_scale_invs
-                if weight_scale_invs is not None
-                else params.weight_scale,
+                ws=weight_scale_invs if weight_scale_invs is not None else params.weight_scale,
                 quant_block_shape=tuple(layer.weight_block_size),
                 use_e8m0=self.use_deep_gemm_e8m0,
                 is_bmm=getattr(layer, "is_bmm", False),

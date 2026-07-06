@@ -84,9 +84,7 @@ def dist_init_torch_only():
     backend = current_platform.dist_backend
 
     temp_file = tempfile.mkstemp()[1]
-    torch.distributed.init_process_group(
-        world_size=1, rank=0, init_method=f"file://{temp_file}", backend=backend
-    )
+    torch.distributed.init_process_group(world_size=1, rank=0, init_method=f"file://{temp_file}", backend=backend)
 
 
 class DummyLoRAModel(nn.Sequential, SupportsLoRA):

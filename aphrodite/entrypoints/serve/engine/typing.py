@@ -50,33 +50,19 @@ class RendererChatRequest(RendererRequest, Protocol):
 
 
 CompletionLikeRequest: TypeAlias = (
-    CompletionRequest
-    | TokenizeCompletionRequest
-    | DetokenizeRequest
-    | DerenderCompletionRequest
+    CompletionRequest | TokenizeCompletionRequest | DetokenizeRequest | DerenderCompletionRequest
 )
 
 ChatLikeRequest: TypeAlias = (
-    ChatCompletionRequest
-    | BatchChatCompletionRequest
-    | TokenizeChatRequest
-    | DerenderChatRequest
+    ChatCompletionRequest | BatchChatCompletionRequest | TokenizeChatRequest | DerenderChatRequest
 )
 
 SpeechToTextRequest: TypeAlias = TranscriptionRequest | TranslationRequest
 
 AnyRequest: TypeAlias = (
-    CompletionLikeRequest
-    | ChatLikeRequest
-    | SpeechToTextRequest
-    | ResponsesRequest
-    | GenerateRequest
+    CompletionLikeRequest | ChatLikeRequest | SpeechToTextRequest | ResponsesRequest | GenerateRequest
 )
 
 AnyResponse: TypeAlias = (
-    CompletionResponse
-    | ChatCompletionResponse
-    | TranscriptionResponse
-    | TokenizeResponse
-    | GenerateResponse
+    CompletionResponse | ChatCompletionResponse | TranscriptionResponse | TokenizeResponse | GenerateResponse
 )

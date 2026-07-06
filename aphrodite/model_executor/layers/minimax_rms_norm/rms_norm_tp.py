@@ -168,9 +168,7 @@ def _minimax_qk_norm_tp_fallback(
     fp32 copies of q/k and the ``cat``/``chunk`` temporaries.
     """
     if not HAS_TRITON:
-        return _minimax_qk_norm_tp_eager(
-            qkv, q_weight, k_weight, q_size, kv_size, tp_world, eps
-        )
+        return _minimax_qk_norm_tp_eager(qkv, q_weight, k_weight, q_size, kv_size, tp_world, eps)
 
     num_tokens = qkv.shape[0]
     row_stride = qkv.stride(0)
@@ -178,9 +176,7 @@ def _minimax_qk_norm_tp_fallback(
     grid = (num_tokens,)
 
     qk_var = torch.empty(num_tokens, 2, dtype=torch.float32, device=qkv.device)
-    _minimax_qk_var_kernel[grid](
-        qkv, qk_var, row_stride, q_size=q_size, kv_size=kv_size, BLOCK=BLOCK
-    )
+    _minimax_qk_var_kernel[grid](qkv, qk_var, row_stride, q_size=q_size, kv_size=kv_size, BLOCK=BLOCK)
 
     # All-reduce sums the per-shard means; the /tp_world that turns this back
     # into the global mean is folded into the apply kernel's rsqrt below.
@@ -235,9 +231,7 @@ def _minimax_qk_norm_fusion(
             tp_world,
             eps,
         )
-    return _minimax_qk_norm_tp_fallback(
-        qkv, q_weight, k_weight, q_size, kv_size, tp_rank, tp_world, eps
-    )
+    return _minimax_qk_norm_tp_fallback(qkv, q_weight, k_weight, q_size, kv_size, tp_rank, tp_world, eps)
 
 
 def _minimax_qk_norm_fusion_fake(
@@ -281,9 +275,7 @@ class MiniMaxText01RMSNormTP(CustomOp):
         self.tp_world = get_tensor_model_parallel_world_size()
         self.tp_rank = get_tensor_model_parallel_rank()
         self.weight_shard_world = weight_shard_world_size or self.tp_world
-        self.weight_shard_rank = (
-            self.tp_rank if weight_shard_rank is None else weight_shard_rank
-        )
+        self.weight_shard_rank = self.tp_rank if weight_shard_rank is None else weight_shard_rank
 
         self.weight = nn.Parameter(torch.ones(hidden_size // self.weight_shard_world))
         self.weight.weight_loader = partial(

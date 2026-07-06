@@ -772,8 +772,8 @@ torch::Tensor gptq_gemm_rdna3(torch::Tensor a, torch::Tensor b_q_weight,
         (const uint32_t*)b_q_weight.data_ptr(),
         (const uint32_t*)b_qzeros.data_ptr(),
         (const aphrodite::gptq_rdna3::bf16_t*)b_scales.data_ptr(), g_idx_ptr,
-        (aphrodite::gptq_rdna3::bf16_t*)c.data_ptr(), size_m, size_n, size_k, groups,
-        use_v2_format, stream);
+        (aphrodite::gptq_rdna3::bf16_t*)c.data_ptr(), size_m, size_n, size_k,
+        groups, use_v2_format, stream);
   }
 
   return c;

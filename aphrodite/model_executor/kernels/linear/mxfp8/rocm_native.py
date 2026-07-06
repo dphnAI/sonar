@@ -75,9 +75,7 @@ def _mxfp8_linear_kernel(
         ws_ptrs += (BLOCK_K // 32) * stride_wsk
 
     o_ptrs = out_ptr + offs_m[:, None] * stride_om + offs_n[None, :] * stride_on
-    tl.store(
-        o_ptrs, acc.to(out_ptr.dtype.element_ty), mask=m_mask[:, None] & n_mask[None, :]
-    )
+    tl.store(o_ptrs, acc.to(out_ptr.dtype.element_ty), mask=m_mask[:, None] & n_mask[None, :])
 
 
 def _mxfp8_dot_scaled_linear(
@@ -129,9 +127,7 @@ class RocmDotScaledMxfp8LinearKernel(Mxfp8LinearKernel):
     """Native CDNA4 (gfx950) MXFP8 linear via Triton ``tl.dot_scaled``."""
 
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if not current_platform.is_rocm():
             return False, "not ROCm"
         # supports_mx() == gfx95x (CDNA4 native microscaling hardware). On other
@@ -160,10 +156,7 @@ class RocmDotScaledMxfp8LinearKernel(Mxfp8LinearKernel):
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if layer.weight_scale.dtype != MXFP8_SCALE_DTYPE:
-            raise ValueError(
-                f"Expected {MXFP8_SCALE_DTYPE} weight_scale, got "
-                f"{layer.weight_scale.dtype}."
-            )
+            raise ValueError(f"Expected {MXFP8_SCALE_DTYPE} weight_scale, got {layer.weight_scale.dtype}.")
         out_shape = (*x.shape[:-1], layer.weight.shape[0])
         x2d = x.reshape(-1, x.shape[-1])
         if x2d.shape[-1] % 128 == 0:

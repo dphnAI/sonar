@@ -205,9 +205,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, OfflineInferenceMixin):
         hf_overrides: HfOverrides | None = None,
         mm_processor_kwargs: dict[str, Any] | None = None,
         pooler_config: PoolerConfig | None = None,
-        structured_outputs_config: dict[str, Any]
-        | StructuredOutputsConfig
-        | None = None,
+        structured_outputs_config: dict[str, Any] | StructuredOutputsConfig | None = None,
         profiler_config: dict[str, Any] | ProfilerConfig | None = None,
         attention_config: dict[str, Any] | AttentionConfig | None = None,
         kv_cache_memory_bytes: int | None = None,
@@ -226,8 +224,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, OfflineInferenceMixin):
             import warnings
 
             warnings.warn(
-                "The 'swap_space' parameter is deprecated and ignored. "
-                "It will be removed in a future version.",
+                "The 'swap_space' parameter is deprecated and ignored. It will be removed in a future version.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -242,9 +239,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, OfflineInferenceMixin):
             if isinstance(worker_cls, type):
                 kwargs["worker_cls"] = cloudpickle.dumps(worker_cls)
 
-        if "kv_transfer_config" in kwargs and isinstance(
-            kwargs["kv_transfer_config"], dict
-        ):
+        if "kv_transfer_config" in kwargs and isinstance(kwargs["kv_transfer_config"], dict):
             from aphrodite.config.kv_transfer import KVTransferConfig
 
             raw_config_dict = kwargs["kv_transfer_config"]
@@ -252,8 +247,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, OfflineInferenceMixin):
                 kwargs["kv_transfer_config"] = KVTransferConfig(**raw_config_dict)
             except ValidationError as e:
                 logger.error(
-                    "Failed to convert 'kv_transfer_config' dict to "
-                    "KVTransferConfig object. Dict: %s. Error: %s",
+                    "Failed to convert 'kv_transfer_config' dict to KVTransferConfig object. Dict: %s. Error: %s",
                     raw_config_dict,
                     e,
                 )
@@ -273,28 +267,18 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, OfflineInferenceMixin):
             return value
 
         if isinstance(compilation_config, int):
-            compilation_config_instance = CompilationConfig(
-                mode=CompilationMode(compilation_config)
-            )
+            compilation_config_instance = CompilationConfig(mode=CompilationMode(compilation_config))
         else:
-            compilation_config_instance = _make_config(
-                compilation_config, CompilationConfig
-            )
+            compilation_config_instance = _make_config(compilation_config, CompilationConfig)
 
-        structured_outputs_instance = _make_config(
-            structured_outputs_config, StructuredOutputsConfig
-        )
+        structured_outputs_instance = _make_config(structured_outputs_config, StructuredOutputsConfig)
         profiler_config_instance = _make_config(profiler_config, ProfilerConfig)
         attention_config_instance = _make_config(attention_config, AttentionConfig)
 
         # warn about single-process data parallel usage.
         _dp_size = int(kwargs.get("data_parallel_size", 1))
         _distributed_executor_backend = kwargs.get("distributed_executor_backend")
-        if (
-            _dp_size > 1
-            and not _distributed_executor_backend == "external_launcher"
-            and not current_platform.is_tpu()
-        ):
+        if _dp_size > 1 and not _distributed_executor_backend == "external_launcher" and not current_platform.is_tpu():
             raise ValueError(
                 f"LLM(data_parallel_size={_dp_size}) is not supported for single-"
                 "process usage and may hang. Please use "
@@ -346,9 +330,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, OfflineInferenceMixin):
 
         log_non_default_args(engine_args)
 
-        self.llm_engine = LLMEngine.from_engine_args(
-            engine_args=engine_args, usage_context=UsageContext.LLM_CLASS
-        )
+        self.llm_engine = LLMEngine.from_engine_args(engine_args=engine_args, usage_context=UsageContext.LLM_CLASS)
         self.model_config = self.llm_engine.model_config
         self.engine_class = type(self.llm_engine)
 
@@ -615,8 +597,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, OfflineInferenceMixin):
 
     def chat(
         self,
-        messages: list[ChatCompletionMessageParam]
-        | Sequence[list[ChatCompletionMessageParam]],
+        messages: list[ChatCompletionMessageParam] | Sequence[list[ChatCompletionMessageParam]],
         sampling_params: SamplingParams | Sequence[SamplingParams] | None = None,
         use_tqdm: bool | Callable[..., tqdm] = True,
         lora_request: Sequence[LoRARequest] | LoRARequest | None = None,
@@ -709,8 +690,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, OfflineInferenceMixin):
 
     def enqueue_chat(
         self,
-        messages: list[ChatCompletionMessageParam]
-        | Sequence[list[ChatCompletionMessageParam]],
+        messages: list[ChatCompletionMessageParam] | Sequence[list[ChatCompletionMessageParam]],
         sampling_params: SamplingParams | Sequence[SamplingParams] | None = None,
         use_tqdm: bool | Callable[..., tqdm] = True,
         lora_request: Sequence[LoRARequest] | LoRARequest | None = None,
@@ -797,12 +777,8 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, OfflineInferenceMixin):
     def stop_profile(self) -> None:
         self.llm_engine.stop_profile()
 
-    def reset_prefix_cache(
-        self, reset_running_requests: bool = False, reset_connector: bool = False
-    ) -> bool:
-        return self.llm_engine.reset_prefix_cache(
-            reset_running_requests, reset_connector
-        )
+    def reset_prefix_cache(self, reset_running_requests: bool = False, reset_connector: bool = False) -> bool:
+        return self.llm_engine.reset_prefix_cache(reset_running_requests, reset_connector)
 
     def sleep(self, level: int = 1, mode: PauseMode = "abort"):
         """
@@ -856,22 +832,16 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, OfflineInferenceMixin):
         """
         return self.llm_engine.get_metrics()
 
-    def init_weight_transfer_engine(
-        self, request: WeightTransferInitRequest | dict
-    ) -> None:
+    def init_weight_transfer_engine(self, request: WeightTransferInitRequest | dict) -> None:
         """
         Initialize weight transfer for RL training.
 
         Args:
             request: Weight transfer initialization request with backend-specific info
         """
-        init_info_dict = (
-            request["init_info"] if isinstance(request, dict) else request.init_info
-        )
+        init_info_dict = request["init_info"] if isinstance(request, dict) else request.init_info
 
-        self.llm_engine.collective_rpc(
-            "init_weight_transfer_engine", kwargs={"init_info": init_info_dict}
-        )
+        self.llm_engine.collective_rpc("init_weight_transfer_engine", kwargs={"init_info": init_info_dict})
 
     def start_weight_update(self) -> None:
         """Start a new weight update."""
@@ -884,13 +854,9 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, OfflineInferenceMixin):
         Args:
             request: Weight update request with backend-specific update info
         """
-        update_info_dict = (
-            request["update_info"] if isinstance(request, dict) else request.update_info
-        )
+        update_info_dict = request["update_info"] if isinstance(request, dict) else request.update_info
 
-        self.llm_engine.collective_rpc(
-            "update_weights", kwargs={"update_info": update_info_dict}
-        )
+        self.llm_engine.collective_rpc("update_weights", kwargs={"update_info": update_info_dict})
 
     def finish_weight_update(self) -> None:
         """Finish the current weight update."""

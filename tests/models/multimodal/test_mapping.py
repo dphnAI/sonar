@@ -194,6 +194,5 @@ def test_hf_model_weights_mapper(model_arch: str):
     weights_missing = ref_weight_names - weight_names
     weights_unmapped = weight_names - ref_weight_names
     assert not weights_missing and not weights_unmapped, (
-        f"Following weights are not mapped correctly: {weights_unmapped}, "
-        f"Missing expected weights: {weights_missing}."
+        f"Following weights are not mapped correctly: {weights_unmapped}, Missing expected weights: {weights_missing}."
     )

@@ -79,22 +79,16 @@ def _fused_qk_rmsnorm_rope_gate_kernel(
     rot_offs = tl.arange(0, ROT_HALF_BLOCK)
     rot_mask = rot_offs < half_rotary
     x_rot1 = tl.load(in_base + rot_offs, mask=rot_mask, other=0.0).to(tl.float32)
-    x_rot2 = tl.load(in_base + half_rotary + rot_offs, mask=rot_mask, other=0.0).to(
-        tl.float32
-    )
+    x_rot2 = tl.load(in_base + half_rotary + rot_offs, mask=rot_mask, other=0.0).to(tl.float32)
     w_rot1 = tl.load(w_ptr + rot_offs, mask=rot_mask, other=0.0).to(tl.float32)
-    w_rot2 = tl.load(w_ptr + half_rotary + rot_offs, mask=rot_mask, other=0.0).to(
-        tl.float32
-    )
+    w_rot2 = tl.load(w_ptr + half_rotary + rot_offs, mask=rot_mask, other=0.0).to(tl.float32)
     x_rot1 = (x_rot1 * inv_rms * w_rot1).to(INPUT_DTYPE).to(tl.float32)
     x_rot2 = (x_rot2 * inv_rms * w_rot2).to(INPUT_DTYPE).to(tl.float32)
 
     # Always use int64 for position to avoid overflow in address computation.
     pos = tl.load(positions_ptr + token).to(tl.int64)
     cache_offset = pos * cache_stride_p
-    cos = tl.load(
-        cos_sin_cache_ptr + cache_offset + rot_offs, mask=rot_mask, other=0.0
-    ).to(tl.float32)
+    cos = tl.load(cos_sin_cache_ptr + cache_offset + rot_offs, mask=rot_mask, other=0.0).to(tl.float32)
     sin = tl.load(
         cos_sin_cache_ptr + cache_offset + half_rotary + rot_offs,
         mask=rot_mask,
@@ -148,17 +142,12 @@ def fused_qk_rmsnorm_rope_gate(
     """
     if rotary_dim <= 0 or rotary_dim > head_dim or rotary_dim % 2 != 0:
         raise ValueError(
-            f"rotary_dim must be a positive even integer <= head_dim, "
-            f"got rotary_dim={rotary_dim}, head_dim={head_dim}"
+            f"rotary_dim must be a positive even integer <= head_dim, got rotary_dim={rotary_dim}, head_dim={head_dim}"
         )
 
     n_tokens = q_gate.shape[0]
-    q_out = torch.empty(
-        (n_tokens, num_q_heads * head_dim), dtype=q_gate.dtype, device=q_gate.device
-    )
-    k_out = torch.empty(
-        (n_tokens, num_kv_heads * head_dim), dtype=k.dtype, device=k.device
-    )
+    q_out = torch.empty((n_tokens, num_q_heads * head_dim), dtype=q_gate.dtype, device=q_gate.device)
+    k_out = torch.empty((n_tokens, num_kv_heads * head_dim), dtype=k.dtype, device=k.device)
     gate_out = torch.empty_like(q_out)
     if n_tokens == 0:
         return q_out, k_out, gate_out

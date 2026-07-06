@@ -23,9 +23,7 @@ from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
 class LinearAttention(PluggableLayer, MambaBase):
     """Base class for Linear attention layer."""
 
-    def __init__(
-        self, config: PretrainedConfig, aphrodite_config: AphroditeConfig, prefix: str = ""
-    ):
+    def __init__(self, config: PretrainedConfig, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
         self.layer_idx = extract_layer_index(prefix)
         self.prefix = prefix
@@ -37,11 +35,7 @@ class LinearAttention(PluggableLayer, MambaBase):
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.num_hidden_layers = config.num_hidden_layers
-        self.head_dim = (
-            config.head_dim
-            if hasattr(config, "head_dim")
-            else config.hidden_size // self.num_heads
-        )
+        self.head_dim = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // self.num_heads
         self.hidden_inner_size = self.head_dim * self.num_heads
 
         self.tp_size = get_tensor_model_parallel_world_size()

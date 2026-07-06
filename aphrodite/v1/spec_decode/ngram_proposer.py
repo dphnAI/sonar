@@ -100,9 +100,7 @@ class NgramProposer:
             # may slow down due to overhead.
             total_tokens = np.sum(num_tokens_no_spec)
             if total_tokens >= self.num_tokens_threshold:
-                final_num_threads = max(
-                    1, min(self.num_numba_thread_available, num_ngram_requests)
-                )
+                final_num_threads = max(1, min(self.num_numba_thread_available, num_ngram_requests))
                 set_num_threads(final_num_threads)
             else:
                 set_num_threads(1)
@@ -124,9 +122,7 @@ class NgramProposer:
 
         for i in range(num_requests):
             if i in valid_ngram_requests and self.valid_ngram_num_drafts[i] > 0:
-                draft_token_ids.append(
-                    self.valid_ngram_draft[i, : self.valid_ngram_num_drafts[i]].tolist()
-                )
+                draft_token_ids.append(self.valid_ngram_draft[i, : self.valid_ngram_num_drafts[i]].tolist())
             else:
                 draft_token_ids.append([])
 
@@ -138,9 +134,7 @@ class NgramProposer:
         sampled_token_ids: list[list[int]],
         num_tokens_no_spec: np.ndarray,
         token_ids_cpu: np.ndarray,
-        slot_mappings: dict[str, torch.Tensor]
-        | list[dict[str, torch.Tensor]]
-        | None = None,  # unused
+        slot_mappings: dict[str, torch.Tensor] | list[dict[str, torch.Tensor]] | None = None,  # unused
     ) -> list[list[int]]:
         assert num_speculative_tokens <= self.k
 

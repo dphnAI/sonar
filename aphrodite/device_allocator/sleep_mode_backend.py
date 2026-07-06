@@ -166,10 +166,7 @@ class SleepModeBackendFactory:
         """Resolve a registered backend class by name."""
         if name not in cls._registry:
             available = ", ".join(sorted(cls._registry)) or "<none>"
-            raise ValueError(
-                f"Unsupported sleep-mode backend '{name}'. "
-                f"Registered backends: {available}."
-            )
+            raise ValueError(f"Unsupported sleep-mode backend '{name}'. Registered backends: {available}.")
         return cls._registry[name]()
 
     @classmethod
@@ -178,9 +175,7 @@ class SleepModeBackendFactory:
         name = model_config.sleep_mode_backend
         backend_cls = cls.get_backend_class(name)
         if not backend_cls.is_supported():
-            raise ValueError(
-                f"Sleep-mode backend '{name}' is not supported on this platform."
-            )
+            raise ValueError(f"Sleep-mode backend '{name}' is not supported on this platform.")
         logger.info("Using sleep-mode backend: %s", name)
         return backend_cls()
 

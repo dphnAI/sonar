@@ -108,9 +108,7 @@ class HpcAttnMetadataBuilder(AttentionMetadataBuilder[HpcAttnMetadata]):
         self.model_config = aphrodite_config.model_config
         self.cache_config = aphrodite_config.cache_config
 
-        self.num_qo_heads = self.model_config.get_num_attention_heads(
-            aphrodite_config.parallel_config
-        )
+        self.num_qo_heads = self.model_config.get_num_attention_heads(aphrodite_config.parallel_config)
         self.num_kv_heads = kv_cache_spec.num_kv_heads
         self.head_dim = kv_cache_spec.head_size
         self.page_size = kv_cache_spec.block_size
@@ -139,12 +137,10 @@ class HpcAttnMetadataBuilder(AttentionMetadataBuilder[HpcAttnMetadata]):
         """Build HpcAttnMetadata from CommonAttentionMetadata."""
         num_actual_tokens = common_attn_metadata.num_actual_tokens
 
-        num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
-            split_decodes_and_prefills(
-                common_attn_metadata,
-                decode_threshold=self.reorder_batch_threshold,
-                require_uniform=False,
-            )
+        num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = split_decodes_and_prefills(
+            common_attn_metadata,
+            decode_threshold=self.reorder_batch_threshold,
+            require_uniform=False,
         )
 
         seq_lens = common_attn_metadata.seq_lens
@@ -156,9 +152,7 @@ class HpcAttnMetadataBuilder(AttentionMetadataBuilder[HpcAttnMetadata]):
         if num_prefills > 0:
             qo_indptr_cpu = common_attn_metadata.query_start_loc_cpu
             prefill_start = num_decodes
-            qo_indptr_prefill_cpu = (
-                qo_indptr_cpu[prefill_start:] - qo_indptr_cpu[prefill_start]
-            )
+            qo_indptr_prefill_cpu = qo_indptr_cpu[prefill_start:] - qo_indptr_cpu[prefill_start]
             qo_indptr = qo_indptr_prefill_cpu.to(self.device, non_blocking=True)
 
         return HpcAttnMetadata(
@@ -286,9 +280,7 @@ class HpcAttentionImpl(AttentionImpl[HpcAttnMetadata]):
             raise NotImplementedError("HPC attention does not support logits_soft_cap")
 
         if head_size != 128:
-            raise ValueError(
-                f"HPC attention only supports head_dim=128, got {head_size}"
-            )
+            raise ValueError(f"HPC attention only supports head_dim=128, got {head_size}")
 
         num_queries_per_kv = num_heads // num_kv_heads
         if num_queries_per_kv not in (4, 8):
@@ -299,10 +291,7 @@ class HpcAttentionImpl(AttentionImpl[HpcAttnMetadata]):
             )
 
         if kv_cache_dtype not in ("auto", "fp8_e4m3"):
-            raise ValueError(
-                f"HPC attention only supports kv_cache_dtype 'auto' or "
-                f"'fp8_e4m3', got '{kv_cache_dtype}'"
-            )
+            raise ValueError(f"HPC attention only supports kv_cache_dtype 'auto' or 'fp8_e4m3', got '{kv_cache_dtype}'")
 
         self.num_heads = num_heads
         self.head_size = head_size

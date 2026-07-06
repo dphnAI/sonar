@@ -39,17 +39,11 @@ def trim_schema(schema: dict) -> dict:
         # into "type": ["type-1", "type-2"]
         # if there's more than 1 types, also remove "null" type as Harmony will
         # just ignore it
-        types = [
-            type_dict["type"]
-            for type_dict in schema["anyOf"]
-            if type_dict["type"] != "null"
-        ]
+        types = [type_dict["type"] for type_dict in schema["anyOf"] if type_dict["type"] != "null"]
         schema["type"] = types
         del schema["anyOf"]
     if "properties" in schema:
-        schema["properties"] = {
-            k: trim_schema(v) for k, v in schema["properties"].items()
-        }
+        schema["properties"] = {k: trim_schema(v) for k, v in schema["properties"].items()}
     return schema
 
 
@@ -63,9 +57,7 @@ def post_process_tools_description(
     # Some tools schema don't need to be part of the prompt (e.g. simple text
     # in text out for Python)
     list_tools_result.tools = [
-        tool
-        for tool in list_tools_result.tools
-        if getattr(tool.annotations, "include_in_prompt", True)
+        tool for tool in list_tools_result.tools if getattr(tool.annotations, "include_in_prompt", True)
     ]
 
     return list_tools_result
@@ -104,10 +96,7 @@ class MCPToolServer(ToolServer):
         try:
             import mcp  # noqa: F401
         except ImportError:
-            raise ImportError(
-                "mcp is not installed. Please run `pip install mcp` to use "
-                "MCPToolServer."
-            ) from None
+            raise ImportError("mcp is not installed. Please run `pip install mcp` to use MCPToolServer.") from None
         self.harmony_tool_descriptions = {}
 
     async def add_tool_server(self, server_url: str):
@@ -174,9 +163,7 @@ class MCPToolServer(ToolServer):
         )
 
     @asynccontextmanager
-    async def new_session(
-        self, tool_name: str, session_id: str, headers: dict[str, str] | None = None
-    ):
+    async def new_session(self, tool_name: str, session_id: str, headers: dict[str, str] | None = None):
         from mcp import ClientSession
         from mcp.client.sse import sse_client
 
@@ -206,9 +193,7 @@ class DemoToolServer(ToolServer):
             self.tools["browser"] = browser_tool
         if python_tool.enabled:
             self.tools["python"] = python_tool
-        logger.info(
-            "DemoToolServer initialized with tools: %s", list(self.tools.keys())
-        )
+        logger.info("DemoToolServer initialized with tools: %s", list(self.tools.keys()))
 
     def has_tool(self, tool_name: str) -> bool:
         return tool_name in self.tools
@@ -226,9 +211,7 @@ class DemoToolServer(ToolServer):
             raise ValueError(f"Unknown tool {tool_name}")
 
     @asynccontextmanager
-    async def new_session(
-        self, tool_name: str, session_id: str, headers: dict[str, str] | None = None
-    ):
+    async def new_session(self, tool_name: str, session_id: str, headers: dict[str, str] | None = None):
         if tool_name not in self.tools:
             raise KeyError(f"Tool '{tool_name}' is not supported")
         yield self.tools[tool_name]

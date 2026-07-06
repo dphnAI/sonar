@@ -4,8 +4,8 @@
 import pytest
 from transformers import AutoTokenizer
 
-from tests.reasoning.utils import run_reasoning_extraction
 from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
+from tests.reasoning.utils import run_reasoning_extraction
 
 parser_name = "minimax_m2"
 end_token = "</think>"
@@ -174,16 +174,10 @@ def test_reasoning(
 ):
     output = minimax_m2_tokenizer.tokenize(param_dict["output"])
     # decode everything to tokens
-    output_tokens: list[str] = [
-        minimax_m2_tokenizer.convert_tokens_to_string([token]) for token in output
-    ]
-    parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(
-        minimax_m2_tokenizer
-    )
+    output_tokens: list[str] = [minimax_m2_tokenizer.convert_tokens_to_string([token]) for token in output]
+    parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(minimax_m2_tokenizer)
 
-    reasoning, content = run_reasoning_extraction(
-        parser, output_tokens, streaming=streaming
-    )
+    reasoning, content = run_reasoning_extraction(parser, output_tokens, streaming=streaming)
 
     assert reasoning == param_dict["reasoning"]
     assert content == param_dict["content"]

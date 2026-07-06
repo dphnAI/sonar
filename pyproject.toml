@@ -135,6 +135,8 @@ extend-exclude = ["tests/models/fixtures/*", "tests/prompts/*", "tests/tokenizer
     "benchmarks/sonnet.txt", "tests/lora/data/*", "build/*",
     "examples/pooling/token_embed/*", "tests/models/language/pooling/*",
     "aphrodite/third_party/*", "aphrodite/entrypoints/serve/instrumentator/static/*", "tests/entrypoints/openai/speech_to_text/test_transcription_validation.py",
+    "tests/entrypoints/speech_to_text/transcription/test_transcription_validation.py",
+    "rust/src/chat/src/renderer/deepseek_v32/fixtures/*",
     "docs/governance/process.md", "docs/assets/contributing/aphrodite_bench_serve_timeline.html",
     "tests/v1/engine/test_fast_incdec_prefix_err.py", ".git/*"]
 ignore-hidden = false
@@ -175,6 +177,18 @@ unsed_kwargs_1 = "unsed_kwargs_1"
 unsed_kwargs_2 = "unsed_kwargs_2"
 view_seperator = "view_seperator"
 womens_doubles = "womens_doubles"
+
+# code identifiers (renaming would break behavior)
+sharedMemPerBlockOptin = "sharedMemPerBlockOptin"  # CUDA device attr field
+tpos_ids = "tpos_ids"  # temporal position ids in vision_tower
+vas = "vas"  # __m512 accumulator var in moe_int8 sgl kernel
+# truncated tokens in streaming-parser / decoder test fixtures
+fals = "fals"
+Hel = "Hel"
+hel = "hel"
+mis = "mis"  # "mis-sized" prefix in a metal kernel comment
+thi = "thi"
+tru = "tru"
 
 [tool.typos.default.extend-words]
 iy = "iy"

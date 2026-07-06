@@ -39,9 +39,7 @@ EXPECTED_STRS_MAP = {
 # and is unstable w.r.t specifics of the fp8 implementation or
 # the hardware being run on.
 # Disabled to prevent it from breaking the build
-@pytest.mark.skip(
-    reason="Prevent unstable test based on golden strings from breaking the build."
-)
+@pytest.mark.skip(reason="Prevent unstable test based on golden strings from breaking the build.")
 @pytest.mark.skipif(
     not is_quant_method_supported("fp8"),
     reason="fp8 is not supported on this GPU type.",
@@ -79,6 +77,4 @@ def test_models(example_prompts, model_name) -> None:
     for i in range(len(example_prompts)):
         generated_str = generations[i]
         expected_str = expected_strs[i]
-        assert expected_str == generated_str, (
-            f"Test{i}:\nExpected: {expected_str!r}\nAphrodite: {generated_str!r}"
-        )
+        assert expected_str == generated_str, f"Test{i}:\nExpected: {expected_str!r}\nAphrodite: {generated_str!r}"

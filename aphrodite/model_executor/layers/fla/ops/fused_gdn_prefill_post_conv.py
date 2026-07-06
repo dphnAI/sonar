@@ -115,9 +115,7 @@ def _fused_post_conv_kernel(
         V_OFFSET: tl.constexpr = 2 * H * K
 
         # Load V features: mixed_qkv[t, 2*H*K + i_hv*V + v]
-        v_offsets = (
-            offs_t[:, None] * stride_x_tok + V_OFFSET + i_hv * V + offs_v[None, :]
-        )
+        v_offsets = offs_t[:, None] * stride_x_tok + V_OFFSET + i_hv * V + offs_v[None, :]
         v_vals = tl.load(mixed_qkv_ptr + v_offsets, mask=mask_2d, other=0)
 
         # Store V
@@ -191,9 +189,7 @@ def fused_post_conv_prep(
     dtype = conv_output.dtype
     device = conv_output.device
 
-    assert qkv_dim == 2 * H * K + HV * V, (
-        f"qkv_dim={qkv_dim} != 2*H*K + HV*V = {2 * H * K + HV * V}"
-    )
+    assert qkv_dim == 2 * H * K + HV * V, f"qkv_dim={qkv_dim} != 2*H*K + HV*V = {2 * H * K + HV * V}"
 
     # Allocate outputs in target contiguous layout
     q = torch.empty(L, H, K, dtype=dtype, device=device)

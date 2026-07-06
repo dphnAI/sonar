@@ -76,16 +76,12 @@ class Qwen3Eagle3DecoderLayer(Qwen3DecoderLayer):
         else:
             self._residual_norm = self._norm_after_residual
 
-    def _norm_before_residual(
-        self, hidden_states: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def _norm_before_residual(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         hidden_states = self.hidden_norm(hidden_states)
         residual = hidden_states
         return hidden_states, residual
 
-    def _norm_after_residual(
-        self, hidden_states: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def _norm_after_residual(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         residual = hidden_states
         hidden_states = self.hidden_norm(hidden_states)
         return hidden_states, residual
@@ -159,11 +155,7 @@ class Qwen3Eagle3Model(nn.Module):
             self.use_aux_hidden_state = eagle_config["use_aux_hidden_state"]
         else:
             self.use_aux_hidden_state = True
-        self.norm_before_fc = bool(
-            eagle_config.get(
-                "norm_before_fc", getattr(self.config, "norm_before_fc", False)
-            )
-        )
+        self.norm_before_fc = bool(eagle_config.get("norm_before_fc", getattr(self.config, "norm_before_fc", False)))
         self.fc_input_size = self.config.hidden_size
 
         current_aphrodite_config = get_current_aphrodite_config()
@@ -190,14 +182,12 @@ class Qwen3Eagle3Model(nn.Module):
             if num_aux_features is None:
                 num_aux_features = getattr(self.config, "num_aux_hidden_states", None)
             if num_aux_features is None:
-                aux_ids = getattr(
-                    self.config, "eagle_aux_hidden_state_layer_ids", None
-                ) or eagle_config.get("eagle_aux_hidden_state_layer_ids")
+                aux_ids = getattr(self.config, "eagle_aux_hidden_state_layer_ids", None) or eagle_config.get(
+                    "eagle_aux_hidden_state_layer_ids"
+                )
                 num_aux_features = len(aux_ids) if aux_ids else 3
             self.num_aux_layers = num_aux_features
-            target_hidden_size = getattr(
-                self.config, "target_hidden_size", self.config.hidden_size
-            )
+            target_hidden_size = getattr(self.config, "target_hidden_size", self.config.hidden_size)
             self.fc_input_size = target_hidden_size * num_aux_features
             if self.norm_before_fc:
                 self.input_norm = RMSNorm(
@@ -210,10 +200,7 @@ class Qwen3Eagle3Model(nn.Module):
             use_fc_norm = getattr(self.config, "fc_norm", False)
             if use_fc_norm:
                 self.fc_norm = nn.ModuleList(
-                    [
-                        RMSNorm(target_hidden_size, eps=self.config.rms_norm_eps)
-                        for _ in range(num_aux_features)
-                    ]
+                    [RMSNorm(target_hidden_size, eps=self.config.rms_norm_eps) for _ in range(num_aux_features)]
                 )
             else:
                 self.fc_norm = None
@@ -277,9 +264,7 @@ class Eagle3Qwen3ForCausalLM(Qwen3ForCausalLM):
         if getattr(self.config, "draft_vocab_size", None) is None:
             base_vocab_size = getattr(self.config, "vocab_size", None)
             self.config.draft_vocab_size = base_vocab_size
-        target_layer_num = aphrodite_config.model_config.get_num_layers(
-            aphrodite_config.parallel_config
-        )
+        target_layer_num = aphrodite_config.model_config.get_num_layers(aphrodite_config.parallel_config)
 
         # Store target layer count in draft config for
         # proper layer_types indexing in draft models
@@ -297,9 +282,7 @@ class Eagle3Qwen3ForCausalLM(Qwen3ForCausalLM):
             quant_config=get_draft_quant_config(aphrodite_config),
             prefix=maybe_prefix(prefix, "lm_head"),
         )
-        self.logits_processor = LogitsProcessor(
-            self.config.draft_vocab_size, scale=logit_scale
-        )
+        self.logits_processor = LogitsProcessor(self.config.draft_vocab_size, scale=logit_scale)
         self.draft_id_to_target_id = nn.Parameter(
             torch.zeros(self.config.draft_vocab_size, dtype=torch.long),
             requires_grad=False,
@@ -338,8 +321,7 @@ class Eagle3Qwen3ForCausalLM(Qwen3ForCausalLM):
         logits = self.logits_processor(self.lm_head, hidden_states)
         if self.draft_id_to_target_id is None:
             assert logits.shape[1] == self.config.vocab_size, (
-                "Expected logits to have shape "
-                f"(*, {self.config.vocab_size}), but got {logits.shape}"
+                f"Expected logits to have shape (*, {self.config.vocab_size}), but got {logits.shape}"
             )
             return logits
 

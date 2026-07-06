@@ -5,10 +5,10 @@ import weakref
 import pytest
 import torch
 
-from tests.models.utils import softmax
 from aphrodite import LLM, ClassificationRequestOutput, PoolingParams
 from aphrodite.distributed import cleanup_dist_env_and_memory
 from aphrodite.tasks import PoolingTask
+from tests.models.utils import softmax
 
 MODEL_NAME = "jason9693/Qwen2.5-1.5B-apeach"
 
@@ -79,12 +79,8 @@ def test_pooling_params(llm: LLM):
     w_activation = get_outputs(use_activation=True)
     wo_activation = get_outputs(use_activation=False)
 
-    assert torch.allclose(default, w_activation, atol=1e-2), (
-        "Default should use activation."
-    )
-    assert not torch.allclose(w_activation, wo_activation, atol=1e-2), (
-        "wo_activation should not use activation."
-    )
+    assert torch.allclose(default, w_activation, atol=1e-2), "Default should use activation."
+    assert not torch.allclose(w_activation, wo_activation, atol=1e-2), "wo_activation should not use activation."
     assert torch.allclose(softmax(wo_activation), w_activation, atol=1e-2), (
         "w_activation should be close to activation(wo_activation)."
     )

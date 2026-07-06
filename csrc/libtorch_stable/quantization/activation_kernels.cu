@@ -559,26 +559,26 @@ __global__ void silu_mul_fp8_quant_deep_gemm_kernel(
 }  // namespace aphrodite
 
 // Launch activation, gating, and quantize kernel.
-#define LAUNCH_ACTIVATION_GATE_KERNEL(KERNEL)                             \
-  int d = input.size(-1) / 2;                                             \
-  int64_t num_tokens = input.numel() / input.size(-1);                    \
-  dim3 grid(num_tokens, num_tokens > 16 ? num_tokens > 32 ? 1 : 2 : 4);   \
-  dim3 block(std::min(d, 512));                                           \
-  const torch::stable::accelerator::DeviceGuard device_guard(             \
-      input.get_device_index());                                          \
-  const cudaStream_t stream =                                             \
-      get_current_cuda_stream(input.get_device_index());                  \
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                    \
-      input.scalar_type(), "act_and_mul_kernel", [&] {                    \
-        APHRODITE_STABLE_DISPATCH_FP8_TYPES(                                   \
-            out.scalar_type(), "act_and_mul_quant_kernel_fp8_type", [&] { \
-              aphrodite::act_and_mul_quant_kernel<scalar_t, KERNEL<scalar_t>,  \
-                                             fp8_t>                       \
-                  <<<grid, block, 0, stream>>>(                           \
-                      out.mutable_data_ptr<fp8_t>(),                      \
-                      input.const_data_ptr<scalar_t>(),                   \
-                      scale.const_data_ptr<float>(), d);                  \
-            });                                                           \
+#define LAUNCH_ACTIVATION_GATE_KERNEL(KERNEL)                                 \
+  int d = input.size(-1) / 2;                                                 \
+  int64_t num_tokens = input.numel() / input.size(-1);                        \
+  dim3 grid(num_tokens, num_tokens > 16 ? num_tokens > 32 ? 1 : 2 : 4);       \
+  dim3 block(std::min(d, 512));                                               \
+  const torch::stable::accelerator::DeviceGuard device_guard(                 \
+      input.get_device_index());                                              \
+  const cudaStream_t stream =                                                 \
+      get_current_cuda_stream(input.get_device_index());                      \
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                   \
+      input.scalar_type(), "act_and_mul_kernel", [&] {                        \
+        APHRODITE_STABLE_DISPATCH_FP8_TYPES(                                  \
+            out.scalar_type(), "act_and_mul_quant_kernel_fp8_type", [&] {     \
+              aphrodite::act_and_mul_quant_kernel<scalar_t, KERNEL<scalar_t>, \
+                                                  fp8_t>                      \
+                  <<<grid, block, 0, stream>>>(                               \
+                      out.mutable_data_ptr<fp8_t>(),                          \
+                      input.const_data_ptr<scalar_t>(),                       \
+                      scale.const_data_ptr<float>(), d);                      \
+            });                                                               \
       });
 
 void silu_and_mul_quant(torch::stable::Tensor& out,    // [..., d]
@@ -650,9 +650,9 @@ void persistent_masked_m_silu_mul_quant(
     dim3 grid(sms), block(THREAD_COUNT);                                       \
     const torch::stable::accelerator::DeviceGuard device_guard(                \
         input.get_device_index());                                             \
-    APHRODITE_STABLE_DISPATCH_FP8_TYPES(                                            \
+    APHRODITE_STABLE_DISPATCH_FP8_TYPES(                                       \
         y_q.scalar_type(), "silu_mul_fp8_quant_deep_gemm_kernel", [&] {        \
-          aphrodite::silu_mul_fp8_quant_deep_gemm_kernel<                           \
+          aphrodite::silu_mul_fp8_quant_deep_gemm_kernel<                      \
               BLOCK_COUNT, max_shared_mem_bytes, fp8_t, scale_t, THREAD_COUNT, \
               Idx_t, CEIL_UE8M0, GROUP_SIZE, STAGES>                           \
               <<<grid, block, max_shared_mem_bytes + (E + 1) * 16, stream>>>(  \

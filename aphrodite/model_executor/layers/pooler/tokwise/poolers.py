@@ -98,18 +98,14 @@ class TokenPooler(Pooler):
         return pooled_data
 
 
-def pooler_for_token_embed(
-    pooler_config: PoolerConfig, projector: ProjectorFn | None = None
-) -> TokenPooler:
+def pooler_for_token_embed(pooler_config: PoolerConfig, projector: ProjectorFn | None = None) -> TokenPooler:
     pooling = get_tok_pooling_method(pooler_config.get_tok_pooling_type())
 
     aphrodite_config = get_current_aphrodite_config()
     model_config = aphrodite_config.model_config
     head = TokenEmbeddingPoolerHead(
         head_dtype=model_config.head_dtype,
-        projector=projector
-        if projector is not None
-        else _load_st_projector(model_config),
+        projector=projector if projector is not None else _load_st_projector(model_config),
         activation=PoolerNormalize(),
     )
 
@@ -129,17 +125,13 @@ def pooler_for_token_classify(
     aphrodite_config = get_current_aphrodite_config()
     model_config = aphrodite_config.model_config
     if model_config.pooler_config is None:
-        raise ValueError(
-            "model_config.pooler_config must be set for token classification pooling"
-        )
+        raise ValueError("model_config.pooler_config must be set for token classification pooling")
     head = TokenClassifierPoolerHead(
         head_dtype=model_config.head_dtype,
         classifier=classifier,
         logit_mean=model_config.pooler_config.logit_mean,
         logit_sigma=model_config.pooler_config.logit_sigma,
-        activation=resolve_classifier_act_fn(
-            model_config, static_num_labels=False, act_fn=act_fn
-        ),
+        activation=resolve_classifier_act_fn(model_config, static_num_labels=False, act_fn=act_fn),
     )
 
     return TokenPooler(pooling=pooling, head=head)

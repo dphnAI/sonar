@@ -17,6 +17,9 @@ from typing import NamedTuple
 
 import pytest
 
+from aphrodite.parser.engine import registered_adapters as _adapters_mod
+from aphrodite.parser.engine.parser_engine import ParserEngine
+from aphrodite.parser.engine.parser_engine_config import ParserState
 from tests.parser.engine.replay_harness import (
     DUMMY_TOOLS,
     MockTokenizer,
@@ -30,9 +33,6 @@ from tests.parser.engine.replay_harness import (
     replay_with_text_holdback,
 )
 from tests.parser.engine.trace_builder import _BUILDERS, build_samples
-from aphrodite.parser.engine import registered_adapters as _adapters_mod
-from aphrodite.parser.engine.parser_engine import ParserEngine
-from aphrodite.parser.engine.parser_engine_config import ParserState
 
 # ── Parser discovery ─────────────────────────────────────────────────
 
@@ -57,11 +57,7 @@ def _discover_parsers() -> list[_ParserInfo]:
     found: list[_ParserInfo] = []
     missing_builders: list[str] = []
     for obj in vars(_adapters_mod).values():
-        if not (
-            isinstance(obj, type)
-            and issubclass(obj, ParserEngine)
-            and obj is not ParserEngine
-        ):
+        if not (isinstance(obj, type) and issubclass(obj, ParserEngine) and obj is not ParserEngine):
             continue
         cfg = obj(bare_tok, None).parser_engine_config
         if cfg.name not in _BUILDERS:
@@ -69,9 +65,7 @@ def _discover_parsers() -> list[_ParserInfo]:
             continue
         tool_end = cfg.token_id_terminals.get("TOOL_END")
         if not tool_end:
-            raise RuntimeError(
-                f"{obj.__name__} config missing 'TOOL_END' in token_id_terminals"
-            )
+            raise RuntimeError(f"{obj.__name__} config missing 'TOOL_END' in token_id_terminals")
         all_vals = set(cfg.terminals.values()) | set(cfg.token_id_terminals.values())
         found.append(
             _ParserInfo(
@@ -100,9 +94,7 @@ def _discover_parsers() -> list[_ParserInfo]:
 
 _PARSERS = _discover_parsers()
 
-_ENGINE_PARSERS: dict[str, type[ParserEngine]] = {
-    f"{p.name}_engine": p.parser_cls for p in _PARSERS
-}
+_ENGINE_PARSERS: dict[str, type[ParserEngine]] = {f"{p.name}_engine": p.parser_cls for p in _PARSERS}
 
 # ── Parametrize sample lists ─────────────────────────────────────────
 
@@ -177,9 +169,7 @@ class TestTextHoldback:
         )
 
 
-@pytest.mark.parametrize(
-    "chunk_size", [1, 2, 3, 5, 10, 19, 20, None], ids=lambda c: f"chunk{c}"
-)
+@pytest.mark.parametrize("chunk_size", [1, 2, 3, 5, 10, 19, 20, None], ids=lambda c: f"chunk{c}")
 @pytest.mark.parametrize(
     "parser_cls,sample,terminals",
     _REPLAY_SAMPLES,
@@ -203,12 +193,7 @@ class TestReplay:
         assert_no_terminal_leakage(output, terminals)
 
 
-_DEFERRAL_SAMPLES = [
-    (p.parser_cls, s, p.tool_end)
-    for p in _PARSERS
-    for s in p.samples
-    if s.expected_tool_calls
-]
+_DEFERRAL_SAMPLES = [(p.parser_cls, s, p.tool_end) for p in _PARSERS for s in p.samples if s.expected_tool_calls]
 
 
 @pytest.mark.parametrize(
@@ -257,15 +242,11 @@ class TestDeferralFinish:
             prompt_token_ids=[],
             finished=False,
         )
-        result2 = parser.parse_delta(
-            last_text_missing, last_ids, request, finished=True
-        )
+        result2 = parser.parse_delta(last_text_missing, last_ids, request, finished=True)
 
         output = collect_output([result1, result2])
 
-        tool_calls_only = dataclasses.replace(
-            sample, expected_reasoning=None, expected_content=None
-        )
+        tool_calls_only = dataclasses.replace(sample, expected_reasoning=None, expected_content=None)
         assert_parse_output(output, tool_calls_only)
 
 
@@ -379,9 +360,7 @@ class TestToolCallFilteringReplay:
                 "".join(all_texts[start:end]),
                 all_ids[start:end],
                 request,
-                prompt_token_ids=(sample.prompt_token_ids or [])
-                if start == 0
-                else None,
+                prompt_token_ids=(sample.prompt_token_ids or []) if start == 0 else None,
                 finished=is_last,
             )
             results.append(result)
@@ -394,17 +373,11 @@ class TestToolCallFilteringReplay:
         )
 
         assert output.reasoning == expected_reasoning, (
-            f"Reasoning mismatch (mode={mode}):\n"
-            f"  expected: {expected_reasoning!r}\n"
-            f"  actual:   {output.reasoning!r}"
+            f"Reasoning mismatch (mode={mode}):\n  expected: {expected_reasoning!r}\n  actual:   {output.reasoning!r}"
         )
-        assert output.tool_calls == [], (
-            f"Expected no tool calls (mode={mode}) but got {output.tool_calls}"
-        )
+        assert output.tool_calls == [], f"Expected no tool calls (mode={mode}) but got {output.tool_calls}"
         assert output.content == expected_content, (
-            f"Content mismatch (mode={mode}):\n"
-            f"  expected: {expected_content!r}\n"
-            f"  actual:   {output.content!r}"
+            f"Content mismatch (mode={mode}):\n  expected: {expected_content!r}\n  actual:   {output.content!r}"
         )
 
 
@@ -434,17 +407,11 @@ class TestToolCallFilteringNonStreaming:
             sample, think_end, tool_start, include_tool_block=False
         )
         assert output.reasoning == expected_reasoning, (
-            f"Reasoning mismatch:\n"
-            f"  expected: {expected_reasoning!r}\n"
-            f"  actual:   {output.reasoning!r}"
+            f"Reasoning mismatch:\n  expected: {expected_reasoning!r}\n  actual:   {output.reasoning!r}"
         )
-        assert output.tool_calls == [], (
-            f"Expected no tool calls but got {output.tool_calls}"
-        )
+        assert output.tool_calls == [], f"Expected no tool calls but got {output.tool_calls}"
         assert output.content == expected_content, (
-            f"Content mismatch:\n"
-            f"  expected: {expected_content!r}\n"
-            f"  actual:   {output.content!r}"
+            f"Content mismatch:\n  expected: {expected_content!r}\n  actual:   {output.content!r}"
         )
 
 
@@ -484,9 +451,7 @@ class TestToolChoiceNoneStreamingParity:
                     text,
                     [tid],
                     request,
-                    prompt_token_ids=(sample.prompt_token_ids or [])
-                    if i == 0
-                    else None,
+                    prompt_token_ids=(sample.prompt_token_ids or []) if i == 0 else None,
                     finished=is_last,
                 )
             )
@@ -587,9 +552,5 @@ class TestAdapterReferences:
     )
     def test_adapter_cls_refs_set(self, parser_name):
         parser_cls = _ENGINE_PARSERS[parser_name]
-        assert parser_cls.reasoning_parser_cls is not None, (
-            f"{parser_name}: reasoning_parser_cls is None"
-        )
-        assert parser_cls.tool_parser_cls is not None, (
-            f"{parser_name}: tool_parser_cls is None"
-        )
+        assert parser_cls.reasoning_parser_cls is not None, f"{parser_name}: reasoning_parser_cls is None"
+        assert parser_cls.tool_parser_cls is not None, f"{parser_name}: tool_parser_cls is None"

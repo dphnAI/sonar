@@ -16,10 +16,7 @@ class TestGranite20bFcToolParser(ToolParserTests):
             parser_name="granite-20b-fc",
             # Test data
             no_tool_calls_output="This is a regular response without any tool calls.",
-            single_tool_call_output=(
-                '<function_call> {"name": "get_weather", '
-                '"arguments": {"city": "Tokyo"}}'
-            ),
+            single_tool_call_output=('<function_call> {"name": "get_weather", "arguments": {"city": "Tokyo"}}'),
             parallel_tool_calls_output=(
                 '<function_call> {"name": "get_weather", '
                 '"arguments": {"city": "Tokyo"}}\n'
@@ -40,9 +37,7 @@ class TestGranite20bFcToolParser(ToolParserTests):
     "empty_object": {}
   }
 }""",
-            empty_arguments_output=(
-                '<function_call> {"name": "refresh", "arguments": {}}'
-            ),
+            empty_arguments_output=('<function_call> {"name": "refresh", "arguments": {}}'),
             surrounding_text_output="""Let me check the weather for you.
 <function_call> {"name": "get_weather", "arguments": {"city": "Tokyo"}}""",
             escaped_strings_output="""<function_call> {
@@ -68,9 +63,7 @@ class TestGranite20bFcToolParser(ToolParserTests):
             parallel_tool_calls_names=["get_weather", "get_time"],
             # xfail markers
             xfail_streaming={
-                "test_surrounding_text": (
-                    "Granite 20B FC streaming requires <function_call> at start"
-                ),
+                "test_surrounding_text": ("Granite 20B FC streaming requires <function_call> at start"),
             },
             xfail_nonstreaming={},
         )

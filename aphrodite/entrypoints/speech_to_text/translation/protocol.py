@@ -196,17 +196,13 @@ class TranslationRequest(OpenAIBaseModel):
             default_sampling_params = {}
         # Default parameters
         if (temperature := self.temperature) is None:
-            temperature = default_sampling_params.get(
-                "temperature", self._DEFAULT_SAMPLING_PARAMS["temperature"]
-            )
+            temperature = default_sampling_params.get("temperature", self._DEFAULT_SAMPLING_PARAMS["temperature"])
 
         return SamplingParams.from_optional(
             temperature=temperature,
             max_tokens=max_tokens,
             seed=self.seed,
-            output_kind=RequestOutputKind.DELTA
-            if self.stream
-            else RequestOutputKind.FINAL_ONLY,
+            output_kind=RequestOutputKind.DELTA if self.stream else RequestOutputKind.FINAL_ONLY,
             skip_clone=True,  # Created fresh per request, safe to skip clone
         )
 

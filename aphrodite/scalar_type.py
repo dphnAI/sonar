@@ -79,9 +79,7 @@ class ScalarType:
 
         max_exponent = (1 << self.exponent) - 2
         if self.nan_repr == NanRepr.EXTD_RANGE_MAX_MIN or self.nan_repr == NanRepr.NONE:
-            assert self.exponent < 11, (
-                f"Cannot represent max/min as a double for type {self.__str__()}"
-            )
+            assert self.exponent < 11, f"Cannot represent max/min as a double for type {self.__str__()}"
             max_exponent = max_exponent + 1
 
         # adjust the exponent to match that of a double
@@ -108,25 +106,19 @@ class ScalarType:
         if self.is_floating_point():
             return self._floating_point_max()
         else:
-            assert self.size_bits < 64 or self.size_bits == 64 and self.is_signed(), (
-                "Cannot represent max as an int"
-            )
+            assert self.size_bits < 64 or self.size_bits == 64 and self.is_signed(), "Cannot represent max as an int"
             return (1 << self.mantissa) - 1
 
     def _raw_min(self) -> int | float:
         if self.is_floating_point():
-            assert self.is_signed(), (
-                "We currently assume all floating point types are signed"
-            )
+            assert self.is_signed(), "We currently assume all floating point types are signed"
             sign_bit_double = 1 << 63
 
             max_raw = self._floating_point_max_int()
             min_raw = max_raw | sign_bit_double
             return struct.unpack("!d", struct.pack("!Q", min_raw))[0]
         else:
-            assert not self.is_signed() or self.size_bits <= 64, (
-                "Cannot represent min as a int64_t"
-            )
+            assert not self.is_signed() or self.size_bits <= 64, "Cannot represent min as a int64_t"
 
             if self.is_signed():
                 return -(1 << (self.size_bits - 1))
@@ -229,14 +221,7 @@ class ScalarType:
           - if bias is not present it means its zero
         """
         if self.is_floating_point():
-            ret = (
-                "float"
-                + str(self.size_bits)
-                + "_e"
-                + str(self.exponent)
-                + "m"
-                + str(self.mantissa)
-            )
+            ret = "float" + str(self.size_bits) + "_e" + str(self.exponent) + "m" + str(self.mantissa)
 
             if not self.is_ieee_754():
                 if self._finite_values_only:
@@ -289,17 +274,14 @@ class ScalarType:
         return ret
 
     @classmethod
-    def float_(
-        cls, exponent: int, mantissa: int, finite_values_only: bool, nan_repr: NanRepr
-    ) -> "ScalarType":
+    def float_(cls, exponent: int, mantissa: int, finite_values_only: bool, nan_repr: NanRepr) -> "ScalarType":
         """
         Create a non-standard floating point type
         (i.e. does not follow IEEE 754 conventions).
         """
         assert mantissa > 0 and exponent > 0
         assert nan_repr != NanRepr.IEEE_754, (
-            "use `float_IEEE754` constructor for floating point types that "
-            "follow IEEE 754 conventions"
+            "use `float_IEEE754` constructor for floating point types that follow IEEE 754 conventions"
         )
         ret = cls(exponent, mantissa, True, 0, finite_values_only, nan_repr)
         ret.id  # noqa B018: make sure the id is cached

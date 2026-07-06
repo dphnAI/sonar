@@ -21,43 +21,43 @@
 #define APHRODITE_STABLE_DISPATCH_FP8_CASE(enum_type, ...) \
   THO_PRIVATE_CASE_TYPE_USING_HINT(enum_type, fp8_t, __VA_ARGS__)
 
-#define APHRODITE_STABLE_DISPATCH_CASE_FLOATING_TYPES(...)                  \
+#define APHRODITE_STABLE_DISPATCH_CASE_FLOATING_TYPES(...)             \
   THO_DISPATCH_CASE(torch::headeronly::ScalarType::Float, __VA_ARGS__) \
   THO_DISPATCH_CASE(torch::headeronly::ScalarType::Half, __VA_ARGS__)  \
   THO_DISPATCH_CASE(torch::headeronly::ScalarType::BFloat16, __VA_ARGS__)
 
 #define APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(TYPE, NAME, ...) \
-  THO_DISPATCH_SWITCH(TYPE, NAME,                            \
-                      APHRODITE_STABLE_DISPATCH_CASE_FLOATING_TYPES(__VA_ARGS__))
+  THO_DISPATCH_SWITCH(                                            \
+      TYPE, NAME, APHRODITE_STABLE_DISPATCH_CASE_FLOATING_TYPES(__VA_ARGS__))
 
-#define APHRODITE_STABLE_DISPATCH_CASE_INTEGRAL_TYPES(...)                  \
+#define APHRODITE_STABLE_DISPATCH_CASE_INTEGRAL_TYPES(...)             \
   THO_DISPATCH_CASE(torch::headeronly::ScalarType::Byte, __VA_ARGS__)  \
   THO_DISPATCH_CASE(torch::headeronly::ScalarType::Char, __VA_ARGS__)  \
   THO_DISPATCH_CASE(torch::headeronly::ScalarType::Short, __VA_ARGS__) \
   THO_DISPATCH_CASE(torch::headeronly::ScalarType::Int, __VA_ARGS__)   \
   THO_DISPATCH_CASE(torch::headeronly::ScalarType::Long, __VA_ARGS__)
 
-#define APHRODITE_STABLE_DISPATCH_CASE_INTEGRAL_AND_UNSIGNED_TYPES(...)      \
-  APHRODITE_STABLE_DISPATCH_CASE_INTEGRAL_TYPES(__VA_ARGS__)                 \
+#define APHRODITE_STABLE_DISPATCH_CASE_INTEGRAL_AND_UNSIGNED_TYPES(...) \
+  APHRODITE_STABLE_DISPATCH_CASE_INTEGRAL_TYPES(__VA_ARGS__)            \
   THO_DISPATCH_CASE(torch::headeronly::ScalarType::UInt16, __VA_ARGS__) \
   THO_DISPATCH_CASE(torch::headeronly::ScalarType::UInt32, __VA_ARGS__) \
   THO_DISPATCH_CASE(torch::headeronly::ScalarType::UInt64, __VA_ARGS__)
 
 #define APHRODITE_STABLE_DISPATCH_INTEGRAL_TYPES(TYPE, NAME, ...) \
-  THO_DISPATCH_SWITCH(TYPE, NAME,                            \
-                      APHRODITE_STABLE_DISPATCH_CASE_INTEGRAL_TYPES(__VA_ARGS__))
+  THO_DISPATCH_SWITCH(                                            \
+      TYPE, NAME, APHRODITE_STABLE_DISPATCH_CASE_INTEGRAL_TYPES(__VA_ARGS__))
 
 #define APHRODITE_STABLE_DISPATCH_INTEGRAL_AND_UNSIGNED_TYPES(TYPE, NAME, ...) \
-  THO_DISPATCH_SWITCH(                                                    \
-      TYPE, NAME,                                                         \
+  THO_DISPATCH_SWITCH(                                                         \
+      TYPE, NAME,                                                              \
       APHRODITE_STABLE_DISPATCH_CASE_INTEGRAL_AND_UNSIGNED_TYPES(__VA_ARGS__))
 
 // FP8 type dispatch - ROCm uses FNUZ format, CUDA uses OCP format
 #ifdef USE_ROCM
-  #define APHRODITE_STABLE_DISPATCH_CASE_FP8_TYPES(...)                 \
-    APHRODITE_STABLE_DISPATCH_FP8_CASE(                                 \
+  #define APHRODITE_STABLE_DISPATCH_CASE_FP8_TYPES(...)            \
+    APHRODITE_STABLE_DISPATCH_FP8_CASE(                            \
         torch::headeronly::ScalarType::Float8_e4m3fn, __VA_ARGS__) \
-    APHRODITE_STABLE_DISPATCH_FP8_CASE(                                 \
+    APHRODITE_STABLE_DISPATCH_FP8_CASE(                            \
         torch::headeronly::ScalarType::Float8_e4m3fnuz, __VA_ARGS__)
 #else
   #define APHRODITE_STABLE_DISPATCH_CASE_FP8_TYPES(...) \
@@ -68,39 +68,40 @@
 // When using this dispatch macro, the type is 'fp8_t' not 'scalar_t'.
 // See APHRODITE_STABLE_DISPATCH_FP8_CASE above.
 #define APHRODITE_STABLE_DISPATCH_FP8_TYPES(TYPE, NAME, ...) \
-  THO_DISPATCH_SWITCH(TYPE, NAME,                       \
+  THO_DISPATCH_SWITCH(TYPE, NAME,                            \
                       APHRODITE_STABLE_DISPATCH_CASE_FP8_TYPES(__VA_ARGS__))
 
 // Half types dispatch (Half + BFloat16)
-#define APHRODITE_STABLE_DISPATCH_CASE_HALF_TYPES(...)                     \
+#define APHRODITE_STABLE_DISPATCH_CASE_HALF_TYPES(...)                \
   THO_DISPATCH_CASE(torch::headeronly::ScalarType::Half, __VA_ARGS__) \
   THO_DISPATCH_CASE(torch::headeronly::ScalarType::BFloat16, __VA_ARGS__)
 
 #define APHRODITE_STABLE_DISPATCH_HALF_TYPES(TYPE, NAME, ...) \
-  THO_DISPATCH_SWITCH(TYPE, NAME,                        \
+  THO_DISPATCH_SWITCH(TYPE, NAME,                             \
                       APHRODITE_STABLE_DISPATCH_CASE_HALF_TYPES(__VA_ARGS__))
 
 // Quant type dispatch (FP8 + INT8)
 #ifdef USE_ROCM
-  #define APHRODITE_STABLE_DISPATCH_CASE_QUANT_TYPES(...)                  \
+  #define APHRODITE_STABLE_DISPATCH_CASE_QUANT_TYPES(...)             \
     THO_DISPATCH_CASE(torch::headeronly::ScalarType::Float8_e4m3fn,   \
                       __VA_ARGS__)                                    \
     THO_DISPATCH_CASE(torch::headeronly::ScalarType::Float8_e4m3fnuz, \
                       __VA_ARGS__)                                    \
     THO_DISPATCH_CASE(torch::headeronly::ScalarType::Char, __VA_ARGS__)
 #else
-  #define APHRODITE_STABLE_DISPATCH_CASE_QUANT_TYPES(...)                \
+  #define APHRODITE_STABLE_DISPATCH_CASE_QUANT_TYPES(...)           \
     THO_DISPATCH_CASE(torch::headeronly::ScalarType::Float8_e4m3fn, \
                       __VA_ARGS__)                                  \
     THO_DISPATCH_CASE(torch::headeronly::ScalarType::Char, __VA_ARGS__)
 #endif
 
 #define APHRODITE_STABLE_DISPATCH_QUANT_TYPES(TYPE, NAME, ...) \
-  THO_DISPATCH_SWITCH(TYPE, NAME,                         \
+  THO_DISPATCH_SWITCH(TYPE, NAME,                              \
                       APHRODITE_STABLE_DISPATCH_CASE_QUANT_TYPES(__VA_ARGS__))
 
 // Group size dispatch (pure C++ if/else, no ATen dependency)
-#define APHRODITE_STABLE_DISPATCH_GROUP_SIZE(group_size, const_group_size, ...) \
+#define APHRODITE_STABLE_DISPATCH_GROUP_SIZE(group_size, const_group_size, \
+                                             ...)                          \
   if (group_size == 128) {                                                 \
     constexpr int const_group_size = 128;                                  \
     __VA_ARGS__();                                                         \
@@ -111,46 +112,46 @@
 
 // Boolean dispatch
 #define APHRODITE_STABLE_DISPATCH_BOOL(expr, const_expr, ...) \
-  if (expr) {                                            \
-    constexpr bool const_expr = true;                    \
-    __VA_ARGS__();                                       \
-  } else {                                               \
-    constexpr bool const_expr = false;                   \
-    __VA_ARGS__();                                       \
+  if (expr) {                                                 \
+    constexpr bool const_expr = true;                         \
+    __VA_ARGS__();                                            \
+  } else {                                                    \
+    constexpr bool const_expr = false;                        \
+    __VA_ARGS__();                                            \
   }
 
 // Vec size dispatch (pure C++ switch, no ATen dependency)
 #define APHRODITE_STABLE_DISPATCH_VEC_SIZE(VEC_SIZE, ...) \
-  switch (VEC_SIZE) {                                \
-    case 16: {                                       \
-      constexpr int vec_size = 16;                   \
-      __VA_ARGS__();                                 \
-      break;                                         \
-    }                                                \
-    case 8: {                                        \
-      constexpr int vec_size = 8;                    \
-      __VA_ARGS__();                                 \
-      break;                                         \
-    }                                                \
-    case 4: {                                        \
-      constexpr int vec_size = 4;                    \
-      __VA_ARGS__();                                 \
-      break;                                         \
-    }                                                \
-    case 2: {                                        \
-      constexpr int vec_size = 2;                    \
-      __VA_ARGS__();                                 \
-      break;                                         \
-    }                                                \
-    default: {                                       \
-      constexpr int vec_size = 1;                    \
-      __VA_ARGS__();                                 \
-      break;                                         \
-    }                                                \
+  switch (VEC_SIZE) {                                     \
+    case 16: {                                            \
+      constexpr int vec_size = 16;                        \
+      __VA_ARGS__();                                      \
+      break;                                              \
+    }                                                     \
+    case 8: {                                             \
+      constexpr int vec_size = 8;                         \
+      __VA_ARGS__();                                      \
+      break;                                              \
+    }                                                     \
+    case 4: {                                             \
+      constexpr int vec_size = 4;                         \
+      __VA_ARGS__();                                      \
+      break;                                              \
+    }                                                     \
+    case 2: {                                             \
+      constexpr int vec_size = 2;                         \
+      __VA_ARGS__();                                      \
+      break;                                              \
+    }                                                     \
+    default: {                                            \
+      constexpr int vec_size = 1;                         \
+      __VA_ARGS__();                                      \
+      break;                                              \
+    }                                                     \
   }
 
 // Tensor rank dispatch (2D, 3D, 4D)
-#define APHRODITE_STABLE_DISPATCH_RANK234(NUM_DIMS, ...)                          \
+#define APHRODITE_STABLE_DISPATCH_RANK234(NUM_DIMS, ...)                     \
   switch (NUM_DIMS) {                                                        \
     case 2: {                                                                \
       constexpr int tensor_rank = 2;                                         \

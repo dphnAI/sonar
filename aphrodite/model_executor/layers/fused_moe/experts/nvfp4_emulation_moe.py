@@ -148,20 +148,13 @@ def fused_moe_nvfp4_emulation_kernel(
     offs_k_packed = tl.arange(0, BLOCK_SIZE_K_PACKED)
 
     # A pointers: [BLOCK_SIZE_M, BLOCK_SIZE_K]
-    a_ptrs = a_ptr + (
-        offs_token[:, None] // top_k * stride_am + offs_k[None, :] * stride_ak
-    )
+    a_ptrs = a_ptr + (offs_token[:, None] // top_k * stride_am + offs_k[None, :] * stride_ak)
 
     # B pointers: [BLOCK_SIZE_N, BLOCK_SIZE_K_PACKED] — N-major so that
     # tl.interleave (which operates on the last dim) produces a
     # [BLOCK_SIZE_N, BLOCK_SIZE_K] tile that we transpose for tl.dot.
     # Each unique byte is loaded exactly once.
-    b_ptrs = (
-        b_ptr
-        + off_experts * stride_be
-        + offs_bn[:, None] * stride_bn
-        + offs_k_packed[None, :] * stride_bk
-    )
+    b_ptrs = b_ptr + off_experts * stride_be + offs_bn[:, None] * stride_bn + offs_k_packed[None, :] * stride_bk
 
     # B_scale pointers: [BLOCK_SIZE_N, BLOCK_SIZE_K_PACKED] — same
     # N-major layout.  Each packed byte index covers 2 K elements that
@@ -214,8 +207,7 @@ def fused_moe_nvfp4_emulation_kernel(
             b_scale_ptr
             + off_experts * stride_bse
             + offs_bn[:, None] * stride_bsn
-            + ((offs_k_packed[None, :] + BLOCK_SIZE_K_PACKED * k) // group_size_packed)
-            * stride_bsk
+            + ((offs_k_packed[None, :] + BLOCK_SIZE_K_PACKED * k) // group_size_packed) * stride_bsk
         )
         if block_k_diviable:
             b_scale_raw = tl.load(b_scale_ptrs)
@@ -291,9 +283,7 @@ def invoke_fused_moe_nvfp4_emulation_kernel(
             A.size(0) * top_k * config["BLOCK_SIZE_M"],
         )
 
-    grid = lambda META: (
-        triton.cdiv(EM, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),
-    )
+    grid = lambda META: (triton.cdiv(EM, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),)
 
     fused_moe_nvfp4_emulation_kernel[grid](
         A,
@@ -445,9 +435,7 @@ class Nvfp4QuantizationEmulationTritonExperts(TritonExperts):
         K = hidden_states.size(-1)
         assert w1.size(2) * 2 == K, f"Hidden size mismatch: {K} != {w1.size(2) * 2}"
 
-        E, num_tokens, N, _, top_k_num = self.moe_problem_size(
-            hidden_states, w1, w2, topk_ids
-        )
+        E, num_tokens, N, _, top_k_num = self.moe_problem_size(hidden_states, w1, w2, topk_ids)
 
         if global_num_experts == -1:
             global_num_experts = E
@@ -474,9 +462,7 @@ class Nvfp4QuantizationEmulationTritonExperts(TritonExperts):
 
         intermediate_cache1 = _resize_cache(workspace2, (num_tokens, top_k_num, N))
         activation_out_dim = self.adjust_N_for_activation(N, activation)
-        intermediate_cache2 = _resize_cache(
-            workspace13, (num_tokens * top_k_num, activation_out_dim)
-        )
+        intermediate_cache2 = _resize_cache(workspace13, (num_tokens * top_k_num, activation_out_dim))
         intermediate_cache3 = _resize_cache(workspace2, (num_tokens, top_k_num, K))
 
         sorted_token_ids, expert_ids, num_tokens_post_padded = moe_align_block_size(
@@ -513,9 +499,7 @@ class Nvfp4QuantizationEmulationTritonExperts(TritonExperts):
             compute_type=compute_type,
         )
 
-        self.activation(
-            activation, intermediate_cache2, intermediate_cache1.view(-1, N)
-        )
+        self.activation(activation, intermediate_cache2, intermediate_cache1.view(-1, N))
 
         # Activation NVFP4 QDQ.
         intermediate_cache2_qdq, _ = moe_kernel_quantize_input(

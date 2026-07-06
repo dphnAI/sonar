@@ -7,7 +7,7 @@ import pytest
 import torch
 from transformers import SiglipModel
 
-from ....conftest import IMAGE_ASSETS, HfRunner, PromptImageInput, AphroditeRunner
+from ....conftest import IMAGE_ASSETS, AphroditeRunner, HfRunner, PromptImageInput
 from ...utils import check_embeddings_close
 
 HF_TEXT_PROMPTS = [
@@ -58,9 +58,7 @@ def _run_test(
         )
 
     with hf_runner(model, dtype=dtype, auto_cls=SiglipModel) as hf_model:
-        all_inputs = hf_model.get_inputs(
-            input_texts, images=input_images, tokenization_kwargs=tokenization_kwargs
-        )
+        all_inputs = hf_model.get_inputs(input_texts, images=input_images, tokenization_kwargs=tokenization_kwargs)
 
         all_outputs = []
         for inputs in all_inputs:
@@ -129,9 +127,7 @@ def test_models_image(
     model: str,
     dtype: str,
 ) -> None:
-    input_texts_images = [
-        (text, asset.pil_image) for text, asset in zip(HF_IMAGE_PROMPTS, image_assets)
-    ]
+    input_texts_images = [(text, asset.pil_image) for text, asset in zip(HF_IMAGE_PROMPTS, image_assets)]
     input_texts = [text for text, _ in input_texts_images]
     input_images = [image for _, image in input_texts_images]
 

@@ -3,7 +3,7 @@
 
 from collections.abc import Sequence
 
-from aphrodite.config import ModelConfig, PoolerConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig, PoolerConfig
 from aphrodite.entrypoints.openai.engine.protocol import UsageInfo
 from aphrodite.entrypoints.pooling.base.protocol import EmbedRequestMixin
 from aphrodite.inputs import PromptType
@@ -22,9 +22,7 @@ from .types import (
 )
 
 
-class BgeM3SparseEmbeddingsProcessor(
-    IOProcessor[SparseEmbeddingCompletionRequestMixin, SparseEmbeddingResponse]
-):
+class BgeM3SparseEmbeddingsProcessor(IOProcessor[SparseEmbeddingCompletionRequestMixin, SparseEmbeddingResponse]):
     def __init__(self, aphrodite_config: AphroditeConfig, renderer: BaseRenderer):
         super().__init__(aphrodite_config, renderer)
         self.offline_requests: list[SparseEmbeddingCompletionRequestMixin] = []
@@ -59,10 +57,7 @@ class BgeM3SparseEmbeddingsProcessor(
 
         raw_embed_request = self.embed_request_queue.pop(0)
         if raw_embed_request.embed_task not in EMBED_TASKS:
-            raise ValueError(
-                f"Unsupported task {raw_embed_request}, "
-                f"Supported tasks are {EMBED_TASKS}"
-            )
+            raise ValueError(f"Unsupported task {raw_embed_request}, Supported tasks are {EMBED_TASKS}")
         params.task = "embed&token_classify"
         params.use_activation = raw_embed_request.use_activation
         if params.use_activation is None:
@@ -96,9 +91,7 @@ class BgeM3SparseEmbeddingsProcessor(
                 raise ValueError("Dimensions must be greater than 0")
         return params
 
-    def parse_request(
-        self, request_data: object
-    ) -> SparseEmbeddingCompletionRequestMixin:
+    def parse_request(self, request_data: object) -> SparseEmbeddingCompletionRequestMixin:
         # for aphrodite.entrypoints.llm.LLM, offline mode, calls `encode` directly.
         if isinstance(request_data, dict):
             return SparseEmbeddingCompletionRequestMixin(**request_data)
@@ -134,16 +127,10 @@ class BgeM3SparseEmbeddingsProcessor(
         tokens = [None] * len(token_ids)
 
         if return_tokens and self.renderer is not None:
-            tokens = convert_ids_list_to_tokens(
-                self.renderer.get_tokenizer(), token_ids
-            )
+            tokens = convert_ids_list_to_tokens(self.renderer.get_tokenizer(), token_ids)
         sparse_embedding_output: list[SparseEmbeddingTokenWeight] = []
         for token_id, weight, token in zip(token_ids, token_weights, tokens):
-            sparse_embedding_output.append(
-                SparseEmbeddingTokenWeight(
-                    token_id=token_id, weight=weight, token=token
-                )
-            )
+            sparse_embedding_output.append(SparseEmbeddingTokenWeight(token_id=token_id, weight=weight, token=token))
         return sparse_embedding_output
 
     def post_process(
@@ -157,11 +144,7 @@ class BgeM3SparseEmbeddingsProcessor(
         raw_request = self._get_sparse_embedding_request(request_id)
         has_dense_embed = raw_request.embed_task in ["dense", "dense&sparse"]
         has_sparse_embed = raw_request.embed_task in ["sparse", "dense&sparse"]
-        embed_dimensions = (
-            self.embed_dimensions
-            if raw_request.dimensions is None
-            else raw_request.dimensions
-        )
+        embed_dimensions = self.embed_dimensions if raw_request.dimensions is None else raw_request.dimensions
         for idx in range(len(model_output)):
             mo = model_output[idx]
             sparse_embedding_dict: dict[int, float] = {}
@@ -177,9 +160,7 @@ class BgeM3SparseEmbeddingsProcessor(
                     # which means first token and last token are special tokens
                     mo.prompt_token_ids = mo.prompt_token_ids[1:]
                 for token_id, weight in zip(mo.prompt_token_ids, sparse_weights):
-                    sparse_embedding_dict[token_id] = max(
-                        weight, sparse_embedding_dict.get(token_id, 0.0)
-                    )
+                    sparse_embedding_dict[token_id] = max(weight, sparse_embedding_dict.get(token_id, 0.0))
                 sparse_embedding = self._build_sparse_embedding_token_weights(
                     sparse_embedding_dict,
                     raw_request.return_tokens,

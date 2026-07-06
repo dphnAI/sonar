@@ -59,9 +59,7 @@ class FlexKVConnectorV1(KVConnectorBase_V1):
         role: KVConnectorRole,
         kv_cache_config: "KVCacheConfig",
     ):
-        super().__init__(
-            aphrodite_config=aphrodite_config, role=role, kv_cache_config=kv_cache_config
-        )
+        super().__init__(aphrodite_config=aphrodite_config, role=role, kv_cache_config=kv_cache_config)
         try:
             from flexkv.integration.aphrodite.aphrodite_v1_adapter import FlexKVConnectorV1Impl
         except ImportError as e:
@@ -132,9 +130,7 @@ class FlexKVConnectorV1(KVConnectorBase_V1):
             attn_metadata (AttentionMetadata): the attention metadata (unused).
             **kwargs (Any): additional arguments (unused).
         """
-        self._flexkv_connector.save_kv_layer(
-            layer_name, kv_layer, attn_metadata, **kwargs
-        )
+        self._flexkv_connector.save_kv_layer(layer_name, kv_layer, attn_metadata, **kwargs)
 
     def wait_for_save(self):
         """No-op for FlexKV (currently).
@@ -149,9 +145,7 @@ class FlexKVConnectorV1(KVConnectorBase_V1):
         """
         self._flexkv_connector.wait_for_save()
 
-    def get_finished(
-        self, finished_req_ids: set[str]
-    ) -> tuple[set[str] | None, set[str] | None]:
+    def get_finished(self, finished_req_ids: set[str]) -> tuple[set[str] | None, set[str] | None]:
         """Notify worker-side connector of requests that have finished
         generating tokens.
 
@@ -193,21 +187,13 @@ class FlexKVConnectorV1(KVConnectorBase_V1):
             num_external_tokens is the number of additional tokens that
             can be loaded from the external KV cache.
         """
-        return self._flexkv_connector.get_num_new_matched_tokens(
-            request, num_computed_tokens
-        )
+        return self._flexkv_connector.get_num_new_matched_tokens(request, num_computed_tokens)
 
-    def update_state_after_alloc(
-        self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int
-    ):
+    def update_state_after_alloc(self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int):
         """Update KVConnector state after block allocation."""
-        self._flexkv_connector.update_state_after_alloc(
-            request, blocks, num_external_tokens
-        )
+        self._flexkv_connector.update_state_after_alloc(request, blocks, num_external_tokens)
 
-    def build_connector_meta(
-        self, scheduler_output: SchedulerOutput
-    ) -> KVConnectorMetadata:
+    def build_connector_meta(self, scheduler_output: SchedulerOutput) -> KVConnectorMetadata:
         """Build the connector metadata for this step.
 
         This function should NOT modify fields in the scheduler_output.

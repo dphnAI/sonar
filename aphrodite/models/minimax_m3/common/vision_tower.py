@@ -93,11 +93,7 @@ class MiniMaxVLAttention(nn.Module):
     ) -> None:
         super().__init__()
         use_data_parallel = is_vit_use_data_parallel()
-        self.tp_size = (
-            1
-            if use_data_parallel
-            else parallel_state.get_tensor_model_parallel_world_size()
-        )
+        self.tp_size = 1 if use_data_parallel else parallel_state.get_tensor_model_parallel_world_size()
         self.head_dim = embed_dim // num_heads
         self.num_heads_per_partition = dist_utils.divide(num_heads, self.tp_size)
 
@@ -128,9 +124,7 @@ class MiniMaxVLAttention(nn.Module):
         # rotation (ro_dim = half_rot_dim * 2 < head_dim for MiniMax).
         # enable_fp32_compute=True runs the rotation in fp32 (q/k upcast,
         # fp32 cos/sin), matching the reference ``_minimax_rope_applier``.
-        self.apply_rotary_emb = ApplyRotaryEmb(
-            enforce_enable=True, enable_fp32_compute=True
-        )
+        self.apply_rotary_emb = ApplyRotaryEmb(enforce_enable=True, enable_fp32_compute=True)
 
     def _apply_rotary_emb(
         self,
@@ -202,12 +196,8 @@ class MiniMaxVLAttention(nn.Module):
         # rotary_cos/sin: (N, half_rot_dim) — ApplyRotaryEmb expands internally
         # and rotates only the first 2*half_rot_dim dims, passing the rest through.
         qk_reshaped = rearrange(qk, "b s two h d -> (two b) s h d", two=2).contiguous()
-        qk_rotated = self._apply_rotary_emb(
-            qk_reshaped, rotary_cos, rotary_sin, seq_len, rotary_segment_lengths
-        )
-        qk_rotated = qk_rotated.view(
-            2, batch_size, seq_len, self.num_heads_per_partition, self.head_dim
-        )
+        qk_rotated = self._apply_rotary_emb(qk_reshaped, rotary_cos, rotary_sin, seq_len, rotary_segment_lengths)
+        qk_rotated = qk_rotated.view(2, batch_size, seq_len, self.num_heads_per_partition, self.head_dim)
         q, k = qk_rotated.unbind(dim=0)  # each (b=1, N, heads, head_dim)
 
         # Flash attention → (b, N, heads, head_dim)
@@ -300,11 +290,7 @@ class MiniMaxVLEncoder(nn.Module):
         prefix: str = "",
     ) -> None:
         super().__init__()
-        n = (
-            config.num_hidden_layers
-            if num_hidden_layers_override is None
-            else num_hidden_layers_override
-        )
+        n = config.num_hidden_layers if num_hidden_layers_override is None else num_hidden_layers_override
         self.layers = nn.ModuleList(
             [
                 MiniMaxVLEncoderLayer(
@@ -358,9 +344,7 @@ class MiniMaxVLVisionTransformer(nn.Module):
         compression = config.img_token_compression_config
         self.spatial_merge_size: int = compression.get("spatial_merge_size", 2)
         self.temporal_patch_size: int = compression.get("temporal_patch_size", 2)
-        self.vision_segment_max_frames: int | None = getattr(
-            config, "vision_segment_max_frames", None
-        )
+        self.vision_segment_max_frames: int | None = getattr(config, "vision_segment_max_frames", None)
         self.use_data_parallel = is_vit_use_data_parallel()
 
         embed_dim = config.hidden_size
@@ -369,14 +353,8 @@ class MiniMaxVLVisionTransformer(nn.Module):
         # Defaults to FLASH_ATTN on SM80+; --mm-encoder-attn-backend FLASHINFER
         # selects the cuDNN ViT prefill path.
         self.hidden_size = embed_dim
-        self.tp_size = (
-            1
-            if self.use_data_parallel
-            else parallel_state.get_tensor_model_parallel_world_size()
-        )
-        self.attn_backend = get_vit_attn_backend(
-            head_size=head_dim, dtype=torch.get_default_dtype()
-        )
+        self.tp_size = 1 if self.use_data_parallel else parallel_state.get_tensor_model_parallel_world_size()
+        self.attn_backend = get_vit_attn_backend(head_size=head_dim, dtype=torch.get_default_dtype())
         rope_dims = 2 * (head_dim // 2)
 
         # Split rope dims evenly across t/h/w (same formula as the reference)
@@ -386,18 +364,9 @@ class MiniMaxVLVisionTransformer(nn.Module):
         # rot_dim = t_dim + h_dim + w_dim (may be < head_dim)
 
         rope_theta: float = getattr(config, "rope_theta", 10000.0)
-        inv_freq_t = 1.0 / (
-            rope_theta
-            ** (torch.arange(0, self.t_dim, 2, dtype=torch.float32) / self.t_dim)
-        )
-        inv_freq_h = 1.0 / (
-            rope_theta
-            ** (torch.arange(0, self.h_dim, 2, dtype=torch.float32) / self.h_dim)
-        )
-        inv_freq_w = 1.0 / (
-            rope_theta
-            ** (torch.arange(0, self.w_dim, 2, dtype=torch.float32) / self.w_dim)
-        )
+        inv_freq_t = 1.0 / (rope_theta ** (torch.arange(0, self.t_dim, 2, dtype=torch.float32) / self.t_dim))
+        inv_freq_h = 1.0 / (rope_theta ** (torch.arange(0, self.h_dim, 2, dtype=torch.float32) / self.h_dim))
+        inv_freq_w = 1.0 / (rope_theta ** (torch.arange(0, self.w_dim, 2, dtype=torch.float32) / self.w_dim))
         self.register_buffer("inv_freq_t", inv_freq_t, persistent=False)
         self.register_buffer("inv_freq_h", inv_freq_h, persistent=False)
         self.register_buffer("inv_freq_w", inv_freq_w, persistent=False)
@@ -417,20 +386,14 @@ class MiniMaxVLVisionTransformer(nn.Module):
 
         if require_post_norm is None:
             require_post_norm = num_hidden_layers_override == n_layers
-        self.post_layernorm = (
-            nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-            if require_post_norm
-            else None
-        )
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps) if require_post_norm else None
 
         # out_hidden_size needed by run_dp_sharded_mrope_vision_model
         self.out_hidden_size = embed_dim
 
     # ── RoPE helpers ─────────────────────────────────────────────────────
 
-    def _get_3d_rope_embed(
-        self, grid_t: int, grid_h: int, grid_w: int, spatial_merge_size: int
-    ) -> torch.Tensor:
+    def _get_3d_rope_embed(self, grid_t: int, grid_h: int, grid_w: int, spatial_merge_size: int) -> torch.Tensor:
         """Compute 3D RoPE frequencies for a single (T, H, W) grid.
 
         Returns (T*H*W, half_rot_dim) on the same device as inv_freq buffers.
@@ -439,10 +402,7 @@ class MiniMaxVLVisionTransformer(nn.Module):
         tokens_per_frame = grid_h * grid_w
 
         tpos_ids = (
-            torch.arange(grid_t, device=self.inv_freq_t.device)
-            .unsqueeze(1)
-            .expand(-1, tokens_per_frame)
-            .flatten()
+            torch.arange(grid_t, device=self.inv_freq_t.device).unsqueeze(1).expand(-1, tokens_per_frame).flatten()
         )
 
         hpos_ids = (
@@ -479,27 +439,17 @@ class MiniMaxVLVisionTransformer(nn.Module):
         max_t = max(grid_t, 1)
         max_hw = max(grid_h, grid_w)
 
-        seq_t = torch.arange(
-            max_t, device=self.inv_freq_t.device, dtype=self.inv_freq_t.dtype
-        )
-        seq_hw = torch.arange(
-            max_hw, device=self.inv_freq_h.device, dtype=self.inv_freq_h.dtype
-        )
+        seq_t = torch.arange(max_t, device=self.inv_freq_t.device, dtype=self.inv_freq_t.dtype)
+        seq_hw = torch.arange(max_hw, device=self.inv_freq_h.device, dtype=self.inv_freq_h.dtype)
 
         freqs_t = torch.outer(seq_t, self.inv_freq_t)  # (max_t, t_dim/2)
         freqs_h = torch.outer(seq_hw, self.inv_freq_h)  # (max_hw, h_dim/2)
         freqs_w = torch.outer(seq_hw, self.inv_freq_w)  # (max_hw, w_dim/2)
 
-        return torch.cat(
-            [freqs_t[tpos_ids], freqs_h[hpos_ids], freqs_w[wpos_ids]], dim=-1
-        )  # (T*H*W, half_rot_dim)
+        return torch.cat([freqs_t[tpos_ids], freqs_h[hpos_ids], freqs_w[wpos_ids]], dim=-1)  # (T*H*W, half_rot_dim)
 
-    def _get_rope_embed_3d(
-        self, grid_thw: list[list[int]], spatial_merge_size: int
-    ) -> torch.Tensor:
-        embeds = [
-            self._get_3d_rope_embed(t, h, w, spatial_merge_size) for t, h, w in grid_thw
-        ]
+    def _get_rope_embed_3d(self, grid_thw: list[list[int]], spatial_merge_size: int) -> torch.Tensor:
+        embeds = [self._get_3d_rope_embed(t, h, w, spatial_merge_size) for t, h, w in grid_thw]
         return torch.cat(embeds, dim=0)  # (total_N, half_rot_dim)
 
     # ── Frame-limit helper (mirrors the reference) ───────────────────────
@@ -541,9 +491,7 @@ class MiniMaxVLVisionTransformer(nn.Module):
         # token cu_seqlens, the max segment length, and sequence_lengths=None;
         # for FLASHINFER (cuDNN) it repacks cu_seqlens into element-offset
         # indptrs, buckets max_seqlen, and builds padded per-sequence lengths.
-        sequence_lengths = MMEncoderAttention.maybe_compute_seq_lens(
-            self.attn_backend, cu_seqlens_np, hidden.device
-        )
+        sequence_lengths = MMEncoderAttention.maybe_compute_seq_lens(self.attn_backend, cu_seqlens_np, hidden.device)
         max_seqlen = torch.tensor(
             MMEncoderAttention.compute_max_seqlen(self.attn_backend, cu_seqlens_np),
             dtype=torch.int32,
@@ -705,9 +653,7 @@ class MiniMaxVLVisionModel(nn.Module):
             vision_hidden_size=config.hidden_size,
             text_hidden_size=text_hidden_size,
             projector_hidden_size=projector_hidden_size,
-            multimodal_projector_bias=getattr(
-                config, "multimodal_projector_bias", True
-            ),
+            multimodal_projector_bias=getattr(config, "multimodal_projector_bias", True),
             projector_hidden_act=getattr(config, "projector_hidden_act", "gelu"),
             quant_config=quant_config,
             prefix=maybe_prefix(prefix, "multi_modal_projector"),

@@ -40,10 +40,7 @@ def _get_numeric(
     try:
         numeric = float(value)
     except (TypeError, ValueError) as exc:
-        raise ValueError(
-            f"Expected numeric value for one of {keys}, "
-            f"but found {value!r} in {run_data=}"
-        ) from exc
+        raise ValueError(f"Expected numeric value for one of {keys}, but found {value!r} in {run_data=}") from exc
 
     if not allow_zero and numeric == 0:
         return None
@@ -95,8 +92,7 @@ def _get_throughput(
     throughput = _get_numeric(run_data, [throughput_var])
     if throughput is None:
         raise ValueError(
-            f"Cannot find throughput metric {throughput_var!r} in run data. "
-            f"Available keys: {sorted(run_data)}"
+            f"Cannot find throughput metric {throughput_var!r} in run data. Available keys: {sorted(run_data)}"
         )
 
     return throughput
@@ -264,11 +260,7 @@ def plot_pareto(
     dry_run: bool,
 ):
     fig_dir = output_dir / "pareto"
-    raw_data = [
-        run_data
-        for path in output_dir.rglob("**/summary.json")
-        for run_data in _json_load_bytes(path)
-    ]
+    raw_data = [run_data for path in output_dir.rglob("**/summary.json") for run_data in _json_load_bytes(path)]
 
     if not raw_data:
         raise ValueError(f"Did not find any parameter sweep results under {output_dir}")
@@ -289,8 +281,7 @@ def plot_pareto(
 
     if not prepared_data:
         raise ValueError(
-            "No data points with both throughput and user count available "
-            "to plot Pareto frontier.",
+            "No data points with both throughput and user count available to plot Pareto frontier.",
         )
 
     fig_groups = full_groupby(
@@ -322,8 +313,7 @@ class SweepPlotParetoArgs:
 
     parser_name: ClassVar[str] = "plot_pareto"
     parser_help: ClassVar[str] = (
-        "Plot Pareto frontier between tokens/s/user and tokens/s/GPU "
-        "from parameter sweep results."
+        "Plot Pareto frontier between tokens/s/user and tokens/s/GPU from parameter sweep results."
     )
 
     @classmethod
@@ -353,8 +343,7 @@ class SweepPlotParetoArgs:
             "--user-count-var",
             type=str,
             default="max_concurrency",
-            help="Result key that stores concurrent user count. "
-            "Falls back to max_concurrent_requests if missing.",
+            help="Result key that stores concurrent user count. Falls back to max_concurrent_requests if missing.",
         )
         parser.add_argument(
             "--gpu-count-var",
@@ -368,8 +357,7 @@ class SweepPlotParetoArgs:
             "--label-by",
             type=str,
             default="max_concurrency,gpu_count",
-            help="Comma-separated list of fields to annotate on Pareto frontier "
-            "points.",
+            help="Comma-separated list of fields to annotate on Pareto frontier points.",
         )
         parser.add_argument(
             "--dry-run",

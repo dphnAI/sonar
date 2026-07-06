@@ -26,9 +26,7 @@ def adapt_config_dict(
         config_dict = _remap_mistral_mla_args(config_dict)
 
     is_moe = bool(config_dict.get("moe"))
-    is_mistral_large_3 = (
-        is_moe and (config_dict["moe"].get("num_shared_experts") or 0) > 0
-    )
+    is_mistral_large_3 = is_moe and (config_dict["moe"].get("num_shared_experts") or 0) > 0
     if config_dict.get("model_type") == "mamba":
         config_dict["architectures"] = ["Mamba2ForCausalLM"]
     elif is_moe and is_mistral_large_3:
@@ -36,18 +34,10 @@ def adapt_config_dict(
         config_dict["model_type"] = "deepseek_v3"
         config_dict["architectures"] = ["MistralLarge3ForCausalLM"]
 
-        assert "llama_4_scaling" in config_dict, (
-            "MistralLarge3 expect llama4 scaling config."
-        )
+        assert "llama_4_scaling" in config_dict, "MistralLarge3 expect llama4 scaling config."
         llama_4_scaling_config_keys = ["original_max_position_embeddings", "beta"]
-        assert all(
-            [
-                key in config_dict["llama_4_scaling"]
-                for key in llama_4_scaling_config_keys
-            ]
-        ), (
-            "llama_4_scaling config should define the keys: "
-            f"{','.join(llama_4_scaling_config_keys)}"
+        assert all([key in config_dict["llama_4_scaling"] for key in llama_4_scaling_config_keys]), (
+            f"llama_4_scaling config should define the keys: {','.join(llama_4_scaling_config_keys)}"
         )
     elif is_moe:
         config_dict["architectures"] = ["MixtralForCausalLM"]
@@ -59,24 +49,12 @@ def adapt_config_dict(
 
     if bool(config_dict.get("llama_4_scaling")):
         llama_4_scaling_config_keys = ["original_max_position_embeddings", "beta"]
-        assert all(
-            [
-                key in config_dict["llama_4_scaling"]
-                for key in llama_4_scaling_config_keys
-            ]
-        ), (
-            "llama_4_scaling config should define the keys: "
-            f"{','.join(llama_4_scaling_config_keys)}"
+        assert all([key in config_dict["llama_4_scaling"] for key in llama_4_scaling_config_keys]), (
+            f"llama_4_scaling config should define the keys: {','.join(llama_4_scaling_config_keys)}"
         )
 
-    is_vision = (config_dict.get("multimodal") or {}).get(
-        "vision_encoder_args"
-    ) or config_dict.get("vision_encoder")
-    is_audio = bool(
-        ((config_dict.get("multimodal") or {}).get("whisper_model_args") or {}).get(
-            "encoder_args"
-        )
-    )
+    is_vision = (config_dict.get("multimodal") or {}).get("vision_encoder_args") or config_dict.get("vision_encoder")
+    is_audio = bool(((config_dict.get("multimodal") or {}).get("whisper_model_args") or {}).get("encoder_args"))
 
     assert not (is_vision and is_audio), "Vision and audio are mutually exclusive"
 
@@ -185,8 +163,7 @@ def _remap_mistral_sliding_window(config: dict) -> dict:
             pattern_repeats = config["num_hidden_layers"] // len(sliding_window)
             layer_types = sliding_window * pattern_repeats
             config["layer_types"] = [
-                "full_attention" if layer_type is None else "sliding_attention"
-                for layer_type in layer_types
+                "full_attention" if layer_type is None else "sliding_attention" for layer_type in layer_types
             ]
             assert len(set(sliding_window) - {None}) <= 1, sliding_window
             config["sliding_window"] = next(filter(None, sliding_window), None)
@@ -211,10 +188,7 @@ def _remap_mistral_quantization_args(config: dict) -> dict:
                 "quant_method": "fp8",
                 "activation_scheme": "dynamic" if is_dynamic else "static",
             }
-        elif (
-            str(quantization.get("quant_method", "")).lower().replace("_", "-")
-            == "compressed-tensors"
-        ):
+        elif str(quantization.get("quant_method", "")).lower().replace("_", "-") == "compressed-tensors":
             # Pass through compressed-tensors config, while normalizing
             # quant_method to the canonical community spelling.
             quantization["quant_method"] = "compressed-tensors"
@@ -240,11 +214,7 @@ def _remap_mistral_audio_args(config: dict) -> dict:
     else:
         block_pool_size = 1
 
-    architecture = (
-        "VoxtralRealtimeGeneration"
-        if encoder_args.get("causal")
-        else "VoxtralForConditionalGeneration"
-    )
+    architecture = "VoxtralRealtimeGeneration" if encoder_args.get("causal") else "VoxtralForConditionalGeneration"
 
     quant_config = config.get("quantization_config")
     config = {
@@ -268,9 +238,7 @@ def _remap_mistral_audio_args(config: dict) -> dict:
             sliding_window=encoder_args.get("sliding_window", None),
             block_pool_size=block_pool_size,
             pos_embed=encoder_args.get("pos_embed", "sinusoidal"),
-            global_log_mel_max=encoder_args["audio_encoding_args"].get(
-                "global_log_mel_max"
-            ),
+            global_log_mel_max=encoder_args["audio_encoding_args"].get("global_log_mel_max"),
             # only needed for RoPE
             max_position_embeddings=block_pool_size * config["max_position_embeddings"],
         ),

@@ -4,8 +4,6 @@
 import pytest
 import torch
 
-from tests.v1.attention.test_attention_backends import BATCH_SPECS
-from tests.v1.attention.utils import BatchSpec, create_common_attn_metadata
 from aphrodite.v1.attention.backends.utils import (
     split_decodes_and_prefills,
 )
@@ -16,6 +14,8 @@ from aphrodite.v1.worker.ubatch_utils import (
     slice_query_start_locs,
     split_attn_metadata,
 )
+from tests.v1.attention.test_attention_backends import BATCH_SPECS
+from tests.v1.attention.utils import BatchSpec, create_common_attn_metadata
 
 
 @pytest.fixture
@@ -183,8 +183,8 @@ def apply_split_decodes_and_prefills(
 
 def test_split_decodes_and_prefills_nonuniform_all_ones():
     query_lens = [1, 1, 1]
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
-        apply_split_decodes_and_prefills(query_lens, 1, False)
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
+        query_lens, 1, False
     )
     assert num_decodes == 3
     assert num_prefills == 0
@@ -194,8 +194,8 @@ def test_split_decodes_and_prefills_nonuniform_all_ones():
 
 def test_split_decodes_and_prefills_nonuniform_all_short_decodes():
     query_lens = [1, 2, 1, 3, 2, 1, 2]
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
-        apply_split_decodes_and_prefills(query_lens, 3, False)
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
+        query_lens, 3, False
     )
     assert num_decodes == 7
     assert num_prefills == 0
@@ -205,8 +205,8 @@ def test_split_decodes_and_prefills_nonuniform_all_short_decodes():
 
 def test_split_decodes_and_prefills_nonuniform_all_prefills():
     query_lens = [4, 5, 6, 7]
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
-        apply_split_decodes_and_prefills(query_lens, 3, False)
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
+        query_lens, 3, False
     )
     assert num_decodes == 0
     assert num_prefills == 4
@@ -216,8 +216,8 @@ def test_split_decodes_and_prefills_nonuniform_all_prefills():
 
 def test_split_decodes_and_prefills_nonuniform_mixed_batch():
     query_lens = [2, 1, 3, 4, 5, 6, 7, 8]
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
-        apply_split_decodes_and_prefills(query_lens, 4, False)
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
+        query_lens, 4, False
     )
     assert num_decodes == 4  # 2, 1, 3, 4 are all <= 4
     assert num_prefills == 4  # 5, 6, 7, 8 are all > 4
@@ -227,8 +227,8 @@ def test_split_decodes_and_prefills_nonuniform_mixed_batch():
 
 def test_split_decodes_and_prefills_uniform_all_ones():
     query_lens = [1, 1, 1]
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
-        apply_split_decodes_and_prefills(query_lens, 1, True)
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
+        query_lens, 1, True
     )
     assert num_decodes == 3
     assert num_prefills == 0
@@ -238,8 +238,8 @@ def test_split_decodes_and_prefills_uniform_all_ones():
 
 def test_split_decodes_and_prefills_uniform_all_short_decodes():
     query_lens = [2, 2, 1, 3, 2, 1, 2]
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
-        apply_split_decodes_and_prefills(query_lens, 3, True)
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
+        query_lens, 3, True
     )
     assert num_decodes == 2
     assert num_prefills == 5
@@ -249,8 +249,8 @@ def test_split_decodes_and_prefills_uniform_all_short_decodes():
 
 def test_split_decodes_and_prefills_uniform_all_prefills():
     query_lens = [4, 5, 6, 7]
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
-        apply_split_decodes_and_prefills(query_lens, 3, True)
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
+        query_lens, 3, True
     )
     assert num_decodes == 0
     assert num_prefills == 4
@@ -260,8 +260,8 @@ def test_split_decodes_and_prefills_uniform_all_prefills():
 
 def test_split_decodes_and_prefills_uniform_mixed_batch_all_uniform_decodes():
     query_lens = [2, 2, 2, 4, 5, 6, 7, 8]
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
-        apply_split_decodes_and_prefills(query_lens, 4, True)
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
+        query_lens, 4, True
     )
     assert num_decodes == 3  # 2, 2, 2 are all <= 4 and uniform
     assert num_prefills == 5  # 4, 5, 6, 7, 8 are all > 4
@@ -271,8 +271,8 @@ def test_split_decodes_and_prefills_uniform_mixed_batch_all_uniform_decodes():
 
 def test_split_decodes_and_prefills_uniform_mixed_batch_non_uniform_decodes():
     query_lens = [2, 1, 2, 4, 5, 6, 7, 8]
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
-        apply_split_decodes_and_prefills(query_lens, 4, True)
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
+        query_lens, 4, True
     )
     assert num_decodes == 1  # only the first 2 is taken as decode
     assert num_prefills == 7  # 1, 2, 4, 5, 6, 7, 8 are all > 4 or non-uniform
@@ -286,8 +286,8 @@ def test_split_decodes_and_prefills_uniform_padded_batch_all_same():
     # This triggers the padded uniform path at line 891
     query_lens = [2, 2, 2, 0]
     padded_num_tokens = 8
-    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
-        apply_split_decodes_and_prefills(query_lens, 3, True, padded_num_tokens)
+    num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = apply_split_decodes_and_prefills(
+        query_lens, 3, True, padded_num_tokens
     )
     # With uniform batch, all requests are treated as decodes
     assert num_decodes == 4
@@ -305,9 +305,7 @@ def test_split_decodes_and_prefills_uniform_padded_batch_all_same():
         ([32, 40], [8, 8], 4, 1, 2),
     ],
 )
-def test_prefill_split_across_ubatches(
-    seq_lens, query_lens, split_point, expected_first_reqs, expected_second_reqs
-):
+def test_prefill_split_across_ubatches(seq_lens, query_lens, split_point, expected_first_reqs, expected_second_reqs):
     """Test splitting a prefill across ubatches"""
     import numpy as np
 
@@ -347,13 +345,9 @@ def test_prefill_split_across_ubatches(
 
     # Check query length continuity: first-chunk + second-chunk == original qlen
     # First ubatch last request query length
-    qlen_first_last = int(
-        first_meta.query_start_loc_cpu[-1] - first_meta.query_start_loc_cpu[-2]
-    )
+    qlen_first_last = int(first_meta.query_start_loc_cpu[-1] - first_meta.query_start_loc_cpu[-2])
     # Second ubatch first request query length
-    qlen_second_first = int(
-        second_meta.query_start_loc_cpu[1] - second_meta.query_start_loc_cpu[0]
-    )
+    qlen_second_first = int(second_meta.query_start_loc_cpu[1] - second_meta.query_start_loc_cpu[0])
     assert qlen_first_last == tokens_in_first_chunk
     assert qlen_first_last + qlen_second_first == int(orig_q_lens[split_req_idx])
 
@@ -397,9 +391,7 @@ def test_build_attention_metadata_zeros_stale_is_prefilling():
     num_prompt = torch.tensor([50, 200, 200, 100, 200], dtype=torch.int32)
 
     runner = MagicMock()
-    runner.kv_cache_config.kv_cache_groups = [
-        MagicMock()
-    ]  # non-empty: skip early return
+    runner.kv_cache_config.kv_cache_groups = [MagicMock()]  # non-empty: skip early return
     runner.attn_groups = [[]]  # empty inner list: inner loop never runs
     runner.input_batch.num_computed_tokens_cpu_tensor = num_computed
     runner.input_batch.num_prompt_tokens_cpu_tensor = num_prompt

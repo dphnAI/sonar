@@ -282,12 +282,7 @@ def test_rust_tool_parser_adapter_streaming_prefers_model_tool_call_ids() -> Non
 
     deltas = parse_streaming(parser, build_kimi_tool_call(), chunk_size=5)
 
-    ids = [
-        tool_call.id
-        for delta in deltas
-        for tool_call in delta.tool_calls or []
-        if tool_call.id is not None
-    ]
+    ids = [tool_call.id for delta in deltas for tool_call in delta.tool_calls or [] if tool_call.id is not None]
     assert ids == KIMI_EXPECTED_IDS
     for index, (_, arguments) in enumerate(EXPECTED_CALLS):
         assert json.loads(collect_streamed_arguments(deltas, index)) == arguments

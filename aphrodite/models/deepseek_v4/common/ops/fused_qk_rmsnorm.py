@@ -62,9 +62,7 @@ def fused_q_kv_rmsnorm(
     eps: float,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     assert qr.ndim == 2 and kv.ndim == 2
-    assert qr.shape[0] == kv.shape[0], (
-        f"token dim mismatch: qr={qr.shape}, kv={kv.shape}"
-    )
+    assert qr.shape[0] == kv.shape[0], f"token dim mismatch: qr={qr.shape}, kv={kv.shape}"
     assert qr.stride(-1) == 1 and kv.stride(-1) == 1
     assert q_weight.is_contiguous() and kv_weight.is_contiguous()
 

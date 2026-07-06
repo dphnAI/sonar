@@ -16,9 +16,7 @@ def test_prefix_caching_from_cli():
     parser = EngineArgs.add_cli_args(FlexibleArgumentParser())
     args = parser.parse_args([])
     aphrodite_config = EngineArgs.from_cli_args(args=args).create_engine_config()
-    assert aphrodite_config.cache_config.enable_prefix_caching, (
-        "V1 turns on prefix caching by default."
-    )
+    assert aphrodite_config.cache_config.enable_prefix_caching, "V1 turns on prefix caching by default."
 
     # Turn it off possible with flag.
     args = parser.parse_args(["--no-enable-prefix-caching"])

@@ -37,9 +37,7 @@ def render(request: Request) -> ServingRender | None:
 async def render_chat_completion(request: ChatCompletionRequest, raw_request: Request):
     handler = render(raw_request)
     if handler is None:
-        raise NotImplementedError(
-            "The model does not support Chat Completions Render API"
-        )
+        raise NotImplementedError("The model does not support Chat Completions Render API")
 
     result = await handler.render_chat_request(request)
 

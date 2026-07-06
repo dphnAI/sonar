@@ -11,7 +11,7 @@ from aphrodite.assets.audio import AudioAsset
 from aphrodite.multimodal.audio import AudioResampler
 from aphrodite.platforms import current_platform
 
-from ....conftest import HfRunner, PromptAudioInput, AphroditeRunner
+from ....conftest import AphroditeRunner, HfRunner, PromptAudioInput
 from ....utils import create_new_process_for_each_test, multi_gpu_test
 from ...registry import HF_EXAMPLE_MODELS
 from ...utils import check_logprobs_close
@@ -193,9 +193,7 @@ def test_beam_search_encoder_decoder(
         hf_output_ids, hf_output_texts = hf_outputs[i]
         aphrodite_output_ids, aphrodite_output_texts = aphrodite_outputs[i]
 
-        for j, (hf_text, aphrodite_text) in enumerate(
-            zip(hf_output_texts, aphrodite_output_texts)
-        ):
+        for j, (hf_text, aphrodite_text) in enumerate(zip(hf_output_texts, aphrodite_output_texts)):
             print(f">>>{j}-th hf output [NOTE: special tokens are filtered]:")
             print(hf_text)
             print(f">>>{j}-th aphrodite output:")
@@ -212,9 +210,7 @@ def test_beam_search_encoder_decoder(
             # Check that outputs are not empty
             assert len(aphrodite_output_ids[j]) > 0, f"Prompt {i}, beam {j}: empty output"
             # Check that decoded text is not empty
-            assert len(aphrodite_output_texts[j].strip()) > 0, (
-                f"Prompt {i}, beam {j}: empty text output"
-            )
+            assert len(aphrodite_output_texts[j].strip()) > 0, f"Prompt {i}, beam {j}: empty text output"
 
 
 def test_parse_language_detection_output():
@@ -236,14 +232,10 @@ def test_parse_language_detection_output():
         return tok
 
     # English
-    assert (
-        cls.parse_language_detection_output([50259], make_tokenizer("<|en|>")) == "en"
-    )
+    assert cls.parse_language_detection_output([50259], make_tokenizer("<|en|>")) == "en"
 
     # German
-    assert (
-        cls.parse_language_detection_output([50261], make_tokenizer("<|de|>")) == "de"
-    )
+    assert cls.parse_language_detection_output([50261], make_tokenizer("<|de|>")) == "de"
 
     # Unsupported language code
     with pytest.raises(AssertionError):

@@ -69,9 +69,7 @@ def _test_online_quant_peak_mem_impl(
             if match:
                 model_memory_gib = float(match.group(1))
         if peak_memory_gib is None:
-            match = re.search(
-                r"Peak GPU memory after loading weights: ([\d.]+) GiB", line
-            )
+            match = re.search(r"Peak GPU memory after loading weights: ([\d.]+) GiB", line)
             if match:
                 peak_memory_gib = float(match.group(1))
 
@@ -89,9 +87,5 @@ def _test_online_quant_peak_mem_impl(
     # same time.
     expected_peak_memory_gib = expected_model_memory_gib * 1.4
 
-    assert model_memory_gib < expected_model_memory_gib, (
-        f"{model_memory_gib=} higher than {expected_model_memory_gib}"
-    )
-    assert peak_memory_gib < expected_peak_memory_gib, (
-        f"{peak_memory_gib=} higher than {expected_peak_memory_gib}"
-    )
+    assert model_memory_gib < expected_model_memory_gib, f"{model_memory_gib=} higher than {expected_model_memory_gib}"
+    assert peak_memory_gib < expected_peak_memory_gib, f"{peak_memory_gib=} higher than {expected_peak_memory_gib}"

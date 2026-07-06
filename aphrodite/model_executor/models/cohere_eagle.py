@@ -67,12 +67,8 @@ class CohereEagleModel(nn.Module):
         # absolute indices (target_layer_num + i), so prepend the target's
         # ``layer_types`` to the draft's so the lookup succeeds.
         target_text_config = aphrodite_config.model_config.hf_text_config
-        if hasattr(target_text_config, "layer_types") and hasattr(
-            self.config, "layer_types"
-        ):
-            self.config.layer_types = list(target_text_config.layer_types) + list(
-                self.config.layer_types
-            )
+        if hasattr(target_text_config, "layer_types") and hasattr(self.config, "layer_types"):
+            self.config.layer_types = list(target_text_config.layer_types) + list(self.config.layer_types)
 
         self.vocab_size = self.config.vocab_size
         self.embed_tokens = VocabParallelEmbedding(
@@ -143,9 +139,7 @@ class EagleCohereForCausalLM(CohereForCausalLM):
         # use tied embeddings so these weights are absent from the draft file.
         self.has_own_embed_tokens = False
         self.has_own_lm_head = False
-        target_layer_num = aphrodite_config.model_config.get_num_layers(
-            aphrodite_config.parallel_config
-        )
+        target_layer_num = aphrodite_config.model_config.get_num_layers(aphrodite_config.parallel_config)
         self.model = CohereEagleModel(
             aphrodite_config=aphrodite_config,
             prefix=maybe_prefix(prefix, "model"),
@@ -153,9 +147,7 @@ class EagleCohereForCausalLM(CohereForCausalLM):
         )
 
         logit_scale = getattr(self.config, "logit_scale", 1.0)
-        self.logits_processor = LogitsProcessor(
-            self.config.vocab_size, scale=logit_scale
-        )
+        self.logits_processor = LogitsProcessor(self.config.vocab_size, scale=logit_scale)
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -168,9 +160,7 @@ class EagleCohereForCausalLM(CohereForCausalLM):
         inputs_embeds: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         if inputs_embeds is not None:
-            raise NotImplementedError(
-                f"{type(self).__name__} does not support multimodal inputs yet."
-            )
+            raise NotImplementedError(f"{type(self).__name__} does not support multimodal inputs yet.")
         return self.model(input_ids, positions, hidden_states)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
@@ -181,16 +171,10 @@ class EagleCohereForCausalLM(CohereForCausalLM):
 
         loader = AutoWeightsLoader(
             self,
-            skip_prefixes=(
-                ["lm_head.", "model.embed_tokens."]
-                if self.config.tie_word_embeddings
-                else None
-            ),
+            skip_prefixes=(["lm_head.", "model.embed_tokens."] if self.config.tie_word_embeddings else None),
         )
 
-        loaded_weight_names = loader.load_weights(
-            map(_track_and_forward, weights), mapper=self.hf_to_aphrodite_mapper
-        )
+        loaded_weight_names = loader.load_weights(map(_track_and_forward, weights), mapper=self.hf_to_aphrodite_mapper)
 
         # Embed tokens are tied with the target model and therefore not
         # present in the EAGLE checkpoint; mark them as loaded explicitly to

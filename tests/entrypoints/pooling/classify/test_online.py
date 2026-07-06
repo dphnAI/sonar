@@ -6,9 +6,9 @@ import requests
 import torch
 import torch.nn.functional as F
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.entrypoints.pooling.classify.protocol import ClassificationResponse
 from aphrodite.entrypoints.pooling.pooling.protocol import PoolingResponse
+from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "jason9693/Qwen2.5-1.5B-apeach"
 DTYPE = "float32"  # Use float32 to avoid NaN issue
@@ -292,27 +292,19 @@ async def test_invocations_completion_request(server: RemoteOpenAIServer):
         "input": input_text,
     }
 
-    classification_response = requests.post(
-        server.url_for("classify"), json=request_args
-    )
+    classification_response = requests.post(server.url_for("classify"), json=request_args)
     classification_response.raise_for_status()
 
-    invocation_response = requests.post(
-        server.url_for("invocations"), json=request_args
-    )
+    invocation_response = requests.post(server.url_for("invocations"), json=request_args)
     invocation_response.raise_for_status()
 
     classification_output = classification_response.json()
     invocation_output = invocation_response.json()
 
     assert classification_output.keys() == invocation_output.keys()
-    for classification_data, invocation_data in zip(
-        classification_output["data"], invocation_output["data"]
-    ):
+    for classification_data, invocation_data in zip(classification_output["data"], invocation_output["data"]):
         assert classification_data.keys() == invocation_data.keys()
-        assert classification_data["probs"] == pytest.approx(
-            invocation_data["probs"], rel=0.01
-        )
+        assert classification_data["probs"] == pytest.approx(invocation_data["probs"], rel=0.01)
 
 
 @pytest.mark.asyncio
@@ -334,27 +326,19 @@ async def test_invocations_chat_request(server: RemoteOpenAIServer):
 
     request_args = {"model": MODEL_NAME, "messages": messages}
 
-    classification_response = requests.post(
-        server.url_for("classify"), json=request_args
-    )
+    classification_response = requests.post(server.url_for("classify"), json=request_args)
     classification_response.raise_for_status()
 
-    invocation_response = requests.post(
-        server.url_for("invocations"), json=request_args
-    )
+    invocation_response = requests.post(server.url_for("invocations"), json=request_args)
     invocation_response.raise_for_status()
 
     classification_output = classification_response.json()
     invocation_output = invocation_response.json()
 
     assert classification_output.keys() == invocation_output.keys()
-    for classification_data, invocation_data in zip(
-        classification_output["data"], invocation_output["data"]
-    ):
+    for classification_data, invocation_data in zip(classification_output["data"], invocation_output["data"]):
         assert classification_data.keys() == invocation_data.keys()
-        assert classification_data["probs"] == pytest.approx(
-            invocation_data["probs"], rel=0.01
-        )
+        assert classification_data["probs"] == pytest.approx(invocation_data["probs"], rel=0.01)
 
 
 @pytest.mark.asyncio
@@ -376,12 +360,8 @@ async def test_use_activation(server: RemoteOpenAIServer, model_name: str):
     w_activation = await get_outputs(use_activation=True)
     wo_activation = await get_outputs(use_activation=False)
 
-    assert torch.allclose(default, w_activation, atol=1e-2), (
-        "Default should use activation."
-    )
-    assert not torch.allclose(w_activation, wo_activation, atol=1e-2), (
-        "wo_activation should not use activation."
-    )
+    assert torch.allclose(default, w_activation, atol=1e-2), "Default should use activation."
+    assert not torch.allclose(w_activation, wo_activation, atol=1e-2), "wo_activation should not use activation."
     assert torch.allclose(F.softmax(wo_activation, dim=-1), w_activation, atol=1e-2), (
         "w_activation should be close to activation(wo_activation)."
     )
@@ -437,9 +417,7 @@ async def test_pooling_classify(server: RemoteOpenAIServer, model_name: str):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
 @pytest.mark.parametrize("task", ["embed", "token_embed", "token_classify", "plugin"])
-async def test_pooling_not_supported(
-    server: RemoteOpenAIServer, model_name: str, task: str
-):
+async def test_pooling_not_supported(server: RemoteOpenAIServer, model_name: str, task: str):
     response = requests.post(
         server.url_for("pooling"),
         json={

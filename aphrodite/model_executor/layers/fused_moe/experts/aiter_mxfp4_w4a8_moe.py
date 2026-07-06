@@ -41,16 +41,10 @@ def aiter_triton_kernel_w4a8_moe_forward(
     unpadded_N_w2=None,
     unpadded_K_w2=None,
 ):
-    assert (
-        quant_config is not None
-        and quant_config.use_mxfp4_w4a8
-        and rocm_aiter_ops.is_enabled()
-    )
+    assert quant_config is not None and quant_config.use_mxfp4_w4a8 and rocm_aiter_ops.is_enabled()
     from aiter.ops.triton.moe_routing.routing import routing as aiter_routing
 
-    routing_data, gather_idx, scatter_idx = aiter_routing(
-        gating_output, topk, sm_first=not renormalize
-    )
+    routing_data, gather_idx, scatter_idx = aiter_routing(gating_output, topk, sm_first=not renormalize)
     return triton_kernel_fused_mxfp4_w4a8_experts(
         None,
         hidden_states,
@@ -119,16 +113,10 @@ def triton_kernel_fused_mxfp4_w4a8_experts(
 
     _swizzle_mx_scale = "CDNA4_SCALE" if should_use_cdna4_mx_scale_swizzle() else None
 
-    assert quant_config.w1_precision is not None, (
-        "w1_precision in quant config can't be None"
-    )
-    assert quant_config.w2_precision is not None, (
-        "w2_precision in quant config can't be None"
-    )
+    assert quant_config.w1_precision is not None, "w1_precision in quant config can't be None"
+    assert quant_config.w2_precision is not None, "w2_precision in quant config can't be None"
 
-    hidden_states = downcast_to_static_fp8(
-        hidden_states, quant_config.w1_precision.flex_ctx.lhs_data.scale
-    )
+    hidden_states = downcast_to_static_fp8(hidden_states, quant_config.w1_precision.flex_ctx.lhs_data.scale)
 
     intermediate_cache1 = moe_gemm_a8w4(
         hidden_states,

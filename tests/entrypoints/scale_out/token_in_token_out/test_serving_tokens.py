@@ -9,10 +9,10 @@ import pytest
 import pytest_asyncio
 from transformers import AutoTokenizer
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.config import ModelConfig
 from aphrodite.config.utils import getattr_iter
 from aphrodite.v1.engine.detokenizer import check_stop_strings
+from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "Qwen/Qwen3-0.6B"
 GEN_ENDPOINT = "/inference/v1/generate"
@@ -73,11 +73,7 @@ def server(request):
 
     extra_args = getattr(request, "param", None)
     if extra_args is not None:
-        args = args + (
-            list(extra_args)
-            if isinstance(extra_args, (list, tuple))
-            else [str(extra_args)]
-        )
+        args = args + (list(extra_args) if isinstance(extra_args, (list, tuple)) else [str(extra_args)])
 
     envs = os.environ.copy()
     # See: https://github.com/vllm-project/vllm/pull/33493#issuecomment-3888060787
@@ -139,8 +135,7 @@ async def test_generate_defaults_max_tokens_when_omitted(client):
     # max_model_len=1024 in the test fixture, prompt is 3 tokens, so we
     # should get ~1021 tokens of output (capped at max_model_len boundary).
     assert completion_tokens > 16, (
-        f"expected server-side default to exceed the legacy 16-token cap, "
-        f"got {completion_tokens}"
+        f"expected server-side default to exceed the legacy 16-token cap, got {completion_tokens}"
     )
 
 
@@ -280,9 +275,7 @@ async def test_same_response_as_chat_completions(client, tokenizer, messages):
                     break
             if eos_pos is not None:
                 gen_token_ids_truncated = gen_token_ids[:eos_pos]
-                generate_res = tokenizer.decode(
-                    gen_token_ids_truncated, skip_special_tokens=True
-                )
+                generate_res = tokenizer.decode(gen_token_ids_truncated, skip_special_tokens=True)
                 # Truncate completions_res to same length for comparison
                 completions_res = completions_res[: len(generate_res)]
 
@@ -315,21 +308,15 @@ async def test_stop_string_workflow(client, tokenizer, messages):
         generate_resp.raise_for_status()
 
     payload["sampling_params"]["stop"] = None
-    generate_resp = await client.post(
-        GEN_ENDPOINT, json=payload, headers={"X-Request-Id": "42"}
-    )
+    generate_resp = await client.post(GEN_ENDPOINT, json=payload, headers={"X-Request-Id": "42"})
     generate_data = generate_resp.json()
-    generate_res = tokenizer.decode(
-        generate_data["choices"][0]["token_ids"], skip_special_tokens=True
-    )
+    generate_res = tokenizer.decode(generate_data["choices"][0]["token_ids"], skip_special_tokens=True)
 
     # NOTE This is under the responsibility of the coordinator
     # stop_checker = StopChecker(
     #     max_model_len=1024, get_tokenizer_for_seq=lambda _: tokenizer
     # )
-    stop_str, truncate_to = check_stop_strings(
-        generate_res, len(generate_res), ["27 member"], False
-    )
+    stop_str, truncate_to = check_stop_strings(generate_res, len(generate_res), ["27 member"], False)
     assert stop_str == "27 member"
     # abort request that hit stop string (requires tokens-only mode)
     # res = await client.post("/abort_requests", json={"request_ids": ["generate-tokens-42"]}) # noqa: E501
@@ -406,9 +393,7 @@ async def test_generate_with_lora_adapter(client, tokenizer, messages):
     }
     generate_resp = await client.post(GEN_ENDPOINT, json=payload)
     generate_data = generate_resp.json()
-    generate_res = tokenizer.decode(
-        generate_data["choices"][0]["token_ids"], skip_special_tokens=True
-    )
+    generate_res = tokenizer.decode(generate_data["choices"][0]["token_ids"], skip_special_tokens=True)
 
     payload = {
         "model": "Alice",

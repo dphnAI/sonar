@@ -57,10 +57,7 @@ class MistralCommonImageProcessor:
             return load_image(image_url_or_urls)
         if is_valid_image(image_url_or_urls):
             return image_url_or_urls
-        raise TypeError(
-            "only a single or a list of entries is supported but got "
-            f"type={type(image_url_or_urls)}"
-        )
+        raise TypeError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
 
 
 class MistralCommonPixtralProcessor(ProcessorMixin):

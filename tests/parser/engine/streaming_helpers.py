@@ -37,9 +37,7 @@ def simulate_tool_streaming(
     for chunk in chunks:
         current_text = previous_text + chunk
 
-        delta_token_ids: list[int] = [
-            tid for text, tid in token_id_map.items() if text in chunk
-        ]
+        delta_token_ids: list[int] = [tid for text, tid in token_id_map.items() if text in chunk]
 
         current_token_ids = previous_token_ids + delta_token_ids
 
@@ -104,9 +102,7 @@ def simulate_reasoning_streaming(
 
     Returns ``(reasoning_text, content_text)`` tuple.
     """
-    token_id_map = (
-        _build_token_id_map(parser) if delta_token_ids_per_chunk is None else {}
-    )
+    token_id_map = _build_token_id_map(parser) if delta_token_ids_per_chunk is None else {}
 
     reasoning_parts: list[str] = []
     content_parts: list[str] = []

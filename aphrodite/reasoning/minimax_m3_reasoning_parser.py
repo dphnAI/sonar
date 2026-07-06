@@ -58,9 +58,7 @@ class MiniMaxM3ReasoningParser(BaseThinkingReasoningParser):
 
     def _decode_text(self, token_ids: Sequence[int]) -> str:
         try:
-            return self.model_tokenizer.decode(
-                list(token_ids), skip_special_tokens=False
-            )
+            return self.model_tokenizer.decode(list(token_ids), skip_special_tokens=False)
         except TypeError:
             return self.model_tokenizer.decode(list(token_ids))
 
@@ -82,21 +80,16 @@ class MiniMaxM3ReasoningParser(BaseThinkingReasoningParser):
         return self._encode_text(content)
 
     @staticmethod
-    def _contains_token_sequence(
-        token_ids: Sequence[int], marker_ids: Sequence[int]
-    ) -> bool:
+    def _contains_token_sequence(token_ids: Sequence[int], marker_ids: Sequence[int]) -> bool:
         if not marker_ids or len(marker_ids) > len(token_ids):
             return False
         marker_len = len(marker_ids)
         return any(
-            tuple(token_ids[i : i + marker_len]) == tuple(marker_ids)
-            for i in range(len(token_ids) - marker_len + 1)
+            tuple(token_ids[i : i + marker_len]) == tuple(marker_ids) for i in range(len(token_ids) - marker_len + 1)
         )
 
     @staticmethod
-    def _rfind_token_sequence(
-        token_ids: Sequence[int], marker_ids: Sequence[int]
-    ) -> int:
+    def _rfind_token_sequence(token_ids: Sequence[int], marker_ids: Sequence[int]) -> int:
         if not marker_ids or len(marker_ids) > len(token_ids):
             return -1
         marker_len = len(marker_ids)
@@ -106,9 +99,7 @@ class MiniMaxM3ReasoningParser(BaseThinkingReasoningParser):
         return -1
 
     @staticmethod
-    def _ends_with_token_sequence_prefix(
-        token_ids: Sequence[int], marker_ids: Sequence[int]
-    ) -> bool:
+    def _ends_with_token_sequence_prefix(token_ids: Sequence[int], marker_ids: Sequence[int]) -> bool:
         if not marker_ids:
             return False
         max_len = min(len(token_ids), len(marker_ids) - 1)
@@ -194,9 +185,7 @@ class MiniMaxM3ReasoningParser(BaseThinkingReasoningParser):
 
         return reasoning, (content_before + content_after) or None
 
-    def is_reasoning_end_streaming(
-        self, input_ids: Sequence[int], delta_ids: Iterable[int]
-    ) -> bool:
+    def is_reasoning_end_streaming(self, input_ids: Sequence[int], delta_ids: Iterable[int]) -> bool:
         if self._reasoning_ended_streaming:
             return True
 
@@ -268,13 +257,10 @@ class MiniMaxM3ReasoningParser(BaseThinkingReasoningParser):
             self._last_streaming_delta_token_ids = None
             self._last_streaming_content_token_ids = None
             self._reasoning_active_streaming = (
-                self._initial_in_reasoning
-                or self.start_token in current_text
-                or current_reasoning is not None
+                self._initial_in_reasoning or self.start_token in current_text or current_reasoning is not None
             )
             self._pending_marker_streaming = not self._reasoning_active_streaming and (
-                self.start_token.startswith(current_text)
-                or self.end_token.startswith(current_text)
+                self.start_token.startswith(current_text) or self.end_token.startswith(current_text)
             )
         reasoning = self._visible_delta(previous_reasoning, current_reasoning)
         content = self._visible_delta(previous_content, current_content)
@@ -292,15 +278,11 @@ class MiniMaxM3ReasoningParser(BaseThinkingReasoningParser):
         depth = 1 if self._initial_in_reasoning else 0
         i = 0
         while i < len(token_ids):
-            if tuple(token_ids[i : i + len(self._start_token_ids)]) == (
-                self._start_token_ids
-            ):
+            if tuple(token_ids[i : i + len(self._start_token_ids)]) == (self._start_token_ids):
                 depth += 1
                 i += len(self._start_token_ids)
                 continue
-            if tuple(token_ids[i : i + len(self._end_token_ids)]) == (
-                self._end_token_ids
-            ):
+            if tuple(token_ids[i : i + len(self._end_token_ids)]) == (self._end_token_ids):
                 if depth > 0:
                     depth -= 1
                 i += len(self._end_token_ids)

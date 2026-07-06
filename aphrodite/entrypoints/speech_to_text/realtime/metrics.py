@@ -57,9 +57,7 @@ class WebSocketMetricsMiddleware:
 
         return self._handle_websocket(scope, receive, send)
 
-    async def _handle_websocket(
-        self, scope: Scope, receive: Receive, send: Send
-    ) -> None:
+    async def _handle_websocket(self, scope: Scope, receive: Receive, send: Send) -> None:
         start_time: float | None = None
 
         async def send_wrapper(message: Message) -> None:

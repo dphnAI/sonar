@@ -122,9 +122,7 @@ async def customer_output_formatter(response):
                 "32",
             ]
 
-            with RemoteOpenAIServer(
-                MODEL_NAME_SMOLLM, args, env_dict=env_vars
-            ) as server:
+            with RemoteOpenAIServer(MODEL_NAME_SMOLLM, args, env_dict=env_vars) as server:
                 # Test 1: Middlewares applied to chat/completions endpoint
                 chat_response = requests.post(
                     server.url_for("v1/chat/completions"),
@@ -149,9 +147,7 @@ async def customer_output_formatter(response):
                 assert chat_response.headers["X-Input-Formatter-Called"] == "true"
 
                 # Verify middleware execution order
-                execution_order = chat_response.headers.get(
-                    "X-Middleware-Order", ""
-                ).rstrip(",")
+                execution_order = chat_response.headers.get("X-Middleware-Order", "").rstrip(",")
                 order_parts = execution_order.split(",") if execution_order else []
                 assert "throttle" in order_parts
                 assert "output_formatter" in order_parts
@@ -177,9 +173,7 @@ async def customer_output_formatter(response):
 
                 # Verify input formatter was called
                 assert "X-Input-Formatter-Called" in invocations_response.headers
-                assert (
-                    invocations_response.headers["X-Input-Formatter-Called"] == "true"
-                )
+                assert invocations_response.headers["X-Input-Formatter-Called"] == "true"
 
         finally:
             os.unlink(script_path)
@@ -231,9 +225,7 @@ async def ping_tracking_middleware(request, call_next):
                 "32",
             ]
 
-            with RemoteOpenAIServer(
-                MODEL_NAME_SMOLLM, args, env_dict=env_vars
-            ) as server:
+            with RemoteOpenAIServer(MODEL_NAME_SMOLLM, args, env_dict=env_vars) as server:
                 # Test ping endpoint with middleware
                 response = requests.get(server.url_for("ping"))
 
@@ -300,9 +292,7 @@ async def env_post_process(response):
             env_vars = {
                 SageMakerEnvVars.SAGEMAKER_MODEL_PATH: script_dir,
                 SageMakerEnvVars.CUSTOM_SCRIPT_FILENAME: script_name,
-                FastAPIEnvVars.CUSTOM_FASTAPI_MIDDLEWARE_THROTTLE: (
-                    f"{script_name}:env_throttle_middleware"
-                ),
+                FastAPIEnvVars.CUSTOM_FASTAPI_MIDDLEWARE_THROTTLE: (f"{script_name}:env_throttle_middleware"),
                 FastAPIEnvVars.CUSTOM_PRE_PROCESS: f"{script_name}:env_pre_process",
                 FastAPIEnvVars.CUSTOM_POST_PROCESS: f"{script_name}:env_post_process",
             }
@@ -317,9 +307,7 @@ async def env_post_process(response):
                 "32",
             ]
 
-            with RemoteOpenAIServer(
-                MODEL_NAME_SMOLLM, args, env_dict=env_vars
-            ) as server:
+            with RemoteOpenAIServer(MODEL_NAME_SMOLLM, args, env_dict=env_vars) as server:
                 response = requests.get(server.url_for("ping"))
                 assert response.status_code == 200
 
@@ -327,20 +315,14 @@ async def env_post_process(response):
                 headers = response.headers
 
                 # Verify that env var middlewares were applied
-                assert "X-Env-Throttle" in headers, (
-                    "Throttle middleware should be applied via env var"
-                )
+                assert "X-Env-Throttle" in headers, "Throttle middleware should be applied via env var"
                 assert headers["X-Env-Throttle"] == "applied"
 
-                assert "X-Env-Post-Process" in headers, (
-                    "Post-process middleware should be applied via env var"
-                )
+                assert "X-Env-Post-Process" in headers, "Post-process middleware should be applied via env var"
                 assert headers["X-Env-Post-Process"] == "applied"
 
                 # Verify that pre_process was called
-                assert "X-Pre-Process-Called" in headers, (
-                    "Pre-process should be called via env var"
-                )
+                assert "X-Pre-Process-Called" in headers, "Pre-process should be called via env var"
                 assert headers["X-Pre-Process-Called"] == "true"
 
         finally:

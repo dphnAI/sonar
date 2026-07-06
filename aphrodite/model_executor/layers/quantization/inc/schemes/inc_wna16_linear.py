@@ -65,18 +65,17 @@ class INCWNA16LinearScheme(INCLinearScheme):
             return self._build_gptq_method()
         if self.layer_config.is_awq:
             return self._build_awq_method()
-        raise NotImplementedError(
-            f"WNA16 linear scheme does not support {self.layer_config}"
-        )
+        raise NotImplementedError(f"WNA16 linear scheme does not support {self.layer_config}")
 
     def _build_gptq_method(self):
         gptq_type_map = {
             (4, True): scalar_types.uint4b8,
             (8, True): scalar_types.uint8b128,
         }
-        use_marlin = (
-            self.layer_config.backend == "auto" or "marlin" in self.layer_config.backend
-        ) and (self.layer_config.bits, self.layer_config.sym) in gptq_type_map
+        use_marlin = (self.layer_config.backend == "auto" or "marlin" in self.layer_config.backend) and (
+            self.layer_config.bits,
+            self.layer_config.sym,
+        ) in gptq_type_map
         if use_marlin:
             use_marlin = check_marlin_supported(
                 gptq_type_map[(self.layer_config.bits, self.layer_config.sym)],
@@ -290,9 +289,7 @@ class INCXPULinearBase(INCLinearScheme):
         pack_factor = self.pack_factor
         mask = (1 << size_bits) - 1
         device = qw.device
-        reverse_order = torch.tensor(
-            self._REVERSE_AWQ_PACK_ORDER, dtype=torch.long, device=device
-        )
+        reverse_order = torch.tensor(self._REVERSE_AWQ_PACK_ORDER, dtype=torch.long, device=device)
         shifts = torch.arange(0, 32, size_bits, dtype=torch.int32, device=device)
 
         K, N_packed = qw.shape
@@ -305,9 +302,7 @@ class INCXPULinearBase(INCLinearScheme):
 
         # Repack along input dim (dim 0) in sequential nibble order
         unpacked = unpacked.reshape(K // pack_factor, pack_factor, N)
-        new_qw = (unpacked.to(torch.int32) << shifts[None, :, None]).sum(
-            dim=1, dtype=torch.int32
-        )
+        new_qw = (unpacked.to(torch.int32) << shifts[None, :, None]).sum(dim=1, dtype=torch.int32)
         return new_qw.contiguous()
 
     def create_weights(

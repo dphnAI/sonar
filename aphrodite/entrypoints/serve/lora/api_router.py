@@ -32,14 +32,10 @@ def attach_router(app: FastAPI):
         """If LoRA dynamic loading & unloading is not enabled, do nothing."""
         return
     if sagemaker_standards is None:
-        logger.warning(
-            "Skipping runtime LoRA router because "
-            "model_hosting_container_standards is unavailable."
-        )
+        logger.warning("Skipping runtime LoRA router because model_hosting_container_standards is unavailable.")
         return
     logger.warning(
-        "LoRA dynamic loading & unloading is enabled in the API server. "
-        "This should ONLY be used for local development!"
+        "LoRA dynamic loading & unloading is enabled in the API server. This should ONLY be used for local development!"
     )
 
     @sagemaker_standards.register_load_adapter_handler(
@@ -55,9 +51,7 @@ def attach_router(app: FastAPI):
         handler: OpenAIServingModels = models(raw_request)
         response = await handler.load_lora_adapter(request)
         if isinstance(response, ErrorResponse):
-            return JSONResponse(
-                content=response.model_dump(), status_code=response.error.code
-            )
+            return JSONResponse(content=response.model_dump(), status_code=response.error.code)
 
         return Response(status_code=200, content=response)
 
@@ -66,18 +60,12 @@ def attach_router(app: FastAPI):
             "lora_name": "path_params.adapter_name",
         }
     )
-    @router.post(
-        "/v1/unload_lora_adapter", dependencies=[Depends(validate_json_request)]
-    )
-    async def unload_lora_adapter(
-        request: UnloadLoRAAdapterRequest, raw_request: Request
-    ):
+    @router.post("/v1/unload_lora_adapter", dependencies=[Depends(validate_json_request)])
+    async def unload_lora_adapter(request: UnloadLoRAAdapterRequest, raw_request: Request):
         handler: OpenAIServingModels = models(raw_request)
         response = await handler.unload_lora_adapter(request)
         if isinstance(response, ErrorResponse):
-            return JSONResponse(
-                content=response.model_dump(), status_code=response.error.code
-            )
+            return JSONResponse(content=response.model_dump(), status_code=response.error.code)
 
         return Response(status_code=200, content=response)
 

@@ -45,9 +45,7 @@ class CompressedTensorsW8A16Fp8(CompressedTensorsScheme):
         self.weight_block_size = self.weight_quant.block_structure
 
         self.weight_quant_key = STRATEGY_TO_WEIGHT_QUANT_KEY[self.strategy]
-        self.activation_quant_key = (
-            kFp8StaticTensorSym if is_static_input_scheme else kFp8DynamicTensorSym
-        )
+        self.activation_quant_key = kFp8StaticTensorSym if is_static_input_scheme else kFp8DynamicTensorSym
 
     @classmethod
     def get_min_capability(cls) -> int:
@@ -86,9 +84,7 @@ class CompressedTensorsW8A16Fp8(CompressedTensorsScheme):
             )
 
         # WEIGHT
-        weight = create_fp8_weight_parameter(
-            output_size_per_partition, input_size_per_partition, weight_loader
-        )
+        weight = create_fp8_weight_parameter(output_size_per_partition, input_size_per_partition, weight_loader)
         layer.register_parameter("weight", weight)
 
         # WEIGHT SCALE

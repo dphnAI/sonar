@@ -23,9 +23,7 @@ from aphrodite.platforms import current_platform
 def test_instanttensor_model_loader():
     with tempfile.TemporaryDirectory() as tmpdir:
         huggingface_hub.constants.HF_HUB_OFFLINE = False
-        download_weights_from_hf(
-            "openai-community/gpt2", allow_patterns=["*.safetensors"], cache_dir=tmpdir
-        )
+        download_weights_from_hf("openai-community/gpt2", allow_patterns=["*.safetensors"], cache_dir=tmpdir)
         safetensors = glob.glob(f"{tmpdir}/**/*.safetensors", recursive=True)
         assert len(safetensors) > 0
 

@@ -76,8 +76,7 @@ class MLAPrefillBackend(ABC):
 
         if not cls.supports_compute_capability(device_capability):
             invalid_reasons.append(
-                f"compute capability {device_capability.major}."
-                f"{device_capability.minor} not supported"
+                f"compute capability {device_capability.major}.{device_capability.minor} not supported"
             )
 
         if not cls.supports_dtype(selector_config.dtype):
@@ -86,10 +85,7 @@ class MLAPrefillBackend(ABC):
         if not cls.is_available():
             invalid_reasons.append("required dependencies not available")
 
-        if (
-            cls.supported_mla_dimensions
-            and selector_config.mla_dimensions not in cls.supported_mla_dimensions
-        ):
+        if cls.supported_mla_dimensions and selector_config.mla_dimensions not in cls.supported_mla_dimensions:
             supported = ", ".join(str(dims) for dims in cls.supported_mla_dimensions)
             invalid_reasons.append(
                 "Model does not have supported MLA dimensions "

@@ -9,8 +9,6 @@ import pytest
 import requests
 import torch
 
-from tests.models.utils import check_embeddings_close
-from tests.utils import RemoteOpenAIServer
 from aphrodite.entrypoints.pooling.pooling.protocol import PoolingResponse
 from aphrodite.entrypoints.pooling.utils import (
     MetadataItem,
@@ -19,9 +17,13 @@ from aphrodite.entrypoints.pooling.utils import (
 )
 from aphrodite.tokenizers import get_tokenizer
 from aphrodite.utils.serial_utils import EMBED_DTYPES, ENDIANNESS, binary2tensor
+from tests.models.utils import check_embeddings_close
+from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "internlm/internlm2-1_8b-reward"
-DUMMY_CHAT_TEMPLATE = """{% for message in messages %}{{message['role'] + ': ' + message['content'] + '\\n'}}{% endfor %}"""  # noqa: E501
+DUMMY_CHAT_TEMPLATE = (
+    """{% for message in messages %}{{message['role'] + ': ' + message['content'] + '\\n'}}{% endfor %}"""  # noqa: E501
+)
 input_text = "The chef prepared a delicious meal."
 input_tokens = [1, 918, 29981, 10166, 395, 18067, 15265, 281]
 
@@ -288,9 +290,7 @@ async def test_batch_base64_pooling(server: RemoteOpenAIServer, model_name: str)
 
     decoded_responses_base64_data = []
     for data in responses_base64.data:
-        decoded_responses_base64_data.append(
-            np.frombuffer(base64.b64decode(data.data), dtype="float32").tolist()
-        )
+        decoded_responses_base64_data.append(np.frombuffer(base64.b64decode(data.data), dtype="float32").tolist())
 
     check_embeddings_close(
         embeddings_0_lst=float_data,
@@ -309,9 +309,7 @@ async def test_batch_base64_pooling(server: RemoteOpenAIServer, model_name: str)
     )
     default_response.raise_for_status()
     responses_default = PoolingResponse.model_validate(default_response.json())
-    default_data = [
-        np.array(d.data).squeeze(-1).tolist() for d in responses_default.data
-    ]
+    default_data = [np.array(d.data).squeeze(-1).tolist() for d in responses_default.data]
 
     check_embeddings_close(
         embeddings_0_lst=float_data,
@@ -323,9 +321,7 @@ async def test_batch_base64_pooling(server: RemoteOpenAIServer, model_name: str)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-async def test_base64_embed_dtype_and_endianness(
-    server: RemoteOpenAIServer, model_name: str
-):
+async def test_base64_embed_dtype_and_endianness(server: RemoteOpenAIServer, model_name: str):
     input_texts = [input_text] * 3
 
     url = server.url_for("pooling")
@@ -370,9 +366,7 @@ async def test_base64_embed_dtype_and_endianness(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-async def test_bytes_embed_dtype_and_endianness(
-    server: RemoteOpenAIServer, model_name: str
-):
+async def test_bytes_embed_dtype_and_endianness(server: RemoteOpenAIServer, model_name: str):
     input_texts = [input_text] * 3
 
     url = server.url_for("pooling")
@@ -418,9 +412,7 @@ async def test_bytes_embed_dtype_and_endianness(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-async def test_bytes_only_embed_dtype_and_endianness(
-    server: RemoteOpenAIServer, model_name: str
-):
+async def test_bytes_only_embed_dtype_and_endianness(server: RemoteOpenAIServer, model_name: str):
     input_texts = [input_text] * 3
 
     url = server.url_for("pooling")
@@ -472,9 +464,7 @@ async def test_bytes_only_embed_dtype_and_endianness(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
 @pytest.mark.parametrize("param_name", ["encoding_format", "embed_dtype", "endianness"])
-async def test_params_not_supported(
-    server: RemoteOpenAIServer, model_name: str, param_name: str
-):
+async def test_params_not_supported(server: RemoteOpenAIServer, model_name: str, param_name: str):
     responses_base64 = requests.post(
         server.url_for("pooling"),
         json={
@@ -501,18 +491,14 @@ async def test_invocations_chat_request(server: RemoteOpenAIServer):
     completion_response = requests.post(server.url_for("pooling"), json=request_args)
     completion_response.raise_for_status()
 
-    invocation_response = requests.post(
-        server.url_for("invocations"), json=request_args
-    )
+    invocation_response = requests.post(server.url_for("invocations"), json=request_args)
     invocation_response.raise_for_status()
 
     completion_output = completion_response.json()
     invocation_output = invocation_response.json()
 
     assert completion_output.keys() == invocation_output.keys()
-    for completion_data, invocation_data in zip(
-        completion_output["data"], invocation_output["data"]
-    ):
+    for completion_data, invocation_data in zip(completion_output["data"], invocation_output["data"]):
         assert completion_data.keys() == invocation_data.keys()
         check_embeddings_close(
             embeddings_0_lst=completion_data["data"],
@@ -548,18 +534,14 @@ async def test_invocations_conversation_chat_request(server: RemoteOpenAIServer)
     chat_response = requests.post(server.url_for("pooling"), json=request_args)
     chat_response.raise_for_status()
 
-    invocation_response = requests.post(
-        server.url_for("invocations"), json=request_args
-    )
+    invocation_response = requests.post(server.url_for("invocations"), json=request_args)
     invocation_response.raise_for_status()
 
     chat_output = chat_response.json()
     invocation_output = invocation_response.json()
 
     assert chat_output.keys() == invocation_output.keys()
-    for chat_data, invocation_data in zip(
-        chat_output["data"], invocation_output["data"]
-    ):
+    for chat_data, invocation_data in zip(chat_output["data"], invocation_output["data"]):
         assert chat_data.keys() == invocation_data.keys()
         check_embeddings_close(
             embeddings_0_lst=chat_data["data"],

@@ -52,6 +52,4 @@ def test_inference(
         default_torch_num_threads=1,
     ) as aphrodite_model:
         aphrodite_output = aphrodite_model.llm.encode(prompt, pooling_task="plugin")
-        assert torch.equal(
-            torch.isnan(aphrodite_output[0].outputs.data).any(), torch.tensor(False)
-        )
+        assert torch.equal(torch.isnan(aphrodite_output[0].outputs.data).any(), torch.tensor(False))

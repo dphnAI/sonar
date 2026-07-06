@@ -41,9 +41,7 @@ def test_keye_vl(image_assets, question: str):
 
     processor = AutoProcessor.from_pretrained(MODEL_NAME, trust_remote_code=True)
 
-    prompt = processor.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
-    )
+    prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
     llm = LLM(
         model=MODEL_NAME,
@@ -54,9 +52,7 @@ def test_keye_vl(image_assets, question: str):
         seed=42,
     )
 
-    sampling_params = SamplingParams(
-        temperature=0.0, max_tokens=256, stop_token_ids=None
-    )
+    sampling_params = SamplingParams(temperature=0.0, max_tokens=256, stop_token_ids=None)
 
     outputs = llm.generate(
         {
@@ -70,7 +66,5 @@ def test_keye_vl(image_assets, question: str):
     for o in outputs:
         generated_text = o.outputs[0].text
         print(generated_text)
-        assert len(generated_text) > 10, (
-            f"Generated text is too short: {generated_text}"
-        )
+        assert len(generated_text) > 10, f"Generated text is too short: {generated_text}"
         print("-" * 50)

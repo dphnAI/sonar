@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Metal frame-capture wrapper for Aphrodite's WorkerProfiler abstraction.
 
 Subclasses ``aphrodite.profiler.wrapper.WorkerProfiler`` so that the manual
@@ -24,9 +25,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import override
 
 import mlx.core as mx
+from typing_extensions import override
+
 from aphrodite.config import ProfilerConfig
 from aphrodite.logger import init_logger
 from aphrodite.profiler.wrapper import WorkerProfiler

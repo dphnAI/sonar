@@ -115,13 +115,9 @@ def test_dtype_singleton_deduped(x: torch.Tensor) -> None:
         for sn in getattr(split_gm, n.target).graph.nodes
         if sn.op == "call_function" and "to_copy" in sn.name
     )
-    assert n_to_copy >= 2, (
-        f"Test setup failed: expected ≥2 _to_copy nodes, got {n_to_copy}"
-    )
+    assert n_to_copy >= 2, f"Test setup failed: expected ≥2 _to_copy nodes, got {n_to_copy}"
 
-    assert consts.count(torch.float16) == 1, (
-        f"torch.float16 should occupy exactly one slot, got consts={consts}"
-    )
+    assert consts.count(torch.float16) == 1, f"torch.float16 should occupy exactly one slot, got consts={consts}"
     assert code.count("__aphrodite_consts__[0]") >= 2, (
         "Deduped const slot should be referenced from both _to_copy nodes"
     )
@@ -158,10 +154,7 @@ def test_consts_ordering_deterministic(x: torch.Tensor) -> None:
     _, _, consts2 = generate_execution_code(_trace_and_split(model_fn, (x,), []))
 
     assert len(consts1) >= 2, "Test setup: model should produce ≥2 const slots"
-    assert consts1 == consts2, (
-        f"consts ordering must be reproducible across traces; "
-        f"got {consts1} vs {consts2}"
-    )
+    assert consts1 == consts2, f"consts ordering must be reproducible across traces; got {consts1} vs {consts2}"
 
 
 def test_primitive_args_inlined(x: torch.Tensor) -> None:
@@ -196,30 +189,21 @@ def test_consts_shared_across_split_submods(x: torch.Tensor) -> None:
     split_gm = _trace_and_split(model_fn, (x,), ["aten::relu.default"])
 
     n_submods = sum(1 for _ in split_gm.named_children())
-    assert n_submods >= 3, (
-        f"Test setup failed: expected ≥3 submods after split, got {n_submods}"
-    )
+    assert n_submods >= 3, f"Test setup failed: expected ≥3 submods after split, got {n_submods}"
 
     code, submod_names, consts = generate_execution_code(split_gm)
 
-    assert consts.count(torch.float16) == 1, (
-        f"fp16 singleton must dedup across submods, got consts={consts}"
-    )
+    assert consts.count(torch.float16) == 1, f"fp16 singleton must dedup across submods, got consts={consts}"
 
     # Find the consts index for fp16 and confirm at least two distinct
     # inlined submods reference it. This rules out the false-positive where
     # one submod references it twice and the other not at all.
     fp16_idx = consts.index(torch.float16)
-    submod_bodies = re.findall(
-        r"def __aphrodite_inlined_submods__(\d+)\([^)]*\):\n((?:    .*\n)+)", code
-    )
+    submod_bodies = re.findall(r"def __aphrodite_inlined_submods__(\d+)\([^)]*\):\n((?:    .*\n)+)", code)
     assert len(submod_bodies) >= 2
-    referencing_submods = [
-        name for name, body in submod_bodies if f"__aphrodite_consts__[{fp16_idx}]" in body
-    ]
+    referencing_submods = [name for name, body in submod_bodies if f"__aphrodite_consts__[{fp16_idx}]" in body]
     assert len(referencing_submods) >= 2, (
-        f"fp16 slot should be referenced from ≥2 inlined submods, "
-        f"got {referencing_submods}"
+        f"fp16 slot should be referenced from ≥2 inlined submods, got {referencing_submods}"
     )
 
     fn = compile_execution_fn(code, {}, submod_names, consts)
@@ -257,9 +241,7 @@ def test_non_graphmodule_submod_uses_indexed_callable(x: torch.Tensor) -> None:
 
     code, submod_names, consts = generate_execution_code(split_gm)
 
-    assert "__aphrodite_submods__[" in code, (
-        "Non-GraphModule submod should produce an indexed callable reference"
-    )
+    assert "__aphrodite_submods__[" in code, "Non-GraphModule submod should produce an indexed callable reference"
     assert target_name in submod_names
 
     submod_callables = {
@@ -290,9 +272,7 @@ def test_getitem_in_stitching_graph(x: torch.Tensor) -> None:
 
     # split_module wraps each submod return in a tuple, so the stitching
     # graph unpacks via getitem. The codegen must emit it as indexing.
-    assert re.search(r"\b\w+ = \w+\[\d+\]\n", code), (
-        "Stitching graph should emit `name = source[N]` for getitem nodes"
-    )
+    assert re.search(r"\b\w+ = \w+\[\d+\]\n", code), "Stitching graph should emit `name = source[N]` for getitem nodes"
 
 
 def test_del_emitted_for_intermediate_values(x: torch.Tensor) -> None:
@@ -303,14 +283,11 @@ def test_del_emitted_for_intermediate_values(x: torch.Tensor) -> None:
     def model_fn(x: torch.Tensor) -> torch.Tensor:
         return x.relu().sigmoid().tanh()
 
-    split_gm = _trace_and_split(
-        model_fn, (x,), ["aten::relu.default", "aten::sigmoid.default"]
-    )
+    split_gm = _trace_and_split(model_fn, (x,), ["aten::relu.default", "aten::sigmoid.default"])
     code, _, _ = generate_execution_code(split_gm)
 
     assert re.search(r"^    del \w+", code, re.MULTILINE), (
-        "Liveness analysis should emit `del` for intermediates with "
-        "last-use before the output"
+        "Liveness analysis should emit `del` for intermediates with last-use before the output"
     )
 
 
@@ -362,9 +339,7 @@ def test_legacy_code_without_consts() -> None:
     keep working."""
     # Pre-consts codegen: no __aphrodite_consts__ reference, only torch/operator.
     legacy_code = (
-        "import torch\n"
-        "def execution_fn(x, *, __aphrodite_submods__):\n"
-        "    return __aphrodite_submods__[0](x) + 1\n"
+        "import torch\ndef execution_fn(x, *, __aphrodite_submods__):\n    return __aphrodite_submods__[0](x) + 1\n"
     )
 
     class AddOne(torch.nn.Module):

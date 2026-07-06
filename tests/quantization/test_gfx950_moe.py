@@ -72,9 +72,7 @@ def mxfp4_oracle_config():
 def test_w4a4_dispatches_to_aiter(mxfp4_oracle_config):
     """With AITER enabled + GFX950, W4A4 selects AITER_MXFP4_MXFP4."""
     config = _make_w4a4_moe_config()
-    backend, experts_cls = select_mxfp4_moe_backend(
-        config, activation_key=kMxfp4Dynamic
-    )
+    backend, experts_cls = select_mxfp4_moe_backend(config, activation_key=kMxfp4Dynamic)
     assert backend == Mxfp4MoeBackend.AITER_MXFP4_MXFP4
     assert experts_cls is not None
 
@@ -87,9 +85,7 @@ def test_w4a4_dispatches_to_aiter(mxfp4_oracle_config):
 def test_w4a4_falls_back_to_triton_unfused_without_aiter(mxfp4_oracle_config):
     """Without AITER and no --moe-backend, ROCm falls back to TRITON_UNFUSED."""
     config = _make_w4a4_moe_config()
-    backend, experts_cls = select_mxfp4_moe_backend(
-        config, activation_key=kMxfp4Dynamic
-    )
+    backend, experts_cls = select_mxfp4_moe_backend(config, activation_key=kMxfp4Dynamic)
     assert backend == Mxfp4MoeBackend.TRITON_UNFUSED
     assert experts_cls is not None
 
@@ -98,8 +94,6 @@ def test_w4a4_falls_back_to_triton_unfused_without_aiter(mxfp4_oracle_config):
 def test_w4a4_dispatches_to_emulation_with_moe_backend(mxfp4_oracle_config):
     """With --moe-backend emulation, W4A4 selects EMULATION."""
     config = _make_w4a4_moe_config(moe_backend="emulation")
-    backend, experts_cls = select_mxfp4_moe_backend(
-        config, activation_key=kMxfp4Dynamic
-    )
+    backend, experts_cls = select_mxfp4_moe_backend(config, activation_key=kMxfp4Dynamic)
     assert backend == Mxfp4MoeBackend.EMULATION
     assert experts_cls is not None

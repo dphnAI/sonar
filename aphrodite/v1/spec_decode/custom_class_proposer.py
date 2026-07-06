@@ -35,15 +35,12 @@ def create_custom_proposer(aphrodite_config: AphroditeConfig):
     try:
         module = importlib.import_module(module_path)
     except ImportError as e:
-        raise ImportError(
-            f"Cannot import module '{module_path}' for custom proposer '{backend}': {e}"
-        ) from e
+        raise ImportError(f"Cannot import module '{module_path}' for custom proposer '{backend}': {e}") from e
 
     user_class = getattr(module, class_name, None)
     if user_class is None:
         raise AttributeError(
-            f"Module '{module_path}' has no attribute '{class_name}' "
-            f"(speculative_config.model='{backend}')"
+            f"Module '{module_path}' has no attribute '{class_name}' (speculative_config.model='{backend}')"
         )
 
     try:
@@ -55,14 +52,9 @@ def create_custom_proposer(aphrodite_config: AphroditeConfig):
         ) from e
 
     if not hasattr(instance, "propose"):
-        raise AttributeError(
-            f"Custom proposer class '{backend}' must have a 'propose' method."
-        )
+        raise AttributeError(f"Custom proposer class '{backend}' must have a 'propose' method.")
     if not callable(instance.propose):
-        raise AttributeError(
-            f"Custom proposer class '{backend}' has a 'propose' attribute "
-            "but it is not callable."
-        )
+        raise AttributeError(f"Custom proposer class '{backend}' has a 'propose' attribute but it is not callable.")
 
     logger.info(
         "Loaded custom proposer class '%s' with num_speculative_tokens=%d",

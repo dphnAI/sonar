@@ -4,7 +4,6 @@ import pytest
 import torch
 from torch import Generator
 
-from tests.utils import large_gpu_mark
 from aphrodite.platforms import current_platform
 from aphrodite.triton_utils import HAS_TRITON
 from aphrodite.utils.torch_utils import set_random_seed
@@ -13,6 +12,7 @@ from aphrodite.v1.sample.ops.topk_topp_sampler import (
     random_sample,
 )
 from aphrodite.v1.sample.sampler import Sampler
+from tests.utils import large_gpu_mark
 
 DEVICE_TYPE = current_platform.device_type
 
@@ -143,9 +143,7 @@ def test_topk_impl_equivalence():
     k = torch.randint(1, 10, (BATCH_SIZE,), generator=generator)
 
     # Set k=vocab_size for ~50% of requests in the batch (top-k disabled).
-    k.masked_fill_(
-        torch.randint(0, 2, (BATCH_SIZE,), generator=generator, dtype=bool), VOCAB_SIZE
-    )
+    k.masked_fill_(torch.randint(0, 2, (BATCH_SIZE,), generator=generator, dtype=bool), VOCAB_SIZE)
 
     # Top-k only implementation
     result1 = apply_top_k_top_p_pytorch(logits=logits.clone(), k=k, p=None)
@@ -192,9 +190,7 @@ def test_flashinfer_sampler():
 
     # Generate various top-k and top-p values
     k_values = torch.randint(1, 1000, (BATCH_SIZE,), generator=generator)
-    p_values = (
-        torch.rand((BATCH_SIZE,), generator=generator) * 0.5 + 0.5
-    )  # range in [0.5, 1.0]
+    p_values = torch.rand((BATCH_SIZE,), generator=generator) * 0.5 + 0.5  # range in [0.5, 1.0]
 
     # Sometimes disable top-k (k=vocab_size)
     k_values.masked_fill_(
@@ -203,9 +199,7 @@ def test_flashinfer_sampler():
     )
 
     # Sometimes disable top-p (p=1.0)
-    p_values.masked_fill_(
-        torch.randint(0, 2, (BATCH_SIZE,), generator=generator, dtype=torch.bool), 1.0
-    )
+    p_values.masked_fill_(torch.randint(0, 2, (BATCH_SIZE,), generator=generator, dtype=torch.bool), 1.0)
 
     python_logits = apply_top_k_top_p_pytorch(
         logits=logits.clone(),
@@ -279,8 +273,7 @@ class TestTritonTopkTopp:
         if p is None:
             # Top-k only: expect exact match
             assert torch.equal(pytorch_kept, triton_kept), (
-                f"Top-k mask mismatch: PyTorch kept {pytorch_kept.tolist()}, "
-                f"Triton kept {triton_kept.tolist()}"
+                f"Top-k mask mismatch: PyTorch kept {pytorch_kept.tolist()}, Triton kept {triton_kept.tolist()}"
             )
         else:
             # Top-p involved: allow small differences
@@ -290,20 +283,15 @@ class TestTritonTopkTopp:
             if max_kept > 0 and max_diff > 3:
                 diff_pct = max_diff / max_kept * 100
                 assert diff_pct < 0.5, (
-                    f"Top-p mask difference too large: {diff_pct:.2f}% "
-                    f"(max diff {max_diff} values out of {max_kept})"
+                    f"Top-p mask difference too large: {diff_pct:.2f}% (max diff {max_diff} values out of {max_kept})"
                 )
 
     @pytest.mark.parametrize("batch_size", [1, 8, 32, 128, 512, 1024])
     @pytest.mark.parametrize("vocab_size", [1024, 32000, 128256])
     def test_topk_only(self, batch_size: int, vocab_size: int):
         """Test top-k only (p=None)."""
-        logits = torch.randn(
-            batch_size, vocab_size, generator=self.generator, dtype=torch.float32
-        )
-        k = torch.randint(
-            1, min(100, vocab_size), (batch_size,), generator=self.generator
-        )
+        logits = torch.randn(batch_size, vocab_size, generator=self.generator, dtype=torch.float32)
+        k = torch.randint(1, min(100, vocab_size), (batch_size,), generator=self.generator)
         # Randomly disable top-k for some rows (~25%)
         disable_mask = torch.randint(0, 4, (batch_size,), generator=self.generator) == 0
         k.masked_fill_(disable_mask, vocab_size)
@@ -314,9 +302,7 @@ class TestTritonTopkTopp:
     @pytest.mark.parametrize("vocab_size", [1024, 32000, 128256])
     def test_topp_only(self, batch_size: int, vocab_size: int):
         """Test top-p only (k=None)."""
-        logits = torch.randn(
-            batch_size, vocab_size, generator=self.generator, dtype=torch.float32
-        )
+        logits = torch.randn(batch_size, vocab_size, generator=self.generator, dtype=torch.float32)
         p = torch.rand(batch_size, generator=self.generator) * 0.9 + 0.1  # [0.1, 1.0]
         # Randomly disable top-p for some rows (~25%)
         disable_mask = torch.randint(0, 4, (batch_size,), generator=self.generator) == 0
@@ -328,12 +314,8 @@ class TestTritonTopkTopp:
     @pytest.mark.parametrize("vocab_size", [1024, 32000, 128256])
     def test_topk_and_topp(self, batch_size: int, vocab_size: int):
         """Test combined top-k and top-p."""
-        logits = torch.randn(
-            batch_size, vocab_size, generator=self.generator, dtype=torch.float32
-        )
-        k = torch.randint(
-            1, min(100, vocab_size), (batch_size,), generator=self.generator
-        )
+        logits = torch.randn(batch_size, vocab_size, generator=self.generator, dtype=torch.float32)
+        k = torch.randint(1, min(100, vocab_size), (batch_size,), generator=self.generator)
         p = torch.rand(batch_size, generator=self.generator) * 0.9 + 0.1  # [0.1, 1.0]
 
         # Randomly disable top-k for some rows (~25%)
@@ -359,9 +341,7 @@ class TestTritonTopkTopp:
     def test_extreme_k_values(self):
         """Test edge cases for k values."""
         batch_size, vocab_size = 16, 1024
-        logits = torch.randn(
-            batch_size, vocab_size, generator=self.generator, dtype=torch.float32
-        )
+        logits = torch.randn(batch_size, vocab_size, generator=self.generator, dtype=torch.float32)
 
         # k=1 (keep only top 1)
         k = torch.ones(batch_size, dtype=torch.int32)
@@ -378,9 +358,7 @@ class TestTritonTopkTopp:
     def test_extreme_p_values(self):
         """Test edge cases for p values."""
         batch_size, vocab_size = 16, 1024
-        logits = torch.randn(
-            batch_size, vocab_size, generator=self.generator, dtype=torch.float32
-        )
+        logits = torch.randn(batch_size, vocab_size, generator=self.generator, dtype=torch.float32)
 
         # p close to 0 (very restrictive)
         p = torch.full((batch_size,), 0.01, dtype=torch.float32)
@@ -397,9 +375,7 @@ class TestTritonTopkTopp:
     def test_large_batch(self):
         """Test with a large batch size."""
         batch_size, vocab_size = 512, 32000
-        logits = torch.randn(
-            batch_size, vocab_size, generator=self.generator, dtype=torch.float32
-        )
+        logits = torch.randn(batch_size, vocab_size, generator=self.generator, dtype=torch.float32)
         k = torch.randint(1, 50, (batch_size,), generator=self.generator)
         p = torch.rand(batch_size, generator=self.generator) * 0.5 + 0.5
 
@@ -429,9 +405,7 @@ class TestTritonTopkTopp:
         if torch.accelerator.get_memory_info()[0] < required_bytes:
             pytest.skip(f"needs ~{required_bytes / 1e9:.0f} GB of free GPU memory")
 
-        logits = torch.randn(
-            batch_size, vocab_size, generator=self.generator, dtype=torch.float32
-        )
+        logits = torch.randn(batch_size, vocab_size, generator=self.generator, dtype=torch.float32)
         logits[batch_size - 1] = logits[0]
         k = torch.full((batch_size,), 5, dtype=torch.int32)
         result = apply_top_k_top_p_triton(logits, k, None)
@@ -440,8 +414,7 @@ class TestTritonTopkTopp:
         kept_last = (result[batch_size - 1] > float("-inf")).nonzero(as_tuple=True)[0]
         assert kept_first.numel() == 5, f"row 0 kept {kept_first.numel()}, expected 5"
         assert torch.equal(kept_first, kept_last), (
-            "highest-offset row produced a different top-k mask than the "
-            "identical row 0 (int32 row-offset overflow)"
+            "highest-offset row produced a different top-k mask than the identical row 0 (int32 row-offset overflow)"
         )
 
     @pytest.mark.parametrize(
@@ -460,13 +433,8 @@ class TestTritonTopkTopp:
             device=device,
             dtype=torch.float32,
         )
-        base = torch.linspace(
-            10.0, -10.0, vocab_size, device=device, dtype=torch.float32
-        )
-        source = base[None, :] + (
-            torch.arange(batch_size, device=device, dtype=torch.float32)[:, None]
-            / 1000.0
-        )
+        base = torch.linspace(10.0, -10.0, vocab_size, device=device, dtype=torch.float32)
+        source = base[None, :] + (torch.arange(batch_size, device=device, dtype=torch.float32)[:, None] / 1000.0)
 
         logits = backing[:, :vocab_size]
         logits.copy_(source)
@@ -509,18 +477,12 @@ class TestTritonTopkTopp:
         from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         batch_size, vocab_size = 32, 128256
-        logits = torch.randn(
-            batch_size, vocab_size, generator=self.generator, dtype=torch.float32
-        )
+        logits = torch.randn(batch_size, vocab_size, generator=self.generator, dtype=torch.float32)
         # Mask a fraction of logits to -inf.
-        mask = (
-            torch.rand(batch_size, vocab_size, generator=self.generator) < inf_fraction
-        )
+        mask = torch.rand(batch_size, vocab_size, generator=self.generator) < inf_fraction
         logits[mask] = float("-inf")
 
-        k = torch.randint(
-            1, 50, (batch_size,), generator=self.generator, dtype=torch.int32
-        )
+        k = torch.randint(1, 50, (batch_size,), generator=self.generator, dtype=torch.int32)
         result = apply_top_k_top_p_triton(logits.clone(), k, None)
 
         assert not result.isnan().any(), "NaN found in top-k result with -inf logits"
@@ -538,18 +500,11 @@ class TestTritonTopkTopp:
         from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         batch_size, vocab_size = 32, 128256
-        logits = torch.randn(
-            batch_size, vocab_size, generator=self.generator, dtype=torch.float32
-        )
-        mask = (
-            torch.rand(batch_size, vocab_size, generator=self.generator) < inf_fraction
-        )
+        logits = torch.randn(batch_size, vocab_size, generator=self.generator, dtype=torch.float32)
+        mask = torch.rand(batch_size, vocab_size, generator=self.generator) < inf_fraction
         logits[mask] = float("-inf")
 
-        p = (
-            torch.rand(batch_size, generator=self.generator, dtype=torch.float32) * 0.9
-            + 0.1
-        )
+        p = torch.rand(batch_size, generator=self.generator, dtype=torch.float32) * 0.9 + 0.1
         result = apply_top_k_top_p_triton(logits.clone(), None, p)
 
         assert not result.isnan().any(), "NaN found in top-p result with -inf logits"
@@ -565,26 +520,15 @@ class TestTritonTopkTopp:
         from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         batch_size, vocab_size = 32, 128256
-        logits = torch.randn(
-            batch_size, vocab_size, generator=self.generator, dtype=torch.float32
-        )
-        mask = (
-            torch.rand(batch_size, vocab_size, generator=self.generator) < inf_fraction
-        )
+        logits = torch.randn(batch_size, vocab_size, generator=self.generator, dtype=torch.float32)
+        mask = torch.rand(batch_size, vocab_size, generator=self.generator) < inf_fraction
         logits[mask] = float("-inf")
 
-        k = torch.randint(
-            1, 50, (batch_size,), generator=self.generator, dtype=torch.int32
-        )
-        p = (
-            torch.rand(batch_size, generator=self.generator, dtype=torch.float32) * 0.9
-            + 0.1
-        )
+        k = torch.randint(1, 50, (batch_size,), generator=self.generator, dtype=torch.int32)
+        p = torch.rand(batch_size, generator=self.generator, dtype=torch.float32) * 0.9 + 0.1
         result = apply_top_k_top_p_triton(logits.clone(), k, p)
 
-        assert not result.isnan().any(), (
-            "NaN found in top-k+top-p result with -inf logits"
-        )
+        assert not result.isnan().any(), "NaN found in top-k+top-p result with -inf logits"
         for i in range(batch_size):
             kept = (result[i] > float("-inf")).sum().item()
             assert kept <= k[i].item(), f"Row {i}: kept {kept} > k={k[i].item()}"
@@ -594,13 +538,9 @@ class TestTritonTopkTopp:
         from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         batch_size, vocab_size = 16, 128256
-        logits = torch.full(
-            (batch_size, vocab_size), float("-inf"), dtype=torch.float32
-        )
+        logits = torch.full((batch_size, vocab_size), float("-inf"), dtype=torch.float32)
 
-        k = torch.randint(
-            1, 50, (batch_size,), generator=self.generator, dtype=torch.int32
-        )
+        k = torch.randint(1, 50, (batch_size,), generator=self.generator, dtype=torch.int32)
         p = torch.full((batch_size,), 0.9, dtype=torch.float32)
 
         # top-k only
@@ -623,15 +563,11 @@ class TestTritonTopkTopp:
         from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         batch_size, vocab_size = 32, 128256
-        logits = torch.full(
-            (batch_size, vocab_size), float("-inf"), dtype=torch.float32
-        )
+        logits = torch.full((batch_size, vocab_size), float("-inf"), dtype=torch.float32)
         # Allow only 5 random tokens per row to be finite.
         for i in range(batch_size):
             indices = torch.randperm(vocab_size, generator=self.generator)[:5]
-            logits[i, indices] = torch.randn(
-                5, generator=self.generator, dtype=torch.float32
-            )
+            logits[i, indices] = torch.randn(5, generator=self.generator, dtype=torch.float32)
 
         k = torch.full((batch_size,), 50, dtype=torch.int32)
         p = torch.full((batch_size,), 0.9, dtype=torch.float32)
@@ -675,9 +611,7 @@ class TestTritonTopkTopp:
         from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         batch_size, vocab_size = 32, 128256
-        logits = torch.full(
-            (batch_size, vocab_size), float("-inf"), dtype=torch.float32
-        )
+        logits = torch.full((batch_size, vocab_size), float("-inf"), dtype=torch.float32)
         # Set exactly `num_valid` tokens per row to the SAME finite value.
         for i in range(batch_size):
             indices = torch.randperm(vocab_size, generator=self.generator)[:num_valid]
@@ -699,10 +633,7 @@ class TestTritonTopkTopp:
             # With all-equal logits the pivot search can't differentiate
             # tokens, so the guard may keep more than k — that is the
             # intended safe fallback.
-            assert kept > 0, (
-                f"Row {i}: all tokens masked with {num_valid} equal-valued "
-                f"finite logits ({mode})"
-            )
+            assert kept > 0, f"Row {i}: all tokens masked with {num_valid} equal-valued finite logits ({mode})"
 
     @pytest.mark.parametrize("num_valid", [2, 5, 10])
     def test_nearly_equal_logits_topp(self, num_valid: int):
@@ -714,17 +645,11 @@ class TestTritonTopkTopp:
         from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         batch_size, vocab_size = 32, 128256
-        logits = torch.full(
-            (batch_size, vocab_size), float("-inf"), dtype=torch.float32
-        )
+        logits = torch.full((batch_size, vocab_size), float("-inf"), dtype=torch.float32)
         for i in range(batch_size):
             indices = torch.randperm(vocab_size, generator=self.generator)[:num_valid]
             # Tiny spread: values in [1.0, 1.0 + 1e-6]
-            logits[i, indices] = (
-                1.0
-                + torch.rand(num_valid, generator=self.generator, dtype=torch.float32)
-                * 1e-6
-            )
+            logits[i, indices] = 1.0 + torch.rand(num_valid, generator=self.generator, dtype=torch.float32) * 1e-6
 
         p = torch.full((batch_size,), 0.95, dtype=torch.float32)
         result = apply_top_k_top_p_triton(logits.clone(), None, p)
@@ -732,31 +657,21 @@ class TestTritonTopkTopp:
         assert not result.isnan().any(), "NaN in nearly-equal-logit result"
         for i in range(batch_size):
             kept = (result[i] > float("-inf")).sum().item()
-            assert kept > 0, (
-                f"Row {i}: all tokens masked with {num_valid} "
-                f"nearly-equal finite logits"
-            )
+            assert kept > 0, f"Row {i}: all tokens masked with {num_valid} nearly-equal finite logits"
 
     def test_mixed_neginf_and_normal_rows(self):
         """Batch with a mix of normal rows and heavily-masked rows."""
         from aphrodite.v1.sample.ops.topk_topp_triton import apply_top_k_top_p_triton
 
         batch_size, vocab_size = 32, 32000
-        logits = torch.randn(
-            batch_size, vocab_size, generator=self.generator, dtype=torch.float32
-        )
+        logits = torch.randn(batch_size, vocab_size, generator=self.generator, dtype=torch.float32)
         # Mask even rows heavily (99% -inf), leave odd rows normal.
         for i in range(0, batch_size, 2):
             mask = torch.rand(vocab_size, generator=self.generator) < 0.99
             logits[i][mask] = float("-inf")
 
-        k = torch.randint(
-            1, 50, (batch_size,), generator=self.generator, dtype=torch.int32
-        )
-        p = (
-            torch.rand(batch_size, generator=self.generator, dtype=torch.float32) * 0.9
-            + 0.1
-        )
+        k = torch.randint(1, 50, (batch_size,), generator=self.generator, dtype=torch.int32)
+        p = torch.rand(batch_size, generator=self.generator, dtype=torch.float32) * 0.9 + 0.1
 
         result = apply_top_k_top_p_triton(logits.clone(), k, p)
         assert not result.isnan().any(), "NaN in mixed normal/-inf batch"
@@ -775,8 +690,7 @@ class TestTritonTopkTopp:
 
 @pytest.mark.skipif(
     not FLASHINFER_TOPK_TOPP_SUPPORTED,
-    reason="FlashInfer top-k/top-p sampler requires CUDA "
-    "and a GPU with FlashInfer support.",
+    reason="FlashInfer top-k/top-p sampler requires CUDA and a GPU with FlashInfer support.",
 )
 class TestFlashInferTopkToppRobustness:
     """Robustness of FlashInfer top-k / top-p sampling to NaN / Inf logits.
@@ -851,9 +765,7 @@ class TestFlashInferTopkToppRobustness:
 
     def _check_tokens(self, tokens: torch.Tensor, ctx: str):
         assert tokens.dim() == 1, f"{ctx}: expected 1-D output, got {tokens.shape}"
-        assert tokens.shape[0] == self.BATCH, (
-            f"{ctx}: expected batch size {self.BATCH}, got {tokens.shape[0]}"
-        )
+        assert tokens.shape[0] == self.BATCH, f"{ctx}: expected batch size {self.BATCH}, got {tokens.shape[0]}"
         ids = tokens.tolist()
         min_id, max_id = min(ids), max(ids)
         assert 0 <= min_id < self.VOCAB and 0 <= max_id < self.VOCAB, (
@@ -922,8 +834,7 @@ class TestFlashInferTopkToppRobustness:
 
 @pytest.mark.skipif(
     not FLASHINFER_TOPK_TOPP_SUPPORTED,
-    reason="FlashInfer top-k/top-p sampler requires CUDA "
-    "and a GPU with FlashInfer support.",
+    reason="FlashInfer top-k/top-p sampler requires CUDA and a GPU with FlashInfer support.",
 )
 class TestFlashInferDistributionMatch:
     """Chi-square goodness-of-fit: FlashInfer and PyTorch-native samplers
@@ -982,16 +893,8 @@ class TestFlashInferDistributionMatch:
 
         # Build a batch of N identical rows for both impls.
         batch = logits_one.expand(self.N_SAMPLES, self.VOCAB).contiguous()
-        k_batch = (
-            torch.full((self.N_SAMPLES,), topk, dtype=torch.int32)
-            if topk is not None
-            else None
-        )
-        p_batch = (
-            torch.full((self.N_SAMPLES,), topp, dtype=torch.float32)
-            if topp is not None
-            else None
-        )
+        k_batch = torch.full((self.N_SAMPLES,), topk, dtype=torch.int32) if topk is not None else None
+        p_batch = torch.full((self.N_SAMPLES,), topp, dtype=torch.float32) if topp is not None else None
 
         # FlashInfer dispatch path.
         fi_tokens = flashinfer_sample(batch.contiguous(), k_batch, p_batch, {})
@@ -1022,8 +925,7 @@ class TestFlashInferDistributionMatch:
         # expected support (zero theoretical probability).
         outside = (expected == 0) & (empirical > 0)
         assert not outside.any(), (
-            f"{label}: sampled out-of-support tokens "
-            f"(zero expected prob): indices={outside.nonzero()[0].tolist()}"
+            f"{label}: sampled out-of-support tokens (zero expected prob): indices={outside.nonzero()[0].tolist()}"
         )
         # Skip chi-square in the degenerate case where the support
         # collapses to a single token (e.g. very restrictive joint
@@ -1040,6 +942,5 @@ class TestFlashInferDistributionMatch:
         exp = exp * (emp.sum() / exp.sum())
         chi2, p_value = chisquare_fn(emp, exp)
         assert p_value > self.ALPHA, (
-            f"{label}: distribution differs from theoretical: "
-            f"chi2={chi2:.2f} p_value={p_value:.2e} alpha={self.ALPHA}"
+            f"{label}: distribution differs from theoretical: chi2={chi2:.2f} p_value={p_value:.2e} alpha={self.ALPHA}"
         )

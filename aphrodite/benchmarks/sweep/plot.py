@@ -38,8 +38,7 @@ class PlotFilterBase(ABC):
                 )
         else:
             raise ValueError(
-                f"Invalid operator for plot filter '{s}'. "
-                f"Valid operators are: {sorted(PLOT_FILTERS)}",
+                f"Invalid operator for plot filter '{s}'. Valid operators are: {sorted(PLOT_FILTERS)}",
             )
 
     @abstractmethod
@@ -141,8 +140,7 @@ class PlotBinner:
                 return PLOT_BINNERS[op_key](key, float(value.removeprefix(op_key)))
         else:
             raise ValueError(
-                f"Invalid operator for plot binner '{s}'. "
-                f"Valid operators are: {sorted(PLOT_BINNERS)}",
+                f"Invalid operator for plot binner '{s}'. Valid operators are: {sorted(PLOT_BINNERS)}",
             )
 
     def apply(self, df: "pd.DataFrame") -> "pd.DataFrame":
@@ -277,10 +275,7 @@ def _plot_fig(
         key=lambda item: _get_group(item, row_by),
     )
     num_rows = len(row_groups)
-    num_cols = max(
-        len(full_groupby(row_data, key=lambda item: _get_group(item, col_by)))
-        for _, row_data in row_groups
-    )
+    num_cols = max(len(full_groupby(row_data, key=lambda item: _get_group(item, col_by))) for _, row_data in row_groups)
 
     fig_path = _get_fig_path(fig_dir, fig_group, fig_name)
 
@@ -299,31 +294,26 @@ def _plot_fig(
 
     if var_x not in df.columns:
         raise ValueError(
-            f"Cannot find {var_x=!r} in parameter sweep results. "
-            f"Available variables: {df.columns.tolist()}"
+            f"Cannot find {var_x=!r} in parameter sweep results. Available variables: {df.columns.tolist()}"
         )
     if var_y not in df.columns:
         raise ValueError(
-            f"Cannot find {var_y=!r} in parameter sweep results. "
-            f"Available variables: {df.columns.tolist()}"
+            f"Cannot find {var_y=!r} in parameter sweep results. Available variables: {df.columns.tolist()}"
         )
     for k in row_by:
         if k not in df.columns:
             raise ValueError(
-                f"Cannot find row_by={k!r} in parameter sweep results. "
-                f"Available variables: {df.columns.tolist()}"
+                f"Cannot find row_by={k!r} in parameter sweep results. Available variables: {df.columns.tolist()}"
             )
     for k in col_by:
         if k not in df.columns:
             raise ValueError(
-                f"Cannot find col_by={k!r} in parameter sweep results. "
-                f"Available variables: {df.columns.tolist()}"
+                f"Cannot find col_by={k!r} in parameter sweep results. Available variables: {df.columns.tolist()}"
             )
     for k in curve_by:
         if k not in df.columns:
             raise ValueError(
-                f"Cannot find curve_by={k!r} in parameter sweep results. "
-                f"Available variables: {df.columns.tolist()}"
+                f"Cannot find curve_by={k!r} in parameter sweep results. Available variables: {df.columns.tolist()}"
             )
 
     df = filter_by.apply(df)
@@ -436,11 +426,7 @@ def plot(
     fig_height: float = 6.4,
     fig_dpi: int = 300,
 ):
-    all_data = [
-        run_data
-        for path in output_dir.rglob("**/summary.json")
-        for run_data in _json_load_bytes(path)
-    ]
+    all_data = [run_data for path in output_dir.rglob("**/summary.json") for run_data in _json_load_bytes(path)]
 
     if not all_data:
         raise ValueError(f"Did not find any parameter sweep results under {output_dir}")
@@ -544,8 +530,7 @@ class SweepPlotArgs:
             "--fig-dir",
             type=str,
             default="",
-            help="The directory to save the figures, relative to `OUTPUT_DIR`. "
-            "By default, the same directory is used.",
+            help="The directory to save the figures, relative to `OUTPUT_DIR`. By default, the same directory is used.",
         )
         parser.add_argument(
             "--fig-by",
@@ -633,8 +618,7 @@ class SweepPlotArgs:
         parser.add_argument(
             "--no-error-bars",
             action="store_true",
-            help="If set, disables error bars on the plot. "
-            "By default, error bars are shown.",
+            help="If set, disables error bars on the plot. By default, error bars are shown.",
         )
         parser.add_argument(
             "--fig-height",
@@ -651,8 +635,7 @@ class SweepPlotArgs:
         parser.add_argument(
             "--dry-run",
             action="store_true",
-            help="If set, prints the information about each figure to plot, "
-            "then exits without drawing them.",
+            help="If set, prints the information about each figure to plot, then exits without drawing them.",
         )
 
         return parser

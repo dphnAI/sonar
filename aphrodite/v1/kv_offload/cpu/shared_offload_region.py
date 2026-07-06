@@ -19,9 +19,7 @@ def _wait_for_file_size(fd: int, expected_size: int, timeout: float = 30.0) -> N
         if os.fstat(fd).st_size >= expected_size:
             return
         if time.monotonic() > deadline:
-            raise TimeoutError(
-                f"Timed out waiting for mmap file to reach {expected_size} bytes"
-            )
+            raise TimeoutError(f"Timed out waiting for mmap file to reach {expected_size} bytes")
         time.sleep(0.005)
 
 
@@ -63,9 +61,7 @@ class SharedOffloadRegion:
             self._worker_area_end = (rank + 1) * cpu_page_size
         try:
             # Exclusive create — only one worker succeeds
-            self.fd: int | None = os.open(
-                self.mmap_path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600
-            )
+            self.fd: int | None = os.open(self.mmap_path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
             os.ftruncate(self.fd, self.total_size_bytes)
             self._creator = True
             logger.info(
@@ -97,9 +93,7 @@ class SharedOffloadRegion:
                 aligned_offset = (raw_offset // page_size) * page_size
                 end = raw_offset + cpu_page_size
                 aligned_length = end - aligned_offset
-                self.mmap_obj.madvise(
-                    _MADV_POPULATE_WRITE, aligned_offset, aligned_length
-                )
+                self.mmap_obj.madvise(_MADV_POPULATE_WRITE, aligned_offset, aligned_length)
             logger.debug(
                 "MADV_POPULATE_WRITE loop: %d blocks in %.3f s",
                 num_blocks,
@@ -109,9 +103,7 @@ class SharedOffloadRegion:
             # No rank — populate the entire shared region in one call.
             _t0 = time.perf_counter()
             self.mmap_obj.madvise(_MADV_POPULATE_WRITE, 0, self.total_size_bytes)
-            logger.debug(
-                "MADV_POPULATE_WRITE entire region: %.3f s", time.perf_counter() - _t0
-            )
+            logger.debug("MADV_POPULATE_WRITE entire region: %.3f s", time.perf_counter() - _t0)
 
         self._base = torch.frombuffer(memoryview(self.mmap_obj), dtype=torch.int8)
         self._views: list[torch.Tensor] = []
@@ -206,7 +198,5 @@ class SharedOffloadRegion:
                 os.unlink(self.mmap_path)
                 logger.info("Removed mmap file %s", self.mmap_path)
             except Exception:
-                logger.warning(
-                    "Failed to unlink path %s", self.mmap_path, exc_info=True
-                )
+                logger.warning("Failed to unlink path %s", self.mmap_path, exc_info=True)
             self._creator = False

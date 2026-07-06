@@ -6,14 +6,14 @@ import torch
 import torch.nn as nn
 
 import aphrodite
-from tests.compile.backend import TestBackend
 from aphrodite.compilation.passes.utility.scatter_split_replace import (
     ScatterSplitReplacementPass,
 )
 from aphrodite.compilation.passes.utility.split_coalescing import SplitCoalescingPass
-from aphrodite.config import CompilationConfig, CompilationMode, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CompilationConfig, CompilationMode
 from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
 from aphrodite.platforms import current_platform
+from tests.compile.backend import TestBackend
 
 DEVICE_TYPE = current_platform.device_type
 
@@ -88,9 +88,7 @@ def test_scatter_split_replace(dtype):
         model = ScatterSplitReplacementModel(num_heads, num_kv_heads, head_size, dtype)
 
         T = 5
-        qkv = torch.randn(
-            T, num_heads * head_size + 2 * num_kv_heads * head_size, dtype=dtype
-        )
+        qkv = torch.randn(T, num_heads * head_size + 2 * num_kv_heads * head_size, dtype=dtype)
         pos = torch.arange(T, dtype=torch.long)
 
         qkv_eager = qkv.clone()

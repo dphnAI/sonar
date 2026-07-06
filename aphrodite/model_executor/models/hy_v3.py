@@ -34,7 +34,7 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig, get_current_aphrodite_config
+from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
 from aphrodite.distributed import (
     get_ep_group,
     get_pp_group,
@@ -110,9 +110,7 @@ class HYV3FeedForward(nn.Module):
             prefix=f"{prefix}.down_proj",
         )
         if hidden_act != "silu":
-            raise ValueError(
-                f"Unsupported activation: {hidden_act}. Only silu is supported for now."
-            )
+            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu is supported for now.")
         self.act_fn = SiluAndMul()
 
     def forward(self, x):
@@ -138,8 +136,7 @@ class HYV3MoEFused(nn.Module):
         self.n_routed_experts = config.num_experts
         if self.tp_size > config.num_experts:
             raise ValueError(
-                f"Tensor parallel size {self.tp_size} is greater than "
-                f"the number of experts {config.num_experts}."
+                f"Tensor parallel size {self.tp_size} is greater than the number of experts {config.num_experts}."
             )
         top_k = config.num_experts_per_tok
         intermediate_size = config.expert_hidden_dim
@@ -153,9 +150,7 @@ class HYV3MoEFused(nn.Module):
         self.n_physical_experts = self.n_logical_experts + self.n_redundant_experts
         self.n_local_physical_experts = self.n_physical_experts // self.ep_size
         self.physical_expert_start = self.ep_rank * self.n_local_physical_experts
-        self.physical_expert_end = (
-            self.physical_expert_start + self.n_local_physical_experts
-        )
+        self.physical_expert_end = self.physical_expert_start + self.n_local_physical_experts
         self.gate = GateLinear(
             config.hidden_size,
             config.num_experts,
@@ -212,9 +207,7 @@ class HYV3MoEFused(nn.Module):
         # router_logits: (num_tokens, n_experts)
         router_logits, _ = self.gate(hidden_states)
 
-        final_hidden_states = self.experts(
-            hidden_states=hidden_states, router_logits=router_logits
-        )
+        final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=router_logits)
         return final_hidden_states.view(orig_shape)
 
 
@@ -281,9 +274,7 @@ class HYV3Attention(nn.Module):
         # When the HPC fused RoPE+QK-Norm path is enabled, the RoPE cos/sin
         # cache must be float32 to match the HPC kernel's expectations.
         kv_cache_dtype = cache_config.cache_dtype if cache_config else "auto"
-        rope_support = HpcRopeNorm.support(
-            self.num_heads, self.num_kv_heads, self.head_dim, kv_cache_dtype
-        )
+        rope_support = HpcRopeNorm.support(self.num_heads, self.num_kv_heads, self.head_dim, kv_cache_dtype)
         self.rotary_emb = get_rope(
             self.head_dim,
             max_position=max_position_embeddings,
@@ -342,15 +333,11 @@ class HYV3Attention(nn.Module):
             attn_output = self.attn(q, k, v, output_shape, self.dtype)
         else:
             if self.use_qk_norm:
-                q_by_head = q.view(
-                    *q.shape[:-1], q.shape[-1] // self.head_dim, self.head_dim
-                )
+                q_by_head = q.view(*q.shape[:-1], q.shape[-1] // self.head_dim, self.head_dim)
                 q_by_head = self.q_norm(q_by_head)
                 q = q_by_head.view(q.shape)
 
-                k_by_head = k.view(
-                    *k.shape[:-1], k.shape[-1] // self.head_dim, self.head_dim
-                )
+                k_by_head = k.view(*k.shape[:-1], k.shape[-1] // self.head_dim, self.head_dim)
                 k_by_head = self.k_norm(k_by_head)
                 k = k_by_head.view(k.shape)
             q, k = self.rotary_emb(positions, q, k)
@@ -399,9 +386,7 @@ class HYV3DecoderLayer(nn.Module):
             )
             self.block_type = "feedforward"
         else:
-            self.mlp = HYV3MoEFused(
-                config=config, quant_config=quant_config, prefix=f"{prefix}.mlp"
-            )
+            self.mlp = HYV3MoEFused(config=config, quant_config=quant_config, prefix=f"{prefix}.mlp")
             self.block_type = "moe"
 
     def forward(
@@ -486,9 +471,7 @@ class HYV3Model(nn.Module, MixtureOfExperts):
         self.num_moe_layers = len(self.moe_layers)
         self.num_logical_experts = getattr(example_layer, "n_logical_experts", None)
         self.num_physical_experts = getattr(example_layer, "n_physical_experts", None)
-        self.num_local_physical_experts = getattr(
-            example_layer, "n_local_physical_experts", None
-        )
+        self.num_local_physical_experts = getattr(example_layer, "n_local_physical_experts", None)
         self.num_routed_experts = getattr(example_layer, "n_routed_experts", None)
         self.num_redundant_experts = getattr(example_layer, "n_redundant_experts", None)
 
@@ -541,14 +524,10 @@ class HYV3Model(nn.Module, MixtureOfExperts):
             hidden_states = intermediate_tensors["hidden_states"]
             residual = intermediate_tensors["residual"]
 
-        for idx, layer in enumerate(
-            islice(self.layers, self.start_layer, self.end_layer)
-        ):
+        for idx, layer in enumerate(islice(self.layers, self.start_layer, self.end_layer)):
             hidden_states, residual = layer(positions, hidden_states, residual, idx=idx)
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
 
         hidden_states = hidden_states + residual
         residual = hidden_states
@@ -648,14 +627,9 @@ class HYV3Model(nn.Module, MixtureOfExperts):
         return loaded_params
 
 
-def get_spec_layer_idx_from_weight_name(
-    config: PretrainedConfig, weight_name: str
-) -> int | None:
+def get_spec_layer_idx_from_weight_name(config: PretrainedConfig, weight_name: str) -> int | None:
     # HYV3MTP is enabled only when num_nextn_predict_layers is greater than 1
-    if (
-        hasattr(config, "num_nextn_predict_layers")
-        and config.num_nextn_predict_layers > 0
-    ):
+    if hasattr(config, "num_nextn_predict_layers") and config.num_nextn_predict_layers > 0:
         layer_idx = config.num_hidden_layers
         for i in range(config.num_nextn_predict_layers):
             if weight_name.startswith(f"model.layers.{layer_idx + i}."):
@@ -680,9 +654,7 @@ class HYV3ForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
         eplb_config = parallel_config.eplb_config
         self.num_redundant_experts = eplb_config.num_redundant_experts
 
-        self.model = HYV3Model(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = HYV3Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
         self.lm_head = ParallelLMHead(
             config.vocab_size,
             config.hidden_size,
@@ -692,9 +664,7 @@ class HYV3ForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
         if self.config.tie_word_embeddings:
             self.lm_head.weight = self.model.embed_tokens.weight
         self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -706,9 +676,7 @@ class HYV3ForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
 
         return hidden_states
 

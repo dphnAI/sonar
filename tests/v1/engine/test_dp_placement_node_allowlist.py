@@ -11,9 +11,7 @@ import aphrodite.v1.engine.utils as utils
 from aphrodite.v1.engine.utils import CoreEngineActorManager
 
 
-def _aphrodite_config(
-    *, dp_size, dp_local, master_ip, world_size=1, all2all_backend="naive"
-):
+def _aphrodite_config(*, dp_size, dp_local, master_ip, world_size=1, all2all_backend="naive"):
     parallel = SimpleNamespace(
         data_parallel_master_ip=master_ip,
         data_parallel_size=dp_size,
@@ -26,9 +24,7 @@ def _aphrodite_config(
 
 def _resources(node_gpus: dict[str, int]):
     # node_gpus: {ip: gpu_count}; plus a CPU-only head node.
-    res = {
-        f"id-{ip}": {"GPU": float(g), f"node:{ip}": 1.0} for ip, g in node_gpus.items()
-    }
+    res = {f"id-{ip}": {"GPU": float(g), f"node:{ip}": 1.0} for ip, g in node_gpus.items()}
     res["id-head"] = {
         "CPU": 8.0,
         "node:__internal_head__": 1.0,
@@ -58,11 +54,7 @@ def _run(cfg, resources):
 
 def _pinned_ips(created):
     return {
-        key.split(":", 1)[1]
-        for pg in created
-        for bundle in pg["bundles"]
-        for key in bundle
-        if key.startswith("node:")
+        key.split(":", 1)[1] for pg in created for bundle in pg["bundles"] for key in bundle if key.startswith("node:")
     }
 
 

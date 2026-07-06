@@ -18,9 +18,7 @@ from aphrodite.sampling_params import BeamSearchParams
 from aphrodite.utils.argparse_utils import FlexibleArgumentParser
 
 
-def save_to_pytorch_benchmark_format(
-    args: argparse.Namespace, results: dict[str, Any]
-) -> None:
+def save_to_pytorch_benchmark_format(args: argparse.Namespace, results: dict[str, Any]) -> None:
     pt_records = convert_to_pytorch_benchmark_format(
         args=args,
         metrics={"latency": results["latencies"]},
@@ -48,9 +46,7 @@ def add_cli_args(parser: FlexibleArgumentParser):
         default=10,
         help="Number of iterations to run for warmup.",
     )
-    parser.add_argument(
-        "--num-iters", type=int, default=30, help="Number of iterations to run."
-    )
+    parser.add_argument("--num-iters", type=int, default=30, help="Number of iterations to run.")
     parser.add_argument(
         "--profile",
         action="store_true",
@@ -65,10 +61,7 @@ def add_cli_args(parser: FlexibleArgumentParser):
     parser.add_argument(
         "--disable-detokenize",
         action="store_true",
-        help=(
-            "Do not detokenize responses (i.e. do not include "
-            "detokenization time in the latency measurement)"
-        ),
+        help=("Do not detokenize responses (i.e. do not include detokenization time in the latency measurement)"),
     )
 
     parser = EngineArgs.add_cli_args(parser)
@@ -86,11 +79,8 @@ def main(args: argparse.Namespace):
     # NOTE(woosuk): If the request cannot be processed in a single batch,
     # the engine will automatically process the request in multiple batches.
     llm = LLM.from_engine_args(engine_args)
-    assert llm.llm_engine.model_config.max_model_len >= (
-        args.input_len + args.output_len
-    ), (
-        "Please ensure that max_model_len is greater than"
-        " the sum of input_len and output_len."
+    assert llm.llm_engine.model_config.max_model_len >= (args.input_len + args.output_len), (
+        "Please ensure that max_model_len is greater than the sum of input_len and output_len."
     )
 
     sampling_params = SamplingParams(
@@ -101,12 +91,9 @@ def main(args: argparse.Namespace):
         max_tokens=args.output_len,
         detokenize=not args.disable_detokenize,
     )
-    dummy_prompt_token_ids = np.random.randint(
-        10000, size=(args.batch_size, args.input_len)
-    )
+    dummy_prompt_token_ids = np.random.randint(10000, size=(args.batch_size, args.input_len))
     dummy_prompts: list[TokensPrompt | TextPrompt] = [
-        TokensPrompt(prompt_token_ids=batch)
-        for batch in dummy_prompt_token_ids.tolist()
+        TokensPrompt(prompt_token_ids=batch) for batch in dummy_prompt_token_ids.tolist()
     ]
 
     def llm_generate():
@@ -141,10 +128,7 @@ def main(args: argparse.Namespace):
     if args.profile:
         profiler_config = engine_args.profiler_config
         if profiler_config.profiler == "torch":
-            print(
-                "Profiling with torch profiler (results will be saved to"
-                f" {profiler_config.torch_profiler_dir})..."
-            )
+            print(f"Profiling with torch profiler (results will be saved to {profiler_config.torch_profiler_dir})...")
         elif profiler_config.profiler == "cuda":
             print("Profiling with cuda profiler ...")
         run_to_completion(do_profile=True)

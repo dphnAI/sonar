@@ -77,9 +77,7 @@ class PoolingOutput:
         return f"PoolingOutput(data={self.data})"
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, self.__class__) and bool(
-            (self.data == other.data).all()
-        )
+        return isinstance(other, self.__class__) and bool((self.data == other.data).all())
 
 
 class RequestOutput:
@@ -126,9 +124,7 @@ class RequestOutput:
         **kwargs: Any,
     ) -> None:
         if kwargs:
-            logger.warning_once(
-                "RequestOutput: Ignoring extra arguments: %s", str(kwargs)
-            )
+            logger.warning_once("RequestOutput: Ignoring extra arguments: %s", str(kwargs))
         self.request_id = request_id
         self.prompt = prompt
         self.prompt_token_ids = prompt_token_ids
@@ -160,9 +156,7 @@ class RequestOutput:
                         if next_completion.logprobs:
                             assert completion.logprobs is not None
                             completion.logprobs.extend(next_completion.logprobs)  # type: ignore[arg-type]
-                        completion.cumulative_logprob = (
-                            next_completion.cumulative_logprob
-                        )
+                        completion.cumulative_logprob = next_completion.cumulative_logprob
                         completion.finish_reason = next_completion.finish_reason
                         completion.stop_reason = next_completion.stop_reason
                     else:

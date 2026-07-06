@@ -81,9 +81,7 @@ class TeleChat2Model(LlamaModel):
                 for i in range(total_num_heads):
                     start = i * head_dim * 2
                     k_weight.append(loaded_weight[start : start + head_dim, :])
-                    v_weight.append(
-                        loaded_weight[start + head_dim : start + 2 * head_dim :]
-                    )
+                    v_weight.append(loaded_weight[start + head_dim : start + 2 * head_dim :])
                 k_weight = torch.cat(k_weight, dim=0)
                 v_weight = torch.cat(v_weight, dim=0)
                 name = name.replace("key_value", "qkv_proj")
@@ -115,9 +113,7 @@ class TeleChat2Model(LlamaModel):
                     if is_pp_missing_parameter(name, self):
                         continue
                     param = params_dict[name]
-                    weight_loader = getattr(
-                        param, "weight_loader", default_weight_loader
-                    )
+                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
                     weight_loader(param, loaded_weight)
             loaded_params.add(name)
         return loaded_params

@@ -8,6 +8,7 @@ import pytest
 import torch
 
 from aphrodite.config import (
+    AphroditeConfig,
     CacheConfig,
     CompilationConfig,
     DeviceConfig,
@@ -15,7 +16,6 @@ from aphrodite.config import (
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
-    AphroditeConfig,
 )
 from aphrodite.config.model import ModelDType
 from aphrodite.v1.attention.backend import (
@@ -65,12 +65,8 @@ def create_common_attn_metadata(
 ) -> CommonAttentionMetadata:
     """Create CommonAttentionMetadata from a BatchSpec and ModelParams."""
     # Create query start locations
-    query_start_loc = torch.zeros(
-        batch_spec.batch_size + 1, dtype=torch.int32, device=device
-    )
-    query_start_loc[1:] = torch.tensor(
-        batch_spec.query_lens, dtype=torch.int32, device=device
-    ).cumsum(0)
+    query_start_loc = torch.zeros(batch_spec.batch_size + 1, dtype=torch.int32, device=device)
+    query_start_loc[1:] = torch.tensor(batch_spec.query_lens, dtype=torch.int32, device=device).cumsum(0)
     query_start_loc_cpu = query_start_loc.cpu()
     num_tokens = batch_spec.compute_num_tokens()
 
@@ -80,22 +76,17 @@ def create_common_attn_metadata(
     max_seq_len = int(seq_lens_cpu.max())
 
     # Create computed tokens (context length for each sequence)
-    context_lens = [
-        batch_spec.seq_lens[i] - batch_spec.query_lens[i]
-        for i in range(batch_spec.batch_size)
-    ]
+    context_lens = [batch_spec.seq_lens[i] - batch_spec.query_lens[i] for i in range(batch_spec.batch_size)]
     num_computed_tokens_cpu = torch.tensor(context_lens, dtype=torch.int32)
 
     # Create block table and slot mapping
     max_blocks = (max(batch_spec.seq_lens) + block_size - 1) // block_size
     if arange_block_indices:
         num_blocks = batch_spec.batch_size * max_blocks
-        block_table_tensor = torch.arange(
-            num_blocks, dtype=torch.int32, device=device
-        ).view(batch_spec.batch_size, max_blocks)
-        slot_mapping = torch.arange(num_tokens, dtype=torch.int64, device=device).view(
-            num_tokens
+        block_table_tensor = torch.arange(num_blocks, dtype=torch.int32, device=device).view(
+            batch_spec.batch_size, max_blocks
         )
+        slot_mapping = torch.arange(num_tokens, dtype=torch.int64, device=device).view(num_tokens)
     else:
         block_table_tensor = torch.randint(
             0,
@@ -104,9 +95,7 @@ def create_common_attn_metadata(
             dtype=torch.int32,
             device=device,
         )
-        slot_mapping = torch.randint(
-            0, max_block_idx, (num_tokens,), dtype=torch.int64, device=device
-        )
+        slot_mapping = torch.randint(0, max_block_idx, (num_tokens,), dtype=torch.int64, device=device)
 
     # Calculate max query length
     max_query_len = max(batch_spec.query_lens)
@@ -164,17 +153,13 @@ def create_standard_kv_cache_spec(
     if attn_type == AttentionType.ENCODER_ONLY:
         return EncoderOnlyAttentionSpec(
             block_size=aphrodite_config.cache_config.block_size,
-            num_kv_heads=aphrodite_config.model_config.get_num_kv_heads(
-                aphrodite_config.parallel_config
-            ),
+            num_kv_heads=aphrodite_config.model_config.get_num_kv_heads(aphrodite_config.parallel_config),
             head_size=aphrodite_config.model_config.get_head_size(),
             dtype=aphrodite_config.model_config.dtype,
         )
     return FullAttentionSpec(
         block_size=aphrodite_config.cache_config.block_size,
-        num_kv_heads=aphrodite_config.model_config.get_num_kv_heads(
-            aphrodite_config.parallel_config
-        ),
+        num_kv_heads=aphrodite_config.model_config.get_num_kv_heads(aphrodite_config.parallel_config),
         head_size=aphrodite_config.model_config.get_head_size(),
         dtype=aphrodite_config.model_config.dtype,
         sliding_window=aphrodite_config.model_config.get_sliding_window(),
@@ -238,12 +223,8 @@ def create_aphrodite_config(
         import types
 
         model_config.get_num_layers = types.MethodType(lambda self: 1, model_config)
-        model_config.get_sliding_window_for_layer = types.MethodType(
-            lambda self, i: None, model_config
-        )
-        model_config.get_logits_soft_cap_for_layer = types.MethodType(
-            lambda self, i: 0.0, model_config
-        )
+        model_config.get_sliding_window_for_layer = types.MethodType(lambda self, i: None, model_config)
+        model_config.get_logits_soft_cap_for_layer = types.MethodType(lambda self, i: 0.0, model_config)
         model_config.get_sm_scale_for_layer = types.MethodType(
             lambda self, i: 1.0 / model_config.get_head_size() ** 0.5, model_config
         )
@@ -403,15 +384,11 @@ class MockMambaBuilder(BaseMambaAttentionMetadataBuilder[BaseMambaAttentionMetad
     ) -> BaseMambaAttentionMetadata:
         block_size = aphrodite_config.cache_config.block_size
         device = device or torch.device("cpu")
-        mamba_spec = MambaSpec(
-            block_size=block_size, shapes=((1,), (1,)), dtypes=(torch.float32,)
-        )
+        mamba_spec = MambaSpec(block_size=block_size, shapes=((1,), (1,)), dtypes=(torch.float32,))
         builder = cls(mamba_spec, ["layer0"], aphrodite_config, device)
         batch_spec = BatchSpec(seq_lens=seq_lens, query_lens=query_lens)
         common_metadata = create_common_attn_metadata(
             batch_spec, block_size=block_size, device=device, arange_block_indices=True
         )
-        common_metadata = common_metadata.replace(
-            is_prefilling=torch.tensor(is_prefilling, dtype=torch.bool)
-        )
+        common_metadata = common_metadata.replace(is_prefilling=torch.tensor(is_prefilling, dtype=torch.bool))
         return builder.build(0, common_metadata)

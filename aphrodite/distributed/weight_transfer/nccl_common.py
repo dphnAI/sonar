@@ -47,9 +47,7 @@ def stateless_init_process_group(
     from aphrodite.distributed.device_communicators.pynccl import PyNcclCommunicator
     from aphrodite.distributed.utils import StatelessProcessGroup
 
-    pg = StatelessProcessGroup.create(
-        host=master_address, port=master_port, rank=rank, world_size=world_size
-    )
+    pg = StatelessProcessGroup.create(host=master_address, port=master_port, rank=rank, world_size=world_size)
     return PyNcclCommunicator(pg, device=device)
 
 

@@ -5,7 +5,7 @@
 
 import pytest
 
-from aphrodite.config import CacheConfig, KVTransferConfig, ParallelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig, KVTransferConfig, ParallelConfig
 from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
 
 pytestmark = pytest.mark.cpu_test
@@ -69,9 +69,7 @@ def test_kv_connector(
             kv_offloading_size=kv_offloading_size,
         ),
         kv_transfer_config=kv_transfer_config,
-        parallel_config=ParallelConfig(
-            tensor_parallel_size=tp, pipeline_parallel_size=pp
-        ),
+        parallel_config=ParallelConfig(tensor_parallel_size=tp, pipeline_parallel_size=pp),
     )
 
     # No KV transfer config expected
@@ -109,9 +107,7 @@ def _build_config(
     from types import SimpleNamespace
 
     kv_transfer_config = (
-        KVTransferConfig(kv_connector=kv_connector, kv_role="kv_both")
-        if kv_connector is not None
-        else None
+        KVTransferConfig(kv_connector=kv_connector, kv_role="kv_both") if kv_connector is not None else None
     )
     cfg = AphroditeConfig.__new__(AphroditeConfig)
     cfg.kv_transfer_config = kv_transfer_config
@@ -123,9 +119,7 @@ def _build_config(
     return cfg
 
 
-@pytest.mark.parametrize(
-    "kv_connector", ["NixlConnector", "MooncakeConnectorV1", "SomeOOTConnector"]
-)
+@pytest.mark.parametrize("kv_connector", ["NixlConnector", "MooncakeConnectorV1", "SomeOOTConnector"])
 def test_kv_connector_rejects_expandable_segments(monkeypatch, kv_connector):
     """KV connectors that pin KV cache memory (e.g. via ibv_reg_mr) are
     invalidated when expandable_segments lets the CUDA VMM allocator remap
@@ -154,9 +148,7 @@ def test_kv_connector_allows_expandable_segments_with_cumem_allocator(
 
 def test_kv_connector_allows_other_alloc_conf(monkeypatch):
     """Other PYTORCH_CUDA_ALLOC_CONF values must not be rejected."""
-    monkeypatch.setenv(
-        "PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:512,expandable_segments:False"
-    )
+    monkeypatch.setenv("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:512,expandable_segments:False")
     _build_config(kv_connector="NixlConnector")
 
 

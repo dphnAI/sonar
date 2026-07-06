@@ -7,15 +7,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from tests.tool_parsers.utils import (
-    run_tool_extraction,
-    run_tool_extraction_streaming,
-)
 from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
 from aphrodite.tokenizers import get_tokenizer
 from aphrodite.tool_parsers.kimi_k2_tool_parser import KimiK2ToolParser
+from tests.tool_parsers.utils import (
+    run_tool_extraction,
+    run_tool_extraction_streaming,
+)
 
 MODEL = "moonshotai/Kimi-K2-Instruct"
 
@@ -47,9 +47,7 @@ def _wrap(*tool_strs: str) -> str:
 
 class TestExtractToolCalls:
     def test_no_tools(self, parser):
-        content, tool_calls = run_tool_extraction(
-            parser, "This is a test", streaming=False
-        )
+        content, tool_calls = run_tool_extraction(parser, "This is a test", streaming=False)
         assert content == "This is a test"
         assert tool_calls == []
 
@@ -57,8 +55,7 @@ class TestExtractToolCalls:
         "model_output, expected_names, expected_args_list, expected_content",
         [
             pytest.param(
-                "I'll check. "
-                + _wrap(_tool("functions.get_weather:0", '{"city": "Beijing"}')),
+                "I'll check. " + _wrap(_tool("functions.get_weather:0", '{"city": "Beijing"}')),
                 ["get_weather"],
                 [{"city": "Beijing"}],
                 "I'll check. ",
@@ -95,10 +92,7 @@ class TestExtractToolCalls:
                 id="three_tool_calls",
             ),
             pytest.param(
-                "Process HTML. "
-                + _wrap(
-                    _tool("functions.process_html:0", '{"html": "<div>content</div>"}')
-                ),
+                "Process HTML. " + _wrap(_tool("functions.process_html:0", '{"html": "<div>content</div>"}')),
                 ["process_html"],
                 [{"html": "<div>content</div>"}],
                 "Process HTML. ",
@@ -133,15 +127,11 @@ class TestExtractToolCalls:
             ),
         ],
     )
-    def test_extract_tool_calls(
-        self, parser, model_output, expected_names, expected_args_list, expected_content
-    ):
+    def test_extract_tool_calls(self, parser, model_output, expected_names, expected_args_list, expected_content):
         content, tool_calls = run_tool_extraction(parser, model_output, streaming=False)
         assert content == expected_content
         assert len(tool_calls) == len(expected_names)
-        for tc, name, expected_args in zip(
-            tool_calls, expected_names, expected_args_list
-        ):
+        for tc, name, expected_args in zip(tool_calls, expected_names, expected_args_list):
             assert tc.type == "function"
             assert tc.function.name == name
             assert json.loads(tc.function.arguments) == expected_args
@@ -177,9 +167,7 @@ class TestExtractToolCalls:
 
     def test_native_id_extracted(self, parser):
         """Regression: parser extracts native ID onto ToolCall (PR #32768)."""
-        model_output = "Checking weather. " + _wrap(
-            _tool("functions.get_weather:0", '{"city": "Tokyo"}')
-        )
+        model_output = "Checking weather. " + _wrap(_tool("functions.get_weather:0", '{"city": "Tokyo"}'))
         content, tool_calls = run_tool_extraction(parser, model_output, streaming=False)
         assert len(tool_calls) == 1
         assert tool_calls[0].id == "functions.get_weather:0"
@@ -189,30 +177,20 @@ class TestExtractToolCalls:
     def test_multi_turn_native_id_continuity(self, kimi_k2_tokenizer):
         """Regression: native IDs from turn 1 preserved across turns (PR #32768)."""
         turn1_parser = KimiK2ToolParser(kimi_k2_tokenizer)
-        turn1_output = "Let me check. " + _wrap(
-            _tool("functions.get_weather:0", '{"city": "Beijing"}')
-        )
-        _, turn1_tools = run_tool_extraction(
-            turn1_parser, turn1_output, streaming=False
-        )
+        turn1_output = "Let me check. " + _wrap(_tool("functions.get_weather:0", '{"city": "Beijing"}'))
+        _, turn1_tools = run_tool_extraction(turn1_parser, turn1_output, streaming=False)
         assert len(turn1_tools) == 1
         assert turn1_tools[0].id == "functions.get_weather:0"
 
         # Fresh parser for turn 2
         turn2_parser = KimiK2ToolParser(kimi_k2_tokenizer)
-        turn2_output = "Now let me get news. " + _wrap(
-            _tool("functions.get_news:0", '{"topic": "weather in Beijing"}')
-        )
-        _, turn2_tools = run_tool_extraction(
-            turn2_parser, turn2_output, streaming=False
-        )
+        turn2_output = "Now let me get news. " + _wrap(_tool("functions.get_news:0", '{"topic": "weather in Beijing"}'))
+        _, turn2_tools = run_tool_extraction(turn2_parser, turn2_output, streaming=False)
         assert len(turn2_tools) == 1
         assert turn2_tools[0].id == "functions.get_news:0"
 
 
-def _split_tool_output_to_deltas(
-    content: str, tool_strs: list[tuple[str, str]]
-) -> list[str]:
+def _split_tool_output_to_deltas(content: str, tool_strs: list[tuple[str, str]]) -> list[str]:
     """Build a list of string deltas with special tokens as separate chunks.
 
     Args:
@@ -317,8 +295,7 @@ class TestStreamingHappyPath:
         "model_output",
         [
             pytest.param(
-                "Single. "
-                + _wrap(_tool("functions.get_weather:0", '{"city": "Beijing"}')),
+                "Single. " + _wrap(_tool("functions.get_weather:0", '{"city": "Beijing"}')),
                 id="single_tool",
             ),
             pytest.param(
@@ -337,19 +314,13 @@ class TestStreamingHappyPath:
     )
     def test_streaming_matches_nonstreaming(self, parser, model_output):
         """Streaming reconstruction matches non-streaming extraction."""
-        content_non, tools_non = run_tool_extraction(
-            parser, model_output, streaming=False
-        )
-        content_stream, tools_stream = run_tool_extraction(
-            parser, model_output, streaming=True
-        )
+        content_non, tools_non = run_tool_extraction(parser, model_output, streaming=False)
+        content_stream, tools_stream = run_tool_extraction(parser, model_output, streaming=True)
 
         assert len(tools_non) == len(tools_stream)
         for tc_non, tc_stream in zip(tools_non, tools_stream):
             assert tc_non.function.name == tc_stream.function.name
-            assert json.loads(tc_non.function.arguments) == json.loads(
-                tc_stream.function.arguments
-            )
+            assert json.loads(tc_non.function.arguments) == json.loads(tc_stream.function.arguments)
 
 
 class TestStreamingEdgeCases:
@@ -363,9 +334,7 @@ class TestStreamingEdgeCases:
 
         forbidden = [SECTION_BEGIN, SECTION_END, TOOL_BEGIN, TOOL_END, ARG_BEGIN]
         for marker in forbidden:
-            assert marker not in rec.other_content, (
-                f"Marker leaked: {marker!r} in {rec.other_content!r}"
-            )
+            assert marker not in rec.other_content, f"Marker leaked: {marker!r} in {rec.other_content!r}"
 
     def test_noise_between_markers_suppressed(self, parser):
         """Text between section_begin and tool_call_begin doesn't leak."""
@@ -493,9 +462,7 @@ def _chunk_tokenized_deltas(tokenizer, text: str, stream_interval: int) -> list[
     deltas = []
     prev = ""
     for i in range(0, len(token_ids), stream_interval):
-        decoded = tokenizer.decode(
-            token_ids[: i + stream_interval], skip_special_tokens=False
-        )
+        decoded = tokenizer.decode(token_ids[: i + stream_interval], skip_special_tokens=False)
         deltas.append(decoded[len(prev) :])
         prev = decoded
     return deltas
@@ -509,26 +476,18 @@ class TestStreamingIntervals:
         text = "Help. " + _wrap(_tool("functions.get_weather:0", '{"city": "Beijing"}'))
         deltas = _chunk_tokenized_deltas(kimi_k2_tokenizer, text, stream_interval)
         parser = KimiK2ToolParser(kimi_k2_tokenizer)
-        rec = run_tool_extraction_streaming(
-            parser, deltas, assert_one_tool_per_delta=False
-        )
+        rec = run_tool_extraction_streaming(parser, deltas, assert_one_tool_per_delta=False)
 
         assert len(rec.tool_calls) == 1
         assert rec.tool_calls[0].function.name == "get_weather"
         assert json.loads(rec.tool_calls[0].function.arguments) == {"city": "Beijing"}
 
     @pytest.mark.parametrize("stream_interval", [1, 2, 3, 5, 8])
-    def test_content_then_tool_call_at_interval(
-        self, kimi_k2_tokenizer, stream_interval
-    ):
-        text = "Sure, let me check. " + _wrap(
-            _tool("functions.get_weather:0", '{"city": "Tokyo"}')
-        )
+    def test_content_then_tool_call_at_interval(self, kimi_k2_tokenizer, stream_interval):
+        text = "Sure, let me check. " + _wrap(_tool("functions.get_weather:0", '{"city": "Tokyo"}'))
         deltas = _chunk_tokenized_deltas(kimi_k2_tokenizer, text, stream_interval)
         parser = KimiK2ToolParser(kimi_k2_tokenizer)
-        rec = run_tool_extraction_streaming(
-            parser, deltas, assert_one_tool_per_delta=False
-        )
+        rec = run_tool_extraction_streaming(parser, deltas, assert_one_tool_per_delta=False)
 
         assert "let me check" in rec.other_content
         assert "get_weather" not in rec.other_content
@@ -544,9 +503,7 @@ class TestStreamingIntervals:
         )
         deltas = _chunk_tokenized_deltas(kimi_k2_tokenizer, text, stream_interval)
         parser = KimiK2ToolParser(kimi_k2_tokenizer)
-        rec = run_tool_extraction_streaming(
-            parser, deltas, assert_one_tool_per_delta=False
-        )
+        rec = run_tool_extraction_streaming(parser, deltas, assert_one_tool_per_delta=False)
 
         assert len(rec.tool_calls) == 2
         assert rec.tool_calls[0].function.name == "search"
@@ -559,9 +516,7 @@ class TestStreamingIntervals:
         text = "This is plain text with no tool calling involved."
         deltas = _chunk_tokenized_deltas(kimi_k2_tokenizer, text, stream_interval)
         parser = KimiK2ToolParser(kimi_k2_tokenizer)
-        rec = run_tool_extraction_streaming(
-            parser, deltas, assert_one_tool_per_delta=False
-        )
+        rec = run_tool_extraction_streaming(parser, deltas, assert_one_tool_per_delta=False)
 
         assert rec.other_content == text
         assert rec.tool_calls == []
@@ -571,9 +526,7 @@ class TestStreamingIntervals:
         text = "Hi! " + _wrap(_tool("functions.get_weather:0", '{"city": "Beijing"}'))
         deltas = _chunk_tokenized_deltas(kimi_k2_tokenizer, text, stream_interval=9999)
         parser = KimiK2ToolParser(kimi_k2_tokenizer)
-        rec = run_tool_extraction_streaming(
-            parser, deltas, assert_one_tool_per_delta=False
-        )
+        rec = run_tool_extraction_streaming(parser, deltas, assert_one_tool_per_delta=False)
 
         assert "Hi!" in rec.other_content
         assert "get_weather" not in rec.other_content

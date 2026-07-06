@@ -113,10 +113,7 @@ def _get_vision_feature_select_strategy(pooling_type: str):
     try:
         return _POOLING_TYPE_TO_STRATEGY[pooling_type]
     except KeyError:
-        raise ValueError(
-            f"No feature selection strategy is defined for "
-            f"pooling_type: {pooling_type!r}"
-        ) from None
+        raise ValueError(f"No feature selection strategy is defined for pooling_type: {pooling_type!r}") from None
 
 
 class CLIPProcessingInfo(BaseProcessingInfo):
@@ -283,9 +280,7 @@ class CLIPTextEmbeddings(nn.Module):
         embed_dim = config.hidden_size
 
         self.token_embedding = VocabParallelEmbedding(config.vocab_size, embed_dim)
-        self.position_embedding = VocabParallelEmbedding(
-            config.max_position_embeddings, embed_dim
-        )
+        self.position_embedding = VocabParallelEmbedding(config.max_position_embeddings, embed_dim)
 
     def forward(
         self,
@@ -295,9 +290,7 @@ class CLIPTextEmbeddings(nn.Module):
     ) -> torch.Tensor:
         if inputs_embeds is None:
             if input_ids is None:
-                raise ValueError(
-                    "Either `input_ids` or `input_embeds` must be provided"
-                )
+                raise ValueError("Either `input_ids` or `input_embeds` must be provided")
 
             inputs_embeds = self.token_embedding(input_ids)
 
@@ -338,9 +331,7 @@ class CLIPVisionEmbeddings(nn.Module):
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
         target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(
-            pixel_values.to(dtype=target_dtype)
-        )  # shape = [*, width, grid, grid]
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
@@ -391,9 +382,7 @@ class CLIPAttention(nn.Module):
             disable_tp=use_data_parallel,
         )
 
-        self.tp_size = (
-            1 if use_data_parallel else get_tensor_model_parallel_world_size()
-        )
+        self.tp_size = 1 if use_data_parallel else get_tensor_model_parallel_world_size()
         self.num_heads_per_partition = divide(self.num_heads, self.tp_size)
 
         self.attn = attn_cls(
@@ -714,9 +703,7 @@ class CLIPVisionTransformer(nn.Module):
         # Drop layers beyond num_hidden_layers_override.
         def _filter(ws):
             for name, w in ws:
-                if name.startswith("encoder.layers.") and int(
-                    name.split(".")[2]
-                ) >= len(self.encoder.layers):
+                if name.startswith("encoder.layers.") and int(name.split(".")[2]) >= len(self.encoder.layers):
                     continue
                 yield name, w
 
@@ -854,9 +841,7 @@ class CLIPEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
         feature_select_strategy: VisionFeatureSelectStrategy | None = None,
     ) -> torch.Tensor:
         if feature_select_strategy is None:
-            feature_select_strategy = _get_vision_feature_select_strategy(
-                self.pooler_config.seq_pooling_type
-            )
+            feature_select_strategy = _get_vision_feature_select_strategy(self.pooler_config.seq_pooling_type)
 
         pooled_output = self.vision_model(
             pixel_values=pixel_values,
@@ -868,9 +853,7 @@ class CLIPEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
 
         return image_features
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> CLIPImagePixelInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> CLIPImagePixelInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         if pixel_values is None:
             return None
@@ -927,9 +910,7 @@ class CLIPEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
         *,
         is_multimodal: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        self._is_text_input = (
-            multimodal_embeddings is None or len(multimodal_embeddings) == 0
-        )
+        self._is_text_input = multimodal_embeddings is None or len(multimodal_embeddings) == 0
 
         # This is to satisfy the type checker for each overload
         if multimodal_embeddings is None or is_multimodal is None:

@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import torch
 
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.model_executor.layers.attention import Attention
 from aphrodite.model_executor.layers.attention.encoder_only_attention import (
     create_encoder_only_attention_backend,
@@ -56,9 +56,7 @@ class PrefillPrefixLMAttention(Attention):
         attn_backend = create_encoder_only_attention_backend(underlying_attn_backend)
 
         if attn_type is not None:
-            assert attn_type == AttentionType.DECODER, (
-                "PrefillPrefixLMAttention only supports AttentionType.DECODER"
-            )
+            assert attn_type == AttentionType.DECODER, "PrefillPrefixLMAttention only supports AttentionType.DECODER"
 
         super().__init__(
             num_heads=num_heads,

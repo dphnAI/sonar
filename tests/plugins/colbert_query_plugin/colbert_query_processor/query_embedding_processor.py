@@ -23,9 +23,7 @@ QUERY_MARKER_TOKEN = "[QueryMarker]"
 DOCUMENT_MARKER_TOKEN = "[DocumentMarker]"
 
 
-class ColBERTQueryEmbeddingProcessor(
-    IOProcessor[ColBERTEmbeddingCompletionRequestMixin, ColBERTEmbeddingResponse]
-):
+class ColBERTQueryEmbeddingProcessor(IOProcessor[ColBERTEmbeddingCompletionRequestMixin, ColBERTEmbeddingResponse]):
     """This IO processor only supports the ColBERT-style model jinaai/jina-colbert-v2.
     It does not support all ColBERT-style variants (e.g. colbert-ir/colbertv2.0).
     """
@@ -101,9 +99,7 @@ class ColBERTQueryEmbeddingProcessor(
         query_marker_id, _ = self._resolve_marker_ids(tokenizer)
         mask_token_id = tokenizer.mask_token_id
         if mask_token_id is None:
-            raise ValueError(
-                "Tokenizer has no mask token; cannot perform query expansion."
-            )
+            raise ValueError("Tokenizer has no mask token; cannot perform query expansion.")
 
         # [CLS], marker and [SEP] take 3 slots.
         content_ids = content_ids[: QUERY_MAXLEN - 3]

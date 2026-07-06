@@ -52,8 +52,7 @@ class BaseThinkingReasoningParser(ReasoningParser):
 
         if not self.model_tokenizer:
             raise ValueError(
-                "The model tokenizer must be passed to the ReasoningParser "
-                "constructor during construction."
+                "The model tokenizer must be passed to the ReasoningParser constructor during construction."
             )
 
         if not self.start_token or not self.end_token:
@@ -63,8 +62,7 @@ class BaseThinkingReasoningParser(ReasoningParser):
         end_token_id = self.vocab.get(self.end_token)
         if start_token_id is None or end_token_id is None:
             raise RuntimeError(
-                f"{self.__class__.__name__} reasoning parser could not locate "
-                "think start/end tokens in the tokenizer!"
+                f"{self.__class__.__name__} reasoning parser could not locate think start/end tokens in the tokenizer!"
             )
         self.start_token_id: int = start_token_id
         self.end_token_id: int = end_token_id
@@ -80,9 +78,7 @@ class BaseThinkingReasoningParser(ReasoningParser):
                 return True
         return False
 
-    def is_reasoning_end_streaming(
-        self, input_ids: Sequence[int], delta_ids: Iterable[int]
-    ) -> bool:
+    def is_reasoning_end_streaming(self, input_ids: Sequence[int], delta_ids: Iterable[int]) -> bool:
         end_token_id = self.end_token_id
         return end_token_id in delta_ids
 
@@ -110,9 +106,7 @@ class BaseThinkingReasoningParser(ReasoningParser):
         Uses token IDs for faster processing.
         """
         # Skip single special tokens
-        if len(delta_token_ids) == 1 and (
-            delta_token_ids[0] in [self.start_token_id, self.end_token_id]
-        ):
+        if len(delta_token_ids) == 1 and (delta_token_ids[0] in [self.start_token_id, self.end_token_id]):
             return None
 
         # Check if start token is present in previous or delta.
@@ -124,9 +118,7 @@ class BaseThinkingReasoningParser(ReasoningParser):
                 end_index = delta_text.find(self.end_token)
                 reasoning = delta_text[:end_index]
                 content = delta_text[end_index + len(self.end_token) :]
-                return DeltaMessage(
-                    reasoning=reasoning, content=content if content else None
-                )
+                return DeltaMessage(reasoning=reasoning, content=content if content else None)
             elif self.end_token_id in previous_token_ids:
                 # start token in previous, end token in previous,
                 # reasoning content continues
@@ -143,9 +135,7 @@ class BaseThinkingReasoningParser(ReasoningParser):
                 end_index = delta_text.find(self.end_token)
                 reasoning = delta_text[start_index + len(self.start_token) : end_index]
                 content = delta_text[end_index + len(self.end_token) :]
-                return DeltaMessage(
-                    reasoning=reasoning, content=content if content else None
-                )
+                return DeltaMessage(reasoning=reasoning, content=content if content else None)
             else:
                 # start token in delta, no end token in delta,
                 # reasoning content continues
@@ -166,9 +156,7 @@ class BaseThinkingReasoningParser(ReasoningParser):
         # Check if the start token is present in the model output, remove it
         # if it is present.
         model_output_parts = model_output.partition(self.start_token)
-        model_output = (
-            model_output_parts[2] if model_output_parts[1] else model_output_parts[0]
-        )
+        model_output = model_output_parts[2] if model_output_parts[1] else model_output_parts[0]
 
         # For models that may not generate start token,
         # assume the reasoning content is always at the start.

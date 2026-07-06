@@ -56,9 +56,7 @@ class TestExtractToolCalls:
         assert result.content == model_output
 
     def test_single_tool_call(self, parser, mock_request):
-        model_output = (
-            '<|tools_prefix|>[{"get_weather": {"location": "London"}}]<|tools_suffix|>'
-        )
+        model_output = '<|tools_prefix|>[{"get_weather": {"location": "London"}}]<|tools_suffix|>'
         result = parser.extract_tool_calls(model_output, mock_request)
 
         assert result.tools_called is True
@@ -69,9 +67,7 @@ class TestExtractToolCalls:
 
     def test_multiple_arguments(self, parser, mock_request):
         model_output = (
-            '<|tools_prefix|>[{"get_weather": '
-            '{"location": "San Francisco", '
-            '"unit": "celsius"}}]<|tools_suffix|>'
+            '<|tools_prefix|>[{"get_weather": {"location": "San Francisco", "unit": "celsius"}}]<|tools_suffix|>'
         )
         result = parser.extract_tool_calls(model_output, mock_request)
 
@@ -83,8 +79,7 @@ class TestExtractToolCalls:
 
     def test_text_before_tool_call(self, parser, mock_request):
         model_output = (
-            "Let me check the weather for you. "
-            '<|tools_prefix|>[{"get_weather": {"location": "Paris"}}]<|tools_suffix|>'
+            'Let me check the weather for you. <|tools_prefix|>[{"get_weather": {"location": "Paris"}}]<|tools_suffix|>'
         )
         result = parser.extract_tool_calls(model_output, mock_request)
 
@@ -108,9 +103,7 @@ class TestExtractToolCalls:
 
     def test_nested_arguments(self, parser, mock_request):
         model_output = (
-            '<|tools_prefix|>[{"complex_function": '
-            '{"nested": {"inner": "value"}, '
-            '"list": ["a", "b"]}}]<|tools_suffix|>'
+            '<|tools_prefix|>[{"complex_function": {"nested": {"inner": "value"}, "list": ["a", "b"]}}]<|tools_suffix|>'
         )
         result = parser.extract_tool_calls(model_output, mock_request)
 
@@ -131,10 +124,7 @@ class TestExtractToolCalls:
         assert args == {"location": "London"}
 
     def test_missing_tool_suffix(self, parser, mock_request):
-        model_output = (
-            '<|tools_prefix|>[{"get_weather": '
-            '{"location": "San Francisco", "unit": "celsius"}}]'
-        )
+        model_output = '<|tools_prefix|>[{"get_weather": {"location": "San Francisco", "unit": "celsius"}}]'
         result = parser.extract_tool_calls(model_output, mock_request)
 
         assert result.tools_called is True
@@ -186,29 +176,13 @@ class TestStreamingExtraction:
                 continue
 
             for tc in delta.tool_calls:
-                idx = (
-                    tc.get("index", 0)
-                    if isinstance(tc, dict)
-                    else getattr(tc, "index", 0)
-                )
-                func = (
-                    tc.get("function", {})
-                    if isinstance(tc, dict)
-                    else getattr(tc, "function", None)
-                )
+                idx = tc.get("index", 0) if isinstance(tc, dict) else getattr(tc, "index", 0)
+                func = tc.get("function", {}) if isinstance(tc, dict) else getattr(tc, "function", None)
                 if not func:
                     continue
 
-                name = (
-                    func.get("name")
-                    if isinstance(func, dict)
-                    else getattr(func, "name", None)
-                )
-                args = (
-                    func.get("arguments")
-                    if isinstance(func, dict)
-                    else getattr(func, "arguments", None)
-                )
+                name = func.get("name") if isinstance(func, dict) else getattr(func, "name", None)
+                args = func.get("arguments") if isinstance(func, dict) else getattr(func, "arguments", None)
 
                 if idx not in tool_calls:
                     tool_calls[idx] = {"name": "", "arguments": ""}
@@ -222,11 +196,7 @@ class TestStreamingExtraction:
 
     def _collect_content(self, results) -> str:
         """Collects generated normal text outside of the tool calls."""
-        return "".join(
-            delta.content
-            for delta, _ in results
-            if delta and getattr(delta, "content", None)
-        )
+        return "".join(delta.content for delta, _ in results if delta and getattr(delta, "content", None))
 
     def test_basic_streaming_single_tool(self, parser, mock_request):
         chunks = [
@@ -259,9 +229,7 @@ class TestStreamingExtraction:
         assert tcs[0]["name"] == "get_weather"
         assert json.loads(tcs[0]["arguments"]) == {"location": "Paris, France"}
 
-    def test_streaming_partial_tag_buffering_missing_tool_suffix(
-        self, parser, mock_request
-    ):
+    def test_streaming_partial_tag_buffering_missing_tool_suffix(self, parser, mock_request):
         chunks = ["Content", "<|tools_", "prefix|>", '[{"f": ', '{"a": 1}}]']
 
         results = self._simulate_streaming(parser, mock_request, chunks)
@@ -342,10 +310,7 @@ class TestStreamingExtraction:
     def test_mtp_streaming_massive_chunk(self, parser, mock_request):
         """Simulates MTP predicting text, tool calls,
         and trailing text all in a single chunk."""
-        chunks = [
-            "Sure! "
-            '<|tools_prefix|>[{"get_weather": {"location": "London"}}]<|tools_suffix|>'
-        ]
+        chunks = ['Sure! <|tools_prefix|>[{"get_weather": {"location": "London"}}]<|tools_suffix|>']
         results = self._simulate_streaming(parser, mock_request, chunks)
 
         content = self._collect_content(results)
@@ -394,10 +359,7 @@ class TestStreamingExtraction:
     def test_aphrodite_streaming_character_by_character(self, parser, mock_request):
         """Simulates worst-case Aphrodite fragmentation where
         chunks arrive character-by-character."""
-        text = (
-            'Hi <|tools_prefix|>[{"get_weather": '
-            '{"location": "London"}}]<|tools_suffix|> '
-        )
+        text = 'Hi <|tools_prefix|>[{"get_weather": {"location": "London"}}]<|tools_suffix|> '
         chunks = list(text)
         results = self._simulate_streaming(parser, mock_request, chunks)
 

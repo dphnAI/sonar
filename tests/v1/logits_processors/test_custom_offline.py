@@ -4,6 +4,12 @@ from typing import Any
 
 import pytest
 
+from aphrodite import LLM, SamplingParams
+from aphrodite.v1.sample.logits_processor import (
+    STR_POOLING_REJECTS_LOGITSPROCS,
+    STR_SPEC_DEC_REJECTS_LOGITSPROCS,
+    LogitsProcessor,
+)
 from tests.utils import create_new_process_for_each_test, set_random_seed
 from tests.v1.logits_processors.utils import (
     DUMMY_LOGITPROC_ARG,
@@ -17,12 +23,6 @@ from tests.v1.logits_processors.utils import (
     WrappedPerReqLogitsProcessor,
     prompts,
     setup_fake_entrypoint,
-)
-from aphrodite import LLM, SamplingParams
-from aphrodite.v1.sample.logits_processor import (
-    STR_POOLING_REJECTS_LOGITSPROCS,
-    STR_SPEC_DEC_REJECTS_LOGITSPROCS,
-    LogitsProcessor,
 )
 
 # Create a mixture of requests which do and don't utilize the dummy logitproc
@@ -77,27 +77,21 @@ def _run_test(kwargs: dict, logitproc_loaded: bool) -> None:
     outputs_ref = llm_ref.generate(prompts, sampling_params_list)
 
     # Validate outputs
-    for bdx, (out_lp, out_ref, params) in enumerate(
-        zip(outputs_logitproc, outputs_ref, sampling_params_list)
-    ):
+    for bdx, (out_lp, out_ref, params) in enumerate(zip(outputs_logitproc, outputs_ref, sampling_params_list)):
         lp_toks = out_lp.outputs[0].token_ids
         if logitproc_loaded and params.extra_args:
             # This request exercises custom logitproc; validate that logitproc
             # forces `target_token` to be decoded in each step
             target_token = params.extra_args[DUMMY_LOGITPROC_ARG]
             if not all(x == target_token for x in lp_toks):
-                raise AssertionError(
-                    f"Request {bdx} generated {lp_toks}, should all be {target_token}"
-                )
+                raise AssertionError(f"Request {bdx} generated {lp_toks}, should all be {target_token}")
         else:
             # This request does not exercise custom logitproc (or custom
             # logitproc is not enabled on this server); validate against
             # reference result
             ref_toks = out_ref.outputs[0].token_ids
             if lp_toks != ref_toks:
-                raise AssertionError(
-                    f"Request {bdx} generated {lp_toks}, should match {ref_toks}"
-                )
+                raise AssertionError(f"Request {bdx} generated {lp_toks}, should match {ref_toks}")
 
 
 @create_new_process_for_each_test()
@@ -190,9 +184,7 @@ def test_custom_logitsprocs_req(monkeypatch):
     # Test that logitproc info is passed to workers
     monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "1")
     set_random_seed(40)
-    _run_test(
-        {"logits_processors": [WrappedPerReqLogitsProcessor]}, logitproc_loaded=True
-    )
+    _run_test({"logits_processors": [WrappedPerReqLogitsProcessor]}, logitproc_loaded=True)
 
 
 @create_new_process_for_each_test()
@@ -205,9 +197,7 @@ def test_custom_logitsprocs_req(monkeypatch):
         CustomLogitprocSource.LOGITPROC_SOURCE_CLASS,
     ],
 )
-def test_rejects_custom_logitsprocs(
-    monkeypatch, model_scenario: str, logitproc_source: CustomLogitprocSource
-):
+def test_rejects_custom_logitsprocs(monkeypatch, model_scenario: str, logitproc_source: CustomLogitprocSource):
     """Validate that Aphrodite engine initialization properly rejects custom
     logitsprocs when the model is a pooling model or speculative decoding
     enabled.

@@ -295,10 +295,7 @@ def compute_mm_encoder_budget(
 
     max_tokens_per_mm_item = max(mm_max_toks_per_item.values())
 
-    if (
-        scheduler_config.disable_chunked_mm_input
-        and max_tokens_per_mm_item > scheduler_config.max_num_batched_tokens
-    ):
+    if scheduler_config.disable_chunked_mm_input and max_tokens_per_mm_item > scheduler_config.max_num_batched_tokens:
         raise ValueError(
             "Chunked MM input disabled but max_tokens_per_mm_item "
             f"({max_tokens_per_mm_item}) is larger than max_num_batched_tokens"
@@ -306,12 +303,8 @@ def compute_mm_encoder_budget(
             "max_num_batched_tokens."
         )
 
-    encoder_compute_budget = max(
-        scheduler_config.max_num_encoder_input_tokens, max_tokens_per_mm_item
-    )
-    encoder_cache_size = max(
-        scheduler_config.encoder_cache_size, max_tokens_per_mm_item
-    )
+    encoder_compute_budget = max(scheduler_config.max_num_encoder_input_tokens, max_tokens_per_mm_item)
+    encoder_cache_size = max(scheduler_config.encoder_cache_size, max_tokens_per_mm_item)
 
     return encoder_compute_budget, encoder_cache_size
 

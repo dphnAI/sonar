@@ -18,18 +18,13 @@ def vision_llm(multimodal_llm_factory):
     )
 
 
-@pytest.mark.parametrize(
-    "image_urls", [[TEST_IMAGE_ASSETS[0], TEST_IMAGE_ASSETS[1]]], indirect=True
-)
+@pytest.mark.parametrize("image_urls", [[TEST_IMAGE_ASSETS[0], TEST_IMAGE_ASSETS[1]]], indirect=True)
 def test_chat_multi_image(vision_llm, image_urls: list[str]):
     messages = [
         {
             "role": "user",
             "content": [
-                *(
-                    {"type": "image_url", "image_url": {"url": image_url}}
-                    for image_url in image_urls
-                ),
+                *({"type": "image_url", "image_url": {"url": image_url}} for image_url in image_urls),
                 {"type": "text", "text": "What's in this image?"},
             ],
         }

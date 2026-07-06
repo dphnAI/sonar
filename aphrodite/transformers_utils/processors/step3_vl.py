@@ -102,10 +102,10 @@ class ImagePatcher:
             windows.append(np.concatenate([start, start + size], axis=1))
         windows = np.concatenate(windows, axis=0)
 
-        return [
-            (int(box[0]), int(box[1]), int(box[2] - box[0]), int(box[3] - box[1]))
-            for box in windows
-        ], (x_num, y_num)
+        return [(int(box[0]), int(box[1]), int(box[2] - box[0]), int(box[3] - box[1])) for box in windows], (
+            x_num,
+            y_num,
+        )
 
     def square_pad(self, img: Image.Image) -> Image.Image:
         w, h = img.size
@@ -116,27 +116,21 @@ class ImagePatcher:
         padded.paste(img, (0, 0))
         return padded
 
-    def get_image_size_for_padding(
-        self, img_width: int, img_height: int
-    ) -> tuple[int, int]:
+    def get_image_size_for_padding(self, img_width: int, img_height: int) -> tuple[int, int]:
         ratio = img_width / img_height
         if min(img_height, img_width) < 32 and (ratio > 4 or ratio < 1 / 4):
             new_size = max(img_height, img_width)
             return new_size, new_size
         return img_width, img_height
 
-    def get_image_size_for_preprocess(
-        self, img_width: int, img_height: int
-    ) -> tuple[int, int]:
+    def get_image_size_for_preprocess(self, img_width: int, img_height: int) -> tuple[int, int]:
         if max(img_height, img_width) > MAX_IMAGE_SIZE:
             scale_factor = MAX_IMAGE_SIZE / max(img_height, img_width)
             img_width = int(img_width * scale_factor)
             img_height = int(img_height * scale_factor)
         return img_width, img_height
 
-    def get_image_size_for_crop(
-        self, img_width: int, img_height: int, window_size: int
-    ):
+    def get_image_size_for_crop(self, img_width: int, img_height: int, window_size: int):
         w_ratio = img_width / window_size
         h_ratio = img_height / window_size
 
@@ -160,18 +154,12 @@ class ImagePatcher:
 
     def get_num_patches(self, img_width: int, img_height: int) -> tuple[int, int]:
         img_width, img_height = self.get_image_size_for_padding(img_width, img_height)
-        img_width, img_height = self.get_image_size_for_preprocess(
-            img_width, img_height
-        )
-        window_size = self.determine_window_size(
-            max(img_height, img_width), min(img_height, img_width)
-        )
+        img_width, img_height = self.get_image_size_for_preprocess(img_width, img_height)
+        window_size = self.determine_window_size(max(img_height, img_width), min(img_height, img_width))
         if window_size == 0 or not self.enable_patch:
             return 0, 0
         else:
-            img_width, img_height = self.get_image_size_for_crop(
-                img_width, img_height, window_size
-            )
+            img_width, img_height = self.get_image_size_for_crop(img_width, img_height, window_size)
             center_list, (x_num, y_num) = self.slide_window(
                 img_width,
                 img_height,
@@ -183,35 +171,23 @@ class ImagePatcher:
                 full_rows -= 1
             return len(center_list), full_rows
 
-    def __call__(
-        self, img: Image.Image
-    ) -> tuple[Image.Image, list[Image.Image], list[bool]]:
+    def __call__(self, img: Image.Image) -> tuple[Image.Image, list[Image.Image], list[bool]]:
         img_width, img_height = img.size
-        new_img_width, new_img_height = self.get_image_size_for_padding(
-            img_width, img_height
-        )
+        new_img_width, new_img_height = self.get_image_size_for_padding(img_width, img_height)
         if new_img_width != img_width or new_img_height != img_height:
             img = self.square_pad(img)
             img_width, img_height = img.size
 
-        new_img_width, new_img_height = self.get_image_size_for_preprocess(
-            img_width, img_height
-        )
+        new_img_width, new_img_height = self.get_image_size_for_preprocess(img_width, img_height)
         img = img.resize((new_img_width, new_img_height), Image.Resampling.BILINEAR)
-        window_size = self.determine_window_size(
-            max(new_img_height, new_img_width), min(new_img_height, new_img_width)
-        )
+        window_size = self.determine_window_size(max(new_img_height, new_img_width), min(new_img_height, new_img_width))
 
         if window_size == 0 or not self.enable_patch:
             return img, [], []
         else:
-            new_img_width, new_img_height = self.get_image_size_for_crop(
-                new_img_width, new_img_height, window_size
-            )
+            new_img_width, new_img_height = self.get_image_size_for_crop(new_img_width, new_img_height, window_size)
             if (new_img_width, new_img_height) != (img_width, img_height):
-                img_for_crop = img.resize(
-                    (new_img_width, new_img_height), Image.Resampling.BILINEAR
-                )
+                img_for_crop = img.resize((new_img_width, new_img_height), Image.Resampling.BILINEAR)
             else:
                 img_for_crop = img
 
@@ -253,20 +229,13 @@ class Step3VLImageProcessor:
         self.patch_size = patch_size
         self.num_image_feature_size = num_image_feature_size
         self.num_patch_feature_size = num_patch_feature_size
-        self.image_preprocessor = Step3VisionProcessor(
-            image_size, "bilinear", patch_size
-        )
+        self.image_preprocessor = Step3VisionProcessor(image_size, "bilinear", patch_size)
         self.patcher = ImagePatcher(enable_patch=enable_patch)
 
     def get_num_image_tokens(self, img_width: int, img_height: int) -> int:
         num_patches, num_newlines = self.patcher.get_num_patches(img_width, img_height)
 
-        return (
-            num_patches * (self.num_patch_feature_size + 2)
-            + self.num_image_feature_size
-            + 2
-            + num_newlines
-        )
+        return num_patches * (self.num_patch_feature_size + 2) + self.num_image_feature_size + 2 + num_newlines
 
     def _split_images(self, images: list[Image.Image]) -> list[ImageWithPatches]:
         result = []
@@ -279,10 +248,7 @@ class Step3VLImageProcessor:
         images: list[Image.Image],
         is_patch: bool = False,
     ) -> list[torch.Tensor]:
-        return [
-            self.image_preprocessor(img, is_patch=is_patch)["pixel_values"]
-            for img in images
-        ]
+        return [self.image_preprocessor(img, is_patch=is_patch)["pixel_values"] for img in images]
 
     def __call__(
         self,
@@ -300,9 +266,7 @@ class Step3VLImageProcessor:
         for raw_img, img_patches, patch_newline_mask in split_images_data:
             pixel_values_lst.extend(self._convert_images_to_pixel_values([raw_img]))
             num_patches.append(len(img_patches))
-            patch_pixel_values_lst.extend(
-                self._convert_images_to_pixel_values(img_patches, is_patch=True)
-            )
+            patch_pixel_values_lst.extend(self._convert_images_to_pixel_values(img_patches, is_patch=True))
             patch_newline_mask_lst.extend(patch_newline_mask)
 
         pixel_values = torch.cat(pixel_values_lst)
@@ -315,9 +279,7 @@ class Step3VLImageProcessor:
                 if patch_pixel_values_lst
                 else pixel_values.new_empty((0, 3, patch_size, patch_size))
             ),
-            "patch_newline_mask": torch.tensor(
-                patch_newline_mask_lst, dtype=torch.bool
-            ),
+            "patch_newline_mask": torch.tensor(patch_newline_mask_lst, dtype=torch.bool),
         }
         return BatchFeature(image_inputs, tensor_type=return_tensors)
 
@@ -342,23 +304,15 @@ class Step3VLProcessor(ProcessorMixin):
         self.image_end_token_id = tokenizer.convert_tokens_to_ids(image_end_token)
         self.patch_start_token_id = tokenizer.convert_tokens_to_ids(patch_start_token)
         self.patch_end_token_id = tokenizer.convert_tokens_to_ids(patch_end_token)
-        self.patch_newline_token_id = tokenizer.convert_tokens_to_ids(
-            patch_newline_token
-        )
+        self.patch_newline_token_id = tokenizer.convert_tokens_to_ids(patch_newline_token)
 
         self.image_token = image_token = "<im_patch>"
         self.image_feature_tokens = image_token * image_processor.num_image_feature_size
         self.patch_feature_tokens = image_token * image_processor.num_patch_feature_size
 
-        self.image_token_id = image_token_id = tokenizer.convert_tokens_to_ids(
-            image_token
-        )
-        self.image_feature_token_ids = [
-            image_token_id
-        ] * image_processor.num_image_feature_size
-        self.patch_feature_token_ids = [
-            image_token_id
-        ] * image_processor.num_patch_feature_size
+        self.image_token_id = image_token_id = tokenizer.convert_tokens_to_ids(image_token)
+        self.image_feature_token_ids = [image_token_id] * image_processor.num_image_feature_size
+        self.patch_feature_token_ids = [image_token_id] * image_processor.num_patch_feature_size
 
     def _get_patch_repl_text(
         self,
@@ -449,9 +403,7 @@ class Step3VLProcessor(ProcessorMixin):
         parts = text.split(placeholder)
 
         if len(parts) - 1 != len(repls):
-            raise ValueError(
-                "The number of placeholders does not match the number of replacements."
-            )
+            raise ValueError("The number of placeholders does not match the number of replacements.")
 
         result = [parts[0]]
         for i, repl in enumerate(repls):
@@ -494,10 +446,7 @@ class Step3VLProcessor(ProcessorMixin):
 
                     start += n_patches
 
-                text = [
-                    self.replace_placeholder(t, image_token, image_repl_str_lst)
-                    for t in text
-                ]
+                text = [self.replace_placeholder(t, image_token, image_repl_str_lst) for t in text]
 
             text_inputs = self.tokenizer(text)
         else:

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Internal sampling batch ownership and token sampling for Metal v1.
 
 Pure functions: logits in, token IDs out.  No model runner state accessed.
@@ -6,6 +7,7 @@ Pure functions: logits in, token IDs out.  No model runner state accessed.
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import mlx.core as mx
 import torch
@@ -18,6 +20,9 @@ from aphrodite.v1.sample.logits_processor import LogitsProcessors
 from aphrodite.v1.sample.logits_processor.interface import BatchUpdate
 from aphrodite.v1.sample.metadata import SamplingMetadata
 from aphrodite.v1.sample.sampler import Sampler
+
+if TYPE_CHECKING:
+    from aphrodite.metal.v1.model_runner import RequestState
 
 GREEDY_TEMPERATURE_EPS = 1e-5
 
@@ -348,7 +353,10 @@ class SamplingBatch:
         )
         for logit_proc in self.logitsprocs.all:
             logit_proc.update_state(batch_update)
-        setattr(self.logitsprocs, "_metal_batch_size", batch_size)
+        # Stash the batch size on the shared LogitsProcessors object so the next
+        # update can detect size changes; the attribute is Metal-private and not
+        # declared on the upstream LogitsProcessors class.
+        self.logitsprocs._metal_batch_size = batch_size  # type: ignore[attr-defined]
 
     def can_use_native_greedy_for_batch(self) -> bool:
         return self.can_use_native_greedy(
@@ -589,7 +597,7 @@ def sample_from_logits(
 
 def sample_decode_tokens(
     logits: mx.array,
-    decode_reqs: list[tuple[str, object]],
+    decode_reqs: list[tuple[str, "RequestState"]],
     num_decode: int,
     sampler: Sampler,
     device: torch.device,

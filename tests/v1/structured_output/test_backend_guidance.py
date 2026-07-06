@@ -6,7 +6,7 @@ from concurrent.futures import Future
 import pytest
 from transformers import AutoTokenizer
 
-from aphrodite.config import StructuredOutputsConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, StructuredOutputsConfig
 from aphrodite.config.model import ModelConfig
 from aphrodite.config.parallel import ParallelConfig
 from aphrodite.config.speculative import SpeculativeConfig
@@ -45,9 +45,7 @@ def test_backend_guidance_rollback_terminated():
         vocab_size=50257,
     )
 
-    grammar = backend.compile_grammar(
-        StructuredOutputOptions.JSON, '{"type": "object"}'
-    )
+    grammar = backend.compile_grammar(StructuredOutputOptions.JSON, '{"type": "object"}')
 
     prompt = tokenizer.encode('{"a": "b"}')
     assert len(prompt) > 1
@@ -117,14 +115,10 @@ def test_grammar_bitmask_with_specdec():
         while not request.structured_output_request._check_grammar_completion():
             continue
 
-        assert request.structured_output_request.grammar.accept_tokens(
-            request.request_id, prompt[:i]
-        )
+        assert request.structured_output_request.grammar.accept_tokens(request.request_id, prompt[:i])
 
         grammar_bitmask(request, prompt[i:] + [tokenizer.eos_token_id])
-        grammar_bitmask(
-            request, prompt[i:] + [tokenizer.eos_token_id] + prompt
-        )  # EOS not the final token
+        grammar_bitmask(request, prompt[i:] + [tokenizer.eos_token_id] + prompt)  # EOS not the final token
         grammar_bitmask(request, prompt[i:])  # EOS not present
         grammar_bitmask(request, prompt[i:] + [tokenizer.eos_token_id])
 
@@ -171,13 +165,9 @@ def test_grammar_init_async_and_sync(async_grammar):
     # Before _check_grammar_completion is called, async mode should have a Future
     raw_grammar = request.structured_output_request._grammar
     if async_grammar:
-        assert isinstance(raw_grammar, Future), (
-            "Async mode should store a Future before completion"
-        )
+        assert isinstance(raw_grammar, Future), "Async mode should store a Future before completion"
     else:
-        assert not isinstance(raw_grammar, Future), (
-            "Sync mode should store the grammar directly, not a Future"
-        )
+        assert not isinstance(raw_grammar, Future), "Sync mode should store the grammar directly, not a Future"
 
     # Wait for grammar to be ready (handles both async and sync cases)
     start_time = time.time()

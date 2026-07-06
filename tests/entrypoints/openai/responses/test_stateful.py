@@ -51,9 +51,7 @@ async def test_background(client: openai.AsyncOpenAI):
 
 @pytest.mark.asyncio
 async def test_background_error(client: openai.AsyncOpenAI):
-    with pytest.raises(
-        openai.BadRequestError, match="background can only be used when `store` is true"
-    ):
+    with pytest.raises(openai.BadRequestError, match="background can only be used when `store` is true"):
         _ = await client.responses.create(
             input="What is 13 * 24?",
             background=True,
@@ -99,17 +97,14 @@ async def test_cancel_completed(client: openai.AsyncOpenAI):
     response = await client.responses.create(input="Hello")
     assert response.status == "completed"
 
-    with pytest.raises(
-        openai.BadRequestError, match="Cannot cancel a synchronous response."
-    ):
+    with pytest.raises(openai.BadRequestError, match="Cannot cancel a synchronous response."):
         await client.responses.cancel(response.id)
 
 
 @pytest.mark.asyncio
 async def test_previous_response_id(client: openai.AsyncOpenAI):
     response1 = await client.responses.create(
-        instructions="You are tested on your ability to retrieve the correct "
-        "information from the previous response.",
+        instructions="You are tested on your ability to retrieve the correct information from the previous response.",
         input="Hello, my name is John.",
     )
 
@@ -130,8 +125,7 @@ async def test_previous_response_id(client: openai.AsyncOpenAI):
 @pytest.mark.asyncio
 async def test_two_responses_with_same_prev_id(client: openai.AsyncOpenAI):
     response1 = await client.responses.create(
-        instructions="You are tested on your ability to retrieve the correct "
-        "information from the previous response.",
+        instructions="You are tested on your ability to retrieve the correct information from the previous response.",
         input="Hello, my name is John.",
     )
 

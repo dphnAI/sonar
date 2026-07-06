@@ -41,9 +41,7 @@ class ECConnectorModelRunnerMixin:
         **kwargs,
     ) -> AbstractContextManager[ECConnectorOutput | None]:
         return (
-            ECConnectorModelRunnerMixin._get_ec_connector_output(
-                scheduler_output, encoder_cache, **kwargs
-            )
+            ECConnectorModelRunnerMixin._get_ec_connector_output(scheduler_output, encoder_cache, **kwargs)
             if has_ec_transfer()
             else nullcontext()
         )
@@ -71,8 +69,8 @@ class ECConnectorModelRunnerMixin:
         try:
             yield output
         finally:
-            output.finished_sending, output.finished_recving = (
-                ec_connector.get_finished(scheduler_output.finished_req_ids)
+            output.finished_sending, output.finished_recving = ec_connector.get_finished(
+                scheduler_output.finished_req_ids
             )
 
             ec_connector.clear_connector_metadata()

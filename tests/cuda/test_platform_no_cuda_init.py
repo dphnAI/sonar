@@ -39,9 +39,7 @@ def test_device_count_respects_env_after_platform_import():
     """Test that device_count respects CUDA_VISIBLE_DEVICES after import."""
     result = run_script("check_device_count_respects_env.py")
     if result.returncode != 0:
-        pytest.fail(
-            f"device_count does not respect env var after import:\n{result.stderr}"
-        )
+        pytest.fail(f"device_count does not respect env var after import:\n{result.stderr}")
 
 
 if __name__ == "__main__":

@@ -24,9 +24,7 @@ def xpu_is_initialized() -> bool:
     return torch.xpu.is_initialized()
 
 
-def cuda_get_device_properties(
-    device, names: Sequence[str], init_cuda=False
-) -> tuple[Any, ...]:
+def cuda_get_device_properties(device, names: Sequence[str], init_cuda=False) -> tuple[Any, ...]:
     """Get specified CUDA device property values without initializing CUDA in
     the current process."""
     if init_cuda or cuda_is_initialized():

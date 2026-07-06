@@ -48,9 +48,7 @@ def make_parallel_config(
     is_sequence_parallel: bool,
     parallel_config: ParallelConfig,
 ) -> FusedMoEParallelConfig:
-    tp_size_ = (
-        tp_size if tp_size is not None else get_tensor_model_parallel_world_size()
-    )
+    tp_size_ = tp_size if tp_size is not None else get_tensor_model_parallel_world_size()
     dp_size_ = dp_size if dp_size is not None else get_dp_group().world_size
     pcp_size_ = pcp_size if pcp_size is not None else get_pcp_group().world_size
     sp_size = tp_size_ if is_sequence_parallel else 1
@@ -85,13 +83,10 @@ def determine_expert_counts(
     # backend-neutral router-append path (env alone, independent of the master
     # switch; e.g. the MM3 triton/flydsl mxfp8 MoE). Gated activations only.
     fuse_shared_enabled = (
-        rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
-        or envs.APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS
+        rocm_aiter_ops.is_fusion_moe_shared_experts_enabled() or envs.APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS
     ) and is_act_and_mul
 
-    num_fused_shared_experts = (
-        n_shared_experts if n_shared_experts is not None and fuse_shared_enabled else 0
-    )
+    num_fused_shared_experts = n_shared_experts if n_shared_experts is not None and fuse_shared_enabled else 0
 
     return global_num_experts, logical_num_experts, num_fused_shared_experts
 
@@ -220,13 +215,11 @@ def FusedMoE(
         parallel_config=aphrodite_config.parallel_config,
     )
 
-    global_num_experts, logical_num_experts, num_fused_shared_experts = (
-        determine_expert_counts(
-            num_experts,
-            num_redundant_experts,
-            n_shared_experts,
-            is_act_and_mul,
-        )
+    global_num_experts, logical_num_experts, num_fused_shared_experts = determine_expert_counts(
+        num_experts,
+        num_redundant_experts,
+        n_shared_experts,
+        is_act_and_mul,
     )
 
     # Initialize EPLB manager (or None?)
@@ -242,9 +235,7 @@ def FusedMoE(
             )
         eplb_state = EplbLayerState()
     else:
-        assert num_redundant_experts == 0, (
-            "Redundant experts are only supported with EPLB."
-        )
+        assert num_redundant_experts == 0, "Redundant experts are only supported with EPLB."
 
     max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
 
@@ -282,9 +273,7 @@ def FusedMoE(
             # by the runner in this case.
             # The member variable must be set in the same way as the router since
             # some quantization methods can access it.
-            routed_scaling_factor=routed_scaling_factor
-            if not apply_routed_scale_to_output
-            else 1.0,
+            routed_scaling_factor=routed_scaling_factor if not apply_routed_scale_to_output else 1.0,
             e_score_correction_bias=e_score_correction_bias,
             num_fused_shared_experts=num_fused_shared_experts,
             # Fused shared-expert slot weight. With apply_routed_scale_to_output
@@ -293,11 +282,7 @@ def FusedMoE(
             # contribution to be 1.0 (matching the un-scaled separate-MLP add).
             shared_expert_weight=(
                 (1.0 / routed_scaling_factor)
-                if (
-                    apply_routed_scale_to_output
-                    and num_fused_shared_experts > 0
-                    and routed_scaling_factor
-                )
+                if (apply_routed_scale_to_output and num_fused_shared_experts > 0 and routed_scaling_factor)
                 else 1.0
             ),
             zero_expert_type=zero_expert_type,
@@ -368,9 +353,7 @@ def FusedMoE(
         topk_group=topk_group,
         custom_routing_function=custom_routing_function,
         scoring_func=scoring_func,
-        routed_scaling_factor=routed_scaling_factor
-        if not apply_routed_scale_to_output
-        else 1.0,
+        routed_scaling_factor=routed_scaling_factor if not apply_routed_scale_to_output else 1.0,
         swiglu_limit=swiglu_limit,
         swiglu_alpha=swiglu_alpha,
         swiglu_beta=swiglu_beta,
@@ -397,9 +380,7 @@ def FusedMoE(
         # When apply_routed_scale_to_output is True, we allow
         # the scaling factor to be passed to the runner, otherwise
         # we pass 1.0 so it ends up being a nop.
-        routed_scaling_factor=routed_scaling_factor
-        if apply_routed_scale_to_output
-        else 1.0,
+        routed_scaling_factor=routed_scaling_factor if apply_routed_scale_to_output else 1.0,
         **runner_args if runner_args is not None else {},
     )
 

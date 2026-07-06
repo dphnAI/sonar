@@ -16,12 +16,8 @@ class Cosmos3ForConditionalGeneration(Qwen3VLForConditionalGeneration):
     # into the nested form expected by Qwen3VLForConditionalGeneration.
     hf_to_aphrodite_mapper = WeightsMapper(
         orig_to_new_regex={
-            regex.compile(
-                r"^(layers\.|embed_tokens\.|norm\.)(.+)$"
-            ): r"language_model.model.\1\2",
-            regex.compile(
-                r"^(blocks\.|merger\.|patch_embed\.|pos_embed\.|deepstack_merger_list\.)"
-            ): r"visual.\1",
+            regex.compile(r"^(layers\.|embed_tokens\.|norm\.)(.+)$"): r"language_model.model.\1\2",
+            regex.compile(r"^(blocks\.|merger\.|patch_embed\.|pos_embed\.|deepstack_merger_list\.)"): r"visual.\1",
             regex.compile(r"^audio_modality_embed(?:\..*)?$"): None,
             regex.compile(r"^action_modality_embed(?:\..*)?$"): None,
         },

@@ -5,7 +5,7 @@ import pytest
 
 from aphrodite.assets.image import ImageAsset
 from aphrodite.assets.video import VideoAsset
-from aphrodite.config import CacheConfig, ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
 from aphrodite.multimodal.parse import parse_mm_uuids
 from aphrodite.renderers.hf import HfRenderer
 from aphrodite.tokenizers.registry import cached_tokenizer_from_config
@@ -15,9 +15,7 @@ stop_pil_image = ImageAsset("stop_sign").pil_image
 baby_reading_np_ndarrays = VideoAsset("baby_reading").np_ndarrays
 
 
-def _build_renderer(
-    *, mm_cache_gb: float = 4.0, enable_prefix_caching: bool = True
-) -> HfRenderer:
+def _build_renderer(*, mm_cache_gb: float = 4.0, enable_prefix_caching: bool = True) -> HfRenderer:
     model_config = ModelConfig(
         model="Qwen/Qwen2.5-VL-3B-Instruct",
         max_model_len=128,
@@ -88,9 +86,7 @@ def test_multi_modal_uuids_missing_modality_raises():
         (0.0, True),  # processor cache disabled
     ],
 )
-def test_multi_modal_uuids_accepts_none_and_passes_through(
-    mm_cache_gb: float, enable_prefix_caching: bool
-):
+def test_multi_modal_uuids_accepts_none_and_passes_through(mm_cache_gb: float, enable_prefix_caching: bool):
     renderer = _build_renderer(
         mm_cache_gb=mm_cache_gb,
         enable_prefix_caching=enable_prefix_caching,
@@ -108,9 +104,7 @@ def test_multi_modal_uuids_accepts_none_and_passes_through(
     mm_data_items = mm_processor.info.parse_mm_data(mm_data)
     mm_uuid_items = parse_mm_uuids(mm_uuids)
 
-    processed_mm_uuids = renderer._process_mm_uuids(
-        mm_data, mm_data_items, mm_uuid_items, "req-3"
-    )
+    processed_mm_uuids = renderer._process_mm_uuids(mm_data, mm_data_items, mm_uuid_items, "req-3")
 
     assert processed_mm_uuids == mm_uuids
 
@@ -123,9 +117,7 @@ def test_multi_modal_uuids_accepts_none_and_passes_through(
         (0.0, True),  # processor cache disabled
     ],
 )
-def test_multi_modal_uuids_accepts_empty(
-    mm_cache_gb: float, enable_prefix_caching: bool
-):
+def test_multi_modal_uuids_accepts_empty(mm_cache_gb: float, enable_prefix_caching: bool):
     renderer = _build_renderer(
         mm_cache_gb=mm_cache_gb,
         enable_prefix_caching=enable_prefix_caching,
@@ -140,9 +132,7 @@ def test_multi_modal_uuids_accepts_empty(
     mm_data_items = mm_processor.info.parse_mm_data(mm_data)
     mm_uuid_items = parse_mm_uuids(mm_uuids)
 
-    processed_mm_uuids = renderer._process_mm_uuids(
-        mm_data, mm_data_items, mm_uuid_items, "req-4"
-    )
+    processed_mm_uuids = renderer._process_mm_uuids(mm_data, mm_data_items, mm_uuid_items, "req-4")
 
     assert processed_mm_uuids == mm_uuids
 
@@ -163,20 +153,18 @@ def test_multi_modal_uuids_ignored_when_caching_disabled():
     mm_data_items = mm_processor.info.parse_mm_data(mm_data)
     mm_uuid_items = parse_mm_uuids(mm_uuids)
 
-    processed_mm_uuids = renderer._process_mm_uuids(
-        mm_data, mm_data_items, mm_uuid_items, request_id
-    )
+    processed_mm_uuids = renderer._process_mm_uuids(mm_data, mm_data_items, mm_uuid_items, request_id)
 
     # Expect request-id-based overrides are passed through
     assert set(mm_uuids.keys()) == {"image", "video"}
     assert len(mm_uuids["image"]) == 2
     assert len(mm_uuids["video"]) == 1
-    assert processed_mm_uuids["image"][0].startswith(
-        f"{request_id}-image-"
-    ) and processed_mm_uuids["image"][0].endswith("-0")
-    assert processed_mm_uuids["image"][1].startswith(
-        f"{request_id}-image-"
-    ) and processed_mm_uuids["image"][1].endswith("-1")
-    assert processed_mm_uuids["video"][0].startswith(
-        f"{request_id}-video-"
-    ) and processed_mm_uuids["video"][0].endswith("-0")
+    assert processed_mm_uuids["image"][0].startswith(f"{request_id}-image-") and processed_mm_uuids["image"][
+        0
+    ].endswith("-0")
+    assert processed_mm_uuids["image"][1].startswith(f"{request_id}-image-") and processed_mm_uuids["image"][
+        1
+    ].endswith("-1")
+    assert processed_mm_uuids["video"][0].startswith(f"{request_id}-video-") and processed_mm_uuids["video"][
+        0
+    ].endswith("-0")

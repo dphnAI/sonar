@@ -21,7 +21,6 @@ Each test:
 
 from openai.types.responses import ResponseFunctionToolCall
 
-from tests.entrypoints.openai.utils import verify_harmony_messages
 from aphrodite.entrypoints.openai.parser.harmony_utils import (
     get_encoding,
     get_system_message,
@@ -32,6 +31,7 @@ from aphrodite.entrypoints.openai.responses.harmony import (
     response_input_to_harmony,
     response_previous_input_to_harmony,
 )
+from tests.entrypoints.openai.utils import verify_harmony_messages
 
 # Use a fixed date so the system message is deterministic across both paths.
 _DATE = "2025-01-01"
@@ -52,9 +52,7 @@ class TestResponseInputToHarmonyRenderParity:
     def test_developer_message(self):
         """Both APIs must render developer messages identically using
         DeveloperContent (with the '# Instructions' header)."""
-        chat_msgs = parse_chat_input_to_harmony_message(
-            {"role": "developer", "content": "Be concise."}
-        )
+        chat_msgs = parse_chat_input_to_harmony_message({"role": "developer", "content": "Be concise."})
         resp_msgs = [
             response_input_to_harmony(
                 {
@@ -70,14 +68,10 @@ class TestResponseInputToHarmonyRenderParity:
         verify_harmony_messages(chat_msgs, expected)
         verify_harmony_messages(resp_msgs, expected)
 
-        assert render_for_completion([_system()] + chat_msgs) == render_for_completion(
-            [_system()] + resp_msgs
-        )
+        assert render_for_completion([_system()] + chat_msgs) == render_for_completion([_system()] + resp_msgs)
 
     def test_user_message(self):
-        chat_msgs = parse_chat_input_to_harmony_message(
-            {"role": "user", "content": "What's the weather in Paris?"}
-        )
+        chat_msgs = parse_chat_input_to_harmony_message({"role": "user", "content": "What's the weather in Paris?"})
         resp_msgs = [
             response_input_to_harmony(
                 {
@@ -93,14 +87,10 @@ class TestResponseInputToHarmonyRenderParity:
         verify_harmony_messages(chat_msgs, expected)
         verify_harmony_messages(resp_msgs, expected)
 
-        assert render_for_completion([_system()] + chat_msgs) == render_for_completion(
-            [_system()] + resp_msgs
-        )
+        assert render_for_completion([_system()] + chat_msgs) == render_for_completion([_system()] + resp_msgs)
 
     def test_assistant_final_message(self):
-        chat_msgs = parse_chat_input_to_harmony_message(
-            {"role": "assistant", "content": "It is 18°C in Paris."}
-        )
+        chat_msgs = parse_chat_input_to_harmony_message({"role": "assistant", "content": "It is 18°C in Paris."})
         resp_msgs = [
             response_input_to_harmony(
                 {
@@ -112,15 +102,11 @@ class TestResponseInputToHarmonyRenderParity:
             )
         ]
 
-        expected = [
-            {"role": "assistant", "channel": "final", "content": "It is 18°C in Paris."}
-        ]
+        expected = [{"role": "assistant", "channel": "final", "content": "It is 18°C in Paris."}]
         verify_harmony_messages(chat_msgs, expected)
         verify_harmony_messages(resp_msgs, expected)
 
-        assert render_for_completion([_system()] + chat_msgs) == render_for_completion(
-            [_system()] + resp_msgs
-        )
+        assert render_for_completion([_system()] + chat_msgs) == render_for_completion([_system()] + resp_msgs)
 
     def test_reasoning_item(self):
         # Chat path: assistant message with only a reasoning field and no content.
@@ -135,9 +121,7 @@ class TestResponseInputToHarmonyRenderParity:
             response_input_to_harmony(
                 {
                     "type": "reasoning",
-                    "content": [
-                        {"type": "reasoning_text", "text": "I should call get_weather."}
-                    ],
+                    "content": [{"type": "reasoning_text", "text": "I should call get_weather."}],
                 },
                 prev_responses=[],
             )
@@ -153,9 +137,7 @@ class TestResponseInputToHarmonyRenderParity:
         verify_harmony_messages(chat_msgs, expected)
         verify_harmony_messages(resp_msgs, expected)
 
-        assert render_for_completion([_system()] + chat_msgs) == render_for_completion(
-            [_system()] + resp_msgs
-        )
+        assert render_for_completion([_system()] + chat_msgs) == render_for_completion([_system()] + resp_msgs)
 
     def test_function_call(self):
         chat_msgs = parse_chat_input_to_harmony_message(
@@ -195,9 +177,7 @@ class TestResponseInputToHarmonyRenderParity:
         verify_harmony_messages(chat_msgs, expected)
         verify_harmony_messages(resp_msgs, expected)
 
-        assert render_for_completion([_system()] + chat_msgs) == render_for_completion(
-            [_system()] + resp_msgs
-        )
+        assert render_for_completion([_system()] + chat_msgs) == render_for_completion([_system()] + resp_msgs)
 
     def test_tool_output(self):
         prev_call = ResponseFunctionToolCall(
@@ -235,9 +215,7 @@ class TestResponseInputToHarmonyRenderParity:
         verify_harmony_messages(chat_msgs, expected)
         verify_harmony_messages(resp_msgs, expected)
 
-        assert render_for_completion([_system()] + chat_msgs) == render_for_completion(
-            [_system()] + resp_msgs
-        )
+        assert render_for_completion([_system()] + chat_msgs) == render_for_completion([_system()] + resp_msgs)
 
     # -----------------------------------------------------------------------
     # Combined and multi-turn cases
@@ -302,9 +280,7 @@ class TestResponseInputToHarmonyRenderParity:
         verify_harmony_messages(chat_msgs, expected)
         verify_harmony_messages(resp_msgs, expected)
 
-        assert render_for_completion([_system()] + chat_msgs) == render_for_completion(
-            [_system()] + resp_msgs
-        )
+        assert render_for_completion([_system()] + chat_msgs) == render_for_completion([_system()] + resp_msgs)
 
     def test_full_multi_turn_tool_call_conversation(self):
         """Full conversation: user -> reasoning + tool_call -> tool_output -> final.
@@ -324,9 +300,7 @@ class TestResponseInputToHarmonyRenderParity:
         # --- Chat completion API path ---
         tool_id_names = {"call_1": "get_weather"}
         chat_msgs = []
-        chat_msgs += parse_chat_input_to_harmony_message(
-            {"role": "user", "content": "What's the weather in Paris?"}
-        )
+        chat_msgs += parse_chat_input_to_harmony_message({"role": "user", "content": "What's the weather in Paris?"})
         chat_msgs += parse_chat_input_to_harmony_message(
             {
                 "role": "assistant",
@@ -385,14 +359,9 @@ class TestResponseInputToHarmonyRenderParity:
                 "content": "It is currently 18°C in Paris with clear skies.",
             },
         ]
-        resp_msgs = [
-            response_input_to_harmony(item, prev_responses=[prev_call])
-            for item in resp_input
-        ]
+        resp_msgs = [response_input_to_harmony(item, prev_responses=[prev_call]) for item in resp_input]
 
-        assert render_for_completion([_system()] + chat_msgs) == render_for_completion(
-            [_system()] + resp_msgs
-        )
+        assert render_for_completion([_system()] + chat_msgs) == render_for_completion([_system()] + resp_msgs)
 
     def test_multi_turn_two_tool_calls_with_reasoning_between(self):
         """Validates parity for a chain of two tool calls, each with its own
@@ -512,10 +481,7 @@ class TestResponseInputToHarmonyRenderParity:
                 "output": "Mon 17°C, Tue 19°C, Wed 16°C",
             },
         ]
-        resp_msgs = [
-            response_input_to_harmony(item, prev_responses=prev_responses)
-            for item in resp_input
-        ]
+        resp_msgs = [response_input_to_harmony(item, prev_responses=prev_responses) for item in resp_input]
 
         chat_completion_tokens = render_for_completion([_system()] + chat_msgs)
         responses_tokens = render_for_completion([_system()] + resp_msgs)
@@ -556,9 +522,7 @@ class TestResponseInputToHarmonyRenderParity:
                 ],
             },
         ]:
-            chat_completion_msgs.extend(
-                parse_chat_input_to_harmony_message(chat_message)
-            )
+            chat_completion_msgs.extend(parse_chat_input_to_harmony_message(chat_message))
 
         responses_prev_input_msgs = []
         for responses_message in [
@@ -593,16 +557,10 @@ class TestResponseInputToHarmonyRenderParity:
                 "content": [{"type": "text", "text": '{"a":3,"b":3}'}],
             },
         ]:
-            responses_prev_input_msgs.extend(
-                response_previous_input_to_harmony(responses_message)
-            )
+            responses_prev_input_msgs.extend(response_previous_input_to_harmony(responses_message))
 
-        chat_completion_tokens = render_for_completion(
-            [_system()] + chat_completion_msgs
-        )
-        responses_tokens = render_for_completion(
-            [_system()] + responses_prev_input_msgs
-        )
+        chat_completion_tokens = render_for_completion([_system()] + chat_completion_msgs)
+        responses_tokens = render_for_completion([_system()] + responses_prev_input_msgs)
 
         assert chat_completion_tokens == responses_tokens
 

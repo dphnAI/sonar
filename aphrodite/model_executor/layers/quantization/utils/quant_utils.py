@@ -90,10 +90,7 @@ class ScaleDesc:
             GroupShape.PER_CHANNEL: "per_channel",
         }
         group_shape = d.get(self.group_shape, str(self.group_shape))
-        return (
-            f"{fx.graph.dtype_abbrs[self.dtype]},"
-            f"{'static' if self.static else 'dynamic'},{group_shape}"
-        )
+        return f"{fx.graph.dtype_abbrs[self.dtype]},{'static' if self.static else 'dynamic'},{group_shape}"
 
 
 @dataclass(frozen=True)
@@ -136,14 +133,10 @@ kDynamicTokenScale = ScaleDesc(torch.float32, False, GroupShape.PER_TOKEN)
 kFp8DynamicTokenSym = QuantKey(FP8_DTYPE, kDynamicTokenScale, symmetric=True)
 
 kNvfp4DynamicGroupScale = ScaleDesc(FP8_DTYPE, False, GroupShape(1, 16))
-kNvfp4Dynamic = QuantKey(
-    FP4_DTYPE, scale=kNvfp4DynamicGroupScale, scale2=kStaticTensorScale
-)
+kNvfp4Dynamic = QuantKey(FP4_DTYPE, scale=kNvfp4DynamicGroupScale, scale2=kStaticTensorScale)
 
 kNvfp4StaticGroupScale = ScaleDesc(FP8_DTYPE, True, GroupShape(1, 16))
-kNvfp4Static = QuantKey(
-    FP4_DTYPE, scale=kNvfp4StaticGroupScale, scale2=kStaticTensorScale
-)
+kNvfp4Static = QuantKey(FP4_DTYPE, scale=kNvfp4StaticGroupScale, scale2=kStaticTensorScale)
 
 kDynamic128Scale = ScaleDesc(torch.float32, False, GroupShape(1, 128))
 kFp8Dynamic128Sym = QuantKey(FP8_DTYPE, kDynamic128Scale, symmetric=True)
@@ -181,12 +174,8 @@ kInt8Static = QuantKey(INT8_DTYPE, scale=kInt8StaticGroupScale, symmetric=True)
 kInt4Static32GroupScale = ScaleDesc(torch.float16, True, GroupShape(1, 32))
 kInt4Static32 = QuantKey(INT4_DTYPE, scale=kInt4Static32GroupScale, symmetric=True)
 
-kInt4StaticAsym = QuantKey(
-    scalar_types.uint4, scale=kInt4StaticGroupScale, symmetric=False
-)
-kInt4Static32Asym = QuantKey(
-    scalar_types.uint4, scale=kInt4Static32GroupScale, symmetric=False
-)
+kInt4StaticAsym = QuantKey(scalar_types.uint4, scale=kInt4StaticGroupScale, symmetric=False)
+kInt4Static32Asym = QuantKey(scalar_types.uint4, scale=kInt4Static32GroupScale, symmetric=False)
 
 kInt8StaticChannelSym = QuantKey(torch.int8, kStaticChannelScale, symmetric=True)
 kInt8DynamicTokenSym = QuantKey(torch.int8, kDynamicTokenScale, symmetric=True)
@@ -196,25 +185,17 @@ kInt8DynamicTokenSym = QuantKey(torch.int8, kDynamicTokenScale, symmetric=True)
 # For group-wise quantization (e.g., group_size=128)
 # Note: group_size will be specified at runtime, this is a generic group scale
 kInt4W4A8StaticGroupScale128 = ScaleDesc(torch.bfloat16, True, GroupShape(1, 128))
-kInt4W4A8StaticGroup128Sym = QuantKey(
-    torch.int8, kInt4W4A8StaticGroupScale128, symmetric=True
-)
+kInt4W4A8StaticGroup128Sym = QuantKey(torch.int8, kInt4W4A8StaticGroupScale128, symmetric=True)
 
 kInt4W4A8StaticGroupScale64 = ScaleDesc(torch.bfloat16, True, GroupShape(1, 64))
-kInt4W4A8StaticGroup64Sym = QuantKey(
-    torch.int8, kInt4W4A8StaticGroupScale64, symmetric=True
-)
+kInt4W4A8StaticGroup64Sym = QuantKey(torch.int8, kInt4W4A8StaticGroupScale64, symmetric=True)
 
 kInt4W4A8StaticGroupScale32 = ScaleDesc(torch.bfloat16, True, GroupShape(1, 32))
-kInt4W4A8StaticGroup32Sym = QuantKey(
-    torch.int8, kInt4W4A8StaticGroupScale32, symmetric=True
-)
+kInt4W4A8StaticGroup32Sym = QuantKey(torch.int8, kInt4W4A8StaticGroupScale32, symmetric=True)
 
 # Generic group-wise with flexible group size (per-token groups)
 kInt4W4A8StaticGroupScale = ScaleDesc(torch.bfloat16, True, GroupShape(1, -1))
-kInt4W4A8StaticGroupSym = QuantKey(
-    torch.int8, kInt4W4A8StaticGroupScale, symmetric=True
-)
+kInt4W4A8StaticGroupSym = QuantKey(torch.int8, kInt4W4A8StaticGroupScale, symmetric=True)
 
 
 def create_fp8_quant_key(
@@ -257,11 +238,7 @@ def group_broadcast(t, shape):
         t_dim_size = t.shape[i] if i < t.ndim else 1
         if t_dim_size != s and t_dim_size != 1:
             assert s % t_dim_size == 0
-            t = (
-                t.unsqueeze(i + 1)
-                .expand(*t.shape[: i + 1], s // t_dim_size, *t.shape[i + 1 :])
-                .flatten(i, i + 1)
-            )
+            t = t.unsqueeze(i + 1).expand(*t.shape[: i + 1], s // t_dim_size, *t.shape[i + 1 :]).flatten(i, i + 1)
     return t
 
 
@@ -287,15 +264,9 @@ def prep_scale_for_group_broadcast(
         # where the "per_tensor_activations" check relies on "x_scale.dim() < 2":
         #   per_tensor_activations = (x_scale.numel() == 1) and x_scale.dim() < 2
         # For all other cases, reshape scalar scales to (1, 1) for broadcasting.
-        return (
-            scale
-            if group_shape is not None and group_shape.is_per_tensor()
-            else scale.reshape(1, 1)
-        )
+        return scale if group_shape is not None and group_shape.is_per_tensor() else scale.reshape(1, 1)
     if scale.ndim == 1:
-        assert group_shape is not None, (
-            "group_shape must be provided to correctly broadcast 1D scale"
-        )
+        assert group_shape is not None, "group_shape must be provided to correctly broadcast 1D scale"
         rows, cols = _normalize_quant_group_shape(x, group_shape)
         # Determine broadcasting dimension: either rows or columns match group size
         if rows == x.shape[-2]:
@@ -334,8 +305,7 @@ def scaled_quantize(
     """
     group_shape = _normalize_quant_group_shape(x, group_shape)
     assert quant_dtype.is_floating_point, (
-        "currently `scaled_quantize` only supports floating point dtypes "
-        "but could be extended to support other dtypes"
+        "currently `scaled_quantize` only supports floating point dtypes but could be extended to support other dtypes"
     )
 
     finfo = torch.finfo(quant_dtype)
@@ -395,9 +365,7 @@ def get_attribute_fallback(obj, attributes: list[str]):
     raise AttributeError(f"'{obj}' has no recognized attributes: {attributes}.")
 
 
-def get_and_maybe_dequant_weights(
-    layer: "LinearBase", out_dtype: torch.dtype = torch.float32
-):
+def get_and_maybe_dequant_weights(layer: "LinearBase", out_dtype: torch.dtype = torch.float32):
     """Return layer's unquantized weights in [out, in] layout"""
     from aphrodite.model_executor.layers.linear import UnquantizedLinearMethod
     from aphrodite.model_executor.layers.quantization.fp8 import Fp8LinearMethod
@@ -414,24 +382,18 @@ def get_and_maybe_dequant_weights(
     weight = get_attribute_fallback(layer, ["weight", "qweight", "weight_packed"])
 
     # Unquantized layer: just return base weights
-    if layer.quant_method is None or isinstance(
-        layer.quant_method, UnquantizedLinearMethod
-    ):
+    if layer.quant_method is None or isinstance(layer.quant_method, UnquantizedLinearMethod):
         return weight.to(out_dtype)
 
     # Simple Fp8 case: rescale with tensor or block weight scales
     if (
-        isinstance(
-            layer.quant_method, (Fp8LinearMethod, Fp8PerTensorOnlineLinearMethod)
-        )
+        isinstance(layer.quant_method, (Fp8LinearMethod, Fp8PerTensorOnlineLinearMethod))
         and not layer.quant_method.use_marlin
         # DeepGEMM transforms the scales using `transform_sf_into_required_layout` into
         # a layout that is not compatible with `scaled_dequantize`.
         and not layer.quant_method.use_deep_gemm
     ):
-        weight_scales = get_attribute_fallback(
-            layer, ["weight_scale", "weight_scale_inv"]
-        )
+        weight_scales = get_attribute_fallback(layer, ["weight_scale", "weight_scale_inv"])
         dequant_weights = scaled_dequantize(
             weight,
             weight_scales,
@@ -458,9 +420,7 @@ def get_and_maybe_dequant_weights(
     return dequant_weights.T
 
 
-def pack_quantized_values_into_int32(
-    w_q: torch.Tensor, wtype: ScalarType, packed_dim: int = 0
-):
+def pack_quantized_values_into_int32(w_q: torch.Tensor, wtype: ScalarType, packed_dim: int = 0):
     # move dim to pack to the end
     perm = (*[i for i in range(len(w_q.shape)) if i != packed_dim], packed_dim)
     inv_perm = tuple(perm.index(i) for i in range(len(perm)))
@@ -480,9 +440,7 @@ def pack_quantized_values_into_int32(
     return res.permute(inv_perm)
 
 
-def unpack_quantized_values_into_int32(
-    w_q: torch.Tensor, wtype: ScalarType, packed_dim: int = 0
-):
+def unpack_quantized_values_into_int32(w_q: torch.Tensor, wtype: ScalarType, packed_dim: int = 0):
     # move dim to pack to the end
     perm = (*[i for i in range(len(w_q.shape)) if i != packed_dim], packed_dim)
     inv_perm = tuple(perm.index(i) for i in range(len(perm)))
@@ -534,10 +492,7 @@ def is_layer_skipped(
     if proj_name in fused_mapping and match_func(prefix, ignored_layers):
         is_skipped = True
     elif proj_name in fused_mapping:
-        shard_prefixes = [
-            prefix.replace(proj_name, shard_proj_name)
-            for shard_proj_name in fused_mapping[proj_name]
-        ]
+        shard_prefixes = [prefix.replace(proj_name, shard_proj_name) for shard_proj_name in fused_mapping[proj_name]]
 
         is_skipped = None
         for shard_prefix in shard_prefixes:
@@ -552,9 +507,7 @@ def is_layer_skipped(
                     "to have the same precision."
                 )
     elif "experts" in prefix and not skip_with_substr:
-        expert_ignore_layers = filter(
-            lambda layer_name: "experts" in layer_name, ignored_layers
-        )
+        expert_ignore_layers = filter(lambda layer_name: "experts" in layer_name, ignored_layers)
         return any(
             prefix in layer_name if not skip_with_substr else layer_name in prefix
             for layer_name in expert_ignore_layers
@@ -608,12 +561,9 @@ def quantize_weights(
     zero_points: bool = False,
     ref_zero_points_after_scales: bool = False,
 ):
-    assert quant_type.is_integer(), (
-        "Floating point quantization may work but has not been tested"
-    )
+    assert quant_type.is_integer(), "Floating point quantization may work but has not been tested"
     assert not zero_points or group_size is not None, (
-        "to have group zero points, group_size must be provided "
-        "(-1 group_size is channelwise)"
+        "to have group zero points, group_size must be provided (-1 group_size is channelwise)"
     )
 
     orig_device = w.device
@@ -644,9 +594,7 @@ def quantize_weights(
         if zero_points:
             assert not quant_type.is_signed() and quant_type.max() > 0
             w_s = (max_val - min_val).clamp(min=1e-5) / quant_type.max()
-            maybe_w_zp = (
-                torch.round(torch.abs(min_val / w_s)).clamp(min_q_val, max_q_val).int()
-            )
+            maybe_w_zp = torch.round(torch.abs(min_val / w_s)).clamp(min_q_val, max_q_val).int()
         else:
             # If the bias is such that there are no possible negative/positive
             #  values, set the max value to inf to avoid divide by 0
@@ -710,12 +658,8 @@ def gptq_quantize_weights(
     size_k, _ = w.shape
 
     assert w.is_floating_point(), "w must be float"
-    assert quant_type in SUPPORTED_GPTQ_QUANT_TYPES, (
-        f"Unsupported gptq type = {quant_type}"
-    )
-    assert group_size in SUPPORTED_GROUP_SIZES + [size_k], (
-        f"Unsupported groupsize = {group_size}"
-    )
+    assert quant_type in SUPPORTED_GPTQ_QUANT_TYPES, f"Unsupported gptq type = {quant_type}"
+    assert group_size in SUPPORTED_GROUP_SIZES + [size_k], f"Unsupported groupsize = {group_size}"
 
     w_ref, w_q, w_s, _ = quantize_weights(w, quant_type, group_size)
 
@@ -723,10 +667,8 @@ def gptq_quantize_weights(
     g_idx = torch.empty(0, dtype=torch.int, device=w.device)
     rand_perm = torch.empty(0, dtype=torch.int, device=w.device)
     if act_order:
-        assert group_size < size_k, (
-            "For act_order, groupsize = {} must be less than size_k = {}".format(
-                group_size, size_k
-            )
+        assert group_size < size_k, "For act_order, groupsize = {} must be less than size_k = {}".format(
+            group_size, size_k
         )
 
         w_ref, w_q, g_idx, rand_perm = permute_rows(w_q, w_ref, group_size, test_perm)
@@ -861,16 +803,12 @@ def awq_pack(
     return pack_cols(q_w, num_bits, size_k, size_n)
 
 
-def convert_bf16_scales_to_fp8(
-    quant_fp8: Callable, scales: torch.Tensor
-) -> tuple[torch.Tensor, torch.Tensor]:
+def convert_bf16_scales_to_fp8(quant_fp8: Callable, scales: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Convert a BF16 scale tensor into the pair of (fp8_scales, channel_scales)
     expected by W4A8 GEMM kernels.
     """
-    assert scales.is_contiguous(), (
-        f"scale tensor must be contiguous, got {scales.stride()=}"
-    )
+    assert scales.is_contiguous(), f"scale tensor must be contiguous, got {scales.stride()=}"
     assert scales.is_cuda, "scales must be on gpu"
 
     orig_shape = scales.shape

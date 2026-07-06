@@ -55,9 +55,7 @@ class MambaHybridAttnMetadata(ModelSpecificAttnMetadata):
         ):
             return {}
         return {
-            "num_accepted_tokens": None
-            if self.num_accepted_tokens is None
-            else self.num_accepted_tokens[:num_reqs],
+            "num_accepted_tokens": None if self.num_accepted_tokens is None else self.num_accepted_tokens[:num_reqs],
             "num_decode_draft_tokens_cpu": None
             if self.num_decode_draft_tokens_cpu is None
             else self.num_decode_draft_tokens_cpu[:num_reqs],
@@ -76,24 +74,16 @@ class MambaHybridModelState(DefaultModelState):
     ) -> None:
         super().__init__(aphrodite_config, model, encoder_cache, device)
         self.cache_config = aphrodite_config.cache_config
-        self.num_accepted_tokens_gpu = torch.ones(
-            self.max_num_reqs, dtype=torch.int32, device=self.device
-        )
+        self.num_accepted_tokens_gpu = torch.ones(self.max_num_reqs, dtype=torch.int32, device=self.device)
         # Pre-copy "align" prefix-cache state (V2). The migration of each
         # request's mamba state across block boundaries runs as a fused GPU
         # kernel reusing the postprocess copy machinery, so the per-step src
         # columns and the running state_idx are kept GPU-resident.
         self._align_mode = self.cache_config.mamba_cache_mode == "align"
         if self._align_mode:
-            self._mamba_state_idx_gpu = torch.zeros(
-                self.max_num_reqs, dtype=torch.int32, device=self.device
-            )
-            self._mamba_src_col_gpu = torch.full(
-                (self.max_num_reqs,), -1, dtype=torch.int32, device=self.device
-            )
-            self._mamba_src_off_gpu = torch.zeros(
-                self.max_num_reqs, dtype=torch.int32, device=self.device
-            )
+            self._mamba_state_idx_gpu = torch.zeros(self.max_num_reqs, dtype=torch.int32, device=self.device)
+            self._mamba_src_col_gpu = torch.full((self.max_num_reqs,), -1, dtype=torch.int32, device=self.device)
+            self._mamba_src_off_gpu = torch.zeros(self.max_num_reqs, dtype=torch.int32, device=self.device)
             self._mamba_ctx: MambaSpecDecodeGPUContext | None = None
             self._mamba_group_ids: list[int] = []
             self._mamba_spec: MambaSpec | None = None
@@ -107,9 +97,7 @@ class MambaHybridModelState(DefaultModelState):
             ) // self.cache_config.block_size
             self.num_accepted_tokens_gpu[req_index] = 1
 
-    def _get_mamba_group_info(
-        self, kv_cache_config: KVCacheConfig
-    ) -> tuple[list[int], MambaSpec]:
+    def _get_mamba_group_info(self, kv_cache_config: KVCacheConfig) -> tuple[list[int], MambaSpec]:
         if self._mamba_spec is None:
             group_ids: list[int] = []
             specs: list[MambaSpec] = []
@@ -137,17 +125,14 @@ class MambaHybridModelState(DefaultModelState):
             # contiguous copy (mirrors get_conv_copy_spec's NotImplementedError).
             if get_conv_copy_spec in copy_funcs and is_conv_state_dim_first():
                 assert self.aphrodite_config.speculative_config is None, (
-                    "DS conv state layout does not support mamba align state "
-                    "copies with speculative decoding"
+                    "DS conv state layout does not support mamba align state copies with speculative decoding"
                 )
             self._mamba_ctx = MambaSpecDecodeGPUContext.create(
                 max_num_reqs=self.max_num_reqs,
                 kv_cache_config=kv_cache_config,
                 num_state_types=len(copy_funcs),
                 device=self.device,
-                make_buffer=lambda n, dtype: CpuGpuBuffer(
-                    n, dtype=dtype, device=self.device
-                ),
+                make_buffer=lambda n, dtype: CpuGpuBuffer(n, dtype=dtype, device=self.device),
             )
         ctx = self._mamba_ctx
         if not ctx.is_initialized:
@@ -238,19 +223,16 @@ class MambaHybridModelState(DefaultModelState):
             max_seq_len = seq_lens_cpu_upper_bound[:num_reqs].max().item()
 
         is_prefilling = torch.zeros(num_reqs, dtype=torch.bool, device="cpu")
-        is_prefilling[: input_batch.num_reqs] = torch.from_numpy(
-            input_batch.is_prefilling_np
-        )
+        is_prefilling[: input_batch.num_reqs] = torch.from_numpy(input_batch.is_prefilling_np)
         # During CUDAGraph capture, num_decode_draft_tokens_cpu and num_accepted_tokens
         # are created by attn_metadata_builder.build_for_cudagraph_capture, so we only
         # compute them during actual (non-capture) forward execution.
         num_accepted_tokens = None
         num_decode_draft_tokens_cpu = None
-        if not for_capture and self.vllm_config.num_speculative_tokens > 0:
+        speculative_config = self.aphrodite_config.speculative_config
+        if not for_capture and speculative_config is not None and speculative_config.num_speculative_tokens > 0:
             num_accepted_tokens = self.num_accepted_tokens_gpu.new_ones(num_reqs)
-            num_accepted_tokens[: input_batch.num_reqs] = self.num_accepted_tokens_gpu[
-                input_batch.idx_mapping
-            ]
+            num_accepted_tokens[: input_batch.num_reqs] = self.num_accepted_tokens_gpu[input_batch.idx_mapping]
 
             # GDN uses >= 0 to select spec-decode rows, so non-decode rows
             # need the -1 sentinel rather than a raw zero draft count.
@@ -300,24 +282,16 @@ class MambaHybridModelState(DefaultModelState):
             # kernel skips them rather than scattering with a host-side gather.
             n = idx_mapping.shape[0]
             if n:
-                _scatter_num_accepted_kernel[(n,)](
-                    idx_mapping, num_sampled, self.num_accepted_tokens_gpu
-                )
+                _scatter_num_accepted_kernel[(n,)](idx_mapping, num_sampled, self.num_accepted_tokens_gpu)
         else:
             # Fill with single value.
-            self.num_accepted_tokens_gpu.index_fill_(
-                0, idx_mapping, max(num_sampled, 1)
-            )
+            self.num_accepted_tokens_gpu.index_fill_(0, idx_mapping, max(num_sampled, 1))
 
         # Align: save the running state to the block-aligned position when
         # spec-decode acceptance leaves the sequence non-block-aligned (mirrors
         # the V1 align postprocess). num_computed_tokens already holds the
         # post-step advanced count.
-        if (
-            self._align_mode
-            and num_computed_tokens is not None
-            and self._mamba_ctx is not None
-        ):
+        if self._align_mode and num_computed_tokens is not None and self._mamba_ctx is not None:
             num_reqs = idx_mapping.shape[0]
             if num_reqs:
                 self._mamba_ctx.run_fused_postprocess_align(

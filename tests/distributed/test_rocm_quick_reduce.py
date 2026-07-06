@@ -72,10 +72,7 @@ def _quick_allreduce_worker(
 ):
     os.environ["APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION"] = quant_level
     os.environ["APHRODITE_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16"] = "1" if cast_bf16 else "0"
-    _log(
-        f"worker start: rank={rank} quant={quant_level} "
-        f"dtype={dtype_name} cast_bf16={cast_bf16}"
-    )
+    _log(f"worker start: rank={rank} quant={quant_level} dtype={dtype_name} cast_bf16={cast_bf16}")
 
     device = torch.device(f"cuda:{rank}")
     torch.accelerator.set_device_index(device)
@@ -124,10 +121,7 @@ def _run_two_gpu_quick_allreduce_test(
     dtype_name: str,
     cast_bf16: bool,
 ):
-    _log(
-        f"launch 2-GPU case: quant={quant_level} "
-        f"dtype={dtype_name} cast_bf16={cast_bf16}"
-    )
+    _log(f"launch 2-GPU case: quant={quant_level} dtype={dtype_name} cast_bf16={cast_bf16}")
     ctx = mp.get_context("spawn")
     port = get_open_port()
     procs = []
@@ -143,10 +137,7 @@ def _run_two_gpu_quick_allreduce_test(
     for proc in procs:
         proc.join(timeout=60)
         assert proc.exitcode == 0, f"worker exited with code {proc.exitcode}"
-    _log(
-        f"finished 2-GPU case: quant={quant_level} "
-        f"dtype={dtype_name} cast_bf16={cast_bf16}"
-    )
+    _log(f"finished 2-GPU case: quant={quant_level} dtype={dtype_name} cast_bf16={cast_bf16}")
 
 
 MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct"
@@ -176,17 +167,11 @@ def _build_prompt(*, fact_block: str, question: str) -> str:
 
 E2E_PROMPTS = [
     _build_prompt(
-        fact_block=(
-            "- Festival city: Oslo\n- Mascot animal: otter\n- Welcome drink: tea"
-        ),
+        fact_block=("- Festival city: Oslo\n- Mascot animal: otter\n- Welcome drink: tea"),
         question="Which city hosts the festival, and what animal is the mascot?",
     ),
     _build_prompt(
-        fact_block=(
-            "- Meeting day: Tuesday\n"
-            "- Planned snack: apricot cake\n"
-            "- Backup room: Cedar"
-        ),
+        fact_block=("- Meeting day: Tuesday\n- Planned snack: apricot cake\n- Backup room: Cedar"),
         question="What day is the meeting, and what snack is planned?",
     ),
 ]
@@ -279,10 +264,7 @@ def _check_quick_reduce_disabled(self) -> int:
 
 
 def _collect_generations(outputs) -> list[tuple[tuple[int, ...], str]]:
-    return [
-        (tuple(output.outputs[0].token_ids), output.outputs[0].text)
-        for output in outputs
-    ]
+    return [(tuple(output.outputs[0].token_ids), output.outputs[0].text) for output in outputs]
 
 
 def _shutdown_llm(llm: LLM | None) -> None:
@@ -313,10 +295,7 @@ def _assert_required_words(
     for i, (_, text) in enumerate(generations):
         lowered = text.lower()
         missing = [word for word in REQUIRED_WORDS[i] if word not in lowered]
-        assert not missing, (
-            f"{label} prompt {i} is missing required words {missing}. "
-            f"Observed text: {text!r}"
-        )
+        assert not missing, f"{label} prompt {i} is missing required words {missing}. Observed text: {text!r}"
 
 
 def _collect_soft_mismatches(
@@ -329,16 +308,14 @@ def _collect_soft_mismatches(
         expected = RECORDED_RESPONSE_TEXTS[i]
         if text != expected:
             mismatches.append(
-                f"baseline prompt {i} drifted from the recorded response.\n"
-                f"expected={expected!r}\nactual={text!r}"
+                f"baseline prompt {i} drifted from the recorded response.\nexpected={expected!r}\nactual={text!r}"
             )
 
     for i, (_, text) in enumerate(quick_reduce_generations):
         expected = RECORDED_RESPONSE_TEXTS[i]
         if text != expected:
             mismatches.append(
-                f"quick-reduce prompt {i} drifted from the recorded response.\n"
-                f"expected={expected!r}\nactual={text!r}"
+                f"quick-reduce prompt {i} drifted from the recorded response.\nexpected={expected!r}\nactual={text!r}"
             )
 
     for i, ((_, baseline_text), (_, quick_reduce_text)) in enumerate(
@@ -486,21 +463,15 @@ def run_quick_reduce_llm_e2e(
                 f"quick-reduce llm e2e subprocess failed for backend={backend} "
                 f"with exit code {proc.exitcode} and produced no result"
             ) from exc
-        raise AssertionError(
-            f"quick-reduce llm e2e subprocess produced no result for backend={backend}"
-        ) from exc
+        raise AssertionError(f"quick-reduce llm e2e subprocess produced no result for backend={backend}") from exc
 
     if result["status"] == "xfail":
         pytest.xfail(result["reason"])
     if result["status"] == "error":
-        raise AssertionError(
-            f"quick-reduce llm e2e subprocess failed for backend={backend}:\n"
-            f"{result['reason']}"
-        )
+        raise AssertionError(f"quick-reduce llm e2e subprocess failed for backend={backend}:\n{result['reason']}")
 
     assert proc.exitcode == 0, (
-        f"quick-reduce llm e2e subprocess failed for backend={backend} "
-        f"with exit code {proc.exitcode}"
+        f"quick-reduce llm e2e subprocess failed for backend={backend} with exit code {proc.exitcode}"
     )
 
 
@@ -537,9 +508,7 @@ def test_quick_reduce_quantization_default(monkeypatch):
 
 @pytest.mark.parametrize("cast_bf16", [True, False])
 def test_quick_reduce_cast_bf16_to_fp16_env_var(monkeypatch, cast_bf16):
-    monkeypatch.setenv(
-        "APHRODITE_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16", "1" if cast_bf16 else "0"
-    )
+    monkeypatch.setenv("APHRODITE_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16", "1" if cast_bf16 else "0")
 
     reloaded_envs = _reload_envs()
     assert reloaded_envs.APHRODITE_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16 is cast_bf16
@@ -587,8 +556,7 @@ def test_quick_allreduce_rocm_arch_available(gcn_arch_name, expected):
 
     with (
         patch(
-            "aphrodite.distributed.device_communicators.quick_all_reduce.current_platform."
-            "is_rocm",
+            "aphrodite.distributed.device_communicators.quick_all_reduce.current_platform.is_rocm",
             return_value=True,
         ),
         patch(
@@ -607,8 +575,7 @@ def test_quick_allreduce_rocm_arch_available_handles_probe_failure():
 
     with (
         patch(
-            "aphrodite.distributed.device_communicators.quick_all_reduce.current_platform."
-            "is_rocm",
+            "aphrodite.distributed.device_communicators.quick_all_reduce.current_platform.is_rocm",
             return_value=True,
         ),
         patch("torch.cuda.get_device_properties", side_effect=RuntimeError),

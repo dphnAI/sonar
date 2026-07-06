@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Whisper transcription policy and decode loop."""
 
 from __future__ import annotations
@@ -11,9 +12,8 @@ import mlx.core as mx
 import numpy as np
 from transformers import WhisperTokenizer
 from transformers.models.whisper.tokenization_whisper import LANGUAGES, TO_LANGUAGE_CODE
-from aphrodite.config import SpeechToTextConfig
-from aphrodite.model_executor.models.whisper_utils import ISO639_1_SUPPORTED_LANGS
 
+from aphrodite.config import SpeechToTextConfig
 from aphrodite.metal.stt.audio import (
     N_FRAMES,
     N_SAMPLES,
@@ -25,6 +25,7 @@ from aphrodite.metal.stt.audio import (
     split_audio,
 )
 from aphrodite.metal.stt.protocol import TranscriptionResult, TranscriptionSegment
+from aphrodite.model_executor.models.whisper_utils import ISO639_1_SUPPORTED_LANGS
 
 from .config import WHISPER_MAX_DECODE_TOKENS
 from .model import WhisperModel
@@ -61,10 +62,7 @@ class WhisperTranscriber:
             logger.debug("Language %r is not officially supported", code)
             return code
 
-        raise ValueError(
-            f"Unsupported language: {code!r}. "
-            "Use a valid Whisper language code or name."
-        )
+        raise ValueError(f"Unsupported language: {code!r}. Use a valid Whisper language code or name.")
 
     def __init__(
         self,
@@ -89,9 +87,7 @@ class WhisperTranscriber:
         try:
             return WhisperTokenizer.from_pretrained("openai/whisper-small")
         except OSError:
-            return WhisperTokenizer.from_pretrained(
-                "openai/whisper-small", local_files_only=True
-            )
+            return WhisperTokenizer.from_pretrained("openai/whisper-small", local_files_only=True)
 
     @property
     def tokenizer(self) -> WhisperTokenizer:
@@ -128,22 +124,16 @@ class WhisperTranscriber:
 
         for chunk_audio, chunk_start in chunks:
             features = self._encode_chunk(chunk_audio)
-            output_tokens = self._greedy_decode(
-                features, language, task, prompt, with_timestamps=with_timestamps
-            )
+            output_tokens = self._greedy_decode(features, language, task, prompt, with_timestamps=with_timestamps)
 
             if with_timestamps:
-                segments = self._extract_segments(
-                    output_tokens, chunk_start, seg_id_offset
-                )
+                segments = self._extract_segments(output_tokens, chunk_start, seg_id_offset)
                 for seg in segments:
                     all_segments.append(seg)
                     all_text_parts.append(seg.text)
                 seg_id_offset += len(segments)
                 if not segments:
-                    text = self.tokenizer.decode(
-                        output_tokens, skip_special_tokens=True
-                    )
+                    text = self.tokenizer.decode(output_tokens, skip_special_tokens=True)
                     if text.strip():
                         all_text_parts.append(text.strip())
             else:
@@ -239,9 +229,7 @@ class WhisperTranscriber:
         task = task.strip().lower()
         if task not in WHISPER_TASKS:
             supported = ", ".join(sorted(WHISPER_TASKS))
-            raise ValueError(
-                f"Unsupported STT task: {task!r}. Must be one of {supported}."
-            )
+            raise ValueError(f"Unsupported STT task: {task!r}. Must be one of {supported}.")
 
         if self.model.is_multilingual:
             return self.validate_language(language, default=None), task
@@ -250,17 +238,13 @@ class WhisperTranscriber:
         if task == "translate":
             raise ValueError("English-only Whisper models do not support translation.")
         if resolved_language not in (None, "en"):
-            raise ValueError(
-                "English-only Whisper models only support English transcription."
-            )
+            raise ValueError("English-only Whisper models only support English transcription.")
         return resolved_language, task
 
     def _encode_prompt(self, prompt: str | None) -> list[int]:
         if not prompt:
             return []
-        prompt_ids = [
-            int(token_id) for token_id in self.tokenizer.get_prompt_ids(prompt)
-        ]
+        prompt_ids = [int(token_id) for token_id in self.tokenizer.get_prompt_ids(prompt)]
         if len(prompt_ids) <= MAX_PROMPT_TOKENS + 1:
             return prompt_ids
         return [prompt_ids[0], *prompt_ids[-MAX_PROMPT_TOKENS:]]
@@ -292,9 +276,7 @@ class WhisperTranscriber:
         max_tokens: int | None = None,
     ) -> list[int]:
         if max_tokens is None:
-            max_tokens = (
-                WHISPER_MAX_DECODE_TOKENS if with_timestamps else MAX_PROMPT_TOKENS
-            )
+            max_tokens = WHISPER_MAX_DECODE_TOKENS if with_timestamps else MAX_PROMPT_TOKENS
 
         prefix = self._encode_prompt(prompt)
         prefix.extend(
@@ -328,9 +310,7 @@ class WhisperTranscriber:
                     seg_start = ts
                     seg_tokens = []
                 else:
-                    seg_text = self.tokenizer.decode(
-                        seg_tokens, skip_special_tokens=True
-                    )
+                    seg_text = self.tokenizer.decode(seg_tokens, skip_special_tokens=True)
                     if seg_text.strip():
                         segments.append(
                             TranscriptionSegment(
@@ -356,9 +336,7 @@ class WhisperTranscriber:
                         id=seg_id,
                         seek=int(seg_start * SEEK_MULTIPLIER),
                         start=round(seg_start + time_offset, 2),
-                        end=round(
-                            seg_start + time_offset + DEFAULT_SEGMENT_DURATION, 2
-                        ),
+                        end=round(seg_start + time_offset + DEFAULT_SEGMENT_DURATION, 2),
                         text=seg_text,
                         tokens=list(seg_tokens),
                     )

@@ -44,10 +44,7 @@ class RDNA3W4A16LinearKernel(MPLinearKernel):
         # The HIP op is registered by the C++ extension; if a user is running
         # against a Aphrodite build that doesn't include it (e.g. partial rebuild),
         # fall through gracefully to the next kernel in the registry.
-        if not (
-            hasattr(torch.ops, "_rocm_C")
-            and hasattr(torch.ops._rocm_C, "gptq_gemm_rdna3")
-        ):
+        if not (hasattr(torch.ops, "_rocm_C") and hasattr(torch.ops._rocm_C, "gptq_gemm_rdna3")):
             return (
                 False,
                 "torch.ops._rocm_C.gptq_gemm_rdna3 missing — rebuild C++ extension",
@@ -72,8 +69,7 @@ class RDNA3W4A16LinearKernel(MPLinearKernel):
         if c.full_weight_shape[0] % c.group_size != 0:
             return (
                 False,
-                f"Group size ({c.group_size}) does not evenly divide K "
-                f"({c.full_weight_shape[0]})",
+                f"Group size ({c.group_size}) does not evenly divide K ({c.full_weight_shape[0]})",
             )
 
         # Output features must be a multiple of the pack factor (8 nibbles per
@@ -82,15 +78,13 @@ class RDNA3W4A16LinearKernel(MPLinearKernel):
         if c.partition_weight_shape[1] % 8 != 0:
             return (
                 False,
-                "Output features must be a multiple of 8 for the RDNA3 "
-                "W4A16 kernel (qzeros packing)",
+                "Output features must be a multiple of 8 for the RDNA3 W4A16 kernel (qzeros packing)",
             )
 
         if c.has_g_idx and c.partition_weight_shape[0] != c.full_weight_shape[0]:
             return (
                 False,
-                "Act-order with TP-partitioned input features is not "
-                "supported by the RDNA3 W4A16 kernel",
+                "Act-order with TP-partitioned input features is not supported by the RDNA3 W4A16 kernel",
             )
 
         return True, None
@@ -119,13 +113,10 @@ class RDNA3W4A16LinearKernel(MPLinearKernel):
                 )
             else:
                 raise NotImplementedError(
-                    "RDNA3 W4A16 kernel: zero-bias 4-bit quant requires "
-                    "explicit zero points (GPTQv1 +1 quirk)."
+                    "RDNA3 W4A16 kernel: zero-bias 4-bit quant requires explicit zero points (GPTQv1 +1 quirk)."
                 )
             zeros = pack_quantized_values_into_int32(zeros, c.weight_type, packed_dim=1)
-            setattr(
-                layer, self.w_zp_name, torch.nn.Parameter(zeros, requires_grad=False)
-            )
+            setattr(layer, self.w_zp_name, torch.nn.Parameter(zeros, requires_grad=False))
 
         # Act-order: convert g_idx to the inverse permutation array exllama
         # expects (kernel reads a[perm[k]] instead of using groups indirected

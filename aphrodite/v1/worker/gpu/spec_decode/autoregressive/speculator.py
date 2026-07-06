@@ -31,21 +31,13 @@ class AutoRegressiveSpeculator(DraftModelSpeculator):
     def __init__(self, aphrodite_config: AphroditeConfig, device: torch.device):
         super().__init__(aphrodite_config, device)
 
-        self.hidden_states = torch.zeros(
-            self.max_num_tokens, self.hidden_size, dtype=self.dtype, device=device
-        )
+        self.hidden_states = torch.zeros(self.max_num_tokens, self.hidden_size, dtype=self.dtype, device=device)
         self.current_draft_step = torch.tensor(0, dtype=torch.int64, device=device)
-        self.last_token_indices = torch.zeros(
-            self.max_num_reqs, dtype=torch.int64, device=device
-        )
+        self.last_token_indices = torch.zeros(self.max_num_reqs, dtype=torch.int64, device=device)
 
-        self.supports_mm_inputs = MULTIMODAL_REGISTRY.supports_multimodal_inputs(
-            self.draft_model_config
-        )
+        self.supports_mm_inputs = MULTIMODAL_REGISTRY.supports_multimodal_inputs(self.draft_model_config)
         if self.supports_mm_inputs:
-            self.inputs_embeds = torch.zeros(
-                self.max_num_tokens, self.hidden_size, dtype=self.dtype, device=device
-            )
+            self.inputs_embeds = torch.zeros(self.max_num_tokens, self.hidden_size, dtype=self.dtype, device=device)
 
         self.prefill_cudagraph_manager: PrefillSpeculatorCudaGraphManager | None = None
         self.decode_cudagraph_manager: DecodeSpeculatorCudaGraphManager | None = None
@@ -155,9 +147,7 @@ class AutoRegressiveSpeculator(DraftModelSpeculator):
         num_reqs = input_batch.num_reqs
         max_query_len = input_batch.num_scheduled_tokens.max()
         max_seq_len = input_batch.seq_lens_cpu_upper_bound[:num_reqs].max().item()
-        self.draft_max_seq_len = min(
-            max_seq_len + self.num_speculative_steps, self.max_model_len
-        )
+        self.draft_max_seq_len = min(max_seq_len + self.num_speculative_steps, self.max_model_len)
 
         # NOTE(woosuk): To avoid CPU-GPU synchronization without CPU knowing the
         # number of rejected tokens, we maintain the size of input_ids and
@@ -167,9 +157,7 @@ class AutoRegressiveSpeculator(DraftModelSpeculator):
         # seq_lens) of the target model.
         if aux_hidden_states:
             assert self.method == "eagle3"
-            hidden_states = self.model.combine_hidden_states(
-                torch.cat(aux_hidden_states, dim=-1)
-            )
+            hidden_states = self.model.combine_hidden_states(torch.cat(aux_hidden_states, dim=-1))
         else:
             hidden_states = last_hidden_states
         self.hidden_states[:num_tokens].copy_(hidden_states)
@@ -294,9 +282,7 @@ class AutoRegressiveSpeculator(DraftModelSpeculator):
             if self.supports_mm_inputs:
                 # Merge multimodal embeddings with input ids.
                 mm_embeds, is_mm_embed = mm_inputs or (None, None)
-                num_input_tokens = (
-                    is_mm_embed.shape[0] if is_mm_embed is not None else num_tokens
-                )
+                num_input_tokens = is_mm_embed.shape[0] if is_mm_embed is not None else num_tokens
                 self.inputs_embeds[:num_input_tokens] = self.model.embed_input_ids(
                     self.input_buffers.input_ids[:num_input_tokens],
                     multimodal_embeddings=mm_embeds,
@@ -314,9 +300,7 @@ class AutoRegressiveSpeculator(DraftModelSpeculator):
                 # Draft prefill with PIECEWISE cudagraph (compiled PW or breakable),
                 # chosen inside run_pw_graph.
                 assert self.prefill_cudagraph_manager is not None
-                ret_hidden_states = self.prefill_cudagraph_manager.run_pw_graph(
-                    self.model, model_inputs
-                )
+                ret_hidden_states = self.prefill_cudagraph_manager.run_pw_graph(self.model, model_inputs)
             else:
                 # Eager (NONE): call the raw model directly.
                 ret_hidden_states = self.model(**model_inputs)
@@ -391,9 +375,7 @@ class AutoRegressiveSpeculator(DraftModelSpeculator):
                     positions,
                     batch_desc.num_tokens,
                 )
-                slot_mappings_by_layer = build_slot_mappings_by_layer(
-                    slot_mappings, self.kv_cache_config
-                )
+                slot_mappings_by_layer = build_slot_mappings_by_layer(slot_mappings, self.kv_cache_config)
                 attn_metadata = self._build_draft_attn_metadata(
                     num_reqs=num_reqs,
                     num_reqs_padded=batch_desc.num_reqs or num_reqs,
@@ -712,9 +694,7 @@ def _update_draft_inputs_kernel(
             mask=mask,
         )
         tl.store(
-            next_input_hidden_states_ptr
-            + req_idx * next_input_hidden_states_stride
-            + block,
+            next_input_hidden_states_ptr + req_idx * next_input_hidden_states_stride + block,
             hidden_states,
             mask=mask,
         )

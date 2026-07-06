@@ -157,8 +157,7 @@ def map_unquantized_backend(runner_backend: MoEBackend) -> UnquantizedMoeBackend
     if backend := mapping.get(runner_backend):
         return backend
     raise ValueError(
-        f"moe_backend='{runner_backend}' is not supported for unquantized MoE. "
-        f"Expected one of {list(mapping.keys())}."
+        f"moe_backend='{runner_backend}' is not supported for unquantized MoE. Expected one of {list(mapping.keys())}."
     )
 
 
@@ -181,9 +180,7 @@ def select_unquantized_moe_backend(
         return UnquantizedMoeBackend.OOT, None
 
     if moe_config.is_lora_enabled:
-        return UnquantizedMoeBackend.TRITON, backend_to_kernel_cls(
-            UnquantizedMoeBackend.TRITON
-        )
+        return UnquantizedMoeBackend.TRITON, backend_to_kernel_cls(UnquantizedMoeBackend.TRITON)
 
     # NOTE: the kernels are selected in the following order.
     AVAILABLE_BACKENDS = _get_priority_backends(moe_config)
@@ -199,23 +196,14 @@ def select_unquantized_moe_backend(
 
     def _make_log_backend(backend: UnquantizedMoeBackend) -> str:
         available_strs = [b.value for b in AVAILABLE_BACKENDS]
-        return (
-            f"Using {backend.value} Unquantized MoE backend out "
-            f"of potential backends: {available_strs}."
-        )
+        return f"Using {backend.value} Unquantized MoE backend out of potential backends: {available_strs}."
 
-    def _make_log_unsupported(
-        backend: UnquantizedMoeBackend, reason: str | None
-    ) -> str:
+    def _make_log_unsupported(backend: UnquantizedMoeBackend, reason: str | None) -> str:
         if reason:
             return (
-                f"Unquantized MoE backend {backend.value} does not support the "
-                f"deployment configuration since {reason}."
+                f"Unquantized MoE backend {backend.value} does not support the deployment configuration since {reason}."
             )
-        return (
-            f"Unquantized MoE backend '{backend.value}' does not support the "
-            "deployment configuration."
-        )
+        return f"Unquantized MoE backend '{backend.value}' does not support the deployment configuration."
 
     def _return_or_raise(
         backend: UnquantizedMoeBackend,
@@ -223,9 +211,7 @@ def select_unquantized_moe_backend(
         activation_format: mk.FusedMoEActivationFormat,
     ) -> tuple[UnquantizedMoeBackend, type[mk.FusedMoEExperts] | None]:
         k_cls = backend_to_kernel_cls(backend)
-        supported, reason = k_cls.is_supported_config(
-            k_cls, config, None, None, activation_format
-        )
+        supported, reason = k_cls.is_supported_config(k_cls, config, None, None, activation_format)
         if supported:
             logger.info_once(_make_log_backend(backend))
             return backend, k_cls
@@ -253,18 +239,14 @@ def select_unquantized_moe_backend(
 
     for backend in AVAILABLE_BACKENDS:
         k_cls = backend_to_kernel_cls(backend)
-        supported, reason = k_cls.is_supported_config(
-            k_cls, moe_config, None, None, activation_format
-        )
+        supported, reason = k_cls.is_supported_config(k_cls, moe_config, None, None, activation_format)
         if supported:
             logger.info_once(_make_log_backend(backend))
             return backend, k_cls
 
         logger.debug_once(_make_log_unsupported(backend, reason))
 
-    raise NotImplementedError(
-        "No Unquantized MoE backend supports the deployment configuration."
-    )
+    raise NotImplementedError("No Unquantized MoE backend supports the deployment configuration.")
 
 
 def convert_to_unquantized_kernel_format(
@@ -374,14 +356,10 @@ class UnquantizedMoEKernelOracle(MoEKernelOracle[UnquantizedMoeBackend]):
     def backend_enum_cls(self) -> type[UnquantizedMoeBackend]:
         return UnquantizedMoeBackend
 
-    def get_priority_backends(
-        self, moe_config: FusedMoEConfig
-    ) -> list[UnquantizedMoeBackend]:
+    def get_priority_backends(self, moe_config: FusedMoEConfig) -> list[UnquantizedMoeBackend]:
         return _get_priority_backends(moe_config)
 
-    def backend_to_kernel_cls(
-        self, backend: UnquantizedMoeBackend
-    ) -> type[mk.FusedMoEExperts]:
+    def backend_to_kernel_cls(self, backend: UnquantizedMoeBackend) -> type[mk.FusedMoEExperts]:
         return backend_to_kernel_cls(backend)
 
     def map_backend(self, runner_backend: MoEBackend) -> UnquantizedMoeBackend:
@@ -394,8 +372,7 @@ class UnquantizedMoEKernelOracle(MoEKernelOracle[UnquantizedMoeBackend]):
         activation_key: "QuantKey | None" = None,
     ) -> tuple[UnquantizedMoeBackend, type[mk.FusedMoEExperts] | None]:
         assert weight_key is None and activation_key is None, (
-            "Weights and activations will never be quantized for "
-            "UnquantizedMoEKernelOracle"
+            "Weights and activations will never be quantized for UnquantizedMoEKernelOracle"
         )
         return select_unquantized_moe_backend(moe_config)
 
@@ -406,9 +383,7 @@ class UnquantizedMoEKernelOracle(MoEKernelOracle[UnquantizedMoeBackend]):
         w13_weight: torch.Tensor,
         w2_weight: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        return convert_to_unquantized_kernel_format(
-            backend, moe_config, w13_weight, w2_weight
-        )
+        return convert_to_unquantized_kernel_format(backend, moe_config, w13_weight, w2_weight)
 
     def make_kernel(
         self,
@@ -418,6 +393,4 @@ class UnquantizedMoEKernelOracle(MoEKernelOracle[UnquantizedMoeBackend]):
         experts_cls: type[mk.FusedMoEExperts],
         routing_tables: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None,
     ) -> mk.FusedMoEKernel:
-        return make_unquantized_moe_kernel(
-            quant_config, moe_config, backend, experts_cls, routing_tables
-        )
+        return make_unquantized_moe_kernel(quant_config, moe_config, backend, experts_cls, routing_tables)

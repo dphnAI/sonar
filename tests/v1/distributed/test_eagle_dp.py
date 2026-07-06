@@ -95,9 +95,7 @@ async def test_run_eagle_dp(monkeypatch: pytest.MonkeyPatch, attn_backend: str):
             engine = AsyncLLM.from_engine_args(engine_args)
             after.callback(engine.shutdown)
 
-            token_ids = await asyncio.wait_for(
-                generate_with_timeout(engine), timeout=30
-            )
+            token_ids = await asyncio.wait_for(generate_with_timeout(engine), timeout=30)
 
             assert not engine.output_processor.has_unfinished_requests()
         return token_ids

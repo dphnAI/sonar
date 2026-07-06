@@ -101,8 +101,7 @@ def _run_flashinfer_sparse_mla_decode_autotune(
         from flashinfer.autotuner import AutoTuner
     except ImportError:
         logger.warning(
-            "Skipping FlashInfer SM120 sparse MLA decode autotune because "
-            "FlashInfer autotuner is unavailable."
+            "Skipping FlashInfer SM120 sparse MLA decode autotune because FlashInfer autotuner is unavailable."
         )
         return False
 
@@ -179,8 +178,7 @@ def _run_flashinfer_sparse_mla_decode_autotune(
 
     AutoTuner.get().load_configs(str(cache_path))
     logger.info(
-        "FlashInfer SM120 sparse MLA %s decode autotune cache loaded on rank %d "
-        "from %s.",
+        "FlashInfer SM120 sparse MLA %s decode autotune cache loaded on rank %d from %s.",
         log_label,
         world.rank_in_group,
         cache_path,
@@ -192,18 +190,14 @@ def _flashinfer_sparse_mla_decode_autotune(
     worker: "Worker",
     num_tokens: int,
 ) -> bool:
-    return _run_flashinfer_sparse_mla_decode_autotune(
-        worker, num_tokens, _FLASHINFER_MLA_SPARSE_BACKENDS
-    )
+    return _run_flashinfer_sparse_mla_decode_autotune(worker, num_tokens, _FLASHINFER_MLA_SPARSE_BACKENDS)
 
 
 def _deepseek_v4_sparse_mla_decode_autotune(
     worker: "Worker",
     num_tokens: int,
 ) -> bool:
-    return _run_flashinfer_sparse_mla_decode_autotune(
-        worker, num_tokens, _DEEPSEEK_V4_FLASHINFER_MLA_SPARSE_BACKENDS
-    )
+    return _run_flashinfer_sparse_mla_decode_autotune(worker, num_tokens, _DEEPSEEK_V4_FLASHINFER_MLA_SPARSE_BACKENDS)
 
 
 def flashinfer_sparse_mla_decode_autotune_warmup(worker: "Worker") -> None:

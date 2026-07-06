@@ -58,9 +58,7 @@ class PPHandler:
     inter-stage hidden-state p2p send/recv ops.
     """
 
-    def __init__(
-        self, max_num_reqs: int, num_speculative_steps: int, device: torch.device
-    ):
+    def __init__(self, max_num_reqs: int, num_speculative_steps: int, device: torch.device):
         self.is_last_rank = get_pp_group().is_last_rank
         self.last_rank = get_pp_group().last_rank
         self.max_sample_len = num_speculative_steps + 1
@@ -82,9 +80,7 @@ class PPHandler:
         self.req_idx_gen_np = np.zeros(max_num_reqs, dtype=np.int32)
 
         # Dedicated subgroup for the sampled-token broadcast.
-        self.broadcast_group = get_pp_group().make_sibling_device_group(
-            group_desc="pp_broadcast"
-        )
+        self.broadcast_group = get_pp_group().make_sibling_device_group(group_desc="pp_broadcast")
 
     def on_req_idx_freed(self, req_idx: int) -> None:
         self.req_idx_gen_np[req_idx] += 1
@@ -138,16 +134,10 @@ class PPHandler:
         num_reqs = input_batch.num_reqs
         with torch.cuda.stream(self.broadcast_stream):
             self.broadcast_stream.wait_stream(self.main_stream)
-            sampled_tokens = torch.empty(
-                num_reqs, self.max_sample_len, dtype=torch.int64, device=self.device
-            )
+            sampled_tokens = torch.empty(num_reqs, self.max_sample_len, dtype=torch.int64, device=self.device)
             combined = torch.empty(2, num_reqs, dtype=torch.int32, device=self.device)
-            torch.distributed.broadcast(
-                sampled_tokens, src=self.last_rank, group=self.broadcast_group
-            )
-            torch.distributed.broadcast(
-                combined, src=self.last_rank, group=self.broadcast_group
-            )
+            torch.distributed.broadcast(sampled_tokens, src=self.last_rank, group=self.broadcast_group)
+            torch.distributed.broadcast(combined, src=self.last_rank, group=self.broadcast_group)
             event = self.broadcast_stream.record_event()
             num_sampled, num_rejected = combined.unbind(dim=0)
             # Must record_stream since these were allocated on broadcast stream but
@@ -187,8 +177,6 @@ class PPHandler:
                 group=self.broadcast_group,
             )
             combined = torch.stack((num_sampled, num_rejected), dim=0)
-            torch.distributed.broadcast(
-                combined, src=self.last_rank, group=self.broadcast_group
-            )
+            torch.distributed.broadcast(combined, src=self.last_rank, group=self.broadcast_group)
             for tensor in (sampled_token_ids, num_sampled, num_rejected):
                 tensor.record_stream(self.broadcast_stream)

@@ -46,10 +46,10 @@ from aphrodite.v1.request import RequestStatus
 from .test_nixl_connector import FakeNixlConnectorWorker, FakeNixlWrapper
 from .utils import (
     assert_scheduler_empty,
+    create_aphrodite_config,
     create_model_runner_output,
     create_request,
     create_scheduler,
-    create_aphrodite_config,
     make_kv_cache_config,
 )
 
@@ -62,9 +62,7 @@ BIDIR_KV_EXTRA_CONFIG = {"bidirectional_kv_xfer": True, "kv_recompute_threshold"
 # Helpers
 
 
-def _make_p_node_turn2_request(
-    request_id, block_size, num_tokens, num_remote_blocks=3, remote_num_tokens=None
-):
+def _make_p_node_turn2_request(request_id, block_size, num_tokens, num_remote_blocks=3, remote_num_tokens=None):
     """Create a P-node Turn 2 request with remote_block_ids from D."""
     request = create_request(
         request_id=request_id,
@@ -83,9 +81,7 @@ def _make_p_node_turn2_request(
     return request
 
 
-def _make_connector_with_fake_worker(
-    hand_shake_latency=0, cycles_before_done=0, do_handshake=True
-):
+def _make_connector_with_fake_worker(hand_shake_latency=0, cycles_before_done=0, do_handshake=True):
     """Create a NixlConnector with FakeNixlConnectorWorker."""
     aphrodite_config = create_aphrodite_config()
     kv_cache_config = make_kv_cache_config(block_size=16, num_blocks=2)
@@ -153,9 +149,7 @@ def test_multiturn_lifecycle():
     scheduler = create_scheduler(aphrodite_config)
     BS = aphrodite_config.cache_config.block_size
 
-    t1 = create_request(
-        request_id=100, block_size=BS, num_tokens=int(BS * 2.5), do_remote_decode=True
-    )
+    t1 = create_request(request_id=100, block_size=BS, num_tokens=int(BS * 2.5), do_remote_decode=True)
     scheduler.add_request(t1)
     t1_id = t1.request_id
     so = scheduler.schedule()
@@ -198,9 +192,7 @@ def test_first_turn_no_remote_blocks():
     )
     scheduler = create_scheduler(aphrodite_config)
     BS = aphrodite_config.cache_config.block_size
-    req = create_request(
-        request_id=3, block_size=BS, num_tokens=int(BS * 2.5), do_remote_decode=True
-    )
+    req = create_request(request_id=3, block_size=BS, num_tokens=int(BS * 2.5), do_remote_decode=True)
     scheduler.add_request(req)
     req_id = req.request_id
     so = scheduler.schedule()
@@ -225,9 +217,7 @@ def test_abort_p_side_during_send():
     )
     scheduler = create_scheduler(aphrodite_config)
     BS = aphrodite_config.cache_config.block_size
-    req = create_request(
-        request_id=42, block_size=BS, num_tokens=int(BS * 2.5), do_remote_decode=True
-    )
+    req = create_request(request_id=42, block_size=BS, num_tokens=int(BS * 2.5), do_remote_decode=True)
     scheduler.add_request(req)
     req_id = req.request_id
     so = scheduler.schedule()
@@ -251,9 +241,7 @@ def test_abort_p_side_non_length_capped():
     )
     scheduler = create_scheduler(aphrodite_config)
     BS = aphrodite_config.cache_config.block_size
-    req = create_request(
-        request_id=44, block_size=BS, num_tokens=int(BS * 2.5), do_remote_decode=True
-    )
+    req = create_request(request_id=44, block_size=BS, num_tokens=int(BS * 2.5), do_remote_decode=True)
     req.sampling_params.max_tokens = 100
     req.max_tokens = 100
     scheduler.add_request(req)
@@ -279,9 +267,7 @@ def test_remote_blocks_exceed_prompt_tokens():
     scheduler = create_scheduler(aphrodite_config)
     BS = aphrodite_config.cache_config.block_size
     NUM_TOKENS = int(BS * 2.5)
-    req = _make_p_node_turn2_request(
-        300, BS, NUM_TOKENS, num_remote_blocks=5, remote_num_tokens=5 * BS
-    )
+    req = _make_p_node_turn2_request(300, BS, NUM_TOKENS, num_remote_blocks=5, remote_num_tokens=5 * BS)
     scheduler.add_request(req)
     req_id = req.request_id
     so = scheduler.schedule()
@@ -477,9 +463,7 @@ def test_p_node_pull_then_send_kv(dist_init):
 )
 def test_p_node_deferred_pull_on_no_handshake(dist_init):
     """P defers KV pull when no prior handshake exists."""
-    connector, worker = _make_connector_with_fake_worker(
-        hand_shake_latency=0, do_handshake=False
-    )
+    connector, worker = _make_connector_with_fake_worker(hand_shake_latency=0, do_handshake=False)
     meta = _make_p_node_recv_metadata("req-p3", [10, 11], [20, 21])
     _do_load_kv(connector, meta)
     assert "req-p3" in worker._recving_metadata
@@ -508,19 +492,13 @@ def test_d_node_request_finished_returns_kv_params():
     )
     scheduler = create_scheduler(aphrodite_config)
     BS = aphrodite_config.cache_config.block_size
-    req = create_request(
-        request_id=1, block_size=BS, num_tokens=int(BS * 2.5), do_remote_prefill=True
-    )
+    req = create_request(request_id=1, block_size=BS, num_tokens=int(BS * 2.5), do_remote_prefill=True)
     scheduler.add_request(req)
     req_id = req.request_id
     so = scheduler.schedule()
-    scheduler.update_from_output(
-        so, create_model_runner_output(reqs=[], finished_recving={req_id})
-    )
+    scheduler.update_from_output(so, create_model_runner_output(reqs=[], finished_recving={req_id}))
     so = scheduler.schedule()
-    eco = scheduler.update_from_output(
-        so, create_model_runner_output(reqs=[req], use_eos=True)
-    )
+    eco = scheduler.update_from_output(so, create_model_runner_output(reqs=[req], use_eos=True))
     assert req.status == RequestStatus.FINISHED_STOPPED
     kv = eco[0].outputs[0].kv_transfer_params
     assert kv is not None
@@ -538,19 +516,13 @@ def test_d_node_request_finished_delays_block_free():
     )
     scheduler = create_scheduler(aphrodite_config)
     BS = aphrodite_config.cache_config.block_size
-    req = create_request(
-        request_id=2, block_size=BS, num_tokens=int(BS * 2.5), do_remote_prefill=True
-    )
+    req = create_request(request_id=2, block_size=BS, num_tokens=int(BS * 2.5), do_remote_prefill=True)
     scheduler.add_request(req)
     req_id = req.request_id
     so = scheduler.schedule()
-    scheduler.update_from_output(
-        so, create_model_runner_output(reqs=[], finished_recving={req_id})
-    )
+    scheduler.update_from_output(so, create_model_runner_output(reqs=[], finished_recving={req_id}))
     so = scheduler.schedule()
-    scheduler.update_from_output(
-        so, create_model_runner_output(reqs=[req], use_eos=True)
-    )
+    scheduler.update_from_output(so, create_model_runner_output(reqs=[req], use_eos=True))
     assert req_id in scheduler.requests
     conn = scheduler.connector.connector_scheduler
     assert req_id in conn._reqs_need_send
@@ -563,19 +535,13 @@ def test_d_node_request_finished_remote_num_tokens():
     )
     scheduler = create_scheduler(aphrodite_config)
     BS = aphrodite_config.cache_config.block_size
-    req = create_request(
-        request_id=3, block_size=BS, num_tokens=int(BS * 2.5), do_remote_prefill=True
-    )
+    req = create_request(request_id=3, block_size=BS, num_tokens=int(BS * 2.5), do_remote_prefill=True)
     scheduler.add_request(req)
     req_id = req.request_id
     so = scheduler.schedule()
-    scheduler.update_from_output(
-        so, create_model_runner_output(reqs=[], finished_recving={req_id})
-    )
+    scheduler.update_from_output(so, create_model_runner_output(reqs=[], finished_recving={req_id}))
     so = scheduler.schedule()
-    eco = scheduler.update_from_output(
-        so, create_model_runner_output(reqs=[req], use_eos=True)
-    )
+    eco = scheduler.update_from_output(so, create_model_runner_output(reqs=[req], use_eos=True))
     kv = eco[0].outputs[0].kv_transfer_params
     assert kv["remote_num_tokens"] > 0
     assert sum(len(g) for g in kv["remote_block_ids"]) > 0
@@ -589,19 +555,13 @@ def test_d_node_partial_last_block_remote_num_tokens():
     )
     scheduler = create_scheduler(aphrodite_config)
     BS = aphrodite_config.cache_config.block_size
-    req = create_request(
-        request_id=5, block_size=BS, num_tokens=int(BS * 2.5), do_remote_prefill=True
-    )
+    req = create_request(request_id=5, block_size=BS, num_tokens=int(BS * 2.5), do_remote_prefill=True)
     scheduler.add_request(req)
     req_id = req.request_id
     so = scheduler.schedule()
-    scheduler.update_from_output(
-        so, create_model_runner_output(reqs=[], finished_recving={req_id})
-    )
+    scheduler.update_from_output(so, create_model_runner_output(reqs=[], finished_recving={req_id}))
     so = scheduler.schedule()
-    eco = scheduler.update_from_output(
-        so, create_model_runner_output(reqs=[req], use_eos=True)
-    )
+    eco = scheduler.update_from_output(so, create_model_runner_output(reqs=[req], use_eos=True))
     kv = eco[0].outputs[0].kv_transfer_params
     total_blocks = sum(len(g) for g in kv["remote_block_ids"])
     assert total_blocks == 3
@@ -685,20 +645,15 @@ def test_remote_num_tokens_bounded_by_blocks():
     scheduler.add_request(req)
     req_id = req.request_id
     so = scheduler.schedule()
-    scheduler.update_from_output(
-        so, create_model_runner_output(reqs=[], finished_recving={req_id})
-    )
+    scheduler.update_from_output(so, create_model_runner_output(reqs=[], finished_recving={req_id}))
     so = scheduler.schedule()
-    eco = scheduler.update_from_output(
-        so, create_model_runner_output(reqs=[req], use_eos=True)
-    )
+    eco = scheduler.update_from_output(so, create_model_runner_output(reqs=[req], use_eos=True))
     kv = eco[0].outputs[0].kv_transfer_params
     assert kv is not None
     total_blocks = sum(len(g) for g in kv["remote_block_ids"])
     max_tokens_in_blocks = total_blocks * BS
     assert kv["remote_num_tokens"] <= max_tokens_in_blocks, (
-        f"remote_num_tokens ({kv['remote_num_tokens']}) exceeds "
-        f"block capacity ({max_tokens_in_blocks})"
+        f"remote_num_tokens ({kv['remote_num_tokens']}) exceeds block capacity ({max_tokens_in_blocks})"
     )
     assert kv["remote_num_tokens"] > 0
 

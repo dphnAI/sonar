@@ -52,15 +52,9 @@ class LogprobsProcessor:
         return cls(
             tokenizer=tokenizer,
             cumulative_logprob=(None if num_logprobs is None else 0.0),
-            logprobs=(
-                None
-                if num_logprobs is None
-                else create_sample_logprobs(sampling_params.flat_logprobs)
-            ),
+            logprobs=(None if num_logprobs is None else create_sample_logprobs(sampling_params.flat_logprobs)),
             prompt_logprobs=(
-                None
-                if num_prompt_logprobs is None
-                else create_prompt_logprobs(sampling_params.flat_logprobs)
+                None if num_prompt_logprobs is None else create_prompt_logprobs(sampling_params.flat_logprobs)
             ),
             num_prompt_logprobs=num_prompt_logprobs,
             num_logprobs=num_logprobs,
@@ -83,9 +77,7 @@ class LogprobsProcessor:
 
         token_ids_lst, logprobs_lst, ranks_lst, _ = logprobs_lists
 
-        for rank_np, logprobs_np, token_ids_np in zip(
-            ranks_lst, logprobs_lst, token_ids_lst
-        ):
+        for rank_np, logprobs_np, token_ids_np in zip(ranks_lst, logprobs_lst, token_ids_lst):
             rank = rank_np.tolist()
             logprobs = logprobs_np.tolist()
             token_ids = token_ids_np.tolist()
@@ -94,9 +86,7 @@ class LogprobsProcessor:
             if self.tokenizer is None:
                 decoded_tokens = NONES
             else:
-                decoded_tokens_list = convert_ids_list_to_tokens(
-                    self.tokenizer, token_ids
-                )
+                decoded_tokens_list = convert_ids_list_to_tokens(self.tokenizer, token_ids)
                 context_token_ids = self._get_sampled_context_ids(self.logprobs)
                 decoded_tokens = self._verify_tokens(
                     decoded_tokens_list=decoded_tokens_list,
@@ -142,11 +132,7 @@ class LogprobsProcessor:
         # Detokenize non-incrementally.
         # Output is flat: [num_tok, num_lps] -> [num_tok * num_lps]
         all_decoded_tokens: list[str] | None = (
-            None
-            if self.tokenizer is None
-            else convert_ids_list_to_tokens(
-                self.tokenizer, token_ids.flatten().tolist()
-            )
+            None if self.tokenizer is None else convert_ids_list_to_tokens(self.tokenizer, token_ids.flatten().tolist())
         )
 
         # Pythonize the torch tensors.
@@ -246,9 +232,7 @@ class LogprobsProcessor:
                 result.append(next(iter(entry)))
         return result
 
-    def _correct_decoded_token(
-        self, token_id: int, context_token_ids: list[int]
-    ) -> str:
+    def _correct_decoded_token(self, token_id: int, context_token_ids: list[int]) -> str:
         """Correct a decoded token that contains the replacement character.
 
         When byte-fallback tokenization splits multi-byte UTF-8
@@ -336,9 +320,7 @@ class LogprobsProcessor:
                 # unfinished byte sequence from byte-fallback
                 # tokenization. Correct each token independently
                 # using only the sequential context.
-                corrected_decoded_token_map[idx] = self._correct_decoded_token(
-                    tokens[idx], context_token_ids
-                )
+                corrected_decoded_token_map[idx] = self._correct_decoded_token(tokens[idx], context_token_ids)
 
         for idx, text in corrected_decoded_token_map.items():
             decoded_tokens_list[idx] = text

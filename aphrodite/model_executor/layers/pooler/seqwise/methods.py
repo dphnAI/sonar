@@ -75,9 +75,7 @@ class MeanPool(SequencePoolingMethod):
             # early return for empty batch
             return hidden_states.new_empty((0, hidden_size), dtype=torch.float32)
 
-        prompt_lens = async_tensor_h2d(
-            prompt_lens_cpu, device=hidden_states.device, dtype=torch.int64
-        )
+        prompt_lens = async_tensor_h2d(prompt_lens_cpu, device=hidden_states.device, dtype=torch.int64)
         # eg. [2, 1, 3] -> [0, 0, 1, 2, 2, 2]
         segment_ids = torch.repeat_interleave(
             torch.arange(num_seqs, device=hidden_states.device, dtype=torch.long),

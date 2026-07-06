@@ -165,9 +165,7 @@ class EngineCoreEvent(msgspec.Struct):
     timestamp: float
 
     @classmethod
-    def new_event(
-        cls, event_type: EngineCoreEventType, timestamp: float | None = None
-    ) -> "EngineCoreEvent":
+    def new_event(cls, event_type: EngineCoreEventType, timestamp: float | None = None) -> "EngineCoreEvent":
         timestamp = time.monotonic() if timestamp is None else timestamp
         return cls(event_type, timestamp)
 

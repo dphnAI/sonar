@@ -30,8 +30,7 @@ class TestUnquantizedDelegation:
         sentinel_kernel = object()
 
         with patch(
-            "aphrodite.model_executor.layers.fused_moe.oracle.unquantized."
-            "make_unquantized_moe_kernel",
+            "aphrodite.model_executor.layers.fused_moe.oracle.unquantized.make_unquantized_moe_kernel",
             return_value=sentinel_kernel,
         ) as mocked:
             out = UnquantizedMoEKernelOracle().make_kernel(

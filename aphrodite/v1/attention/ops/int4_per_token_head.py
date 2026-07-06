@@ -156,25 +156,16 @@ def _reshape_cache_int4_kernel(
 
     k_zp_int = k_zp_f.to(tl.int32)
     k_scale_bits = k_scale.to(tl.int32, bitcast=True)
-    k_scale_packed = ((k_scale_bits & -16) | (k_zp_int & 0xF)).to(
-        tl.float32, bitcast=True
-    )
+    k_scale_packed = ((k_scale_bits & -16) | (k_zp_int & 0xF)).to(tl.float32, bitcast=True)
 
     tl.store(
-        k_scale_cache_ptr
-        + blk * stride_ks_blk
-        + slot_in_blk * stride_ks_slot
-        + head * stride_ks_head,
+        k_scale_cache_ptr + blk * stride_ks_blk + slot_in_blk * stride_ks_slot + head * stride_ks_head,
         k_scale_packed,
     )
 
     k_packed = pack_int4_nibbles(k_even_q.to(tl.uint8), k_odd_q.to(tl.uint8))
     tl.store(
-        key_cache_ptr
-        + blk * stride_kc_blk
-        + slot_in_blk * stride_kc_slot
-        + head * stride_kc_head
-        + half_offs,
+        key_cache_ptr + blk * stride_kc_blk + slot_in_blk * stride_kc_slot + head * stride_kc_head + half_offs,
         k_packed,
         mask=half_offs < half_k,
     )
@@ -230,25 +221,16 @@ def _reshape_cache_int4_kernel(
 
     v_zp_int = v_zp_f.to(tl.int32)
     v_scale_bits = v_scale.to(tl.int32, bitcast=True)
-    v_scale_packed = ((v_scale_bits & -16) | (v_zp_int & 0xF)).to(
-        tl.float32, bitcast=True
-    )
+    v_scale_packed = ((v_scale_bits & -16) | (v_zp_int & 0xF)).to(tl.float32, bitcast=True)
 
     tl.store(
-        v_scale_cache_ptr
-        + blk * stride_vs_blk
-        + slot_in_blk * stride_vs_slot
-        + head * stride_vs_head,
+        v_scale_cache_ptr + blk * stride_vs_blk + slot_in_blk * stride_vs_slot + head * stride_vs_head,
         v_scale_packed,
     )
 
     v_packed = pack_int4_nibbles(v_even_q.to(tl.uint8), v_odd_q.to(tl.uint8))
     tl.store(
-        value_cache_ptr
-        + blk * stride_vc_blk
-        + slot_in_blk * stride_vc_slot
-        + head * stride_vc_head
-        + half_offs,
+        value_cache_ptr + blk * stride_vc_blk + slot_in_blk * stride_vc_slot + head * stride_vc_head + half_offs,
         v_packed,
         mask=half_offs < half_v,
     )
@@ -270,9 +252,7 @@ def _run_reshape_kernel(
     num_tokens, num_kv_heads, head_size = key.shape
     head_size_v = value.shape[2]
     assert head_size % packing_factor == 0 and head_size_v % packing_factor == 0
-    packed_padded = triton.next_power_of_2(
-        max(head_size, head_size_v) // packing_factor
-    )
+    packed_padded = triton.next_power_of_2(max(head_size, head_size_v) // packing_factor)
     if current_platform.is_rocm() or current_platform.is_xpu():
         num_warps = 4
     else:
@@ -397,9 +377,7 @@ def _attn_packed(
         cur_batch_in_all_start_index,
         cur_batch_query_len,
         seq_len,
-    ) = resolve_seq_and_query_len(
-        query_start_len_ptr, seq_lens_ptr, q_block_global_idx, num_seqs, BLOCK_Q
-    )
+    ) = resolve_seq_and_query_len(query_start_len_ptr, seq_lens_ptr, q_block_global_idx, num_seqs, BLOCK_Q)
 
     if q_block_local_idx * BLOCK_Q >= cur_batch_query_len:
         return
@@ -429,13 +407,8 @@ def _attn_packed(
     offs_s1 = packed_offs * PACKING_FACTOR + 1
     mask_s0 = tl.where(offs_s0 < HEAD_SIZE, 1, 0).to(tl.int1)
     mask_s1 = tl.where(offs_s1 < HEAD_SIZE, 1, 0).to(tl.int1)
-    packed_dim_mask = tl.where(packed_offs < HEAD_SIZE // PACKING_FACTOR, 1, 0).to(
-        tl.int1
-    )
-    q_base = (
-        query_offset_0[:, None] * query_stride_0
-        + query_offset_1[:, None] * query_stride_1
-    )
+    packed_dim_mask = tl.where(packed_offs < HEAD_SIZE // PACKING_FACTOR, 1, 0).to(tl.int1)
+    q_base = query_offset_0[:, None] * query_stride_0 + query_offset_1[:, None] * query_stride_1
     q_mask = query_mask_0[:, None] & query_mask_1[:, None]
     Q_s0 = tl.load(
         query_ptr + q_base + offs_s0[None, :],
@@ -454,9 +427,7 @@ def _attn_packed(
     block_table_offset = seq_idx * block_table_stride
 
     # Online-softmax state + optional feature loads.
-    M = init_softmax_M(
-        sink_ptr, query_offset_1, query_mask_1, segm_idx, BLOCK_M, USE_SINKS, IS_3D
-    )
+    M = init_softmax_M(sink_ptr, query_offset_1, query_mask_1, segm_idx, BLOCK_M, USE_SINKS, IS_3D)
     L = tl.full([BLOCK_M], 1.0, dtype=tl.float32)
     acc_s0 = tl.zeros([BLOCK_M, PACKED_HEAD_PADDED], dtype=tl.float32)
     acc_s1 = tl.zeros([BLOCK_M, PACKED_HEAD_PADDED], dtype=tl.float32)
@@ -464,9 +435,7 @@ def _attn_packed(
     context_len = seq_len - cur_batch_query_len
 
     if USE_ALIBI_SLOPES:
-        alibi_slope = tl.load(
-            alibi_slopes_ptr + query_offset_1, mask=query_mask_1, other=0.0
-        )
+        alibi_slope = tl.load(alibi_slopes_ptr + query_offset_1, mask=query_mask_1, other=0.0)
 
     if USE_QQ_BIAS:
         qq_bias_row_ptrs = qq_bias_ptr + query_pos[:, None] * qq_bias_stride_0
@@ -494,9 +463,7 @@ def _attn_packed(
         seq_offset = j * TILE_SIZE + offs_t
         tile_mask = seq_offset < max_seq_prefix_len
 
-        physical_block_idx = tl.load(
-            block_tables_ptr + block_table_offset + seq_offset // BLOCK_SIZE
-        ).to(tl.int64)
+        physical_block_idx = tl.load(block_tables_ptr + block_table_offset + seq_offset // BLOCK_SIZE).to(tl.int64)
 
         slot_in_blk = seq_offset % BLOCK_SIZE
         k_off = (
@@ -530,17 +497,9 @@ def _attn_packed(
         V_s0 = V_s0_u.to(tl.float32)
         V_s1 = V_s1_u.to(tl.float32)
 
-        ks_idx = (
-            physical_block_idx * stride_ks_blk
-            + slot_in_blk * stride_ks_slot
-            + kv_head_idx * stride_ks_head
-        )
+        ks_idx = physical_block_idx * stride_ks_blk + slot_in_blk * stride_ks_slot + kv_head_idx * stride_ks_head
         ks_raw = tl.load(k_scale_cache_ptr + ks_idx, mask=tile_mask, other=0)
-        vs_idx = (
-            physical_block_idx * stride_vs_blk
-            + slot_in_blk * stride_vs_slot
-            + kv_head_idx * stride_vs_head
-        )
+        vs_idx = physical_block_idx * stride_vs_blk + slot_in_blk * stride_vs_slot + kv_head_idx * stride_vs_head
         vs_raw = tl.load(v_scale_cache_ptr + vs_idx, mask=tile_mask, other=0)
 
         # INT4 steganographs the 4-bit zero-point in the low 4 bits of
@@ -569,26 +528,18 @@ def _attn_packed(
         # subtracts the ``zp * sum(Q)`` correction term.
         S = tl.zeros(shape=(BLOCK_M, TILE_SIZE), dtype=tl.float32)
         raw_dot = tl.dot(Q_s0, K_s0) + tl.dot(Q_s1, K_s1)
-        S += (raw_dot - Q_sum[:, None] * k_zp[None, :]) * (
-            scale * k_token_head_scales[None, :]
-        )
+        S += (raw_dot - Q_sum[:, None] * k_zp[None, :]) * (scale * k_token_head_scales[None, :])
 
         if USE_SOFTCAP:
             S = apply_softcap(S, softcap)
 
-        S = tl.where(
-            query_mask_1[:, None] & query_mask_0[:, None] & seq_mask, S, float("-inf")
-        )
+        S = tl.where(query_mask_1[:, None] & query_mask_0[:, None] & seq_mask, S, float("-inf"))
 
         if USE_ALIBI_SLOPES:
-            S = apply_alibi_to_score(
-                S, alibi_slope, seq_offset, context_len, query_pos, USE_ALIBI_SQRT
-            )
+            S = apply_alibi_to_score(S, alibi_slope, seq_offset, context_len, query_pos, USE_ALIBI_SQRT)
 
         if USE_QQ_BIAS:
-            S += load_qq_bias_tile(
-                qq_bias_row_ptrs, seq_offset, context_len, qq_bias_stride_0
-            )
+            S += load_qq_bias_tile(qq_bias_row_ptrs, seq_offset, context_len, qq_bias_stride_0)
 
         M, L, P, alpha = softmax_step(S, M, L)
         acc_s0 = acc_s0 * alpha[:, None]
@@ -614,8 +565,7 @@ def _attn_packed(
     out_mask = query_mask_0[:, None] & query_mask_1[:, None]
     if IS_3D:
         segm_base = (
-            query_offset_0[:, None].to(tl.int64)
-            * (num_query_heads * NUM_SEGMENTS_PER_SEQ * HEAD_SIZE_PADDED)
+            query_offset_0[:, None].to(tl.int64) * (num_query_heads * NUM_SEGMENTS_PER_SEQ * HEAD_SIZE_PADDED)
             + query_offset_1[:, None] * (NUM_SEGMENTS_PER_SEQ * HEAD_SIZE_PADDED)
             + segm_idx * HEAD_SIZE_PADDED
         )
@@ -649,10 +599,7 @@ def _attn_packed(
             out_s = tl.load(out_scale)
             acc_s0 = tl.clamp(acc_s0 * out_s, FP8_MIN, FP8_MAX)
             acc_s1 = tl.clamp(acc_s1 * out_s, FP8_MIN, FP8_MAX)
-        out_base = (
-            query_offset_0[:, None] * output_stride_0
-            + query_offset_1[:, None] * output_stride_1
-        )
+        out_base = query_offset_0[:, None] * output_stride_0 + query_offset_1[:, None] * output_stride_1
         tl.store(
             output_ptr + out_base + offs_s0[None, :],
             acc_s0,
@@ -707,9 +654,7 @@ def _launch_packed_attn(
     use_mm_prefix = False
     max_mm_ranges = 0
     if mm_prefix_range is not None:
-        assert mm_prefix_range.ndim == 3, (
-            f"Unsupported mm_prefix_range shape: {mm_prefix_range.shape}"
-        )
+        assert mm_prefix_range.ndim == 3, f"Unsupported mm_prefix_range shape: {mm_prefix_range.shape}"
         use_mm_prefix = True
         max_mm_ranges = mm_prefix_range.shape[1]
 
@@ -720,18 +665,12 @@ def _launch_packed_attn(
     num_queries_per_kv = num_query_heads // num_kv_heads
     head_size = q.shape[2]
 
-    BLOCK_M = (
-        16 if num_queries_per_kv <= 16 else triton.next_power_of_2(num_queries_per_kv)
-    )
+    BLOCK_M = 16 if num_queries_per_kv <= 16 else triton.next_power_of_2(num_queries_per_kv)
     BLOCK_Q = BLOCK_M // num_queries_per_kv
     total_num_q_blocks = q.shape[0] // BLOCK_Q + num_seqs
     sliding_window_val = 1 + window_size[0] if window_size[0] >= 0 else 0
-    TILE_SIZE_PREFILL = _get_tile_size(
-        head_size, sliding_window_val, q.element_size(), is_prefill=True
-    )
-    TILE_SIZE_DECODE = _get_tile_size(
-        head_size, sliding_window_val, q.element_size(), is_prefill=False
-    )
+    TILE_SIZE_PREFILL = _get_tile_size(head_size, sliding_window_val, q.element_size(), is_prefill=True)
+    TILE_SIZE_DECODE = _get_tile_size(head_size, sliding_window_val, q.element_size(), is_prefill=False)
 
     use_3d = not (
         seq_threshold_3D is None
@@ -976,9 +915,7 @@ def _hadacore_available() -> bool:
 _HADAMARD_MATRIX_CACHE: dict[tuple[int, torch.dtype, str], torch.Tensor] = {}
 
 
-def _get_hadamard_matrix(
-    d: int, dtype: torch.dtype, device: torch.device
-) -> torch.Tensor:
+def _get_hadamard_matrix(d: int, dtype: torch.dtype, device: torch.device) -> torch.Tensor:
     key = (d, dtype, str(device))
     cached = _HADAMARD_MATRIX_CACHE.get(key)
     if cached is None:
@@ -1133,10 +1070,7 @@ def _get_rht_signs(d: int, round_idx: int, device: torch.device) -> torch.Tensor
     if key not in _RHT_SIGNS_CACHE:
         gen = torch.Generator(device="cpu")
         gen.manual_seed(0x9E3779B9 + round_idx * 0x517CC1B7)
-        signs = (
-            2.0 * torch.bernoulli(torch.full((d,), 0.5, device="cpu"), generator=gen)
-            - 1.0
-        )
+        signs = 2.0 * torch.bernoulli(torch.full((d,), 0.5, device="cpu"), generator=gen) - 1.0
         _RHT_SIGNS_CACHE[key] = signs.to(device)
     return _RHT_SIGNS_CACHE[key]
 

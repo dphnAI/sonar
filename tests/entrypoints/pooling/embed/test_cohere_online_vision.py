@@ -45,19 +45,10 @@ def _make_tiny_png(r: int, g: int, b: int, w: int = 2, h: int = 2) -> str:
 
     def chunk(ctype: bytes, cdata: bytes) -> bytes:
         c = ctype + cdata
-        return (
-            struct.pack(">I", len(cdata))
-            + c
-            + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
-        )
+        return struct.pack(">I", len(cdata)) + c + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
 
     ihdr = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)
-    png = (
-        b"\x89PNG\r\n\x1a\n"
-        + chunk(b"IHDR", ihdr)
-        + chunk(b"IDAT", compressed)
-        + chunk(b"IEND", b"")
-    )
+    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", compressed) + chunk(b"IEND", b"")
     return "data:image/png;base64," + base64.b64encode(png).decode()
 
 

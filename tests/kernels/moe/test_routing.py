@@ -36,9 +36,7 @@ TOP_KS = [2, 4, 6]
 NUM_EXPERTS = [8, 16, 64]
 
 
-def setup_eplb_state(
-    enable_eplb: bool, global_num_experts: int
-) -> EplbLayerState | None:
+def setup_eplb_state(enable_eplb: bool, global_num_experts: int) -> EplbLayerState | None:
     if not enable_eplb:
         return None
 
@@ -50,16 +48,12 @@ def setup_eplb_state(
     # logical_to_physical_map: maps logical experts to physical experts
     # Shape: (num_logical_experts, max_slots)
     # For testing, use simple 1:1 mapping with single slot per expert
-    logical_to_physical_map = torch.arange(
-        global_num_experts, dtype=torch.int64, device="cuda"
-    ).unsqueeze(-1)
+    logical_to_physical_map = torch.arange(global_num_experts, dtype=torch.int64, device="cuda").unsqueeze(-1)
 
     # logical_replica_count: number of replicas per logical expert
     # Shape: (num_logical_experts,)
     # For testing, each logical expert has exactly 1 replica
-    logical_replica_count = torch.ones(
-        global_num_experts, dtype=torch.int64, device="cuda"
-    )
+    logical_replica_count = torch.ones(global_num_experts, dtype=torch.int64, device="cuda")
     should_record_tensor = torch.ones((), dtype=torch.bool, device="cuda")
     num_unpadded_tokens_tensors = [torch.tensor(0, dtype=torch.int32, device="cuda")]
 
@@ -72,9 +66,7 @@ def setup_eplb_state(
     )
 
 
-def make_test_data(
-    m: int, k: int, num_experts: int
-) -> tuple[torch.Tensor, torch.Tensor]:
+def make_test_data(m: int, k: int, num_experts: int) -> tuple[torch.Tensor, torch.Tensor]:
     hidden_states = torch.randn((m, k), device="cuda") / 10
     logits = torch.randn((m, num_experts), device="cuda")
     return hidden_states, logits
@@ -85,9 +77,7 @@ def make_e_score_correction_bias(
     num_experts: int,
 ) -> torch.Tensor:
     # return torch.randn(num_experts, device="cuda") * e_score_correction_bias_val
-    return torch.full(
-        (num_experts,), e_score_correction_bias_val, device="cuda", dtype=torch.float32
-    )
+    return torch.full((num_experts,), e_score_correction_bias_val, device="cuda", dtype=torch.float32)
 
 
 def assert_routing_results_close(
@@ -109,16 +99,12 @@ def assert_routing_results_close(
     # Gather the sorted values
     topk_ids_sorted = torch.gather(topk_ids, 1, sorted_indices_actual)
     topk_weights_sorted = torch.gather(topk_weights, 1, sorted_indices_actual)
-    baseline_ids_sorted = torch.gather(
-        baseline_ids.to(topk_ids.dtype), 1, sorted_indices_baseline
-    )
+    baseline_ids_sorted = torch.gather(baseline_ids.to(topk_ids.dtype), 1, sorted_indices_baseline)
     baseline_weights_sorted = torch.gather(baseline_weights, 1, sorted_indices_baseline)
 
     # Compare
     torch.testing.assert_close(topk_ids_sorted, baseline_ids_sorted)
-    torch.testing.assert_close(
-        topk_weights_sorted, baseline_weights_sorted, rtol=rtol, atol=atol
-    )
+    torch.testing.assert_close(topk_weights_sorted, baseline_weights_sorted, rtol=rtol, atol=atol)
 
 
 def assert_aiter_routing_valid(
@@ -139,25 +125,18 @@ def assert_aiter_routing_valid(
     n_tokens = topk_weights.shape[0]
 
     # Shape
-    assert topk_weights.shape == (n_tokens, top_k), (
-        f"weights shape {topk_weights.shape} != ({n_tokens}, {top_k})"
-    )
-    assert topk_ids.shape == (n_tokens, top_k), (
-        f"ids shape {topk_ids.shape} != ({n_tokens}, {top_k})"
-    )
+    assert topk_weights.shape == (n_tokens, top_k), f"weights shape {topk_weights.shape} != ({n_tokens}, {top_k})"
+    assert topk_ids.shape == (n_tokens, top_k), f"ids shape {topk_ids.shape} != ({n_tokens}, {top_k})"
 
     # Expert IDs in valid range
     assert (topk_ids >= 0).all() and (topk_ids < num_experts).all(), (
-        f"expert IDs out of range [0, {num_experts}): "
-        f"min={topk_ids.min().item()}, max={topk_ids.max().item()}"
+        f"expert IDs out of range [0, {num_experts}): min={topk_ids.min().item()}, max={topk_ids.max().item()}"
     )
 
     # No duplicate expert IDs per token
     for i in range(n_tokens):
         ids = topk_ids[i]
-        assert ids.unique().numel() == top_k, (
-            f"token {i}: duplicate expert IDs {ids.tolist()}"
-        )
+        assert ids.unique().numel() == top_k, f"token {i}: duplicate expert IDs {ids.tolist()}"
 
     # Weights are non-negative
     assert (topk_weights >= 0).all(), "negative routing weights"
@@ -275,9 +254,7 @@ def baseline_grouped_topk(
         original_scores = scores
         scores = scores + e_score_correction_bias.unsqueeze(0)
         # For bias case, use sum of top-2 scores in each group
-        group_scores = (
-            scores.view(num_token, num_expert_group, -1).topk(2, dim=-1)[0].sum(dim=-1)
-        )
+        group_scores = scores.view(num_token, num_expert_group, -1).topk(2, dim=-1)[0].sum(dim=-1)
     else:
         # Use max score in each group
         group_scores = scores.view(num_token, num_expert_group, -1).max(dim=-1).values
@@ -317,9 +294,7 @@ def baseline_grouped_topk(
     return topk_weights.to(torch.float32), topk_ids.to(torch.int32)
 
 
-def baseline_custom_llama4(
-    router_logits: torch.Tensor, top_k: int
-) -> tuple[torch.Tensor, torch.Tensor]:
+def baseline_custom_llama4(router_logits: torch.Tensor, top_k: int) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Baseline for Llama4 custom routing.
 
@@ -362,9 +337,7 @@ def test_fused_topk(
     topk_weights, topk_ids = router.select_experts(hidden_states, router_logits)
 
     # Compute baseline
-    baseline_weights, baseline_ids = baseline_fused_topk(
-        router_logits, top_k, renormalize
-    )
+    baseline_weights, baseline_ids = baseline_fused_topk(router_logits, top_k, renormalize)
 
     # Compare results
     assert_routing_results_close(topk_weights, topk_ids, baseline_weights, baseline_ids)
@@ -503,9 +476,7 @@ def test_grouped_topk(
         # Force-enable AITER for gfx942/gfx950 regardless of env var,
         # so CI always exercises this path on capable hardware.
         with patch.object(rocm_aiter_ops, "_AITER_ENABLED", True):
-            aiter_weights, aiter_ids = router.select_experts(
-                hidden_states, router_logits
-            )
+            aiter_weights, aiter_ids = router.select_experts(hidden_states, router_logits)
         assert_aiter_routing_valid(
             aiter_weights,
             aiter_ids,
@@ -702,9 +673,7 @@ def test_eplb_map_hot_expert_replica_balance(top_k, R):
 
     hot_load = load[:R].float()
     max_mean = (hot_load.max() / hot_load.mean()).item()
-    assert max_mean < 1.15, (
-        f"Hot expert replicas uneven: {hot_load.tolist()}, max/mean={max_mean:.3f}"
-    )
+    assert max_mean < 1.15, f"Hot expert replicas uneven: {hot_load.tolist()}, max/mean={max_mean:.3f}"
 
 
 @pytest.mark.parametrize("record_enabled", [True, False])
@@ -787,8 +756,7 @@ def test_eplb_map_with_redundancy(
 
 
 @pytest.mark.parametrize(
-    "l2p_map, replica_count, num_physical, topk_ids, "
-    "num_unpadded, expected_out, expected_load",
+    "l2p_map, replica_count, num_physical, topk_ids, num_unpadded, expected_out, expected_load",
     [
         pytest.param(
             [[0], [1], [2], [3]],
@@ -828,11 +796,7 @@ def test_eplb_map_num_unpadded_tokens(
     load = torch.zeros(num_physical, dtype=torch.int32, device="cuda")
     rec = torch.tensor(True, dtype=torch.bool, device="cuda")
     ids = torch.tensor(topk_ids, dtype=torch.int32, device="cuda")
-    num_unpadded_t = (
-        torch.tensor(num_unpadded, dtype=torch.int32, device="cuda")
-        if num_unpadded is not None
-        else None
-    )
+    num_unpadded_t = torch.tensor(num_unpadded, dtype=torch.int32, device="cuda") if num_unpadded is not None else None
 
     out = eplb_map_to_physical_and_record(
         topk_ids=ids,

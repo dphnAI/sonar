@@ -104,10 +104,7 @@ def _find_deepseek_v4_model(model: torch.nn.Module) -> torch.nn.Module | None:
     for module in model.modules():
         if module.__class__.__name__ != "DeepseekV4Model":
             continue
-        if all(
-            hasattr(module, attr)
-            for attr in ("hc_head_fn", "hc_head_scale", "hc_head_base")
-        ):
+        if all(hasattr(module, attr) for attr in ("hc_head_fn", "hc_head_scale", "hc_head_base")):
             return module
     return None
 

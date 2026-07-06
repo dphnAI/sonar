@@ -65,9 +65,7 @@ class TestHf3fsMockClient:
     def test_batch_write_and_read_dtype(self, tmp_path, dtype, bytes_per_page):
         """Write a tensor of the given dtype and verify round-trip correctness."""
         path = str(tmp_path / f"rw_{dtype}")
-        client = MockHf3fsClient(
-            path=path, size=bytes_per_page * 8, bytes_per_page=bytes_per_page, entries=4
-        )
+        client = MockHf3fsClient(path=path, size=bytes_per_page * 8, bytes_per_page=bytes_per_page, entries=4)
         elem_size = torch.tensor([], dtype=dtype).element_size()
         numel = bytes_per_page // elem_size
         tensor_write = torch.arange(numel, dtype=dtype)
@@ -79,9 +77,7 @@ class TestHf3fsMockClient:
         tensor_read = torch.zeros(numel, dtype=dtype)
         results = client.batch_read([0], [tensor_read])
         assert results == [bytes_per_page], f"Read should succeed, got {results}"
-        assert torch.equal(tensor_write, tensor_read), (
-            "Read tensor should match written tensor"
-        )
+        assert torch.equal(tensor_write, tensor_read), "Read tensor should match written tensor"
         client.close()
 
     def test_batch_read_empty_file_returns_error(self, tmp_path):
@@ -89,9 +85,7 @@ class TestHf3fsMockClient:
         bytes_per_page = 128
         size = bytes_per_page * 4
         path = str(tmp_path / "empty_read")
-        client = MockHf3fsClient(
-            path=path, size=size, bytes_per_page=bytes_per_page, entries=4
-        )
+        client = MockHf3fsClient(path=path, size=size, bytes_per_page=bytes_per_page, entries=4)
         numel = bytes_per_page // 4
         tensor_read = torch.zeros(numel, dtype=torch.float32)
         results = client.batch_read([size], [tensor_read])  # offset == size => OOB
@@ -103,9 +97,7 @@ class TestHf3fsMockClient:
         bytes_per_page = 128
         size = bytes_per_page * 4
         path = str(tmp_path / "oob_write")
-        client = MockHf3fsClient(
-            path=path, size=size, bytes_per_page=bytes_per_page, entries=4
-        )
+        client = MockHf3fsClient(path=path, size=size, bytes_per_page=bytes_per_page, entries=4)
         numel = bytes_per_page // 4
         tensor = torch.ones(numel, dtype=torch.float32)
         event = _make_cuda_event()
@@ -124,19 +116,14 @@ class TestHf3fsMockClient:
             bytes_per_page=bytes_per_page,
             entries=8,
         )
-        tensors_write = [
-            torch.full((bytes_per_page // 4,), float(i), dtype=torch.float32)
-            for i in range(n)
-        ]
+        tensors_write = [torch.full((bytes_per_page // 4,), float(i), dtype=torch.float32) for i in range(n)]
         offsets = [i * bytes_per_page for i in range(n)]
         event = _make_cuda_event()
 
         results = client.batch_write(offsets, tensors_write, event)
         assert all(r == bytes_per_page for r in results)
 
-        tensors_read = [
-            torch.zeros(bytes_per_page // 4, dtype=torch.float32) for _ in range(n)
-        ]
+        tensors_read = [torch.zeros(bytes_per_page // 4, dtype=torch.float32) for _ in range(n)]
         results = client.batch_read(offsets, tensors_read)
         assert all(r == bytes_per_page for r in results)
 

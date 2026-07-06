@@ -79,9 +79,7 @@ class MiMoModel(Qwen2Model):
                 residual,
             )
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
         hidden_states = hidden_states + residual
         return hidden_states
 
@@ -96,9 +94,7 @@ class MiMoForCausalLM(Qwen2ForCausalLM, nn.Module):
 
         self.quant_config = quant_config
 
-        self.model = MiMoModel(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = MiMoModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
 
         if get_pp_group().is_last_rank:
             if config.tie_word_embeddings:
@@ -115,9 +111,7 @@ class MiMoForCausalLM(Qwen2ForCausalLM, nn.Module):
 
         self.logits_processor = LogitsProcessor(config.vocab_size)
 
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         skip_prefixes = ["lm_head."] if self.config.tie_word_embeddings else []

@@ -213,9 +213,7 @@ class MHCPostOp(CustomOp):
         post_layer_mix: torch.Tensor,
         comb_res_mix: torch.Tensor,
     ) -> torch.Tensor:
-        return torch.ops.aphrodite.mhc_post_tilelang(
-            x, residual, post_layer_mix, comb_res_mix
-        )
+        return torch.ops.aphrodite.mhc_post_tilelang(x, residual, post_layer_mix, comb_res_mix)
 
     def forward_hip(
         self,
@@ -233,9 +231,7 @@ class MHCPostOp(CustomOp):
                 comb_res_mix,
             )
         if HAS_TILELANG_MHC:
-            return torch.ops.aphrodite.mhc_post_tilelang(
-                x, residual, post_layer_mix, comb_res_mix
-            )
+            return torch.ops.aphrodite.mhc_post_tilelang(x, residual, post_layer_mix, comb_res_mix)
         else:
             return self.forward_native(x, residual, post_layer_mix, comb_res_mix)
 
@@ -366,9 +362,7 @@ class HCHeadOp(CustomOp):
         hs_flat = hidden_states.view(-1, hc_mult, hidden_size)
         num_tokens = hs_flat.shape[0]
 
-        out = torch.empty(
-            num_tokens, hidden_size, dtype=torch.bfloat16, device=hidden_states.device
-        )
+        out = torch.empty(num_tokens, hidden_size, dtype=torch.bfloat16, device=hidden_states.device)
         torch.ops.aphrodite.hc_head_triton(
             hs_flat,
             hc_fn,
@@ -513,9 +507,7 @@ class MHCFusedPostPreOp(CustomOp):
         norm_eps: float = 0.0,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # Decompose into post + pre (no fused kernel available).
-        residual_cur = mhc_kernels.mhc_post_torch(
-            x, residual, post_layer_mix, comb_res_mix
-        )
+        residual_cur = mhc_kernels.mhc_post_torch(x, residual, post_layer_mix, comb_res_mix)
         post_mix_cur, comb_mix_cur, layer_input_cur = mhc_kernels.mhc_pre_torch(
             residual_cur,
             fn,

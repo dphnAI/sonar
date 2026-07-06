@@ -13,11 +13,10 @@ from aphrodite.entrypoints.chat_utils import (
 )
 from aphrodite.entrypoints.pooling.scoring.typing import ScoreMultiModalParam
 
-from ....conftest import HfRunner, AphroditeRunner
+from ....conftest import AphroditeRunner, HfRunner
 
 pytestmark = pytest.mark.skip(
-    reason="jinaai/jina-reranker-m0 custom code is incompatible with "
-    "transformers v5 (missing all_tied_weights_keys)"
+    reason="jinaai/jina-reranker-m0 custom code is incompatible with transformers v5 (missing all_tied_weights_keys)"
 )
 
 MODELS = ["jinaai/jina-reranker-m0"]
@@ -50,12 +49,8 @@ lower computational requirements."""  # noqa: E501
 TEXT_IMAGE_TEST_DATA = {
     "query": [{"text": "slm markdown"}],
     "documents": [
-        {
-            "image": "https://raw.githubusercontent.com/jina-ai/multimodal-reranker-test/main/handelsblatt-preview.png"
-        },
-        {
-            "image": "https://raw.githubusercontent.com/jina-ai/multimodal-reranker-test/main/paper-11.png"
-        },
+        {"image": "https://raw.githubusercontent.com/jina-ai/multimodal-reranker-test/main/handelsblatt-preview.png"},
+        {"image": "https://raw.githubusercontent.com/jina-ai/multimodal-reranker-test/main/paper-11.png"},
     ],
 }
 
@@ -68,11 +63,7 @@ TEXT_TEXT_TEST_DATA = {
 }
 
 IMAGE_TEXT_TEST_DATA = {
-    "query": [
-        {
-            "image": "https://raw.githubusercontent.com/jina-ai/multimodal-reranker-test/main/paper-11.png"
-        }
-    ],
+    "query": [{"image": "https://raw.githubusercontent.com/jina-ai/multimodal-reranker-test/main/paper-11.png"}],
     "documents": [
         {"text": LONG_TEXT_DOC},
         {"text": "数据提取么?为什么不用正则啊,你用正则不就全解决了么?"},
@@ -80,18 +71,10 @@ IMAGE_TEXT_TEST_DATA = {
 }
 
 IMAGE_IMAGE_TEST_DATA = {
-    "query": [
-        {
-            "image": "https://raw.githubusercontent.com/jina-ai/multimodal-reranker-test/main/paper-11.png"
-        }
-    ],
+    "query": [{"image": "https://raw.githubusercontent.com/jina-ai/multimodal-reranker-test/main/paper-11.png"}],
     "documents": [
-        {
-            "image": "https://raw.githubusercontent.com/jina-ai/multimodal-reranker-test/main/handelsblatt-preview.png"
-        },
-        {
-            "image": "https://raw.githubusercontent.com/jina-ai/multimodal-reranker-test/main/paper-11.png"
-        },
+        {"image": "https://raw.githubusercontent.com/jina-ai/multimodal-reranker-test/main/handelsblatt-preview.png"},
+        {"image": "https://raw.githubusercontent.com/jina-ai/multimodal-reranker-test/main/paper-11.png"},
     ],
 }
 
@@ -99,24 +82,16 @@ TEXT_MIXED_DOCS_TEST_DATA = {
     "query": [{"text": "slm markdown"}],
     "documents": [
         {"text": LONG_TEXT_DOC},
-        {
-            "image": "https://raw.githubusercontent.com/jina-ai/multimodal-reranker-test/main/paper-11.png"
-        },
+        {"image": "https://raw.githubusercontent.com/jina-ai/multimodal-reranker-test/main/paper-11.png"},
         {"text": "数据提取么？为什么不用正则啊,你用正则不就全解决了么?"},
-        {
-            "image": "https://raw.githubusercontent.com/jina-ai/multimodal-reranker-test/main/handelsblatt-preview.png"
-        },
+        {"image": "https://raw.githubusercontent.com/jina-ai/multimodal-reranker-test/main/handelsblatt-preview.png"},
     ],
 }
 
 
 def _normalize_image(image_val: str) -> str:
     """Normalize image value to proper format for HF model."""
-    return (
-        image_val
-        if image_val.startswith(("http://", "https://"))
-        else f"data:image/png;base64,{image_val}"
-    )
+    return image_val if image_val.startswith(("http://", "https://")) else f"data:image/png;base64,{image_val}"
 
 
 def create_score_multimodal_param(
@@ -151,9 +126,7 @@ def create_score_multimodal_param(
                 )
             else:
                 formatted_content.append(
-                    ChatCompletionContentPartImageEmbedsParam(
-                        type="image_embeds", image_embeds=image_val
-                    )
+                    ChatCompletionContentPartImageEmbedsParam(type="image_embeds", image_embeds=image_val)
                 )
 
     return [ScoreMultiModalParam(content=[content]) for content in formatted_content]

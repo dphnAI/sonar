@@ -39,9 +39,7 @@ def generative_scoring(request: Request) -> ServingGenerativeScoring | None:
 async def create_generative_scoring(raw_request: Request):
     handler = generative_scoring(raw_request)
     if handler is None:
-        raise NotImplementedError(
-            "The model does not support the Generative Scoring API"
-        )
+        raise NotImplementedError("The model does not support the Generative Scoring API")
 
     raw_body = await raw_request.json()
 

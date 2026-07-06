@@ -155,11 +155,7 @@ class TestCohereEmbedRequestParsing:
             {
                 "model": "test",
                 "inputs": [
-                    {
-                        "content": [
-                            {"type": "image_url", "image_url": {"url": "image-uri"}}
-                        ]
-                    },
+                    {"content": [{"type": "image_url", "image_url": {"url": "image-uri"}}]},
                 ],
             },
         ],
@@ -284,9 +280,7 @@ class TestApplyStPrompt:
         assert handler._apply_task_instruction(texts, "document") is texts
 
     def test_multiple_texts(self):
-        handler = self._make_handler(
-            {"query": "Represent this sentence for searching: "}
-        )
+        handler = self._make_handler({"query": "Represent this sentence for searching: "})
         result = handler._apply_task_instruction(["a", "b", "c"], "query")
         assert result == [
             "Represent this sentence for searching: a",
@@ -458,10 +452,11 @@ class TestChunkedEmbeddingProcessing:
             "embd-client-prompt-999-chunk-888-prompt-1-chunk-0",
         ]
         assert ctx.chunked_embedding_metadata is not None
-        assert [
-            (item.prompt_index, item.chunk_index)
-            for item in ctx.chunked_embedding_metadata
-        ] == [(0, 0), (0, 1), (1, 0)]
+        assert [(item.prompt_index, item.chunk_index) for item in ctx.chunked_embedding_metadata] == [
+            (0, 0),
+            (0, 1),
+            (1, 0),
+        ]
 
         ctx.final_res_batch = [
             self._make_output(ctx.prompt_request_ids[0], [0, 1, 2], [1.0, 1.0]),
@@ -472,17 +467,13 @@ class TestChunkedEmbeddingProcessing:
         handler._post_process_chunked(ctx)
 
         assert len(ctx.final_res_batch) == 2
-        assert ctx.final_res_batch[0].request_id == (
-            "embd-client-prompt-999-chunk-888-prompt-0"
-        )
+        assert ctx.final_res_batch[0].request_id == ("embd-client-prompt-999-chunk-888-prompt-0")
         assert ctx.final_res_batch[0].prompt_token_ids == [0, 1, 2, 3, 4]
         assert torch.allclose(
             ctx.final_res_batch[0].outputs.data,
             torch.tensor([2.2, 3.4]),
         )
-        assert ctx.final_res_batch[1].request_id == (
-            "embd-client-prompt-999-chunk-888-prompt-1"
-        )
+        assert ctx.final_res_batch[1].request_id == ("embd-client-prompt-999-chunk-888-prompt-1")
         assert ctx.final_res_batch[1].prompt_token_ids == [10, 11]
         assert torch.allclose(
             ctx.final_res_batch[1].outputs.data,
@@ -591,9 +582,7 @@ class TestPreProcessCohereOnline:
                     "request": ctx.request,
                     "all_messages": [
                         handler._mixed_input_to_messages(
-                            CohereEmbedInput(
-                                content=[CohereEmbedContent(type="text", text="hello")]
-                            ),
+                            CohereEmbedInput(content=[CohereEmbedContent(type="text", text="hello")]),
                             task_prefix="query: ",
                         )
                     ],
@@ -635,9 +624,7 @@ class TestPreProcessOpenAIEmbeddingChatOnline:
                     "prompt_extras": prompt_extras,
                 }
             )
-            return all_messages, [
-                {"prompt_token_ids": [index]} for index, _ in enumerate(all_messages)
-            ]
+            return all_messages, [{"prompt_token_ids": [index]} for index, _ in enumerate(all_messages)]
 
     @classmethod
     def _make_handler(cls, renderer):
@@ -659,10 +646,7 @@ class TestPreProcessOpenAIEmbeddingChatOnline:
             | EmbeddingBatchChatInputRequest
         ),
     ) -> PoolingServeContext[
-        EmbeddingChatRequest
-        | EmbeddingBatchChatRequest
-        | EmbeddingChatInputRequest
-        | EmbeddingBatchChatInputRequest
+        EmbeddingChatRequest | EmbeddingBatchChatRequest | EmbeddingChatInputRequest | EmbeddingBatchChatInputRequest
     ]:
         return PoolingServeContext(
             request=request,

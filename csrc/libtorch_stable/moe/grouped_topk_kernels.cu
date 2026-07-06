@@ -1049,31 +1049,33 @@ std::tuple<torch::stable::Tensor, torch::stable::Tensor> grouped_topk(
       get_current_cuda_stream(scores.get_device_index());
   auto const sf = static_cast<aphrodite::moe::ScoringFunc>(scoring_func);
 
-#define LAUNCH_KERNEL_SF(T, BiasT, IdxT)                                      \
-  do {                                                                        \
-    switch (sf) {                                                             \
-      case aphrodite::moe::SCORING_NONE:                                           \
-        aphrodite::moe::invokeNoAuxTc<T, BiasT, IdxT, aphrodite::moe::SCORING_NONE>(    \
-            reinterpret_cast<T*>(scores.mutable_data_ptr()),                  \
-            reinterpret_cast<float*>(topk_values.mutable_data_ptr()),         \
-            reinterpret_cast<IdxT*>(topk_indices.mutable_data_ptr()),         \
-            reinterpret_cast<BiasT const*>(bias.data_ptr()), num_tokens,      \
-            num_experts, n_group, topk_group, topk, renormalize,              \
-            routed_scaling_factor, pdl_flag, stream);                         \
-        break;                                                                \
-      case aphrodite::moe::SCORING_SIGMOID:                                        \
-        aphrodite::moe::invokeNoAuxTc<T, BiasT, IdxT, aphrodite::moe::SCORING_SIGMOID>( \
-            reinterpret_cast<T*>(scores.mutable_data_ptr()),                  \
-            reinterpret_cast<float*>(topk_values.mutable_data_ptr()),         \
-            reinterpret_cast<IdxT*>(topk_indices.mutable_data_ptr()),         \
-            reinterpret_cast<BiasT const*>(bias.data_ptr()), num_tokens,      \
-            num_experts, n_group, topk_group, topk, renormalize,              \
-            routed_scaling_factor, pdl_flag, stream);                         \
-        break;                                                                \
-      default:                                                                \
-        STD_TORCH_CHECK(false, "Unsupported scoring_func");                   \
-        break;                                                                \
-    }                                                                         \
+#define LAUNCH_KERNEL_SF(T, BiasT, IdxT)                                 \
+  do {                                                                   \
+    switch (sf) {                                                        \
+      case aphrodite::moe::SCORING_NONE:                                 \
+        aphrodite::moe::invokeNoAuxTc<T, BiasT, IdxT,                    \
+                                      aphrodite::moe::SCORING_NONE>(     \
+            reinterpret_cast<T*>(scores.mutable_data_ptr()),             \
+            reinterpret_cast<float*>(topk_values.mutable_data_ptr()),    \
+            reinterpret_cast<IdxT*>(topk_indices.mutable_data_ptr()),    \
+            reinterpret_cast<BiasT const*>(bias.data_ptr()), num_tokens, \
+            num_experts, n_group, topk_group, topk, renormalize,         \
+            routed_scaling_factor, pdl_flag, stream);                    \
+        break;                                                           \
+      case aphrodite::moe::SCORING_SIGMOID:                              \
+        aphrodite::moe::invokeNoAuxTc<T, BiasT, IdxT,                    \
+                                      aphrodite::moe::SCORING_SIGMOID>(  \
+            reinterpret_cast<T*>(scores.mutable_data_ptr()),             \
+            reinterpret_cast<float*>(topk_values.mutable_data_ptr()),    \
+            reinterpret_cast<IdxT*>(topk_indices.mutable_data_ptr()),    \
+            reinterpret_cast<BiasT const*>(bias.data_ptr()), num_tokens, \
+            num_experts, n_group, topk_group, topk, renormalize,         \
+            routed_scaling_factor, pdl_flag, stream);                    \
+        break;                                                           \
+      default:                                                           \
+        STD_TORCH_CHECK(false, "Unsupported scoring_func");              \
+        break;                                                           \
+    }                                                                    \
   } while (0)
 
 #define LAUNCH_KERNEL(T, IdxT)                                         \

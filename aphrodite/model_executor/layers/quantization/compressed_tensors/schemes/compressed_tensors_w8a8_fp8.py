@@ -71,16 +71,10 @@ class CompressedTensorsW8A8Fp8(CompressedTensorsScheme):
             self.use_aiter_and_is_supported = rocm_aiter_ops.is_linear_fp8_enabled()
             assert not self.is_static_input_scheme
             self.act_q_group_shape = GroupShape(1, self.weight_block_size[0])
-            self.weight_quant_key = create_fp8_quant_key(
-                static=True, group_shape=GroupShape(*self.weight_block_size)
-            )
-            self.activation_quant_key = create_fp8_quant_key(
-                static=False, group_shape=self.act_q_group_shape
-            )
+            self.weight_quant_key = create_fp8_quant_key(static=True, group_shape=GroupShape(*self.weight_block_size))
+            self.activation_quant_key = create_fp8_quant_key(static=False, group_shape=self.act_q_group_shape)
         else:
-            self.activation_quant_key = activation_quant_key_mapping[
-                self.is_static_input_scheme
-            ]
+            self.activation_quant_key = activation_quant_key_mapping[self.is_static_input_scheme]
             self.weight_quant_key = weight_quant_key_mapping[self.strategy]
 
     @classmethod
@@ -118,9 +112,7 @@ class CompressedTensorsW8A8Fp8(CompressedTensorsScheme):
             )
 
         # WEIGHT
-        weight = create_fp8_weight_parameter(
-            output_size_per_partition, input_size_per_partition, weight_loader
-        )
+        weight = create_fp8_weight_parameter(output_size_per_partition, input_size_per_partition, weight_loader)
         layer.register_parameter("weight", weight)
 
         # WEIGHT SCALE
@@ -175,8 +167,7 @@ class CompressedTensorsW8A8Fp8(CompressedTensorsScheme):
 
         else:
             raise ValueError(
-                f"Unknown quantization strategy {self.strategy}: "
-                f"should be one of {list(QuantizationStrategy)}"
+                f"Unknown quantization strategy {self.strategy}: should be one of {list(QuantizationStrategy)}"
             )
 
         # required by torch.compile to be torch.nn.Parameter

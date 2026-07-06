@@ -7,9 +7,9 @@ Test modular OAI Triton MoE
 import pytest
 import torch
 
-from tests.utils import wait_for_gpu_memory_to_clear
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.utils.import_utils import has_triton_kernels
+from tests.utils import wait_for_gpu_memory_to_clear
 
 if not has_triton_kernels():
     pytest.skip(
@@ -83,8 +83,8 @@ def make_weights(dtype, k, n, e):
 
     num_warps = 8
     w_layout, w_layout_opts = layout.make_default_matmul_mxfp4_w_layout(mx_axis=1)
-    w_scale_layout, w_scale_layout_opts = (
-        layout.make_default_matmul_mxfp4_w_scale_layout(mx_axis=1, num_warps=num_warps)
+    w_scale_layout, w_scale_layout_opts = layout.make_default_matmul_mxfp4_w_scale_layout(
+        mx_axis=1, num_warps=num_warps
     )
 
     w1_tri = convert_layout(wrap_torch_tensor(w1_tri, FP4), w_layout, **w_layout_opts)
@@ -101,12 +101,8 @@ def make_weights(dtype, k, n, e):
         **w_scale_layout_opts,
     )
 
-    w1_precision_config = PrecisionConfig(
-        weight_scale=w1_scale_tri, flex_ctx=FlexCtx(rhs_data=InFlexData())
-    )
-    w2_precision_config = PrecisionConfig(
-        weight_scale=w2_scale_tri, flex_ctx=FlexCtx(rhs_data=InFlexData())
-    )
+    w1_precision_config = PrecisionConfig(weight_scale=w1_scale_tri, flex_ctx=FlexCtx(rhs_data=InFlexData()))
+    w2_precision_config = PrecisionConfig(weight_scale=w2_scale_tri, flex_ctx=FlexCtx(rhs_data=InFlexData()))
 
     return (
         w1,
@@ -205,9 +201,7 @@ def oai_triton_moe_impl(
     )
 
 
-@pytest.mark.skipif(
-    not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform."
-)
+@pytest.mark.skipif(not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform.")
 @pytest.mark.parametrize("dtype", [torch.bfloat16])
 @pytest.mark.parametrize("m,n,k", MNK)
 @pytest.mark.parametrize("num_experts", [32, 128])

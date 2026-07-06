@@ -6,10 +6,10 @@ import weakref
 import pytest
 import torch
 
-from tests.models.utils import softmax
 from aphrodite import LLM, PoolingParams
 from aphrodite.distributed import cleanup_dist_env_and_memory
 from aphrodite.platforms import current_platform
+from tests.models.utils import softmax
 
 MODEL_NAME = "tomaarsen/Qwen3-Reranker-0.6B-seq-cls"
 PROMPT = "The chef prepared a delicious meal."
@@ -61,9 +61,7 @@ def test_1_to_1(llm, hf_model):
     text_pair = [TEXTS_1[0], TEXTS_2[0]]
 
     hf_outputs = hf_model.predict([text_pair]).tolist()
-    aphrodite_outputs = [
-        output.outputs.score for output in llm.score(text_pair[0], text_pair[1])
-    ]
+    aphrodite_outputs = [output.outputs.score for output in llm.score(text_pair[0], text_pair[1])]
 
     assert len(aphrodite_outputs) == 1
     assert len(hf_outputs) == 1
@@ -155,12 +153,8 @@ def test_pooling_params(llm: LLM):
     w_activation = get_outputs(use_activation=True)
     wo_activation = get_outputs(use_activation=False)
 
-    assert torch.allclose(default, w_activation, atol=1e-2), (
-        "Default should use activation."
-    )
-    assert not torch.allclose(w_activation, wo_activation, atol=1e-2), (
-        "wo_activation should not use activation."
-    )
+    assert torch.allclose(default, w_activation, atol=1e-2), "Default should use activation."
+    assert not torch.allclose(w_activation, wo_activation, atol=1e-2), "wo_activation should not use activation."
     assert torch.allclose(softmax(wo_activation), w_activation, atol=1e-2), (
         "w_activation should be close to activation(wo_activation)."
     )

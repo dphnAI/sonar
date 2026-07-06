@@ -82,13 +82,7 @@ if current_platform.is_cuda_alike():
             is_unpadded = offs < num_unpadded_tokens * num_active_experts
         else:
             is_unpadded = True
-        valid = (
-            mask
-            & record_enabled
-            & is_unpadded
-            & (physical_id >= 0)
-            & (physical_id < out_size)
-        )
+        valid = mask & record_enabled & is_unpadded & (physical_id >= 0) & (physical_id < out_size)
         safe_physical_id = tl.where(physical_id >= 0, physical_id, 0)
         tl.atomic_add(out_ptr + safe_physical_id, 1, mask=valid)
 
@@ -216,15 +210,11 @@ class BaseRouter(FusedMoERouter):
                 logical_replica_count=eplb_state.logical_replica_count,
                 expert_load_view=eplb_state.expert_load_view,
                 record_enabled=eplb_state.should_record_tensor,
-                num_unpadded_tokens=eplb_state.num_unpadded_tokens_tensors[
-                    dbo_current_ubatch_id()
-                ],
+                num_unpadded_tokens=eplb_state.num_unpadded_tokens_tensors[dbo_current_ubatch_id()],
             )
         return topk_ids
 
-    def _convert_indices_dtype(
-        self, topk_ids: torch.Tensor, indices_type: torch.dtype | None
-    ) -> torch.Tensor:
+    def _convert_indices_dtype(self, topk_ids: torch.Tensor, indices_type: torch.dtype | None) -> torch.Tensor:
         """Convert topk_ids to the desired dtype if needed."""
         if (indices_type is not None) and topk_ids.dtype != indices_type:
             topk_ids = topk_ids.to(dtype=indices_type)

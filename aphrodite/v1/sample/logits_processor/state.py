@@ -83,9 +83,7 @@ class BatchUpdateBuilder:
           index: request index
         """
         if self._is_removed_sorted:
-            raise RuntimeError(
-                "Cannot register new removed request after self.removed has been read."
-            )
+            raise RuntimeError("Cannot register new removed request after self.removed has been read.")
         self._removed.append(index)
         self.batch_changed = True
 
@@ -153,11 +151,9 @@ class LogitsProcessors:
         self.non_argmax_invariant: list[LogitsProcessor] = []
         if logitsprocs:
             for logitproc in logitsprocs:
-                (
-                    self.argmax_invariant
-                    if logitproc.is_argmax_invariant()
-                    else self.non_argmax_invariant
-                ).append(logitproc)
+                (self.argmax_invariant if logitproc.is_argmax_invariant() else self.non_argmax_invariant).append(
+                    logitproc
+                )
 
     @property
     def all(self) -> Iterator["LogitsProcessor"]:

@@ -11,7 +11,6 @@ from dataclasses import dataclass, fields
 import pytest
 import torch
 
-from tests.kernels.utils import opcheck
 from aphrodite import _custom_ops as ops
 from aphrodite.model_executor.layers.quantization.utils.machete_utils import (
     query_machete_supported_group_sizes,
@@ -22,6 +21,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
 )
 from aphrodite.platforms import current_platform
 from aphrodite.scalar_type import ScalarType, scalar_types
+from tests.kernels.utils import opcheck
 
 if current_platform.is_rocm():
     pytest.skip(
@@ -29,9 +29,7 @@ if current_platform.is_rocm():
         allow_module_level=True,
     )
 
-CUDA_DEVICES = [
-    f"cuda:{i}" for i in range(1 if torch.accelerator.device_count() == 1 else 2)
-]
+CUDA_DEVICES = [f"cuda:{i}" for i in range(1 if torch.accelerator.device_count() == 1 else 2)]
 
 # TODO: in future PR refactor this and `is_quant_method_supported` in the kernel
 #  unit tests to a common utility function. Currently the use of
@@ -80,9 +78,7 @@ class Tensors:
 #  Ch Scales Type, Tok Scales Type)
 # NOTE: None "Scale Type" means the act type is floating point
 #       None "Output Type" means the output type is the same as the act type
-TestTypeTuple = tuple[
-    list[torch.dtype], ScalarType, torch.dtype | None, torch.dtype | None, bool
-]
+TestTypeTuple = tuple[list[torch.dtype], ScalarType, torch.dtype | None, torch.dtype | None, bool]
 TEST_TYPES = [
     # GPTQ style
     *(
@@ -191,9 +187,7 @@ def create_test_tensors(
     m, n, k = shape
     factor = subset_stride_factor or 1
 
-    print(
-        "create_test_tensors, shape:", shape, "types:", types, "group_size:", group_size
-    )
+    print("create_test_tensors, shape:", shape, "types:", types, "group_size:", group_size)
 
     a = rand_data((m * factor, k * factor), types.act_type, scale=3, offset=2)
     w = rand_data((k * factor, n * factor), types.act_type, scale=3, offset=1)
@@ -223,16 +217,8 @@ def create_test_tensors(
     a_ref = a.to(torch.float32)
     w_ref = w_ref.to(torch.float32)
 
-    w_ch_s = (
-        None
-        if types.channel_scale_type is None
-        else rand_data((n,), types.channel_scale_type)
-    )
-    w_tok_s = (
-        None
-        if types.token_scale_type is None
-        else rand_data((m,), types.token_scale_type)
-    )
+    w_ch_s = None if types.channel_scale_type is None else rand_data((n,), types.channel_scale_type)
+    w_tok_s = None if types.token_scale_type is None else rand_data((m,), types.token_scale_type)
 
     return Tensors(
         w_ref=w_ref,
@@ -257,13 +243,9 @@ def machete_mm_test_helper(
     output_ref_type = output_ref.dtype
 
     if tensors.w_ch_s is not None:
-        output_ref = (
-            output_ref.to(tensors.w_ch_s.dtype) * tensors.w_ch_s.unsqueeze(0)
-        ).to(output_ref_type)
+        output_ref = (output_ref.to(tensors.w_ch_s.dtype) * tensors.w_ch_s.unsqueeze(0)).to(output_ref_type)
     if tensors.w_tok_s is not None:
-        output_ref = (
-            output_ref.to(tensors.w_tok_s.dtype) * tensors.w_tok_s.unsqueeze(1)
-        ).to(output_ref_type)
+        output_ref = (output_ref.to(tensors.w_tok_s.dtype) * tensors.w_tok_s.unsqueeze(1)).to(output_ref_type)
 
     output = ops.machete_mm(
         a=tensors.a,
@@ -284,20 +266,12 @@ def machete_mm_test_helper(
     # Relax atol as our reduction dim becomes larger (more rounding error)
     # Relax atol when we have zeropoints since the way machete applies
     #  zeropoints (after scales) causes noise around 0
-    atol = (
-        1
-        if tensors.w_g_zp is not None
-        else min(5e-2 * math.sqrt(tensors.a.shape[1]), 1)
-    )
+    atol = 1 if tensors.w_g_zp is not None else min(5e-2 * math.sqrt(tensors.a.shape[1]), 1)
     rtol = 1e-1 if tensors.a.element_size() >= 2 else 2e-1
-    torch.testing.assert_close(
-        output, output_ref.to(output.dtype), rtol=rtol, atol=atol
-    )
+    torch.testing.assert_close(output, output_ref.to(output.dtype), rtol=rtol, atol=atol)
 
 
-@pytest.mark.skipif(
-    not IS_SUPPORTED_BY_GPU, reason="Machete is not supported on this GPU type."
-)
+@pytest.mark.skipif(not IS_SUPPORTED_BY_GPU, reason="Machete is not supported on this GPU type.")
 @pytest.mark.parametrize("shape", MNK_SHAPES, ids=lambda x: "x".join(str(v) for v in x))
 @pytest.mark.parametrize("types", TEST_TYPES)
 def test_machete_all_schedules(shape, types: TypeConfig):
@@ -324,9 +298,7 @@ def test_machete_all_schedules(shape, types: TypeConfig):
             machete_mm_test_helper(types, tensors, group_size, schedule)
 
 
-@pytest.mark.skipif(
-    not IS_SUPPORTED_BY_GPU, reason="Machete is not supported on this GPU type."
-)
+@pytest.mark.skipif(not IS_SUPPORTED_BY_GPU, reason="Machete is not supported on this GPU type.")
 @pytest.mark.parametrize("shape", MNK_SHAPES, ids=lambda x: "x".join(str(v) for v in x))
 @pytest.mark.parametrize("types", TEST_TYPES)
 def test_machete_heuristic(shape, types: TypeConfig):
@@ -345,9 +317,7 @@ def test_machete_heuristic(shape, types: TypeConfig):
 
 
 # Test working on other devices
-@pytest.mark.skipif(
-    not IS_SUPPORTED_BY_GPU, reason="Machete is not supported on this GPU type."
-)
+@pytest.mark.skipif(not IS_SUPPORTED_BY_GPU, reason="Machete is not supported on this GPU type.")
 @pytest.mark.parametrize("device", CUDA_DEVICES)
 def test_machete_devices(device: str):
     group_size = 128
@@ -373,9 +343,7 @@ def test_machete_devices(device: str):
 
 
 # Test working with a subset of A and B
-@pytest.mark.skipif(
-    not IS_SUPPORTED_BY_GPU, reason="Machete is not supported on this GPU type."
-)
+@pytest.mark.skipif(not IS_SUPPORTED_BY_GPU, reason="Machete is not supported on this GPU type.")
 def test_machete_subset():
     group_size = 128
 
@@ -389,9 +357,7 @@ def test_machete_subset():
         token_scale_type=None,
     )
 
-    tensors = create_test_tensors(
-        (512, 4096, 4096), type_config, group_size, subset_stride_factor=2
-    )
+    tensors = create_test_tensors((512, 4096, 4096), type_config, group_size, subset_stride_factor=2)
     machete_mm_test_helper(type_config, tensors, group_size)
 
 
@@ -405,9 +371,7 @@ class MacheteLayer(torch.nn.Module):
         return ops.machete_mm(a=a, **self.kwargs)
 
 
-@pytest.mark.skipif(
-    not IS_SUPPORTED_BY_GPU, reason="Machete is not supported on this GPU type."
-)
+@pytest.mark.skipif(not IS_SUPPORTED_BY_GPU, reason="Machete is not supported on this GPU type.")
 def test_machete_cuda_graph():
     m, n, k = 512, 4096, 4096
 
@@ -418,9 +382,7 @@ def test_machete_cuda_graph():
     group_size = 128
     zero_points = False
 
-    w_ref, w_q_packed, w_s, w_zp = machete_quantize_and_pack(
-        a.dtype, b, wtype, stype, group_size, zero_points
-    )
+    w_ref, w_q_packed, w_s, w_zp = machete_quantize_and_pack(a.dtype, b, wtype, stype, group_size, zero_points)
 
     # Construct a trivial model with a single layer that calls a machete kernel
     model = MacheteLayer(

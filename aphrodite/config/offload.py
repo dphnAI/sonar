@@ -117,14 +117,12 @@ class OffloadConfig:
         prefetch_active = self.prefetch.offload_group_size > 0
         if self.offload_backend == "uva" and prefetch_active:
             warnings.warn(
-                "Prefetch offload fields are set but offload_backend='uva'. "
-                "Prefetch settings will be ignored.",
+                "Prefetch offload fields are set but offload_backend='uva'. Prefetch settings will be ignored.",
                 stacklevel=2,
             )
         elif self.offload_backend == "prefetch" and uva_active:
             warnings.warn(
-                "UVA offload fields are set but offload_backend='prefetch'. "
-                "UVA settings will be ignored.",
+                "UVA offload fields are set but offload_backend='prefetch'. UVA settings will be ignored.",
                 stacklevel=2,
             )
         elif self.offload_backend == "auto" and uva_active and prefetch_active:

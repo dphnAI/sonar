@@ -148,9 +148,7 @@ class StructuralTagResponseFormat(OpenAIBaseModel):
     format: Any
 
 
-AnyStructuralTagResponseFormat: TypeAlias = (
-    LegacyStructuralTagResponseFormat | StructuralTagResponseFormat
-)
+AnyStructuralTagResponseFormat: TypeAlias = LegacyStructuralTagResponseFormat | StructuralTagResponseFormat
 
 
 class ResponseFormat(OpenAIBaseModel):
@@ -159,9 +157,7 @@ class ResponseFormat(OpenAIBaseModel):
     json_schema: JsonSchemaResponseFormat | None = None
 
 
-AnyResponseFormat: TypeAlias = (
-    ResponseFormat | StructuralTagResponseFormat | LegacyStructuralTagResponseFormat
-)
+AnyResponseFormat: TypeAlias = ResponseFormat | StructuralTagResponseFormat | LegacyStructuralTagResponseFormat
 
 
 def validate_structural_tag_response_format(
@@ -178,15 +174,14 @@ def validate_structural_tag_response_format(
 
     if isinstance(response_format, dict):
         try:
-            response_format = TypeAdapter(
-                AnyStructuralTagResponseFormat
-            ).validate_python(response_format)
+            response_format = TypeAdapter(AnyStructuralTagResponseFormat).validate_python(response_format)
         except ValidationError as exc:
             raise APHRODITEValidationError(
                 "Invalid response_format structural_tag specification.",
                 parameter="response_format",
             ) from exc
 
+    assert not isinstance(response_format, dict)
     try:
         payload = json.dumps(response_format.model_dump(by_alias=True))
         validate_structural_tag_payload(payload, parameter="response_format")
@@ -208,11 +203,7 @@ def validate_structural_tag_payload(payload: Any, *, parameter: str) -> None:
         )
 
     try:
-        validate_xgrammar_grammar(
-            SamplingParams(
-                structured_outputs=StructuredOutputsParams(structural_tag=payload)
-            )
-        )
+        validate_xgrammar_grammar(SamplingParams(structured_outputs=StructuredOutputsParams(structural_tag=payload)))  # type: ignore[call-arg]
     except (TypeError, ValueError) as exc:
         raise APHRODITEValidationError(
             f"Invalid {parameter} structural_tag specification.",
@@ -273,9 +264,7 @@ class LogitsProcessorConstructor(BaseModel):
 LogitsProcessors = list[str | LogitsProcessorConstructor]
 
 
-def get_logits_processors(
-    processors: LogitsProcessors | None, pattern: str | None
-) -> list[Any] | None:
+def get_logits_processors(processors: LogitsProcessors | None, pattern: str | None) -> list[Any] | None:
     if processors and pattern:
         logits_processors = []
         for processor in processors:
@@ -289,13 +278,9 @@ def get_logits_processors(
             try:
                 logits_processor = resolve_obj_by_qualname(qualname)
             except Exception as e:
-                raise ValueError(
-                    f"Logits processor '{qualname}' could not be resolved: {e}"
-                ) from e
+                raise ValueError(f"Logits processor '{qualname}' could not be resolved: {e}") from e
             if isinstance(processor, LogitsProcessorConstructor):
-                logits_processor = logits_processor(
-                    *processor.args or [], **processor.kwargs or {}
-                )
+                logits_processor = logits_processor(*processor.args or [], **processor.kwargs or {})
             logits_processors.append(logits_processor)
         return logits_processors
     elif processors:

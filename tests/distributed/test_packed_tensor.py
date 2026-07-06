@@ -141,9 +141,7 @@ class TestPackedBroadcastRoundtrip:
             buffer_size_bytes=buffer_size,
         )
 
-        consumer_group = MockConsumerCommunicationGroup(
-            producer_group.broadcasted_tensors
-        )
+        consumer_group = MockConsumerCommunicationGroup(producer_group.broadcasted_tensors)
 
         state_dict_info = create_state_dict_info(params_cuda)
         unpacked_tensors = {}
@@ -187,9 +185,7 @@ class TestPackedBroadcastRoundtrip:
             buffer_size_bytes=buffer_size,
         )
 
-        consumer_group = MockConsumerCommunicationGroup(
-            producer_group.broadcasted_tensors
-        )
+        consumer_group = MockConsumerCommunicationGroup(producer_group.broadcasted_tensors)
 
         state_dict_info = create_state_dict_info(params)
         unpacked_tensors = {}
@@ -230,9 +226,7 @@ class TestPackedBroadcastRoundtrip:
             buffer_size_bytes=target_size,
         )
 
-        consumer_group = MockConsumerCommunicationGroup(
-            producer_group.broadcasted_tensors
-        )
+        consumer_group = MockConsumerCommunicationGroup(producer_group.broadcasted_tensors)
 
         state_dict_info = create_state_dict_info(params_cuda)
         unpacked_tensors = {}
@@ -253,9 +247,7 @@ class TestPackedBroadcastRoundtrip:
         assert len(unpacked_tensors) == len(params)
         for name, original_tensor in params_cuda:
             assert name in unpacked_tensors
-            assert torch.allclose(
-                unpacked_tensors[name], original_tensor, rtol=1e-5, atol=1e-7
-            )
+            assert torch.allclose(unpacked_tensors[name], original_tensor, rtol=1e-5, atol=1e-7)
 
     def test_roundtrip_non_contiguous_tensors(self):
         """Test roundtrip with non-contiguous tensors from the trainer."""
@@ -288,9 +280,7 @@ class TestPackedBroadcastRoundtrip:
             buffer_size_bytes=buffer_size,
         )
 
-        consumer_group = MockConsumerCommunicationGroup(
-            producer_group.broadcasted_tensors
-        )
+        consumer_group = MockConsumerCommunicationGroup(producer_group.broadcasted_tensors)
 
         state_dict_info = create_state_dict_info(params)
         unpacked_tensors = {}
@@ -372,10 +362,7 @@ class TestPackTensors:
 
     def test_pack_respects_buffer_limit(self):
         """Test that packing stops when buffer_size_bytes is exceeded."""
-        params = [
-            (f"w{i}", torch.randn(100, 100, dtype=torch.float32).cuda())
-            for i in range(10)
-        ]
+        params = [(f"w{i}", torch.randn(100, 100, dtype=torch.float32).cuda()) for i in range(10)]
 
         chunk = pack_tensors(
             iterator=iter(params),
@@ -445,9 +432,7 @@ class TestPackTensors:
 
     def test_pack_multiple_chunks(self):
         """Test consuming an iterator across multiple pack_tensors calls."""
-        params = [
-            (f"w{i}", torch.randn(50, 50, dtype=torch.float32).cuda()) for i in range(6)
-        ]
+        params = [(f"w{i}", torch.randn(50, 50, dtype=torch.float32).cuda()) for i in range(6)]
         it = iter(params)
 
         all_names = []
@@ -472,9 +457,7 @@ class TestPackedIpcProducer:
 
     def test_producer_yields_chunks(self):
         """Test that the producer yields PackedIpcChunk objects."""
-        params = [
-            (f"w{i}", torch.randn(50, 50, dtype=torch.float32).cuda()) for i in range(6)
-        ]
+        params = [(f"w{i}", torch.randn(50, 50, dtype=torch.float32).cuda()) for i in range(6)]
 
         chunks = list(
             packed_ipc_producer(
@@ -687,19 +670,14 @@ class TestPackedIpcRoundtrip:
         )
 
         assert len(result) == len(params_cuda)
-        for (orig_name, orig_tensor), (res_name, res_tensor) in zip(
-            params_cuda, result
-        ):
+        for (orig_name, orig_tensor), (res_name, res_tensor) in zip(params_cuda, result):
             assert orig_name == res_name
             assert res_tensor.dtype == dtype
             assert torch.allclose(res_tensor, orig_tensor.cpu(), rtol=1e-4, atol=1e-6)
 
     def test_roundtrip_multiple_chunks(self):
         """Test IPC roundtrip across multiple chunks."""
-        params = [
-            (f"layer{i}.weight", torch.randn(100, 100, dtype=torch.float32).cuda())
-            for i in range(8)
-        ]
+        params = [(f"layer{i}.weight", torch.randn(100, 100, dtype=torch.float32).cuda()) for i in range(8)]
         gpu_uuid = self._get_gpu_uuid()
         device_index = torch.cuda.current_device()
 

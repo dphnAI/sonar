@@ -143,9 +143,7 @@ def _patch_make_bitmatrix_metadata() -> None:
         x = kv_pairs & 0xFFFF0000 | 0x00000001
         cols_and_inclusive_run_lengths = tl.associative_scan(x, 0, _keyed_add)
         exclusive_run_lengths = (cols_and_inclusive_run_lengths - 1) & 0xFFFF
-        row_sorted_indx = tl.load(
-            ColPartialSum + pid_m * stride_pm + col_indx * stride_pn, mask=mask
-        )
+        row_sorted_indx = tl.load(ColPartialSum + pid_m * stride_pm + col_indx * stride_pn, mask=mask)
         row_sorted_indx += tl.load(ColOffs + col_indx, mask=mask)
         row_sorted_indx += exclusive_run_lengths
         tl.store(RowSortedIndx + offs_global, row_sorted_indx, mask=mask)
@@ -154,9 +152,7 @@ def _patch_make_bitmatrix_metadata() -> None:
     def _make_bitmatrix_metadata_pow2_safe(nonzero_indx, bitmatrix):
         assert nonzero_indx.ndim == 2
         PARTIAL_BLOCK_M = 32
-        col_sum, col_partial_sum = sum_bitmatrix_rows(
-            bitmatrix, partials_block_size=PARTIAL_BLOCK_M
-        )
+        col_sum, col_partial_sum = sum_bitmatrix_rows(bitmatrix, partials_block_size=PARTIAL_BLOCK_M)
         device = bitmatrix.device
         n_indx = nonzero_indx.numel()
         n_cols = bitmatrix.shape[1]
@@ -212,9 +208,7 @@ def _patch_make_bitmatrix_metadata() -> None:
     # "aphrodite.third_party.triton_kernels.tensor".
     from triton_kernels.tensor import SparseMatrix as _SparseMatrix
 
-    _SparseMatrix.__post_init__.__globals__["make_bitmatrix_metadata"] = (
-        _make_bitmatrix_metadata_pow2_safe
-    )
+    _SparseMatrix.__post_init__.__globals__["make_bitmatrix_metadata"] = _make_bitmatrix_metadata_pow2_safe
     # Also patch the bitmatrix module itself in case it is imported directly.
     _bm.make_bitmatrix_metadata = _make_bitmatrix_metadata_pow2_safe
 
@@ -499,8 +493,7 @@ if has_triton_kernels():
             _patch_legacy_routing_for_nonpow2_topk()
     except (AttributeError, ImportError) as e:
         logger.error(
-            "Failed to import Triton kernels. Please make sure your triton "
-            "version is compatible. Error: %s",
+            "Failed to import Triton kernels. Please make sure your triton version is compatible. Error: %s",
             e,
         )
 
@@ -579,9 +572,7 @@ def triton_kernel_moe_forward(
     if use_legacy_triton_kernels and expert_map is None:
         from triton_kernels.routing import routing as fused_routing
 
-        routing_data, gather_idx, scatter_idx = fused_routing(
-            gating_output, topk, sm_first=sm_first
-        )
+        routing_data, gather_idx, scatter_idx = fused_routing(gating_output, topk, sm_first=sm_first)
         effective_expert_map = None
         effective_global_num_experts = global_num_experts
     else:
@@ -603,24 +594,18 @@ def triton_kernel_moe_forward(
             # topk_ids_raw contains global expert IDs - remap to local.
             topk_ids = expert_map[topk_ids_raw.to(torch.long)]
             local_num_experts = w1.shape[0]
-            routing_data, gather_idx, scatter_idx = make_routing_data(
-                topk_ids, topk_weights, local_num_experts
-            )
+            routing_data, gather_idx, scatter_idx = make_routing_data(topk_ids, topk_weights, local_num_experts)
             # expert_map already applied; pass None downstream.
             effective_expert_map = None
             effective_global_num_experts = local_num_experts
         else:
             topk_ids = topk_ids_raw.to(torch.long)
-            routing_data, gather_idx, scatter_idx = make_routing_data(
-                topk_ids, topk_weights, gating_output.shape[-1]
-            )
+            routing_data, gather_idx, scatter_idx = make_routing_data(topk_ids, topk_weights, gating_output.shape[-1])
             effective_expert_map = expert_map
             effective_global_num_experts = global_num_experts
 
     output = torch.empty_like(hidden_states)
-    effective_quant_config = (
-        quant_config if quant_config is not None else FUSED_MOE_UNQUANTIZED_CONFIG
-    )
+    effective_quant_config = quant_config if quant_config is not None else FUSED_MOE_UNQUANTIZED_CONFIG
 
     return triton_kernel_fused_experts(
         output,
@@ -660,9 +645,7 @@ def triton_kernel_fused_experts(
     a1q_scale: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Triton implementation of fused expert computation using OAI kernels."""
-    assert activation == MoEActivation.SWIGLUOAI, (
-        "Only SWIGLUOAI activation is supported"
-    )
+    assert activation == MoEActivation.SWIGLUOAI, "Only SWIGLUOAI activation is supported"
     assert quant_config is not None
 
     # type check, uint8 means mxfp4
@@ -690,9 +673,7 @@ def triton_kernel_fused_experts(
         )
 
     # Add batch_dim to output buffer because matmul_ogs expects 3D output
-    intermediate_cache = _resize_cache(
-        intermediate_cache, (batch_dim, M * topk, N // 2)
-    )
+    intermediate_cache = _resize_cache(intermediate_cache, (batch_dim, M * topk, N // 2))
     output_tensor = _resize_cache(output_tensor, (batch_dim, M, K))
 
     act = (
@@ -754,9 +735,7 @@ def make_routing_data(
     BLOCK_SIZE_K = 32
 
     bm_cols = triton.cdiv(num_local_experts, BLOCK_SIZE_K)  # n_bitpacks
-    bitmatrix = torch.zeros(
-        (n_rows, bm_cols), dtype=torch.uint32, device=topk_ids.device
-    )
+    bitmatrix = torch.zeros((n_rows, bm_cols), dtype=torch.uint32, device=topk_ids.device)
 
     grid = (triton.cdiv(n_rows, BLOCK_SIZE_M),)
     pack_bitmatrix[grid](
@@ -772,9 +751,7 @@ def make_routing_data(
     bitmatrix_shape = [n_rows, bm_cols * 32]
     bitmatrix_shape_max = [n_rows, None]
     bitmatrix = (
-        Bitmatrix(
-            bitmatrix, dtype=BIT, shape=bitmatrix_shape, shape_max=bitmatrix_shape_max
-        )
+        Bitmatrix(bitmatrix, dtype=BIT, shape=bitmatrix_shape, shape_max=bitmatrix_shape_max)
         if not use_legacy_triton_kernels
         else Bitmatrix(
             bitmatrix,
@@ -790,9 +767,7 @@ def make_routing_data(
     if use_legacy_triton_kernels:
         from triton_kernels.routing import routing_from_bitmatrix
 
-        return routing_from_bitmatrix(
-            bitmatrix, topk_weights, topk_ids, num_local_experts, num_topk
-        )
+        return routing_from_bitmatrix(bitmatrix, topk_weights, topk_ids, num_local_experts, num_topk)
 
     sparse_logits = SparseMatrix(indx=topk_ids, vals=topk_weights, mask=bitmatrix)
     dispatch_indx = sparse_logits.mask_metadata.row_sorted_indx
@@ -845,9 +820,7 @@ def masked_moe_sum(
     M, topk, K = intermediate.shape
     BLOCK_K = 1024
     grid = (M, triton.cdiv(K, BLOCK_K))
-    _masked_topk_sum_kernel[grid](
-        intermediate, topk_ids, output, K, topk=topk, BLOCK_K=BLOCK_K
-    )
+    _masked_topk_sum_kernel[grid](intermediate, topk_ids, output, K, topk=topk, BLOCK_K=BLOCK_K)
 
 
 @triton.jit
@@ -873,9 +846,7 @@ def _remap_topk_to_local_kernel(
     tl.store(out_ptr + offs, out, mask=mask)
 
 
-def remap_topk_to_local(
-    topk_ids: torch.Tensor, expert_map: torch.Tensor
-) -> torch.Tensor:
+def remap_topk_to_local(topk_ids: torch.Tensor, expert_map: torch.Tensor) -> torch.Tensor:
     """Fused global->local expert-id mapping over a topk_ids tensor, preserving -1.
 
     Replaces ``torch.where(topk_ids >= 0, expert_map[topk_ids.clamp(min=0)], -1)``
@@ -1032,9 +1003,7 @@ class OAITritonExperts(BaseOAITritonExperts):
         if global_num_experts == -1:
             global_num_experts = local_num_experts
 
-        routing_data, gather_indx, scatter_indx = self._make_routing_data(
-            topk_ids, topk_weights, local_num_experts
-        )
+        routing_data, gather_indx, scatter_indx = self._make_routing_data(topk_ids, topk_weights, local_num_experts)
 
         topk = topk_ids.size(1)
         triton_kernel_fused_experts(
@@ -1107,21 +1076,10 @@ class UnfusedOAITritonExperts(LoRAExpertsMixin, BaseOAITritonExperts):
     ) -> None:
         quant_config = self.quant_config or FUSED_MOE_UNQUANTIZED_CONFIG
         if activation == MoEActivation.SWIGLUOAI:
-            alpha = (
-                quant_config.gemm1_alpha
-                if quant_config.gemm1_alpha is not None
-                else 1.702
-            )
-            limit = (
-                quant_config.gemm1_clamp_limit
-                if quant_config.gemm1_clamp_limit is not None
-                else 7.0
-            )
+            alpha = quant_config.gemm1_alpha if quant_config.gemm1_alpha is not None else 1.702
+            limit = quant_config.gemm1_clamp_limit if quant_config.gemm1_clamp_limit is not None else 7.0
             torch.ops._C.swigluoai_and_mul(output, input, alpha, limit)
-        elif (
-            activation == MoEActivation.SILU
-            and quant_config.gemm1_clamp_limit is not None
-        ):
+        elif activation == MoEActivation.SILU and quant_config.gemm1_clamp_limit is not None:
             swiglu_limit_func(
                 output,
                 input,
@@ -1129,17 +1087,9 @@ class UnfusedOAITritonExperts(LoRAExpertsMixin, BaseOAITritonExperts):
             )
         elif activation == MoEActivation.SWIGLUOAI_UNINTERLEAVE:
             assert quant_config.gemm1_clamp_limit is not None
-            alpha = (
-                quant_config.gemm1_alpha
-                if quant_config.gemm1_alpha is not None
-                else 1.0
-            )
-            beta = (
-                quant_config.gemm1_beta if quant_config.gemm1_beta is not None else 0.0
-            )
-            torch.ops._C.silu_and_mul_with_clamp(
-                output, input, quant_config.gemm1_clamp_limit, alpha, beta
-            )
+            alpha = quant_config.gemm1_alpha if quant_config.gemm1_alpha is not None else 1.0
+            beta = quant_config.gemm1_beta if quant_config.gemm1_beta is not None else 0.0
+            torch.ops._C.silu_and_mul_with_clamp(output, input, quant_config.gemm1_clamp_limit, alpha, beta)
         else:
             super().activation(activation, output, input)
 
@@ -1176,20 +1126,14 @@ class UnfusedOAITritonExperts(LoRAExpertsMixin, BaseOAITritonExperts):
         if global_num_experts == -1:
             global_num_experts = local_num_experts
 
-        routing_data, gather_indx, scatter_indx = self._make_routing_data(
-            topk_ids, topk_weights, local_num_experts
-        )
+        routing_data, gather_indx, scatter_indx = self._make_routing_data(topk_ids, topk_weights, local_num_experts)
 
         topk = topk_ids.size(1)
 
         # type check, uint8 means mxfp4
         assert hidden_states.dtype == torch.bfloat16
-        assert (
-            quant_config.w1_bias is None or quant_config.w1_bias.dtype == torch.float32
-        )
-        assert (
-            quant_config.w2_bias is None or quant_config.w2_bias.dtype == torch.float32
-        )
+        assert quant_config.w1_bias is None or quant_config.w1_bias.dtype == torch.float32
+        assert quant_config.w2_bias is None or quant_config.w2_bias.dtype == torch.float32
 
         # Shape check, only check non-mxfp4
         assert hidden_states.ndim == 2

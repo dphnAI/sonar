@@ -72,12 +72,10 @@ def test_scheduler_role_initializes_store_scheduler_only():
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "connector.MooncakeStoreScheduler"
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"
         ) as mock_scheduler,
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "connector.MooncakeStoreWorker"
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
         ) as mock_worker,
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
@@ -100,8 +98,7 @@ def test_worker_methods_delegate_to_store_worker():
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "connector.MooncakeStoreWorker"
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
         ) as mock_worker_cls,
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
@@ -131,8 +128,7 @@ def test_get_kv_connector_kv_cache_events_returns_none_when_empty():
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "connector.MooncakeStoreWorker"
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
         ) as mock_worker_cls,
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
@@ -152,8 +148,7 @@ def test_get_kv_connector_stats_delegates_to_worker():
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "connector.MooncakeStoreWorker"
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
         ) as mock_worker_cls,
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
@@ -194,8 +189,7 @@ def test_get_kv_connector_kv_cache_events_wraps_worker_events():
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "connector.MooncakeStoreWorker"
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
         ) as mock_worker_cls,
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
@@ -216,10 +210,7 @@ def test_prefer_cross_layer_blocks_from_config():
     kv_cache_config = _make_kv_cache_config()
     with (
         set_current_aphrodite_config(aphrodite_config),
-        patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "connector.MooncakeStoreScheduler"
-        ),
+        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"),
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
             aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config
@@ -234,10 +225,7 @@ def test_prefer_cross_layer_blocks_from_config():
     )
     with (
         set_current_aphrodite_config(aphrodite_config_enabled),
-        patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "connector.MooncakeStoreScheduler"
-        ),
+        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"),
     ):
         connector_enabled = mooncake_store_connector.MooncakeStoreConnector(
             aphrodite_config_enabled, KVConnectorRole.SCHEDULER, kv_cache_config
@@ -252,8 +240,7 @@ def test_register_cross_layers_kv_cache_delegates_to_worker():
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "connector.MooncakeStoreWorker"
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
         ) as mock_worker_cls,
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
@@ -275,10 +262,7 @@ def test_update_connector_output_and_take_events():
 
     with (
         set_current_aphrodite_config(aphrodite_config),
-        patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "connector.MooncakeStoreScheduler"
-        ),
+        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"),
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
             aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config
@@ -306,8 +290,7 @@ def test_reset_cache_scheduler_role_delegates_to_reset_store():
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "connector.MooncakeStoreScheduler"
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"
         ) as mock_scheduler_cls,
     ):
         conn = mooncake_store_connector.MooncakeStoreConnector(
@@ -327,8 +310,7 @@ def test_reset_cache_scheduler_role_propagates_failure():
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "connector.MooncakeStoreScheduler"
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"
         ) as mock_scheduler_cls,
     ):
         conn = mooncake_store_connector.MooncakeStoreConnector(
@@ -346,10 +328,7 @@ def test_reset_cache_worker_role_returns_none():
 
     with (
         set_current_aphrodite_config(aphrodite_config),
-        patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "connector.MooncakeStoreWorker"
-        ),
+        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"),
     ):
         conn = mooncake_store_connector.MooncakeStoreConnector(
             aphrodite_config, KVConnectorRole.WORKER, kv_cache_config
@@ -366,8 +345,7 @@ def test_scheduler_reset_store_returns_client_reset_result():
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "scheduler.LookupKeyClient"
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient"
         ) as mock_client_cls,
     ):
         sched = scheduler.MooncakeStoreScheduler(aphrodite_config, kv_cache_config)
@@ -385,8 +363,7 @@ def test_scheduler_reset_store_handles_rpc_exception():
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "scheduler.LookupKeyClient"
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient"
         ) as mock_client_cls,
     ):
         sched = scheduler.MooncakeStoreScheduler(aphrodite_config, kv_cache_config)
@@ -400,8 +377,7 @@ def test_lookup_key_client_lookup_prepends_typed_tag():
     aphrodite_config = _make_aphrodite_config()
 
     with patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-        "worker.make_zmq_socket"
+        "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.make_zmq_socket"
     ) as mock_make_socket:
         client = worker.LookupKeyClient(aphrodite_config)
 
@@ -422,8 +398,7 @@ def test_lookup_key_client_reset_uses_typed_protocol():
     aphrodite_config = _make_aphrodite_config()
 
     with patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-        "worker.make_zmq_socket"
+        "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.make_zmq_socket"
     ) as mock_make_socket:
         client = worker.LookupKeyClient(aphrodite_config)
 
@@ -467,8 +442,7 @@ def test_lookup_key_client_non_block_lookup_async():
     aphrodite_config = _make_aphrodite_config()
 
     with patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-        "worker.make_zmq_socket"
+        "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.make_zmq_socket"
     ) as mock_make_socket:
         client = worker.LookupKeyClient(aphrodite_config)
 
@@ -491,8 +465,7 @@ def test_lookup_key_client_discard_clears_state():
     aphrodite_config = _make_aphrodite_config()
 
     with patch(
-        "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-        "worker.make_zmq_socket"
+        "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.make_zmq_socket"
     ) as mock_make_socket:
         client = worker.LookupKeyClient(aphrodite_config)
 
@@ -531,8 +504,7 @@ def test_get_num_new_matched_tokens_async_defers_then_reports():
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "scheduler.LookupKeyClient"
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.scheduler.LookupKeyClient"
         ) as mock_client_cls,
     ):
         sched = scheduler.MooncakeStoreScheduler(aphrodite_config, kv_cache_config)
@@ -581,8 +553,7 @@ def test_scheduler_reset_connector_cache_invokes_connector_reset():
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "connector.MooncakeStoreScheduler"
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"
         ) as mock_scheduler_cls,
     ):
         conn = mooncake_store_connector.MooncakeStoreConnector(
@@ -624,8 +595,7 @@ def test_reset_cache_scheduler_role_clears_local_state():
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "connector.MooncakeStoreScheduler"
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"
         ) as mock_scheduler_cls,
     ):
         conn = mooncake_store_connector.MooncakeStoreConnector(
@@ -634,12 +604,8 @@ def test_reset_cache_scheduler_role_clears_local_state():
 
     # Seed both sentinel pieces of stale-reference state.
     sched_inst = mock_scheduler_cls.return_value
-    sched_inst.load_specs = {
-        "req-A": LoadSpec(aphrodite_cached_tokens=0, kvpool_cached_tokens=128, can_load=True)
-    }
-    conn._kv_cache_events = mooncake_store_connector.MooncakeStoreKVEvents(
-        num_workers=1
-    )
+    sched_inst.load_specs = {"req-A": LoadSpec(aphrodite_cached_tokens=0, kvpool_cached_tokens=128, can_load=True)}
+    conn._kv_cache_events = mooncake_store_connector.MooncakeStoreKVEvents(num_workers=1)
     sched_inst.reset_store.return_value = True
 
     assert conn.reset_cache() is True
@@ -672,9 +638,7 @@ def test_lookup_key_server_reset_drains_send_queue_before_remove_all():
     fake_send_queue.join.side_effect = lambda: call_order.append("join")
 
     fake_store = MagicMock()
-    fake_store.remove_all.side_effect = lambda force: call_order.append(
-        f"remove_all(force={force})"
-    )
+    fake_store.remove_all.side_effect = lambda force: call_order.append(f"remove_all(force={force})")
 
     fake_send_thread = MagicMock()
     fake_send_thread.request_queue = fake_send_queue
@@ -748,8 +712,7 @@ def test_shutdown_closes_worker_store():
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "connector.MooncakeStoreWorker"
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
         ) as mock_worker_cls,
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
@@ -769,8 +732,7 @@ def test_del_invokes_shutdown_and_closes_store():
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "connector.MooncakeStoreWorker"
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreWorker"
         ) as mock_worker_cls,
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
@@ -790,10 +752,7 @@ def test_shutdown_scheduler_role_is_noop():
 
     with (
         set_current_aphrodite_config(aphrodite_config),
-        patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "connector.MooncakeStoreScheduler"
-        ),
+        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.connector.MooncakeStoreScheduler"),
     ):
         connector = mooncake_store_connector.MooncakeStoreConnector(
             aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config

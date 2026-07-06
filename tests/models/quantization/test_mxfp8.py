@@ -59,9 +59,7 @@ def test_mxfp8_logprobs(
             max_model_len=MAX_MODEL_LEN,
             enforce_eager=True,
         ) as aphrodite_model:
-            baseline_outputs = aphrodite_model.generate_greedy_logprobs(
-                example_prompts, MAX_TOKENS, NUM_LOG_PROBS
-            )
+            baseline_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, MAX_TOKENS, NUM_LOG_PROBS)
 
         with aphrodite_runner(
             model,
@@ -69,9 +67,7 @@ def test_mxfp8_logprobs(
             enforce_eager=True,
             quantization="mxfp8",
         ) as aphrodite_model:
-            test_outputs = aphrodite_model.generate_greedy_logprobs(
-                example_prompts, MAX_TOKENS, NUM_LOG_PROBS
-            )
+            test_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, MAX_TOKENS, NUM_LOG_PROBS)
 
         check_logprobs_close(
             outputs_0_lst=baseline_outputs,
@@ -99,6 +95,4 @@ def test_mxfp8_generation(aphrodite_runner, model: str) -> None:
         output = aphrodite_model.generate_greedy([prompt], max_tokens=5)
 
     generated = output[0][1]
-    assert len(generated) > len(prompt), (
-        f"MXFP8 model produced no new tokens. Output: {generated!r}"
-    )
+    assert len(generated) > len(prompt), f"MXFP8 model produced no new tokens. Output: {generated!r}"

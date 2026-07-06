@@ -102,9 +102,7 @@ class Gemma3ProcessingInfo(BaseProcessingInfo):
             **self.ctx.get_merged_mm_kwargs(mm_kwargs),
         )["images_kwargs"]
 
-        do_pan_and_scan = images_kwargs.get(
-            "do_pan_and_scan", image_processor.do_pan_and_scan
-        )
+        do_pan_and_scan = images_kwargs.get("do_pan_and_scan", image_processor.do_pan_and_scan)
         pan_and_scan_min_crop_size = images_kwargs.get(
             "pan_and_scan_min_crop_size", image_processor.pan_and_scan_min_crop_size
         )
@@ -220,9 +218,7 @@ class Gemma3ProcessingInfo(BaseProcessingInfo):
             **self.ctx.get_merged_mm_kwargs({}),
         )["images_kwargs"]
 
-        max_num_crops = images_kwargs.get(
-            "pan_and_scan_max_num_crops", image_processor.pan_and_scan_max_num_crops
-        )
+        max_num_crops = images_kwargs.get("pan_and_scan_max_num_crops", image_processor.pan_and_scan_max_num_crops)
 
         vision_config = self.get_hf_config().vision_config
         native_size = vision_config.image_size
@@ -279,9 +275,7 @@ class Gemma3MultiModalProcessor(BaseMultiModalProcessor[Gemma3ProcessingInfo]):
         if (images := mm_data.get("images")) is not None:
             mm_items = self.info.parse_mm_data({"image": images}, validate=False)
             parsed_images = mm_items.get_items("image", ImageProcessorItems)
-            image_sizes = [
-                parsed_images.get_image_size(i) for i in range(len(parsed_images))
-            ]
+            image_sizes = [parsed_images.get_image_size(i) for i in range(len(parsed_images))]
             hf_processor = self.info.get_hf_processor(**mm_kwargs)
 
             num_crops = [
@@ -423,23 +417,15 @@ class Gemma3MultiModalProjector(nn.Module):
         super().__init__()
 
         self.mm_input_projection_weight = nn.Parameter(
-            torch.zeros(
-                config.vision_config.hidden_size, config.text_config.hidden_size
-            )
+            torch.zeros(config.vision_config.hidden_size, config.text_config.hidden_size)
         )
 
-        self.mm_soft_emb_norm = GemmaRMSNorm(
-            config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps
-        )
+        self.mm_soft_emb_norm = GemmaRMSNorm(config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps)
 
-        self.patches_per_image = int(
-            config.vision_config.image_size // config.vision_config.patch_size
-        )
+        self.patches_per_image = int(config.vision_config.image_size // config.vision_config.patch_size)
         self.tokens_per_side = int(config.mm_tokens_per_image**0.5)
         self.kernel_size = self.patches_per_image // self.tokens_per_side
-        self.avg_pool = nn.AvgPool2d(
-            kernel_size=self.kernel_size, stride=self.kernel_size
-        )
+        self.avg_pool = nn.AvgPool2d(kernel_size=self.kernel_size, stride=self.kernel_size)
 
     def forward(self, vision_outputs: torch.Tensor):
         batch_size, _, seq_length = vision_outputs.shape
@@ -456,9 +442,7 @@ class Gemma3MultiModalProjector(nn.Module):
 
         normed_vision_outputs = self.mm_soft_emb_norm(pooled_vision_outputs)
 
-        projected_vision_outputs = torch.matmul(
-            normed_vision_outputs, self.mm_input_projection_weight
-        )
+        projected_vision_outputs = torch.matmul(normed_vision_outputs, self.mm_input_projection_weight)
         return projected_vision_outputs.type_as(vision_outputs)
 
 
@@ -467,9 +451,7 @@ class Gemma3MultiModalProjector(nn.Module):
     info=Gemma3ProcessingInfo,
     dummy_inputs=Gemma3DummyInputsBuilder,
 )
-class Gemma3ForConditionalGeneration(
-    nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA, SupportsEncoderCudaGraph
-):
+class Gemma3ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA, SupportsEncoderCudaGraph):
     packed_modules_mapping = {
         "qkv_proj": [
             "q_proj",
@@ -536,17 +518,13 @@ class Gemma3ForConditionalGeneration(
             logit_scale = getattr(config, "logit_scale", 1.0)
             self.language_model.logits_processor.scale *= logit_scale
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
     @property
     def dtype(self):
         return next(self.parameters()).dtype
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> Gemma3ImageInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> Gemma3ImageInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         num_patches = kwargs.pop("num_patches", None)
         image_embeds = kwargs.pop("image_embeds", None)
@@ -744,9 +722,7 @@ class Gemma3ForConditionalGeneration(
         for p in num_patches:
             cum_patches.append(cum_patches[-1] + int(p))
 
-        selected_pv = torch.cat(
-            [pixel_values[cum_patches[i] : cum_patches[i + 1]] for i in indices]
-        )
+        selected_pv = torch.cat([pixel_values[cum_patches[i] : cum_patches[i + 1]] for i in indices])
         selected_np = num_patches[indices]
 
         return {

@@ -189,9 +189,7 @@ class MMLinearKernel(ABC, Generic[_ConfigT, _ParamsT]):
 
     @classmethod
     @abstractmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         """Check if this kernel is supported on the current hardware.
 
         This method checks hardware-level compatibility (e.g., GPU architecture,

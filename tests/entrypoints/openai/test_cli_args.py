@@ -85,18 +85,14 @@ def test_valid_json_format(serve_parser):
             json.dumps(LORA_MODULE),
         ]
     )
-    expected = [
-        LoRAModulePath(name="module2", path="/path/to/module2", base_model_name="llama")
-    ]
+    expected = [LoRAModulePath(name="module2", path="/path/to/module2", base_model_name="llama")]
     assert args.lora_modules == expected
 
 
 def test_invalid_json_format(serve_parser):
     # Test invalid JSON format input, missing closing brace
     with pytest.raises(SystemExit):
-        serve_parser.parse_args(
-            ["--lora-modules", '{"name": "module3", "path": "/path/to/module3"']
-        )
+        serve_parser.parse_args(["--lora-modules", '{"name": "module3", "path": "/path/to/module3"'])
 
 
 def test_invalid_type_error(serve_parser):
@@ -138,9 +134,7 @@ def test_multiple_valid_inputs(serve_parser):
     )
     expected = [
         LoRAModulePath(name="module1", path="/path/to/module1"),
-        LoRAModulePath(
-            name="module2", path="/path/to/module2", base_model_name="llama"
-        ),
+        LoRAModulePath(name="module2", path="/path/to/module2", base_model_name="llama"),
     ]
     assert args.lora_modules == expected
 
@@ -193,9 +187,7 @@ def test_passes_with_reasoning_parser(serve_parser):
 
 def test_chat_template_validation_for_happy_paths(serve_parser):
     """Ensure validation passes if the chat template exists"""
-    args = serve_parser.parse_args(
-        args=["--chat-template", CHATML_JINJA_PATH.absolute().as_posix()]
-    )
+    args = serve_parser.parse_args(args=["--chat-template", CHATML_JINJA_PATH.absolute().as_posix()])
     validate_parsed_serve_args(args)
 
 
@@ -224,9 +216,7 @@ def test_middleware(serve_parser, cli_args, expected_middleware):
 
 def test_default_chat_template_kwargs_parsing(serve_parser):
     """Ensure default_chat_template_kwargs JSON is parsed correctly"""
-    args = serve_parser.parse_args(
-        args=["--default-chat-template-kwargs", '{"enable_thinking": false}']
-    )
+    args = serve_parser.parse_args(args=["--default-chat-template-kwargs", '{"enable_thinking": false}'])
     assert args.default_chat_template_kwargs == {"enable_thinking": False}
 
 
@@ -250,9 +240,7 @@ def test_default_chat_template_kwargs_default_none(serve_parser):
 def test_default_chat_template_kwargs_invalid_json(serve_parser):
     """Ensure invalid JSON raises an error"""
     with pytest.raises(SystemExit):
-        serve_parser.parse_args(
-            args=["--default-chat-template-kwargs", "not valid json"]
-        )
+        serve_parser.parse_args(args=["--default-chat-template-kwargs", "not valid json"])
 
 
 @pytest.mark.parametrize(
@@ -296,9 +284,7 @@ def test_served_model_name_parsing(tmp_path, aphrodite_parser, args, raises):
 ### Tests for LoRA target modules parsing
 def test_lora_target_modules_single(serve_parser):
     """Test parsing single lora-target-modules argument"""
-    args = serve_parser.parse_args(
-        args=["--enable-lora", "--lora-target-modules", "o_proj"]
-    )
+    args = serve_parser.parse_args(args=["--enable-lora", "--lora-target-modules", "o_proj"])
     assert args.lora_target_modules == ["o_proj"]
 
 

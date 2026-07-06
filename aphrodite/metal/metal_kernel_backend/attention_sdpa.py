@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Scaled dot-product attention (SDPA) on Metal.
 
 Supports MHA, GQA, and MQA as variants of the same kernel — the head ratio
@@ -145,9 +146,7 @@ def _build_block_tables(
     bt_arr = mx.array(padded, dtype=mx.int32)  # [num_seqs, max_blocks]
     offsets = mx.arange(ratio, dtype=mx.int32)  # [ratio]
     # [num_seqs, max_blocks, 1] * ratio + [1, 1, ratio] → [num_seqs, max_blocks, ratio]
-    expanded = (bt_arr[:, :, None] * ratio + offsets[None, None, :]).reshape(
-        bt_arr.shape[0], -1
-    )
+    expanded = (bt_arr[:, :, None] * ratio + offsets[None, None, :]).reshape(bt_arr.shape[0], -1)
     result = (expanded, kernel_bs)
     ctx.block_tables_cache[cache_block_size] = result
     return result
@@ -239,6 +238,7 @@ def prepare_sdpa_qkv(
         else:
             queries = q_proj_out.reshape(B, L, n_heads, -1)
 
+    assert ctx.cu_seqlens is not None
     if shared_kv is not None:
         # YOCO: reuse K/V from a reference layer.  Q still needs norm + RoPE.
         keys, values = shared_kv
@@ -247,8 +247,7 @@ def prepare_sdpa_qkv(
         queries = queries.transpose(0, 2, 1, 3)
         if not hasattr(inner, "rope") and not hasattr(inner, "rotary_emb"):
             raise NotImplementedError(
-                f"Attention module {type(inner).__name__} does not have a "
-                "'rope' or 'rotary_emb' attribute."
+                f"Attention module {type(inner).__name__} does not have a 'rope' or 'rotary_emb' attribute."
             )
         queries, _ = apply_packed_rope(
             inner,
@@ -282,8 +281,7 @@ def prepare_sdpa_qkv(
 
         if not hasattr(inner, "rope") and not hasattr(inner, "rotary_emb"):
             raise NotImplementedError(
-                f"Attention module {type(inner).__name__} does not have a "
-                "'rope' or 'rotary_emb' attribute."
+                f"Attention module {type(inner).__name__} does not have a 'rope' or 'rotary_emb' attribute."
             )
         queries, keys = apply_packed_rope(
             inner,
@@ -377,9 +375,7 @@ def truncate_padded_output(
     """
     if actual_head_dim == cache_head_dim:
         return out.reshape(batch_size, seq_len, n_heads * cache_head_dim)
-    out = out.reshape(batch_size, seq_len, n_heads, cache_head_dim)[
-        ..., :actual_head_dim
-    ]
+    out = out.reshape(batch_size, seq_len, n_heads, cache_head_dim)[..., :actual_head_dim]
     return out.reshape(batch_size, seq_len, n_heads * actual_head_dim)
 
 
@@ -412,9 +408,7 @@ def sdpa_forward(
     n_heads = getattr(inner, "n_heads", None) or inner.num_attention_heads
     n_kv_heads = getattr(inner, "n_kv_heads", None) or inner.num_key_value_heads
 
-    queries, keys, values, gate, kv_for_sharing = prepare_sdpa_qkv(
-        inner, x, ctx, n_heads, n_kv_heads, shared_kv
-    )
+    queries, keys, values, gate, kv_for_sharing = prepare_sdpa_qkv(inner, x, ctx, n_heads, n_kv_heads, shared_kv)
 
     # --- Metal kernel dispatch ---
     n_heads = queries.shape[1]
@@ -425,9 +419,7 @@ def sdpa_forward(
     cache_head_dim = kv_cache.head_dim_per_layer[layer_idx]
     layer_sliding_window = kv_cache.sliding_window_per_layer[layer_idx]
     actual_head_dim = head_dim
-    queries, keys, values = pad_qkv_to_cache_head_dim(
-        queries, keys, values, head_dim, cache_head_dim
-    )
+    queries, keys, values = pad_qkv_to_cache_head_dim(queries, keys, values, head_dim, cache_head_dim)
     head_dim = cache_head_dim
 
     # Reshape to 3D: (1, heads, L, hd) → (L, heads, hd)
@@ -479,6 +471,7 @@ def sdpa_forward(
         )
 
         v_centroids = get_v_centroids(kv_cache.v_bits)
+        assert kv_cache.k_quant is not None
         k_signed = bool(QUANT_PARAMS[kv_cache.k_quant]["signed"])
         # tq_encode is a proper MLX Primitive: it returns five NEW array
         # objects that alias the input cache buffers in place but carry
@@ -547,12 +540,8 @@ def sdpa_forward(
         # which differs from ``head_dim`` for all bitwidths except 8-bit K.
         # Mirrors the ``sg = ...shape[-1]`` idiom used for the scale/zero
         # reshape below.
-        kernel_k_cache = new_k_cache.reshape(
-            -1, kernel_block_size, cache_kv_heads, new_k_cache.shape[-1]
-        )
-        kernel_v_cache = new_v_cache.reshape(
-            -1, kernel_block_size, cache_kv_heads, new_v_cache.shape[-1]
-        )
+        kernel_k_cache = new_k_cache.reshape(-1, kernel_block_size, cache_kv_heads, new_k_cache.shape[-1])
+        kernel_v_cache = new_v_cache.reshape(-1, kernel_block_size, cache_kv_heads, new_v_cache.shape[-1])
 
     ops = get_ops()
     out = mx.array(0)
@@ -563,15 +552,9 @@ def sdpa_forward(
         kernel_key_zero = new_key_zero_cache
         if kernel_block_size != kv_cache.block_size:
             sg = new_key_scale_cache.shape[-1]
-            kernel_key_scale = new_key_scale_cache.reshape(
-                -1, kernel_block_size, kv_cache.num_kv_heads, sg
-            )
-            kernel_value_scale = new_value_scale_cache.reshape(
-                -1, kernel_block_size, kv_cache.num_kv_heads, sg
-            )
-            kernel_key_zero = new_key_zero_cache.reshape(
-                -1, kernel_block_size, kv_cache.num_kv_heads, sg
-            )
+            kernel_key_scale = new_key_scale_cache.reshape(-1, kernel_block_size, kv_cache.num_kv_heads, sg)
+            kernel_value_scale = new_value_scale_cache.reshape(-1, kernel_block_size, kv_cache.num_kv_heads, sg)
+            kernel_key_zero = new_key_zero_cache.reshape(-1, kernel_block_size, kv_cache.num_kv_heads, sg)
         # Get Lloyd-Max centroids for V quantization (lazily computed, cached)
         from aphrodite.metal.metal_kernel_backend.turboquant import get_v_centroids
 

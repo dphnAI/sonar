@@ -5,10 +5,10 @@ import weakref
 
 import pytest
 
-from tests.entrypoints.pooling.scoring.util import EncoderScoringHfRunner
 from aphrodite import LLM
 from aphrodite.distributed import cleanup_dist_env_and_memory
 from aphrodite.platforms import current_platform
+from tests.entrypoints.pooling.scoring.util import EncoderScoringHfRunner
 
 MODEL_NAME = "intfloat/multilingual-e5-small"
 PROMPT = "The chef prepared a delicious meal."
@@ -64,9 +64,7 @@ def test_1_to_1(llm, hf_model):
     text_pair = [TEXTS_1[0], TEXTS_2[0]]
 
     hf_outputs = hf_model.predict([text_pair]).tolist()
-    aphrodite_outputs = [
-        output.outputs.score for output in llm.score(text_pair[0], text_pair[1])
-    ]
+    aphrodite_outputs = [output.outputs.score for output in llm.score(text_pair[0], text_pair[1])]
 
     assert len(aphrodite_outputs) == 1
     assert len(hf_outputs) == 1

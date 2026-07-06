@@ -39,9 +39,7 @@ def test_chat_completion_request_with_no_tools():
 
 @pytest.mark.parametrize("tool_choice", ["auto", "required"])
 def test_chat_completion_request_with_tool_choice_but_no_tools(tool_choice):
-    with pytest.raises(
-        ValueError, match="When using `tool_choice`, `tools` must be set."
-    ):
+    with pytest.raises(ValueError, match="When using `tool_choice`, `tools` must be set."):
         ChatCompletionRequest.model_validate(
             {
                 "messages": [{"role": "user", "content": "Hello"}],
@@ -50,9 +48,7 @@ def test_chat_completion_request_with_tool_choice_but_no_tools(tool_choice):
             }
         )
 
-    with pytest.raises(
-        ValueError, match="When using `tool_choice`, `tools` must be set."
-    ):
+    with pytest.raises(ValueError, match="When using `tool_choice`, `tools` must be set."):
         ChatCompletionRequest.model_validate(
             {
                 "messages": [{"role": "user", "content": "Hello"}],

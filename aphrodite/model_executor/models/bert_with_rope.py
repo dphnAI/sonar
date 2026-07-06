@@ -7,7 +7,7 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed import (
     divide,
     get_tensor_model_parallel_rank,
@@ -49,17 +49,11 @@ class BertWithRopeEmbedding(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
         if config.position_embedding_type not in ["rope", "rotary"]:
-            raise ValueError(
-                "Only 'rotary'('rope') position_embedding_type" + " is supported"
-            )
+            raise ValueError("Only 'rotary'('rope') position_embedding_type" + " is supported")
 
-        self.word_embeddings = VocabParallelEmbedding(
-            config.vocab_size, config.hidden_size
-        )
+        self.word_embeddings = VocabParallelEmbedding(config.vocab_size, config.hidden_size)
         if config.type_vocab_size > 0:
-            self.token_type_embeddings = VocabParallelEmbedding(
-                config.type_vocab_size, config.hidden_size
-            )
+            self.token_type_embeddings = VocabParallelEmbedding(config.type_vocab_size, config.hidden_size)
         else:
             self.token_type_embeddings = None
 
@@ -76,9 +70,7 @@ class BertWithRopeEmbedding(nn.Module):
         embeddings = inputs_embeds
         if self.token_type_embeddings is not None:
             if token_type_ids is None:
-                token_type_ids = torch.zeros(
-                    input_shape, dtype=torch.long, device=inputs_embeds.device
-                )
+                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=inputs_embeds.device)
 
             token_type_embeddings = self.token_type_embeddings(token_type_ids)
             embeddings += token_type_embeddings
@@ -253,9 +245,7 @@ class NomicMoE(nn.Module):
             params_dtype = torch.get_default_dtype()
         self.params_dtype = params_dtype
 
-        self.router = ReplicatedLinear(
-            self.hidden_size, self.num_total_experts, bias=False
-        )
+        self.router = ReplicatedLinear(self.hidden_size, self.num_total_experts, bias=False)
         self.w1 = nn.Parameter(
             torch.empty(
                 self.num_total_experts,
@@ -322,9 +312,7 @@ class NomicMoE(nn.Module):
         # FIXME(Isotr0py): This implementation is too tricky,
         # we should use FusedMoE instead in the future
         # after supporting ungated activation for it.
-        topk_weights, topk_ids, _ = fused_topk(
-            hidden_states, router_logits, self.top_k, renormalize=False
-        )
+        topk_weights, topk_ids, _ = fused_topk(hidden_states, router_logits, self.top_k, renormalize=False)
 
         final_hidden_states = torch.ops.aphrodite.fused_experts(
             hidden_states=hidden_states,
@@ -484,9 +472,7 @@ class BertWithRope(nn.Module, SupportsQuant):
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
         else:
-            hidden_states = self.embeddings(
-                input_ids=input_ids, token_type_ids=token_type_ids
-            )
+            hidden_states = self.embeddings(input_ids=input_ids, token_type_ids=token_type_ids)
         return self.encoder(positions, hidden_states)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
@@ -654,10 +640,7 @@ class JinaRobertaModel(BertWithRope):
                     B = weights[weight_name + b][i].to(device).float()
                     A = weights[weight_name + a][i].to(device).float()
 
-                weight = (
-                    weights[weight_name + o].to(device)
-                    + torch.matmul(B, A).view(shape) * scaling
-                )
+                weight = weights[weight_name + o].to(device) + torch.matmul(B, A).view(shape) * scaling
                 weight = weight.cpu().to(dtype)
 
                 weights[weight_name.replace(".parametrizations", "")] = weight
@@ -684,9 +667,7 @@ class GteNewForSequenceClassification(nn.Module, SupportsCrossEncoding):
         config = aphrodite_config.model_config.hf_config
         quant_config = aphrodite_config.quant_config
 
-        self.new = GteNewModel(
-            aphrodite_config=aphrodite_config, prefix=prefix, add_pooling_layer=True
-        )
+        self.new = GteNewModel(aphrodite_config=aphrodite_config, prefix=prefix, add_pooling_layer=True)
         self.classifier = ReplicatedLinear(
             config.hidden_size,
             config.num_labels,

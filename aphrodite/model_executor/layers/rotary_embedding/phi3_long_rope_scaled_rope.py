@@ -36,9 +36,7 @@ class Phi3LongRoPEScaledRotaryEmbedding(nn.Module):
         super().__init__()
 
         if is_neox_style is False:
-            raise ValueError(
-                "`Phi3LongRoPEScaledRotaryEmbedding` only supports neox_style."
-            )
+            raise ValueError("`Phi3LongRoPEScaledRotaryEmbedding` only supports neox_style.")
 
         self.rotary_dim = rotary_dim
         self.head_size = head_size
@@ -68,9 +66,7 @@ class Phi3LongRoPEScaledRotaryEmbedding(nn.Module):
         if scale <= 1.0:
             scaling_factor = 1.0
         else:
-            scaling_factor = math.sqrt(
-                1 + math.log(scale) / math.log(self.original_max_position_embeddings)
-            )
+            scaling_factor = math.sqrt(1 + math.log(scale) / math.log(self.original_max_position_embeddings))
         if short_mscale is None:
             short_mscale = scaling_factor
         if long_mscale is None:
@@ -79,32 +75,19 @@ class Phi3LongRoPEScaledRotaryEmbedding(nn.Module):
         self.short_mscale = short_mscale
         self.long_mscale = long_mscale
 
-        short_cache = self._compute_cos_sin_cache(
-            original_max_position_embeddings, short_factor, short_mscale
-        )
+        short_cache = self._compute_cos_sin_cache(original_max_position_embeddings, short_factor, short_mscale)
         short_cache = short_cache.to(dtype)
 
-        long_cache = self._compute_cos_sin_cache(
-            max_position_embeddings, long_factor, long_mscale
-        )
+        long_cache = self._compute_cos_sin_cache(max_position_embeddings, long_factor, long_mscale)
         long_cache = long_cache.to(dtype)
 
         long_short_cache = torch.cat([short_cache, long_cache], dim=0)
-        self.register_buffer(
-            "long_short_cos_sin_cache", long_short_cache, persistent=False
-        )
+        self.register_buffer("long_short_cos_sin_cache", long_short_cache, persistent=False)
 
     def _compute_inv_freq(self, rescale_factors: list[float]) -> torch.Tensor:
         rescale_factors = torch.tensor(rescale_factors, dtype=torch.float32)
         inv_freq = 1.0 / (
-            rescale_factors
-            * (
-                self.base
-                ** (
-                    torch.arange(0, self.rotary_dim, 2, dtype=torch.float)
-                    / self.rotary_dim
-                )
-            )
+            rescale_factors * (self.base ** (torch.arange(0, self.rotary_dim, 2, dtype=torch.float) / self.rotary_dim))
         )
         return inv_freq
 

@@ -42,9 +42,7 @@ def _build_rope_parameters(config: PretrainedConfig) -> dict | None:
     rope_parameters = copy.deepcopy(getattr(config, "rope_parameters", None)) or {}
     if "rope_theta" not in rope_parameters and hasattr(config, "rope_theta"):
         rope_parameters["rope_theta"] = config.rope_theta
-    if "partial_rotary_factor" not in rope_parameters and hasattr(
-        config, "partial_rotary_factor"
-    ):
+    if "partial_rotary_factor" not in rope_parameters and hasattr(config, "partial_rotary_factor"):
         rope_parameters["partial_rotary_factor"] = config.partial_rotary_factor
 
     rope_scaling = getattr(config, "rope_scaling", None)
@@ -162,12 +160,8 @@ class BailingMoELinearAttention(LinearAttention):
 
         self.group_norm_size = getattr(config, "group_norm_size", 1)
         self.rms_norm_eps = float(getattr(config, "rms_norm_eps", 1e-5))
-        assert self.tp_size <= self.group_norm_size, (
-            "tp_size must be <= group_norm_size for local rms norm"
-        )
-        assert self.group_norm_size % self.tp_size == 0, (
-            "group_norm_size must be divisible by tp_size"
-        )
+        assert self.tp_size <= self.group_norm_size, "tp_size must be <= group_norm_size for local rms norm"
+        assert self.group_norm_size % self.tp_size == 0, "group_norm_size must be divisible by tp_size"
 
         # When group_norm_size == 1, group_size equals hidden_size // tp_size
         self.g_norm = BailingGroupRMSNormGate(
@@ -195,12 +189,8 @@ class BailingMoELinearAttention(LinearAttention):
         if self.num_hidden_layers <= 1:
             self.slope_rate = slope_rate * (1 + 1e-5)
         else:
-            self.slope_rate = slope_rate * (
-                1 - self.layer_idx / (self.num_hidden_layers - 1) + 1e-5
-            )
-        self.tp_slope = self.slope_rate[
-            self.tp_rank * self.tp_heads : (self.tp_rank + 1) * self.tp_heads
-        ].contiguous()
+            self.slope_rate = slope_rate * (1 - self.layer_idx / (self.num_hidden_layers - 1) + 1e-5)
+        self.tp_slope = self.slope_rate[self.tp_rank * self.tp_heads : (self.tp_rank + 1) * self.tp_heads].contiguous()
 
         # Register for compilation
         compilation_config = get_current_aphrodite_config().compilation_config
@@ -222,9 +212,7 @@ class BailingMoELinearAttention(LinearAttention):
             weight_loader(param, loaded_weight)
         else:
             # Fall back to direct copy for standard tensors
-            assert param.size() == loaded_weight.size(), (
-                f"Shape mismatch: {param.shape} vs {loaded_weight.shape}"
-            )
+            assert param.size() == loaded_weight.size(), f"Shape mismatch: {param.shape} vs {loaded_weight.shape}"
             param.data.copy_(loaded_weight)
 
     def forward(
@@ -254,9 +242,7 @@ class BailingMoELinearAttention(LinearAttention):
             assert isinstance(attn_metadata, dict)
             attn_metadata = attn_metadata[self.prefix]  # type: ignore
             assert isinstance(attn_metadata, LinearAttentionMetadata)
-            num_actual_tokens = (
-                attn_metadata.num_prefill_tokens + attn_metadata.num_decode_tokens
-            )
+            num_actual_tokens = attn_metadata.num_prefill_tokens + attn_metadata.num_decode_tokens
         else:
             num_actual_tokens = hidden_states.shape[0]
 
@@ -313,25 +299,17 @@ class BailingMoELinearAttention(LinearAttention):
         if attn_metadata is not None:
             kv_cache = self.kv_cache[0]
             state_indices_tensor = attn_metadata.state_indices_tensor
-            clear_linear_attention_cache_for_new_sequences(
-                kv_cache, state_indices_tensor, attn_metadata
-            )
+            clear_linear_attention_cache_for_new_sequences(kv_cache, state_indices_tensor, attn_metadata)
 
         # Compute attention
         decode_only = getattr(attn_metadata, "num_prefills", 0) == 0
         if attn_metadata is None:
-            hidden = torch.empty(
-                (q.shape[0], q.shape[1] * q.shape[2]), device=q.device, dtype=q.dtype
-            )
+            hidden = torch.empty((q.shape[0], q.shape[1] * q.shape[2]), device=q.device, dtype=q.dtype)
         else:
             if not decode_only:
-                hidden = self._prefill_and_mix_infer(
-                    q, k, v, kv_cache, state_indices_tensor, attn_metadata
-                )
+                hidden = self._prefill_and_mix_infer(q, k, v, kv_cache, state_indices_tensor, attn_metadata)
             else:
-                hidden = self._decode_infer(
-                    q, k, v, kv_cache, state_indices_tensor, attn_metadata
-                )
+                hidden = self._decode_infer(q, k, v, kv_cache, state_indices_tensor, attn_metadata)
 
         # Apply group norm and gate (matching SGLang behavior)
         gate, _ = self.g_proj(hidden_states[:num_actual_tokens])
@@ -348,9 +326,7 @@ class BailingMoELinearAttention(LinearAttention):
         dense_out, _ = self.dense(hidden)
         output[:num_actual_tokens] = dense_out
 
-    def _prefill_and_mix_infer(
-        self, q, k, v, kv_cache, state_indices_tensor, attn_metadata
-    ):
+    def _prefill_and_mix_infer(self, q, k, v, kv_cache, state_indices_tensor, attn_metadata):
         """Handle prefill (mixed with decode if any)."""
         return linear_attention_prefill_and_mix(
             q=q,

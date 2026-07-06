@@ -14,10 +14,10 @@ import requests
 from prometheus_client.parser import text_string_to_metric_families
 from transformers import AutoTokenizer
 
-from tests.conftest import LocalAssetServer
-from tests.utils import RemoteOpenAIServer
 from aphrodite import version
 from aphrodite.utils.network_utils import get_open_port
+from tests.conftest import LocalAssetServer
+from tests.utils import RemoteOpenAIServer
 
 MODELS = {
     "text": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
@@ -77,9 +77,7 @@ def _get_expected_values(num_requests: int, prompt_ids: list[int], max_tokens: i
     # {metric_family: [(suffix, expected_value)]}
     return {
         "aphrodite:time_to_first_token_seconds": [("_count", num_requests)],
-        "aphrodite:inter_token_latency_seconds": [
-            ("_count", num_requests * (max_tokens - 1))
-        ],
+        "aphrodite:inter_token_latency_seconds": [("_count", num_requests * (max_tokens - 1))],
         "aphrodite:e2e_request_latency_seconds": [("_count", num_requests)],
         "aphrodite:request_queue_time_seconds": [("_count", num_requests)],
         "aphrodite:request_inference_time_seconds": [("_count", num_requests)],
@@ -142,8 +140,7 @@ async def test_metrics_counts(
     expected_values = _get_expected_values(num_requests, prompt_ids, max_tokens)
     for metric_family, suffix_values_list in expected_values.items():
         if metric_family not in EXPECTED_METRICS_V1 or (
-            not server.show_hidden_metrics
-            and metric_family in HIDDEN_DEPRECATED_METRICS
+            not server.show_hidden_metrics and metric_family in HIDDEN_DEPRECATED_METRICS
         ):
             continue
 
@@ -171,9 +168,7 @@ async def test_metrics_counts(
                                 f"{sample.value}"
                             )
                             break
-                    assert found_suffix, (
-                        f"Did not find {metric_name_w_suffix} in prom endpoint"
-                    )
+                    assert found_suffix, f"Did not find {metric_name_w_suffix} in prom endpoint"
                 break
 
         assert found_metric, f"Did not find {metric_family} in prom endpoint"
@@ -371,24 +366,14 @@ async def test_abort_metrics_reset(
     )
 
     # Verify running and waiting requests counts and KV cache usage are zero
-    running_requests_after, waiting_requests_after, kv_cache_usage_after = (
-        _get_running_metrics_from_api(server)
-    )
+    running_requests_after, waiting_requests_after, kv_cache_usage_after = _get_running_metrics_from_api(server)
 
-    assert running_requests_after == 0, (
-        f"Expected 0 running requests after abort, got {running_requests_after}"
-    )
-    assert waiting_requests_after == 0, (
-        f"Expected 0 waiting requests after abort, got {waiting_requests_after}"
-    )
-    assert kv_cache_usage_after == 0, (
-        f"Expected 0% KV cache usage after abort, got {kv_cache_usage_after}"
-    )
+    assert running_requests_after == 0, f"Expected 0 running requests after abort, got {running_requests_after}"
+    assert waiting_requests_after == 0, f"Expected 0 waiting requests after abort, got {waiting_requests_after}"
+    assert kv_cache_usage_after == 0, f"Expected 0% KV cache usage after abort, got {kv_cache_usage_after}"
 
 
-async def _poll_until(
-    predicate, *, timeout: float, interval: float = 0.5, description: str = "condition"
-):
+async def _poll_until(predicate, *, timeout: float, interval: float = 0.5, description: str = "condition"):
     """Poll until predicate() returns True, or raise TimeoutError."""
     start = time.time()
     while time.time() - start < timeout:
@@ -478,9 +463,7 @@ def test_metrics_exist_run_batch():
             timeout = 120
             while not is_server_up(server_url):
                 if proc.poll() is not None:
-                    pytest.fail(
-                        f"Batch process exited early with returncode={proc.returncode}"
-                    )
+                    pytest.fail(f"Batch process exited early with returncode={proc.returncode}")
                 if time.time() - start > timeout:
                     pytest.fail("Batch server did not start within timeout")
                 time.sleep(1)

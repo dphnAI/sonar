@@ -11,8 +11,6 @@ import pytest
 import torch
 from torch._subclasses.fake_tensor import FakeTensorMode
 
-from tests.kernels.helion.utils import skip_if_platform_unsupported
-from tests.kernels.quant_utils import FP8_DTYPE
 from aphrodite.kernels.helion.case_key import CaseKey
 from aphrodite.kernels.helion.config_manager import ConfigManager
 from aphrodite.kernels.helion.ops.dynamic_per_token_scaled_fp8_quant import (
@@ -24,6 +22,8 @@ from aphrodite.kernels.helion.ops.dynamic_per_token_scaled_fp8_quant import (
 from aphrodite.platforms import current_platform
 from aphrodite.utils.import_utils import has_helion
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.kernels.helion.utils import skip_if_platform_unsupported
+from tests.kernels.quant_utils import FP8_DTYPE
 
 if not has_helion():
     pytest.skip(
@@ -34,12 +34,8 @@ if not has_helion():
 
 def _generate_fake_input(num_tokens: int, hidden_size: int) -> tuple[Any, ...]:
     with FakeTensorMode():
-        input = torch.randn(
-            num_tokens, hidden_size, device="cuda", dtype=torch.bfloat16
-        )
-        result = torch.empty(
-            input.shape, device=input.device, dtype=current_platform.fp8_dtype()
-        )
+        input = torch.randn(num_tokens, hidden_size, device="cuda", dtype=torch.bfloat16)
+        result = torch.empty(input.shape, device=input.device, dtype=current_platform.fp8_dtype())
         scale = torch.empty((num_tokens, 1), device=input.device, dtype=torch.float32)
         scale_ub = torch.mean(input).to(torch.float32)
         args = (result, input, scale, scale_ub)
@@ -115,15 +111,9 @@ class TestDynamicPerTokenScaledFp8QuantCorrectness:
         skip_if_platform_unsupported("dynamic_per_token_scaled_fp8_quant")
         set_random_seed(seed)
 
-        x = (
-            torch.rand(num_tokens, hidden_size, dtype=dtype, device="cuda") + 1e-6
-        )  # avoid nans
+        x = torch.rand(num_tokens, hidden_size, dtype=dtype, device="cuda") + 1e-6  # avoid nans
 
-        scale_ub = (
-            torch.mean(x).to(dtype=torch.float32, device="cuda")
-            if has_scale_ub
-            else None
-        )
+        scale_ub = torch.mean(x).to(dtype=torch.float32, device="cuda") if has_scale_ub else None
 
         ref_out = torch.empty(x.shape, device="cuda", dtype=FP8_DTYPE)
         ref_scales = torch.empty((x.shape[0], 1), device="cuda", dtype=torch.float32)
@@ -135,10 +125,7 @@ class TestDynamicPerTokenScaledFp8QuantCorrectness:
 
         torch.testing.assert_close(ref_scales, ops_scales)
         # allow 1 ULP difference
-        assert (
-            ref_out.view(torch.uint8).to(torch.int16)
-            - ops_out.view(torch.uint8).to(torch.int16)
-        ).abs().max() <= 1
+        assert (ref_out.view(torch.uint8).to(torch.int16) - ops_out.view(torch.uint8).to(torch.int16)).abs().max() <= 1
 
 
 class TestDynamicPerTokenScaledFp8QuantIntegration:

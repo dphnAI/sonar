@@ -31,9 +31,7 @@ class NixlPullConnectorScheduler(NixlBaseConnectorScheduler):
     ):
         super().__init__(aphrodite_config, engine_id, kv_cache_config)
 
-    def get_num_new_matched_tokens(
-        self, request: "Request", num_computed_tokens: int
-    ) -> tuple[int, bool]:
+    def get_num_new_matched_tokens(self, request: "Request", num_computed_tokens: int) -> tuple[int, bool]:
         """
         For remote prefill, pull all prompt blocks from remote
         asynchronously relative to engine execution.
@@ -51,8 +49,7 @@ class NixlPullConnectorScheduler(NixlBaseConnectorScheduler):
 
         params = request.kv_transfer_params
         logger.debug(
-            "NIXLConnector get_num_new_matched_tokens: "
-            "num_computed_tokens=%s, kv_transfer_params=%s",
+            "NIXLConnector get_num_new_matched_tokens: num_computed_tokens=%s, kv_transfer_params=%s",
             num_computed_tokens,
             params,
         )
@@ -87,16 +84,11 @@ class NixlPullConnectorScheduler(NixlBaseConnectorScheduler):
             # The tokens will be loaded if not already present
             # in the prefill node local cache
             remote_num_tokens = params.get("remote_num_tokens") or 0
-            count = (
-                min(remote_num_tokens, request.num_prompt_tokens) - num_computed_tokens
-            )
+            count = min(remote_num_tokens, request.num_prompt_tokens) - num_computed_tokens
             if count > 0:
                 # Check kv_recompute_threshold: skip pull if
                 # remote tokens are below the threshold.
-                if (
-                    self.kv_recompute_threshold > 0
-                    and count < self.kv_recompute_threshold
-                ):
+                if self.kv_recompute_threshold > 0 and count < self.kv_recompute_threshold:
                     logger.debug(
                         "Skipping remote pull for %s: %d remote tokens < threshold %d",
                         request.request_id,
@@ -109,13 +101,10 @@ class NixlPullConnectorScheduler(NixlBaseConnectorScheduler):
         # No remote prefill for this request.
         return 0, False
 
-    def update_state_after_alloc(
-        self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int
-    ):
+    def update_state_after_alloc(self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int):
         params = request.kv_transfer_params
         logger.debug(
-            "NIXLConnector update_state_after_alloc: "
-            "num_external_tokens=%s, kv_transfer_params=%s",
+            "NIXLConnector update_state_after_alloc: num_external_tokens=%s, kv_transfer_params=%s",
             num_external_tokens,
             params,
         )
@@ -151,13 +140,9 @@ class NixlPullConnectorScheduler(NixlBaseConnectorScheduler):
                     # send_notif in _read_blocks to free the memory on the remote node.
 
                     unhashed_local_block_ids: BlockIds = (
-                        blocks.get_unhashed_block_ids_all_groups()
-                        if num_external_tokens > 0
-                        else ()
+                        blocks.get_unhashed_block_ids_all_groups() if num_external_tokens > 0 else ()
                     )
-                    local_block_ids = self.get_sw_clipped_blocks(
-                        unhashed_local_block_ids
-                    )
+                    local_block_ids = self.get_sw_clipped_blocks(unhashed_local_block_ids)
 
                     # Get unhashed blocks to pull from remote. Mind that a full prefix
                     # cache hit is indicated with an empty list.
@@ -168,8 +153,7 @@ class NixlPullConnectorScheduler(NixlBaseConnectorScheduler):
 
                 else:
                     logger.warning(
-                        "Got invalid KVTransferParams: %s. This "
-                        "request will not utilize KVTransfer",
+                        "Got invalid KVTransferParams: %s. This request will not utilize KVTransfer",
                         params,
                     )
             else:
@@ -191,8 +175,7 @@ class NixlPullConnectorScheduler(NixlBaseConnectorScheduler):
 
         params = request.kv_transfer_params
         logger.debug(
-            "NIXLConnector request_finished(%s), request_status=%s, "
-            "kv_transfer_params=%s",
+            "NIXLConnector request_finished(%s), request_status=%s, kv_transfer_params=%s",
             request.request_id,
             request.status,
             params,
@@ -246,14 +229,11 @@ class NixlPullConnectorScheduler(NixlBaseConnectorScheduler):
                 # lease mechanism as turn2 request is client-driven.
                 request_kv_blocks_ttl = self.decoder_kv_blocks_ttl
             logger.debug(
-                "NIXLConnector request_finished(%s) waiting for %d seconds "
-                "before releasing blocks",
+                "NIXLConnector request_finished(%s) waiting for %d seconds before releasing blocks",
                 request.request_id,
                 request_kv_blocks_ttl,
             )
-            self._reqs_need_send[request.request_id] = (
-                time.perf_counter() + request_kv_blocks_ttl
-            )
+            self._reqs_need_send[request.request_id] = time.perf_counter() + request_kv_blocks_ttl
             # NOTE HMA will "mark" empty/null blocks in groups with 0s (eg SWA ones),
             # trimming down after allocating for the whole sequence length. Empty
             # blocks are always at the start of the list.

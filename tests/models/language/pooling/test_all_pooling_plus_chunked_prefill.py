@@ -4,9 +4,9 @@ import pytest
 import torch
 from transformers import AutoModel
 
-from tests.models.utils import check_embeddings_close
 from aphrodite import TokensPrompt
 from aphrodite.config import PoolerConfig
+from tests.models.utils import check_embeddings_close
 
 
 @pytest.mark.parametrize(

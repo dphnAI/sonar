@@ -120,11 +120,7 @@ class ShortConv(MambaBase, CustomOp):
             assert isinstance(attn_metadata_raw, dict)
             attn_metadata = attn_metadata_raw[self.prefix]
             assert isinstance(attn_metadata, ShortConvAttentionMetadata)
-            conv_state = (
-                self.kv_cache[0]
-                if is_conv_state_dim_first()
-                else self.kv_cache[0].transpose(-1, -2)
-            )
+            conv_state = self.kv_cache[0] if is_conv_state_dim_first() else self.kv_cache[0].transpose(-1, -2)
             state_indices_tensor_p = attn_metadata.state_indices_tensor_p
             state_indices_tensor_d = attn_metadata.state_indices_tensor_d
             has_initial_states_p = attn_metadata.has_initial_states_p
@@ -134,9 +130,7 @@ class ShortConv(MambaBase, CustomOp):
 
         B, C, x = BCx.chunk(3, dim=-1)
 
-        conv_weights = self.conv.weight.view(
-            self.conv.weight.size(0), self.conv.weight.size(2)
-        )
+        conv_weights = self.conv.weight.view(self.conv.weight.size(0), self.conv.weight.size(2))
 
         if attn_metadata is None:
             # V1 profile run

@@ -138,9 +138,7 @@ class TestInterleavedPacking:
     def test_strided_views_are_independent(self):
         groups = _make_groups(n_c4=3, n_c128=2, n_swa=5)
         page_sizes = _page_sizes_by_layer(groups)
-        num_blocks, tensors = _get_kv_cache_config_packed(
-            _mock_aphrodite_config(), groups, 100 * 1024 * 1024
-        )
+        num_blocks, tensors = _get_kv_cache_config_packed(_mock_aphrodite_config(), groups, 100 * 1024 * 1024)
         backing = torch.zeros(tensors[0].size, dtype=torch.uint8)
         views = []
         for t in tensors:
@@ -169,9 +167,7 @@ class TestInterleavedPacking:
             KVCacheGroupSpec(["sw.1", "sw.3"], sw),
         ]
 
-        config = get_kv_cache_config_from_groups(
-            _mock_aphrodite_config(), groups, available_memory=page_size * 2 * 32
-        )
+        config = get_kv_cache_config_from_groups(_mock_aphrodite_config(), groups, available_memory=page_size * 2 * 32)
 
         assert config.num_blocks == 32
         assert sum(t.size for t in config.kv_cache_tensors) == page_size * 2 * 32
@@ -221,9 +217,7 @@ class TestInterleavedPacking:
             _mock_aphrodite_config(), groups, available_memory=spec.page_size_bytes * 2 * 32
         )
 
-        assert sum(t.size for t in config.kv_cache_tensors) == (
-            spec.page_size_bytes * 2 * 32
-        )
+        assert sum(t.size for t in config.kv_cache_tensors) == (spec.page_size_bytes * 2 * 32)
         assert [t.block_stride for t in config.kv_cache_tensors] == [0, 0]
 
 

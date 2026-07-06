@@ -45,9 +45,7 @@ class Step3p5ReasoningParser(BaseThinkingReasoningParser):
     def is_reasoning_end(self, input_ids: Sequence[int]) -> bool:
         return self._is_reasoning_end_from_ids(input_ids)
 
-    def is_reasoning_end_streaming(
-        self, input_ids: Sequence[int], delta_ids: Iterable[int]
-    ) -> bool:
+    def is_reasoning_end_streaming(self, input_ids: Sequence[int], delta_ids: Iterable[int]) -> bool:
         # Only examine newly generated tokens; they may contain multiple ids.
         return self._is_reasoning_end_from_ids(tuple(delta_ids))
 
@@ -136,10 +134,7 @@ class Step3p5ReasoningParser(BaseThinkingReasoningParser):
         # Compatibility path for models that don't generate the start token:
         # treat everything before </think> as reasoning and everything after
         # as content.
-        if (
-            self.start_token_id not in previous_token_ids
-            and self.start_token_id not in delta_token_ids
-        ):
+        if self.start_token_id not in previous_token_ids and self.start_token_id not in delta_token_ids:
             if self.end_token_id in delta_token_ids:
                 end_index = delta_text.find(self.end_token)
                 reasoning = delta_text[:end_index]

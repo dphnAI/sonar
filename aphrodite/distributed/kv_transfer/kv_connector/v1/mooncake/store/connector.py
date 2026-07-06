@@ -90,15 +90,10 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
     @property
     def prefer_cross_layer_blocks(self) -> bool:
         extra_config = self._kv_transfer_config.kv_connector_extra_config
-        return (
-            str(extra_config.get("enable_cross_layers_blocks", "False")).lower()
-            == "true"
-        )
+        return str(extra_config.get("enable_cross_layers_blocks", "False")).lower() == "true"
 
     @staticmethod
-    def _validate_kv_cache_config(
-        aphrodite_config: AphroditeConfig, kv_cache_config: KVCacheConfig
-    ) -> None:
+    def _validate_kv_cache_config(aphrodite_config: AphroditeConfig, kv_cache_config: KVCacheConfig) -> None:
         from aphrodite.v1.kv_cache_interface import CrossAttentionSpec, MambaSpec
 
         unsupported: list[str] = []
@@ -117,13 +112,9 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
         pcp = aphrodite_config.parallel_config.prefill_context_parallel_size
         dcp = aphrodite_config.parallel_config.decode_context_parallel_size
         if len(kv_cache_config.kv_cache_groups) > 1 and pcp * dcp > 1:
-            unsupported.append(
-                f"PCP/DCP > 1 (pcp={pcp}, dcp={dcp}) with hybrid attention"
-            )
+            unsupported.append(f"PCP/DCP > 1 (pcp={pcp}, dcp={dcp}) with hybrid attention")
         if unsupported:
-            raise ValueError(
-                "MooncakeStoreConnector does not support: " + "; ".join(unsupported)
-            )
+            raise ValueError("MooncakeStoreConnector does not support: " + "; ".join(unsupported))
 
     def __init__(
         self,
@@ -147,9 +138,7 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
         self.connector_worker: MooncakeStoreWorker | None = None
 
         if role == KVConnectorRole.SCHEDULER:
-            self.connector_scheduler = MooncakeStoreScheduler(
-                aphrodite_config, kv_cache_config
-            )
+            self.connector_scheduler = MooncakeStoreScheduler(aphrodite_config, kv_cache_config)
         else:
             self.connector_worker = MooncakeStoreWorker(aphrodite_config, kv_cache_config)
 
@@ -178,9 +167,7 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
         num_computed_tokens: int,
     ) -> tuple[int | None, bool]:
         assert self.connector_scheduler is not None
-        return self.connector_scheduler.get_num_new_matched_tokens(
-            request, num_computed_tokens
-        )
+        return self.connector_scheduler.get_num_new_matched_tokens(request, num_computed_tokens)
 
     def update_state_after_alloc(
         self,
@@ -189,9 +176,7 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
         num_external_tokens: int,
     ):
         assert self.connector_scheduler is not None
-        return self.connector_scheduler.update_state_after_alloc(
-            request, blocks, num_external_tokens
-        )
+        return self.connector_scheduler.update_state_after_alloc(request, blocks, num_external_tokens)
 
     def build_connector_meta(
         self,
@@ -234,18 +219,14 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
 
     def update_connector_output(self, connector_output: KVConnectorOutput):
         kv_cache_events = connector_output.kv_cache_events
-        if not kv_cache_events or not isinstance(
-            kv_cache_events, MooncakeStoreKVEvents
-        ):
+        if not kv_cache_events or not isinstance(kv_cache_events, MooncakeStoreKVEvents):
             return
 
         if self._kv_cache_events is None:
             self._kv_cache_events = kv_cache_events
         else:
             self._kv_cache_events.add_events(kv_cache_events.get_all_events())
-            self._kv_cache_events.increment_workers(
-                kv_cache_events.get_number_of_workers()
-            )
+            self._kv_cache_events.increment_workers(kv_cache_events.get_number_of_workers())
 
     def take_events(self) -> Iterable[KVCacheEvent]:
         if self._kv_cache_events is not None:
@@ -262,14 +243,11 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
         assert self.connector_worker is not None
         self.connector_worker.register_kv_caches(kv_caches)
 
-    def register_cross_layers_kv_cache(
-        self, kv_cache: torch.Tensor, attn_backend: type
-    ):
+    def register_cross_layers_kv_cache(self, kv_cache: torch.Tensor, attn_backend: type):
         assert self.connector_worker is not None
-        assert (
-            self._kv_cache_config is not None
-            and len(self._kv_cache_config.kv_cache_groups) == 1
-        ), "Cross-layer KV cache does not supported with hybrid models"
+        assert self._kv_cache_config is not None and len(self._kv_cache_config.kv_cache_groups) == 1, (
+            "Cross-layer KV cache does not supported with hybrid models"
+        )
         self.connector_worker.register_cross_layers_kv_caches(kv_cache)
 
     def start_load_kv(self, forward_context: ForwardContext, **kwargs: Any) -> None:
@@ -294,9 +272,7 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
         # No-op: stores are issued in get_finished() for compute overlap.
         pass
 
-    def get_finished(
-        self, finished_req_ids: set[str]
-    ) -> tuple[set[str] | None, set[str] | None]:
+    def get_finished(self, finished_req_ids: set[str]) -> tuple[set[str] | None, set[str] | None]:
         assert self.connector_worker is not None
         metadata = self._get_connector_metadata()
         assert isinstance(metadata, MooncakeStoreConnectorMetadata)
@@ -324,14 +300,8 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
         return self.connector_worker.get_kv_connector_stats()
 
     @classmethod
-    def build_kv_connector_stats(
-        cls, data: dict[str, Any] | None = None
-    ) -> KVConnectorStats | None:
-        return (
-            MooncakeStoreConnectorStats(data=data)
-            if data is not None
-            else MooncakeStoreConnectorStats()
-        )
+    def build_kv_connector_stats(cls, data: dict[str, Any] | None = None) -> KVConnectorStats | None:
+        return MooncakeStoreConnectorStats(data=data) if data is not None else MooncakeStoreConnectorStats()
 
     @classmethod
     def build_prom_metrics(
@@ -341,6 +311,4 @@ class MooncakeStoreConnector(KVConnectorBase_V1, SupportsHMA):
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ) -> KVConnectorPromMetrics:
-        return MooncakeStorePromMetrics(
-            aphrodite_config, metric_types, labelnames, per_engine_labelvalues
-        )
+        return MooncakeStorePromMetrics(aphrodite_config, metric_types, labelnames, per_engine_labelvalues)

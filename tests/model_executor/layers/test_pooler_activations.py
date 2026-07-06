@@ -159,9 +159,7 @@ class TestGetActFn:
         assert isinstance(result, PoolerIdentity)
 
     def test_single_label_classification(self):
-        cfg = self._make_config(
-            problem_type="single_label_classification", num_labels=3
-        )
+        cfg = self._make_config(problem_type="single_label_classification", num_labels=3)
         result = get_act_fn(cfg)
         assert isinstance(result, PoolerClassify)
         assert result.num_labels == 3
@@ -174,9 +172,7 @@ class TestGetActFn:
     def test_sentence_transformers_activation(self):
         cfg = self._make_config(
             problem_type="",
-            sentence_transformers={
-                "activation_fn": "torch.nn.modules.activation.Sigmoid"
-            },
+            sentence_transformers={"activation_fn": "torch.nn.modules.activation.Sigmoid"},
         )
         result = get_act_fn(cfg)
         assert isinstance(result, PoolerClassify)
@@ -184,9 +180,7 @@ class TestGetActFn:
     def test_sbert_activation(self):
         cfg = self._make_config(
             problem_type="",
-            sbert_ce_default_activation_function=(
-                "torch.nn.modules.activation.Sigmoid"
-            ),
+            sbert_ce_default_activation_function=("torch.nn.modules.activation.Sigmoid"),
         )
         result = get_act_fn(cfg)
         assert isinstance(result, PoolerClassify)
@@ -200,9 +194,7 @@ class TestGetActFn:
         cfg = self._make_config(
             problem_type="",
             sentence_transformers={"activation_fn": "torch.nn.modules.linear.Identity"},
-            sbert_ce_default_activation_function=(
-                "torch.nn.modules.activation.Sigmoid"
-            ),
+            sbert_ce_default_activation_function=("torch.nn.modules.activation.Sigmoid"),
         )
         result = get_act_fn(cfg)
         assert isinstance(result, PoolerIdentity)
@@ -221,9 +213,7 @@ class TestGetActFn:
 # ---------------------------------------------------------------------------
 class TestResolveClassifierActFn:
     def test_delegates_to_get_act_fn_when_none(self):
-        model_config = SimpleNamespace(
-            hf_config=SimpleNamespace(num_labels=3, problem_type="")
-        )
+        model_config = SimpleNamespace(hf_config=SimpleNamespace(num_labels=3, problem_type=""))
         result = resolve_classifier_act_fn(model_config, act_fn=None)
         assert isinstance(result, PoolerClassify)
         assert result.num_labels == 3

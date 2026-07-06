@@ -124,9 +124,7 @@ class StagedWriteTensor:
             max_concurrency = _DEFAULT_MAX_CONCURRENCY
         supported_dtypes = [torch.int32, torch.int64, torch.float32]
         if dtype not in supported_dtypes:
-            raise ValueError(
-                f"Unsupported dtype {dtype}: should be one of {supported_dtypes}"
-            )
+            raise ValueError(f"Unsupported dtype {dtype}: should be one of {supported_dtypes}")
         self.num_rows = size if isinstance(size, int) else size[0]
         self.dtype = dtype
         self.device = device
@@ -152,9 +150,7 @@ class StagedWriteTensor:
         self.write_starts = new_buffer(self.num_rows, dtype=torch.int32)
         self.write_cu_lens = new_buffer(self.num_rows, dtype=torch.int32)
 
-    def stage_write(
-        self, index: int, start: int, x: Iterable[int] | Iterable[float]
-    ) -> None:
+    def stage_write(self, index: int, start: int, x: Iterable[int] | Iterable[float]) -> None:
         assert index >= 0
         assert start >= 0
         if not x:
@@ -181,9 +177,7 @@ class StagedWriteTensor:
         cu_lens_uva = self.write_cu_lens.copy_to_uva(self._staged_write_cu_lens)
 
         # Special handling for write_contents
-        write_contents = async_tensor_h2d(
-            self._staged_write_contents, device=self.device, dtype=self.dtype
-        )
+        write_contents = async_tensor_h2d(self._staged_write_contents, device=self.device, dtype=self.dtype)
 
         # Write diffs to the GPU buffer
         _apply_write_kernel[(n,)](
@@ -210,12 +204,8 @@ class StagedWriteTensor:
 class FusedStagedWriter:
     """Applies the staged writes of several `StagedWriteTensor`s at once."""
 
-    def __init__(
-        self, device: torch.device, max_writes: int, max_concurrency: int | None = None
-    ):
-        new_pool = partial(
-            UvaBufferPool, dtype=torch.int32, max_concurrency=max_concurrency
-        )
+    def __init__(self, device: torch.device, max_writes: int, max_concurrency: int | None = None):
+        new_pool = partial(UvaBufferPool, dtype=torch.int32, max_concurrency=max_concurrency)
         self.group_ids = new_pool(max_writes)
         self.indices = new_pool(max_writes)
         self.starts = new_pool(max_writes)

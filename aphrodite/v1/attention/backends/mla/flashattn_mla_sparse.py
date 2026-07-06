@@ -83,9 +83,7 @@ class FlashAttnMLASparseBackend(AttentionBackend):
         device_capability: DeviceCapability,
     ) -> str | None:
         if kv_cache_dtype not in (None, "auto", "float16", "bfloat16"):
-            return (
-                "FlashAttention MLA Sparse currently supports only FP16/BF16 KV cache"
-            )
+            return "FlashAttention MLA Sparse currently supports only FP16/BF16 KV cache"
 
         if not flash_attn_supports_mla():
             return "FlashAttention MLA not supported on this device"
@@ -129,9 +127,7 @@ class FlashAttnMLASparseMetadata(AttentionMetadata):
     topk_tokens: int = 2048
 
 
-class FlashAttnMLASparseMetadataBuilder(
-    AttentionMetadataBuilder[FlashAttnMLASparseMetadata]
-):
+class FlashAttnMLASparseMetadataBuilder(AttentionMetadataBuilder[FlashAttnMLASparseMetadata]):
     _cudagraph_support: ClassVar[AttentionCGSupport] = AttentionCGSupport.UNIFORM_BATCH
 
     def __init__(
@@ -166,9 +162,7 @@ class FlashAttnMLASparseMetadataBuilder(
         num_tokens = cm.num_actual_tokens
         starts = np.asarray(cm.query_start_loc_cpu, dtype=np.int32)
         seg_lengths = np.diff(starts)
-        req_id_per_token = np.repeat(
-            np.arange(seg_lengths.shape[0], dtype=np.int32), seg_lengths
-        )
+        req_id_per_token = np.repeat(np.arange(seg_lengths.shape[0], dtype=np.int32), seg_lengths)
 
         self.req_id_per_token_buffer.fill_(0)
         self.req_id_per_token_buffer[: req_id_per_token.shape[0]].copy_(
@@ -209,13 +203,10 @@ class FlashAttnMLASparseImpl(SparseMLAAttentionImpl[FlashAttnMLASparseMetadata])
         unsupported_features = [alibi_slopes, sliding_window, logits_soft_cap]
         if any(unsupported_features):
             raise NotImplementedError(
-                "FlashAttnMLASparseImpl does not support alibi, sliding window, "
-                "or logits soft cap."
+                "FlashAttnMLASparseImpl does not support alibi, sliding window, or logits soft cap."
             )
         if kv_cache_dtype not in ("auto", "float16", "bfloat16"):
-            raise NotImplementedError(
-                "FlashAttnMLASparseImpl currently supports only FP16/BF16 KV cache."
-            )
+            raise NotImplementedError("FlashAttnMLASparseImpl currently supports only FP16/BF16 KV cache.")
 
         self.num_heads = num_heads
         self.head_size = head_size
@@ -227,9 +218,7 @@ class FlashAttnMLASparseImpl(SparseMLAAttentionImpl[FlashAttnMLASparseMetadata])
         self.topk_indices_buffer: torch.Tensor | None = (
             indexer.topk_indices_buffer if indexer is not None else topk_indices_buffer
         )
-        assert self.topk_indices_buffer is not None, (
-            "Indexer or topk_indices_buffer required for sparse MLA"
-        )
+        assert self.topk_indices_buffer is not None, "Indexer or topk_indices_buffer required for sparse MLA"
         self.supports_quant_query_input = False
         self.dcp_world_size = -1
         self.q_pad_num_heads = None
@@ -242,9 +231,7 @@ class FlashAttnMLASparseImpl(SparseMLAAttentionImpl[FlashAttnMLASparseMetadata])
         layer: AttentionLayer,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         if not isinstance(q, tuple):
-            raise NotImplementedError(
-                "FlashAttnMLASparseImpl expects split (q_nope, q_rope) input."
-            )
+            raise NotImplementedError("FlashAttnMLASparseImpl expects split (q_nope, q_rope) input.")
         q_nope, q_rope = q
         num_actual_toks = q_rope.shape[0]
 
@@ -259,15 +246,9 @@ class FlashAttnMLASparseImpl(SparseMLAAttentionImpl[FlashAttnMLASparseMetadata])
             return_valid_counts=True,
         )
 
-        cu_seqlens_q = torch.arange(
-            0, num_actual_toks + 1, dtype=torch.int32, device=q_rope.device
-        )
-        kv_cache = kv_c_and_k_pe_cache.view(
-            -1, attn_metadata.block_size, self.head_size
-        )
-        k_cache = kv_cache[:, :, self.kv_lora_rank :].view(
-            -1, 1, 1, self.qk_rope_head_dim
-        )
+        cu_seqlens_q = torch.arange(0, num_actual_toks + 1, dtype=torch.int32, device=q_rope.device)
+        kv_cache = kv_c_and_k_pe_cache.view(-1, attn_metadata.block_size, self.head_size)
+        k_cache = kv_cache[:, :, self.kv_lora_rank :].view(-1, 1, 1, self.qk_rope_head_dim)
         v_cache = kv_cache[:, :, : self.kv_lora_rank].view(-1, 1, 1, self.kv_lora_rank)
 
         out = flash_attn_varlen_func(

@@ -21,16 +21,13 @@ DEFAULT_MAX_LORAS = 4 * 3
 
 def get_lora_requests(lora_path) -> list[LoRARequest]:
     lora_requests: list[LoRARequest] = [
-        LoRARequest(lora_name=f"{i}", lora_int_id=i, lora_path=lora_path)
-        for i in range(1, DEFAULT_MAX_LORAS + 1)
+        LoRARequest(lora_name=f"{i}", lora_int_id=i, lora_path=lora_path) for i in range(1, DEFAULT_MAX_LORAS + 1)
     ]
     return lora_requests
 
 
 async def requests_processing_time(llm, lora_requests: list[LoRARequest]) -> float:
-    sampling_params = SamplingParams(
-        n=1, temperature=0.0, top_p=1.0, ignore_eos=True, max_tokens=1
-    )
+    sampling_params = SamplingParams(n=1, temperature=0.0, top_p=1.0, ignore_eos=True, max_tokens=1)
 
     generators = []
     start = time.perf_counter()

@@ -29,7 +29,7 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed import get_tensor_model_parallel_world_size
 from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.model_executor.layers.attention import PrefillPrefixLMAttention
@@ -62,9 +62,7 @@ class HrmTextMLP(nn.Module):
     ) -> None:
         super().__init__()
         if hidden_act != "silu":
-            raise ValueError(
-                f"HrmTextMLP only supports hidden_act='silu', got {hidden_act!r}"
-            )
+            raise ValueError(f"HrmTextMLP only supports hidden_act='silu', got {hidden_act!r}")
         self.gate_up_proj = MergedColumnParallelLinear(
             hidden_size,
             [intermediate_size] * 2,
@@ -137,16 +135,13 @@ class HrmTextAttention(nn.Module):
 
         self.total_num_heads = config.num_attention_heads
         assert self.total_num_heads % tp_size == 0, (
-            f"num_attention_heads={self.total_num_heads} must be divisible "
-            f"by tp_size={tp_size}"
+            f"num_attention_heads={self.total_num_heads} must be divisible by tp_size={tp_size}"
         )
         # HF main hardcodes MHA (num_key_value_groups=1). We follow.
         self.total_num_kv_heads = config.num_attention_heads
         self.num_heads = self.total_num_heads // tp_size
         self.num_kv_heads = self.total_num_kv_heads // tp_size
-        self.head_dim = getattr(
-            config, "head_dim", self.hidden_size // self.total_num_heads
-        )
+        self.head_dim = getattr(config, "head_dim", self.hidden_size // self.total_num_heads)
         self.q_size = self.num_heads * self.head_dim
         self.kv_size = self.num_kv_heads * self.head_dim
         self.scaling = self.head_dim**-0.5
@@ -198,10 +193,7 @@ class HrmTextAttention(nn.Module):
                 for low_cycle_idx in range(L_cycles)
             ]
         else:  # "H"
-            steps_used = [
-                high_cycle_idx * (L_cycles + 1) + L_cycles
-                for high_cycle_idx in range(H_cycles)
-            ]
+            steps_used = [high_cycle_idx * (L_cycles + 1) + L_cycles for high_cycle_idx in range(H_cycles)]
 
         # `PrefillPrefixLMAttention` forces `causal=False` on every metadata
         # build, so the prompt attends bidirectionally during prefill (matching
@@ -212,9 +204,7 @@ class HrmTextAttention(nn.Module):
         self.attn_per_step = nn.ModuleDict()
         for step in steps_used:
             global_idx = step * num_layers_per_stack + layer_idx_in_stack
-            unique_prefix = prefix.replace(
-                f"layers.{layer_idx_in_stack}", f"layers.{global_idx}"
-            )
+            unique_prefix = prefix.replace(f"layers.{layer_idx_in_stack}", f"layers.{global_idx}")
             self.attn_per_step[str(step)] = PrefillPrefixLMAttention(
                 num_heads=self.num_heads,
                 head_size=self.head_dim,
@@ -232,9 +222,7 @@ class HrmTextAttention(nn.Module):
         current_step: int,
     ) -> torch.Tensor:
         gqkv, _ = self.gqkv_proj(hidden_states)
-        g, q, k, v = gqkv.split(
-            [self.q_size, self.q_size, self.kv_size, self.kv_size], dim=-1
-        )
+        g, q, k, v = gqkv.split([self.q_size, self.q_size, self.kv_size, self.kv_size], dim=-1)
         q, k = self.rotary_emb(positions, q, k)
         attn_out = self.attn_per_step[str(current_step)](q, k, v)
         # Sigmoid gate. Shapes: attn_out is (..., q_size); g is (..., q_size).
@@ -277,12 +265,8 @@ class HrmTextDecoderLayer(nn.Module):
             prefix=f"{prefix}.mlp",
         )
         # Parameterless RMSNorm (HF main: HrmTextRMSNorm has no weight).
-        self.input_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps, has_weight=False
-        )
-        self.post_attention_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps, has_weight=False
-        )
+        self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps, has_weight=False)
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps, has_weight=False)
 
     def forward(
         self,
@@ -331,9 +315,7 @@ class HrmTextStack(nn.Module):
                 for i in range(config.num_layers_per_stack)
             ]
         )
-        self.final_norm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps, has_weight=False
-        )
+        self.final_norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps, has_weight=False)
 
     def forward(
         self,
@@ -403,9 +385,7 @@ class HrmTextModel(nn.Module):
         )
         # Frozen learned initial L state. HF inits to zeros and sets
         # requires_grad_(False); for inference we just load the tensor.
-        self.z_L_init = nn.Parameter(
-            torch.zeros(config.hidden_size), requires_grad=False
-        )
+        self.z_L_init = nn.Parameter(torch.zeros(config.hidden_size), requires_grad=False)
 
         # Embedding scale: HF uses config.embedding_scale (default
         # 1 / initializer_range = 50.0 when initializer_range=0.02). NOT
@@ -479,13 +459,9 @@ class HrmTextForCausalLM(nn.Module):
         self.quant_config = quant_config
 
         if aphrodite_config.parallel_config.pipeline_parallel_size > 1:
-            raise ValueError(
-                "HrmTextForCausalLM does not support pipeline parallelism."
-            )
+            raise ValueError("HrmTextForCausalLM does not support pipeline parallelism.")
 
-        self.model = HrmTextModel(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = HrmTextModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
 
         if config.tie_word_embeddings:
             self.lm_head = self.model.embed_tokens

@@ -91,9 +91,7 @@ class WorkerBase:
         # IR op priority and torch-wrap state are constant for the worker's
         # lifetime.
         aphrodite_config.kernel_config.ir_op_priority.set_default()
-        aphrodite.ir.set_default_torch_wrap(
-            aphrodite_config.compilation_config.ir_enable_torch_wrap
-        )
+        aphrodite.ir.set_default_torch_wrap(aphrodite_config.compilation_config.ir_enable_torch_wrap)
 
     def get_kv_cache_spec(self) -> dict[str, KVCacheSpec]:
         """Get specifications for KV cache implementation."""
@@ -139,9 +137,7 @@ class WorkerBase:
         """Load model onto target device."""
         raise NotImplementedError
 
-    def execute_model(
-        self, scheduler_output: SchedulerOutput
-    ) -> ModelRunnerOutput | AsyncModelRunnerOutput | None:
+    def execute_model(self, scheduler_output: SchedulerOutput) -> ModelRunnerOutput | AsyncModelRunnerOutput | None:
         """If this method returns None, sample_tokens should be called immediately after
         to obtain the ModelRunnerOutput.
 
@@ -150,9 +146,7 @@ class WorkerBase:
         """
         raise NotImplementedError
 
-    def sample_tokens(
-        self, grammar_output: GrammarOutput
-    ) -> ModelRunnerOutput | AsyncModelRunnerOutput:
+    def sample_tokens(self, grammar_output: GrammarOutput) -> ModelRunnerOutput | AsyncModelRunnerOutput:
         """Should be called immediately after execute_model iff it returned None."""
         raise NotImplementedError
 
@@ -235,9 +229,7 @@ class WorkerWrapperBase:
         kwargs = all_kwargs[self.rpc_rank]
 
         aphrodite_config: AphroditeConfig | None = kwargs.get("aphrodite_config")
-        assert aphrodite_config is not None, (
-            "aphrodite_config is required to initialize the worker"
-        )
+        assert aphrodite_config is not None, "aphrodite_config is required to initialize the worker"
         self.aphrodite_config = aphrodite_config
 
         aphrodite_config.enable_trace_function_call_for_thread()
@@ -248,9 +240,7 @@ class WorkerWrapperBase:
 
         parallel_config = aphrodite_config.parallel_config
         if isinstance(parallel_config.worker_cls, str):
-            worker_class: type[WorkerBase] = resolve_obj_by_qualname(
-                parallel_config.worker_cls
-            )
+            worker_class: type[WorkerBase] = resolve_obj_by_qualname(parallel_config.worker_cls)
         else:
             raise ValueError(
                 "passing worker_cls is no longer supported. "
@@ -259,9 +249,7 @@ class WorkerWrapperBase:
             )
 
         if parallel_config.worker_extension_cls:
-            worker_extension_cls = resolve_obj_by_qualname(
-                parallel_config.worker_extension_cls
-            )
+            worker_extension_cls = resolve_obj_by_qualname(parallel_config.worker_extension_cls)
             extended_calls = []
             if worker_extension_cls not in worker_class.__bases__:
                 # check any conflicts between worker and worker_extension_cls
@@ -276,9 +264,7 @@ class WorkerWrapperBase:
                     if callable(getattr(worker_extension_cls, attr)):
                         extended_calls.append(attr)
                 # dynamically inherit the worker extension class
-                worker_class.__bases__ = worker_class.__bases__ + (
-                    worker_extension_cls,
-                )
+                worker_class.__bases__ = worker_class.__bases__ + (worker_extension_cls,)
                 logger.info(
                     "Injected %s into %s for extended collective_rpc calls %s",
                     worker_extension_cls,
@@ -288,9 +274,7 @@ class WorkerWrapperBase:
 
         assigned_physical_gpu_ids = kwargs.pop("assigned_physical_gpu_ids", None)
         if assigned_physical_gpu_ids is not None:
-            aphrodite_config.parallel_config.assigned_physical_gpu_ids = (
-                assigned_physical_gpu_ids
-            )
+            aphrodite_config.parallel_config.assigned_physical_gpu_ids = assigned_physical_gpu_ids
 
         shared_worker_lock = kwargs.pop("shared_worker_lock", None)
         if shared_worker_lock is None:
@@ -307,11 +291,9 @@ class WorkerWrapperBase:
 
             self.mm_receiver_cache = None
         else:
-            self.mm_receiver_cache = (
-                MULTIMODAL_REGISTRY.worker_receiver_cache_from_config(
-                    aphrodite_config,
-                    shared_worker_lock,
-                )
+            self.mm_receiver_cache = MULTIMODAL_REGISTRY.worker_receiver_cache_from_config(
+                aphrodite_config,
+                shared_worker_lock,
             )
 
         with set_current_aphrodite_config(self.aphrodite_config):
@@ -339,13 +321,9 @@ class WorkerWrapperBase:
             return
 
         for req_data in scheduler_output.scheduled_new_reqs:
-            req_data.mm_features = mm_cache.get_and_update_features(
-                req_data.mm_features
-            )
+            req_data.mm_features = mm_cache.get_and_update_features(req_data.mm_features)
 
-    def execute_model(
-        self, scheduler_output: SchedulerOutput
-    ) -> ModelRunnerOutput | AsyncModelRunnerOutput | None:
+    def execute_model(self, scheduler_output: SchedulerOutput) -> ModelRunnerOutput | AsyncModelRunnerOutput | None:
         self._apply_mm_cache(scheduler_output)
 
         return self.worker.execute_model(scheduler_output)

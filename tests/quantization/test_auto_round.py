@@ -52,11 +52,7 @@ MODELS = [
 
 
 @pytest.mark.skipif(
-    not (
-        current_platform.is_cpu()
-        or current_platform.is_xpu()
-        or current_platform.is_cuda()
-    ),
+    not (current_platform.is_cpu() or current_platform.is_xpu() or current_platform.is_cuda()),
     reason="Only supports CPU/XPU/CUDA backend.",
 )
 @pytest.mark.parametrize("model", MODELS)
@@ -121,9 +117,7 @@ def test_inc_config_parser_exact_match() -> None:
         }
     )
 
-    layer_config = config.config_parser.resolve(
-        DummyLayer(), "layers.0.self_attn.q_proj"
-    )
+    layer_config = config.config_parser.resolve(DummyLayer(), "layers.0.self_attn.q_proj")
 
     assert layer_config.bits == 8
     assert layer_config.group_size == 64
@@ -157,9 +151,7 @@ def test_inc_config_parser_regex_match() -> None:
         }
     )
 
-    layer_config = config.config_parser.resolve(
-        DummyLayer(), "layers.3.self_attn.q_proj"
-    )
+    layer_config = config.config_parser.resolve(DummyLayer(), "layers.3.self_attn.q_proj")
 
     assert layer_config.bits == 8
     assert layer_config.group_size == 64
@@ -177,9 +169,7 @@ def test_inc_config_parser_invalid_regex_ignored() -> None:
         }
     )
 
-    layer_config = config.config_parser.resolve(
-        DummyLayer(), "layers.0.self_attn.q_proj"
-    )
+    layer_config = config.config_parser.resolve(DummyLayer(), "layers.0.self_attn.q_proj")
 
     assert layer_config.bits == 4
     assert layer_config.group_size == 128
@@ -189,9 +179,7 @@ def test_inc_config_parser_invalid_regex_ignored() -> None:
 def test_inc_config_parser_block_name_to_quantize_marks_unquantized() -> None:
     config = make_config(block_name_to_quantize=["layers.1"])
 
-    layer_config = config.config_parser.resolve(
-        DummyLayer(), "layers.0.self_attn.q_proj"
-    )
+    layer_config = config.config_parser.resolve(DummyLayer(), "layers.0.self_attn.q_proj")
 
     assert layer_config.bits == 16
     assert layer_config.group_size == -1
@@ -423,8 +411,7 @@ def test_wna16_linear_gptq_uses_auto_gptq_when_supported(monkeypatch) -> None:
             captured["cfg"] = cfg
 
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_wna16_linear."
-        "check_marlin_supported",
+        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_wna16_linear.check_marlin_supported",
         lambda *args, **kwargs: True,
     )
     monkeypatch.setattr(
@@ -604,8 +591,7 @@ def test_resolve_gptq_moe_uses_auto_gptq_when_supported(monkeypatch) -> None:
         lambda *args, **kwargs: True,
     )
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.utils.marlin_utils."
-        "check_moe_marlin_supports_layer",
+        "aphrodite.model_executor.layers.quantization.utils.marlin_utils.check_moe_marlin_supports_layer",
         lambda *args, **kwargs: True,
     )
     monkeypatch.setattr(
@@ -691,9 +677,7 @@ class TestGetLayerConfigFusedQKV:
         config.packed_modules_mapping = {
             "qkv_proj": ["q_proj", "k_proj", "v_proj"],
         }
-        bits, _, _ = config.get_layer_config(
-            DummyLayer(), "model.layers.0.self_attn.qkv_proj"
-        )
+        bits, _, _ = config.get_layer_config(DummyLayer(), "model.layers.0.self_attn.qkv_proj")
         assert bits == 8
 
     def test_false_substring_match_does_not_override(self):
@@ -718,9 +702,7 @@ class TestGetLayerConfigFusedQKV:
         config.packed_modules_mapping = {
             "qkv": ["qkv"],
         }
-        bits, _, _ = config.get_layer_config(
-            DummyLayer(), "model.layers.0.in_proj_qkvz"
-        )
+        bits, _, _ = config.get_layer_config(DummyLayer(), "model.layers.0.in_proj_qkvz")
         # bits should be the global default (4) – no erroneous fusion match
         assert bits == 4
 
@@ -734,9 +716,7 @@ class TestGetLayerConfigFusedQKV:
         config.packed_modules_mapping = {
             "qkv": ["qkv"],
         }
-        bits, _, _ = config.get_layer_config(
-            DummyLayer(), "vision_model.encoder.layers.0.self_attn.qkv"
-        )
+        bits, _, _ = config.get_layer_config(DummyLayer(), "vision_model.encoder.layers.0.self_attn.qkv")
         assert bits == 8
 
     def test_mixed_fp16_and_int4_fused_layer(self):
@@ -768,7 +748,5 @@ class TestGetLayerConfigFusedQKV:
         config.packed_modules_mapping = {
             "qkv_proj": ["q_proj", "k_proj", "v_proj"],
         }
-        bits, _, _ = config.get_layer_config(
-            DummyLayer(), "model.layers.0.self_attn.qkv_proj"
-        )
+        bits, _, _ = config.get_layer_config(DummyLayer(), "model.layers.0.self_attn.qkv_proj")
         assert bits == 8

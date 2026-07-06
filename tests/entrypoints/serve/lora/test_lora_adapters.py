@@ -151,9 +151,7 @@ async def test_load_lora_adapter_with_same_name_replaces_inplace(
 
 
 @pytest.mark.asyncio
-async def test_load_lora_adapter_with_load_inplace_false_errors(
-    client: openai.AsyncOpenAI, qwen3_meowing_lora_files
-):
+async def test_load_lora_adapter_with_load_inplace_false_errors(client: openai.AsyncOpenAI, qwen3_meowing_lora_files):
     """Test that load_inplace=False returns an error when adapter already exists."""
     adapter_name = "test-load-inplace-false"
 
@@ -241,9 +239,7 @@ async def test_dynamic_lora_badrequests(
 
 
 @pytest.mark.asyncio
-async def test_multiple_lora_adapters(
-    client: openai.AsyncOpenAI, tmp_path, qwen3_lora_files
-):
+async def test_multiple_lora_adapters(client: openai.AsyncOpenAI, tmp_path, qwen3_lora_files):
     """Validate that many loras can be dynamically registered and inferenced
     with concurrently"""
 
@@ -273,9 +269,7 @@ async def test_multiple_lora_adapters(
 
 
 @pytest.mark.asyncio
-async def test_loading_invalid_adapters_does_not_break_others(
-    client: openai.AsyncOpenAI, tmp_path, qwen3_lora_files
-):
+async def test_loading_invalid_adapters_does_not_break_others(client: openai.AsyncOpenAI, tmp_path, qwen3_lora_files):
     invalid_files = tmp_path / "invalid_files"
     invalid_files.mkdir()
     (invalid_files / "adapter_config.json").write_text("this is not json")

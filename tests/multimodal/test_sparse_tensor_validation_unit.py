@@ -39,10 +39,7 @@ class TestSparseTensorValidationContextManager:
                 tensor = torch.sparse_coo_tensor(indices, values, shape)
                 tensor.to_dense()
 
-        assert (
-            "index" in str(exc_info.value).lower()
-            or "bound" in str(exc_info.value).lower()
-        )
+        assert "index" in str(exc_info.value).lower() or "bound" in str(exc_info.value).lower()
 
     def test_negative_indices_rejected(self):
         """Sparse tensors with negative indices should be rejected."""

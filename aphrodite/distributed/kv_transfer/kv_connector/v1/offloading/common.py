@@ -17,9 +17,7 @@ class DirectionalTransferStats:
     time: float = 0.0
     sizes: list[int | float] = field(default_factory=list)
 
-    def aggregate(
-        self, other: "DirectionalTransferStats"
-    ) -> "DirectionalTransferStats":
+    def aggregate(self, other: "DirectionalTransferStats") -> "DirectionalTransferStats":
         return DirectionalTransferStats(
             bytes=self.bytes + other.bytes,
             time=self.time + other.time,
@@ -89,9 +87,7 @@ class OffloadingWorkerMetadata(KVConnectorWorkerMetadata):
         """Record a transfer job completion from this worker."""
         self.completed_jobs[job_id] = 1
 
-    def aggregate(
-        self, other: "KVConnectorWorkerMetadata"
-    ) -> "KVConnectorWorkerMetadata":
+    def aggregate(self, other: "KVConnectorWorkerMetadata") -> "KVConnectorWorkerMetadata":
         assert isinstance(other, OffloadingWorkerMetadata)
 
         merged = dict(self.completed_jobs)

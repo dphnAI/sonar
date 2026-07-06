@@ -105,8 +105,8 @@ __device__ inline void dequant(int q, scalar_t2* frag_b);
 // https://github.com/NVIDIA/FasterTransformer/blob/release/v5.3_tag/src/fastertransformer/cutlass_extensions/include/cutlass_extensions/interleaved_numeric_conversion.h#L327-L385
 //
 template <>
-__device__ inline void dequant<half2, aphrodite::kU4B8.id(), true>(int q,
-                                                              half2* frag_b) {
+__device__ inline void dequant<half2, aphrodite::kU4B8.id(), true>(
+    int q, half2* frag_b) {
   const int MASK = 0x000f000f;
   const int EX = 0x64006400;
   // Guarantee that the `(a & b) | c` operations are LOP3s.
@@ -119,8 +119,8 @@ __device__ inline void dequant<half2, aphrodite::kU4B8.id(), true>(int q,
 }
 
 template <>
-__device__ inline void dequant<half2, aphrodite::kU4B8.id(), false>(int q,
-                                                               half2* frag_b) {
+__device__ inline void dequant<half2, aphrodite::kU4B8.id(), false>(
+    int q, half2* frag_b) {
   const int LO = 0x000f000f;
   const int HI = 0x00f000f0;
   const int EX = 0x64006400;
@@ -142,14 +142,14 @@ __device__ inline void dequant<half2, aphrodite::kU4B8.id(), false>(int q,
 }
 
 template <>
-__device__ inline void dequant<half2, aphrodite::kU4.id(), true>(int q,
-                                                            half2* frag_b) {
+__device__ inline void dequant<half2, aphrodite::kU4.id(), true>(
+    int q, half2* frag_b) {
   dequant<half2, aphrodite::kU4B8.id(), true>(q, frag_b);
 }
 
 template <>
-__device__ inline void dequant<half2, aphrodite::kU4.id(), false>(int q,
-                                                             half2* frag_b) {
+__device__ inline void dequant<half2, aphrodite::kU4.id(), false>(
+    int q, half2* frag_b) {
   const int LO = 0x000f000f;
   const int HI = 0x00f000f0;
   const int EX = 0x64006400;
@@ -224,8 +224,8 @@ __device__ inline void dequant<nv_bfloat162, aphrodite::kU4.id(), false>(
 // https://github.com/NVIDIA/FasterTransformer/blob/release/v5.3_tag/src/fastertransformer/cutlass_extensions/include/cutlass_extensions/interleaved_numeric_conversion.h#L125-L175
 //
 template <>
-__device__ inline void dequant<half2, aphrodite::kU8B128.id(), true>(int q,
-                                                                half2* frag_b) {
+__device__ inline void dequant<half2, aphrodite::kU8B128.id(), true>(
+    int q, half2* frag_b) {
   static constexpr uint32_t mask_for_elt_01 = 0x5250;
   static constexpr uint32_t mask_for_elt_23 = 0x5351;
   static constexpr uint32_t start_byte_for_fp16 = 0x64646464;
@@ -250,14 +250,14 @@ __device__ inline void dequant<half2, aphrodite::kU8B128.id(), false>(
 }
 
 template <>
-__device__ inline void dequant<half2, aphrodite::kU8.id(), true>(int q,
-                                                            half2* frag_b) {
+__device__ inline void dequant<half2, aphrodite::kU8.id(), true>(
+    int q, half2* frag_b) {
   dequant<half2, aphrodite::kU8B128.id(), true>(q, frag_b);
 }
 
 template <>
-__device__ inline void dequant<half2, aphrodite::kU8.id(), false>(int q,
-                                                             half2* frag_b) {
+__device__ inline void dequant<half2, aphrodite::kU8.id(), false>(
+    int q, half2* frag_b) {
   dequant<half2, aphrodite::kU8.id(), true>(q, frag_b);
 
   static constexpr uint32_t I8s_TO_F16s_MAGIC_NUM = 0x64006400;
@@ -395,8 +395,8 @@ __device__ inline void dequant<nv_bfloat162, aphrodite::kFE4M3fn.id(), false>(
 }
 
 template <>
-__device__ inline void dequant<half2, aphrodite::kFE2M1f.id(), true>(int q,
-                                                                half2* frag_b) {
+__device__ inline void dequant<half2, aphrodite::kFE2M1f.id(), true>(
+    int q, half2* frag_b) {
   // Constants for FP4 (E2M1) and FP16 formats
   constexpr int FP4_EXPONENT = 2, FP16_EXPONENT = 5;
   constexpr int RIGHT_SHIFT = FP16_EXPONENT - FP4_EXPONENT;
@@ -531,7 +531,8 @@ __device__ inline void dequant_fp8_scales<half2, aphrodite::kFE4M3fn.id()>(
 };
 
 template <>
-__device__ inline void dequant_fp8_scales<nv_bfloat162, aphrodite::kFE4M3fn.id()>(
+__device__ inline void
+dequant_fp8_scales<nv_bfloat162, aphrodite::kFE4M3fn.id()>(
     int q, nv_bfloat162* frag_b) {
   constexpr int FP8_EXPONENT = 4, BF16_EXPONENT = 8;
   constexpr int RIGHT_SHIFT = BF16_EXPONENT - FP8_EXPONENT;
@@ -548,7 +549,8 @@ __device__ inline void dequant_fp8_scales<nv_bfloat162, aphrodite::kFE4M3fn.id()
 }
 
 template <>
-__device__ inline void dequant_fp8_scales<nv_bfloat162, aphrodite::kFE8M0fnu.id()>(
+__device__ inline void
+dequant_fp8_scales<nv_bfloat162, aphrodite::kFE8M0fnu.id()>(
     int q, nv_bfloat162* frag_b) {
   // In this conversion, 2 ** -127 in FP8E8M0 would become 0 in BF16,
   // but we assume that such a extreme value would not occur in real models.

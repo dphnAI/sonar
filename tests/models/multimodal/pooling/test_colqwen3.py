@@ -23,8 +23,7 @@ from aphrodite.entrypoints.pooling.scoring.typing import ScoreMultiModalParam
 from ....conftest import AphroditeRunner
 
 pytestmark = pytest.mark.skip(
-    reason="ColQwen3 model's weight tying is incompatible with "
-    "transformers v5 (missing all_tied_weights_keys)"
+    reason="ColQwen3 model's weight tying is incompatible with transformers v5 (missing all_tied_weights_keys)"
 )
 
 MODELS = [
@@ -53,9 +52,7 @@ DTYPE = "half"
 GPU_MEMORY_UTILIZATION = 0.7
 
 
-def _make_base64_image(
-    width: int = 64, height: int = 64, color: tuple[int, int, int] = (255, 0, 0)
-) -> str:
+def _make_base64_image(width: int = 64, height: int = 64, color: tuple[int, int, int] = (255, 0, 0)) -> str:
     """Create a small solid-color PNG image and return its base64 data URI."""
     img = Image.new("RGB", (width, height), color)
     buf = BytesIO()

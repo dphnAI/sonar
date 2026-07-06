@@ -118,10 +118,7 @@ class RealtimeConnection:
             try:
                 audio_bytes = base64.b64decode(append_event.audio)
                 # Convert PCM16 bytes to float32 numpy array
-                audio_array = (
-                    np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32)
-                    / 32768.0
-                )
+                audio_array = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
 
                 if len(audio_array) / 1024**2 > self._max_audio_filesize_mb:
                     raise APHRODITEValidationError(
@@ -141,10 +138,7 @@ class RealtimeConnection:
 
         elif event_type == "input_audio_buffer.commit":
             if not self._is_model_validated:
-                err_msg = (
-                    "Model not validated. Make sure to validate the"
-                    " model by sending a session.update event."
-                )
+                err_msg = "Model not validated. Make sure to validate the model by sending a session.update event."
                 await self.send_error(
                     err_msg,
                     "model_not_validated",
@@ -179,14 +173,10 @@ class RealtimeConnection:
         input_stream = asyncio.Queue[list[int]]()
 
         # Transform to StreamingInput generator
-        streaming_input_gen = self.serving.transcribe_realtime(
-            audio_stream, input_stream
-        )
+        streaming_input_gen = self.serving.transcribe_realtime(audio_stream, input_stream)
 
         # Start generation task
-        self.generation_task = asyncio.create_task(
-            self._run_generation(streaming_input_gen, input_stream)
-        )
+        self.generation_task = asyncio.create_task(self._run_generation(streaming_input_gen, input_stream))
 
     async def _run_generation(
         self,
@@ -265,9 +255,7 @@ class RealtimeConnection:
             logger.exception("Error in generation: %s", e)
             await self.send_error(sanitize_message(str(e)), "processing_error")
 
-    async def send(
-        self, event: SessionCreated | TranscriptionDelta | TranscriptionDone
-    ):
+    async def send(self, event: SessionCreated | TranscriptionDelta | TranscriptionDone):
         """Send event to client."""
         data = event.model_dump_json()
         await self.websocket.send_text(data)

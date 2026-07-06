@@ -8,9 +8,7 @@ from aphrodite.v1.attention.ops.xpu_mla_sparse import triton_bf16_mla_sparse_int
 
 
 # https://github.com/deepseek-ai/FlashMLA/blob/main/tests/ref.py#L7
-def _merge_two_lse(
-    lse0: torch.Tensor, lse1: torch.Tensor | None, s_q: int, h_q: int
-) -> torch.Tensor:
+def _merge_two_lse(lse0: torch.Tensor, lse1: torch.Tensor | None, s_q: int, h_q: int) -> torch.Tensor:
     if lse1 is None:
         return lse0
     else:
@@ -51,9 +49,7 @@ def reference_mla_sparse_prefill(
     indices[invalid_mask] = 0
 
     q = q.float()
-    gathered_kv = (
-        kv.index_select(dim=0, index=indices.flatten()).reshape(s_q, topk, d_qk).float()
-    )  # [s_q, topk, d_qk]
+    gathered_kv = kv.index_select(dim=0, index=indices.flatten()).reshape(s_q, topk, d_qk).float()  # [s_q, topk, d_qk]
     P = q @ gathered_kv.transpose(1, 2)  # [s_q, h_q, topk]
     P *= sm_scale
     P[invalid_mask.unsqueeze(1).broadcast_to(P.shape)] = float("-inf")
@@ -64,9 +60,7 @@ def reference_mla_sparse_prefill(
     lse_for_o = _merge_two_lse(orig_lse, attn_sink, s_q, h_q)
     if not torch.is_inference_mode_enabled():
         lse_for_o = lse_for_o.clone()
-    lse_for_o[lse_for_o == float("-inf")] = float(
-        "+inf"
-    )  # So that corresponding O will be 0
+    lse_for_o[lse_for_o == float("-inf")] = float("+inf")  # So that corresponding O will be 0
     s_for_o = torch.exp(P - lse_for_o.unsqueeze(-1))
     out = s_for_o @ gathered_kv[..., :d_v]  # [s_q, h_q, dv]
 
@@ -103,16 +97,12 @@ def test_bf16_triton_sparse_mla(device_str, dtype):
 
     sm_scale = d_qk**-0.5
 
-    out, max_logits, lse = triton_bf16_mla_sparse_interface(
-        q, kv, indices, sm_scale, d_v
-    )
+    out, max_logits, lse = triton_bf16_mla_sparse_interface(q, kv, indices, sm_scale, d_v)
     assert out.shape == (s_q, h_q, d_v)
     assert max_logits.shape == (s_q, h_q)
     assert lse.shape == (s_q, h_q)
 
-    ref_out, ref_out_fp32, ref_max_logits, ref_lse = reference_mla_sparse_prefill(
-        q, kv, indices, sm_scale, d_v
-    )
+    ref_out, ref_out_fp32, ref_max_logits, ref_lse = reference_mla_sparse_prefill(q, kv, indices, sm_scale, d_v)
     assert torch.allclose(out, ref_out, atol=1e-2, rtol=1e-2)
     assert torch.allclose(max_logits, ref_max_logits, atol=1e-3, rtol=1e-3)
     assert torch.allclose(lse, ref_lse, atol=1e-3, rtol=1e-3)

@@ -92,9 +92,7 @@ def test_fused_topk_softplus_sqrt(
     torch.manual_seed(0)
     hidden_states = torch.randn((num_tokens, hidden_size), dtype=dtype, device="cuda")
     gating_output = torch.randn((num_tokens, num_experts), dtype=dtype, device="cuda")
-    e_score_correction_bias = torch.randn(
-        (num_experts,), dtype=torch.float32, device="cuda"
-    )
+    e_score_correction_bias = torch.randn((num_experts,), dtype=torch.float32, device="cuda")
 
     topk_weights_ref, topk_ids_ref = _torch_topk_softplus_sqrt(
         gating_output=gating_output,
@@ -151,12 +149,10 @@ def test_fused_topk_softplus_sqrt_hash(
     gating_output = torch.randn((num_tokens, num_experts), dtype=dtype, device="cuda")
     # Per-token fixed expert selection: for each vocab id pick `topk` distinct
     # experts.
-    hash_indices_table = torch.stack(
-        [torch.randperm(num_experts)[:topk] for _ in range(vocab_size)]
-    ).to(device="cuda", dtype=torch.int32)
-    input_ids = torch.randint(
-        0, vocab_size, (num_tokens,), dtype=torch.int32, device="cuda"
+    hash_indices_table = torch.stack([torch.randperm(num_experts)[:topk] for _ in range(vocab_size)]).to(
+        device="cuda", dtype=torch.int32
     )
+    input_ids = torch.randint(0, vocab_size, (num_tokens,), dtype=torch.int32, device="cuda")
 
     topk_weights_ref, topk_ids_ref = _torch_topk_softplus_sqrt(
         gating_output=gating_output,

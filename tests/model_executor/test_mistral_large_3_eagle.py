@@ -60,9 +60,7 @@ class DummyDecoderLayer(nn.Module):
         return hidden_states, residual
 
 
-def make_aphrodite_config(
-    *, model_type="mistral3", qk_nope_head_dim=128, qk_rope_head_dim=64
-):
+def make_aphrodite_config(*, model_type="mistral3", qk_nope_head_dim=128, qk_rope_head_dim=64):
     hf_config = SimpleNamespace(
         model_type=model_type,
         first_k_dense_replace=0,

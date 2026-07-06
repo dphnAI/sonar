@@ -24,9 +24,7 @@ from aphrodite.v1.executor.ray_utils import _wait_until_pg_removed
 APHRODITE_MULTI_NODE = os.getenv("APHRODITE_MULTI_NODE", "0") == "1"
 
 
-@pytest.mark.skipif(
-    not APHRODITE_MULTI_NODE, reason="Need at least 2 nodes to run the test."
-)
+@pytest.mark.skipif(not APHRODITE_MULTI_NODE, reason="Need at least 2 nodes to run the test.")
 def test_multi_node_assignment() -> None:
     # NOTE: important to keep this class definition here
     # to let ray use cloudpickle to serialize it.

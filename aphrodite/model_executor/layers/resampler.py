@@ -106,12 +106,8 @@ def get_2d_sincos_pos_embed_from_grid(
     assert embed_dim % 2 == 0
 
     # use half of dimensions to encode grid_h
-    emb_h = get_1d_sincos_pos_embed_from_grid(
-        embed_dim // 2, grid[0], version
-    )  # (H*W, D/2) or (H, W, D/2)
-    emb_w = get_1d_sincos_pos_embed_from_grid(
-        embed_dim // 2, grid[1], version
-    )  # (H*W, D/2) or (H, W, D/2)
+    emb_h = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[0], version)  # (H*W, D/2) or (H, W, D/2)
+    emb_w = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[1], version)  # (H*W, D/2) or (H, W, D/2)
 
     if version == (2, 0):
         emb = np.concatenate([emb_h, emb_w], axis=1)  # (H*W, D)
@@ -241,9 +237,7 @@ class Resampler2(BaseResampler):
         self.adaptive = adaptive
         pos_embed_arr = get_2d_sincos_pos_embed(embed_dim, grid_size, version=(2, 0))
 
-        self.pos_embed = nn.Parameter(
-            torch.from_numpy(pos_embed_arr).requires_grad_(False)
-        )
+        self.pos_embed = nn.Parameter(torch.from_numpy(pos_embed_arr).requires_grad_(False))
 
     def forward(
         self,
@@ -254,16 +248,10 @@ class Resampler2(BaseResampler):
         if tgt_sizes is None:
             tgt_sizes = int(math.sqrt(x.size(1)))
         if self.adaptive:
-            pos_embed_arr = get_2d_sincos_pos_embed(
-                self.embed_dim, tgt_sizes, version=(2, 0)
-            )
-            pos_embed = torch.from_numpy(pos_embed_arr).to(
-                device=x.device, dtype=x.dtype
-            )
+            pos_embed_arr = get_2d_sincos_pos_embed(self.embed_dim, tgt_sizes, version=(2, 0))
+            pos_embed = torch.from_numpy(pos_embed_arr).to(device=x.device, dtype=x.dtype)
         else:
-            pos_embed = get_abs_pos(self.pos_embed, tgt_sizes).to(
-                device=x.device, dtype=x.dtype
-            )
+            pos_embed = get_abs_pos(self.pos_embed, tgt_sizes).to(device=x.device, dtype=x.dtype)
 
         x, _ = self.kv_proj(x)
         x = self.ln_kv(x).permute(1, 0, 2)

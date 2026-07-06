@@ -67,9 +67,7 @@ def test_machete_kernel_selected(act_type, weight_type, group_size, zero_points)
         has_g_idx=False,
     )
     kernel = choose_mp_linear_kernel(config)
-    assert kernel is MacheteLinearKernel, (
-        f"Expected MacheteLinearKernel, got {kernel.__name__}"
-    )
+    assert kernel is MacheteLinearKernel, f"Expected MacheteLinearKernel, got {kernel.__name__}"
 
 
 @pytest.mark.parametrize(
@@ -88,9 +86,7 @@ def test_machete_kernel_selected(act_type, weight_type, group_size, zero_points)
     ],
     ids=["partitioned-g_idx", "unsupported-quant-type", "unsupported-group-size"],
 )
-def test_machete_rejects_invalid_config(
-    full_shape, part_shape, weight_type, group_size, has_g_idx, expected_reason
-):
+def test_machete_rejects_invalid_config(full_shape, part_shape, weight_type, group_size, has_g_idx, expected_reason):
     """Verify Machete rejects unsupported configurations."""
     config = MPLinearLayerConfig(
         full_weight_shape=full_shape,
@@ -141,8 +137,7 @@ def test_w4a16_machete_e2e(aphrodite_runner, model_name):
             assert isinstance(qkv_proj.quant_method, CompressedTensorsLinearMethod)
             assert isinstance(qkv_proj.scheme, CompressedTensorsWNA16)
             assert isinstance(qkv_proj.scheme.kernel, MacheteLinearKernel), (
-                f"Expected MacheteLinearKernel on Hopper, "
-                f"got {type(qkv_proj.scheme.kernel).__name__}"
+                f"Expected MacheteLinearKernel on Hopper, got {type(qkv_proj.scheme.kernel).__name__}"
             )
 
             assert hasattr(qkv_proj, "weight_packed")
@@ -172,14 +167,11 @@ def test_w4a16_machete_bfloat16_deterministic(aphrodite_runner):
             layer = model.model.layers[0]
             scheme = layer.self_attn.qkv_proj.scheme
             assert isinstance(scheme.kernel, MacheteLinearKernel), (
-                f"Expected MacheteLinearKernel with bf16, "
-                f"got {type(scheme.kernel).__name__}"
+                f"Expected MacheteLinearKernel with bf16, got {type(scheme.kernel).__name__}"
             )
 
         llm.apply_model(check_kernel_type)
 
         out1 = llm.generate_greedy(prompt, max_tokens=10)
         out2 = llm.generate_greedy(prompt, max_tokens=10)
-        assert out1[0][1] == out2[0][1], (
-            f"Non-deterministic: '{out1[0][1]}' vs '{out2[0][1]}'"
-        )
+        assert out1[0][1] == out2[0][1], f"Non-deterministic: '{out1[0][1]}' vs '{out2[0][1]}'"

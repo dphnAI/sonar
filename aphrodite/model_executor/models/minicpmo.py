@@ -170,9 +170,7 @@ class MiniCPMOAudioEmbeddingInputs(TensorSchema):
     ]
 
 
-MiniCPMOAudioInputs: TypeAlias = (
-    MiniCPMOAudioFeatureInputs | MiniCPMOAudioEmbeddingInputs
-)
+MiniCPMOAudioInputs: TypeAlias = MiniCPMOAudioFeatureInputs | MiniCPMOAudioEmbeddingInputs
 
 
 def _minicpmo_field_config(hf_inputs: Mapping[str, torch.Tensor]):
@@ -186,15 +184,9 @@ def _minicpmo_field_config(hf_inputs: Mapping[str, torch.Tensor]):
     audio_features_cfg = MultiModalFieldConfig.batched("audio")
 
     if audio_features is not None and audio_feature_lens is not None:
-        num_features = (
-            len(audio_features)
-            if isinstance(audio_features, (list, tuple))
-            else audio_features.shape[0]
-        )
+        num_features = len(audio_features) if isinstance(audio_features, (list, tuple)) else audio_features.shape[0]
         num_audios = (
-            len(audio_feature_lens)
-            if isinstance(audio_feature_lens, (list, tuple))
-            else audio_feature_lens.shape[0]
+            len(audio_feature_lens) if isinstance(audio_feature_lens, (list, tuple)) else audio_feature_lens.shape[0]
         )
 
         if num_features > num_audios:
@@ -225,10 +217,7 @@ def _minicpmo_field_config(hf_inputs: Mapping[str, torch.Tensor]):
                 slice_idxs.append(slice_idxs[-1] + n)
             audio_features_cfg = MultiModalFieldConfig.flat(
                 "audio",
-                [
-                    slice(slice_idxs[i], slice_idxs[i + 1])
-                    for i in range(len(chunks_per_audio))
-                ],
+                [slice(slice_idxs[i], slice_idxs[i + 1]) for i in range(len(chunks_per_audio))],
             )
 
     return dict(
@@ -368,12 +357,8 @@ class MiniCPMOProcessingInfo(MiniCPMVProcessingInfo):
 
         max_image_tokens = self.get_max_image_tokens() * max_images
         max_audio_tokens = self.get_max_audio_tokens() * max_audios
-        max_total_frames = self.get_max_video_frames(
-            seq_len - max_image_tokens - max_audio_tokens
-        )
-        max_frames_per_video = min(
-            max_total_frames // max(max_videos, 1), _MAX_FRAMES_PER_VIDEO
-        )
+        max_total_frames = self.get_max_video_frames(seq_len - max_image_tokens - max_audio_tokens)
+        max_frames_per_video = min(max_total_frames // max(max_videos, 1), _MAX_FRAMES_PER_VIDEO)
 
         return max(max_frames_per_video, 1)
 
@@ -393,10 +378,7 @@ class MiniCPMODummyInputsBuilder(MiniCPMVDummyInputsBuilder[MiniCPMOProcessingIn
         mm_options: Mapping[str, BaseDummyOptions],
     ) -> MultiModalDataDict:
         num_audios = mm_counts.get("audio", 0)
-        audio_len = (
-            self.info.get_max_audio_chunks_with_most_features()
-            * self.info.get_default_audio_sampling_rate()
-        )
+        audio_len = self.info.get_max_audio_chunks_with_most_features() * self.info.get_default_audio_sampling_rate()
 
         audio_overrides = mm_options.get("audio")
 
@@ -437,9 +419,7 @@ class MiniCPMOMultiModalProcessor(MiniCPMVMultiModalProcessor[MiniCPMOProcessing
             return {}
 
         mm_items = self.info.parse_mm_data({"audio": audios}, validate=False)
-        parsed_audios = mm_items.get_items(
-            "audio", (MiniCPMOAudioEmbeddingItems, AudioProcessorItems)
-        )
+        parsed_audios = mm_items.get_items("audio", (MiniCPMOAudioEmbeddingItems, AudioProcessorItems))
 
         if isinstance(parsed_audios, MiniCPMOAudioEmbeddingItems):
             audio_inputs = {}
@@ -503,15 +483,11 @@ class MiniCPMOMultiModalProcessor(MiniCPMVMultiModalProcessor[MiniCPMOProcessing
         audio_placeholder = self.info.audio_pattern
 
         def get_audio_replacement(item_idx: int):
-            audios = mm_items.get_items(
-                "audio", (MiniCPMOAudioEmbeddingItems, AudioProcessorItems)
-            )
+            audios = mm_items.get_items("audio", (MiniCPMOAudioEmbeddingItems, AudioProcessorItems))
 
             if isinstance(audios, MiniCPMOAudioEmbeddingItems):
                 single_audio_embeds = audios.get(item_idx)["audio_embeds"]
-                audio_len = self.info.get_audio_len_by_num_chunks(
-                    sum(map(len, single_audio_embeds))
-                )
+                audio_len = self.info.get_audio_len_by_num_chunks(sum(map(len, single_audio_embeds)))
             else:
                 audio_len = audios.get_audio_length(item_idx)
 
@@ -580,21 +556,15 @@ class MiniCPMWhisperEncoderLayer(nn.Module):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
         )
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.dropout, training=self.training
-        )
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.activation_dropout, training=self.training
-        )
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.dropout, training=self.training
-        )
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
         if hidden_states.dtype == torch.float16:
@@ -609,10 +579,7 @@ class MiniCPMWhisperEncoder(WhisperEncoder):
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [
-                MiniCPMWhisperEncoderLayer(config, layer_idx=i)
-                for i in range(config.encoder_layers)
-            ]
+            [MiniCPMWhisperEncoderLayer(config, layer_idx=i) for i in range(config.encoder_layers)]
         )
 
     def forward(
@@ -621,9 +588,7 @@ class MiniCPMWhisperEncoder(WhisperEncoder):
         attention_mask: torch.Tensor | None = None,
     ) -> BaseModelOutputWithPast:
         # Ignore copy
-        input_features = input_features.to(
-            dtype=self.conv1.weight.dtype, device=self.conv1.weight.device
-        )
+        input_features = input_features.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)
 
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
@@ -635,9 +600,7 @@ class MiniCPMWhisperEncoder(WhisperEncoder):
         embed_pos = embed_pos[: inputs_embeds.shape[1], :]
 
         hidden_states = inputs_embeds + embed_pos
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.dropout, training=self.training
-        )
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         encoder_states = ()
 
@@ -699,21 +662,15 @@ class MiniCPMOBaseModel:
         super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
 
         with self._mark_tower_model(aphrodite_config, "audio"):
-            self.apm = self.init_audio_module(
-                aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "apm")
-            )
+            self.apm = self.init_audio_module(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "apm"))
 
     def init_audio_module(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         # Do not use parameters temporarily
         audio_config = self.config.audio_config
         model = MiniCPMWhisperEncoder(audio_config)
         audio_output_dim = int(audio_config.encoder_ffn_dim // 4)
-        self.audio_avg_pooler = nn.AvgPool1d(
-            self.config.audio_pool_step, stride=self.config.audio_pool_step
-        )
-        self.audio_projection_layer = MultiModalProjector(
-            in_dim=audio_output_dim, out_dim=self.embed_dim
-        )
+        self.audio_avg_pooler = nn.AvgPool1d(self.config.audio_pool_step, stride=self.config.audio_pool_step)
+        self.audio_projection_layer = MultiModalProjector(in_dim=audio_output_dim, out_dim=self.embed_dim)
         self.audio_encoder_layer = -1
         return model
 
@@ -744,9 +701,7 @@ class MiniCPMOBaseModel:
             start_indices = start_chunk_indices * chunk_size
         # Compute ending indices vectorially
         end_chunk_indices = chunk_indices + 1
-        end_indices = torch.clamp(
-            end_chunk_indices * chunk_size + num_lookhead, max=size
-        )
+        end_indices = torch.clamp(end_chunk_indices * chunk_size + num_lookhead, max=size)
         # Create column indices for broadcasting
         col_indices = torch.arange(size, device=device).unsqueeze(0)
         start_indices = start_indices.unsqueeze(1)
@@ -764,9 +719,7 @@ class MiniCPMOBaseModel:
 
         return input_lengths_after_cnn, input_lengths_after_pooling
 
-    def get_audio_hidden_states(
-        self, data: MiniCPMOAudioFeatureInputs
-    ) -> list[torch.Tensor]:
+    def get_audio_hidden_states(self, data: MiniCPMOAudioFeatureInputs) -> list[torch.Tensor]:
         chunk_length = self.config.audio_chunk_length
 
         # (bs, 80, frames) or [], multi audios need filled in advance
@@ -824,23 +777,17 @@ class MiniCPMOBaseModel:
                 num_left_chunks=-1,
                 device=audio_attention_mask_.device,
             )
-            audio_attention_mask_ = torch.logical_or(
-                audio_attention_mask_, torch.logical_not(chunk_mask)
-            )
+            audio_attention_mask_ = torch.logical_or(audio_attention_mask_, torch.logical_not(chunk_mask))
 
         audio_attention_mask[audio_attention_mask_] = float("-inf")
-        audio_states = self.apm(
-            wavforms, attention_mask=audio_attention_mask
-        ).hidden_states[self.audio_encoder_layer]
+        audio_states = self.apm(wavforms, attention_mask=audio_attention_mask).hidden_states[self.audio_encoder_layer]
         audio_embeds = self.audio_projection_layer(audio_states)
 
         audio_embeds = audio_embeds.transpose(1, 2)
         audio_embeds = self.audio_avg_pooler(audio_embeds)
         audio_embeds = audio_embeds.transpose(1, 2)
 
-        _, feature_lens_after_pooling = self._get_feat_extract_output_lengths(
-            audio_feature_lens
-        )
+        _, feature_lens_after_pooling = self._get_feat_extract_output_lengths(audio_feature_lens)
 
         num_audio_tokens = feature_lens_after_pooling
 
@@ -849,18 +796,14 @@ class MiniCPMOBaseModel:
         for i in range(len(audio_feature_lens_raw)):
             target_audio_embeds_lst = list[torch.Tensor]()
             for _ in range(len(audio_feature_lens_raw[i])):
-                target_audio_embeds_lst.append(
-                    audio_embeds[idx, : num_audio_tokens[idx], :]
-                )
+                target_audio_embeds_lst.append(audio_embeds[idx, : num_audio_tokens[idx], :])
                 idx += 1
 
             final_audio_embeds.append(torch.cat(target_audio_embeds_lst))
 
         return final_audio_embeds
 
-    def _parse_and_validate_audio_input(
-        self, **kwargs: object
-    ) -> MiniCPMOAudioInputs | None:
+    def _parse_and_validate_audio_input(self, **kwargs: object) -> MiniCPMOAudioInputs | None:
         audio_features = kwargs.pop("audio_features", None)
         audio_embeds = kwargs.pop("audio_embeds", None)
 
@@ -887,10 +830,7 @@ class MiniCPMOBaseModel:
         # Preserve the order of modalities if there are multiple of them
         # from the order of kwargs.
         for input_key in kwargs:
-            if (
-                input_key in ("audio_features", "audio_embeds")
-                and "audios" not in modalities
-            ):
+            if input_key in ("audio_features", "audio_embeds") and "audios" not in modalities:
                 modalities["audios"] = self._parse_and_validate_audio_input(**kwargs)
 
         return modalities
@@ -923,9 +863,7 @@ class MiniCPMO2_6(MiniCPMOBaseModel, MiniCPMV2_6):
         super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
 
         with self._mark_tower_model(aphrodite_config, "audio"):
-            self.apm = self.init_audio_module(
-                aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "apm")
-            )
+            self.apm = self.init_audio_module(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "apm"))
 
 
 class MiniCPMO4_5(MiniCPMOBaseModel, MiniCPMV4_5):
@@ -935,9 +873,7 @@ class MiniCPMO4_5(MiniCPMOBaseModel, MiniCPMV4_5):
         super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
 
         with self._mark_tower_model(aphrodite_config, "audio"):
-            self.apm = self.init_audio_module(
-                aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "apm")
-            )
+            self.apm = self.init_audio_module(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "apm"))
 
 
 _MINICPMO_SUPPORT_VERSION = {
@@ -980,13 +916,8 @@ class MiniCPMO(MiniCPMOBaseModel, MiniCPMV2_6):
         # Dispatch class based on version
         instance_cls = _MINICPMO_SUPPORT_VERSION.get(version)
         if instance_cls is None:
-            supported_versions = ", ".join(
-                [f"{v[0]}.{v[1]}" for v in sorted(_MINICPMO_SUPPORT_VERSION.keys())]
-            )
-            raise ValueError(
-                f"Currently, MiniCPMO only supports versions "
-                f"{supported_versions}. Got version: {version}"
-            )
+            supported_versions = ", ".join([f"{v[0]}.{v[1]}" for v in sorted(_MINICPMO_SUPPORT_VERSION.keys())])
+            raise ValueError(f"Currently, MiniCPMO only supports versions {supported_versions}. Got version: {version}")
 
         return instance_cls(aphrodite_config=aphrodite_config, prefix=prefix)
 

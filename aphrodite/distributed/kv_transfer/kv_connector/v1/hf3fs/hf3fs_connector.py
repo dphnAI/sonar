@@ -189,9 +189,7 @@ class AsyncOperationManager:
         self._load_futures[request_id] = future
         return future
 
-    def get_finished_operations(
-        self, finished_req_ids: set[str]
-    ) -> tuple[set[str], set[str]]:
+    def get_finished_operations(self, finished_req_ids: set[str]) -> tuple[set[str], set[str]]:
         completed_saves = self._check_completed_saves(finished_req_ids)
         completed_loads = self._check_completed_loads()
 
@@ -273,16 +271,10 @@ class AsyncOperationManager:
         try:
             # Step1: Allocate storage pages
             key_pairs = [(hash_val, "") for hash_val in block_hashes]
-            allocation_results = (
-                self._connector._metadata_client.allocate_pages_for_keys(
-                    self._rank, key_pairs
-                )
-            )
+            allocation_results = self._connector._metadata_client.allocate_pages_for_keys(self._rank, key_pairs)
 
             if any(result[1] < 0 for result in allocation_results):
-                return self._fail_task(
-                    "Saved", "Page allocation failed", request_id, future
-                )
+                return self._fail_task("Saved", "Page allocation failed", request_id, future)
 
             page_indices = [result[1] for result in allocation_results]
             offsets = [idx * self._bytes_per_page for idx in page_indices]
@@ -300,9 +292,7 @@ class AsyncOperationManager:
             # Synchronize streams and gather data
             with torch.cuda.stream(self._save_stream):
                 self._save_stream.wait_event(main_stream_event)  # Wait for main stream
-                self._connector._gather_or_scatter_kv_caches(
-                    block_ids, buffers, "gather"
-                )
+                self._connector._gather_or_scatter_kv_caches(block_ids, buffers, "gather")
 
                 save_stream_event = torch.Event()
                 save_stream_event.record(self._save_stream)  # Record gather completion
@@ -320,36 +310,24 @@ class AsyncOperationManager:
 
             # Check write results
             write_success = all(
-                result == self._bytes_per_page
-                for write_future in write_futures
-                for result in write_future.result()
+                result == self._bytes_per_page for write_future in write_futures for result in write_future.result()
             )
 
             # Step4: Confirm writes to metadata server
             if write_success:
                 written_keys = list(zip(block_hashes, page_indices))
-                self._connector._metadata_client.confirm_write_for_keys(
-                    self._rank, written_keys, []
-                )
+                self._connector._metadata_client.confirm_write_for_keys(self._rank, written_keys, [])
                 self._save_buffer_allocator.free_buffer(buffers)
-                return self._succeed_task(
-                    "Saved", start_time, request_id, len(block_ids), future
-                )
+                return self._succeed_task("Saved", start_time, request_id, len(block_ids), future)
             else:
-                self._connector._metadata_client.confirm_write_for_keys(
-                    self._rank, [], page_indices
-                )
+                self._connector._metadata_client.confirm_write_for_keys(self._rank, [], page_indices)
                 self._save_buffer_allocator.free_buffer(buffers)
-                return self._fail_task(
-                    "Saved", "Write operation failed", request_id, future
-                )
+                return self._fail_task("Saved", "Write operation failed", request_id, future)
 
         except Exception as e:
             if buffers is not None:
                 self._save_buffer_allocator.free_buffer(buffers)
-            return self._fail_task(
-                "Saved", f"Task execution error: {e}", request_id, future
-            )
+            return self._fail_task("Saved", f"Task execution error: {e}", request_id, future)
 
     def _handle_load_task(self, task) -> None:
         """Handle individual load task."""
@@ -358,9 +336,7 @@ class AsyncOperationManager:
         buffers = None
         try:
             # Step1: Get block locations from metadata server
-            page_indices = self._connector._metadata_client.get_key_locations(
-                self._rank, block_hashes
-            )
+            page_indices = self._connector._metadata_client.get_key_locations(self._rank, block_hashes)
 
             if any(idx is None for idx in page_indices):
                 return self._fail_task("Loaded", "Blocks not found", request_id, future)
@@ -382,46 +358,32 @@ class AsyncOperationManager:
                 batch_offsets = offsets[i : i + DEFAULT_MAX_IO_ENTRIES]
                 batch_buffers = buffers[i : i + DEFAULT_MAX_IO_ENTRIES]
                 client = self._connector._clients[self._connector._ac.next()]
-                read_future = self._io_executor.submit(
-                    client.batch_read, batch_offsets, batch_buffers
-                )
+                read_future = self._io_executor.submit(client.batch_read, batch_offsets, batch_buffers)
                 read_futures.append(read_future)
 
             # Check read results
             read_success = all(
-                result == self._bytes_per_page
-                for read_future in read_futures
-                for result in read_future.result()
+                result == self._bytes_per_page for read_future in read_futures for result in read_future.result()
             )
 
             if not read_success:
                 self._load_buffer_allocator.free_buffer(buffers)
-                return self._fail_task(
-                    "Loaded", "Read operation failed", request_id, future
-                )
+                return self._fail_task("Loaded", "Read operation failed", request_id, future)
 
             # Step3: Scatter data back to KV cache
             with torch.cuda.stream(self._load_stream):
-                self._connector._gather_or_scatter_kv_caches(
-                    block_ids, buffers, "scatter"
-                )
+                self._connector._gather_or_scatter_kv_caches(block_ids, buffers, "scatter")
 
             self._load_stream.synchronize()
             self._load_buffer_allocator.free_buffer(buffers)
-            return self._succeed_task(
-                "Loaded", start_time, request_id, len(block_ids), future
-            )
+            return self._succeed_task("Loaded", start_time, request_id, len(block_ids), future)
 
         except Exception as e:
             if buffers is not None:
                 self._load_buffer_allocator.free_buffer(buffers)
-            return self._fail_task(
-                "Loaded", f"Task execution error: {e}", request_id, future
-            )
+            return self._fail_task("Loaded", f"Task execution error: {e}", request_id, future)
 
-    def _fail_task(
-        self, operation: str, error_msg: str, request_id: str, future: Future
-    ) -> None:
+    def _fail_task(self, operation: str, error_msg: str, request_id: str, future: Future) -> None:
         """Helper to fail task with error logging."""
         logger.error(
             "%s for %s request %s",
@@ -475,9 +437,7 @@ class HF3FSKVConnector(KVConnectorBase_V1):
         role: KVConnectorRole,
         kv_cache_config: "KVCacheConfig",
     ):
-        super().__init__(
-            aphrodite_config=aphrodite_config, role=role, kv_cache_config=kv_cache_config
-        )
+        super().__init__(aphrodite_config=aphrodite_config, role=role, kv_cache_config=kv_cache_config)
 
         # Core configuration
         self._aphrodite_config = aphrodite_config
@@ -492,22 +452,14 @@ class HF3FSKVConnector(KVConnectorBase_V1):
         kv_config = aphrodite_config.kv_transfer_config
         assert kv_config is not None
 
-        self._storage_path = kv_config.get_from_extra_config(
-            "hf3fs_storage_path", "/aphrodite-workspace/mnt/hf3fs"
-        )
+        self._storage_path = kv_config.get_from_extra_config("hf3fs_storage_path", "/aphrodite-workspace/mnt/hf3fs")
         self._metadata_server_url = kv_config.get_from_extra_config(
             "hf3fs_metadata_server_url", "http://localhost:18000"
         )
-        self._file_size = kv_config.get_from_extra_config(
-            "hf3fs_file_size", 1024 * 1024 * 1024
-        )
+        self._file_size = kv_config.get_from_extra_config("hf3fs_file_size", 1024 * 1024 * 1024)
         self._numjobs = kv_config.get_from_extra_config("hf3fs_client_numjobs", 16)
-        self._max_device_buffer_count = kv_config.get_from_extra_config(
-            "hf3fs_max_device_buffer_count", 128
-        )
-        self._max_device_buffer_count = max(
-            self._max_device_buffer_count, self._numjobs * DEFAULT_MAX_IO_ENTRIES
-        )
+        self._max_device_buffer_count = kv_config.get_from_extra_config("hf3fs_max_device_buffer_count", 128)
+        self._max_device_buffer_count = max(self._max_device_buffer_count, self._numjobs * DEFAULT_MAX_IO_ENTRIES)
 
         if self._role == KVConnectorRole.SCHEDULER:
             self._scheduling_states: dict[str, RequestSchedulingState] = {}
@@ -581,9 +533,7 @@ class HF3FSKVConnector(KVConnectorBase_V1):
         os.makedirs(self._storage_path, exist_ok=True)
 
         self._rank = get_tensor_model_parallel_rank()
-        file_path = os.path.join(
-            self._storage_path, f"hf3fs_aphrodite_data_file_{self._rank}"
-        )
+        file_path = os.path.join(self._storage_path, f"hf3fs_aphrodite_data_file_{self._rank}")
 
         try:
             # Initialize HF3FS clients
@@ -634,9 +584,7 @@ class HF3FSKVConnector(KVConnectorBase_V1):
             for i in range(0, len(block_ids), self._max_device_buffer_count):
                 batch_block_ids = block_ids[i : i + self._max_device_buffer_count]
                 batch_block_hashes = block_hashes[i : i + self._max_device_buffer_count]
-                self._async_manager.submit_save_operation(
-                    request.request_id, batch_block_ids, batch_block_hashes
-                )
+                self._async_manager.submit_save_operation(request.request_id, batch_block_ids, batch_block_hashes)
 
     def start_load_kv(self, forward_context: "ForwardContext", **kwargs) -> None:
         metadata = self._get_connector_metadata()
@@ -650,23 +598,17 @@ class HF3FSKVConnector(KVConnectorBase_V1):
 
             load_op = request.load_block_op
             block_ids = request.block_ids[: load_op.num_blocks_to_load]
-            block_hashes = self._generate_block_hashes(
-                request.token_ids, load_op.num_computed_blocks, len(block_ids)
-            )
+            block_hashes = self._generate_block_hashes(request.token_ids, load_op.num_computed_blocks, len(block_ids))
 
             for i in range(0, len(block_ids), self._max_device_buffer_count):
                 batch_block_ids = block_ids[i : i + self._max_device_buffer_count]
                 batch_block_hashes = block_hashes[i : i + self._max_device_buffer_count]
-                self._async_manager.submit_load_operation(
-                    request.request_id, batch_block_ids, batch_block_hashes
-                )
+                self._async_manager.submit_load_operation(request.request_id, batch_block_ids, batch_block_hashes)
 
     def wait_for_layer_load(self, layer_name: str) -> None:
         pass
 
-    def get_finished(
-        self, finished_req_ids: set[str]
-    ) -> tuple[set[str] | None, set[str] | None]:
+    def get_finished(self, finished_req_ids: set[str]) -> tuple[set[str] | None, set[str] | None]:
         return self._async_manager.get_finished_operations(finished_req_ids)
 
     def get_kv_connector_stats(self) -> Optional["KVConnectorStats"]:
@@ -674,10 +616,7 @@ class HF3FSKVConnector(KVConnectorBase_V1):
         Get the KV connector stats collected during the last interval.
         """
         # Clear stats for next iteration
-        if (
-            hasattr(self, "_async_manager")
-            and not self._async_manager.hf3fs_stats.is_empty()
-        ):
+        if hasattr(self, "_async_manager") and not self._async_manager.hf3fs_stats.is_empty():
             return self._async_manager.hf3fs_stats.clone_and_reset()
         return None
 
@@ -692,18 +631,14 @@ class HF3FSKVConnector(KVConnectorBase_V1):
     ) -> tuple[bool, dict[str, Any] | None]:
         return True, None
 
-    def get_num_new_matched_tokens(
-        self, request: "Request", num_computed_tokens: int
-    ) -> tuple[int, bool]:
+    def get_num_new_matched_tokens(self, request: "Request", num_computed_tokens: int) -> tuple[int, bool]:
         """Get number of new tokens that can be loaded from external cache."""
         try:
             state = self._get_or_create_scheduling_state(request.request_id)
             state.request = request
             assert request.prompt_token_ids is not None
 
-            num_tokens_to_check = self._align_to_block_size(
-                len(request.prompt_token_ids) - 1
-            )
+            num_tokens_to_check = self._align_to_block_size(len(request.prompt_token_ids) - 1)
 
             if num_tokens_to_check <= num_computed_tokens:
                 state.load_op = LoadBlockInfo(
@@ -735,12 +670,7 @@ class HF3FSKVConnector(KVConnectorBase_V1):
             )
 
             logger.info(
-                (
-                    "Token matching for %s: "
-                    "%d matched (%d blocks), "
-                    "%d new hits, "
-                    "prompt len %d"
-                ),
+                ("Token matching for %s: %d matched (%d blocks), %d new hits, prompt len %d"),
                 request.request_id,
                 matched_tokens,
                 matched_blocks,
@@ -750,14 +680,10 @@ class HF3FSKVConnector(KVConnectorBase_V1):
             return new_hit_tokens, new_hit_tokens > 0
 
         except Exception as e:
-            logger.error(
-                "Error calculating matches for request %s: %s", request.request_id, e
-            )
+            logger.error("Error calculating matches for request %s: %s", request.request_id, e)
             return 0, False
 
-    def update_state_after_alloc(
-        self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int
-    ) -> None:
+    def update_state_after_alloc(self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int) -> None:
         """Update state after block allocation."""
         state = self._get_or_create_scheduling_state(request.request_id)
         state.request = request
@@ -770,8 +696,7 @@ class HF3FSKVConnector(KVConnectorBase_V1):
         expected_blocks = state.load_op.num_blocks_to_load
         actual_blocks = num_external_tokens // self._block_size
         assert actual_blocks == expected_blocks, (
-            f"Block count mismatch for {request.request_id}: "
-            f"expected {expected_blocks}, got {actual_blocks}"
+            f"Block count mismatch for {request.request_id}: expected {expected_blocks}, got {actual_blocks}"
         )
 
         # Update load operation with allocated block IDs
@@ -780,9 +705,7 @@ class HF3FSKVConnector(KVConnectorBase_V1):
             state.load_op.need_fetch_block_ids.extend(local_block_ids)
             state.phase = "WAITING_TO_LOAD"
 
-    def build_connector_meta(
-        self, scheduler_output: SchedulerOutput
-    ) -> KVConnectorMetadata:
+    def build_connector_meta(self, scheduler_output: SchedulerOutput) -> KVConnectorMetadata:
         """Build connector metadata for scheduling step."""
         metadata = HF3FSConnectorMetadata()
 
@@ -796,27 +719,19 @@ class HF3FSKVConnector(KVConnectorBase_V1):
 
         return metadata
 
-    def _process_waiting_to_load_requests(
-        self, metadata: HF3FSConnectorMetadata
-    ) -> None:
+    def _process_waiting_to_load_requests(self, metadata: HF3FSConnectorMetadata) -> None:
         """Process requests waiting to load."""
         for state in list(self._scheduling_states.values()):
             if not state.is_ready_to_load():
                 continue
             assert state.load_op is not None
-            assert (
-                state.request is not None and state.request.prompt_token_ids is not None
-            )
+            assert state.request is not None and state.request.prompt_token_ids is not None
             # Create load request metadata
-            num_cached_blocks = (
-                state.load_op.num_computed_blocks + state.load_op.num_blocks_to_load
-            )
+            num_cached_blocks = state.load_op.num_computed_blocks + state.load_op.num_blocks_to_load
             num_tokens_to_compute = num_cached_blocks * self._block_size
 
             # Initialize token_ids and allocated_block_ids for loading
-            state.token_ids = state.request.prompt_token_ids[
-                :num_tokens_to_compute
-            ].copy()
+            state.token_ids = state.request.prompt_token_ids[:num_tokens_to_compute].copy()
             state.allocated_block_ids = state.load_op.need_fetch_block_ids.copy()
 
             request_metadata = HF3FSRequestMetadata.from_scheduling_state(
@@ -827,28 +742,19 @@ class HF3FSKVConnector(KVConnectorBase_V1):
                 metadata.add_request(request_metadata)
                 state.phase = "ACTIVE"
 
-    def _process_new_requests(
-        self, scheduler_output: SchedulerOutput, metadata: HF3FSConnectorMetadata
-    ) -> None:
+    def _process_new_requests(self, scheduler_output: SchedulerOutput, metadata: HF3FSConnectorMetadata) -> None:
         """Process new requests."""
         for request in scheduler_output.scheduled_new_reqs:
             state = self._get_or_create_scheduling_state(request.req_id)
 
             # Calculate tokens to compute
-            num_tokens_to_compute = (
-                request.num_computed_tokens
-                + scheduler_output.num_scheduled_tokens[request.req_id]
-            )
-            self._initialize_state_from_new_request(
-                state, request, num_tokens_to_compute
-            )
+            num_tokens_to_compute = request.num_computed_tokens + scheduler_output.num_scheduled_tokens[request.req_id]
+            self._initialize_state_from_new_request(state, request, num_tokens_to_compute)
 
             # Create save metadata (skip cached blocks if any)
             num_cached_blocks = None
             if state.load_op:
-                num_cached_blocks = (
-                    state.load_op.num_computed_blocks + state.load_op.num_blocks_to_load
-                )
+                num_cached_blocks = state.load_op.num_computed_blocks + state.load_op.num_blocks_to_load
 
             request_metadata = HF3FSRequestMetadata.from_scheduling_state(
                 state, self._block_size, None, num_cached_blocks
@@ -858,9 +764,7 @@ class HF3FSKVConnector(KVConnectorBase_V1):
                 metadata.add_request(request_metadata)
                 state.phase = "ACTIVE"
 
-    def _process_cached_requests(
-        self, scheduler_output: SchedulerOutput, metadata: HF3FSConnectorMetadata
-    ) -> None:
+    def _process_cached_requests(self, scheduler_output: SchedulerOutput, metadata: HF3FSConnectorMetadata) -> None:
         """Process cached requests."""
         cached_reqs = scheduler_output.scheduled_cached_reqs
         for i, request_id in enumerate(cached_reqs.req_ids):
@@ -870,35 +774,25 @@ class HF3FSKVConnector(KVConnectorBase_V1):
             # Update with new tokens and blocks
             num_new_tokens = scheduler_output.num_scheduled_tokens[request_id]
             num_current_tokens = len(state.token_ids)
-            new_token_ids = state.request.all_token_ids[
-                num_current_tokens : num_current_tokens + num_new_tokens
-            ]
+            new_token_ids = state.request.all_token_ids[num_current_tokens : num_current_tokens + num_new_tokens]
             new_block_ids = cached_reqs.new_block_ids[i]
 
             state.update_tokens_and_blocks(new_token_ids, new_block_ids)
 
             # Create save metadata
-            request_metadata = HF3FSRequestMetadata.from_scheduling_state(
-                state, self._block_size, None
-            )
+            request_metadata = HF3FSRequestMetadata.from_scheduling_state(state, self._block_size, None)
 
             if request_metadata:
                 metadata.add_request(request_metadata)
 
     @classmethod
-    def build_kv_connector_stats(
-        cls, data: dict[str, Any] | None = None
-    ) -> Optional["KVConnectorStats"]:
+    def build_kv_connector_stats(cls, data: dict[str, Any] | None = None) -> Optional["KVConnectorStats"]:
         """
         KVConnectorStats resolution method. This method allows dynamically
         registered connectors to return their own KVConnectorStats object,
         which can implement custom aggregation logic on the data dict.
         """
-        return (
-            HF3FSKVConnectorStats(data=data)
-            if data is not None
-            else HF3FSKVConnectorStats()
-        )
+        return HF3FSKVConnectorStats(data=data) if data is not None else HF3FSKVConnectorStats()
 
     @classmethod
     def build_prom_metrics(
@@ -908,9 +802,7 @@ class HF3FSKVConnector(KVConnectorBase_V1):
         labelnames: list[str],
         per_engine_labelvalues: dict[int, list[object]],
     ) -> KVConnectorPromMetrics:
-        return HF3FSPromMetrics(
-            aphrodite_config, metric_types, labelnames, per_engine_labelvalues
-        )
+        return HF3FSPromMetrics(aphrodite_config, metric_types, labelnames, per_engine_labelvalues)
 
     def close(self) -> None:
         try:
@@ -928,14 +820,10 @@ class HF3FSKVConnector(KVConnectorBase_V1):
     # Utility Methods
     ############################################################
 
-    def _get_or_create_scheduling_state(
-        self, request_id: str
-    ) -> RequestSchedulingState:
+    def _get_or_create_scheduling_state(self, request_id: str) -> RequestSchedulingState:
         """Get existing or create new scheduling state."""
         if request_id not in self._scheduling_states:
-            self._scheduling_states[request_id] = RequestSchedulingState(
-                request_id=request_id
-            )
+            self._scheduling_states[request_id] = RequestSchedulingState(request_id=request_id)
         return self._scheduling_states[request_id]
 
     def _initialize_state_from_new_request(
@@ -967,9 +855,7 @@ class HF3FSKVConnector(KVConnectorBase_V1):
                 break
 
             end_idx = start_idx + self._block_size
-            block_hash = self._compute_prefix_hash(
-                token_ids[start_idx:end_idx], previous_hash
-            )
+            block_hash = self._compute_prefix_hash(token_ids[start_idx:end_idx], previous_hash)
 
             block_index = start_idx // self._block_size
             if block_index >= start_block_id:
@@ -981,9 +867,7 @@ class HF3FSKVConnector(KVConnectorBase_V1):
 
         return block_hashes
 
-    def _gather_or_scatter_kv_caches(
-        self, block_ids: list[int], block_buffers, operation: str
-    ):
+    def _gather_or_scatter_kv_caches(self, block_ids: list[int], block_buffers, operation: str):
         for buffer_tensor, block_id in zip(block_buffers, block_ids):
             start_idx = block_id * self._local_block_size
             token_indices = list(range(start_idx, start_idx + self._local_block_size))
@@ -1004,9 +888,7 @@ class HF3FSKVConnector(KVConnectorBase_V1):
                     is_mla=self._use_mla,
                 )
 
-    def _compute_prefix_hash(
-        self, token_ids: list[int], previous_hash: str = ""
-    ) -> str:
+    def _compute_prefix_hash(self, token_ids: list[int], previous_hash: str = "") -> str:
         """Compute prefix hash for token block."""
         combined_string = f"{previous_hash}_{token_ids}"
         return hashlib.md5(combined_string.encode()).hexdigest()
@@ -1137,9 +1019,7 @@ class HF3FSPromMetrics(KVConnectorPromMetrics):
             buckets=buckets,
             labelnames=labelnames,
         )
-        self.hf3fs_save_duration = create_metric_per_engine(
-            hf3fs_save_duration, self.per_engine_labelvalues
-        )
+        self.hf3fs_save_duration = create_metric_per_engine(hf3fs_save_duration, self.per_engine_labelvalues)
 
         hf3fs_load_duration = self._histogram_cls(
             name="aphrodite:hf3fs_load_duration_seconds",
@@ -1147,27 +1027,21 @@ class HF3FSPromMetrics(KVConnectorPromMetrics):
             buckets=buckets,
             labelnames=labelnames,
         )
-        self.hf3fs_load_duration = create_metric_per_engine(
-            hf3fs_load_duration, self.per_engine_labelvalues
-        )
+        self.hf3fs_load_duration = create_metric_per_engine(hf3fs_load_duration, self.per_engine_labelvalues)
 
         hf3fs_num_failed_save = self._counter_cls(
             name="aphrodite:hf3fs_num_failed_save",
             documentation="Number of failed HF3FS KV save.",
             labelnames=labelnames,
         )
-        self.hf3fs_num_failed_save = create_metric_per_engine(
-            hf3fs_num_failed_save, self.per_engine_labelvalues
-        )
+        self.hf3fs_num_failed_save = create_metric_per_engine(hf3fs_num_failed_save, self.per_engine_labelvalues)
 
         hf3fs_num_failed_load = self._counter_cls(
             name="aphrodite:hf3fs_num_failed_load",
             documentation="Number of failed HF3FS KV load.",
             labelnames=labelnames,
         )
-        self.hf3fs_num_failed_load = create_metric_per_engine(
-            hf3fs_num_failed_load, self.per_engine_labelvalues
-        )
+        self.hf3fs_num_failed_load = create_metric_per_engine(hf3fs_num_failed_load, self.per_engine_labelvalues)
 
     def observe(self, transfer_stats_data: dict[str, Any], engine_idx: int = 0):
         for prom_obj, list_item_key in zip(

@@ -38,9 +38,7 @@ PROMPT = "Given a query A and a passage B, determine whether the passage contain
 
 
 class GemmaRerankerHfRunner(MtebCrossEncoderMixin, HfRunner):
-    def __init__(
-        self, model_name: str, dtype: str = "auto", *args: Any, **kwargs: Any
-    ) -> None:
+    def __init__(self, model_name: str, dtype: str = "auto", *args: Any, **kwargs: Any) -> None:
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         HfRunner.__init__(
@@ -70,12 +68,8 @@ class GemmaRerankerHfRunner(MtebCrossEncoderMixin, HfRunner):
                 prompt = PROMPT
 
             sep = "\n"
-            prompt_inputs = tokenizer(
-                prompt, return_tensors=None, add_special_tokens=False
-            )["input_ids"]
-            sep_inputs = tokenizer(sep, return_tensors=None, add_special_tokens=False)[
-                "input_ids"
-            ]
+            prompt_inputs = tokenizer(prompt, return_tensors=None, add_special_tokens=False)["input_ids"]
+            sep_inputs = tokenizer(sep, return_tensors=None, add_special_tokens=False)["input_ids"]
             inputs = []
             for query, passage in pairs:
                 query_inputs = tokenizer(

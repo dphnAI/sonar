@@ -70,9 +70,7 @@ class Mxfp4Config(QuantizationConfig):
 
     # TODO (zyongye) This is only temporaty fallback.
     # We should have `Mxfp4MoEMethod` after this migration is complete.
-    def get_quant_method(
-        self, layer: torch.nn.Module, prefix: str
-    ) -> "QuantizeMethodBase | None":
+    def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> "QuantizeMethodBase | None":
         if isinstance(layer, LinearBase):
             if self.ignored_layers and is_layer_skipped(
                 prefix=prefix,
@@ -81,16 +79,14 @@ class Mxfp4Config(QuantizationConfig):
             ):
                 return UnquantizedLinearMethod()
             logger.debug_once(
-                "MXFP4 linear layer is not implemented - falling back to "
-                "UnquantizedLinearMethod.",
+                "MXFP4 linear layer is not implemented - falling back to UnquantizedLinearMethod.",
             )
             return UnquantizedLinearMethod()
         elif isinstance(layer, RoutedExperts):
             return GptOssMxfp4MoEMethod(layer.moe_config)
         elif isinstance(layer, Attention):
             logger.debug_once(
-                "MXFP4 attention layer is not implemented. "
-                "Skipping quantization for this layer.",
+                "MXFP4 attention layer is not implemented. Skipping quantization for this layer.",
             )
         return None
 
@@ -112,16 +108,11 @@ class GptOssMxfp4Config(Mxfp4Config):
         return "gpt_oss_mxfp4"
 
     @classmethod
-    def override_quantization_method(
-        cls, hf_quant_cfg, user_quant, hf_config=None
-    ) -> QuantizationMethods | None:
+    def override_quantization_method(cls, hf_quant_cfg, user_quant, hf_config=None) -> QuantizationMethods | None:
         # Match both "mxfp4" (original checkpoint value) and "gpt_oss_mxfp4"
         # (already normalized by verify_and_update_model_config) so that
         # explicit --quantization mxfp4 from the user doesn't cause a mismatch.
-        if not (
-            isinstance(hf_quant_cfg, dict)
-            and hf_quant_cfg.get("quant_method") in ("mxfp4", "gpt_oss_mxfp4")
-        ):
+        if not (isinstance(hf_quant_cfg, dict) and hf_quant_cfg.get("quant_method") in ("mxfp4", "gpt_oss_mxfp4")):
             return None
         # Require explicit confirmation that this is a GPT-OSS model.
         # Do NOT fall back to returning the override when hf_config is None,
@@ -315,30 +306,22 @@ class GptOssMxfp4MoEMethod(FusedMoEMethodBase):
         )
         if w13_bias is not None:
             assert (
-                w13_bias.dim() == 2
-                and w13_bias.shape[0] == num_experts
-                and w13_bias.shape[1] == intermediate_size * 2
+                w13_bias.dim() == 2 and w13_bias.shape[0] == num_experts and w13_bias.shape[1] == intermediate_size * 2
             )
         if w2_bias is not None:
-            assert (
-                w2_bias.dim() == 2
-                and w2_bias.shape[0] == num_experts
-                and w2_bias.shape[1] == hidden_size
-            )
+            assert w2_bias.dim() == 2 and w2_bias.shape[0] == num_experts and w2_bias.shape[1] == hidden_size
 
         # Convert weights to kernel format
-        w13, w2, w13_scale, w2_scale, w13_bias, w2_bias = (
-            convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
-                mxfp4_backend=self.mxfp4_backend,
-                layer=layer,
-                w13_weight=w13,
-                w2_weight=w2,
-                w13_weight_scale=w13_scale,
-                w2_weight_scale=w2_scale,
-                w13_bias=w13_bias,
-                w2_bias=w2_bias,
-                _cache_permute_indices=self._cache_permute_indices,
-            )
+        w13, w2, w13_scale, w2_scale, w13_bias, w2_bias = convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
+            mxfp4_backend=self.mxfp4_backend,
+            layer=layer,
+            w13_weight=w13,
+            w2_weight=w2,
+            w13_weight_scale=w13_scale,
+            w2_weight_scale=w2_scale,
+            w13_bias=w13_bias,
+            w2_bias=w2_bias,
+            _cache_permute_indices=self._cache_permute_indices,
         )
 
         # For TRITON backends, weights are wrapped tensors from triton_kernels
@@ -390,9 +373,7 @@ class GptOssMxfp4MoEMethod(FusedMoEMethodBase):
 
         self._setup_kernel(layer, w13, w2, w13_scale, w2_scale, w13_bias, w2_bias)
 
-    def get_fused_moe_quant_config(
-        self, layer: RoutedExperts
-    ) -> FusedMoEQuantConfig | None:
+    def get_fused_moe_quant_config(self, layer: RoutedExperts) -> FusedMoEQuantConfig | None:
         w1_bias = getattr(layer, "w13_bias", None)
         w2_bias = getattr(layer, "w2_bias", None)
 
@@ -662,30 +643,22 @@ class Mxfp4MoEMethod(FusedMoEMethodBase):
         )
         if w13_bias is not None:
             assert (
-                w13_bias.dim() == 2
-                and w13_bias.shape[0] == num_experts
-                and w13_bias.shape[1] == intermediate_size * 2
+                w13_bias.dim() == 2 and w13_bias.shape[0] == num_experts and w13_bias.shape[1] == intermediate_size * 2
             )
         if w2_bias is not None:
-            assert (
-                w2_bias.dim() == 2
-                and w2_bias.shape[0] == num_experts
-                and w2_bias.shape[1] == hidden_size
-            )
+            assert w2_bias.dim() == 2 and w2_bias.shape[0] == num_experts and w2_bias.shape[1] == hidden_size
 
         # Convert weights to kernel format
-        w13, w2, w13_scale, w2_scale, w13_bias, w2_bias = (
-            convert_weight_to_mxfp4_moe_kernel_format(
-                mxfp4_backend=self.mxfp4_backend,
-                layer=layer,
-                w13_weight=w13,
-                w2_weight=w2,
-                w13_weight_scale=w13_scale,
-                w2_weight_scale=w2_scale,
-                w13_bias=w13_bias,
-                w2_bias=w2_bias,
-                _cache_permute_indices=self._cache_permute_indices,
-            )
+        w13, w2, w13_scale, w2_scale, w13_bias, w2_bias = convert_weight_to_mxfp4_moe_kernel_format(
+            mxfp4_backend=self.mxfp4_backend,
+            layer=layer,
+            w13_weight=w13,
+            w2_weight=w2,
+            w13_weight_scale=w13_scale,
+            w2_weight_scale=w2_scale,
+            w13_bias=w13_bias,
+            w2_bias=w2_bias,
+            _cache_permute_indices=self._cache_permute_indices,
         )
 
         # For TRITON backends, weights are wrapped tensors from triton_kernels

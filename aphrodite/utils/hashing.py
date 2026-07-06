@@ -61,8 +61,7 @@ def sha256_cbor(input: Any) -> bytes:
 def _xxhash_digest(input_bytes: bytes) -> bytes:
     if _xxhash is None:
         raise ModuleNotFoundError(
-            "xxhash is required for the 'xxhash' prefix caching hash algorithms. "
-            "Install it via `pip install xxhash`."
+            "xxhash is required for the 'xxhash' prefix caching hash algorithms. Install it via `pip install xxhash`."
         )
     return _xxhash.xxh3_128_digest(input_bytes)
 

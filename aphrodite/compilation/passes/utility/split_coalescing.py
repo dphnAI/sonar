@@ -22,8 +22,8 @@ from torch import fx
 
 from aphrodite.logger import init_logger
 
-from ..fx_utils import is_func
 from ..aphrodite_inductor_pass import AphroditeInductorPass
+from ..fx_utils import is_func
 
 logger = init_logger(__name__)
 
@@ -53,11 +53,7 @@ class SplitCoalescingPass(AphroditeInductorPass):
 
             # Find existing node with same split_sizes
             canonical = next(
-                (
-                    n
-                    for n in split_nodes[arg_node]
-                    if list(n.args[1]) == list(split_sizes)
-                ),
+                (n for n in split_nodes[arg_node] if list(n.args[1]) == list(split_sizes)),
                 None,
             )
             if canonical is not None:

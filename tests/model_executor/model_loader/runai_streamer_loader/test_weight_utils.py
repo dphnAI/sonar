@@ -15,9 +15,7 @@ from aphrodite.model_executor.model_loader.weight_utils import (
 )
 
 
-def test_runai_safetensors_weights_iterator_clones_reused_buffers(
-    tmp_path, monkeypatch
-):
+def test_runai_safetensors_weights_iterator_clones_reused_buffers(tmp_path, monkeypatch):
     monkeypatch.setenv("RUNAI_STREAMER_MEMORY_LIMIT", "0")
     weights_file = tmp_path / "model.safetensors"
     expected_tensors = {
@@ -26,9 +24,7 @@ def test_runai_safetensors_weights_iterator_clones_reused_buffers(
     }
     save_file(expected_tensors, weights_file)
 
-    actual_tensors = dict(
-        runai_safetensors_weights_iterator([str(weights_file)], False)
-    )
+    actual_tensors = dict(runai_safetensors_weights_iterator([str(weights_file)], False))
 
     assert actual_tensors.keys() == expected_tensors.keys()
     assert actual_tensors["first"].data_ptr() != actual_tensors["second"].data_ptr()
@@ -39,9 +35,7 @@ def test_runai_safetensors_weights_iterator_clones_reused_buffers(
 def test_runai_model_loader():
     with tempfile.TemporaryDirectory() as tmpdir:
         huggingface_hub.constants.HF_HUB_OFFLINE = False
-        download_weights_from_hf(
-            "openai-community/gpt2", allow_patterns=["*.safetensors"], cache_dir=tmpdir
-        )
+        download_weights_from_hf("openai-community/gpt2", allow_patterns=["*.safetensors"], cache_dir=tmpdir)
         safetensors = glob.glob(f"{tmpdir}/**/*.safetensors", recursive=True)
         assert len(safetensors) > 0
 

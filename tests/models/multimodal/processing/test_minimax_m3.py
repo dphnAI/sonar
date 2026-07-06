@@ -35,9 +35,7 @@ def _image_tokens(grid_thw) -> int:
 # --------------------------------------------------------------------------- #
 def test_smart_resize_long_side_shrink():
     # (a) long side exceeds the cap -> shrink so the long side equals the cap.
-    h, w = smart_resize(
-        2048, 1024, factor=28, max_long_side_pixel=1008, max_total_pixels=10**9
-    )
+    h, w = smart_resize(2048, 1024, factor=28, max_long_side_pixel=1008, max_total_pixels=10**9)
     assert max(h, w) == 1008
     assert (h, w) == (1008, 504)  # aspect ratio preserved
 
@@ -45,9 +43,7 @@ def test_smart_resize_long_side_shrink():
 def test_smart_resize_short_side_enlarge():
     # (b) long side within the cap but short side below the floor -> enlarge so
     # the short side reaches min_short_side_pixel.
-    h, w = smart_resize(
-        200, 40, factor=28, max_long_side_pixel=1008, max_total_pixels=10**9
-    )
+    h, w = smart_resize(200, 40, factor=28, max_long_side_pixel=1008, max_total_pixels=10**9)
     assert min(h, w) == MIN_SHORT_SIDE_PIXEL  # 112
 
 
@@ -75,9 +71,7 @@ def test_image_tokens_increase_with_max_long_side_pixel():
     proc = MiniMaxM3VLImageProcessor()
     counts = []
     for long_side in LONG_SIDES:
-        patches = proc.get_number_of_image_patches(
-            2048, 2048, images_kwargs={"max_long_side_pixel": long_side}
-        )
+        patches = proc.get_number_of_image_patches(2048, 2048, images_kwargs={"max_long_side_pixel": long_side})
         counts.append(patches // MERGE2)
 
     assert counts == [81, 324, 1296]

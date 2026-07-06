@@ -86,16 +86,12 @@ def create_expert_weights(
     for layer in range(num_layers):
         layer_weights = []
         for weight_idx, hidden_size in enumerate(hidden_sizes):
-            weight_tensor = torch.zeros(
-                num_local_experts, hidden_size, device=device, dtype=torch.float32
-            )
+            weight_tensor = torch.zeros(num_local_experts, hidden_size, device=device, dtype=torch.float32)
 
             for local_expert in range(num_local_experts):
                 # Get the logical expert ID for this physical expert
                 global_pos = rank * num_local_experts + local_expert
-                logical_expert_id = physical_to_logical_mapping[
-                    layer, global_pos
-                ].item()
+                logical_expert_id = physical_to_logical_mapping[layer, global_pos].item()
 
                 # Generate weights based on logical expert ID
                 # (so that all replicas of the same logical expert have the
@@ -149,9 +145,7 @@ def verify_expert_weights_after_shuffle(
 
                 # Check if the weights are correct
                 actual_weights = weight_tensor[local_expert]
-                expected_base = (
-                    expected_logical_expert * 1000 + layer * 100 + weight_idx * 10
-                )
+                expected_base = expected_logical_expert * 1000 + layer * 100 + weight_idx * 10
                 expected_weights = torch.arange(
                     expected_base,
                     expected_base + hidden_size,
@@ -208,9 +202,7 @@ def verify_redundant_experts_have_same_weights(
             # Use all_gather to collect expert weights from current node
             # expert_weights[layer][weight_idx] shape:
             # [num_local_experts, hidden_size]
-            local_weights = expert_weights[layer][
-                weight_idx
-            ]  # [num_local_experts, hidden_size]
+            local_weights = expert_weights[layer][weight_idx]  # [num_local_experts, hidden_size]
 
             # Split tensor along dim 0 into a list for all_gather
             gathered_weights_list = torch.chunk(gathered_weights, world_size, dim=0)
@@ -233,8 +225,7 @@ def verify_redundant_experts_have_same_weights(
             if logical_expert_id not in logical_expert_weights:
                 # First time encountering this logical expert, save its weights
                 logical_expert_weights[logical_expert_id] = {
-                    weight_idx: all_weights[weight_idx][physical_pos]
-                    for weight_idx in range(len(hidden_sizes))
+                    weight_idx: all_weights[weight_idx][physical_pos] for weight_idx in range(len(hidden_sizes))
                 }
             else:
                 # Verify that current physical expert's weights match the
@@ -245,17 +236,9 @@ def verify_redundant_experts_have_same_weights(
                         logical_expert_weights[logical_expert_id][weight_idx],
                     ):
                         ok = False
-                        actual_head = (
-                            all_weights[weight_idx][physical_pos][:8]
-                            .detach()
-                            .cpu()
-                            .tolist()
-                        )
+                        actual_head = all_weights[weight_idx][physical_pos][:8].detach().cpu().tolist()
                         reference_head = (
-                            logical_expert_weights[logical_expert_id][weight_idx][:8]
-                            .detach()
-                            .cpu()
-                            .tolist()
+                            logical_expert_weights[logical_expert_id][weight_idx][:8].detach().cpu().tolist()
                         )
                         print(
                             "verify_redundant_experts_have_same_weights failed: "
@@ -277,9 +260,7 @@ def assert_verification_synced(local_ok: bool, msg: str) -> None:
     assert bool(ok_tensor.item()), msg
 
 
-def create_eplb_communicator_or_raise(
-    *, group_coordinator, backend, expert_weights, expert_buffer
-):
+def create_eplb_communicator_or_raise(*, group_coordinator, backend, expert_weights, expert_buffer):
     try:
         return create_eplb_communicator(
             group_coordinator=group_coordinator,
@@ -288,9 +269,7 @@ def create_eplb_communicator_or_raise(
             expert_buffer=expert_buffer,
         )
     except Exception as exc:
-        raise RuntimeError(
-            f"Failed to create EPLB communicator for backend={backend}: {exc}"
-        ) from exc
+        raise RuntimeError(f"Failed to create EPLB communicator for backend={backend}: {exc}") from exc
 
 
 def _test_async_transfer_layer_without_mtp_worker(
@@ -307,9 +286,7 @@ def _test_async_transfer_layer_without_mtp_worker(
     aphrodite_config.parallel_config.tensor_parallel_size = world_size
 
     with set_current_aphrodite_config(aphrodite_config):
-        ensure_model_parallel_initialized(
-            tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1
-        )
+        ensure_model_parallel_initialized(tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1)
 
         ep_group_coordinator = get_tp_group()
         ep_group = ep_group_coordinator.device_group
@@ -403,8 +380,7 @@ def _test_async_transfer_layer_without_mtp_worker(
     )
     assert_verification_synced(
         local_ok,
-        "Async transfer verification failed on at least one rank. "
-        "See logs for details.",
+        "Async transfer verification failed on at least one rank. See logs for details.",
     )
 
 
@@ -424,9 +400,7 @@ def _test_rearrange_expert_weights_with_redundancy(
     aphrodite_config.parallel_config.tensor_parallel_size = world_size
 
     with set_current_aphrodite_config(aphrodite_config):
-        ensure_model_parallel_initialized(
-            tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1
-        )
+        ensure_model_parallel_initialized(tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1)
 
         ep_group_coordinator = get_tp_group()
         ep_group = ep_group_coordinator.cpu_group
@@ -438,9 +412,7 @@ def _test_rearrange_expert_weights_with_redundancy(
         hidden_sizes = [32, 64]  # Two different weight matrices
 
         # Create old expert indices (with redundancy)
-        redundancy_config = create_redundancy_config(
-            num_logical_experts, total_physical_experts
-        )
+        redundancy_config = create_redundancy_config(num_logical_experts, total_physical_experts)
 
         old_indices = create_expert_indices_with_redundancy(
             num_layers,
@@ -450,9 +422,7 @@ def _test_rearrange_expert_weights_with_redundancy(
         )
 
         # Create new expert indices (with redundancy)
-        new_redundancy_config = create_redundancy_config(
-            num_logical_experts, total_physical_experts
-        )
+        new_redundancy_config = create_redundancy_config(num_logical_experts, total_physical_experts)
         new_indices = create_expert_indices_with_redundancy(
             num_layers,
             num_logical_experts,
@@ -532,9 +502,7 @@ def _test_rearrange_expert_weights_with_redundancy(
         (4, 8, 8, 16),
     ],
 )
-@pytest.mark.parametrize(
-    "eplb_communicator", ["torch_nccl", "torch_gloo", "pynccl", "nixl"]
-)
+@pytest.mark.parametrize("eplb_communicator", ["torch_nccl", "torch_gloo", "pynccl", "nixl"])
 def test_rearrange_expert_weights_with_redundancy(
     world_size,
     num_layers,
@@ -565,9 +533,7 @@ def _test_rearrange_expert_weights_no_change(env, world_size) -> None:
     aphrodite_config.parallel_config.tensor_parallel_size = world_size
 
     with set_current_aphrodite_config(aphrodite_config):
-        ensure_model_parallel_initialized(
-            tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1
-        )
+        ensure_model_parallel_initialized(tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1)
 
         ep_group_coordinator = get_tp_group()
         ep_group = ep_group_coordinator.cpu_group
@@ -588,9 +554,7 @@ def _test_rearrange_expert_weights_no_change(env, world_size) -> None:
             num_layers, num_logical_experts, total_physical_experts, redundancy_config
         )
 
-        expert_weights = create_expert_weights(
-            num_layers, num_local_experts, hidden_sizes, ep_rank, device, indices
-        )
+        expert_weights = create_expert_weights(num_layers, num_local_experts, hidden_sizes, ep_rank, device, indices)
 
         # Save original weights
         original_weights = []
@@ -628,8 +592,7 @@ def _test_rearrange_expert_weights_no_change(env, world_size) -> None:
             ):
                 local_ok = False
                 print(
-                    "test_rearrange_expert_weights_no_change failed: "
-                    f"layer={layer}, weight_idx={weight_idx}",
+                    f"test_rearrange_expert_weights_no_change failed: layer={layer}, weight_idx={weight_idx}",
                     flush=True,
                 )
     assert_verification_synced(
@@ -691,9 +654,7 @@ def _test_rearrange_expert_weights_profile_mode(env, world_size) -> None:
     aphrodite_config.parallel_config.tensor_parallel_size = world_size
 
     with set_current_aphrodite_config(aphrodite_config):
-        ensure_model_parallel_initialized(
-            tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1
-        )
+        ensure_model_parallel_initialized(tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1)
 
         ep_group_coordinator = get_tp_group()
         ep_group = ep_group_coordinator.cpu_group
@@ -707,12 +668,8 @@ def _test_rearrange_expert_weights_profile_mode(env, world_size) -> None:
         hidden_sizes = [32]
 
         # Create different index distributions
-        old_redundancy = create_redundancy_config(
-            num_logical_experts, total_physical_experts
-        )
-        new_redundancy = create_redundancy_config(
-            num_logical_experts, total_physical_experts
-        )
+        old_redundancy = create_redundancy_config(num_logical_experts, total_physical_experts)
+        new_redundancy = create_redundancy_config(num_logical_experts, total_physical_experts)
 
         old_indices = create_expert_indices_with_redundancy(
             num_layers, num_logical_experts, total_physical_experts, old_redundancy
@@ -762,8 +719,7 @@ def _test_rearrange_expert_weights_profile_mode(env, world_size) -> None:
             ):
                 local_ok = False
                 print(
-                    "test_rearrange_expert_weights_profile_mode failed: "
-                    f"layer={layer}, weight_idx={weight_idx}",
+                    f"test_rearrange_expert_weights_profile_mode failed: layer={layer}, weight_idx={weight_idx}",
                     flush=True,
                 )
     assert_verification_synced(
@@ -800,9 +756,7 @@ def _test_nixl_deferred_init_worker(
     aphrodite_config.parallel_config.tensor_parallel_size = world_size
 
     with set_current_aphrodite_config(aphrodite_config):
-        ensure_model_parallel_initialized(
-            tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1
-        )
+        ensure_model_parallel_initialized(tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1)
 
         ep_group_coordinator = get_tp_group()
         ep_group = ep_group_coordinator.cpu_group
@@ -812,9 +766,7 @@ def _test_nixl_deferred_init_worker(
         total_physical_experts = world_size * num_local_experts
         hidden_sizes = [32, 64]
 
-        redundancy_config = create_redundancy_config(
-            num_logical_experts, total_physical_experts
-        )
+        redundancy_config = create_redundancy_config(num_logical_experts, total_physical_experts)
         old_indices = create_expert_indices_with_redundancy(
             num_layers,
             num_logical_experts,
@@ -822,9 +774,7 @@ def _test_nixl_deferred_init_worker(
             redundancy_config,
         )
 
-        new_redundancy_config = create_redundancy_config(
-            num_logical_experts, total_physical_experts
-        )
+        new_redundancy_config = create_redundancy_config(num_logical_experts, total_physical_experts)
         new_indices = create_expert_indices_with_redundancy(
             num_layers,
             num_logical_experts,

@@ -41,8 +41,7 @@ def _is_flashmla_available() -> tuple[bool, str | None]:
     if not _flashmla_extension_C_AVAILABLE:
         return (
             False,
-            "aphrodite._flashmla_extension_C is not available, likely "
-            "was not compiled due to a build error.",
+            "aphrodite._flashmla_extension_C is not available, likely was not compiled due to a build error.",
         )
 
     return True, None
@@ -67,10 +66,7 @@ def is_flashmla_sparse_supported() -> tuple[bool, str | None]:
     is_available, maybe_reason = _is_flashmla_available()
     if not is_available:
         return False, maybe_reason
-    if not (
-        current_platform.is_device_capability_family(90)
-        or current_platform.is_device_capability_family(100)
-    ):
+    if not (current_platform.is_device_capability_family(90) or current_platform.is_device_capability_family(100)):
         return (
             False,
             "FlashMLA Sparse is only supported on Hopper and Blackwell DC devices.",

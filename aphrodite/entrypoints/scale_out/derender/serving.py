@@ -69,15 +69,11 @@ class ServingDerender(BaseServing):
             return error_check_ret
 
         try:
-            choices = await self.online_derenderer.derender_chat(
-                request.generate_response, request.chat_request
-            )
+            choices = await self.online_derenderer.derender_chat(request.generate_response, request.chat_request)
         except ValueError as exc:
             return self.create_error_response(str(exc))
 
-        prompt_tokens = (
-            request.prompt_tokens if request.prompt_tokens is not None else 0
-        )
+        prompt_tokens = request.prompt_tokens if request.prompt_tokens is not None else 0
         gen = request.generate_response
         completion_tokens = sum(len(ch.token_ids) for ch in gen.choices if ch.token_ids)
         usage = UsageInfo(
@@ -121,18 +117,14 @@ class ServingDerender(BaseServing):
             choices,
             total_prompt_tokens,
             total_completion_tokens,
-        ) = await self.online_derenderer.derender_completion(
-            request.generate_responses, request.prompt_tokens
-        )
+        ) = await self.online_derenderer.derender_completion(request.generate_responses, request.prompt_tokens)
 
         if not request.generate_responses:
             return self.create_error_response("generate_responses must not be empty")
 
         first = request.generate_responses[0]
         kv_params = first.kv_transfer_params
-        if any(
-            r.kv_transfer_params != kv_params for r in request.generate_responses[1:]
-        ):
+        if any(r.kv_transfer_params != kv_params for r in request.generate_responses[1:]):
             logger.warning(
                 "derender_completion: kv_transfer_params differ across responses; "
                 "setting to None on the aggregated response"
@@ -146,8 +138,7 @@ class ServingDerender(BaseServing):
         )
 
         logger.debug(
-            "derender_completion request_id=%s model=%s choices=%d"
-            " completion_tokens=%d",
+            "derender_completion request_id=%s model=%s choices=%d completion_tokens=%d",
             first.request_id,
             request.model,
             len(choices),
@@ -179,9 +170,7 @@ class ServingDerender(BaseServing):
         raw_placeholders: MultiModalPlaceholders = mm_engine_input["mm_placeholders"]
 
         mm_placeholders = {
-            modality: [
-                PlaceholderRangeInfo(offset=p.offset, length=p.length) for p in ranges
-            ]
+            modality: [PlaceholderRangeInfo(offset=p.offset, length=p.length) for p in ranges]
             for modality, ranges in raw_placeholders.items()
         }
 
@@ -190,10 +179,7 @@ class ServingDerender(BaseServing):
         if raw_mm_kwargs := mm_engine_input.get("mm_kwargs"):
             kwargs_data = {}
             for modality, items in raw_mm_kwargs.items():
-                kwargs_data[modality] = [
-                    encode_mm_kwargs_item(item) if item is not None else None
-                    for item in items
-                ]
+                kwargs_data[modality] = [encode_mm_kwargs_item(item) if item is not None else None for item in items]
 
         return MultiModalFeatures(
             mm_hashes=mm_hashes,

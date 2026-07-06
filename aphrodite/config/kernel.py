@@ -50,9 +50,7 @@ class IrOpPriorityConfig:
 
         assert "_impls" not in factors
         factors["_impls"] = {
-            name: {
-                provider: IrOp.registry[name].impls[provider].uuid() for provider in p
-            }
+            name: {provider: IrOp.registry[name].impls[provider].uuid() for provider in p}
             for name, p in asdict(self).items()  # type: ignore[call-overload]
         }
 
@@ -79,9 +77,7 @@ class IrOpPriorityConfig:
 
         for field in fields(self):  # type: ignore[arg-type]
             op_priority = getattr(self, field.name)
-            assert op_priority is not None, (
-                f"IR op priority for {field.name} must be set"
-            )
+            assert op_priority is not None, f"IR op priority for {field.name} must be set"
             logger.debug("Setting IR op priority for %s to %s", field.name, op_priority)
             yield IrOp.registry[field.name], op_priority
 
@@ -105,9 +101,7 @@ class IrOpPriorityConfig:
             yield
 
     @classmethod
-    def with_default(
-        cls, default: list[str], /, **kwargs: list[str]
-    ) -> "IrOpPriorityConfig":
+    def with_default(cls, default: list[str], /, **kwargs: list[str]) -> "IrOpPriorityConfig":
         """
         A helper to create an IrOpPriorityConfig where fields not specified in kwargs
         use the given default list.
@@ -283,9 +277,7 @@ class KernelConfig:
                 # Append platform-specific priorities
                 # Must be idempotent because aphrodite_config.set_platform_defaults() may be
                 # called multiple times (due to AphroditeConfig.__post_init__ manual call).
-                unique_op_priority = [
-                    op for op in op_priority if op not in current_op_priority
-                ]
+                unique_op_priority = [op for op in op_priority if op not in current_op_priority]
                 current_op_priority.extend(unique_op_priority)
 
         logger.info(

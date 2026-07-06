@@ -157,15 +157,9 @@ class TritonAttentionDiffKVImpl(TritonAttentionImpl):
                 f"KV cache (got kv_cache_dtype={self.kv_cache_dtype!r})."
             )
         if self._is_per_token_head_quant:
-            raise NotImplementedError(
-                "TritonAttentionDiffKVBackend does not support per-token-head "
-                "quantization."
-            )
+            raise NotImplementedError("TritonAttentionDiffKVBackend does not support per-token-head quantization.")
         if self.chunk_lookback > -1:
-            raise NotImplementedError(
-                "TritonAttentionDiffKVBackend does not support chunked "
-                "attention with lookback."
-            )
+            raise NotImplementedError("TritonAttentionDiffKVBackend does not support chunked attention with lookback.")
 
     def do_kv_cache_update(
         self,
@@ -215,17 +209,12 @@ class TritonAttentionDiffKVImpl(TritonAttentionImpl):
             output:   [num_tokens, num_heads, head_size_v]
         """
         if output_scale is not None or output_block_scale is not None:
-            raise NotImplementedError(
-                "fused output quantization is not supported for "
-                "TritonAttentionDiffKVImpl"
-            )
+            raise NotImplementedError("fused output quantization is not supported for TritonAttentionDiffKVImpl")
 
         if attn_metadata is None:
             return output.fill_(0)
 
-        assert attn_metadata.use_cascade is False, (
-            "Cascade attention not supported for TritonAttentionDiffKVImpl"
-        )
+        assert attn_metadata.use_cascade is False, "Cascade attention not supported for TritonAttentionDiffKVImpl"
 
         num_actual_tokens = attn_metadata.num_actual_tokens
         head_size_qk = self.head_size

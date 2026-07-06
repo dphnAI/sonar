@@ -67,9 +67,7 @@ def default_server_args():
     ]
 
 
-@pytest.fixture(
-    scope="function", params=[[], ["--logits-processors", DUMMY_LOGITPROC_FQCN]]
-)
+@pytest.fixture(scope="function", params=[[], ["--logits-processors", DUMMY_LOGITPROC_FQCN]])
 def server(default_server_args, request, monkeypatch):
     """Consider two server configurations:
     (1) --logits-processors cli arg specifies dummy logits processor via fully-
@@ -149,9 +147,7 @@ def test_custom_logitsprocs(server, model_name: str):
                 target_token = random.choice([128, 67])
                 # For requests which activate the dummy logitproc, choose one of
                 # two `target_token` values which are known not to be EOS tokens
-                request_keyword_args["extra_body"] = {
-                    "aphrodite_xargs": {DUMMY_LOGITPROC_ARG: target_token}
-                }
+                request_keyword_args["extra_body"] = {"aphrodite_xargs": {DUMMY_LOGITPROC_ARG: target_token}}
             batch = await client.completions.create(
                 model=model_name,
                 prompt=prompt,
@@ -177,18 +173,14 @@ def test_custom_logitsprocs(server, model_name: str):
     "model_name",
     [MODEL_NAME],
 )
-async def test_invalid_custom_logitsproc_arg(
-    client: openai.AsyncOpenAI, model_name: str
-):
+async def test_invalid_custom_logitsproc_arg(client: openai.AsyncOpenAI, model_name: str):
     """Test that request with invalid custom logitsproc is rejected"""
 
     prompt = "Hello, my name is"
     # Pass invalid (non-int) target_token value to dummy logits processor
     request_keyword_args: dict[str, Any] = {
         **api_keyword_args,
-        "extra_body": {
-            "aphrodite_xargs": {DUMMY_LOGITPROC_ARG: "invalid_target_token_value"}
-        },
+        "extra_body": {"aphrodite_xargs": {DUMMY_LOGITPROC_ARG: "invalid_target_token_value"}},
     }
 
     with pytest.raises(openai.OpenAIError) as exc_info:

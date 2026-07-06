@@ -64,9 +64,7 @@ class LogprobsTensors(NamedTuple):
             self.logprob_token_ids.cpu().numpy(),
             self.logprobs.cpu().numpy(),
             self.selected_token_ranks.cpu().numpy(),
-            cu_num_generated_tokens
-            if cu_num_generated_tokens is not None
-            else self.cu_num_generated_tokens,
+            cu_num_generated_tokens if cu_num_generated_tokens is not None else self.cu_num_generated_tokens,
         )
 
     def to_cpu_nonblocking(self) -> "LogprobsTensors":
@@ -81,9 +79,7 @@ class LogprobsTensors(NamedTuple):
 
     def filter(self, mask: torch.Tensor) -> "LogprobsTensors":
         """Filter the logprobs tensors with the given bool mask."""
-        assert self.cu_num_generated_tokens is None, (
-            "filter can't be used with cu_num_generated_tokens"
-        )
+        assert self.cu_num_generated_tokens is None, "filter can't be used with cu_num_generated_tokens"
         return LogprobsTensors(
             self.logprob_token_ids[mask],
             self.logprobs[mask],
@@ -91,18 +87,12 @@ class LogprobsTensors(NamedTuple):
         )
 
     @staticmethod
-    def empty_cpu(
-        num_positions: int, num_tokens_per_position: int
-    ) -> "LogprobsTensors":
+    def empty_cpu(num_positions: int, num_tokens_per_position: int) -> "LogprobsTensors":
         """Create empty LogprobsTensors on CPU."""
 
-        logprob_token_ids = torch.empty(
-            (num_positions, num_tokens_per_position), dtype=torch.int32, device="cpu"
-        )
+        logprob_token_ids = torch.empty((num_positions, num_tokens_per_position), dtype=torch.int32, device="cpu")
         logprobs = torch.empty_like(logprob_token_ids, dtype=torch.float32)
-        selected_token_ranks = torch.empty(
-            num_positions, dtype=torch.int32, device="cpu"
-        )
+        selected_token_ranks = torch.empty(num_positions, dtype=torch.int32, device="cpu")
         return LogprobsTensors(
             logprob_token_ids=logprob_token_ids,
             logprobs=logprobs,
@@ -252,9 +242,7 @@ class ModelRunnerOutput:
     # [prompt_len, num_prompt_logprobs]
     # [prompt_len, num_prompt_logprobs]
     # [prompt_len]
-    prompt_logprobs_dict: dict[str, LogprobsTensors | None] = field(
-        default_factory=dict
-    )
+    prompt_logprobs_dict: dict[str, LogprobsTensors | None] = field(default_factory=dict)
 
     # [num_reqs, hidden_size]
     pooler_output: list[torch.Tensor | None] | None = None

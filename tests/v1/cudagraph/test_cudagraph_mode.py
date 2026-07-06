@@ -5,11 +5,11 @@ from contextlib import ExitStack
 
 import pytest
 
-from tests.utils import wait_for_gpu_memory_to_clear
-from tests.v1.attention.utils import full_cg_backend_configs as backend_configs
 from aphrodite import LLM
 from aphrodite.config import CompilationConfig, CompilationMode
 from aphrodite.platforms import current_platform
+from tests.utils import wait_for_gpu_memory_to_clear
+from tests.v1.attention.utils import full_cg_backend_configs as backend_configs
 
 # test attention backend and cudagraph_mode combo
 # (backend_name, cudagraph_mode, supported)
@@ -59,9 +59,7 @@ def test_backend_and_cudagraph_mode_combo(backend_name, cudagraph_mode, supporte
             gpu_memory_utilization=0.45,
             max_model_len=1024,
             attention_config=attention_config,
-            compilation_config=CompilationConfig(
-                mode=CompilationMode.APHRODITE_COMPILE, cudagraph_mode=cudagraph_mode
-            ),
+            compilation_config=CompilationConfig(mode=CompilationMode.APHRODITE_COMPILE, cudagraph_mode=cudagraph_mode),
         )
         llm.generate(["Hello, my name is"] * 10)
     # when above code raises, `llm` may be undefined, so we need to catch that
@@ -95,12 +93,8 @@ combo_cases_2 = [
 ]
 
 
-@pytest.mark.parametrize(
-    "backend_name,cudagraph_mode,compilation_mode,supported", combo_cases_2
-)
-def test_cudagraph_compilation_combo(
-    backend_name, cudagraph_mode, compilation_mode, supported
-):
+@pytest.mark.parametrize("backend_name,cudagraph_mode,compilation_mode,supported", combo_cases_2)
+def test_cudagraph_compilation_combo(backend_name, cudagraph_mode, compilation_mode, supported):
     backend_config = backend_configs[backend_name]
     attention_config = backend_config.attention_config
 
@@ -115,9 +109,7 @@ def test_cudagraph_compilation_combo(
             gpu_memory_utilization=0.45,
             max_model_len=1024,
             attention_config=attention_config,
-            compilation_config=CompilationConfig(
-                mode=compilation_mode, cudagraph_mode=cudagraph_mode
-            ),
+            compilation_config=CompilationConfig(mode=compilation_mode, cudagraph_mode=cudagraph_mode),
         )
         llm.generate(["Hello, my name is"] * 10)
     # when above code raises, `llm` may be undefined, so we need to catch that

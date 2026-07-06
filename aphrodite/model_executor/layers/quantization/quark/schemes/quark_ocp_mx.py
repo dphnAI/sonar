@@ -82,9 +82,7 @@ try:
                     x_q.view(torch.uint8),
                     weight.view(torch.uint8).view(weight.shape[0] // 16, -1),
                     x_s,
-                    weight_scale.view(torch.uint8).view(
-                        weight_scale.shape[0] // 32, -1
-                    ),
+                    weight_scale.view(torch.uint8).view(weight_scale.shape[0] // 32, -1),
                     out_dtype,
                     y,
                 )
@@ -111,9 +109,7 @@ try:
             else:
                 x_q = x
                 x_s = x_scales
-            y = torch.empty(
-                x_q.shape[0], weight.shape[0], device=x_q.device, dtype=out_dtype
-            )
+            y = torch.empty(x_q.shape[0], weight.shape[0], device=x_q.device, dtype=out_dtype)
 
             gemm_afp4wfp4(x_q, weight, x_s, weight_scale.T, out_dtype, y)
             return y
@@ -126,9 +122,7 @@ try:
         rocm_use_aiter_fp4_asm_gemm: bool = False,
         out_dtype: torch.dtype | None = torch.bfloat16,
     ) -> torch.Tensor:
-        return torch.empty(
-            (*x.shape[:-1], weight.shape[0]), dtype=out_dtype, device=x.device
-        )
+        return torch.empty((*x.shape[:-1], weight.shape[0]), dtype=out_dtype, device=x.device)
 
     direct_register_custom_op(
         op_name="gemm_with_dynamic_quant",
@@ -167,18 +161,14 @@ class QuarkOCP_MX(QuarkScheme):
             else:
                 self.input_dtype = input_quant.replace("fp", "mxfp")
 
-        self.ocp_mx_scheme = OCP_MX_Scheme.from_quant_dtype(
-            self.input_dtype, self.weight_dtype
-        )
+        self.ocp_mx_scheme = OCP_MX_Scheme.from_quant_dtype(self.input_dtype, self.weight_dtype)
 
         if self.weight_dtype == "mxfp4":
             self.packed_factor: int | Fraction = 2
             self.dequant_func = dequant_mxfp4
         else:
             self.packed_factor = Fraction(numerator=8, denominator=6)
-            self.dequant_func = partial(
-                dequant_mxfp6, quant_dtype=self.weight_dtype.replace("mx", "")
-            )
+            self.dequant_func = partial(dequant_mxfp6, quant_dtype=self.weight_dtype.replace("mx", ""))
 
         if self.input_dtype is None:
             self.quant_dequant_func: Callable[[torch.Tensor], torch.Tensor] = (
@@ -187,9 +177,7 @@ class QuarkOCP_MX(QuarkScheme):
         elif self.input_dtype == "mxfp4":
             self.quant_dequant_func = quant_dequant_mxfp4
         else:
-            self.quant_dequant_func = partial(
-                quant_dequant_mxfp6, quant_dtype=self.input_dtype.replace("mx", "")
-            )
+            self.quant_dequant_func = partial(quant_dequant_mxfp6, quant_dtype=self.input_dtype.replace("mx", ""))
 
         if input_quant_spec is None:
             self.static_input_scales = False
@@ -198,8 +186,7 @@ class QuarkOCP_MX(QuarkScheme):
 
         if self.static_input_scales:
             raise NotImplementedError(
-                "QuarkOCP_MX with static input scales is currently not "
-                "implemented. Please open an issue."
+                "QuarkOCP_MX with static input scales is currently not implemented. Please open an issue."
             )
 
         # TODO: integrate (or test) mixed-precision kernel.
@@ -207,9 +194,7 @@ class QuarkOCP_MX(QuarkScheme):
             self.input_dtype != "mxfp4" or self.weight_dtype != "mxfp4"
         )
 
-        self.rocm_use_aiter_fp4_asm_gemm = (
-            rocm_aiter_ops.is_asm_fp4_gemm_dynamic_quant_enabled()
-        )
+        self.rocm_use_aiter_fp4_asm_gemm = rocm_aiter_ops.is_asm_fp4_gemm_dynamic_quant_enabled()
 
         if not self.emulate and (dynamic_mxfp4_quant is None or gemm_afp4wfp4 is None):
             # Currently need these kernels if not emulating
@@ -227,9 +212,7 @@ class QuarkOCP_MX(QuarkScheme):
                 "layers computed in high precision."
             )
 
-        if current_platform.supports_mx() and (
-            self.input_dtype != "mxfp4" or self.weight_dtype != "mxfp4"
-        ):
+        if current_platform.supports_mx() and (self.input_dtype != "mxfp4" or self.weight_dtype != "mxfp4"):
             logger.warning_once(
                 "The current platform supports native MXFP4/MXFP6 "
                 f"computation, but kernels for input_dtype={self.input_dtype} "
@@ -258,9 +241,7 @@ class QuarkOCP_MX(QuarkScheme):
     def get_min_capability(cls) -> int:
         return 70
 
-    def process_dynamic_mxfp4_weights_after_loading(
-        self, layer: torch.nn.Module
-    ) -> None:
+    def process_dynamic_mxfp4_weights_after_loading(self, layer: torch.nn.Module) -> None:
         w_q, w_s = dynamic_mxfp4_quant(layer.weight)
         layer.weight_scale = torch.nn.Parameter(w_s.T.contiguous(), requires_grad=False)
         layer.weight = torch.nn.Parameter(w_q, requires_grad=False)
@@ -272,9 +253,7 @@ class QuarkOCP_MX(QuarkScheme):
             if self.dynamic_mxfp4_quant:
                 self.process_dynamic_mxfp4_weights_after_loading(layer)
             else:
-                layer.weight_scale = torch.nn.Parameter(
-                    layer.weight_scale.data, requires_grad=False
-                )
+                layer.weight_scale = torch.nn.Parameter(layer.weight_scale.data, requires_grad=False)
         else:
             if self.dynamic_mxfp4_quant:
                 self.process_dynamic_mxfp4_weights_after_loading(layer)
@@ -282,25 +261,17 @@ class QuarkOCP_MX(QuarkScheme):
                 # shuffle weight scale
                 weight_scale_shuffle = layer.weight_scale.data
                 sm, sn = weight_scale_shuffle.shape
-                weight_scale_shuffle = weight_scale_shuffle.view(
-                    sm // 32, 2, 16, sn // 8, 2, 4, 1
-                )
-                weight_scale_shuffle = weight_scale_shuffle.permute(
-                    0, 3, 5, 2, 4, 1, 6
-                ).contiguous()
+                weight_scale_shuffle = weight_scale_shuffle.view(sm // 32, 2, 16, sn // 8, 2, 4, 1)
+                weight_scale_shuffle = weight_scale_shuffle.permute(0, 3, 5, 2, 4, 1, 6).contiguous()
                 weight_scale_shuffle = weight_scale_shuffle.view(sm, sn)
-                layer.weight_scale = torch.nn.Parameter(
-                    weight_scale_shuffle, requires_grad=False
-                )
+                layer.weight_scale = torch.nn.Parameter(weight_scale_shuffle, requires_grad=False)
 
                 # shuffle weight
                 weight_shuffle = layer.weight.data
                 weight_shuffle = shuffle_weight(weight_shuffle, layout=(16, 16))
                 layer.weight = torch.nn.Parameter(weight_shuffle, requires_grad=False)
             else:
-                layer.weight_scale = torch.nn.Parameter(
-                    layer.weight_scale.data.T.contiguous(), requires_grad=False
-                )
+                layer.weight_scale = torch.nn.Parameter(layer.weight_scale.data.T.contiguous(), requires_grad=False)
 
     def create_weights(
         self,

@@ -36,9 +36,7 @@ def _walk_json_for_additional_properties(data: object):
     if isinstance(data, dict):
         for value in data.values():
             _walk_json_for_additional_properties(value)
-        if "additionalProperties" not in data and (
-            "properties" in data or "patternProperties" in data
-        ):
+        if "additionalProperties" not in data and ("properties" in data or "patternProperties" in data):
             data["additionalProperties"] = False
     elif isinstance(data, list):
         for item in data:
@@ -86,9 +84,7 @@ def process_for_additional_properties(
 @dataclass
 class GuidanceBackend(StructuredOutputBackend):
     def __post_init__(self):
-        self.disable_any_whitespace = (
-            self.aphrodite_config.structured_outputs_config.disable_any_whitespace
-        )
+        self.disable_any_whitespace = self.aphrodite_config.structured_outputs_config.disable_any_whitespace
         self.disable_additional_properties = (
             self.aphrodite_config.structured_outputs_config.disable_additional_properties
         )
@@ -96,13 +92,9 @@ class GuidanceBackend(StructuredOutputBackend):
         if is_mistral_tokenizer(self.tokenizer):
             self.ll_tokenizer = self.tokenizer.llg_tokenizer
         else:
-            self.ll_tokenizer = llguidance_hf.from_tokenizer(
-                self.tokenizer, max(self.vocab_size, len(self.tokenizer))
-            )
+            self.ll_tokenizer = llguidance_hf.from_tokenizer(self.tokenizer, max(self.vocab_size, len(self.tokenizer)))
 
-    def compile_grammar(
-        self, request_type: StructuredOutputOptions, grammar_spec: str
-    ) -> StructuredOutputGrammar:
+    def compile_grammar(self, request_type: StructuredOutputOptions, grammar_spec: str) -> StructuredOutputGrammar:
         self.serialized_grammar = serialize_guidance_grammar(
             request_type,
             grammar_spec,
@@ -126,9 +118,7 @@ class GuidanceBackend(StructuredOutputBackend):
         return r
 
     def allocate_token_bitmask(self, max_num_seqs: int):
-        return llguidance_torch.allocate_token_bitmask(
-            max_num_seqs, self.ll_tokenizer.vocab_size
-        )
+        return llguidance_torch.allocate_token_bitmask(max_num_seqs, self.ll_tokenizer.vocab_size)
 
     def destroy(self):
         pass
@@ -261,9 +251,7 @@ def serialize_guidance_grammar(
                 begin: str = s["begin"]
                 trig = next((t for t in triggers if begin.startswith(t)), None)
                 if trig is None:
-                    raise ValueError(
-                        f"Trigger {begin} not found in triggers {triggers}"
-                    )
+                    raise ValueError(f"Trigger {begin} not found in triggers {triggers}")
                 tags.append(
                     llguidance.StructTag(
                         trigger=trig,
@@ -276,18 +264,12 @@ def serialize_guidance_grammar(
                 raise ValueError("No structural tags found in the grammar spec.")
             return llguidance.StructTag.to_grammar(tags)
         else:
-            logger.error(
-                "Validation should have already occurred. Please file an issue."
-            )
-            raise ValueError(
-                f"grammar is not of valid supported types. ({request_type!s})"
-            )
+            logger.error("Validation should have already occurred. Please file an issue.")
+            raise ValueError(f"grammar is not of valid supported types. ({request_type!s})")
         return llguidance.grammar_from(tp, grammar_spec)
 
 
-def validate_guidance_grammar(
-    sampling_params: SamplingParams, tokenizer: llguidance.LLTokenizer | None = None
-) -> None:
+def validate_guidance_grammar(sampling_params: SamplingParams, tokenizer: llguidance.LLTokenizer | None = None) -> None:
     # if structured output is not enabled, there is nothing to validate
     if sampling_params.structured_outputs is None:
         return

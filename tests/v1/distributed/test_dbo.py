@@ -11,9 +11,9 @@ correctly with the DeepSeek-V2-Lite model using GSM8K evaluation.
 import pytest
 import torch
 
+from aphrodite.utils.import_utils import has_deep_ep
 from tests.evals.gsm8k.gsm8k_eval import evaluate_gsm8k
 from tests.utils import RemoteOpenAIServer
-from aphrodite.utils.import_utils import has_deep_ep
 
 # Detect Blackwell / B200 (compute capability 10.x)
 try:
@@ -49,10 +49,7 @@ DEEPEP_BACKENDS = [
 @pytest.mark.parametrize("all2all_backend", DEEPEP_BACKENDS)
 @pytest.mark.xfail(
     IS_BLACKWELL,
-    reason=(
-        "Temporary: DBO accuracy unstable on Blackwell "
-        "(doesn't meet expectation of MIN_ACCURACY = 0.62)"
-    ),
+    reason=("Temporary: DBO accuracy unstable on Blackwell (doesn't meet expectation of MIN_ACCURACY = 0.62)"),
 )
 def test_dbo_dp_ep_gsm8k(all2all_backend: str, num_gpus_available):
     """
@@ -104,6 +101,5 @@ def test_dbo_dp_ep_gsm8k(all2all_backend: str, num_gpus_available):
         # Validate accuracy is reasonable
         accuracy = results["accuracy"]
         assert accuracy >= MIN_ACCURACY, (
-            f"DBO+DP+EP accuracy too low ({all2all_backend}): "
-            f"{accuracy:.3f} < {MIN_ACCURACY:.3f} "
+            f"DBO+DP+EP accuracy too low ({all2all_backend}): {accuracy:.3f} < {MIN_ACCURACY:.3f} "
         )

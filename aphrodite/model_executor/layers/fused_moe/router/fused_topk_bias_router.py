@@ -177,24 +177,18 @@ def fused_topk_bias(
             hash_indices_table = hash_indices_table.to(dtype=indices_type)
 
     if not rocm_aiter_ops.is_fused_moe_enabled():
-        assert hidden_states.size(0) == gating_output.size(0), (
-            "Number of tokens mismatch"
-        )
+        assert hidden_states.size(0) == gating_output.size(0), "Number of tokens mismatch"
 
         M, _ = hidden_states.size()
 
-        topk_weights = torch.empty(
-            M, topk, dtype=torch.float32, device=hidden_states.device
-        )
+        topk_weights = torch.empty(M, topk, dtype=torch.float32, device=hidden_states.device)
         topk_ids = torch.empty(
             M,
             topk,
             dtype=torch.int32 if indices_type is None else indices_type,
             device=hidden_states.device,
         )
-        token_expert_indices = torch.empty(
-            M, topk, dtype=torch.int32, device=hidden_states.device
-        )
+        token_expert_indices = torch.empty(M, topk, dtype=torch.int32, device=hidden_states.device)
 
         if scoring_func == "softmax":
             topk_weights, topk_ids = aphrodite_topk_softmax(
@@ -240,9 +234,7 @@ def fused_topk_bias(
         num_experts = gating_output.shape[-1]
         num_expert_group = _aiter_get_num_expert_group(num_experts)
         if topk >= num_expert_group:
-            topk_weights = torch.empty(
-                M, topk, dtype=torch.float32, device=hidden_states.device
-            )
+            topk_weights = torch.empty(M, topk, dtype=torch.float32, device=hidden_states.device)
             topk_ids = torch.empty(
                 M,
                 topk,
@@ -264,18 +256,14 @@ def fused_topk_bias(
 
     if scoring_func == "sqrtsoftplus":
         M = hidden_states.size(0)
-        topk_weights = torch.empty(
-            M, topk, dtype=torch.float32, device=hidden_states.device
-        )
+        topk_weights = torch.empty(M, topk, dtype=torch.float32, device=hidden_states.device)
         topk_ids = torch.empty(
             M,
             topk,
             dtype=torch.int32 if indices_type is None else indices_type,
             device=hidden_states.device,
         )
-        token_expert_indices = torch.empty(
-            M, topk, dtype=torch.int32, device=hidden_states.device
-        )
+        token_expert_indices = torch.empty(M, topk, dtype=torch.int32, device=hidden_states.device)
         return aphrodite_topk_softplus_sqrt(
             topk_weights,
             topk_ids,
@@ -296,9 +284,7 @@ def fused_topk_bias(
     else:
         raise ValueError(f"Unsupported scoring function: {scoring_func}")
     if e_score_correction_bias is not None:
-        scores_for_choice = scores.view(
-            -1, n_routed_experts
-        ) + e_score_correction_bias.unsqueeze(0)
+        scores_for_choice = scores.view(-1, n_routed_experts) + e_score_correction_bias.unsqueeze(0)
     else:
         scores_for_choice = scores.view(-1, n_routed_experts)
     # For batch invariance, use sorted=True to ensure deterministic expert selection
@@ -306,18 +292,14 @@ def fused_topk_bias(
         topk_indices = hash_indices_table[input_tokens]
     else:
         use_sorted = envs.APHRODITE_BATCH_INVARIANT
-        topk_indices = torch.topk(scores_for_choice, k=topk, dim=-1, sorted=use_sorted)[
-            1
-        ]
+        topk_indices = torch.topk(scores_for_choice, k=topk, dim=-1, sorted=use_sorted)[1]
     topk_weights = scores.gather(1, topk_indices)
     if renormalize:
         topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True)
     topk_weights = topk_weights.to(torch.float32)
     if routed_scaling_factor != 1.0:
         topk_weights *= routed_scaling_factor
-    return topk_weights, topk_indices.to(
-        torch.int32 if indices_type is None else indices_type
-    )
+    return topk_weights, topk_indices.to(torch.int32 if indices_type is None else indices_type)
 
 
 class FusedTopKBiasRouter(BaseRouter):
@@ -396,9 +378,7 @@ class FusedTopKBiasRouter(BaseRouter):
             # shared experts occupy the slots immediately after them, i.e. ids
             # [global_num_experts, global_num_experts + n).
             base = self.global_num_experts
-            shared_ids = torch.arange(
-                base, base + n, dtype=topk_ids.dtype, device=topk_ids.device
-            ).expand(m, n)
+            shared_ids = torch.arange(base, base + n, dtype=topk_ids.dtype, device=topk_ids.device).expand(m, n)
             shared_w = torch.full(
                 (m, n),
                 self.shared_expert_weight,

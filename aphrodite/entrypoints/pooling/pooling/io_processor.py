@@ -48,16 +48,10 @@ class PluginWithIOProcessorPlugins(PoolingIOProcessor):
 
         validated_prompt = self.io_processor.parse_data(ctx.request.data)
 
-        raw_prompts = self.io_processor.pre_process(
-            prompt=validated_prompt, request_id=ctx.request_id
-        )
+        raw_prompts = self.io_processor.pre_process(prompt=validated_prompt, request_id=ctx.request_id)
 
         parsed_prompts = [
-            (
-                prompt
-                if isinstance(prompt, bytes)
-                else parse_model_prompt(self.model_config, prompt)
-            )
+            (prompt if isinstance(prompt, bytes) else parse_model_prompt(self.model_config, prompt))
             for prompt in prompt_to_seq(raw_prompts)
         ]
 
@@ -67,9 +61,7 @@ class PluginWithIOProcessorPlugins(PoolingIOProcessor):
             parsed_prompts,
             tok_params,
             prompt_extras={
-                k: v
-                for k in ("mm_processor_kwargs", "cache_salt")
-                if (v := getattr(ctx.request, k, None)) is not None
+                k: v for k in ("mm_processor_kwargs", "cache_salt") if (v := getattr(ctx.request, k, None)) is not None
             },
         )
 
@@ -87,9 +79,7 @@ class PluginWithIOProcessorPlugins(PoolingIOProcessor):
             request_id=ctx.request_id,
         )
 
-        if callable(
-            output_to_response := getattr(self.io_processor, "output_to_response", None)
-        ):
+        if callable(output_to_response := getattr(self.io_processor, "output_to_response", None)):
             logger.warning_once(
                 "`IOProcessor.output_to_response` is deprecated. To ensure "
                 "consistency between offline and online APIs, "

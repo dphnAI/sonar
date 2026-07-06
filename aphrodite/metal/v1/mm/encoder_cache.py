@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """MLX encoder-output cache for multimodal requests."""
 
 from __future__ import annotations
@@ -19,9 +20,7 @@ class EncoderCache:
         self.mm_features: dict[str, list[MultiModalFeatureSpec]] = {}
         self.encoder_outputs: dict[str, mx.array] = {}
 
-    def add_request(
-        self, req_id: str, mm_features: list[MultiModalFeatureSpec]
-    ) -> None:
+    def add_request(self, req_id: str, mm_features: list[MultiModalFeatureSpec]) -> None:
         self.mm_features[req_id] = mm_features
 
     def remove_request(self, req_id: str) -> None:

@@ -98,9 +98,7 @@ class FlashInferPrefillBackend(MLAPrefillBackend):
         if len(self._prefill_chunks) < num_chunks:
             for _ in range(len(self._prefill_chunks), num_chunks):
                 self._prefill_chunks.append(
-                    BatchPrefillWithRaggedKVCacheWrapper(
-                        workspace_buffer, "NHD", backend="cutlass"
-                    )
+                    BatchPrefillWithRaggedKVCacheWrapper(workspace_buffer, "NHD", backend="cutlass")
                 )
 
     def _resolve_global_hyperparameters(self) -> PerLayerParameters:
@@ -113,11 +111,7 @@ class FlashInferPrefillBackend(MLAPrefillBackend):
         )
 
         forward_context = self.aphrodite_config.compilation_config.static_forward_context
-        layer_names = [
-            name
-            for name, layer in forward_context.items()
-            if isinstance(layer, MLAAttention)
-        ]
+        layer_names = [name for name, layer in forward_context.items() if isinstance(layer, MLAAttention)]
 
         self._global_hyperparameters = infer_global_hyperparameters(
             get_per_layer_parameters(
@@ -136,9 +130,7 @@ class FlashInferPrefillBackend(MLAPrefillBackend):
         qo_indptr = prefill_metadata.query_start_loc
         has_context = prefill_metadata.chunked_context is not None
         if self._prefill_main is None:
-            self._prefill_main = BatchPrefillWithRaggedKVCacheWrapper(
-                self._workspace_buffer, "NHD", backend="cutlass"
-            )
+            self._prefill_main = BatchPrefillWithRaggedKVCacheWrapper(self._workspace_buffer, "NHD", backend="cutlass")
             self._ensure_chunks(_DEFAULT_NUM_CHUNKS, self._workspace_buffer)
 
         if has_context:

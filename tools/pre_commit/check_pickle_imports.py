@@ -51,6 +51,11 @@ ALLOWED_FILES = {
     "aphrodite/diffusion/utils.py",
     "aphrodite/diffusion/runtime/distributed/utils.py",
     "aphrodite/diffusion/runtime/models/registry.py",
+    # tests exercising serialization paths
+    "tests/compile/test_aot_compile.py",
+    "tests/distributed/test_weight_transfer.py",
+    "tests/multimodal/media/test_base.py",
+    "tests/tokenizers_/test_hf.py",
 }
 
 PICKLE_RE = re.compile(

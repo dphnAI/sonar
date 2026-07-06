@@ -91,10 +91,7 @@ def compute_maxsim_score_batched(
         max_d = max(int(x.shape[0]) for x in d_embs[start:end])
 
         # keep score matrix bounded to avoid oversized allocations.
-        while (
-            end - start > 1
-            and (end - start) * max_q * max_d > max_score_matrix_elements
-        ):
+        while end - start > 1 and (end - start) * max_q * max_d > max_score_matrix_elements:
             end -= 1
             max_q = max(int(x.shape[0]) for x in q_embs[start:end])
             max_d = max(int(x.shape[0]) for x in d_embs[start:end])
@@ -105,12 +102,8 @@ def compute_maxsim_score_batched(
         device = batch_q[0].device
         dim = int(batch_q[0].shape[1])
 
-        q_batch = torch.zeros(
-            (batch_size, max_q, dim), dtype=torch.float32, device=device
-        )
-        d_batch = torch.zeros(
-            (batch_size, max_d, dim), dtype=torch.float32, device=device
-        )
+        q_batch = torch.zeros((batch_size, max_q, dim), dtype=torch.float32, device=device)
+        d_batch = torch.zeros((batch_size, max_d, dim), dtype=torch.float32, device=device)
         q_mask = torch.zeros((batch_size, max_q), dtype=torch.bool, device=device)
         d_mask = torch.zeros((batch_size, max_d), dtype=torch.bool, device=device)
 

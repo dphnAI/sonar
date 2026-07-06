@@ -5,7 +5,7 @@ from typing import Literal
 
 from torch import nn
 
-from aphrodite.config import ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig
 from aphrodite.config.load import LoadConfig
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.model_loader.base_loader import BaseModelLoader
@@ -99,15 +99,12 @@ def register_model_loader(load_format: str):
     def _wrapper(model_loader_cls):
         if load_format in _LOAD_FORMAT_TO_MODEL_LOADER:
             logger.warning(
-                "Load format `%s` is already registered, and will be "
-                "overwritten by the new loader class `%s`.",
+                "Load format `%s` is already registered, and will be overwritten by the new loader class `%s`.",
                 load_format,
                 model_loader_cls,
             )
         if not issubclass(model_loader_cls, BaseModelLoader):
-            raise ValueError(
-                "The model loader must be a subclass of `BaseModelLoader`."
-            )
+            raise ValueError("The model loader must be a subclass of `BaseModelLoader`.")
         _LOAD_FORMAT_TO_MODEL_LOADER[load_format] = model_loader_cls
         logger.info(
             "Registered model loader `%s` with load format `%s`",
@@ -137,9 +134,7 @@ def get_model(
     loader = get_model_loader(load_config or aphrodite_config.load_config)
     if model_config is None:
         model_config = aphrodite_config.model_config
-    return loader.load_model(
-        aphrodite_config=aphrodite_config, model_config=model_config, prefix=prefix
-    )
+    return loader.load_model(aphrodite_config=aphrodite_config, model_config=model_config, prefix=prefix)
 
 
 __all__ = [

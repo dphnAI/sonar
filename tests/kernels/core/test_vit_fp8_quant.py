@@ -22,9 +22,7 @@ NUM_HEADS = [16]
 SCALES = [0.01, 0.1, 1.0]
 
 
-def _naive_fp8_quantize(
-    tensor: torch.Tensor, scale: torch.Tensor, skip_scale: bool
-) -> torch.Tensor:
+def _naive_fp8_quantize(tensor: torch.Tensor, scale: torch.Tensor, skip_scale: bool) -> torch.Tensor:
     """Reference FP8 quantization in PyTorch."""
     fp8_dtype = current_platform.fp8_dtype()
     fp8_min, fp8_max = get_fp8_min_max()
@@ -41,17 +39,11 @@ def _naive_fp8_quantize(
 @pytest.mark.parametrize("seq_len", SEQ_LENS)
 @pytest.mark.parametrize("num_heads", NUM_HEADS)
 @pytest.mark.parametrize("scale_val", SCALES)
-def test_quantize_contiguous(
-    head_dim: int, seq_len: int, num_heads: int, scale_val: float
-) -> None:
+def test_quantize_contiguous(head_dim: int, seq_len: int, num_heads: int, scale_val: float) -> None:
     """Test quantization of contiguous 3D tensors."""
     torch.manual_seed(42)
-    tensor = torch.randn(
-        seq_len, num_heads, head_dim, device="cuda", dtype=torch.bfloat16
-    )
-    scale = torch.tensor([scale_val], dtype=torch.float32, device="cuda").view(
-        1, 1, 1, 1
-    )
+    tensor = torch.randn(seq_len, num_heads, head_dim, device="cuda", dtype=torch.bfloat16)
+    scale = torch.tensor([scale_val], dtype=torch.float32, device="cuda").view(1, 1, 1, 1)
 
     result = quantize_fp8_pad_head_dim_triton(tensor, scale)
 
@@ -75,9 +67,7 @@ def test_quantize_non_contiguous(head_dim: int) -> None:
     """Test quantization from non-contiguous QKV views (interleaved buffer)."""
     seq_len, num_heads = 64, 16
     # Simulate interleaved QKV buffer: shape (seq_len, 3 * num_heads, head_dim)
-    qkv = torch.randn(
-        seq_len, 3 * num_heads, head_dim, device="cuda", dtype=torch.bfloat16
-    )
+    qkv = torch.randn(seq_len, 3 * num_heads, head_dim, device="cuda", dtype=torch.bfloat16)
     # Q is every 3rd head slice - non-contiguous view
     q = qkv[:, 0::3, :]
     assert not q.is_contiguous()
@@ -98,9 +88,7 @@ def test_quantize_non_contiguous(head_dim: int) -> None:
 def test_skip_scale() -> None:
     """Test skip_scale=True produces cast-only output (no division)."""
     seq_len, num_heads, head_dim = 32, 8, 80
-    tensor = torch.randn(
-        seq_len, num_heads, head_dim, device="cuda", dtype=torch.bfloat16
-    )
+    tensor = torch.randn(seq_len, num_heads, head_dim, device="cuda", dtype=torch.bfloat16)
     scale = torch.tensor([0.5], dtype=torch.float32, device="cuda").view(1, 1, 1, 1)
 
     result_skip = quantize_fp8_pad_head_dim_triton(tensor, scale, skip_scale=True)

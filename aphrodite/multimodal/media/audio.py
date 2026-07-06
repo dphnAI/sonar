@@ -86,10 +86,7 @@ def load_audio_pyav(
                     metadata_duration_s = float(stream.duration * stream.time_base)
                 elif container.duration:
                     metadata_duration_s = container.duration / 1_000_000
-                if (
-                    metadata_duration_s is not None
-                    and metadata_duration_s > max_duration_s
-                ):
+                if metadata_duration_s is not None and metadata_duration_s > max_duration_s:
                     raise ValueError(
                         f"Audio exceeds maximum allowed duration of "
                         f"{max_duration_s}s (metadata reports "
@@ -98,9 +95,7 @@ def load_audio_pyav(
                         f"increase this limit."
                     )
 
-            max_samples = (
-                int(sr * max_duration_s) if max_duration_s is not None else None
-            )
+            max_samples = int(sr * max_duration_s) if max_duration_s is not None else None
             total_samples = 0
 
             chunks: list[npt.NDArray] = []
@@ -110,11 +105,7 @@ def load_audio_pyav(
                 rel_tol=0.0,
                 abs_tol=1e-6,
             )
-            resampler = (
-                av.AudioResampler(format="fltp", layout="mono", rate=sr)
-                if needs_resampling
-                else None
-            )
+            resampler = av.AudioResampler(format="fltp", layout="mono", rate=sr) if needs_resampling else None
             for frame in container.decode(stream):
                 if needs_resampling:
                     assert resampler is not None
@@ -192,9 +183,7 @@ def load_audio(
     max_duration_s: float | None = None,
 ):
     try:
-        return load_audio_soundfile(
-            path, sr=sr, mono=mono, max_duration_s=max_duration_s
-        )
+        return load_audio_soundfile(path, sr=sr, mono=mono, max_duration_s=max_duration_s)
     except ImportError as exc:
         # soundfile (or resampy) is not installed — fall through to pyav.
         # NOTE: this clause must stay BEFORE ``soundfile.LibsndfileError``

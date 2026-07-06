@@ -97,9 +97,7 @@ def run_gpqa_eval(model_name: str, base_url: str, reasoning_effort: str) -> floa
             return float(match.group(1))
 
         # If we still can't find it, raise an error
-        raise ValueError(
-            f"Could not parse score from evaluation output:\n{result.stdout}"
-        )
+        raise ValueError(f"Could not parse score from evaluation output:\n{result.stdout}")
 
     except subprocess.TimeoutExpired as e:
         raise RuntimeError("Evaluation timed out") from e
@@ -153,9 +151,7 @@ def test_gpqa_correctness(config_filename):
         base_url = remote_server.url_for("v1")
         print(f"Server started at: {base_url}")
 
-        measured_metric = run_gpqa_eval(
-            eval_config["model_name"], base_url, reasoning_effort
-        )
+        measured_metric = run_gpqa_eval(eval_config["model_name"], base_url, reasoning_effort)
         expected_metric = eval_config["metric_threshold"]
 
         print(f"GPQA Results for {eval_config['model_name']}:")

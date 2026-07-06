@@ -37,11 +37,7 @@ WEIGHT_TYPE = scalar_types.uint4b8  # symmetric int4, bias = 8
 # The kernel is only selectable when running on gfx1100 with the custom op
 # compiled in; otherwise can_implement rejects and selection falls through.
 gfx1100_only = pytest.mark.skipif(
-    not (
-        on_gfx1100()
-        and hasattr(torch.ops, "_rocm_C")
-        and hasattr(torch.ops._rocm_C, "gptq_gemm_rdna3")
-    ),
+    not (on_gfx1100() and hasattr(torch.ops, "_rocm_C") and hasattr(torch.ops._rocm_C, "gptq_gemm_rdna3")),
     reason="requires gfx1100 with the _rocm_C.gptq_gemm_rdna3 op built in",
 )
 

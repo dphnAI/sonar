@@ -154,10 +154,7 @@ class Base(
             quant_method_name = self.quant_config.get_name()
             # Check for unsupported quantization methods.
             if quant_method_name in ("mxfp4", "gpt_oss_mxfp4"):
-                raise NotImplementedError(
-                    "Transformers modeling backend does "
-                    "not support MXFP4 quantization yet."
-                )
+                raise NotImplementedError("Transformers modeling backend does not support MXFP4 quantization yet.")
 
         self._patch_config()
         from_config_kwargs = dict(
@@ -357,12 +354,8 @@ class Base(
             return
 
         if not self.model.supports_pp_plan:
-            tip = get_feature_request_tip(
-                self.model_config.model, self.model_config.trust_remote_code
-            )
-            raise ValueError(
-                f"{type(self.model)} does not support pipeline parallel. {tip}"
-            )
+            tip = get_feature_request_tip(self.model_config.model, self.model_config.trust_remote_code)
+            raise ValueError(f"{type(self.model)} does not support pipeline parallel. {tip}")
 
         def attrsetter(attr: str) -> Callable[[object, object], None]:
             """Set a possibly nested attribute, like the inverse of attrgetter."""
@@ -385,17 +378,14 @@ class Base(
 
         if len(module_lists) > 1:
             raise ValueError(
-                "Pipeline parallel of models with multiple `ModuleList`s "
-                "in the base model are not supported yet!"
+                "Pipeline parallel of models with multiple `ModuleList`s in the base model are not supported yet!"
             )
         if module_list_idx is None:
             raise ValueError(f"Could not find `ModuleList` in {type(self.model)}")
 
         # Layers before module list
         for name in pp_plan[:module_list_idx]:
-            if self.pp_group.is_first_rank or (
-                self._get_tie_word_embeddings() and self.pp_group.is_last_rank
-            ):
+            if self.pp_group.is_first_rank or (self._get_tie_word_embeddings() and self.pp_group.is_last_rank):
                 continue
             # attrsetter in case the module is nested (e.g. "text_model.embed_tokens")
             attrsetter(name)(self.model, PPMissingLayer())
@@ -432,12 +422,8 @@ class Base(
         tp_plan = self.model.tp_plan
 
         if not tp_plan and self.tp_group.world_size > 1:
-            tip = get_feature_request_tip(
-                self.model_config.model, self.model_config.trust_remote_code
-            )
-            raise ValueError(
-                f"{type(self.model)} does not support tensor parallel. {tip}"
-            )
+            tip = get_feature_request_tip(self.model_config.model, self.model_config.trust_remote_code)
+            raise ValueError(f"{type(self.model)} does not support tensor parallel. {tip}")
 
         # Prefix the patterns because we always start from `self.model`
         tp_plan = {maybe_prefix("model", k): v for k, v in tp_plan.items()}
@@ -446,10 +432,7 @@ class Base(
             for child_name, child_module in module.named_children():
                 new_module = child_module
                 qual_name = maybe_prefix(prefix, child_name)
-                if (
-                    isinstance(module, nn.ModuleList)
-                    and len(module) == self.text_config.num_hidden_layers
-                ):
+                if isinstance(module, nn.ModuleList) and len(module) == self.text_config.num_hidden_layers:
                     # Populate Eagle3 attrs
                     self._target_class = type(child_module)
                     layer_name = qual_name.removeprefix("model.")
@@ -474,15 +457,11 @@ class Base(
                     # LinearBase, so we set a default style which causes any
                     # unspecified layers to be replaced with ReplicatedLinear
                     style = tp_plan.get(pattern, "replicate")
-                    new_module = replace_linear_class(
-                        child_module, style, self.quant_config, prefix=qual_name
-                    )
+                    new_module = replace_linear_class(child_module, style, self.quant_config, prefix=qual_name)
                 elif isinstance(child_module, (nn.Conv2d, nn.Conv3d)):
                     new_module = replace_conv_class(child_module)
                 elif child_module.__class__.__name__.endswith("RMSNorm"):
-                    new_module = replace_rms_norm_class(
-                        child_module, self.text_config.hidden_size
-                    )
+                    new_module = replace_rms_norm_class(child_module, self.text_config.hidden_size)
                 else:
                     _recursive_replace(child_module, prefix=qual_name)
 
@@ -523,17 +502,10 @@ class Base(
         for i in range(start, end):
             # Handle interleaved sliding window attention
             per_layer_sliding_window = None
-            if (
-                hasattr(self.config, "layer_types")
-                and self.config.layer_types[i] == "sliding_attention"
-            ):
+            if hasattr(self.config, "layer_types") and self.config.layer_types[i] == "sliding_attention":
                 per_layer_sliding_window = self.config.sliding_window
 
-            attn_cls = (
-                EncoderOnlyAttention
-                if attn_type == AttentionType.ENCODER_ONLY
-                else Attention
-            )
+            attn_cls = EncoderOnlyAttention if attn_type == AttentionType.ENCODER_ONLY else Attention
             attention_instances[i] = attn_cls(
                 num_heads=num_heads,
                 head_size=head_size,
@@ -598,11 +570,7 @@ class Base(
 
         # If the model scales embeddings inside the input embedding layer we must
         # ensure they are scaled here since VocabParallelEmbedding will not do it
-        if (
-            self.embed_scale is not None
-            and input_ids is not None
-            and inputs_embeds is None
-        ):
+        if self.embed_scale is not None and input_ids is not None and inputs_embeds is None:
             inputs_embeds = self.embed_input_ids(input_ids)
             input_ids = None
 
@@ -656,8 +624,7 @@ class Base(
         required = Version(min_version)
         if installed < required:
             raise ImportError(
-                f"Transformers modeling backend requires transformers>={required} "
-                f"for {feature}, but got {installed}"
+                f"Transformers modeling backend requires transformers>={required} for {feature}, but got {installed}"
             )
 
     def set_aux_hidden_state_layers(self, layers: tuple[int, ...]) -> None:

@@ -34,10 +34,7 @@ def _check_bitsandbytes_version():
         import bitsandbytes
 
         if version.parse(bitsandbytes.__version__) < version.parse(min_version):
-            raise ImportError(
-                "bitsandbytes version is wrong. Please "
-                f"install bitsandbytes>={min_version}."
-            )
+            raise ImportError(f"bitsandbytes version is wrong. Please install bitsandbytes>={min_version}.")
     except ImportError as err:
         raise ImportError(
             f"Please install bitsandbytes>={min_version} via "
@@ -78,9 +75,7 @@ class BitsAndBytesConfig(QuantizationConfig):
         self.llm_int8_threshold = llm_int8_threshold
 
         if self.bnb_4bit_quant_storage not in ["uint8"]:
-            raise ValueError(
-                f"Unsupported bnb_4bit_quant_storage: {self.bnb_4bit_quant_storage}"
-            )
+            raise ValueError(f"Unsupported bnb_4bit_quant_storage: {self.bnb_4bit_quant_storage}")
 
     def __repr__(self) -> str:
         return (
@@ -119,30 +114,16 @@ class BitsAndBytesConfig(QuantizationConfig):
 
         load_in_8bit = get_safe_value(config, ["load_in_8bit"], default_value=False)
         load_in_4bit = get_safe_value(config, ["load_in_4bit"], default_value=True)
-        bnb_4bit_compute_dtype = get_safe_value(
-            config, ["bnb_4bit_compute_dtype"], default_value="float32"
-        )
-        bnb_4bit_quant_storage = get_safe_value(
-            config, ["bnb_4bit_quant_storage"], default_value="uint8"
-        )
-        bnb_4bit_quant_type = get_safe_value(
-            config, ["bnb_4bit_quant_type"], default_value="fp4"
-        )
-        bnb_4bit_use_double_quant = get_safe_value(
-            config, ["bnb_4bit_use_double_quant"], default_value=False
-        )
+        bnb_4bit_compute_dtype = get_safe_value(config, ["bnb_4bit_compute_dtype"], default_value="float32")
+        bnb_4bit_quant_storage = get_safe_value(config, ["bnb_4bit_quant_storage"], default_value="uint8")
+        bnb_4bit_quant_type = get_safe_value(config, ["bnb_4bit_quant_type"], default_value="fp4")
+        bnb_4bit_use_double_quant = get_safe_value(config, ["bnb_4bit_use_double_quant"], default_value=False)
         llm_int8_enable_fp32_cpu_offload = get_safe_value(
             config, ["llm_int8_enable_fp32_cpu_offload"], default_value=False
         )
-        llm_int8_has_fp16_weight = get_safe_value(
-            config, ["llm_int8_has_fp16_weight"], default_value=False
-        )
-        llm_int8_skip_modules = get_safe_value(
-            config, ["llm_int8_skip_modules"], default_value=[]
-        )
-        llm_int8_threshold = get_safe_value(
-            config, ["llm_int8_threshold"], default_value=6.0
-        )
+        llm_int8_has_fp16_weight = get_safe_value(config, ["llm_int8_has_fp16_weight"], default_value=False)
+        llm_int8_skip_modules = get_safe_value(config, ["llm_int8_skip_modules"], default_value=[])
+        llm_int8_threshold = get_safe_value(config, ["llm_int8_threshold"], default_value=6.0)
 
         return cls(
             load_in_8bit=load_in_8bit,
@@ -180,9 +161,7 @@ def is_layer_skipped_bnb(prefix: str, llm_int8_skip_modules: list[str]):
     components = prefix.split(".")
 
     # Check if any of the skip modules exactly matches any component
-    substr_check = any(
-        module_name in components for module_name in llm_int8_skip_modules
-    )
+    substr_check = any(module_name in components for module_name in llm_int8_skip_modules)
 
     # Allow certain layers to not be quantized
     set_components = set(".".join(components[: i + 1]) for i in range(len(components)))
@@ -249,9 +228,7 @@ class BitsAndBytesLinearMethod(LinearMethodBase):
 
             total_size = input_size_per_partition * sum(output_partition_sizes)
             if total_size % quant_ratio != 0:
-                raise ValueError(
-                    "The input size is not aligned with the quantized weight shape."
-                )
+                raise ValueError("The input size is not aligned with the quantized weight shape.")
 
             qweight = BitsAndBytesWeightParameter(
                 torch.empty(total_size // quant_ratio, 1, dtype=torch.uint8),
@@ -312,9 +289,7 @@ class BitsAndBytesLinearMethod(LinearMethodBase):
         generation = qweight.generation
 
         out_dim_0 = x.shape[0]
-        out_dim_1 = sum(
-            [quant_state[1].shape[0] for quant_state in quant_states.items()]
-        )
+        out_dim_1 = sum([quant_state[1].shape[0] for quant_state in quant_states.items()])
         out = torch.empty(out_dim_0, out_dim_1, dtype=torch.float16, device=x.device)
 
         current_index = 0
@@ -328,14 +303,9 @@ class BitsAndBytesLinearMethod(LinearMethodBase):
                 matmul_states[i].CB = qweight[offsets[i] : offsets[i + 1]]
                 matmul_states[i].SCB = quant_states[i].to(x.device)
                 matmul_states[i].threshold = self.quant_config.llm_int8_threshold
-                matmul_states[
-                    i
-                ].has_fp16_weights = self.quant_config.llm_int8_has_fp16_weight
+                matmul_states[i].has_fp16_weights = self.quant_config.llm_int8_has_fp16_weight
                 matmul_states[i].is_training = False
-                if (
-                    matmul_states[i].threshold > 0.0
-                    and not matmul_states[i].has_fp16_weights
-                ):
+                if matmul_states[i].threshold > 0.0 and not matmul_states[i].has_fp16_weights:
                     matmul_states[i].use_pool = True
 
             new_x = bf_x.unsqueeze(0)
@@ -377,9 +347,7 @@ class BitsAndBytesLinearMethod(LinearMethodBase):
         offsets = qweight.bnb_shard_offsets
 
         out_dim_0 = x.shape[0]
-        out_dim_1 = sum(
-            [quant_state[1].shape[0] for quant_state in quant_states.items()]
-        )
+        out_dim_1 = sum([quant_state[1].shape[0] for quant_state in quant_states.items()])
         out = torch.empty(out_dim_0, out_dim_1, dtype=torch.bfloat16, device=x.device)
         apply_bnb_4bit(bf_x, qweight, offsets, out)
         out = out.to(original_type)
@@ -477,9 +445,7 @@ class BitsAndBytesMoEMethod(FusedMoEMethodBase):
             **extra_weight_attrs,
         )
 
-    def get_fused_moe_quant_config(
-        self, layer: RoutedExperts
-    ) -> FusedMoEQuantConfig | None:
+    def get_fused_moe_quant_config(self, layer: RoutedExperts) -> FusedMoEQuantConfig | None:
         return None
 
     def apply(
@@ -522,9 +488,7 @@ class BitsAndBytesMoEMethod(FusedMoEMethodBase):
     ):
         quant_ratio = calculate_quant_ratio(params_dtype)
         # Fused gate_up_proj (column parallel)
-        w13_total_size = (
-            hidden_size * 2 * intermediate_size_per_partition
-        ) // quant_ratio
+        w13_total_size = (hidden_size * 2 * intermediate_size_per_partition) // quant_ratio
         w13_qweight = torch.nn.Parameter(
             torch.empty(
                 num_experts,
@@ -591,9 +555,7 @@ class BitsAndBytesMoEMethod(FusedMoEMethodBase):
     ):
         raise NotImplementedError
 
-    def _apply_4bit_dequnt(
-        self, layer: torch.nn.Module
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def _apply_4bit_dequnt(self, layer: torch.nn.Module) -> tuple[torch.Tensor, torch.Tensor]:
         from bitsandbytes.functional import dequantize_4bit
 
         w13 = dequantize_4bit(
@@ -608,7 +570,5 @@ class BitsAndBytesMoEMethod(FusedMoEMethodBase):
         w2 = w2.reshape(layer.w2_weight.experts_shape)
         return w13, w2
 
-    def _apply_8bit_dequant(
-        self, layer: torch.nn.Module
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def _apply_8bit_dequant(self, layer: torch.nn.Module) -> tuple[torch.Tensor, torch.Tensor]:
         raise NotImplementedError

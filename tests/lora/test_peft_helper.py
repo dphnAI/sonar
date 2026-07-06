@@ -26,9 +26,7 @@ ERROR_CASES = [
 
 
 def test_peft_helper_pass(llama32_lora_files, tmp_path):
-    peft_helper = PEFTHelper.from_local_dir(
-        llama32_lora_files, max_position_embeddings=4096
-    )
+    peft_helper = PEFTHelper.from_local_dir(llama32_lora_files, max_position_embeddings=4096)
     lora_config = LoRAConfig(max_lora_rank=16, max_cpu_loras=3, max_loras=2)
     peft_helper.validate_legal(lora_config)
     assert peft_helper.r == 8
@@ -94,6 +92,4 @@ def test_peft_helper_error(
     lora_config = LoRAConfig(max_lora_rank=16, max_cpu_loras=3, max_loras=2)
     # Test loading the adapter
     with pytest.raises(ValueError, match=expected_error):
-        PEFTHelper.from_local_dir(
-            test_dir, max_position_embeddings=4096
-        ).validate_legal(lora_config)
+        PEFTHelper.from_local_dir(test_dir, max_position_embeddings=4096).validate_legal(lora_config)

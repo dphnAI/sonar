@@ -214,7 +214,8 @@ void scaled_fp4_quant_sm1xxa(torch::stable::Tensor const& output,
     int32_t num_padded_cols =
         sf_n_int * 4 * CVT_FP4_SF_VEC_SIZE / CVT_FP4_ELTS_PER_THREAD;
 
-    int grid_y = aphrodite::div_round_up(num_padded_cols, static_cast<int>(block.x));
+    int grid_y =
+        aphrodite::div_round_up(num_padded_cols, static_cast<int>(block.x));
     int grid_x =
         std::min(aphrodite::computeEffectiveRows(m),
                  std::max(1, (multiProcessorCount * numBlocksPerSM) / grid_y));
@@ -224,14 +225,16 @@ void scaled_fp4_quant_sm1xxa(torch::stable::Tensor const& output,
         input.scalar_type(), "nvfp4_quant_kernel", [&] {
           using cuda_type = aphrodite::CUDATypeConverter<scalar_t>::Type;
           auto input_ptr = static_cast<cuda_type const*>(input.data_ptr());
-          aphrodite::cvt_fp16_to_fp4<cuda_type, false><<<grid, block, 0, stream>>>(
-              m, n, output_n, num_padded_cols, input_ptr, input_sf_ptr,
-              reinterpret_cast<uint32_t*>(output_ptr),
-              reinterpret_cast<uint32_t*>(sf_out));
+          aphrodite::cvt_fp16_to_fp4<cuda_type, false>
+              <<<grid, block, 0, stream>>>(
+                  m, n, output_n, num_padded_cols, input_ptr, input_sf_ptr,
+                  reinterpret_cast<uint32_t*>(output_ptr),
+                  reinterpret_cast<uint32_t*>(sf_out));
         });
   } else {
     int num_packed_cols = output_n / CVT_FP4_ELTS_PER_THREAD;
-    int grid_y = aphrodite::div_round_up(num_packed_cols, static_cast<int>(block.x));
+    int grid_y =
+        aphrodite::div_round_up(num_packed_cols, static_cast<int>(block.x));
     int grid_x = std::min(
         m, std::max(1, (multiProcessorCount * numBlocksPerSM) / grid_y));
     dim3 grid(grid_x, grid_y);

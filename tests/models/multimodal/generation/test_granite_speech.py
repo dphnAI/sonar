@@ -10,7 +10,7 @@ from aphrodite.logprobs import SampleLogprobs
 from aphrodite.lora.request import LoRARequest
 from aphrodite.platforms import current_platform
 
-from ....conftest import AudioTestAssets, HfRunner, PromptAudioInput, AphroditeRunner
+from ....conftest import AphroditeRunner, AudioTestAssets, HfRunner, PromptAudioInput
 from ...registry import HF_EXAMPLE_MODELS
 from ...utils import check_logprobs_close
 
@@ -96,9 +96,7 @@ def run_test(
         enforce_eager=True,
         attention_config=attention_config,
     ) as aphrodite_model:
-        lora_request = (
-            LoRARequest("audio", 1, audio_lora_path) if audio_lora_path else None
-        )
+        lora_request = LoRARequest("audio", 1, audio_lora_path) if audio_lora_path else None
         aphrodite_outputs_per_case = [
             aphrodite_model.generate_greedy_logprobs(
                 prompts,
@@ -135,12 +133,8 @@ def run_test(
 
 
 @pytest.mark.parametrize("model,audio_lora_path", models.items())
-@pytest.mark.parametrize(
-    "dtype", ["float16"] if current_platform.is_rocm() else ["bfloat16"]
-)
-@pytest.mark.parametrize(
-    "max_model_len", [512] if current_platform.is_rocm() else [2048]
-)
+@pytest.mark.parametrize("dtype", ["float16"] if current_platform.is_rocm() else ["bfloat16"])
+@pytest.mark.parametrize("max_model_len", [512] if current_platform.is_rocm() else [2048])
 @pytest.mark.parametrize("max_tokens", [128])
 @pytest.mark.parametrize("num_logprobs", [10])
 def test_models(

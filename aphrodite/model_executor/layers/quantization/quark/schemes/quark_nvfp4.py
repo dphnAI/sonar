@@ -135,9 +135,7 @@ class QuarkNVFP4(QuarkScheme):
         layer.weight_global_scale = Parameter(weight_global_scale, requires_grad=False)
         del layer.weight_scale_2
 
-        layer.alpha = Parameter(
-            layer.input_global_scale * layer.weight_global_scale, requires_grad=False
-        )
+        layer.alpha = Parameter(layer.input_global_scale * layer.weight_global_scale, requires_grad=False)
         layer.input_global_scale_inv = Parameter(
             (1.0 / layer.input_global_scale).to(torch.float32), requires_grad=False
         )

@@ -90,9 +90,7 @@ def get_metrics_snapshot() -> list[Metric]:
         if metric.type == "gauge":
             samples = _get_samples(metric)
             for s in samples:
-                collected.append(
-                    Gauge(name=metric.name, labels=s.labels, value=s.value)
-                )
+                collected.append(Gauge(name=metric.name, labels=s.labels, value=s.value))
         elif metric.type == "counter":
             samples = _get_samples(metric, "_total")
             if metric.name == "aphrodite:spec_decode_num_accepted_tokens_per_pos":
@@ -105,14 +103,10 @@ def get_metrics_snapshot() -> list[Metric]:
                 # We convert these into a vector of integer values.
                 #
                 for labels, values in _digest_num_accepted_by_pos_samples(samples):
-                    collected.append(
-                        Vector(name=metric.name, labels=labels, values=values)
-                    )
+                    collected.append(Vector(name=metric.name, labels=labels, values=values))
             else:
                 for s in samples:
-                    collected.append(
-                        Counter(name=metric.name, labels=s.labels, value=int(s.value))
-                    )
+                    collected.append(Counter(name=metric.name, labels=s.labels, value=int(s.value)))
 
         elif metric.type == "histogram":
             #
@@ -198,19 +192,13 @@ def _digest_histogram(
         labels_key = frozenset(s.labels.items())
         sums_by_labels[labels_key] = s.value
 
-    assert (
-        set(buckets_by_labels.keys())
-        == set(counts_by_labels.keys())
-        == set(sums_by_labels.keys())
-    )
+    assert set(buckets_by_labels.keys()) == set(counts_by_labels.keys()) == set(sums_by_labels.keys())
 
     output = []
     label_keys = list(buckets_by_labels.keys())
     for k in label_keys:
         labels = dict(k)
-        output.append(
-            (labels, buckets_by_labels[k], counts_by_labels[k], sums_by_labels[k])
-        )
+        output.append((labels, buckets_by_labels[k], counts_by_labels[k], sums_by_labels[k]))
     return output
 
 

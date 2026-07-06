@@ -368,8 +368,7 @@ class P2PSecondaryTierManager(SecondaryTierManager):
             self._failed_req_ids.add(kv_request_id)
             return
         logger.debug(
-            "P2P %s: submit_load job_id=%d -> request_blocks peer=%s "
-            "kv_request_id=%s blocks=%d session_ready=%s",
+            "P2P %s: submit_load job_id=%d -> request_blocks peer=%s kv_request_id=%s blocks=%d session_ready=%s",
             self._local_id,
             job_id,
             peer_id,
@@ -412,10 +411,7 @@ class P2PSecondaryTierManager(SecondaryTierManager):
         warned = False
         while True:
             self._poll_once()
-            pending = any(
-                s._client._inbound or s._server._inflight
-                for s in self._sessions.values()
-            )
+            pending = any(s._client._inbound or s._server._inflight for s in self._sessions.values())
             if not pending:
                 return
             if not warned and time.monotonic() - start > 5.0:
@@ -511,9 +507,7 @@ class P2PSecondaryTierManager(SecondaryTierManager):
             # Purge any kv_request_id → session entries pointing at this
             # session so subsequent submit_stores fall back to the unbound
             # path (which will time out into failure if no peer rebinds).
-            stale_kv_ids = [
-                kid for kid, s in self._kv_to_session.items() if s is session
-            ]
+            stale_kv_ids = [kid for kid, s in self._kv_to_session.items() if s is session]
             for kid in stale_kv_ids:
                 del self._kv_to_session[kid]
             failed_loads, failed_stores = session.close()
@@ -549,12 +543,9 @@ class P2PSecondaryTierManager(SecondaryTierManager):
             batches = self._unbound_stores.pop(kid)
             self._failed_req_ids.add(kid)
             for batch in batches:
-                self._finished_jobs.append(
-                    JobResult(job_id=batch.job_id, success=False)
-                )
+                self._finished_jobs.append(JobResult(job_id=batch.job_id, success=False))
             logger.warning(
-                "P2P %s: unbound store kv_request_id=%s timed out after %.0fs "
-                "without a fetch — failing %d job(s)",
+                "P2P %s: unbound store kv_request_id=%s timed out after %.0fs without a fetch — failing %d job(s)",
                 self._local_id,
                 kid,
                 _UNBOUND_STORE_TIMEOUT_S,
@@ -586,15 +577,11 @@ class P2PSecondaryTierManager(SecondaryTierManager):
         for session in self._sessions.values():
             result = session.poll()
             for lr in result.loads:
-                self._finished_jobs.append(
-                    JobResult(job_id=lr.job_id, success=lr.success)
-                )
+                self._finished_jobs.append(JobResult(job_id=lr.job_id, success=lr.success))
                 if not lr.success:
                     self._failed_req_ids.add(lr.kv_request_id)
             for sr in result.stores:
-                self._finished_jobs.append(
-                    JobResult(job_id=sr.job_id, success=sr.success)
-                )
+                self._finished_jobs.append(JobResult(job_id=sr.job_id, success=sr.success))
             # Bind kv_request_id → session for any FetchMsg this tick and
             # replay any submit_store batches parked while no peer was
             # asking. ServerRole.on_fetch already recorded the demand
@@ -603,9 +590,7 @@ class P2PSecondaryTierManager(SecondaryTierManager):
             for kv_request_id in result.new_fetch_ids:
                 self._kv_to_session[kv_request_id] = session
                 for batch in self._unbound_stores.pop(kv_request_id, ()):
-                    session.add_stored_blocks(
-                        kv_request_id, batch.keys, batch.block_ids, batch.job_id
-                    )
+                    session.add_stored_blocks(kv_request_id, batch.keys, batch.block_ids, batch.job_id)
 
         self._reap_dead_sessions()
         self._reap_unbound_stores()
@@ -625,9 +610,7 @@ class P2PSecondaryTierManager(SecondaryTierManager):
         # leak them; the manager is going away after this call.
         for batches in self._unbound_stores.values():
             for batch in batches:
-                self._finished_jobs.append(
-                    JobResult(job_id=batch.job_id, success=False)
-                )
+                self._finished_jobs.append(JobResult(job_id=batch.job_id, success=False))
         self._unbound_stores.clear()
         self._control.close()
         self._data.close()
@@ -656,8 +639,7 @@ class P2PSecondaryTierManager(SecondaryTierManager):
             time.sleep(_DRAIN_SLEEP_S)
         if still:
             logger.warning(
-                "P2P %s: shutdown drain timed out after %.1fs with %d "
-                "transfers still inflight — force-cancelling",
+                "P2P %s: shutdown drain timed out after %.1fs with %d transfers still inflight — force-cancelling",
                 self._local_id,
                 _SHUTDOWN_DRAIN_TIMEOUT_S,
                 len(still),

@@ -121,9 +121,7 @@ def _lora_expand_kernel_fp8(
     cta_m_len = min(BLOCK_M, lora_m_size - cta_m_offset)
 
     lora_m_indices_start = tl.load(lora_token_start_loc + lora_idx)
-    cta_lora_seq_indices = (
-        token_indices_sorted_by_lora_ids + lora_m_indices_start + cta_m_offset
-    )
+    cta_lora_seq_indices = token_indices_sorted_by_lora_ids + lora_m_indices_start + cta_m_offset
 
     offset_m = tl.arange(0, BLOCK_M) % cta_m_len
     ram = tl.load(cta_lora_seq_indices + offset_m)
@@ -307,9 +305,7 @@ def _lora_expand_fp8(
     if b_scale is not None and b_scale[0].dim() > 0:
         b_scale_l_stride = b_scale[0].stride(0) if b_scale[0].dim() > 0 else 0
         b_scale_n_stride = (
-            b_scale[0].stride(-2)
-            if b_scale[0].dim() > 2
-            else (b_scale[0].stride(-1) if b_scale[0].dim() > 1 else 1)
+            b_scale[0].stride(-2) if b_scale[0].dim() > 2 else (b_scale[0].stride(-1) if b_scale[0].dim() > 1 else 1)
         )
         b_scale_k_stride = b_scale[0].stride(-1) if b_scale[0].dim() > 2 else 0
     else:

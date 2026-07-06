@@ -3,9 +3,9 @@
 import numpy as np
 
 from aphrodite.config import (
+    AphroditeConfig,
     ModelConfig,
     SpeculativeConfig,
-    AphroditeConfig,
 )
 from aphrodite.v1.spec_decode.ngram_proposer import (
     NgramProposer,

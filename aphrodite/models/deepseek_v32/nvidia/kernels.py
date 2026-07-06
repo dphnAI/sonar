@@ -227,10 +227,7 @@ def _fused_norm_rope_kernel(
             #   bytes [KV_DIM + 16, ...)     : 2 * KPE_HALF_ROT_DIM bf16 RoPE
             # mla_cache_block_stride / mla_cache_entry_stride are byte strides
             # (mla_cache_ptr is the 1-byte fp8 view of the uint8 cache).
-            byte_base = (
-                mla_block_idx * mla_cache_block_stride
-                + mla_block_off * mla_cache_entry_stride
-            )
+            byte_base = mla_block_idx * mla_cache_block_stride + mla_block_off * mla_cache_entry_stride
             kv_2d = tl.reshape(kv_c, (MLA_NUM_TILES, MLA_TILE_DIM))
             tile_amax = tl.max(tl.abs(kv_2d), axis=1, keep_dims=True)
             # scale = amax / 448 (fp8 e4m3 max), matching the reference
@@ -248,11 +245,7 @@ def _fused_norm_rope_kernel(
             tl.store(rope_dst + dim_off * 2 + 1, r2.to(tl.bfloat16))
             return
 
-        dst = (
-            mla_cache_ptr
-            + mla_block_idx * mla_cache_block_stride
-            + mla_block_off * mla_cache_entry_stride
-        )
+        dst = mla_cache_ptr + mla_block_idx * mla_cache_block_stride + mla_block_off * mla_cache_entry_stride
         # kv_c_normed (KV_DIM elements)
         if MLA_CACHE_FP8:
             scale = tl.load(mla_cache_scale_ptr)
@@ -281,12 +274,8 @@ def _fused_norm_rope_kernel(
             mask=index_k_mask,
             other=0.0,
         ).to(tl.float32)
-        index_k_w = tl.load(
-            index_k_layer_norm_w_ptr + index_k_block, mask=index_k_mask
-        ).to(tl.float32)
-        index_k_b = tl.load(
-            index_k_layer_norm_bias_ptr + index_k_block, mask=index_k_mask
-        ).to(tl.float32)
+        index_k_w = tl.load(index_k_layer_norm_w_ptr + index_k_block, mask=index_k_mask).to(tl.float32)
+        index_k_b = tl.load(index_k_layer_norm_bias_ptr + index_k_block, mask=index_k_mask).to(tl.float32)
 
         # 1. LayerNorm. Keep (mean, rstd) so the RoPE rotation partner can be
         #    re-normalized in registers below, avoiding a global scratch buffer.
@@ -310,22 +299,15 @@ def _fused_norm_rope_kernel(
         else:
             # NeoX: pair across halves; partner = block ^ HALF.
             cos_idx = index_k_block % INDEX_K_HALF_ROT_DIM
-            partner_offs = tl.where(
-                in_rope, index_k_block ^ INDEX_K_HALF_ROT_DIM, index_k_block
-            )
+            partner_offs = tl.where(in_rope, index_k_block ^ INDEX_K_HALF_ROT_DIM, index_k_block)
             sign = tl.where(index_k_block < INDEX_K_HALF_ROT_DIM, -1.0, 1.0)
         cos_full = tl.load(
-            index_k_rope_cos_sin_cache_ptr
-            + pos * index_k_rope_cos_sin_cache_stride
-            + cos_idx,
+            index_k_rope_cos_sin_cache_ptr + pos * index_k_rope_cos_sin_cache_stride + cos_idx,
             mask=in_rope,
             other=1.0,
         ).to(tl.float32)
         sin_full = tl.load(
-            index_k_rope_cos_sin_cache_ptr
-            + pos * index_k_rope_cos_sin_cache_stride
-            + INDEX_K_HALF_ROT_DIM
-            + cos_idx,
+            index_k_rope_cos_sin_cache_ptr + pos * index_k_rope_cos_sin_cache_stride + INDEX_K_HALF_ROT_DIM + cos_idx,
             mask=in_rope,
             other=0.0,
         ).to(tl.float32)
@@ -337,12 +319,8 @@ def _fused_norm_rope_kernel(
             mask=index_k_mask,
             other=0.0,
         ).to(tl.float32)
-        w_partner = tl.load(
-            index_k_layer_norm_w_ptr + partner_offs, mask=index_k_mask
-        ).to(tl.float32)
-        b_partner = tl.load(
-            index_k_layer_norm_bias_ptr + partner_offs, mask=index_k_mask
-        ).to(tl.float32)
+        w_partner = tl.load(index_k_layer_norm_w_ptr + partner_offs, mask=index_k_mask).to(tl.float32)
+        b_partner = tl.load(index_k_layer_norm_bias_ptr + partner_offs, mask=index_k_mask).to(tl.float32)
         normed_partner = (raw_partner - mean) * rstd * w_partner + b_partner
         roped = normed * cos_full + sign * normed_partner * sin_full
         result = tl.where(in_rope, roped, normed)
@@ -431,9 +409,7 @@ def fused_norm_rope(
         idx_cache_stride = 1
         if mla_kv_cache is None:
             # Pure profiling run (no caches at all): skip all per-token writes.
-            slot_mapping = torch.full(
-                (num_tokens,), -1, dtype=torch.int64, device=device
-            )
+            slot_mapping = torch.full((num_tokens,), -1, dtype=torch.int64, device=device)
 
     # --- MLA KV cache setup ---
     mla_cache_ds_mla = mla_kv_cache_dtype == "fp8_ds_mla"
@@ -602,18 +578,12 @@ def _fused_q_kernel(
                 ql_nope_off = tl.arange(0, QL_NOPE_BLOCK)
                 ql_nope_mask = ql_nope_off < QL_NOPE_DIM
                 ql_nope = tl.load(
-                    ql_nope_ptr
-                    + tok_idx * ql_nope_stride0
-                    + q_head_idx * ql_nope_stride1
-                    + ql_nope_off,
+                    ql_nope_ptr + tok_idx * ql_nope_stride0 + q_head_idx * ql_nope_stride1 + ql_nope_off,
                     mask=ql_nope_mask,
                 ).to(tl.float32)
                 ql_nope_fp8 = (ql_nope / scale).to(tl.float8e4nv)
                 tl.store(
-                    mqa_q_fp8_ptr
-                    + tok_idx * mqa_q_fp8_stride0
-                    + q_head_idx * mqa_q_fp8_stride1
-                    + ql_nope_off,
+                    mqa_q_fp8_ptr + tok_idx * mqa_q_fp8_stride0 + q_head_idx * mqa_q_fp8_stride1 + ql_nope_off,
                     ql_nope_fp8,
                     mask=ql_nope_mask,
                 )
@@ -637,18 +607,11 @@ def _fused_q_kernel(
             if q_head_idx < NUM_Q_HEADS:
                 rot_off = tl.arange(0, Q_PE_HALF_ROT_DIM)
                 x1 = tl.load(
-                    q_pe_ptr
-                    + tok_idx * q_pe_stride0
-                    + q_head_idx * q_pe_stride1
-                    + rot_off * 2,
+                    q_pe_ptr + tok_idx * q_pe_stride0 + q_head_idx * q_pe_stride1 + rot_off * 2,
                 ).to(tl.float32)
-                x2 = tl.load(
-                    q_pe_ptr
-                    + tok_idx * q_pe_stride0
-                    + q_head_idx * q_pe_stride1
-                    + rot_off * 2
-                    + 1
-                ).to(tl.float32)
+                x2 = tl.load(q_pe_ptr + tok_idx * q_pe_stride0 + q_head_idx * q_pe_stride1 + rot_off * 2 + 1).to(
+                    tl.float32
+                )
                 r1 = x1 * cos - x2 * sin
                 r2 = x2 * cos + x1 * sin
                 if QUANTIZE_MQA:
@@ -672,11 +635,7 @@ def _fused_q_kernel(
                 else:
                     # bf16 query: write the RoPE'd q_pe unquantized.
                     out_ty = q_pe_out_ptr.dtype.element_ty
-                    q_pe_dst = (
-                        q_pe_out_ptr
-                        + tok_idx * q_pe_out_stride0
-                        + q_head_idx * q_pe_out_stride1
-                    )
+                    q_pe_dst = q_pe_out_ptr + tok_idx * q_pe_out_stride0 + q_head_idx * q_pe_out_stride1
                     tl.store(q_pe_dst + rot_off * 2, r1.to(out_ty))
                     tl.store(q_pe_dst + rot_off * 2 + 1, r2.to(out_ty))
         return
@@ -703,9 +662,7 @@ def _fused_q_kernel(
             sign = tl.where(index_q_block % 2 == 0, -1.0, 1.0)
         else:
             cos_idx = index_q_block % INDEX_Q_HALF_ROT_DIM
-            partner_offs = tl.where(
-                in_rope, index_q_block ^ INDEX_Q_HALF_ROT_DIM, index_q_block
-            )
+            partner_offs = tl.where(in_rope, index_q_block ^ INDEX_Q_HALF_ROT_DIM, index_q_block)
             sign = tl.where(index_q_block < INDEX_Q_HALF_ROT_DIM, -1.0, 1.0)
         cos_full = tl.load(
             index_q_cos_sin_ptr + pos * index_q_cos_sin_stride + cos_idx,
@@ -713,10 +670,7 @@ def _fused_q_kernel(
             other=1.0,
         ).to(tl.float32)
         sin_full = tl.load(
-            index_q_cos_sin_ptr
-            + pos * index_q_cos_sin_stride
-            + INDEX_Q_HALF_ROT_DIM
-            + cos_idx,
+            index_q_cos_sin_ptr + pos * index_q_cos_sin_stride + INDEX_Q_HALF_ROT_DIM + cos_idx,
             mask=in_rope,
             other=0.0,
         ).to(tl.float32)
@@ -727,17 +681,12 @@ def _fused_q_kernel(
         # Index Q Quantize (from registers)
         index_q_fp8, index_q_scale = _fp8_ue8m0_quantize(index_q)
         tl.store(
-            index_q_fp8_ptr
-            + tok_idx * index_q_fp8_stride0
-            + head_idx * index_q_fp8_stride1
-            + index_q_block,
+            index_q_fp8_ptr + tok_idx * index_q_fp8_stride0 + head_idx * index_q_fp8_stride1 + index_q_block,
             index_q_fp8,
         )
 
         # Index weights update
-        index_weights = tl.load(
-            index_weights_ptr + tok_idx * index_weights_stride + head_idx
-        )
+        index_weights = tl.load(index_weights_ptr + tok_idx * index_weights_stride + head_idx)
         index_weights = index_weights.to(tl.float32)
         index_weights *= index_q_scale
         index_weights *= index_weights_softmax_scale

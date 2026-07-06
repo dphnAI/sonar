@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 
 import aphrodite.envs as envs
-from aphrodite.config import ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig
 from aphrodite.config.load import LoadConfig
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.model_loader.reload import finalize_layerwise_processing
@@ -40,15 +40,11 @@ class BaseModelLoader(ABC):
         raise NotImplementedError
 
     @instrument(span_name="Load model")
-    def load_model(
-        self, aphrodite_config: AphroditeConfig, model_config: ModelConfig, prefix: str = ""
-    ) -> nn.Module:
+    def load_model(self, aphrodite_config: AphroditeConfig, model_config: ModelConfig, prefix: str = "") -> nn.Module:
         """Load a model with the given configurations."""
         device_config = aphrodite_config.device_config
         load_config = aphrodite_config.load_config
-        load_device = (
-            device_config.device if load_config.device is None else load_config.device
-        )
+        load_device = device_config.device if load_config.device is None else load_config.device
         target_device = torch.device(load_device)
         with set_default_torch_dtype(model_config.dtype):
             with target_device:

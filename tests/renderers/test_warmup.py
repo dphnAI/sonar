@@ -35,9 +35,7 @@ def _make_renderer_mock(mm_limits: dict[str, int]) -> MagicMock:
     mm_processor.info.allowed_mm_limits = mm_limits
     renderer.mm_processor = mm_processor
     renderer._readonly_mm_processor = None
-    renderer._warmup_mm_processor = BaseRenderer._warmup_mm_processor.__get__(
-        renderer, BaseRenderer
-    )
+    renderer._warmup_mm_processor = BaseRenderer._warmup_mm_processor.__get__(renderer, BaseRenderer)
     renderer._clear_processor_cache = BaseRenderer._clear_processor_cache
     renderer.clear_mm_cache = MagicMock()
     renderer.model_config.max_model_len = 128

@@ -72,13 +72,9 @@ class Step3p7ForConditionalGeneration(Step3VLForConditionalGeneration):
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
-    def _get_vision_model_output(
-        self, input_tensor: torch.Tensor | None
-    ) -> torch.Tensor | None:
+    def _get_vision_model_output(self, input_tensor: torch.Tensor | None) -> torch.Tensor | None:
         if input_tensor is None:
             return None
         if self.use_data_parallel:

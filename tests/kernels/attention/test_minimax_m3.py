@@ -56,15 +56,11 @@ def _stride_order_for(backend: type[MiniMaxM3SparseBackend], ndim: int) -> tuple
     return stride_order
 
 
-def _allocate_main_kv_via_contract(
-    num_pages: int, device: torch.device | str = "cuda"
-) -> torch.Tensor:
+def _allocate_main_kv_via_contract(num_pages: int, device: torch.device | str = "cuda") -> torch.Tensor:
     """Build the main KV cache exactly as the production allocator does for the
     currently active layout: allocate the physical (permuted) tensor, then
     expose the inverse-permuted logical-NHD view the backend sees."""
-    logical_shape = MiniMaxM3SparseBackend.get_kv_cache_shape(
-        num_pages, BLOCK_SIZE, NUM_KV_HEADS, HEAD_DIM
-    )
+    logical_shape = MiniMaxM3SparseBackend.get_kv_cache_shape(num_pages, BLOCK_SIZE, NUM_KV_HEADS, HEAD_DIM)
     stride_order = _stride_order_for(MiniMaxM3SparseBackend, len(logical_shape))
     physical_shape = tuple(logical_shape[i] for i in stride_order)
     inv_order = [stride_order.index(i) for i in range(len(stride_order))]
@@ -88,9 +84,7 @@ TOPK = 16
         ("fp8_e4m3", current_platform.fp8_dtype()),
         (
             "fp8_e5m2",
-            torch.float8_e5m2fnuz
-            if current_platform.is_fp8_fnuz()
-            else torch.float8_e5m2,
+            torch.float8_e5m2fnuz if current_platform.is_fp8_fnuz() else torch.float8_e5m2,
         ),
     ],
 )
@@ -137,9 +131,7 @@ def _reference_index_topk(
     sm_scale: float = 1.0,
 ) -> torch.Tensor:
     total_q, num_idx_heads, _ = idx_q.shape
-    out = torch.full(
-        (num_idx_heads, total_q, topk), -1, device=idx_q.device, dtype=torch.int32
-    )
+    out = torch.full((num_idx_heads, total_q, topk), -1, device=idx_q.device, dtype=torch.int32)
 
     q_start = 0
     for req_id, (q_len, seq_len, prefix_len) in enumerate(
@@ -201,9 +193,7 @@ def test_prefill_index_topk_correctness():
 
     cu_seqlens = torch.zeros(batch + 1, device="cuda", dtype=torch.int32)
     cu_seqlens[1:] = q_lens.cumsum(0)
-    block_table = torch.randperm(num_pages, device="cuda", dtype=torch.int32).reshape(
-        batch, max_blocks
-    )
+    block_table = torch.randperm(num_pages, device="cuda", dtype=torch.int32).reshape(batch, max_blocks)
     idx_q = torch.ones(q_lens.sum().item(), num_idx_heads, head_dim, device="cuda")
     index_kv_cache = torch.empty(num_pages, BLOCK_SIZE, head_dim, device="cuda")
     for req_id in range(batch):
@@ -264,9 +254,7 @@ def _fmha_indexer_topk(
 
     num_idx_heads, head_dim = idx_q.shape[1], idx_q.shape[2]
     nvp = [(s + 127) // 128 for s in seq_lens.tolist()]
-    kv_indices = torch.cat([block_table[r, : nvp[r]] for r in range(len(nvp))]).to(
-        torch.int32
-    )
+    kv_indices = torch.cat([block_table[r, : nvp[r]] for r in range(len(nvp))]).to(torch.int32)
 
     qo = q_lens.cpu().to(torch.int32)
     kv = seq_lens.cpu().to(torch.int32)
@@ -343,16 +331,10 @@ def test_fmha_sm100_indexer_matches_reference(q_lens, prefix_lens, index_dtype):
     max_blocks = (int(seq_lens.max()) + BLOCK_SIZE - 1) // BLOCK_SIZE
     assert max_blocks <= len(_E4M3_EXACT_VALUES)
     num_pages = batch * max_blocks
-    block_table = torch.randperm(num_pages, device=device, dtype=torch.int32).reshape(
-        batch, max_blocks
-    )
+    block_table = torch.randperm(num_pages, device=device, dtype=torch.int32).reshape(batch, max_blocks)
 
-    idx_q = torch.ones(
-        int(q_lens_t.sum()), num_idx_heads, head_dim, device=device, dtype=index_dtype
-    )
-    index_cache = torch.empty(
-        num_pages, BLOCK_SIZE, head_dim, device=device, dtype=index_dtype
-    )
+    idx_q = torch.ones(int(q_lens_t.sum()), num_idx_heads, head_dim, device=device, dtype=index_dtype)
+    index_cache = torch.empty(num_pages, BLOCK_SIZE, head_dim, device=device, dtype=index_dtype)
     for r in range(batch):
         for b in range(max_blocks):
             index_cache[block_table[r, b]] = float(_E4M3_EXACT_VALUES[b])
@@ -397,11 +379,6 @@ def test_fmha_sm100_indexer_matches_reference(q_lens, prefix_lens, index_dtype):
 @pytest.mark.parametrize("topk", [8, 16])
 def test_msa_indexer_impl_matches_triton(topk, monkeypatch):
     import aphrodite.models.minimax_m3.common.indexer as indexer_mod
-    from tests.v1.attention.utils import (
-        BatchSpec,
-        create_common_attn_metadata,
-        create_aphrodite_config,
-    )
     from aphrodite.config import set_current_aphrodite_config
     from aphrodite.forward_context import set_forward_context
     from aphrodite.models.minimax_m3.common.indexer import (
@@ -412,6 +389,11 @@ def test_msa_indexer_impl_matches_triton(topk, monkeypatch):
         MiniMaxM3IndexerMSAImpl,
         MiniMaxM3IndexerMSAMetadataBuilder,
     )
+    from tests.v1.attention.utils import (
+        BatchSpec,
+        create_aphrodite_config,
+        create_common_attn_metadata,
+    )
 
     torch.manual_seed(0)
     device = torch.device("cuda")
@@ -419,38 +401,26 @@ def test_msa_indexer_impl_matches_triton(topk, monkeypatch):
     # TP=1: avoid requiring an initialized distributed group in a unit test.
     monkeypatch.setattr(indexer_mod, "get_tensor_model_parallel_world_size", lambda: 1)
 
-    aphrodite_config = create_aphrodite_config(
-        block_size=BLOCK_SIZE, max_model_len=8192, max_num_batched_tokens=8192
-    )
-    aphrodite_config.model_config.hf_config.sparse_attention_config = {
-        "sparse_num_index_heads": num_idx_heads
-    }
+    aphrodite_config = create_aphrodite_config(block_size=BLOCK_SIZE, max_model_len=8192, max_num_batched_tokens=8192)
+    aphrodite_config.model_config.hf_config.sparse_attention_config = {"sparse_num_index_heads": num_idx_heads}
 
     # Decode-first mixed batch: 2 decode reqs (q_len 1) then 2 prefill reqs. Long
     # prefixes so every token sees > TOPK causal blocks (non-trivial selection).
     batch = BatchSpec(seq_lens=[2305, 2561, 2624, 2720], query_lens=[1, 1, 64, 96])
-    common = create_common_attn_metadata(
-        batch, BLOCK_SIZE, device, arange_block_indices=True
-    )
+    common = create_common_attn_metadata(batch, BLOCK_SIZE, device, arange_block_indices=True)
     num_tokens = batch.compute_num_tokens()
 
     # Deterministic index cache: distinct, monotonic per-logical-block values so
     # the top-k is unambiguous (both kernels pick the same blocks, no fp ties).
     block_table = common.block_table_tensor
     num_pages = int(block_table.max().item()) + 1
-    index_cache = torch.zeros(
-        num_pages, BLOCK_SIZE, head_dim, device=device, dtype=DTYPE
-    )
+    index_cache = torch.zeros(num_pages, BLOCK_SIZE, head_dim, device=device, dtype=DTYPE)
     for r, seq_len in enumerate(batch.seq_lens):
         for b in range((seq_len + BLOCK_SIZE - 1) // BLOCK_SIZE):
             index_cache[block_table[r, b]] = float(b + 1)
-    index_q = torch.ones(
-        num_tokens, num_idx_heads * head_dim, device=device, dtype=DTYPE
-    )
+    index_q = torch.ones(num_tokens, num_idx_heads * head_dim, device=device, dtype=DTYPE)
 
-    spec = MLAAttentionSpec(
-        block_size=BLOCK_SIZE, num_kv_heads=1, head_size=head_dim, dtype=DTYPE
-    )
+    spec = MLAAttentionSpec(block_size=BLOCK_SIZE, num_kv_heads=1, head_size=head_dim, dtype=DTYPE)
     impl_kwargs = dict(
         num_kv_heads=num_idx_heads,
         scale=head_dim**-0.5,
@@ -465,9 +435,7 @@ def test_msa_indexer_impl_matches_triton(topk, monkeypatch):
     with set_current_aphrodite_config(aphrodite_config):
         msa_impl = MiniMaxM3IndexerMSAImpl(prefix="idx_msa", **impl_kwargs)
         triton_impl = MiniMaxM3IndexerTritonImpl(prefix="idx_triton", **impl_kwargs)
-        msa_builder = MiniMaxM3IndexerMSAMetadataBuilder(
-            spec, [msa_impl.index_cache.prefix], aphrodite_config, device
-        )
+        msa_builder = MiniMaxM3IndexerMSAMetadataBuilder(spec, [msa_impl.index_cache.prefix], aphrodite_config, device)
         triton_builder = MiniMaxM3IndexerTritonMetadataBuilder(
             spec, [triton_impl.index_cache.prefix], aphrodite_config, device
         )
@@ -480,9 +448,7 @@ def test_msa_indexer_impl_matches_triton(topk, monkeypatch):
     # decode ([:, :nd]) and prefill ([:, nd:]) into its buffer and return views.
     # Separate buffers so the two forwards don't clobber each other.
     nd = sum(q for q in batch.query_lens if q <= 1)
-    msa_impl.topk_indices_buffer = torch.full(
-        (num_idx_heads, num_tokens, topk), -2, dtype=torch.int32, device=device
-    )
+    msa_impl.topk_indices_buffer = torch.full((num_idx_heads, num_tokens, topk), -2, dtype=torch.int32, device=device)
     triton_impl.topk_indices_buffer = torch.full(
         (num_idx_heads, num_tokens, topk), -2, dtype=torch.int32, device=device
     )
@@ -543,14 +509,10 @@ def test_decode_index_topk_correctness(
     max_blocks = (max_seq_len + BLOCK_SIZE - 1) // BLOCK_SIZE
     num_pages = active_batch * max_blocks
 
-    active_block_table = torch.randperm(
-        num_pages, device="cuda", dtype=torch.int32
-    ).reshape(active_batch, max_blocks)
+    active_block_table = torch.randperm(num_pages, device="cuda", dtype=torch.int32).reshape(active_batch, max_blocks)
     block_table = torch.zeros(batch, max_blocks, device="cuda", dtype=torch.int32)
     block_table[:active_batch] = active_block_table
-    idx_q = torch.randn(
-        batch * decode_query_len, num_idx_heads, head_dim, device="cuda"
-    )
+    idx_q = torch.randn(batch * decode_query_len, num_idx_heads, head_dim, device="cuda")
     index_kv_cache = torch.randn(num_pages, BLOCK_SIZE, head_dim, device="cuda")
 
     actual = minimax_m3_index_decode(
@@ -601,15 +563,9 @@ def test_decode_index_topk_fp8(num_idx_heads: int):
     max_seq_len = int(active_seq_lens.max())
     max_blocks = (max_seq_len + BLOCK_SIZE - 1) // BLOCK_SIZE
     num_pages = batch * max_blocks
-    block_table = torch.randperm(num_pages, device="cuda", dtype=torch.int32).reshape(
-        batch, max_blocks
-    )
-    idx_q = torch.randn(
-        batch * decode_query_len, num_idx_heads, head_dim, device="cuda"
-    ).to(torch.float8_e4m3fn)
-    index_kv_cache = torch.randn(num_pages, BLOCK_SIZE, head_dim, device="cuda").to(
-        torch.float8_e4m3fn
-    )
+    block_table = torch.randperm(num_pages, device="cuda", dtype=torch.int32).reshape(batch, max_blocks)
+    idx_q = torch.randn(batch * decode_query_len, num_idx_heads, head_dim, device="cuda").to(torch.float8_e4m3fn)
+    index_kv_cache = torch.randn(num_pages, BLOCK_SIZE, head_dim, device="cuda").to(torch.float8_e4m3fn)
 
     actual = minimax_m3_index_decode(
         idx_q,
@@ -680,12 +636,8 @@ def _reference_sparse_attn(
             k_head = k_req[:, kv_head].T.expand(gqa_group_size, -1, -1)
             scores = torch.bmm(q_heads, k_head, out_dtype=torch.float32)
             scores = scores.transpose(0, 1) * SM_SCALE
-            probs = torch.softmax(
-                scores.masked_fill(~mask[:, None, :], -float("inf")), -1
-            )
-            out[q_start:q_end, head_start:head_end] = torch.einsum(
-                "qhk,kd->qhd", probs, v_req[:, kv_head]
-            )
+            probs = torch.softmax(scores.masked_fill(~mask[:, None, :], -float("inf")), -1)
+            out[q_start:q_end, head_start:head_end] = torch.einsum("qhk,kd->qhd", probs, v_req[:, kv_head])
         q_start += q_len
     return out.to(q.dtype)
 
@@ -715,9 +667,7 @@ def test_prefill_sparse_attention_correctness(
     block_table = torch.zeros(batch, max_blocks, device="cuda", dtype=torch.int32)
     base_page = 0
     for req_id, num_req_pages in enumerate(pages_per_req):
-        block_table[req_id, :num_req_pages] = physical_pages[
-            base_page : base_page + num_req_pages
-        ]
+        block_table[req_id, :num_req_pages] = physical_pages[base_page : base_page + num_req_pages]
         base_page += num_req_pages
 
     q_lens_t = torch.tensor(q_lens, device="cuda", dtype=torch.int32)
@@ -743,9 +693,7 @@ def test_prefill_sparse_attention_correctness(
     for q_len, prefix_len in zip(q_lens_t.tolist(), prefix_lens.tolist()):
         for local_q in range(q_len):
             current_block = (prefix_len + local_q) // BLOCK_SIZE
-            older_blocks = torch.randperm(
-                current_block, device="cuda", dtype=torch.int32
-            )
+            older_blocks = torch.randperm(current_block, device="cuda", dtype=torch.int32)
             selected = torch.cat(
                 [
                     torch.tensor([current_block], device="cuda", dtype=torch.int32),
@@ -814,9 +762,7 @@ def test_main_backend_layout_contract():
 
     # M3 has no cross-layer KV blocks.
     with pytest.raises(NotImplementedError):
-        MiniMaxM3SparseBackend.get_kv_cache_stride_order(
-            include_num_layers_dimension=True
-        )
+        MiniMaxM3SparseBackend.get_kv_cache_stride_order(include_num_layers_dimension=True)
 
 
 def test_main_backend_unknown_layout_raises(monkeypatch):
@@ -836,14 +782,10 @@ def test_indexer_backend_stride_order_is_identity():
 
     # Cross-layer (per-layer-stacked) KV blocks are not supported.
     with pytest.raises(NotImplementedError):
-        MiniMaxM3IndexerBackend.get_kv_cache_stride_order(
-            include_num_layers_dimension=True
-        )
+        MiniMaxM3IndexerBackend.get_kv_cache_stride_order(include_num_layers_dimension=True)
 
     # The stride order matches the 3-dim indexer shape rank.
-    indexer_shape = MiniMaxM3IndexerBackend.get_kv_cache_shape(
-        5, BLOCK_SIZE, 1, HEAD_DIM
-    )
+    indexer_shape = MiniMaxM3IndexerBackend.get_kv_cache_shape(5, BLOCK_SIZE, 1, HEAD_DIM)
     assert len(indexer_shape) == 3
     assert _stride_order_for(MiniMaxM3IndexerBackend, len(indexer_shape)) == (0, 1, 2)
 
@@ -894,9 +836,7 @@ def test_main_cache_is_block_first_and_unpadded():
     # Unpadded -> allocator uses kv_tensor.view(...) rather than as_strided().
     assert spec.page_size_padded is None
 
-    logical = MiniMaxM3SparseBackend.get_kv_cache_shape(
-        4, BLOCK_SIZE, NUM_KV_HEADS, HEAD_DIM
-    )
+    logical = MiniMaxM3SparseBackend.get_kv_cache_shape(4, BLOCK_SIZE, NUM_KV_HEADS, HEAD_DIM)
     for layout in ("NHD", "HND"):
         try:
             set_kv_cache_layout(layout)
@@ -927,9 +867,7 @@ def _build_decode_inputs(
     block_table = torch.zeros(batch, max_blocks, device="cuda", dtype=torch.int32)
     base_page = 0
     for req_id, num_req_pages in enumerate(pages_per_req):
-        block_table[req_id, :num_req_pages] = physical_pages[
-            base_page : base_page + num_req_pages
-        ]
+        block_table[req_id, :num_req_pages] = physical_pages[base_page : base_page + num_req_pages]
         base_page += num_req_pages
 
     seq_lens = torch.tensor(
@@ -937,9 +875,7 @@ def _build_decode_inputs(
         device="cuda",
         dtype=torch.int32,
     )
-    q = torch.randn(
-        batch * decode_query_len, NUM_Q_HEADS, HEAD_DIM, device="cuda", dtype=DTYPE
-    )
+    q = torch.randn(batch * decode_query_len, NUM_Q_HEADS, HEAD_DIM, device="cuda", dtype=DTYPE)
 
     topk_idx = torch.full(
         (NUM_KV_HEADS, batch * decode_query_len, TOPK),
@@ -952,9 +888,7 @@ def _build_decode_inputs(
         for local_q in range(decode_query_len):
             query_pos = seq_len - decode_query_len + local_q
             current_block = query_pos // BLOCK_SIZE
-            older_blocks = torch.randperm(
-                current_block, device="cuda", dtype=torch.int32
-            )
+            older_blocks = torch.randperm(current_block, device="cuda", dtype=torch.int32)
             selected = torch.cat(
                 [
                     torch.tensor([current_block], device="cuda", dtype=torch.int32),
@@ -1006,9 +940,7 @@ def test_decode_sparse_attention_correctness(
     # seq_len - 1 for each request.
     active_batch = len(seq_lens_list)
     active_tokens = active_batch * decode_query_len
-    q_lens_t = torch.full(
-        (len(seq_lens_list),), decode_query_len, device="cuda", dtype=torch.int32
-    )
+    q_lens_t = torch.full((len(seq_lens_list),), decode_query_len, device="cuda", dtype=torch.int32)
     active_seq_lens = seq_lens[:active_batch]
     prefix_lens = active_seq_lens - q_lens_t
     expected = _reference_sparse_attn(
@@ -1038,9 +970,7 @@ def test_decode_wrong_layout_breaks_parity():
     q, block_table, seq_lens, topk_idx, num_pages = _build_decode_inputs(seq_lens_list)
 
     # Physical HND storage [blocks, 2, heads, block, dim].
-    phys = torch.randn(
-        (num_pages, 2, NUM_KV_HEADS, BLOCK_SIZE, HEAD_DIM), device="cuda", dtype=DTYPE
-    )
+    phys = torch.randn((num_pages, 2, NUM_KV_HEADS, BLOCK_SIZE, HEAD_DIM), device="cuda", dtype=DTYPE)
     # Correct logical-NHD view (strided) vs. the same bytes mislabeled as a
     # contiguous-NHD cache — same shape, different content mapping.
     correct = phys.permute(0, 1, 3, 2, 4)
@@ -1048,14 +978,10 @@ def test_decode_wrong_layout_breaks_parity():
 
     q_lens_t = torch.ones(len(seq_lens_list), device="cuda", dtype=torch.int32)
     prefix_lens = seq_lens - q_lens_t
-    expected = _reference_sparse_attn(
-        q, correct, topk_idx, block_table, q_lens_t, seq_lens, prefix_lens
-    )
+    expected = _reference_sparse_attn(q, correct, topk_idx, block_table, q_lens_t, seq_lens, prefix_lens)
 
     actual = torch.empty_like(q)
-    minimax_m3_sparse_attn_decode(
-        q, wrong, topk_idx, block_table, seq_lens, NUM_KV_HEADS, SM_SCALE, actual, 1
-    )
+    minimax_m3_sparse_attn_decode(q, wrong, topk_idx, block_table, seq_lens, NUM_KV_HEADS, SM_SCALE, actual, 1)
     torch.accelerator.synchronize()
     assert (actual.float() - expected.float()).abs().max().item() > 1.7e-2
 
@@ -1099,9 +1025,7 @@ def test_main_cache_byte_identical_through_production_allocator():
     assert view.storage_offset() == oracle.storage_offset()
 
     # Indexer cache allocates through the same path under both layouts.
-    ispec = MLAAttentionSpec(
-        block_size=BLOCK_SIZE, num_kv_heads=1, head_size=HEAD_DIM, dtype=DTYPE
-    )
+    ispec = MLAAttentionSpec(block_size=BLOCK_SIZE, num_kv_heads=1, head_size=HEAD_DIM, dtype=DTYPE)
     for layout in ("NHD", "HND"):
         iraw = torch.zeros(nb * ispec.page_size_bytes, dtype=torch.int8)
         igroup = AttentionGroup(
@@ -1126,14 +1050,10 @@ def test_indexer_inherited_stride_order_trips_allocator_assert():
 
     class _BrokenIndexerBackend(MiniMaxM3IndexerBackend):
         # Simulate inheriting the parent's 5-element stride order.
-        get_kv_cache_stride_order = staticmethod(
-            MiniMaxM3SparseBackend.get_kv_cache_stride_order
-        )
+        get_kv_cache_stride_order = staticmethod(MiniMaxM3SparseBackend.get_kv_cache_stride_order)
 
     nb = 4
-    ispec = MLAAttentionSpec(
-        block_size=BLOCK_SIZE, num_kv_heads=1, head_size=HEAD_DIM, dtype=DTYPE
-    )
+    ispec = MLAAttentionSpec(block_size=BLOCK_SIZE, num_kv_heads=1, head_size=HEAD_DIM, dtype=DTYPE)
     iraw = torch.zeros(nb * ispec.page_size_bytes, dtype=torch.int8)
     igroup = AttentionGroup(
         backend=_BrokenIndexerBackend,
@@ -1157,8 +1077,7 @@ def test_padded_main_cache_is_flagged():
     def _require_unpadded_block_first(spec, stride_order):
         inv_order = [stride_order.index(i) for i in range(len(stride_order))]
         assert spec.page_size_padded is None, (
-            "main GQA cache must be unpadded to use the contiguous-view "
-            "allocator branch"
+            "main GQA cache must be unpadded to use the contiguous-view allocator branch"
         )
         assert inv_order[0] == 0, "main GQA cache must remain block-first"
 
@@ -1206,15 +1125,11 @@ def test_reshape_and_cache_flash_write_persists(kv_layout: str):
     key_cache, value_cache = kv_cache.unbind(1)
 
     num_tokens = 12
-    slot_mapping = torch.randperm(num_pages * BLOCK_SIZE, device="cuda")[
-        :num_tokens
-    ].to(torch.int64)
+    slot_mapping = torch.randperm(num_pages * BLOCK_SIZE, device="cuda")[:num_tokens].to(torch.int64)
     key = torch.randn(num_tokens, NUM_KV_HEADS, HEAD_DIM, device="cuda", dtype=DTYPE)
     value = torch.randn(num_tokens, NUM_KV_HEADS, HEAD_DIM, device="cuda", dtype=DTYPE)
     scale = torch.ones((), device="cuda")
-    ops.reshape_and_cache_flash(
-        key, value, key_cache, value_cache, slot_mapping, "auto", scale, scale
-    )
+    ops.reshape_and_cache_flash(key, value, key_cache, value_cache, slot_mapping, "auto", scale, scale)
     torch.accelerator.synchronize()
 
     # Read back through the independent logical view; proves the writes landed

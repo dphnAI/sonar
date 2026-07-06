@@ -73,9 +73,7 @@ class OlmoHybridGatedDeltaNetAttention(GatedDeltaNetAttention):
     ) -> None:
         super().__init__(config, aphrodite_config, prefix=prefix)
 
-        assert getattr(config, "linear_use_gate", True), (
-            "OlmoHybridGatedDeltaNet requires linear_use_gate=True"
-        )
+        assert getattr(config, "linear_use_gate", True), "OlmoHybridGatedDeltaNet requires linear_use_gate=True"
         self.num_k_heads = config.linear_num_key_heads
         self.num_v_heads = config.linear_num_value_heads
         self.head_k_dim = config.linear_key_head_dim
@@ -280,9 +278,7 @@ class OlmoHybridGatedDeltaNetAttention(GatedDeltaNetAttention):
         core_attn_out_flat = core_attn_out.reshape(-1, core_attn_out.shape[-1])
         gate_flat = gate.reshape(-1, gate.shape[-1])
         core_attn_out_normed = self.o_norm(core_attn_out_flat, gate_flat)
-        core_attn_out = core_attn_out_normed.view(
-            num_tokens, self.num_v_heads // self.tp_size, self.head_v_dim
-        )
+        core_attn_out = core_attn_out_normed.view(num_tokens, self.num_v_heads // self.tp_size, self.head_v_dim)
 
         core_attn_out = rearrange(core_attn_out, "l h d -> l (h d)")
         output[:num_tokens], _ = self.o_proj(core_attn_out)
@@ -318,11 +314,7 @@ class OlmoHybridGatedDeltaNetAttention(GatedDeltaNetAttention):
         self_kv_cache = self.kv_cache
         # conv_state must be (..., dim, width-1) for the conv kernels.
         # DS layout stores it that way directly; SD layout needs a transpose.
-        conv_state = (
-            self_kv_cache[0]
-            if is_conv_state_dim_first()
-            else self_kv_cache[0].transpose(-1, -2)
-        )
+        conv_state = self_kv_cache[0] if is_conv_state_dim_first() else self_kv_cache[0].transpose(-1, -2)
         ssm_state = self_kv_cache[1]
         num_actual_tokens = attn_metadata.num_actual_tokens
         num_accepted_tokens = attn_metadata.num_accepted_tokens
@@ -331,9 +323,7 @@ class OlmoHybridGatedDeltaNetAttention(GatedDeltaNetAttention):
         b = b[:num_actual_tokens]
         a = a[:num_actual_tokens]
 
-        conv_weights = self.conv1d.weight.view(
-            self.conv1d.weight.size(0), self.conv1d.weight.size(2)
-        )
+        conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
 
         if spec_sequence_masks is not None:
             if attn_metadata.num_prefills == 0 and attn_metadata.num_decodes == 0:
@@ -356,9 +346,7 @@ class OlmoHybridGatedDeltaNetAttention(GatedDeltaNetAttention):
                 conv_weights,
                 None,  # no bias
                 self.activation,
-                conv_state_indices=spec_state_indices_tensor[:, 0][
-                    : attn_metadata.num_spec_decodes
-                ],
+                conv_state_indices=spec_state_indices_tensor[:, 0][: attn_metadata.num_spec_decodes],
                 num_accepted_tokens=num_accepted_tokens,
                 query_start_loc=spec_query_start_loc,
                 max_query_len=spec_state_indices_tensor.size(-1),
@@ -387,22 +375,16 @@ class OlmoHybridGatedDeltaNetAttention(GatedDeltaNetAttention):
                 conv_weights,
                 None,
                 self.activation,
-                conv_state_indices=non_spec_state_indices_tensor[
-                    : attn_metadata.num_decodes
-                ],
+                conv_state_indices=non_spec_state_indices_tensor[: attn_metadata.num_decodes],
                 validate_data=True,
             )
         else:
             mixed_qkv_non_spec = None
 
         query_spec, key_spec, value_spec = self.rearrange_mixed_qkv(mixed_qkv_spec)
-        query_non_spec, key_non_spec, value_non_spec = self.rearrange_mixed_qkv(
-            mixed_qkv_non_spec
-        )
+        query_non_spec, key_non_spec, value_non_spec = self.rearrange_mixed_qkv(mixed_qkv_non_spec)
 
-        g, beta = fused_olmo_hybrid_gdn_gating(
-            self.A_log, a, b, self.dt_bias, self.allow_neg_eigval
-        )
+        g, beta = fused_olmo_hybrid_gdn_gating(self.A_log, a, b, self.dt_bias, self.allow_neg_eigval)
 
         if spec_sequence_masks is not None:
             assert spec_token_indx is not None
@@ -463,27 +445,21 @@ class OlmoHybridGatedDeltaNetAttention(GatedDeltaNetAttention):
                 cu_seqlens=non_spec_query_start_loc,
                 use_qk_l2norm_in_kernel=True,
             )
-            ssm_state[non_spec_state_indices_tensor] = last_recurrent_state.to(
-                ssm_state.dtype
-            )
+            ssm_state[non_spec_state_indices_tensor] = last_recurrent_state.to(ssm_state.dtype)
         elif attn_metadata.num_decodes > 0:
             assert non_spec_query_start_loc is not None
             assert non_spec_state_indices_tensor is not None
-            core_attn_out_non_spec, last_recurrent_state = (
-                fused_recurrent_gated_delta_rule(
-                    q=query_non_spec,
-                    k=key_non_spec,
-                    v=value_non_spec,
-                    g=g_non_spec,
-                    beta=beta_non_spec,
-                    initial_state=ssm_state,
-                    inplace_final_state=True,
-                    cu_seqlens=non_spec_query_start_loc[
-                        : attn_metadata.num_decodes + 1
-                    ],
-                    ssm_state_indices=non_spec_state_indices_tensor,
-                    use_qk_l2norm_in_kernel=True,
-                )
+            core_attn_out_non_spec, last_recurrent_state = fused_recurrent_gated_delta_rule(
+                q=query_non_spec,
+                k=key_non_spec,
+                v=value_non_spec,
+                g=g_non_spec,
+                beta=beta_non_spec,
+                initial_state=ssm_state,
+                inplace_final_state=True,
+                cu_seqlens=non_spec_query_start_loc[: attn_metadata.num_decodes + 1],
+                ssm_state_indices=non_spec_state_indices_tensor,
+                use_qk_l2norm_in_kernel=True,
             )
         else:
             core_attn_out_non_spec, last_recurrent_state = None, None
@@ -586,9 +562,7 @@ def fused_olmo_hybrid_gdn_gating_kernel(
 
     # g = -self.A_log.float().exp() * F.softplus(a.float() + self.dt_bias)
     x = blk_a.to(tl.float32) + blk_bias.to(tl.float32)
-    softplus_x = tl.where(
-        beta * x <= threshold, (1 / beta) * tl.log(1 + tl.exp(beta * x)), x
-    )
+    softplus_x = tl.where(beta * x <= threshold, (1 / beta) * tl.log(1 + tl.exp(beta * x)), x)
     blk_g = -tl.exp(blk_A_log.to(tl.float32)) * softplus_x
     tl.store(g + off, blk_g.to(g.dtype.element_ty), mask=mask)
 
@@ -597,9 +571,7 @@ def fused_olmo_hybrid_gdn_gating_kernel(
     blk_beta_output = tl.sigmoid(blk_b.to(tl.float32))
     if allow_neg_eigval:
         blk_beta_output = blk_beta_output * 2.0
-    tl.store(
-        beta_output + off, blk_beta_output.to(beta_output.dtype.element_ty), mask=mask
-    )
+    tl.store(beta_output + off, blk_beta_output.to(beta_output.dtype.element_ty), mask=mask)
 
 
 def fused_olmo_hybrid_gdn_gating(

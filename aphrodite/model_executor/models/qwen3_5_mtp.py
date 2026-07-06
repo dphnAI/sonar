@@ -87,11 +87,7 @@ class Qwen3_5MultiTokenPredictor(nn.Module):
         # missing from hf_quant_config.json exclude_modules. Force unquantized.
         # Ref: https://github.com/vllm-project/vllm/pull/38650
         # Ref: https://github.com/NVIDIA/Model-Optimizer/pull/1124
-        fc_quant = (
-            None
-            if (quant_config and quant_config.get_name() == "modelopt_fp4")
-            else quant_config
-        )
+        fc_quant = None if (quant_config and quant_config.get_name() == "modelopt_fp4") else quant_config
         self.fc = ColumnParallelLinear(
             self.config.hidden_size * 2,
             self.config.hidden_size,
@@ -116,12 +112,8 @@ class Qwen3_5MultiTokenPredictor(nn.Module):
         )
 
         self.norm = Qwen3_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.pre_fc_norm_hidden = Qwen3_5RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
-        self.pre_fc_norm_embedding = Qwen3_5RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.pre_fc_norm_hidden = Qwen3_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.pre_fc_norm_embedding = Qwen3_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.embed_tokens(input_ids)
@@ -157,9 +149,7 @@ class Qwen3_5MultiTokenPredictor(nn.Module):
         )
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
 
         hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
@@ -171,9 +161,7 @@ class Qwen3_5MultiTokenPredictor(nn.Module):
         )
         if is_fse:
             num_routed = getattr(self.config, "num_experts", 0)
-            mapper = mapper | WeightsMapper(
-                orig_to_new_substr={"mlp.shared_expert.": f"mlp.experts.{num_routed}."}
-            )
+            mapper = mapper | WeightsMapper(orig_to_new_substr={"mlp.shared_expert.": f"mlp.experts.{num_routed}."})
         loader = AutoWeightsLoader(self)
         return loader.load_weights(weights, mapper=mapper)
 
@@ -213,9 +201,7 @@ class Qwen3_5MTP(LocalArgmaxMixin, nn.Module, SupportsMultiModal):
 
         super().__init__()
         self.config = config
-        self.model = Qwen3_5MultiTokenPredictor(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "mtp")
-        )
+        self.model = Qwen3_5MultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "mtp"))
 
         if get_pp_group().is_last_rank:
             if config.tie_word_embeddings:
@@ -267,9 +253,7 @@ class Qwen3_5MTP(LocalArgmaxMixin, nn.Module, SupportsMultiModal):
         inputs_embeds: torch.Tensor | None = None,
         **kwargs: object,
     ):
-        hidden_states = self.model(
-            input_ids, positions, hidden_states, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.model(input_ids, positions, hidden_states, intermediate_tensors, inputs_embeds)
         return hidden_states
 
     def compute_logits(

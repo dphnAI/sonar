@@ -93,8 +93,7 @@ def test_custom_is_not_alias_of_any_backend():
         f"CUSTOM.value = {repr(AttentionBackendEnum.CUSTOM.value)}\n"
         f"This happens when CUSTOM has the same value as another backend.\n"
         f"When you register to CUSTOM, you're actually registering to {aliases[0]}!\n"
-        f"All backend values:\n"
-        + "\n".join(f"  {b.name}: {repr(b.value)}" for b in all_backends)
+        f"All backend values:\n" + "\n".join(f"  {b.name}: {repr(b.value)}" for b in all_backends)
     )
 
     # Verify CUSTOM has its own unique identity
@@ -112,9 +111,7 @@ def test_register_custom_backend_with_class_path():
     )
 
     # Check that CUSTOM backend is registered
-    assert AttentionBackendEnum.CUSTOM.is_overridden(), (
-        "CUSTOM should be overridden after registration"
-    )
+    assert AttentionBackendEnum.CUSTOM.is_overridden(), "CUSTOM should be overridden after registration"
 
     # Get the registered class path
     class_path = AttentionBackendEnum.CUSTOM.get_path()
@@ -140,8 +137,7 @@ def test_mamba_custom_is_not_alias_of_any_backend():
     assert len(aliases) == 0, (
         f"BUG! MambaAttentionBackendEnum.CUSTOM is an alias of: {', '.join(aliases)}!\n"
         f"CUSTOM.value = {repr(MambaAttentionBackendEnum.CUSTOM.value)}\n"
-        f"All mamba backend values:\n"
-        + "\n".join(f"  {b.name}: {repr(b.value)}" for b in all_backends)
+        f"All mamba backend values:\n" + "\n".join(f"  {b.name}: {repr(b.value)}" for b in all_backends)
     )
 
 
@@ -158,10 +154,7 @@ def test_register_custom_mamba_backend_with_class_path():
 
     # Get the registered class path
     class_path = MambaAttentionBackendEnum.CUSTOM.get_path()
-    assert (
-        class_path
-        == "tests.test_attention_backend_registry.CustomMambaAttentionBackend"
-    )
+    assert class_path == "tests.test_attention_backend_registry.CustomMambaAttentionBackend"
 
     # Get the backend class
     backend_cls = MambaAttentionBackendEnum.CUSTOM.get_class()

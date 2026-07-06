@@ -80,9 +80,7 @@ class SPTestSettings:
             parallel_setups=parallel_setups,
             distributed_backends=["mp", "ray"],
             runner=runner,
-            test_options=SPTestOptions(
-                multi_node_only=multi_node_only, load_format=load_format
-            ),
+            test_options=SPTestOptions(multi_node_only=multi_node_only, load_format=load_format),
         )
 
     @staticmethod
@@ -112,9 +110,7 @@ class SPTestSettings:
             parallel_setups=parallel_setups,
             distributed_backends=["mp", "ray"],
             runner=runner,
-            test_options=SPTestOptions(
-                multi_node_only=multi_node_only, load_format=load_format
-            ),
+            test_options=SPTestOptions(multi_node_only=multi_node_only, load_format=load_format),
         )
 
     @staticmethod
@@ -142,9 +138,7 @@ class SPTestSettings:
             parallel_setups=parallel_setups,
             distributed_backends=["mp", "ray"],
             runner=runner,
-            test_options=SPTestOptions(
-                multi_node_only=multi_node_only, load_format=load_format
-            ),
+            test_options=SPTestOptions(multi_node_only=multi_node_only, load_format=load_format),
         )
 
     def iter_params(self, model_id: str):
@@ -216,10 +210,7 @@ def _compare_sp(
     if num_gpus_available < tp_size * pp_size:
         pytest.skip(f"Need at least {tp_size} x {pp_size} GPUs")
     if APHRODITE_MULTI_NODE and distributed_backend == "mp":
-        pytest.skip(
-            "Skipping multi-node pipeline parallel test for "
-            "multiprocessing distributed backend"
-        )
+        pytest.skip("Skipping multi-node pipeline parallel test for multiprocessing distributed backend")
     if multi_node_only and not APHRODITE_MULTI_NODE:
         pytest.skip("Not in multi-node setting")
 
@@ -349,11 +340,7 @@ def test_tp_sp_generation(
         pytest.skip("inductor graph partition is only available in PyTorch 2.9+")
 
     # Skip FP8 SP-only test on sm89 (compute capability 8.9)
-    if (
-        "fp8" in model_id.lower()
-        and current_platform.get_device_capability() < (9, 0)
-        and (not fuse_gemm_comms)
-    ):
+    if "fp8" in model_id.lower() and current_platform.get_device_capability() < (9, 0) and (not fuse_gemm_comms):
         pytest.skip("FP8 reduction support begins with sm90 capable devices.")
 
     _compare_sp(
@@ -415,10 +402,7 @@ def test_tp_sp_generation_prompt_embeds(
 
 @create_new_process_for_each_test()
 def test_tp_sp_nvfp4_generation(num_gpus_available: int):
-    if (
-        not current_platform.is_cuda()
-        or not current_platform.is_device_capability_family(100)
-    ):
+    if not current_platform.is_cuda() or not current_platform.is_device_capability_family(100):
         pytest.skip("NVFP4 requires Blackwell")
 
     _compare_sp(

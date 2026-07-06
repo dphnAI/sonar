@@ -235,9 +235,7 @@ class MultiModalConfig:
 
     @field_validator("mm_encoder_attn_backend", mode="before")
     @classmethod
-    def _validate_mm_encoder_attn_backend(
-        cls, value: str | AttentionBackendEnum | None
-    ) -> AttentionBackendEnum | None:
+    def _validate_mm_encoder_attn_backend(cls, value: str | AttentionBackendEnum | None) -> AttentionBackendEnum | None:
         if isinstance(value, str) and value.upper() == "XFORMERS":
             raise ValueError(
                 "Attention backend 'XFORMERS' has been removed (See PR #29262 for "
@@ -247,35 +245,27 @@ class MultiModalConfig:
         if value is None or isinstance(value, AttentionBackendEnum):
             return value
 
-        assert isinstance(value, str), (
-            "mm_encoder_attn_backend must be a string or an AttentionBackendEnum."
-        )
+        assert isinstance(value, str), "mm_encoder_attn_backend must be a string or an AttentionBackendEnum."
         return AttentionBackendEnum[value.upper()]
 
     @model_validator(mode="after")
     def _validate_multimodal_config(self):
         if self.mm_processor_cache_type != "shm" and (
-            self.mm_shm_cache_max_object_size_mb
-            != MultiModalConfig.mm_shm_cache_max_object_size_mb
+            self.mm_shm_cache_max_object_size_mb != MultiModalConfig.mm_shm_cache_max_object_size_mb
         ):
             raise ValueError(
-                "'mm_shm_cache_max_object_size_mb' should only be set when "
-                "'mm_processor_cache_type' is 'shm'."
+                "'mm_shm_cache_max_object_size_mb' should only be set when 'mm_processor_cache_type' is 'shm'."
             )
         # Validate FP8 scale path combinations.
         if self.mm_encoder_attn_dtype != "fp8" and (
-            self.mm_encoder_fp8_scale_path is not None
-            or self.mm_encoder_fp8_scale_save_path is not None
+            self.mm_encoder_fp8_scale_path is not None or self.mm_encoder_fp8_scale_save_path is not None
         ):
             raise ValueError(
                 "'mm_encoder_fp8_scale_path' and "
                 "'mm_encoder_fp8_scale_save_path' require "
                 "'mm_encoder_attn_dtype' to be 'fp8'."
             )
-        if (
-            self.mm_encoder_fp8_scale_path is not None
-            and self.mm_encoder_fp8_scale_save_path is not None
-        ):
+        if self.mm_encoder_fp8_scale_path is not None and self.mm_encoder_fp8_scale_save_path is not None:
             raise ValueError(
                 "'mm_encoder_fp8_scale_save_path' cannot be used with "
                 "'mm_encoder_fp8_scale_path' (saving requires dynamic scaling)."
@@ -289,9 +279,7 @@ class MultiModalConfig:
         if self.mm_encoder_fp8_scale_save_path is not None:
             save_parent = Path(self.mm_encoder_fp8_scale_save_path).parent
             if not save_parent.is_dir():
-                raise FileNotFoundError(
-                    f"Parent directory for FP8 scale save path not found: {save_parent}"
-                )
+                raise FileNotFoundError(f"Parent directory for FP8 scale save path not found: {save_parent}")
         return self
 
     def compute_hash(self) -> str:
@@ -307,9 +295,7 @@ class MultiModalConfig:
         the final hidden states.
         """
         factors: list[Any] = [
-            self.mm_encoder_attn_backend.name
-            if self.mm_encoder_attn_backend is not None
-            else None,
+            self.mm_encoder_attn_backend.name if self.mm_encoder_attn_backend is not None else None,
             self.mm_encoder_tp_mode,
             self.mm_encoder_attn_dtype,
             self.mm_encoder_fp8_scale_path,

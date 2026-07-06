@@ -106,9 +106,7 @@ def _make_metadata(
 # ---------------------------------------------------------------------------
 class TestCLSPool:
     def test_extracts_first_token(self):
-        hidden = torch.tensor(
-            [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0], [9.0, 10.0]]
-        )
+        hidden = torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0], [9.0, 10.0]])
         metadata = _make_metadata([2, 3])
         pooler = CLSPool()
         out = pooler(hidden, metadata)
@@ -128,9 +126,7 @@ class TestCLSPool:
 # ---------------------------------------------------------------------------
 class TestLastPool:
     def test_extracts_last_token(self):
-        hidden = torch.tensor(
-            [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0], [9.0, 10.0]]
-        )
+        hidden = torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0], [9.0, 10.0]])
         metadata = _make_metadata([2, 3])
         pooler = LastPool()
         out = pooler(hidden, metadata)
@@ -151,9 +147,7 @@ class TestLastPool:
 # ---------------------------------------------------------------------------
 class TestMeanPool:
     def test_computes_mean(self):
-        hidden = torch.tensor(
-            [[1.0, 2.0], [3.0, 4.0], [10.0, 20.0]], dtype=torch.float32
-        )
+        hidden = torch.tensor([[1.0, 2.0], [3.0, 4.0], [10.0, 20.0]], dtype=torch.float32)
         metadata = _make_metadata([2, 1])
         pooler = MeanPool()
         out = pooler(hidden, metadata)
@@ -210,8 +204,7 @@ class TestMeanPool:
         metadata = _make_metadata([3, 2])
         pooler = MeanPool()
         with patch(
-            "aphrodite.model_executor.layers.pooler.seqwise.methods"
-            "._MEAN_POOL_ACCUMULATION_CHUNK_BYTES",
+            "aphrodite.model_executor.layers.pooler.seqwise.methods._MEAN_POOL_ACCUMULATION_CHUNK_BYTES",
             16,
         ):
             out = pooler(hidden, metadata)
@@ -279,9 +272,7 @@ class TestAllPool:
 
     def test_splits_by_sequence(self):
         pooler = self._make_all_pool()
-        hidden = torch.tensor(
-            [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0], [9.0, 10.0]]
-        )
+        hidden = torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0], [9.0, 10.0]])
         metadata = _make_metadata([2, 3])
         out = pooler(hidden, metadata)
         assert len(out) == 2
@@ -334,9 +325,7 @@ class TestAllPool:
 
     def test_chunked_prefill_single_shot_matches_non_chunked(self):
         pooler = self._make_all_pool(chunked=True)
-        hidden = torch.tensor(
-            [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0], [9.0, 10.0]]
-        )
+        hidden = torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0], [9.0, 10.0]])
         metadata = _make_metadata([2, 3])
         out = pooler(hidden, metadata)
         assert len(out) == 2

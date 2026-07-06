@@ -7,7 +7,7 @@ from collections.abc import Generator
 import torch
 from torch import nn
 
-from aphrodite.config import ModelConfig, ParallelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig, ParallelConfig
 from aphrodite.config.load import LoadConfig
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.model_loader.base_loader import BaseModelLoader
@@ -49,13 +49,9 @@ class TensorizerLoader(BaseModelLoader):
             self.tensorizer_config = load_config.model_loader_extra_config
         else:
             validate_config(load_config.model_loader_extra_config)
-            self.tensorizer_config = TensorizerConfig(
-                **load_config.model_loader_extra_config["tensorizer_config"]
-            )
+            self.tensorizer_config = TensorizerConfig(**load_config.model_loader_extra_config["tensorizer_config"])
 
-    def _verify_config(
-        self, model_config: ModelConfig, parallel_config: ParallelConfig
-    ):
+    def _verify_config(self, model_config: ModelConfig, parallel_config: ParallelConfig):
         self.tensorizer_config.verify_with_model_config(model_config)
         self.tensorizer_config.verify_with_parallel_config(parallel_config)
 
@@ -112,9 +108,7 @@ class TensorizerLoader(BaseModelLoader):
         else:
             model.load_weights(self._get_weights_iterator())
 
-    def load_model(
-        self, aphrodite_config: AphroditeConfig, model_config: ModelConfig, prefix: str = ""
-    ) -> nn.Module:
+    def load_model(self, aphrodite_config: AphroditeConfig, model_config: ModelConfig, prefix: str = "") -> nn.Module:
         parallel_config = aphrodite_config.parallel_config
         self._verify_config(model_config, parallel_config)
 

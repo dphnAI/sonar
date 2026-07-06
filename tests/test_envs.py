@@ -57,9 +57,7 @@ def test_getattr_with_cache(monkeypatch: pytest.MonkeyPatch):
     # All environment variables are cached
     for environment_variable in environment_variables:
         envs.__getattr__(environment_variable)
-    assert envs.__getattr__.cache_info().hits == start_hits + 2 + len(
-        environment_variables
-    )
+    assert envs.__getattr__.cache_info().hits == start_hits + 2 + len(environment_variables)
 
     # Reset envs.__getattr__ back to none-cached version to
     # avoid affecting other tests
@@ -108,9 +106,7 @@ class TestEnvWithChoices:
 
     def test_default_value_returned_when_env_not_set(self):
         """Test default is returned when env var is not set."""
-        env_func = env_with_choices(
-            "NONEXISTENT_ENV", "default", ["option1", "option2"]
-        )
+        env_func = env_with_choices("NONEXISTENT_ENV", "default", ["option1", "option2"])
         assert env_func() == "default"
 
     def test_none_default_returned_when_env_not_set(self):
@@ -121,58 +117,40 @@ class TestEnvWithChoices:
     def test_valid_value_returned_case_sensitive(self):
         """Test that valid value is returned in case sensitive mode."""
         with patch.dict(os.environ, {"TEST_ENV": "option1"}):
-            env_func = env_with_choices(
-                "TEST_ENV", "default", ["option1", "option2"], case_sensitive=True
-            )
+            env_func = env_with_choices("TEST_ENV", "default", ["option1", "option2"], case_sensitive=True)
             assert env_func() == "option1"
 
     def test_valid_lowercase_value_returned_case_insensitive(self):
         """Test that lowercase value is accepted in case insensitive mode."""
         with patch.dict(os.environ, {"TEST_ENV": "option1"}):
-            env_func = env_with_choices(
-                "TEST_ENV", "default", ["OPTION1", "OPTION2"], case_sensitive=False
-            )
+            env_func = env_with_choices("TEST_ENV", "default", ["OPTION1", "OPTION2"], case_sensitive=False)
             assert env_func() == "option1"
 
     def test_valid_uppercase_value_returned_case_insensitive(self):
         """Test that uppercase value is accepted in case insensitive mode."""
         with patch.dict(os.environ, {"TEST_ENV": "OPTION1"}):
-            env_func = env_with_choices(
-                "TEST_ENV", "default", ["option1", "option2"], case_sensitive=False
-            )
+            env_func = env_with_choices("TEST_ENV", "default", ["option1", "option2"], case_sensitive=False)
             assert env_func() == "OPTION1"
 
     def test_invalid_value_raises_error_case_sensitive(self):
         """Test that invalid value raises ValueError in case sensitive mode."""
         with patch.dict(os.environ, {"TEST_ENV": "invalid"}):
-            env_func = env_with_choices(
-                "TEST_ENV", "default", ["option1", "option2"], case_sensitive=True
-            )
-            with pytest.raises(
-                ValueError, match="Invalid value 'invalid' for TEST_ENV"
-            ):
+            env_func = env_with_choices("TEST_ENV", "default", ["option1", "option2"], case_sensitive=True)
+            with pytest.raises(ValueError, match="Invalid value 'invalid' for TEST_ENV"):
                 env_func()
 
     def test_case_mismatch_raises_error_case_sensitive(self):
         """Test that case mismatch raises ValueError in case sensitive mode."""
         with patch.dict(os.environ, {"TEST_ENV": "OPTION1"}):
-            env_func = env_with_choices(
-                "TEST_ENV", "default", ["option1", "option2"], case_sensitive=True
-            )
-            with pytest.raises(
-                ValueError, match="Invalid value 'OPTION1' for TEST_ENV"
-            ):
+            env_func = env_with_choices("TEST_ENV", "default", ["option1", "option2"], case_sensitive=True)
+            with pytest.raises(ValueError, match="Invalid value 'OPTION1' for TEST_ENV"):
                 env_func()
 
     def test_invalid_value_raises_error_case_insensitive(self):
         """Test that invalid value raises ValueError when case insensitive."""
         with patch.dict(os.environ, {"TEST_ENV": "invalid"}):
-            env_func = env_with_choices(
-                "TEST_ENV", "default", ["option1", "option2"], case_sensitive=False
-            )
-            with pytest.raises(
-                ValueError, match="Invalid value 'invalid' for TEST_ENV"
-            ):
+            env_func = env_with_choices("TEST_ENV", "default", ["option1", "option2"], case_sensitive=False)
+            with pytest.raises(ValueError, match="Invalid value 'invalid' for TEST_ENV"):
                 env_func()
 
     def test_callable_choices_resolved_correctly(self):
@@ -193,9 +171,7 @@ class TestEnvWithChoices:
 
         with patch.dict(os.environ, {"TEST_ENV": "invalid"}):
             env_func = env_with_choices("TEST_ENV", "default", get_choices)
-            with pytest.raises(
-                ValueError, match="Invalid value 'invalid' for TEST_ENV"
-            ):
+            with pytest.raises(ValueError, match="Invalid value 'invalid' for TEST_ENV"):
                 env_func()
 
 
@@ -204,9 +180,7 @@ class TestEnvListWithChoices:
 
     def test_default_list_returned_when_env_not_set(self):
         """Test that default list is returned when env var is not set."""
-        env_func = env_list_with_choices(
-            "NONEXISTENT_ENV", ["default1", "default2"], ["option1", "option2"]
-        )
+        env_func = env_list_with_choices("NONEXISTENT_ENV", ["default1", "default2"], ["option1", "option2"])
         assert env_func() == ["default1", "default2"]
 
     def test_empty_default_list_returned_when_env_not_set(self):
@@ -241,34 +215,26 @@ class TestEnvListWithChoices:
     def test_empty_string_returns_default(self):
         """Test that empty string returns default."""
         with patch.dict(os.environ, {"TEST_ENV": ""}):
-            env_func = env_list_with_choices(
-                "TEST_ENV", ["default"], ["option1", "option2"]
-            )
+            env_func = env_list_with_choices("TEST_ENV", ["default"], ["option1", "option2"])
             assert env_func() == ["default"]
 
     def test_only_commas_returns_default(self):
         """Test that string with only commas returns default."""
         with patch.dict(os.environ, {"TEST_ENV": ",,,"}):
-            env_func = env_list_with_choices(
-                "TEST_ENV", ["default"], ["option1", "option2"]
-            )
+            env_func = env_list_with_choices("TEST_ENV", ["default"], ["option1", "option2"])
             assert env_func() == ["default"]
 
     def test_case_sensitive_validation(self):
         """Test case sensitive validation."""
         with patch.dict(os.environ, {"TEST_ENV": "option1,OPTION2"}):
-            env_func = env_list_with_choices(
-                "TEST_ENV", [], ["option1", "option2"], case_sensitive=True
-            )
+            env_func = env_list_with_choices("TEST_ENV", [], ["option1", "option2"], case_sensitive=True)
             with pytest.raises(ValueError, match="Invalid value 'OPTION2' in TEST_ENV"):
                 env_func()
 
     def test_case_insensitive_validation(self):
         """Test case insensitive validation."""
         with patch.dict(os.environ, {"TEST_ENV": "OPTION1,option2"}):
-            env_func = env_list_with_choices(
-                "TEST_ENV", [], ["option1", "option2"], case_sensitive=False
-            )
+            env_func = env_list_with_choices("TEST_ENV", [], ["option1", "option2"], case_sensitive=False)
             assert env_func() == ["OPTION1", "option2"]
 
     def test_invalid_value_in_list_raises_error(self):
@@ -311,9 +277,7 @@ class TestEnvSetWithChoices:
 
     def test_default_list_returned_when_env_not_set(self):
         """Test that default list is returned when env var is not set."""
-        env_func = env_set_with_choices(
-            "NONEXISTENT_ENV", ["default1", "default2"], ["option1", "option2"]
-        )
+        env_func = env_set_with_choices("NONEXISTENT_ENV", ["default1", "default2"], ["option1", "option2"])
         assert env_func() == {"default1", "default2"}
 
     def test_empty_default_list_returned_when_env_not_set(self):
@@ -348,34 +312,26 @@ class TestEnvSetWithChoices:
     def test_empty_string_returns_default(self):
         """Test that empty string returns default."""
         with patch.dict(os.environ, {"TEST_ENV": ""}):
-            env_func = env_set_with_choices(
-                "TEST_ENV", ["default"], ["option1", "option2"]
-            )
+            env_func = env_set_with_choices("TEST_ENV", ["default"], ["option1", "option2"])
             assert env_func() == {"default"}
 
     def test_only_commas_returns_default(self):
         """Test that string with only commas returns default."""
         with patch.dict(os.environ, {"TEST_ENV": ",,,"}):
-            env_func = env_set_with_choices(
-                "TEST_ENV", ["default"], ["option1", "option2"]
-            )
+            env_func = env_set_with_choices("TEST_ENV", ["default"], ["option1", "option2"])
             assert env_func() == {"default"}
 
     def test_case_sensitive_validation(self):
         """Test case sensitive validation."""
         with patch.dict(os.environ, {"TEST_ENV": "option1,OPTION2"}):
-            env_func = env_set_with_choices(
-                "TEST_ENV", [], ["option1", "option2"], case_sensitive=True
-            )
+            env_func = env_set_with_choices("TEST_ENV", [], ["option1", "option2"], case_sensitive=True)
             with pytest.raises(ValueError, match="Invalid value 'OPTION2' in TEST_ENV"):
                 env_func()
 
     def test_case_insensitive_validation(self):
         """Test case insensitive validation."""
         with patch.dict(os.environ, {"TEST_ENV": "OPTION1,option2"}):
-            env_func = env_set_with_choices(
-                "TEST_ENV", [], ["option1", "option2"], case_sensitive=False
-            )
+            env_func = env_set_with_choices("TEST_ENV", [], ["option1", "option2"], case_sensitive=False)
             assert env_func() == {"OPTION1", "option2"}
 
     def test_invalid_value_in_list_raises_error(self):

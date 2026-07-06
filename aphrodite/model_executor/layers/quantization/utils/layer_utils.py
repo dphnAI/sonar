@@ -19,9 +19,7 @@ def update_tensor_inplace(dst: torch.Tensor, src: torch.Tensor):
 
 # Newly generated tensors need to replace existing tensors that are
 # already registered as parameters by Aphrodite (and won't be freed)
-def replace_parameter(
-    mod: torch.nn.Module, name: str, new: torch.Tensor | torch.nn.Parameter
-) -> None:
+def replace_parameter(mod: torch.nn.Module, name: str, new: torch.Tensor | torch.nn.Parameter) -> None:
     old = getattr(mod, name)
     if (
         type(old) is type(new)

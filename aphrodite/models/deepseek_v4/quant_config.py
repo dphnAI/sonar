@@ -72,9 +72,7 @@ class DeepseekV4FP8Config(Fp8Config):
             self._resolved_expert_dtype = expert_dtype
             from aphrodite.logger import init_logger
 
-            init_logger(__name__).info_once(
-                "DeepSeek V4 expert_dtype resolved to %r", expert_dtype
-            )
+            init_logger(__name__).info_once("DeepSeek V4 expert_dtype resolved to %r", expert_dtype)
         return self._resolved_expert_dtype
 
     @property
@@ -118,13 +116,8 @@ class DeepseekV4FP8Config(Fp8Config):
         return "deepseek_v4_fp8"
 
     @classmethod
-    def override_quantization_method(
-        cls, hf_quant_cfg, user_quant, hf_config=None
-    ) -> QuantizationMethods | None:
-        if not (
-            isinstance(hf_quant_cfg, dict)
-            and hf_quant_cfg.get("quant_method") in ("fp8", "deepseek_v4_fp8")
-        ):
+    def override_quantization_method(cls, hf_quant_cfg, user_quant, hf_config=None) -> QuantizationMethods | None:
+        if not (isinstance(hf_quant_cfg, dict) and hf_quant_cfg.get("quant_method") in ("fp8", "deepseek_v4_fp8")):
             return None
         model_type = getattr(hf_config, "model_type", None)
         if model_type == "deepseek_v4" or user_quant == "deepseek_v4_fp8":

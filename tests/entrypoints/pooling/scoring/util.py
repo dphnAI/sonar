@@ -11,13 +11,13 @@ from PIL import Image
 from safetensors.torch import load_file
 from transformers import AutoModel, AutoTokenizer
 
-from tests.conftest import HfRunner
 from aphrodite.entrypoints.chat_utils import (
     ChatCompletionContentPartImageParam,
     ChatCompletionContentPartTextParam,
 )
 from aphrodite.entrypoints.pooling.scoring.typing import ScoreMultiModalParam
 from aphrodite.entrypoints.pooling.scoring.utils import compute_maxsim_score
+from tests.conftest import HfRunner
 
 
 class ColBERTScoringHfRunner(torch.nn.Module):
@@ -57,10 +57,7 @@ class ColBERTScoringHfRunner(torch.nn.Module):
     @torch.inference_mode()
     def predict(self, prompts: list[list[str]], *args, **kwargs):
         hf_embeddings = [self(prompt) for prompt in prompts]
-        hf_outputs = [
-            compute_maxsim_score(*map(torch.tensor, pair)).item()
-            for pair in hf_embeddings
-        ]
+        hf_outputs = [compute_maxsim_score(*map(torch.tensor, pair)).item() for pair in hf_embeddings]
         return torch.as_tensor(hf_outputs)
 
 
@@ -71,16 +68,11 @@ class EncoderScoringHfRunner(HfRunner):
     @torch.inference_mode()
     def predict(self, prompts: list[list[str]], *args, **kwargs):
         hf_embeddings = [self.encode(prompt) for prompt in prompts]
-        hf_outputs = [
-            F.cosine_similarity(*map(torch.tensor, pair), dim=0)
-            for pair in hf_embeddings
-        ]
+        hf_outputs = [F.cosine_similarity(*map(torch.tensor, pair), dim=0) for pair in hf_embeddings]
         return torch.as_tensor(hf_outputs)
 
 
-def make_base64_image(
-    width: int = 64, height: int = 64, color: tuple[int, int, int] = (255, 0, 0)
-) -> str:
+def make_base64_image(width: int = 64, height: int = 64, color: tuple[int, int, int] = (255, 0, 0)) -> str:
     """Create a small solid-color PNG image and return its base64 data URI."""
     img = Image.new("RGB", (width, height), color)
     buf = BytesIO()

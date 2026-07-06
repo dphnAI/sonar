@@ -61,9 +61,7 @@ class ExampleSecondaryTierManager(SecondaryTierManager):
             tier_type=tier_type,
         )
 
-        logger.info(
-            "ExampleSecondaryTierManager initialized with custom_param=%d", custom_param
-        )
+        logger.info("ExampleSecondaryTierManager initialized with custom_param=%d", custom_param)
 
         # key -> True (only care about presence)
         self.blocks: dict[OffloadKey, bool] = {}
@@ -97,9 +95,7 @@ class ExampleSecondaryTierManager(SecondaryTierManager):
         keys = job_metadata.keys
         block_ids = job_metadata.block_ids
 
-        assert len(keys) == len(block_ids), (
-            f"Length mismatch: {len(keys)} keys but {len(block_ids)} block_ids"
-        )
+        assert len(keys) == len(block_ids), f"Length mismatch: {len(keys)} keys but {len(block_ids)} block_ids"
 
         for key in keys:
             self.blocks[key] = True
@@ -117,15 +113,11 @@ class ExampleSecondaryTierManager(SecondaryTierManager):
         keys = job_metadata.keys
         block_ids = job_metadata.block_ids
 
-        assert len(keys) == len(block_ids), (
-            f"Length mismatch: {len(keys)} keys but {len(block_ids)} block_ids"
-        )
+        assert len(keys) == len(block_ids), f"Length mismatch: {len(keys)} keys but {len(block_ids)} block_ids"
 
         for key in keys:
             if key not in self.blocks:
-                self.completed_jobs.append(
-                    JobResult(job_id=job_metadata.job_id, success=False)
-                )
+                self.completed_jobs.append(JobResult(job_id=job_metadata.job_id, success=False))
                 return
 
         self.completed_jobs.append(JobResult(job_id=job_metadata.job_id, success=True))

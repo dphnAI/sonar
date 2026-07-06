@@ -69,9 +69,7 @@ class PrepMetaKernel:
         cu_num_chunks = thread_sum
         for i in cutlass.range_constexpr(5):
             offset = cutlass.const_expr(1 << i)
-            lower = cute.arch.shuffle_sync_up(
-                cu_num_chunks, offset=offset, mask_and_clamp=0
-            )
+            lower = cute.arch.shuffle_sync_up(cu_num_chunks, offset=offset, mask_and_clamp=0)
             if lane_id >= offset:
                 cu_num_chunks += lower
 

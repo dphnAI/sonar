@@ -17,9 +17,7 @@ class FbgemmNvFp4LinearKernel(NvFp4LinearKernel):
     """NVFP4 GEMM via FBGEMM."""
 
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if has_fbgemm_gpu():
             return True, None
         return False, "fbgemm_gpu required"
@@ -30,9 +28,7 @@ class FbgemmNvFp4LinearKernel(NvFp4LinearKernel):
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         swizzled = swizzle_blockscale(layer.weight_scale.data)
-        layer.weight_scale = torch.nn.Parameter(
-            swizzled.view(-1).view(torch.uint8), requires_grad=False
-        )
+        layer.weight_scale = torch.nn.Parameter(swizzled.view(-1).view(torch.uint8), requires_grad=False)
 
     def apply_weights(
         self,

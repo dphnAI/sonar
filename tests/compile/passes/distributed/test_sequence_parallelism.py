@@ -5,20 +5,18 @@ import pytest
 import torch
 
 import aphrodite.envs as envs
-from tests.compile.backend import TestBackend
-from tests.utils import TestFP8Layer, multi_gpu_test
+from aphrodite.compilation.passes.aphrodite_inductor_pass import AphroditeInductorPass
 from aphrodite.compilation.passes.fusion.rms_quant_fusion import RMSNormQuantFusionPass
 from aphrodite.compilation.passes.fusion.sequence_parallelism import SequenceParallelismPass
 from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
 from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
-from aphrodite.compilation.passes.aphrodite_inductor_pass import AphroditeInductorPass
 from aphrodite.config import (
+    AphroditeConfig,
     CompilationConfig,
     CUDAGraphMode,
     DeviceConfig,
     ModelConfig,
     PassConfig,
-    AphroditeConfig,
     get_current_aphrodite_config,
     set_current_aphrodite_config,
 )
@@ -35,6 +33,8 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
 from aphrodite.platforms import current_platform
 from aphrodite.utils.system_utils import update_environment_variables
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.compile.backend import TestBackend
+from tests.utils import TestFP8Layer, multi_gpu_test
 
 DEVICE_TYPE = current_platform.device_type
 
@@ -217,9 +217,7 @@ def test_sequence_parallelism_pass(
 def test_sequence_parallelism_pass_requires_full_graph_compilation():
     aphrodite_config = AphroditeConfig()
     aphrodite_config.compilation_config.use_inductor_graph_partition = False
-    aphrodite_config.compilation_config.splitting_ops = [
-        "aphrodite::unified_attention_with_output"
-    ]
+    aphrodite_config.compilation_config.splitting_ops = ["aphrodite::unified_attention_with_output"]
 
     sequence_parallelism_pass = object.__new__(SequenceParallelismPass)
     sequence_parallelism_pass.compilation_config = aphrodite_config.compilation_config
@@ -281,9 +279,7 @@ def sequence_parallelism_pass_on_test_model(
     # this is a fake model name to construct the model config
     # in the aphrodite_config, it's not really used.
     model_name = "RedHatAI/Llama-3.2-1B-Instruct-FP8"
-    model_config = ModelConfig(
-        model=model_name, trust_remote_code=True, dtype=dtype, seed=42
-    )
+    model_config = ModelConfig(model=model_name, trust_remote_code=True, dtype=dtype, seed=42)
 
     aphrodite_config = AphroditeConfig(
         model_config=model_config,

@@ -4,12 +4,12 @@ from unittest.mock import patch
 
 import pytest
 
-from tests.kernels.moe.utils import make_dummy_moe_config
 from aphrodite.model_executor.layers.fused_moe.oracle.unquantized import (
     UnquantizedMoeBackend,
     select_unquantized_moe_backend,
 )
 from aphrodite.platforms import current_platform
+from tests.kernels.moe.utils import make_dummy_moe_config
 
 skipif_not_cuda_rocm = pytest.mark.skipif(
     not (current_platform.is_cuda() or current_platform.is_rocm()),
@@ -45,9 +45,7 @@ def test_select_default_backend_by_platform(
 ):
     """Test default backend selection per platform with all optional
     accelerators (FlashInfer, AITER) disabled."""
-    with patch(
-        "aphrodite.model_executor.layers.fused_moe.oracle.unquantized.current_platform"
-    ) as mock_platform:
+    with patch("aphrodite.model_executor.layers.fused_moe.oracle.unquantized.current_platform") as mock_platform:
         # Set all platform checks to False
         mock_platform.is_cuda.return_value = False
         mock_platform.is_rocm.return_value = False
@@ -69,9 +67,7 @@ def test_select_default_backend_by_platform(
         patch.object(current_platform, platform_method, return_value=True),
     ):
         moe_config = make_dummy_moe_config()
-        selected_backend, expert_cls = select_unquantized_moe_backend(
-            moe_config=moe_config
-        )
+        selected_backend, expert_cls = select_unquantized_moe_backend(moe_config=moe_config)
 
         assert selected_backend == expected_backend
         if expected_backend in [
@@ -92,14 +88,10 @@ def test_select_default_backend_by_platform(
     "aphrodite.model_executor.layers.fused_moe.oracle.unquantized.rocm_aiter_ops.is_fused_moe_enabled",
     return_value=True,
 )
-@pytest.mark.skipif(
-    not current_platform.is_rocm(), reason="ROCm-specific backend selection test"
-)
+@pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific backend selection test")
 def test_select_rocm_aiter_backend(mock_aiter_enabled, mock_has_flashinfer):
     """Test ROCm backend selection when AITER is available."""
-    with patch(
-        "aphrodite.model_executor.layers.fused_moe.oracle.unquantized.current_platform"
-    ) as mock_platform:
+    with patch("aphrodite.model_executor.layers.fused_moe.oracle.unquantized.current_platform") as mock_platform:
         mock_platform.is_cuda.return_value = False
         mock_platform.is_rocm.return_value = True
         mock_platform.is_cpu.return_value = False
@@ -120,9 +112,7 @@ def test_select_rocm_aiter_backend(mock_aiter_enabled, mock_has_flashinfer):
     "aphrodite.model_executor.layers.fused_moe.experts.trtllm_bf16_moe.TrtLlmBf16Experts.is_supported_config",
     return_value=(True, None),
 )
-@pytest.mark.skipif(
-    not current_platform.is_cuda(), reason="Only supported on NVIDIA platforms."
-)
+@pytest.mark.skipif(not current_platform.is_cuda(), reason="Only supported on NVIDIA platforms.")
 def test_select_cuda_flashinfer_trtllm_backend(mock_is_supported_trtllm):
     """Test CUDA backend selection when FlashInfer TRTLLM is available and enabled."""
     with (
@@ -140,9 +130,7 @@ def test_select_cuda_flashinfer_trtllm_backend(mock_is_supported_trtllm):
         moe_config.moe_parallel_config.use_ep = True
         moe_config.moe_parallel_config.use_dp = False
 
-        selected_backend, experts_cls = select_unquantized_moe_backend(
-            moe_config=moe_config
-        )
+        selected_backend, experts_cls = select_unquantized_moe_backend(moe_config=moe_config)
 
         assert selected_backend == UnquantizedMoeBackend.FLASHINFER_TRTLLM
         assert experts_cls is not None
@@ -160,9 +148,7 @@ def test_select_cuda_flashinfer_trtllm_backend(mock_is_supported_trtllm):
     "aphrodite.model_executor.layers.fused_moe.experts.flashinfer_cutlass_moe.FlashInferExperts.is_supported_config",
     return_value=(True, None),
 )
-@pytest.mark.skipif(
-    not current_platform.is_cuda(), reason="Only supported on NVIDIA platforms."
-)
+@pytest.mark.skipif(not current_platform.is_cuda(), reason="Only supported on NVIDIA platforms.")
 def test_select_cuda_flashinfer_cutlass_backend(
     mock_has_flashinfer,
     mock_is_supported_trtllm,
@@ -186,9 +172,7 @@ def test_select_cuda_flashinfer_cutlass_backend(
         moe_config.moe_parallel_config.use_ep = True
         moe_config.moe_parallel_config.use_dp = False
 
-        selected_backend, experts_cls = select_unquantized_moe_backend(
-            moe_config=moe_config
-        )
+        selected_backend, experts_cls = select_unquantized_moe_backend(moe_config=moe_config)
 
         assert selected_backend == UnquantizedMoeBackend.FLASHINFER_CUTLASS
         assert experts_cls is not None
@@ -199,9 +183,7 @@ def test_select_lora_backend_prefers_triton():
     """LoRA-enabled unquantized MoE should select Triton backend."""
     moe_config = make_dummy_moe_config()
     moe_config.is_lora_enabled = True
-    selected_backend, experts_cls = select_unquantized_moe_backend(
-        moe_config=moe_config
-    )
+    selected_backend, experts_cls = select_unquantized_moe_backend(moe_config=moe_config)
 
     assert selected_backend == UnquantizedMoeBackend.TRITON
     assert experts_cls is not None
@@ -216,9 +198,7 @@ def test_select_lora_explicit_non_triton_backend():
     # Use string from mapping in function map_unquantized_backend()
     moe_config.moe_backend = "flashinfer_cutlass"
 
-    selected_backend, experts_cls = select_unquantized_moe_backend(
-        moe_config=moe_config
-    )
+    selected_backend, experts_cls = select_unquantized_moe_backend(moe_config=moe_config)
 
     assert selected_backend == UnquantizedMoeBackend.TRITON
     assert experts_cls is not None
@@ -232,9 +212,7 @@ def test_select_explicit_triton_backend(is_lora_enabled):
     moe_config.is_lora_enabled = is_lora_enabled
     moe_config.moe_backend = "triton"
 
-    selected_backend, experts_cls = select_unquantized_moe_backend(
-        moe_config=moe_config
-    )
+    selected_backend, experts_cls = select_unquantized_moe_backend(moe_config=moe_config)
 
     assert selected_backend == UnquantizedMoeBackend.TRITON
     assert experts_cls is not None

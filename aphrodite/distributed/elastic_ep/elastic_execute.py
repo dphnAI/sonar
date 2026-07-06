@@ -109,9 +109,7 @@ def broadcast_expert_mapping(
         assert num_local_physical_experts is not None
         assert num_logical_experts is not None
         assert physical_to_logical.dtype == torch.int64
-        shape_tensor = torch.tensor(
-            list(physical_to_logical.shape), dtype=torch.int64, device="cpu"
-        )
+        shape_tensor = torch.tensor(list(physical_to_logical.shape), dtype=torch.int64, device="cpu")
         metadata_tensor = torch.tensor(
             [num_local_physical_experts, num_logical_experts],
             dtype=torch.int64,
@@ -175,27 +173,19 @@ class ElasticEPScalingExecutor:
             old_num_physical_experts,
         ) = self.receive_expert_mapping()
         num_physical_experts = expanded_physical_to_logical.shape[1]
-        self.worker.parallel_config.eplb_config.num_redundant_experts = (
-            num_physical_experts - num_logical_experts
-        )
+        self.worker.parallel_config.eplb_config.num_redundant_experts = num_physical_experts - num_logical_experts
         self.worker.load_model(load_dummy_weights=True)
-        self.worker.model_runner.setup_eplb_from_mapping(
-            expanded_physical_to_logical, old_num_physical_experts
-        )
+        self.worker.model_runner.setup_eplb_from_mapping(expanded_physical_to_logical, old_num_physical_experts)
         self._set_eplb_suppressed(True)
 
-    def create_standby_groups(
-        self, reconfig_request: ReconfigureDistributedRequest
-    ) -> None:
+    def create_standby_groups(self, reconfig_request: ReconfigureDistributedRequest) -> None:
         self.reconfig_request = reconfig_request
         new_dp_size = reconfig_request.new_data_parallel_size
         old_dp_size = get_dp_group().world_size
         world_size = self.worker.aphrodite_config.parallel_config.world_size
         new_world_size_across_dp = world_size * new_dp_size
         updated_config = copy.copy(self.worker.aphrodite_config)
-        updated_config.parallel_config = copy.deepcopy(
-            self.worker.aphrodite_config.parallel_config
-        )
+        updated_config.parallel_config = copy.deepcopy(self.worker.aphrodite_config.parallel_config)
         updated_config.parallel_config.data_parallel_size = new_dp_size
         with set_current_aphrodite_config(updated_config):
             create_standby_groups(
@@ -218,14 +208,10 @@ class ElasticEPScalingExecutor:
         assert standby_dp_group is not None
         # Broadcast old_dp_size to all workers in standby group
         if standby_dp_group.rank_in_group < old_dp_size:
-            old_dp_size_tensor = torch.tensor(
-                [old_dp_size], dtype=torch.int64, device="cpu"
-            )
+            old_dp_size_tensor = torch.tensor([old_dp_size], dtype=torch.int64, device="cpu")
         else:
             old_dp_size_tensor = torch.empty(1, dtype=torch.int64, device="cpu")
-        old_dp_size_tensor = standby_dp_group.tcp_store_group.broadcast(
-            old_dp_size_tensor, 0
-        )
+        old_dp_size_tensor = standby_dp_group.tcp_store_group.broadcast(old_dp_size_tensor, 0)
 
         num_new_workers = new_dp_size - old_dp_size
         dp_rank = self.worker.aphrodite_config.parallel_config.data_parallel_rank
@@ -240,10 +226,7 @@ class ElasticEPScalingExecutor:
             recv_begin = dp_rank * (num_dst_per_sender + 1)
             recv_end = recv_begin + num_dst_per_sender + 1
         else:
-            recv_begin = (
-                remainder * (num_dst_per_sender + 1)
-                + (dp_rank - remainder) * num_dst_per_sender
-            )
+            recv_begin = remainder * (num_dst_per_sender + 1) + (dp_rank - remainder) * num_dst_per_sender
             recv_end = recv_begin + num_dst_per_sender
 
         ranks_to_send = list(range(old_dp_size + recv_begin, old_dp_size + recv_end))
@@ -365,36 +348,19 @@ class ElasticEPScalingExecutor:
         new_ep_size = get_ep_group().world_size
 
         parallel_config.data_parallel_size = new_dp_size
-        if (
-            reconfig_request.new_data_parallel_rank
-            != ReconfigureRankType.KEEP_CURRENT_RANK
-        ):
+        if reconfig_request.new_data_parallel_rank != ReconfigureRankType.KEEP_CURRENT_RANK:
             parallel_config.data_parallel_rank = reconfig_request.new_data_parallel_rank
-        if (
-            reconfig_request.new_data_parallel_rank_local
-            != ReconfigureRankType.KEEP_CURRENT_RANK
-        ):
-            parallel_config.data_parallel_rank_local = (
-                reconfig_request.new_data_parallel_rank_local
-            )
-        parallel_config.data_parallel_master_ip = (
-            reconfig_request.new_data_parallel_master_ip
-        )
-        parallel_config.data_parallel_master_port = (
-            reconfig_request.new_data_parallel_master_port
-        )
+        if reconfig_request.new_data_parallel_rank_local != ReconfigureRankType.KEEP_CURRENT_RANK:
+            parallel_config.data_parallel_rank_local = reconfig_request.new_data_parallel_rank_local
+        parallel_config.data_parallel_master_ip = reconfig_request.new_data_parallel_master_ip
+        parallel_config.data_parallel_master_port = reconfig_request.new_data_parallel_master_port
 
         # Reconfigure MoE modules with new EP size
-        moe_modules = [
-            module
-            for module in self.worker.model_runner.model.modules()
-            if is_moe_layer(module)
-        ]
+        moe_modules = [module for module in self.worker.model_runner.model.modules() if is_moe_layer(module)]
         num_local_experts = moe_modules[0].moe_config.num_local_experts
-        assert all(
-            module.moe_config.num_local_experts == num_local_experts
-            for module in moe_modules
-        ), "All MoE modules must have the same number of experts"
+        assert all(module.moe_config.num_local_experts == num_local_experts for module in moe_modules), (
+            "All MoE modules must have the same number of experts"
+        )
         dp_group = get_dp_group()
         ep_group = get_ep_group()
         for module in moe_modules:
@@ -409,9 +375,7 @@ class ElasticEPScalingExecutor:
 
         num_physical_experts = num_local_experts * new_ep_size
         num_logical_experts = eplb_model_state.logical_replica_count.shape[1]
-        parallel_config.eplb_config.num_redundant_experts = (
-            num_physical_experts - num_logical_experts
-        )
+        parallel_config.eplb_config.num_redundant_experts = num_physical_experts - num_logical_experts
         old_physical_to_logical = eplb_model_state.physical_to_logical_map
         num_moe_layers = old_physical_to_logical.shape[0]
         num_local_experts = eplb_model_state.expert_load_pass.shape[1] // old_ep_size
@@ -422,32 +386,22 @@ class ElasticEPScalingExecutor:
                 dtype=old_physical_to_logical.dtype,
                 device=old_physical_to_logical.device,
             )
-            expanded_physical_to_logical[:, : num_local_experts * old_ep_size] = (
-                old_physical_to_logical
-            )
+            expanded_physical_to_logical[:, : num_local_experts * old_ep_size] = old_physical_to_logical
             eplb_model_state.physical_to_logical_map = expanded_physical_to_logical
 
         old_num_physical_experts = eplb_model_state.expert_load_pass.shape[1]
         pad_size = num_physical_experts - old_num_physical_experts
         if new_dp_size > old_dp_size:
             assert pad_size > 0
-            expanded_expert_load_pass = F.pad(
-                eplb_model_state.expert_load_pass, (0, pad_size), value=0
-            )
-            expanded_expert_load_window = F.pad(
-                eplb_model_state.expert_load_window, (0, pad_size), value=0
-            )
+            expanded_expert_load_pass = F.pad(eplb_model_state.expert_load_pass, (0, pad_size), value=0)
+            expanded_expert_load_window = F.pad(eplb_model_state.expert_load_window, (0, pad_size), value=0)
             eplb_model_state.expert_load_pass = expanded_expert_load_pass
             eplb_model_state.expert_load_window = expanded_expert_load_window
             eplb_state.num_valid_physical_experts = old_num_physical_experts
         else:
             assert pad_size < 0
-            eplb_model_state.expert_load_pass = eplb_model_state.expert_load_pass[
-                :, :num_physical_experts
-            ]
-            eplb_model_state.expert_load_window = eplb_model_state.expert_load_window[
-                :, :, :num_physical_experts
-            ]
+            eplb_model_state.expert_load_pass = eplb_model_state.expert_load_pass[:, :num_physical_experts]
+            eplb_model_state.expert_load_window = eplb_model_state.expert_load_window[:, :, :num_physical_experts]
             eplb_state.num_valid_physical_experts = num_physical_experts
 
         model = self.worker.model_runner.get_model()
@@ -458,9 +412,7 @@ class ElasticEPScalingExecutor:
                 eplb_model_state.logical_to_physical_map,
                 eplb_model_state.logical_replica_count,
             )
-            eplb_state._propagate_shared_tensors(
-                model, eplb_model_state.num_unpadded_tokens_tensors
-            )
+            eplb_state._propagate_shared_tensors(model, eplb_model_state.num_unpadded_tokens_tensors)
             model.update_physical_experts_metadata(
                 num_physical_experts=num_physical_experts,
                 num_local_physical_experts=num_local_experts,
@@ -472,9 +424,7 @@ class ElasticEPScalingExecutor:
                     module._replace_quant_method(module._quant_method.old_quant_method)
             prepare_communication_buffer_for_model(self.worker.model_runner.model)
 
-        eplb_model_state.expert_buffer = [
-            torch.empty_like(w) for w in model.expert_weights[0]
-        ]
+        eplb_model_state.expert_buffer = [torch.empty_like(w) for w in model.expert_weights[0]]
         assert parallel_config.eplb_config.communicator is not None, (
             "EPLB communicator backend must be set by ParallelConfig"
         )
@@ -485,44 +435,33 @@ class ElasticEPScalingExecutor:
             expert_buffer=eplb_model_state.expert_buffer,
         )
 
-        if (
-            self.worker.aphrodite_config.compilation_config.mode
-            == CompilationMode.STOCK_TORCH_COMPILE
-        ):
+        if self.worker.aphrodite_config.compilation_config.mode == CompilationMode.STOCK_TORCH_COMPILE:
             # NOTE(yongji): when using stock torch.compile,
             # torch.compile is triggered during GPUModelRunner's load_model()
             # TODO(yongji):check do we need to re-trigger torch.compile here?
             # any changes to the tensor shapes in execution should already
             # be handled internally by torch.compile.
-            backend = self.worker.aphrodite_config.compilation_config.init_backend(
-                self.worker.aphrodite_config
-            )
+            backend = self.worker.aphrodite_config.compilation_config.init_backend(self.worker.aphrodite_config)
             compilation_counter.stock_torch_compile_count += 1
             self.worker.model_runner.model.compile(fullgraph=True, backend=backend)
 
         multi_block_table = self.worker.model_runner.input_batch.block_table
         saved_block_tables: list[tuple[torch.Tensor, torch.Tensor]] = []
         for bt in multi_block_table.block_tables:
-            saved_block_tables.append(
-                (bt.block_table.gpu.clone(), bt.block_table.cpu.clone())
-            )
+            saved_block_tables.append((bt.block_table.gpu.clone(), bt.block_table.cpu.clone()))
         multi_block_table.clear()
 
         unlock_workspace()
         self.worker.compile_or_warm_up_model()
         lock_workspace()
 
-        for bt, (saved_gpu, saved_cpu) in zip(
-            multi_block_table.block_tables, saved_block_tables
-        ):
+        for bt, (saved_gpu, saved_cpu) in zip(multi_block_table.block_tables, saved_block_tables):
             bt.block_table.gpu.copy_(saved_gpu)
             bt.block_table.cpu.copy_(saved_cpu)
         if new_dp_size < old_dp_size:
             self._set_eplb_suppressed(False)
 
-    def _perform_eplb_reshuffle(
-        self, rank_mapping: dict[int, int] | None = None
-    ) -> None:
+    def _perform_eplb_reshuffle(self, rank_mapping: dict[int, int] | None = None) -> None:
         if get_ep_group().rank == 0:
             logger.info("[Elastic EP] Starting expert resharding...")
 
@@ -541,9 +480,7 @@ class ElasticEPScalingExecutor:
         torch.accelerator.synchronize()
         # reset expert_rearrangement_step to ensure all ranks are synchronized
         eplb_state.expert_rearrangement_step = 0
-        eplb_state.num_valid_physical_experts = (
-            eplb_model_state.physical_to_logical_map.shape[1]
-        )
+        eplb_state.num_valid_physical_experts = eplb_model_state.physical_to_logical_map.shape[1]
         eplb_state.is_async = is_async_enabled
         # Start the async worker thread if it doesn't exist yet (idempotent).
         # This is needed for new workers after scale-up: they create EplbState
@@ -567,8 +504,7 @@ class ElasticEPScalingExecutor:
         old_ep_size = parallel_config.data_parallel_size * tp_size
         new_ep_size = new_dp_size * tp_size
         rank_mapping = {
-            old_ep_rank: old_ep_rank if old_ep_rank < new_ep_size else -1
-            for old_ep_rank in range(old_ep_size)
+            old_ep_rank: old_ep_rank if old_ep_rank < new_ep_size else -1 for old_ep_rank in range(old_ep_size)
         }
         self._perform_eplb_reshuffle(rank_mapping=rank_mapping)
 
@@ -592,11 +528,7 @@ class ElasticEPScalingExecutor:
         if new_worker_idx < remainder * (num_dst_per_sender + 1):
             sender_rank = new_worker_idx // (num_dst_per_sender + 1)
         else:
-            sender_rank = (
-                remainder
-                + (new_worker_idx - remainder * (num_dst_per_sender + 1))
-                // num_dst_per_sender
-            )
+            sender_rank = remainder + (new_worker_idx - remainder * (num_dst_per_sender + 1)) // num_dst_per_sender
 
         model = self.worker.model_runner.get_model()
         batch_transfer_weights(
@@ -611,15 +543,13 @@ class ElasticEPScalingExecutor:
     def receive_expert_mapping(self) -> tuple[torch.Tensor, int, int]:
         dp_group = get_dp_group()
         assert isinstance(dp_group, StatelessGroupCoordinator)
-        physical_to_logical, num_local_physical_experts, num_logical_experts = (
-            broadcast_expert_mapping(
-                physical_to_logical=None,
-                num_local_physical_experts=None,
-                num_logical_experts=None,
-                dp_group=dp_group,
-                src_rank=0,
-                device=self.worker.device,
-            )
+        physical_to_logical, num_local_physical_experts, num_logical_experts = broadcast_expert_mapping(
+            physical_to_logical=None,
+            num_local_physical_experts=None,
+            num_logical_experts=None,
+            dp_group=dp_group,
+            src_rank=0,
+            device=self.worker.device,
         )
         num_moe_layers = physical_to_logical.shape[0]
         new_dp_size = get_dp_group().world_size
@@ -654,9 +584,7 @@ class ElasticEPScalingExecutor:
         multi_block_table = self.worker.model_runner.input_batch.block_table
         saved_block_tables: list[tuple[torch.Tensor, torch.Tensor]] = []
         for bt in multi_block_table.block_tables:
-            saved_block_tables.append(
-                (bt.block_table.gpu.clone(), bt.block_table.cpu.clone())
-            )
+            saved_block_tables.append((bt.block_table.gpu.clone(), bt.block_table.cpu.clone()))
         multi_block_table.clear()
 
         # _ensure_workspace_size allocates a fresh tensor on grow, leaving
@@ -679,8 +607,6 @@ class ElasticEPScalingExecutor:
 
         lock_workspace()
 
-        for bt, (saved_gpu, saved_cpu) in zip(
-            multi_block_table.block_tables, saved_block_tables
-        ):
+        for bt, (saved_gpu, saved_cpu) in zip(multi_block_table.block_tables, saved_block_tables):
             bt.block_table.gpu.copy_(saved_gpu)
             bt.block_table.cpu.copy_(saved_cpu)

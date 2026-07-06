@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 from transformers import BatchFeature
 
-from aphrodite.config import ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig
 from aphrodite.inputs import TokensPrompt
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.linear import ColumnParallelLinear, RowParallelLinear
@@ -96,15 +96,11 @@ class JinaVLForSequenceClassification(
     )
 
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "qwen2_vl")
-        )
+        super().__init__(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "qwen2_vl"))
         pooler_config = aphrodite_config.model_config.pooler_config
         assert pooler_config is not None
 
-        self.score = JinaVLScorer(
-            aphrodite_config.model_config, prefix=maybe_prefix(prefix, "score")
-        )
+        self.score = JinaVLScorer(aphrodite_config.model_config, prefix=maybe_prefix(prefix, "score"))
         self.pooler = DispatchPooler.for_seq_cls(pooler_config, classifier=self.score)
 
     @classmethod

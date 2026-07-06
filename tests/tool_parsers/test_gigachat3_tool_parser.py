@@ -6,13 +6,13 @@ import json
 import pytest
 from transformers import AutoTokenizer
 
+from aphrodite.entrypoints.openai.engine.protocol import FunctionCall
+from aphrodite.tokenizers import TokenizerLike
+from aphrodite.tool_parsers import ToolParser, ToolParserManager
 from tests.tool_parsers.utils import (
     run_tool_extraction,
     run_tool_extraction_streaming,
 )
-from aphrodite.entrypoints.openai.engine.protocol import FunctionCall
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers import ToolParser, ToolParserManager
 
 
 @pytest.fixture(scope="function")
@@ -40,9 +40,7 @@ SIMPLE_FUNCTION_JSON = json.dumps(
     },
     ensure_ascii=False,
 )
-SIMPLE_FUNCTION_OUTPUT_GIGACHAT3 = (
-    f"{MSG_SEP_TOKEN}{TOOL_HEADER_GIGACHAT3}{SIMPLE_FUNCTION_JSON}"
-)
+SIMPLE_FUNCTION_OUTPUT_GIGACHAT3 = f"{MSG_SEP_TOKEN}{TOOL_HEADER_GIGACHAT3}{SIMPLE_FUNCTION_JSON}"
 SIMPLE_FUNCTION_OUTPUT_GIGACHAT31 = f"{TOOL_HEADER_GIGACHAT31}{SIMPLE_FUNCTION_JSON}"
 SIMPLE_FUNCTION_CALL = FunctionCall(
     name="manage_user_memory",
@@ -57,12 +55,8 @@ PARAMETERLESS_FUNCTION_JSON = json.dumps(
     },
     ensure_ascii=False,
 )
-PARAMETERLESS_FUNCTION_OUTPUT_GIGACHAT3 = (
-    f"{MSG_SEP_TOKEN}{TOOL_HEADER_GIGACHAT3}{PARAMETERLESS_FUNCTION_JSON}"
-)
-PARAMETERLESS_FUNCTION_OUTPUT_GIGACHAT31 = (
-    f"{TOOL_HEADER_GIGACHAT31}{PARAMETERLESS_FUNCTION_JSON}"
-)
+PARAMETERLESS_FUNCTION_OUTPUT_GIGACHAT3 = f"{MSG_SEP_TOKEN}{TOOL_HEADER_GIGACHAT3}{PARAMETERLESS_FUNCTION_JSON}"
+PARAMETERLESS_FUNCTION_OUTPUT_GIGACHAT31 = f"{TOOL_HEADER_GIGACHAT31}{PARAMETERLESS_FUNCTION_JSON}"
 PARAMETERLESS_FUNCTION_CALL = FunctionCall(
     name="manage_user_memory",
     arguments=json.dumps({}, ensure_ascii=False),
@@ -86,9 +80,7 @@ COMPLEX_FUNCTION_JSON = json.dumps(
     },
     ensure_ascii=False,
 )
-COMPLEX_FUNCTION_OUTPUT_GIGACHAT3 = (
-    f"{MSG_SEP_TOKEN}{TOOL_HEADER_GIGACHAT3}{COMPLEX_FUNCTION_JSON}"
-)
+COMPLEX_FUNCTION_OUTPUT_GIGACHAT3 = f"{MSG_SEP_TOKEN}{TOOL_HEADER_GIGACHAT3}{COMPLEX_FUNCTION_JSON}"
 COMPLEX_FUNCTION_OUTPUT_GIGACHAT31 = f"{TOOL_HEADER_GIGACHAT31}{COMPLEX_FUNCTION_JSON}"
 COMPLEX_FUNCTION_CALL = FunctionCall(
     name="manage_user_memory",
@@ -116,13 +108,9 @@ def fixture_gigachat_tokenizer(default_tokenizer: TokenizerLike):
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_no_tool_call(streaming: bool, gigachat_tokenizer: TokenizerLike):
-    tool_parser: ToolParser = ToolParserManager.get_tool_parser("gigachat3")(
-        gigachat_tokenizer
-    )
+    tool_parser: ToolParser = ToolParserManager.get_tool_parser("gigachat3")(gigachat_tokenizer)
     model_output = "How can I help you today?"
-    content, tool_calls = run_tool_extraction(
-        tool_parser, model_output, streaming=streaming
-    )
+    content, tool_calls = run_tool_extraction(tool_parser, model_output, streaming=streaming)
     assert content == model_output
     assert len(tool_calls) == 0
 
@@ -271,9 +259,7 @@ TEST_CASES = [
 ]
 
 
-@pytest.mark.parametrize(
-    "streaming, model_output, expected_tool_calls, expected_content", TEST_CASES
-)
+@pytest.mark.parametrize("streaming, model_output, expected_tool_calls, expected_content", TEST_CASES)
 def test_tool_call(
     streaming: bool,
     model_output: str,
@@ -281,12 +267,8 @@ def test_tool_call(
     expected_content: str | None,
     gigachat_tokenizer: TokenizerLike,
 ):
-    tool_parser: ToolParser = ToolParserManager.get_tool_parser("gigachat3")(
-        gigachat_tokenizer
-    )
-    content, tool_calls = run_tool_extraction(
-        tool_parser, model_output, streaming=streaming
-    )
+    tool_parser: ToolParser = ToolParserManager.get_tool_parser("gigachat3")(gigachat_tokenizer)
+    content, tool_calls = run_tool_extraction(tool_parser, model_output, streaming=streaming)
     if content == "":
         content = None
     assert content == expected_content
@@ -336,9 +318,7 @@ def test_streaming_tool_call_with_large_steps(
     """
     Test that the closing braces are streamed correctly.
     """
-    tool_parser: ToolParser = ToolParserManager.get_tool_parser("gigachat3")(
-        gigachat_tokenizer
-    )
+    tool_parser: ToolParser = ToolParserManager.get_tool_parser("gigachat3")(gigachat_tokenizer)
     reconstructor = run_tool_extraction_streaming(
         tool_parser,
         model_output_deltas,

@@ -17,7 +17,7 @@ from torch import nn
 from transformers import Zamba2Config
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
 from aphrodite.distributed import get_tensor_model_parallel_world_size
 from aphrodite.model_executor.layers.activation import GeluAndMul
 from aphrodite.model_executor.layers.attention import Attention
@@ -144,9 +144,7 @@ class Zamba2Attention(nn.Module):
         self.qkv_size = self.attention_hidden_size // tp_size
         self.scale = (self.attention_head_dim / 2) ** -0.5
 
-        if (
-            self.attention_head_dim * self.total_num_attention_heads
-        ) != self.attention_hidden_size:
+        if (self.attention_head_dim * self.total_num_attention_heads) != self.attention_hidden_size:
             raise ValueError(
                 f"attention_hidden_size must be divisible by"
                 f" num_attention_heads"
@@ -177,11 +175,7 @@ class Zamba2Attention(nn.Module):
 
         # Initialize attention blocks with proper indexing
         self.dpa_list = nn.ModuleList([])
-        j = (
-            bare_block_idx
-            * (self.num_hybrid_layers + config.num_mem_blocks - 1)
-            // config.num_mem_blocks
-        )
+        j = bare_block_idx * (self.num_hybrid_layers + config.num_mem_blocks - 1) // config.num_mem_blocks
         for block_idx in range(self.num_hybrid_layers):
             if block_idx % config.num_mem_blocks == bare_block_idx:
                 dpa = Attention(
@@ -279,9 +273,7 @@ class Zamba2Attention(nn.Module):
             value_states = value_states + v_lora_output
 
         if self.config.use_mem_rope:
-            query_states, key_states = self.rotary_emb(
-                position_ids, query_states, key_states
-            )
+            query_states, key_states = self.rotary_emb(position_ids, query_states, key_states)
 
         y = self.dpa_list[block_idx](query_states, key_states, value_states)
         y, _ = self.o_proj(y)
@@ -338,10 +330,7 @@ class Zamba2MLP(nn.Module):
 
         # Only allow GELU activations
         if config.hidden_act != "gelu":
-            raise ValueError(
-                f"Only GELU activation is supported "
-                f"(got `hidden_act`: {config.hidden_act})"
-            )
+            raise ValueError(f"Only GELU activation is supported (got `hidden_act`: {config.hidden_act})")
         self.act_fn = GeluAndMul()
 
         # Initialize adapter layers
@@ -467,9 +456,7 @@ class Zamba2AttentionDecoderLayer(nn.Module):
         # (which is the output of the previous (mamba) layer).
         # The concatenated tensor is then used as input of the pre-attention
         # RMSNorm (see fig. 2 in https://arxiv.org/pdf/2405.16712).
-        hidden_states = torch.concatenate(
-            [hidden_states, original_hidden_states], dim=-1
-        )
+        hidden_states = torch.concatenate([hidden_states, original_hidden_states], dim=-1)
 
         # Layer norm before attention
         hidden_states = self.input_layernorm(hidden_states)
@@ -702,10 +689,7 @@ class Zamba2Model(nn.Module):
         )
 
         # Map hybrid layer indices to block indices
-        layer2block_map = {
-            layer_idx: block_idx
-            for block_idx, layer_idx in enumerate(config.hybrid_layer_ids)
-        }
+        layer2block_map = {layer_idx: block_idx for block_idx, layer_idx in enumerate(config.hybrid_layer_ids)}
 
         # Create cyclic iterator of transformer blocks
         blocks = cycle(
@@ -896,9 +880,7 @@ class Zamba2ForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsMambaPrefixC
         self.model_config = aphrodite_config.model_config
 
         # Initialize core model
-        self.model = Zamba2Model(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = Zamba2Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
 
         # Initialize language modeling head
         self.lm_head = ParallelLMHead(

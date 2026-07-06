@@ -4,6 +4,7 @@ import os
 
 import pytest
 
+from aphrodite.platforms import current_platform
 from tests.models.language.pooling_mteb_test.mteb_score_utils import (
     MTEB_RERANK_LANGS,
     MTEB_RERANK_TASKS,
@@ -13,7 +14,6 @@ from tests.models.language.pooling_mteb_test.mteb_score_utils import (
     run_mteb_rerank,
 )
 from tests.utils import RemoteOpenAIServer
-from aphrodite.platforms import current_platform
 
 os.environ["APHRODITE_LOGGING_LEVEL"] = "WARNING"
 

@@ -145,11 +145,7 @@ class KVEventAggregator:
         Returns:
             List of events present in all workers.
         """
-        return [
-            event
-            for event, count in self._event_counter.items()
-            if count == self._num_workers
-        ]
+        return [event for event, count in self._event_counter.items() if count == self._num_workers]
 
     def get_all_events(self) -> list[KVCacheEvent]:
         """
@@ -193,10 +189,7 @@ class KVEventAggregator:
         return self._num_workers
 
     def __repr__(self) -> str:
-        return (
-            f"<KVEventAggregator workers={self._num_workers}, "
-            f"events={len(self._event_counter)}>"
-        )
+        return f"<KVEventAggregator workers={self._num_workers}, events={len(self._event_counter)}>"
 
 
 class KVConnectorKVEvents(ABC):
@@ -324,9 +317,7 @@ class ZmqEventPublisher(EventPublisher):
         self._dp_rank = data_parallel_rank
 
         self._endpoint = self.offset_endpoint_port(endpoint, self._dp_rank)
-        self._replay_endpoint = self.offset_endpoint_port(
-            replay_endpoint, self._dp_rank
-        )
+        self._replay_endpoint = self.offset_endpoint_port(replay_endpoint, self._dp_rank)
         self._hwm = hwm
         self._socket_setup()
 
@@ -338,9 +329,7 @@ class ZmqEventPublisher(EventPublisher):
         self._running = True
         logger.info("Starting ZMQ publisher thread")
 
-        self._thread = threading.Thread(
-            target=self._publisher_thread, daemon=True, name="zmq-publisher"
-        )
+        self._thread = threading.Thread(target=self._publisher_thread, daemon=True, name="zmq-publisher")
         self._thread.start()
 
     def publish(self, events: EventBatch) -> None:
@@ -461,17 +450,13 @@ class ZmqEventPublisher(EventPublisher):
                 # [identity, empty_delim, seq_bytes, payload]
                 # (identity, empty_delim) are stripped off by the router
                 # receiving payload is (seq_bytes, payload)
-                self._replay.send_multipart(
-                    (client_id, b"", seq.to_bytes(8, "big"), buf)
-                )
+                self._replay.send_multipart((client_id, b"", seq.to_bytes(8, "big"), buf))
         # Send end of sequence marker
         # receiving payload is (-1, b""")
         self._replay.send_multipart((client_id, b"", self.END_SEQ, b""))
 
     @staticmethod
-    def offset_endpoint_port(
-        endpoint: str | None, data_parallel_rank: int
-    ) -> str | None:
+    def offset_endpoint_port(endpoint: str | None, data_parallel_rank: int) -> str | None:
         """Helper function to offset the port in an endpoint by
             the data parallel rank.
 
@@ -515,15 +500,9 @@ class EventPublisherFactory:
         cls._registry[name] = ctor
 
     @classmethod
-    def create(
-        cls, config: KVEventsConfig | None, data_parallel_rank: int = 0
-    ) -> EventPublisher:
+    def create(cls, config: KVEventsConfig | None, data_parallel_rank: int = 0) -> EventPublisher:
         """Create publisher from a config mapping."""
-        if (
-            config is None
-            or not config.enable_kv_cache_events
-            or config.publisher == "null"
-        ):
+        if config is None or not config.enable_kv_cache_events or config.publisher == "null":
             return NullEventPublisher()
 
         config_dict = asdict(config)

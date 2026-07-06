@@ -20,9 +20,7 @@ from .abstract import AbstractEplbPolicy
 
 class DefaultEplbPolicy(AbstractEplbPolicy):
     @classmethod
-    def balanced_packing(
-        cls, weight: np.ndarray, num_packs: int
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def balanced_packing(cls, weight: np.ndarray, num_packs: int) -> tuple[np.ndarray, np.ndarray]:
         """
         Pack n weighted objects to m packs, such that each bin contains exactly
         n/m objects and the weights of all packs are as balanced as possible.
@@ -73,9 +71,7 @@ class DefaultEplbPolicy(AbstractEplbPolicy):
         return pack_index, rank_in_pack
 
     @classmethod
-    def replicate_experts(
-        cls, weight: np.ndarray, num_phy: int
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def replicate_experts(cls, weight: np.ndarray, num_phy: int) -> tuple[np.ndarray, np.ndarray]:
         """
         Replicate `num_log` experts to `num_phy` replicas, such that the maximum
         load of all replicas is minimized.
@@ -139,37 +135,24 @@ class DefaultEplbPolicy(AbstractEplbPolicy):
             return inv
 
         # Step 1: pack groups to nodes
-        tokens_per_group = weight.reshape(num_layers, num_groups, group_size).sum(
-            axis=-1
-        )
-        group_pack_index, group_rank_in_pack = cls.balanced_packing(
-            tokens_per_group, num_nodes
-        )
+        tokens_per_group = weight.reshape(num_layers, num_groups, group_size).sum(axis=-1)
+        group_pack_index, group_rank_in_pack = cls.balanced_packing(tokens_per_group, num_nodes)
         # Map each logical expert into a node-local ordering based on packed groups.
         log2mlog = (
-            (
-                (group_pack_index * groups_per_node + group_rank_in_pack)[..., None]
-                * group_size
-            )
+            ((group_pack_index * groups_per_node + group_rank_in_pack)[..., None] * group_size)
             + np.arange(group_size, dtype=np.int64)
         ).reshape(num_layers, num_logical_experts)
         mlog2log = inverse(log2mlog)
 
         # Step 2: construct redundant experts within nodes
         # Reorder weights into the node-local layout so replication is done per node.
-        tokens_per_mlog = np.take_along_axis(weight, mlog2log, axis=1).reshape(
-            -1, num_logical_experts // num_nodes
-        )
-        phy2mlog, mlogcnt = cls.replicate_experts(
-            tokens_per_mlog, num_physical_experts // num_nodes
-        )
+        tokens_per_mlog = np.take_along_axis(weight, mlog2log, axis=1).reshape(-1, num_logical_experts // num_nodes)
+        phy2mlog, mlogcnt = cls.replicate_experts(tokens_per_mlog, num_physical_experts // num_nodes)
 
         # Step 3: pack physical_experts to GPUs
         # Effective per-physical load = logical load divided by replica count.
         tokens_per_phy = np.take_along_axis(tokens_per_mlog / mlogcnt, phy2mlog, axis=1)
-        pack_index, rank_in_pack = cls.balanced_packing(
-            tokens_per_phy, num_gpus // num_nodes
-        )
+        pack_index, rank_in_pack = cls.balanced_packing(tokens_per_phy, num_gpus // num_nodes)
         phy2pphy = pack_index * phy_experts_per_gpu + rank_in_pack
         pphy2phy = inverse(phy2pphy)
 
@@ -226,17 +209,13 @@ class DefaultEplbPolicy(AbstractEplbPolicy):
             for slot_idx in range(slots_per_gpu):
                 # matches: [layers, slots], True where new local experts have
                 # the same logical value as the old from 'slot_idx' and not checked yet
-                matches = (new_local == old_local[:, slot_idx][:, None]) & (
-                    ~used_new_indices
-                )
+                matches = (new_local == old_local[:, slot_idx][:, None]) & (~used_new_indices)
                 has_any = matches.any(axis=1)
                 if np.any(has_any):
                     first_idx = np.argmax(matches, axis=1)
                     layer_indices = np.nonzero(has_any)[0]
                     matched_new_positions = first_idx[layer_indices]
-                    post_phy2log[layer_indices, start + slot_idx] = new_local[
-                        layer_indices, matched_new_positions
-                    ]
+                    post_phy2log[layer_indices, start + slot_idx] = new_local[layer_indices, matched_new_positions]
                     used_new_indices[layer_indices, matched_new_positions] = True
                     preserved_positions[layer_indices, slot_idx] = True
 
@@ -265,9 +244,7 @@ class DefaultEplbPolicy(AbstractEplbPolicy):
                         continue
                     src_pos = remaining_indices[layer_idx, :k]
                     dst_pos = fill_indices[layer_idx, :k]
-                    post_phy2log[layer_idx, start + dst_pos] = new_local[
-                        layer_idx, src_pos
-                    ]
+                    post_phy2log[layer_idx, start + dst_pos] = new_local[layer_idx, src_pos]
 
         return post_phy2log
 
@@ -301,22 +278,14 @@ class DefaultEplbPolicy(AbstractEplbPolicy):
                 index of each replica
         """
         weight_np = weight.float().cpu().numpy()
-        old_phy2log_np = (
-            old_global_expert_indices.cpu().numpy()
-            if old_global_expert_indices is not None
-            else None
-        )
+        old_phy2log_np = old_global_expert_indices.cpu().numpy() if old_global_expert_indices is not None else None
 
         if num_groups % num_nodes == 0:
             # use hierarchical load-balance policy
-            phy2log_np = cls.rebalance_experts_hierarchical(
-                weight_np, num_replicas, num_groups, num_nodes, num_ranks
-            )
+            phy2log_np = cls.rebalance_experts_hierarchical(weight_np, num_replicas, num_groups, num_nodes, num_ranks)
         else:
             # use global load-balance policy
-            phy2log_np = cls.rebalance_experts_hierarchical(
-                weight_np, num_replicas, 1, 1, num_ranks
-            )
+            phy2log_np = cls.rebalance_experts_hierarchical(weight_np, num_replicas, 1, 1, num_ranks)
 
         # Optional postprocessing to preserve slots for experts moving
         # within the same GPU
@@ -324,9 +293,7 @@ class DefaultEplbPolicy(AbstractEplbPolicy):
         # Helps to avoid unnecessary weight copying when experts move
         # within the same GPU.
         if old_phy2log_np is not None:
-            phy2log_np = cls.preserve_intragpu_slots(
-                phy2log_np, num_ranks, old_phy2log_np
-            )
+            phy2log_np = cls.preserve_intragpu_slots(phy2log_np, num_ranks, old_phy2log_np)
 
         phy2log = torch.from_numpy(phy2log_np)
         return phy2log

@@ -119,9 +119,7 @@ class TensorSchema:
             )
 
         if len(value) == 0:
-            raise ValueError(
-                f"{field_name}{self._fmt_indexer(leading_idxs)} is an empty sequence"
-            )
+            raise ValueError(f"{field_name}{self._fmt_indexer(leading_idxs)} is an empty sequence")
 
         # Ensure all tensors in the list have the same
         # shape, besides dynamic dimensions
@@ -185,16 +183,12 @@ class TensorSchema:
                 if dim in shape_env:
                     if actual_shape[i] != shape_env[dim]:
                         raise ValueError(
-                            f"{field_name} dim[{i}] expected "
-                            f"'{dim}'={shape_env[dim]}, got "
-                            f"{actual_shape[i]}"
+                            f"{field_name} dim[{i}] expected '{dim}'={shape_env[dim]}, got {actual_shape[i]}"
                         )
                 else:
                     shape_env[dim] = actual_shape[i]
             else:
-                raise TypeError(
-                    f"{field_name} dim[{i}] has unsupported type: {type(dim)}"
-                )
+                raise TypeError(f"{field_name} dim[{i}] has unsupported type: {type(dim)}")
 
     def validate(self) -> None:
         type_hints = get_type_hints(self.__class__, include_extras=True)

@@ -28,27 +28,13 @@ MODELS = [
     EmbedModelInfo("BAAI/bge-small-zh", architecture="BertModel", enable_test=False),
     EmbedModelInfo("BAAI/bge-large-en", architecture="BertModel", enable_test=False),
     EmbedModelInfo("BAAI/bge-large-zh", architecture="BertModel", enable_test=False),
-    EmbedModelInfo(
-        "BAAI/bge-large-zh-noinstruct", architecture="BertModel", enable_test=False
-    ),
-    EmbedModelInfo(
-        "BAAI/bge-base-en-v1.5", architecture="BertModel", enable_test=False
-    ),
-    EmbedModelInfo(
-        "BAAI/bge-base-zh-v1.5", architecture="BertModel", enable_test=False
-    ),
-    EmbedModelInfo(
-        "BAAI/bge-small-en-v1.5", architecture="BertModel", enable_test=False
-    ),
-    EmbedModelInfo(
-        "BAAI/bge-small-zh-v1.5", architecture="BertModel", enable_test=False
-    ),
-    EmbedModelInfo(
-        "BAAI/bge-large-en-v1.5", architecture="BertModel", enable_test=False
-    ),
-    EmbedModelInfo(
-        "BAAI/bge-large-zh-v1.5", architecture="BertModel", enable_test=False
-    ),
+    EmbedModelInfo("BAAI/bge-large-zh-noinstruct", architecture="BertModel", enable_test=False),
+    EmbedModelInfo("BAAI/bge-base-en-v1.5", architecture="BertModel", enable_test=False),
+    EmbedModelInfo("BAAI/bge-base-zh-v1.5", architecture="BertModel", enable_test=False),
+    EmbedModelInfo("BAAI/bge-small-en-v1.5", architecture="BertModel", enable_test=False),
+    EmbedModelInfo("BAAI/bge-small-zh-v1.5", architecture="BertModel", enable_test=False),
+    EmbedModelInfo("BAAI/bge-large-en-v1.5", architecture="BertModel", enable_test=False),
+    EmbedModelInfo("BAAI/bge-large-zh-v1.5", architecture="BertModel", enable_test=False),
     ########## XLMRobertaModel
     EmbedModelInfo(
         "BAAI/bge-m3",
@@ -107,9 +93,7 @@ def test_embed_models_mteb(hf_runner, aphrodite_runner, model_info: EmbedModelIn
 
 
 @pytest.mark.parametrize("model_info", MODELS)
-def test_embed_models_correctness(
-    hf_runner, aphrodite_runner, model_info: EmbedModelInfo, example_prompts
-) -> None:
+def test_embed_models_correctness(hf_runner, aphrodite_runner, model_info: EmbedModelInfo, example_prompts) -> None:
     correctness_test_embed_models(hf_runner, aphrodite_runner, model_info, example_prompts)
 
 

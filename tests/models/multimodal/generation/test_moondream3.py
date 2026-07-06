@@ -4,8 +4,8 @@
 
 import pytest
 
-from tests.models.registry import HF_EXAMPLE_MODELS
 from aphrodite.platforms import current_platform
+from tests.models.registry import HF_EXAMPLE_MODELS
 
 from ....conftest import IMAGE_ASSETS, ImageTestAssets
 from ....utils import large_gpu_mark, multi_gpu_test
@@ -23,18 +23,12 @@ HF_IMAGE_PROMPTS = IMAGE_ASSETS.prompts(
 
 def make_query_prompt(question: str) -> str:
     """Create a direct-answer query prompt for Moondream3."""
-    return (
-        "<|endoftext|><image><|md_reserved_0|>query<|md_reserved_1|>"
-        f"{question}<|md_reserved_2|>"
-    )
+    return f"<|endoftext|><image><|md_reserved_0|>query<|md_reserved_1|>{question}<|md_reserved_2|>"
 
 
 def make_caption_prompt(length: str = "normal") -> str:
     """Create a caption prompt for Moondream3."""
-    return (
-        "<|endoftext|><image><|md_reserved_0|>"
-        f"describe<|md_reserved_1|>{length}<|md_reserved_2|>"
-    )
+    return f"<|endoftext|><image><|md_reserved_0|>describe<|md_reserved_1|>{length}<|md_reserved_2|>"
 
 
 @multi_gpu_test(num_gpus=2)
@@ -144,10 +138,7 @@ def test_batched_inference(llm, image_assets: ImageTestAssets):
     from aphrodite import SamplingParams
 
     images = [asset.pil_image for asset in image_assets]
-    prompts = [
-        {"prompt": prompt, "multi_modal_data": {"image": img}}
-        for img, prompt in zip(images, HF_IMAGE_PROMPTS)
-    ]
+    prompts = [{"prompt": prompt, "multi_modal_data": {"image": img}} for img, prompt in zip(images, HF_IMAGE_PROMPTS)]
 
     outputs = llm.generate(prompts, SamplingParams(max_tokens=50, temperature=0))
 

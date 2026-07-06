@@ -7,9 +7,7 @@ from ..op import register_op
 
 
 @register_op
-def rms_norm(
-    x: Tensor, weight: Tensor | None, epsilon: float, variance_size: int | None = None
-) -> Tensor:
+def rms_norm(x: Tensor, weight: Tensor | None, epsilon: float, variance_size: int | None = None) -> Tensor:
     """Weighted root-mean-square layer normalization"""
     orig_dtype = x.dtype
     x = x.to(torch.float32)
@@ -22,9 +20,7 @@ def rms_norm(
 
 
 @rms_norm.register_input_generator
-def _rms_norm_input_generator(
-    num_tokens: int, hidden_size: int, dtype: torch.dtype, epsilon: float = 1e-5
-) -> tuple:
+def _rms_norm_input_generator(num_tokens: int, hidden_size: int, dtype: torch.dtype, epsilon: float = 1e-5) -> tuple:
     x = torch.randn(num_tokens, hidden_size, dtype=dtype)
     weight = torch.randn(hidden_size, dtype=dtype)
     return x, weight, epsilon

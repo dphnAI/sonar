@@ -11,12 +11,12 @@ import torch
 import zmq
 
 from aphrodite.config import (
+    AphroditeConfig,
     CacheConfig,
     DeviceConfig,
     KVTransferConfig,
     ModelConfig,
     SchedulerConfig,
-    AphroditeConfig,
     set_current_aphrodite_config,
 )
 from aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common import (
@@ -106,9 +106,7 @@ def mock_parallel_groups():
         yield mock_group
 
 
-def _setup_kv_transfer_request(
-    request, remote_host="127.0.0.1", fake_port=4789, fake_transfer_id="0"
-):
+def _setup_kv_transfer_request(request, remote_host="127.0.0.1", fake_port=4789, fake_transfer_id="0"):
     """Setup KV transfer parameters for a request."""
     request.kv_transfer_params.update(
         {
@@ -123,9 +121,7 @@ def _setup_kv_transfer_request(
     )
     zmq_addr = f"host:{remote_host},handshake:{fake_port},notify:{fake_port}"
     fake_uuid = uuid.uuid4().hex
-    request.request_id = (
-        f"___prefill_addr_{zmq_addr}___decode_addr_{zmq_addr}_{fake_uuid}"
-    )
+    request.request_id = f"___prefill_addr_{zmq_addr}___decode_addr_{zmq_addr}_{fake_uuid}"
     return request
 
 
@@ -165,19 +161,13 @@ class FakeMoRIIOWrapper:
     def build_session(self, local_memory_metadata, remote_memory_metadata):
         pass
 
-    def read_remote_data(
-        self, transfer_size_byte, local_offset=0, remote_offset=0, session=None
-    ):
+    def read_remote_data(self, transfer_size_byte, local_offset=0, remote_offset=0, session=None):
         pass
 
-    def write_remote_data(
-        self, transfer_size_byte, local_offset=0, remote_offset=0, session=None
-    ):
+    def write_remote_data(self, transfer_size_byte, local_offset=0, remote_offset=0, session=None):
         pass
 
-    def write_remote_data_single(
-        self, transfer_size_byte, local_offset=0, remote_offset=0, sess_idx=0
-    ):
+    def write_remote_data_single(self, transfer_size_byte, local_offset=0, remote_offset=0, sess_idx=0):
         pass
 
     def waiting_for_transfer_complete(self):
@@ -229,9 +219,7 @@ class FakeMoRIIOConnectorWorker(MoRIIOConnectorWorker):
         kv_cache_config=None,
         **kwargs,
     ):
-        super().__init__(
-            aphrodite_config, engine_id, kv_cache_config or _make_test_kv_cache_config()
-        )
+        super().__init__(aphrodite_config, engine_id, kv_cache_config or _make_test_kv_cache_config())
 
 
 def create_aphrodite_config(
@@ -317,25 +305,15 @@ def test_write_mode_saves_local_block_ids():
     assert kv_connector_metadata is not None, "kv_connector_metadata is None"
     assert isinstance(kv_connector_metadata, MoRIIOConnectorMetadata)
 
-    assert len(kv_connector_metadata.reqs_to_save) == 1, (
-        "Unexpected number of reqs_to_save"
-    )
-    assert len(kv_connector_metadata.reqs_to_recv) == 0, (
-        "Unexpected number of reqs_to_recv"
-    )
-    assert len(kv_connector_metadata.reqs_to_send) == 0, (
-        "Unexpected number of reqs_to_send"
-    )
-    assert request_id in kv_connector_metadata.reqs_to_save, (
-        "Request ID not in reqs_to_save"
-    )
+    assert len(kv_connector_metadata.reqs_to_save) == 1, "Unexpected number of reqs_to_save"
+    assert len(kv_connector_metadata.reqs_to_recv) == 0, "Unexpected number of reqs_to_recv"
+    assert len(kv_connector_metadata.reqs_to_send) == 0, "Unexpected number of reqs_to_send"
+    assert request_id in kv_connector_metadata.reqs_to_save, "Request ID not in reqs_to_save"
     req_meta = kv_connector_metadata.reqs_to_save[request_id]
 
     for block_id, block in zip(
         req_meta.local_block_ids,
-        scheduler.kv_cache_manager.coordinator.single_type_managers[0].req_to_blocks[
-            request_id
-        ],
+        scheduler.kv_cache_manager.coordinator.single_type_managers[0].req_to_blocks[request_id],
     ):
         assert block_id == block.block_id, f"{block_id} != {block.block_id}"
 
@@ -346,9 +324,7 @@ def test_write_mode_with_chunked_prefill_saves_local_block_ids():
     MAX_NUM_BATCHED_TOKENS = 64
     NUM_TOKENS = MAX_NUM_BATCHED_TOKENS * 2 + MAX_NUM_BATCHED_TOKENS // 2
 
-    aphrodite_config = create_aphrodite_config(
-        max_num_batched_tokens=MAX_NUM_BATCHED_TOKENS, role="kv_producer"
-    )
+    aphrodite_config = create_aphrodite_config(max_num_batched_tokens=MAX_NUM_BATCHED_TOKENS, role="kv_producer")
     BLOCK_SIZE = aphrodite_config.cache_config.block_size
 
     scheduler = create_scheduler(aphrodite_config)
@@ -381,16 +357,12 @@ def test_write_mode_with_chunked_prefill_saves_local_block_ids():
         assert len(kv_connector_metadata.reqs_to_recv) == expected_recv
         assert len(kv_connector_metadata.reqs_to_send) == expected_send
     assert kv_connector_metadata is not None, "kv_connector_metadata is None"
-    assert request_id in kv_connector_metadata.reqs_to_save, (
-        "Request ID not in reqs_to_save"
-    )
+    assert request_id in kv_connector_metadata.reqs_to_save, "Request ID not in reqs_to_save"
     req_meta = kv_connector_metadata.reqs_to_save[request_id]
 
     for block_id, block in zip(
         req_meta.local_block_ids,
-        scheduler.kv_cache_manager.coordinator.single_type_managers[0].req_to_blocks[
-            request_id
-        ],
+        scheduler.kv_cache_manager.coordinator.single_type_managers[0].req_to_blocks[request_id],
     ):
         assert block_id == block.block_id, f"{block_id} != {block.block_id}"
 
@@ -421,9 +393,7 @@ def test_read_mode_loads_remote_block_ids():
     request_id = request.request_id
 
     scheduler.add_request(request)
-    block_list = scheduler.kv_cache_manager.coordinator.single_type_managers[
-        0
-    ].req_to_blocks[request_id]
+    block_list = scheduler.kv_cache_manager.coordinator.single_type_managers[0].req_to_blocks[request_id]
 
     # Set remote block ids to be fetched.
     request.kv_transfer_params["remote_block_ids"] = block_list
@@ -436,25 +406,15 @@ def test_read_mode_loads_remote_block_ids():
     assert isinstance(kv_connector_metadata, MoRIIOConnectorMetadata), (
         "kv_connector_metadata is not MoRIIOConnectorMetadata"
     )
-    assert len(kv_connector_metadata.reqs_to_save) == 0, (
-        "Unexpected number of reqs_to_save"
-    )
-    assert len(kv_connector_metadata.reqs_to_recv) == 1, (
-        "Unexpected number of reqs_to_recv"
-    )
-    assert len(kv_connector_metadata.reqs_to_send) == 0, (
-        "Unexpected number of reqs_to_send"
-    )
-    assert request_id in kv_connector_metadata.reqs_to_recv, (
-        "Request ID not in reqs_to_recv"
-    )
+    assert len(kv_connector_metadata.reqs_to_save) == 0, "Unexpected number of reqs_to_save"
+    assert len(kv_connector_metadata.reqs_to_recv) == 1, "Unexpected number of reqs_to_recv"
+    assert len(kv_connector_metadata.reqs_to_send) == 0, "Unexpected number of reqs_to_send"
+    assert request_id in kv_connector_metadata.reqs_to_recv, "Request ID not in reqs_to_recv"
     req_meta = kv_connector_metadata.reqs_to_recv[request_id]
 
     for block_id, block in zip(
         req_meta.local_block_ids,
-        scheduler.kv_cache_manager.coordinator.single_type_managers[0].req_to_blocks[
-            request_id
-        ],
+        scheduler.kv_cache_manager.coordinator.single_type_managers[0].req_to_blocks[request_id],
     ):
         assert block_id == block.block_id, f"{block_id} != {block.block_id}"
 
@@ -474,14 +434,10 @@ def test_read_mode_loads_remote_block_ids():
         pytest.param("xfer-8", {}, [], id="address-unavailable-plain-id"),
     ],
 )
-def test_write_mode_finished_before_alloc_releases_prefill_blocks(
-    transfer_id, extra_params, expected_notifications
-):
+def test_write_mode_finished_before_alloc_releases_prefill_blocks(transfer_id, extra_params, expected_notifications):
     scheduler = _write_consumer_scheduler_for_finished_request(tp_size=2)
     notifications = []
-    scheduler._send_transfer_release = lambda transfer_id, host, port: (
-        notifications.append((transfer_id, host, port))
-    )
+    scheduler._send_transfer_release = lambda transfer_id, host, port: (notifications.append((transfer_id, host, port)))
     request = create_request(request_id=7, do_remote_prefill=True)
     request.request_id = "plain-decode-id"
     request.kv_transfer_params = {
@@ -514,9 +470,7 @@ def test_send_transfer_release_sends_structured_release_message():
     }
 
 
-@pytest.mark.skipif(
-    not aiter_available, reason="Requires aiter package for ROCm FlashAttention backend"
-)
+@pytest.mark.skipif(not aiter_available, reason="Requires aiter package for ROCm FlashAttention backend")
 def test_register_kv_caches(mock_parallel_groups):
     """Test that MoRIIOConnector.register_kv_caches correctly registers kv caches."""
     ROLE = "kv_consumer"
@@ -530,9 +484,7 @@ def test_register_kv_caches(mock_parallel_groups):
     backend_cls = AiterFlashAttentionBackend
 
     # Create test kv cache tensors using proper backend shape
-    kv_cache_shape = backend_cls.get_kv_cache_shape(
-        num_blocks=2, block_size=16, num_kv_heads=4, head_size=64
-    )
+    kv_cache_shape = backend_cls.get_kv_cache_shape(num_blocks=2, block_size=16, num_kv_heads=4, head_size=64)
     shared_tensor = torch.zeros(*kv_cache_shape, dtype=torch.float16)
     unique_tensor = torch.zeros(*kv_cache_shape, dtype=torch.float16)
     kv_caches = {
@@ -542,12 +494,8 @@ def test_register_kv_caches(mock_parallel_groups):
     }
 
     with (
-        patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector.threading.Event"
-        ),
-        patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector.threading.Thread"
-        ),
+        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector.threading.Event"),
+        patch("aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_connector.threading.Thread"),
     ):
         # Create connector
         aphrodite_config.kv_transfer_config.kv_connector_extra_config.update(
@@ -578,44 +526,26 @@ def test_register_kv_caches(mock_parallel_groups):
         # Verify that the MemoryDesc stored in layer_name_to_local_kv_cache_metadata
         assert (
             shared_tensor.data_ptr()
-            == MemoryDesc.unpack(
-                connector.connector_worker.layer_name_to_local_kv_cache_metadata[
-                    "layer0"
-                ][0]
-            ).data
+            == MemoryDesc.unpack(connector.connector_worker.layer_name_to_local_kv_cache_metadata["layer0"][0]).data
         )
         assert (
             unique_tensor.data_ptr()
-            == MemoryDesc.unpack(
-                connector.connector_worker.layer_name_to_local_kv_cache_metadata[
-                    "layer1"
-                ][0]
-            ).data
+            == MemoryDesc.unpack(connector.connector_worker.layer_name_to_local_kv_cache_metadata["layer1"][0]).data
         )
         assert (
             shared_tensor.data_ptr()
-            == MemoryDesc.unpack(
-                connector.connector_worker.layer_name_to_local_kv_cache_metadata[
-                    "layer2"
-                ][0]
-            ).data
+            == MemoryDesc.unpack(connector.connector_worker.layer_name_to_local_kv_cache_metadata["layer2"][0]).data
         )
 
         # Verify engine keys
         expected_engine_key = f"{ROLE[3:]}:{IP}:{DEFAULT_PORT}:tp{TP_RANK}:dp{DP_RANK}"
         assert (
-            MemoryDesc.unpack(
-                connector.connector_worker.layer_name_to_local_kv_cache_metadata[
-                    "layer0"
-                ][0]
-            ).engine_key
+            MemoryDesc.unpack(connector.connector_worker.layer_name_to_local_kv_cache_metadata["layer0"][0]).engine_key
             == expected_engine_key
         )
 
 
-@pytest.mark.skipif(
-    not aiter_available, reason="Requires aiter package for ROCm FlashAttention backend"
-)
+@pytest.mark.skipif(not aiter_available, reason="Requires aiter package for ROCm FlashAttention backend")
 def test_moriio_handshake_returns_metadata(mock_parallel_groups):
     """MoRIIO handshake socket returns valid agent metadata over ZMQ."""
 
@@ -626,9 +556,7 @@ def test_moriio_handshake_returns_metadata(mock_parallel_groups):
     backend_cls = AiterFlashAttentionBackend
 
     # Create test kv cache tensors using proper backend shape
-    kv_cache_shape = backend_cls.get_kv_cache_shape(
-        num_blocks=2, block_size=16, num_kv_heads=4, head_size=64
-    )
+    kv_cache_shape = backend_cls.get_kv_cache_shape(num_blocks=2, block_size=16, num_kv_heads=4, head_size=64)
     shared_tensor = torch.zeros(*kv_cache_shape, dtype=torch.float16)
     unique_tensor = torch.zeros(*kv_cache_shape, dtype=torch.float16)
     kv_caches = {
@@ -675,9 +603,7 @@ def test_moriio_handshake_returns_metadata(mock_parallel_groups):
             metadata_bytes = received_frame[1]
             decoder = msgspec.msgpack.Decoder(MoRIIOAgentMetadata)
             metadata = decoder.decode(metadata_bytes)
-            assert isinstance(metadata, MoRIIOAgentMetadata), (
-                "Decoded metadata is not MoRIIOAgentMetadata"
-            )
+            assert isinstance(metadata, MoRIIOAgentMetadata), "Decoded metadata is not MoRIIOAgentMetadata"
 
 
 def test_resolve_host_ip_prefers_extra_config():

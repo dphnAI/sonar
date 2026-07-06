@@ -17,9 +17,7 @@ __all__ = [
 FLOAT4_E2M1_MAX = scalar_types.float4_e2m1f.max()
 FLOAT4_E2M1_MAX_RECIPROCAL = 1 / FLOAT4_E2M1_MAX
 
-kE2M1ToFloat_handle = SimpleNamespace(
-    val=torch.tensor([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0], dtype=torch.float32)
-)
+kE2M1ToFloat_handle = SimpleNamespace(val=torch.tensor([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0], dtype=torch.float32))
 
 
 @triton.jit
@@ -90,11 +88,7 @@ def _dequantize_nvfp4_kernel(
 
     # Load [TILE_BLOCKS, BLOCK_PACKED] packed bytes
     packed_offsets = tl.arange(0, BLOCK_PACKED)[None, :]
-    byte_indices = (
-        fp4_row_offset
-        + (start_block + block_offsets[:, None]) * BLOCK_PACKED
-        + packed_offsets
-    )
+    byte_indices = fp4_row_offset + (start_block + block_offsets[:, None]) * BLOCK_PACKED + packed_offsets
     elem_mask = block_mask[:, None]
     raw_bytes = tl.load(fp4_ptr + byte_indices, mask=elem_mask, other=0)
 
@@ -108,11 +102,7 @@ def _dequantize_nvfp4_kernel(
     result = tl.interleave(low_result, high_result)
 
     elem_offsets = tl.arange(0, BLOCK_SIZE)[None, :]
-    out_indices = (
-        output_row_offset
-        + (start_block + block_offsets[:, None]) * BLOCK_SIZE
-        + elem_offsets
-    )
+    out_indices = output_row_offset + (start_block + block_offsets[:, None]) * BLOCK_SIZE + elem_offsets
     tl.store(output_ptr + out_indices, result, mask=block_mask[:, None])
 
 
@@ -174,11 +164,7 @@ def _nvfp4_quant_dequant_kernel(
     block_mask = (start_block + block_offsets) < num_blocks
 
     # Load [TILE_BLOCKS, BLOCK_SIZE] elements
-    indices = (
-        row_offset
-        + (start_block + block_offsets[:, None]) * BLOCK_SIZE
-        + tl.arange(0, BLOCK_SIZE)[None, :]
-    )
+    indices = row_offset + (start_block + block_offsets[:, None]) * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)[None, :]
     mask_2d = block_mask[:, None]
     x = tl.load(input_ptr + indices, mask=mask_2d, other=0.0).to(tl.float32)
 
@@ -211,9 +197,7 @@ def _triton_nvfp4_quant_dequant(
     x_m, x_k = x.shape
 
     if not torch.compiler.is_compiling():
-        assert x_k % block_size == 0, (
-            f"Weight shape K={x_k} is not divisible by block_size={block_size}"
-        )
+        assert x_k % block_size == 0, f"Weight shape K={x_k} is not divisible by block_size={block_size}"
 
     output_dtype = x.dtype
     num_blocks = x_k // block_size
@@ -361,9 +345,7 @@ def dequantize_to_dtype(
     assert tensor_fp4.dtype == torch.uint8
 
     if not swizzle and current_platform.is_cuda_alike():
-        return _triton_dequantize_nvfp4(
-            tensor_fp4, tensor_sf, global_scale, dtype, block_size
-        )
+        return _triton_dequantize_nvfp4(tensor_fp4, tensor_sf, global_scale, dtype, block_size)
 
     # We handle 3D tensors reshaping them to 2D.
     is_3d = tensor_fp4.ndim == 3
@@ -441,9 +423,7 @@ def ref_nvfp4_quant(x, global_scale, block_size):
     return cast_to_fp4(clipped_x), scale.squeeze(-1)
 
 
-def ref_nvfp4_quant_dequant(
-    x: torch.Tensor, global_scale: torch.Tensor, block_size: int
-) -> torch.Tensor:
+def ref_nvfp4_quant_dequant(x: torch.Tensor, global_scale: torch.Tensor, block_size: int) -> torch.Tensor:
     """
     NVFP4 quantize-dequantize operation.
 

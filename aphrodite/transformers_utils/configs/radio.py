@@ -96,12 +96,8 @@ class RadioConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.hidden_act = hidden_act
         self.cpe_max_size = cpe_max_size
-        self.norm_mean = (
-            list(norm_mean) if isinstance(norm_mean, (tuple, list)) else norm_mean
-        )
-        self.norm_std = (
-            list(norm_std) if isinstance(norm_std, (tuple, list)) else norm_std
-        )
+        self.norm_mean = list(norm_mean) if isinstance(norm_mean, (tuple, list)) else norm_mean
+        self.norm_std = list(norm_std) if isinstance(norm_std, (tuple, list)) else norm_std
         self.register_multiple = register_multiple
         self.teachers = teachers if teachers is not None else []
         self.cls_token_per_teacher = cls_token_per_teacher

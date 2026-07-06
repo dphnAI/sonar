@@ -51,9 +51,7 @@ def find_getitem(node: fx.Node, idx: int) -> fx.Node:
 
 # An auto-functionalization-aware utility for finding nodes with a specific op
 # Also handles op overload packets and finds all overloads
-def find_op_nodes(
-    op: OpOverload | OpOverloadPacket, graph: fx.Graph
-) -> Iterator[fx.Node]:
+def find_op_nodes(op: OpOverload | OpOverloadPacket, graph: fx.Graph) -> Iterator[fx.Node]:
     if isinstance(op, OpOverloadPacket):
         for overload in op.overloads():
             overload_op = getattr(op, overload)

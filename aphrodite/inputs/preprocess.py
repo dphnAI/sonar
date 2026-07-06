@@ -76,9 +76,7 @@ class InputPreprocessor:
         """
         renderer = self.renderer
 
-        tok_params = renderer.default_cmpl_tok_params.with_kwargs(
-            **(tokenization_kwargs or {})
-        )
+        tok_params = renderer.default_cmpl_tok_params.with_kwargs(**(tokenization_kwargs or {}))
 
         tok_prompt = renderer._tokenize_singleton_prompt(
             TextPrompt(prompt=prompt),
@@ -114,14 +112,10 @@ class InputPreprocessor:
     ) -> EmbedsInput:
         return self.renderer._process_embeds(parsed_content)
 
-    def _truncate_inputs(
-        self, inputs: list[int], tokenization_kwargs: dict[str, Any] | None = None
-    ) -> list[int]:
+    def _truncate_inputs(self, inputs: list[int], tokenization_kwargs: dict[str, Any] | None = None) -> list[int]:
         renderer = self.renderer
 
-        tok_params = renderer.default_cmpl_tok_params.with_kwargs(
-            **(tokenization_kwargs or {})
-        )
+        tok_params = renderer.default_cmpl_tok_params.with_kwargs(**(tokenization_kwargs or {}))
 
         tok_prompt = renderer._tokenize_singleton_prompt(
             TokensPrompt(prompt_token_ids=inputs),
@@ -135,9 +129,7 @@ class InputPreprocessor:
         parsed_content: TokensPrompt,
         tokenization_kwargs: dict[str, Any] | None = None,
     ) -> TokensInput | MultiModalInput:
-        prompt_token_ids = self._truncate_inputs(
-            parsed_content["prompt_token_ids"], tokenization_kwargs
-        )
+        prompt_token_ids = self._truncate_inputs(parsed_content["prompt_token_ids"], tokenization_kwargs)
 
         inputs: TokensInput | MultiModalInput
         if multi_modal_data := parsed_content.get("multi_modal_data"):
@@ -240,9 +232,7 @@ class InputPreprocessor:
             from aphrodite.multimodal.processing import EncDecMultiModalProcessor
 
             if isinstance(self.renderer.mm_processor, EncDecMultiModalProcessor):
-                skip_decoder_start_token = (
-                    self.renderer.mm_processor.skip_decoder_start_token
-                )
+                skip_decoder_start_token = self.renderer.mm_processor.skip_decoder_start_token
 
         return build_enc_dec_input(
             encoder_input=self._prompt_to_llm_inputs(

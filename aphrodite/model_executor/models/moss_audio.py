@@ -86,13 +86,9 @@ DEFAULT_MOSS_AUDIO_MEL_CONFIG = {
     "mel_hop_length": 160,
     "mel_n_fft": 400,
 }
-MOSS_AUDIO_PLACEHOLDER = (
-    f"{MOSS_AUDIO_BOS_TOKEN}{MOSS_AUDIO_TOKEN}{MOSS_AUDIO_EOS_TOKEN}"
-)
+MOSS_AUDIO_PLACEHOLDER = f"{MOSS_AUDIO_BOS_TOKEN}{MOSS_AUDIO_TOKEN}{MOSS_AUDIO_EOS_TOKEN}"
 MOSS_AUDIO_SPAN_RE = re.compile(
-    f"{re.escape(MOSS_AUDIO_BOS_TOKEN)}"
-    f"(?:{re.escape(MOSS_AUDIO_TOKEN)})+"
-    f"{re.escape(MOSS_AUDIO_EOS_TOKEN)}"
+    f"{re.escape(MOSS_AUDIO_BOS_TOKEN)}(?:{re.escape(MOSS_AUDIO_TOKEN)})+{re.escape(MOSS_AUDIO_EOS_TOKEN)}"
 )
 MOSS_AUDIO_PROCESSOR_CONFIG_KEYS = {
     "audio_token_id",
@@ -151,11 +147,7 @@ def _filter_moss_audio_processor_config(
     if not config:
         return {}
 
-    return {
-        key: value
-        for key, value in config.items()
-        if key in MOSS_AUDIO_PROCESSOR_CONFIG_KEYS
-    }
+    return {key: value for key, value in config.items() if key in MOSS_AUDIO_PROCESSOR_CONFIG_KEYS}
 
 
 def _merge_moss_audio_processor_configs(
@@ -196,26 +188,16 @@ class MossAudioEncoderConfig:
     pretrained_path: str = ""
     n_window: int = 200
     conv_chunksize: int = 64
-    deepstack_encoder_layer_indexes: list[int] = field(
-        default_factory=lambda: [8, 16, 24]
-    )
+    deepstack_encoder_layer_indexes: list[int] = field(default_factory=lambda: [8, 16, 24])
 
     @classmethod
     def from_config(cls, config: object) -> "MossAudioEncoderConfig":
         if isinstance(config, cls):
             return config
         if isinstance(config, Mapping):
-            values = {
-                key: value
-                for key, value in config.items()
-                if key in cls.__dataclass_fields__
-            }
+            values = {key: value for key, value in config.items() if key in cls.__dataclass_fields__}
         else:
-            values = {
-                key: getattr(config, key)
-                for key in cls.__dataclass_fields__
-                if hasattr(config, key)
-            }
+            values = {key: getattr(config, key) for key in cls.__dataclass_fields__ if hasattr(config, key)}
         return cls(**values)
 
 
@@ -268,16 +250,12 @@ class SinusoidsPositionEmbedding(nn.Module):
         del num_positions  # Kept for config compatibility.
         max_timescale = 10000.0
         log_timescale_increment = math.log(max_timescale) / (embedding_dim // 2 - 1)
-        inv_timescales = torch.exp(
-            -log_timescale_increment * torch.arange(embedding_dim // 2).float()
-        )
+        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(embedding_dim // 2).float())
         self.register_buffer("inv_timescales", inv_timescales, persistent=False)
 
     def forward(self, seq_len: int, device: torch.device) -> torch.Tensor:
         scaled_time = (
-            torch.arange(seq_len, device=device, dtype=self.inv_timescales.dtype)[
-                :, None
-            ]
+            torch.arange(seq_len, device=device, dtype=self.inv_timescales.dtype)[:, None]
             * self.inv_timescales[None, :]
         )
         return torch.cat([scaled_time.sin(), scaled_time.cos()], dim=1).unsqueeze(0)
@@ -296,8 +274,7 @@ class MossAudioAttention(nn.Module):
         self.head_dim = self.embed_dim // self.num_heads
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
-                f"d_model ({self.embed_dim}) must be divisible by "
-                f"encoder_attention_heads ({self.num_heads})."
+                f"d_model ({self.embed_dim}) must be divisible by encoder_attention_heads ({self.num_heads})."
             )
 
         tp_size = get_tensor_model_parallel_world_size()
@@ -380,9 +357,7 @@ class MossAudioEncoderLayer(nn.Module):
             quant_config=quant_config,
             prefix=f"{prefix}.self_attn",
         )
-        self.self_attn_layer_norm = nn.LayerNorm(
-            config.d_model, eps=config.layer_norm_eps
-        )
+        self.self_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.activation_fn = _ACTIVATION_REGISTRY[config.activation_function]
         self.activation_dropout = config.activation_dropout
         self.dropout = config.dropout
@@ -410,21 +385,15 @@ class MossAudioEncoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states = self.self_attn(hidden_states, attention_mask)
-        hidden_states = residual + F.dropout(
-            hidden_states, p=self.dropout, training=self.training
-        )
+        hidden_states = residual + F.dropout(hidden_states, p=self.dropout, training=self.training)
 
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states, _ = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = F.dropout(
-            hidden_states, p=self.activation_dropout, training=self.training
-        )
+        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states, _ = self.fc2(hidden_states)
-        hidden_states = residual + F.dropout(
-            hidden_states, p=self.dropout, training=self.training
-        )
+        hidden_states = residual + F.dropout(hidden_states, p=self.dropout, training=self.training)
         return hidden_states
 
 
@@ -460,9 +429,7 @@ class MossAudioEncoder(nn.Module):
             padding=(1, 1),
         )
 
-        conv_freq = self._compute_downsampled_length(
-            torch.tensor(config.num_mel_bins)
-        ).item()
+        conv_freq = self._compute_downsampled_length(torch.tensor(config.num_mel_bins)).item()
         self.stem_proj = ReplicatedLinear(
             config.downsample_hidden_size * int(conv_freq),
             config.d_model,
@@ -471,9 +438,7 @@ class MossAudioEncoder(nn.Module):
             return_bias=False,
             prefix=f"{prefix}.stem_proj",
         )
-        self.embed_positions = SinusoidsPositionEmbedding(
-            config.max_source_positions, config.d_model
-        )
+        self.embed_positions = SinusoidsPositionEmbedding(config.max_source_positions, config.d_model)
         self.layers = nn.ModuleList(
             [
                 MossAudioEncoderLayer(
@@ -497,14 +462,9 @@ class MossAudioEncoder(nn.Module):
         else:
             self.out_proj = nn.Identity()
 
-        self.deepstack_encoder_layer_indexes = list(
-            config.deepstack_encoder_layer_indexes or []
-        )
+        self.deepstack_encoder_layer_indexes = list(config.deepstack_encoder_layer_indexes or [])
         self._deepstack_capture_map = {
-            layer_idx: capture_idx
-            for capture_idx, layer_idx in enumerate(
-                self.deepstack_encoder_layer_indexes
-            )
+            layer_idx: capture_idx for capture_idx, layer_idx in enumerate(self.deepstack_encoder_layer_indexes)
         }
         self.n_window = int(config.n_window)
         self.chunk_frames = int(self.n_window * 2)
@@ -548,10 +508,7 @@ class MossAudioEncoder(nn.Module):
             x = x[:, :max_len, :]
         x = x + self.embed_positions(x.shape[1], x.device).to(x.dtype)
 
-        attention_mask = (
-            torch.arange(x.size(1), device=x.device)[None, :]
-            < downsampled_lengths[:, None]
-        )
+        attention_mask = torch.arange(x.size(1), device=x.device)[None, :] < downsampled_lengths[:, None]
 
         deepstack_hidden_states: list[torch.Tensor | None] = []
         if output_deepstack_hidden_states:
@@ -570,13 +527,10 @@ class MossAudioEncoder(nn.Module):
             return x, []
 
         ordered_deepstack_hidden_states = [
-            hidden_states
-            for hidden_states in deepstack_hidden_states
-            if hidden_states is not None
+            hidden_states for hidden_states in deepstack_hidden_states if hidden_states is not None
         ]
         ordered_deepstack_hidden_states = [
-            self.out_proj(hidden_states)
-            for hidden_states in ordered_deepstack_hidden_states
+            self.out_proj(hidden_states) for hidden_states in ordered_deepstack_hidden_states
         ]
         return x, ordered_deepstack_hidden_states
 
@@ -595,19 +549,13 @@ class MossAudioEncoder(nn.Module):
                     device=input_features.device,
                 )
             else:
-                feature_lens = feature_lens.to(
-                    device=input_features.device, dtype=torch.long
-                )
+                feature_lens = feature_lens.to(device=input_features.device, dtype=torch.long)
             valid_chunks = [
-                input_features[i, :, : int(feature_lens[i].item())]
-                for i in range(int(input_features.shape[0]))
+                input_features[i, :, : int(feature_lens[i].item())] for i in range(int(input_features.shape[0]))
             ]
             input_features = torch.cat(valid_chunks, dim=1)
         elif input_features.dim() != 2:
-            raise ValueError(
-                f"Expected [n_mels, T] or [B, n_mels, T], got "
-                f"{tuple(input_features.shape)}."
-            )
+            raise ValueError(f"Expected [n_mels, T] or [B, n_mels, T], got {tuple(input_features.shape)}.")
 
         if feature_lens is None:
             feature_lens = torch.tensor(
@@ -616,13 +564,9 @@ class MossAudioEncoder(nn.Module):
                 dtype=torch.long,
             )
         else:
-            feature_lens = feature_lens.to(
-                device=input_features.device, dtype=torch.long
-            )
+            feature_lens = feature_lens.to(device=input_features.device, dtype=torch.long)
 
-        chunk_num = torch.ceil(
-            feature_lens.to(torch.float32) / self.chunk_frames
-        ).long()
+        chunk_num = torch.ceil(feature_lens.to(torch.float32) / self.chunk_frames).long()
         chunk_lengths = torch.full(
             (int(chunk_num.sum().item()),),
             self.chunk_frames,
@@ -634,16 +578,10 @@ class MossAudioEncoder(nn.Module):
         chunk_lengths[chunk_lengths == 0] = self.chunk_frames
 
         chunk_list = input_features.T.split(chunk_lengths.tolist(), dim=0)
-        padded_feature = nn.utils.rnn.pad_sequence(
-            chunk_list, batch_first=True
-        ).transpose(1, 2)
+        padded_feature = nn.utils.rnn.pad_sequence(chunk_list, batch_first=True).transpose(1, 2)
 
         feature_lens_after_cnn = self._compute_downsampled_length(chunk_lengths)
-        t_down_max = (
-            int(feature_lens_after_cnn.max().item())
-            if feature_lens_after_cnn.numel() > 0
-            else 0
-        )
+        t_down_max = int(feature_lens_after_cnn.max().item()) if feature_lens_after_cnn.numel() > 0 else 0
         indices = torch.arange(t_down_max, device=padded_feature.device)
         padded_mask_after_cnn = indices[None, :] < feature_lens_after_cnn[:, None]
 
@@ -668,10 +606,7 @@ class MossAudioEncoder(nn.Module):
 
             if should_output_deepstack:
                 if len(deepstack_outs) != num_deepstack:
-                    raise RuntimeError(
-                        "DeepStack output count does not match configured "
-                        "layer indexes."
-                    )
+                    raise RuntimeError("DeepStack output count does not match configured layer indexes.")
                 for capture_idx, ds in enumerate(deepstack_outs):
                     if ds.shape[1] < t_down_max:
                         ds = F.pad(ds, (0, 0, 0, t_down_max - ds.shape[1]))
@@ -782,10 +717,7 @@ class MossQwen3Model(Qwen3Model):
         ):
             hidden_states, residual = layer(positions, hidden_states, residual)
             deepstack_key = f"deepstack_input_embeds_{layer_idx}"
-            if (
-                deepstack_input_embeds is not None
-                and deepstack_key in deepstack_input_embeds.tensors
-            ):
+            if deepstack_input_embeds is not None and deepstack_key in deepstack_input_embeds.tensors:
                 hidden_states = hidden_states + deepstack_input_embeds[deepstack_key]
             self._maybe_add_hidden_state(
                 aux_hidden_states,
@@ -804,15 +736,10 @@ class MossQwen3Model(Qwen3Model):
                 if layer_idx < self.end_layer:
                     continue
                 deepstack_key = f"deepstack_input_embeds_{layer_idx}"
-                if (
-                    deepstack_input_embeds is not None
-                    and deepstack_key in deepstack_input_embeds.tensors
-                ):
+                if deepstack_input_embeds is not None and deepstack_key in deepstack_input_embeds.tensors:
                     tensors[deepstack_key] = deepstack_input_embeds[deepstack_key]
                 else:
-                    tensors[deepstack_key] = hidden_states.new_zeros(
-                        hidden_states.shape
-                    )
+                    tensors[deepstack_key] = hidden_states.new_zeros(hidden_states.shape)
             return IntermediateTensors(tensors)
 
         hidden_states, _ = self.norm(hidden_states, residual)
@@ -830,9 +757,7 @@ class MossQwen3ForCausalLM(Qwen3ForCausalLM):
         self.config = config
         self.aphrodite_config = aphrodite_config
         self.quant_config = quant_config
-        self.model = MossQwen3Model(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = MossQwen3Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
 
         if get_pp_group().is_last_rank:
             if config.tie_word_embeddings:
@@ -858,9 +783,7 @@ class MossQwen3ForCausalLM(Qwen3ForCausalLM):
         dtype: torch.dtype,
         device: torch.device,
     ) -> IntermediateTensors:
-        intermediate_tensors = self.model.make_empty_intermediate_tensors(
-            batch_size, dtype, device
-        )
+        intermediate_tensors = self.model.make_empty_intermediate_tensors(batch_size, dtype, device)
         for layer_idx in self.deepstack_inject_layer_indices:
             intermediate_tensors[f"deepstack_input_embeds_{layer_idx}"] = torch.zeros(
                 (batch_size, self.config.hidden_size),
@@ -941,13 +864,9 @@ class MossAudioProcessor:
             hop_length=self.mel_config["mel_hop_length"],
             n_fft=self.mel_config["mel_n_fft"],
         )
-        self.audio_tokens_per_second = self.mel_config["mel_sr"] / (
-            self.mel_config["mel_hop_length"] * 8
-        )
+        self.audio_tokens_per_second = self.mel_config["mel_sr"] / (self.mel_config["mel_hop_length"] * 8)
         self.time_marker_every_seconds = 2
-        self.time_marker_every_audio_tokens = int(
-            self.audio_tokens_per_second * self.time_marker_every_seconds
-        )
+        self.time_marker_every_audio_tokens = int(self.audio_tokens_per_second * self.time_marker_every_seconds)
         self._digit_token_ids = {
             "0": 15,
             "1": 16,
@@ -974,9 +893,7 @@ class MossAudioProcessor:
             raise ValueError("The audio is too short to be represented.")
         if wav.ndim == 2:
             wav = wav[0]
-        feats = self.feature_extractor._np_extract_fbank_features(
-            wav[None, ...], device="cpu"
-        )
+        feats = self.feature_extractor._np_extract_fbank_features(wav[None, ...], device="cpu")
         return torch.from_numpy(feats[0])
 
     def _get_default_audio_prompt(self) -> str:
@@ -1005,9 +922,7 @@ class MossAudioProcessor:
             num_full_seconds + 1,
             self.time_marker_every_seconds,
         ):
-            marker_pos = (
-                second // self.time_marker_every_seconds
-            ) * self.time_marker_every_audio_tokens
+            marker_pos = (second // self.time_marker_every_seconds) * self.time_marker_every_audio_tokens
             audio_segment_len = marker_pos - audio_tokens_consumed
             if audio_segment_len > 0:
                 token_ids.extend([self.audio_token_id] * audio_segment_len)
@@ -1095,12 +1010,8 @@ class MossAudioProcessor:
         if not audio_list:
             for match in MOSS_AUDIO_SPAN_RE.finditer(prompt_text):
                 prefix = prompt_text[cursor : match.start()]
-                input_ids.extend(
-                    self.tokenizer.encode(prefix, add_special_tokens=False)
-                )
-                input_ids.extend(
-                    [self.audio_start_id, self.audio_token_id, self.audio_end_id]
-                )
+                input_ids.extend(self.tokenizer.encode(prefix, add_special_tokens=False))
+                input_ids.extend([self.audio_start_id, self.audio_token_id, self.audio_end_id])
                 cursor = match.end()
             suffix = prompt_text[cursor:]
             input_ids.extend(self.tokenizer.encode(suffix, add_special_tokens=False))
@@ -1116,8 +1027,7 @@ class MossAudioProcessor:
             match = next(span_iter, None)
             if match is None:
                 raise ValueError(
-                    "Audio placeholder count mismatch: expected one "
-                    f"{MOSS_AUDIO_PLACEHOLDER!r} span per audio item."
+                    f"Audio placeholder count mismatch: expected one {MOSS_AUDIO_PLACEHOLDER!r} span per audio item."
                 )
             prefix = prompt_text[cursor : match.start()]
             input_ids.extend(self.tokenizer.encode(prefix, add_special_tokens=False))
@@ -1129,10 +1039,7 @@ class MossAudioProcessor:
         # Step 8. Reject extra placeholder spans after all audio items are used.
         suffix = prompt_text[cursor:]
         if MOSS_AUDIO_SPAN_RE.search(suffix):
-            raise ValueError(
-                "Audio placeholder count mismatch: found more placeholder spans "
-                "than audio items."
-            )
+            raise ValueError("Audio placeholder count mismatch: found more placeholder spans than audio items.")
         input_ids.extend(self.tokenizer.encode(suffix, add_special_tokens=False))
 
         # Step 9. Return tokenizer output plus audio tensors for embed_multimodal.
@@ -1162,9 +1069,7 @@ class MossAudioProcessingInfo(BaseProcessingInfo):
             language_config=getattr(config, "language_config", None),
             adapter_hidden_size=getattr(config, "adapter_hidden_size", 8192),
             ignore_index=getattr(config, "ignore_index", -100),
-            deepstack_num_inject_layers=getattr(
-                config, "deepstack_num_inject_layers", None
-            ),
+            deepstack_num_inject_layers=getattr(config, "deepstack_num_inject_layers", None),
         )
 
     def _get_processor_config_defaults(self) -> dict[str, object]:
@@ -1191,9 +1096,7 @@ class MossAudioProcessingInfo(BaseProcessingInfo):
     @staticmethod
     def _get_processor_cache_key(kwargs: Mapping[str, object]) -> tuple[object, ...]:
         mel_config = _normalize_moss_audio_mel_config(
-            kwargs.get("mel_config")
-            if isinstance(kwargs.get("mel_config"), Mapping)
-            else None
+            kwargs.get("mel_config") if isinstance(kwargs.get("mel_config"), Mapping) else None
         )
         return (
             int(kwargs.get("audio_token_id", MOSS_AUDIO_TOKEN_ID)),
@@ -1210,20 +1113,12 @@ class MossAudioProcessingInfo(BaseProcessingInfo):
             kwargs,
         )
         mel_config = _normalize_moss_audio_mel_config(
-            merged_kwargs.get("mel_config")
-            if isinstance(merged_kwargs.get("mel_config"), Mapping)
-            else None
+            merged_kwargs.get("mel_config") if isinstance(merged_kwargs.get("mel_config"), Mapping) else None
         )
         processor_kwargs = {
-            "audio_token_id": int(
-                merged_kwargs.get("audio_token_id", MOSS_AUDIO_TOKEN_ID)
-            ),
-            "audio_start_id": int(
-                merged_kwargs.get("audio_start_id", MOSS_AUDIO_BOS_TOKEN_ID)
-            ),
-            "audio_end_id": int(
-                merged_kwargs.get("audio_end_id", MOSS_AUDIO_EOS_TOKEN_ID)
-            ),
+            "audio_token_id": int(merged_kwargs.get("audio_token_id", MOSS_AUDIO_TOKEN_ID)),
+            "audio_start_id": int(merged_kwargs.get("audio_start_id", MOSS_AUDIO_BOS_TOKEN_ID)),
+            "audio_end_id": int(merged_kwargs.get("audio_end_id", MOSS_AUDIO_EOS_TOKEN_ID)),
             "enable_time_marker": bool(merged_kwargs.get("enable_time_marker", False)),
             "mel_config": mel_config,
         }
@@ -1268,8 +1163,7 @@ class MossAudioProcessingInfo(BaseProcessingInfo):
             return {}
         processor = self.get_hf_processor()
         raw_mel_len = math.ceil(
-            (processor.mel_config["mel_sr"] * DEFAULT_MAX_AUDIO_SECONDS)
-            / processor.mel_config["mel_hop_length"]
+            (processor.mel_config["mel_sr"] * DEFAULT_MAX_AUDIO_SECONDS) / processor.mel_config["mel_hop_length"]
         )
         return {"audio": MossAudioEncoder.compute_num_audio_tokens(raw_mel_len)}
 
@@ -1310,11 +1204,7 @@ class MossAudioMultiModalProcessor(BaseMultiModalProcessor[MossAudioProcessingIn
             mm_data["audio"] = audios
         mm_kwargs = dict(mm_kwargs)
         processor_kwargs = _filter_moss_audio_processor_config(mm_kwargs)
-        tok_kwargs = {
-            key: value
-            for key, value in tok_kwargs.items()
-            if key not in MOSS_AUDIO_PROCESSOR_CONFIG_KEYS
-        }
+        tok_kwargs = {key: value for key, value in tok_kwargs.items() if key not in MOSS_AUDIO_PROCESSOR_CONFIG_KEYS}
         return self.info.ctx.call_hf_processor(
             self.info.get_hf_processor(**processor_kwargs),
             dict(text=prompt, **mm_data),
@@ -1344,10 +1234,7 @@ class MossAudioMultiModalProcessor(BaseMultiModalProcessor[MossAudioProcessingIn
                 lens = audio_data_seqlens.reshape(-1).tolist()
             else:
                 lens = list(audio_data_seqlens)
-            audio_token_lens = [
-                MossAudioEncoder.compute_num_audio_tokens(int(length))
-                for length in lens
-            ]
+            audio_token_lens = [MossAudioEncoder.compute_num_audio_tokens(int(length)) for length in lens]
 
         def get_replacement(
             item_idx: int,
@@ -1474,9 +1361,7 @@ class MossAudioModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
                 language_config=getattr(config, "language_config", None),
                 adapter_hidden_size=getattr(config, "adapter_hidden_size", 8192),
                 ignore_index=getattr(config, "ignore_index", -100),
-                deepstack_num_inject_layers=getattr(
-                    config, "deepstack_num_inject_layers", None
-                ),
+                deepstack_num_inject_layers=getattr(config, "deepstack_num_inject_layers", None),
             )
         self.config = config
         self.quant_config = aphrodite_config.quant_config
@@ -1542,24 +1427,16 @@ class MossAudioModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
 
         with self._mark_language_model(aphrodite_config):
             self.language_model = MossQwen3ForCausalLM(
-                aphrodite_config=aphrodite_config.with_hf_config(
-                    language_config, architectures=["Qwen3ForCausalLM"]
-                ),
+                aphrodite_config=aphrodite_config.with_hf_config(language_config, architectures=["Qwen3ForCausalLM"]),
                 prefix=maybe_prefix(prefix, "language_model"),
             )
             self.language_model.deepstack_inject_layer_indices = range(deepstack_k)
-            self.language_model.model.deepstack_inject_layer_indices = range(
-                deepstack_k
-            )
+            self.language_model.model.deepstack_inject_layer_indices = range(deepstack_k)
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
     @staticmethod
-    def _validate_audio_batch_size(
-        audio_batch_size: int, audio_data_seqlens: torch.Tensor
-    ) -> None:
+    def _validate_audio_batch_size(audio_batch_size: int, audio_data_seqlens: torch.Tensor) -> None:
         if audio_batch_size != audio_data_seqlens.numel():
             raise ValueError(
                 "audio_data batch size does not match audio_data_seqlens: "
@@ -1590,9 +1467,7 @@ class MossAudioModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
             if not isinstance(item, torch.Tensor):
                 raise TypeError("audio_data list items must be torch.Tensor.")
             if item.ndim != 2:
-                raise ValueError(
-                    "audio_data list items must have shape [mel_dim, time]."
-                )
+                raise ValueError("audio_data list items must have shape [mel_dim, time].")
             if item.shape[0] != mel_dim:
                 raise ValueError("audio_data list items must have the same mel_dim.")
             if item.dtype != dtype:
@@ -1606,9 +1481,7 @@ class MossAudioModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
         padded = torch.nn.utils.rnn.pad_sequence(time_major, batch_first=True)
         return padded.transpose(1, 2).contiguous()
 
-    def _parse_and_validate_audio_input(
-        self, **kwargs: object
-    ) -> MossAudioAudioInputs | None:
+    def _parse_and_validate_audio_input(self, **kwargs: object) -> MossAudioAudioInputs | None:
         """Normalize and validate model-side audio kwargs.
 
         If audio_data is provided, this checks that audio_data_seqlens is also
@@ -1622,9 +1495,7 @@ class MossAudioModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
         if audio_data is None:
             return None
         if audio_data_seqlens is None:
-            raise ValueError(
-                "audio_data_seqlens is required when audio_data is provided."
-            )
+            raise ValueError("audio_data_seqlens is required when audio_data is provided.")
         if not isinstance(audio_data_seqlens, torch.Tensor):
             audio_data_seqlens = torch.tensor(audio_data_seqlens, dtype=torch.long)
         audio_data_seqlens = audio_data_seqlens.to(dtype=torch.long).reshape(-1)
@@ -1637,9 +1508,7 @@ class MossAudioModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
         else:
             raise TypeError("audio_data must be a torch.Tensor or list[torch.Tensor].")
 
-        audio_token_lens = MossAudioEncoder._compute_downsampled_length(
-            audio_data_seqlens
-        )
+        audio_token_lens = MossAudioEncoder._compute_downsampled_length(audio_data_seqlens)
         if (
             audio_data_seqlens.numel() == 0
             or torch.any(audio_data_seqlens <= 0).item()
@@ -1678,17 +1547,10 @@ class MossAudioModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
         deepstack_embeddings: list[tuple[torch.Tensor, ...]] = []
         if deepstack is not None:
             if len(deepstack) < len(self.deepstack_audio_merger_list):
-                raise RuntimeError(
-                    "DeepStack output count does not match configured audio "
-                    "merger count."
-                )
-            for idx, hidden_states in enumerate(
-                deepstack[: len(self.deepstack_audio_merger_list)]
-            ):
+                raise RuntimeError("DeepStack output count does not match configured audio merger count.")
+            for idx, hidden_states in enumerate(deepstack[: len(self.deepstack_audio_merger_list)]):
                 ds_embeds = self.deepstack_audio_merger_list[idx](hidden_states)
-                deepstack_embeddings.append(
-                    tuple(ds_embeds.squeeze(0).split(audio_lengths, dim=0))
-                )
+                deepstack_embeddings.append(tuple(ds_embeds.squeeze(0).split(audio_lengths, dim=0)))
 
         if not deepstack_embeddings:
             return main_embeddings
@@ -1697,10 +1559,7 @@ class MossAudioModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
             torch.cat(
                 [
                     main_embedding,
-                    *(
-                        layer_embeddings[item_idx]
-                        for layer_embeddings in deepstack_embeddings
-                    ),
+                    *(layer_embeddings[item_idx] for layer_embeddings in deepstack_embeddings),
                 ],
                 dim=-1,
             )
@@ -1743,22 +1602,17 @@ class MossAudioModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
             return embeddings, ()
 
         packed_hidden_size = hidden_size * (deepstack_count + 1)
-        if deepstack_count == 0 or any(
-            embedding.shape[-1] != packed_hidden_size for embedding in embeddings
-        ):
+        if deepstack_count == 0 or any(embedding.shape[-1] != packed_hidden_size for embedding in embeddings):
             got = [int(embedding.shape[-1]) for embedding in embeddings]
             raise ValueError(
                 "MOSS-Audio multimodal embedding width mismatch: expected "
                 f"{hidden_size} or {packed_hidden_size}, got {got}."
             )
 
-        split_by_item = [
-            torch.split(embedding, hidden_size, dim=-1) for embedding in embeddings
-        ]
+        split_by_item = [torch.split(embedding, hidden_size, dim=-1) for embedding in embeddings]
         main_embeddings = tuple(parts[0] for parts in split_by_item)
         deepstack_embeddings = tuple(
-            tuple(parts[layer_idx + 1] for parts in split_by_item)
-            for layer_idx in range(deepstack_count)
+            tuple(parts[layer_idx + 1] for parts in split_by_item) for layer_idx in range(deepstack_count)
         )
         return main_embeddings, deepstack_embeddings
 
@@ -1772,18 +1626,13 @@ class MossAudioModel(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA):
             self.deepstack_input_embeds = None
             return
         flat_by_layer = [
-            torch.cat(layer_embeds, dim=0).to(
-                device=inputs_embeds.device, dtype=inputs_embeds.dtype
-            )
+            torch.cat(layer_embeds, dim=0).to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
             for layer_embeds in deepstack_embeddings
         ]
         num_mm_tokens = int(is_multimodal.sum().item())
         if any(layer.shape[0] != num_mm_tokens for layer in flat_by_layer):
             got = [int(layer.shape[0]) for layer in flat_by_layer]
-            raise ValueError(
-                "DeepStack audio token count mismatch: "
-                f"expected {num_mm_tokens}, got {got}."
-            )
+            raise ValueError(f"DeepStack audio token count mismatch: expected {num_mm_tokens}, got {got}.")
         data = {}
         for layer_idx, layer_embeds in enumerate(flat_by_layer):
             scattered = inputs_embeds.new_zeros(inputs_embeds.shape)

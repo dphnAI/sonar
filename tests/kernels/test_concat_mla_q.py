@@ -26,9 +26,7 @@ def test_concat_mla_q_contiguous(num_tokens, num_heads, nope_dim, rope_dim, dtyp
 
     ref = torch.cat((ql_nope, q_pe), dim=-1)
 
-    q_out = torch.empty(
-        num_tokens, num_heads, nope_dim + rope_dim, dtype=dtype, device="cuda"
-    )
+    q_out = torch.empty(num_tokens, num_heads, nope_dim + rope_dim, dtype=dtype, device="cuda")
     ops.concat_mla_q(ql_nope, q_pe, q_out)
 
     torch.testing.assert_close(q_out, ref, atol=0, rtol=0)
@@ -55,9 +53,7 @@ def test_concat_mla_q_transposed_nope(num_tokens, num_heads, nope_dim, rope_dim,
 
     ref = torch.cat((ql_nope, q_pe), dim=-1)
 
-    q_out = torch.empty(
-        num_tokens, num_heads, nope_dim + rope_dim, dtype=dtype, device="cuda"
-    )
+    q_out = torch.empty(num_tokens, num_heads, nope_dim + rope_dim, dtype=dtype, device="cuda")
     ops.concat_mla_q(ql_nope, q_pe, q_out)
 
     torch.testing.assert_close(q_out, ref, atol=0, rtol=0)
@@ -91,9 +87,7 @@ def test_concat_mla_q_split_rope(num_tokens, num_heads, dtype):
 
     ref = torch.cat((ql_nope, q_pe), dim=-1)
 
-    q_out = torch.empty(
-        num_tokens, num_heads, nope_dim + rope_dim, dtype=dtype, device="cuda"
-    )
+    q_out = torch.empty(num_tokens, num_heads, nope_dim + rope_dim, dtype=dtype, device="cuda")
     ops.concat_mla_q(ql_nope, q_pe, q_out)
 
     torch.testing.assert_close(q_out, ref, atol=0, rtol=0)
@@ -117,19 +111,17 @@ def test_concat_mla_q_values_preserved(num_tokens):
     nope_dim, rope_dim = 512, 64
 
     # Use specific bit patterns (stay in int16 for bit-exact comparison)
-    ql_nope_bits = torch.arange(
-        num_tokens * 128 * nope_dim, dtype=torch.int16, device="cuda"
-    ).view(num_tokens, 128, nope_dim)
-    q_pe_bits = torch.arange(
-        num_tokens * 128 * rope_dim, dtype=torch.int16, device="cuda"
-    ).view(num_tokens, 128, rope_dim)
+    ql_nope_bits = torch.arange(num_tokens * 128 * nope_dim, dtype=torch.int16, device="cuda").view(
+        num_tokens, 128, nope_dim
+    )
+    q_pe_bits = torch.arange(num_tokens * 128 * rope_dim, dtype=torch.int16, device="cuda").view(
+        num_tokens, 128, rope_dim
+    )
 
     ql_nope = ql_nope_bits.view(torch.bfloat16)
     q_pe = q_pe_bits.view(torch.bfloat16)
 
-    q_out = torch.empty(
-        num_tokens, 128, nope_dim + rope_dim, dtype=torch.bfloat16, device="cuda"
-    )
+    q_out = torch.empty(num_tokens, 128, nope_dim + rope_dim, dtype=torch.bfloat16, device="cuda")
     ops.concat_mla_q(ql_nope, q_pe, q_out)
 
     out_bits = q_out.view(torch.int16)

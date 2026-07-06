@@ -94,10 +94,7 @@ def _extract_step_logprobs(request_output):
         inner = request_output.outputs[0]
         if hasattr(inner, "logprobs") and inner.logprobs is not None:
             t = torch.tensor(
-                [
-                    inner.logprobs[i][tid].logprob
-                    for i, tid in enumerate(inner.token_ids)
-                ],
+                [inner.logprobs[i][tid].logprob for i, tid in enumerate(inner.token_ids)],
                 dtype=torch.float32,
             )
             return t, inner.token_ids

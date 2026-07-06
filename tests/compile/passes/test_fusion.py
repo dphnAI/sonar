@@ -8,8 +8,6 @@ import torch
 import aphrodite.config
 import aphrodite.ir.ops
 import aphrodite.plugins
-from tests.compile.backend import TestBackend
-from tests.utils import TestFP8Layer
 from aphrodite._aiter_ops import IS_AITER_FOUND, rocm_aiter_ops
 from aphrodite.compilation.passes.fusion.matcher_utils import QUANT_OPS
 from aphrodite.compilation.passes.fusion.rms_quant_fusion import (
@@ -20,11 +18,11 @@ from aphrodite.compilation.passes.fusion.rms_quant_fusion import (
 from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
 from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
 from aphrodite.config import (
+    AphroditeConfig,
     CompilationConfig,
     CompilationMode,
     ModelConfig,
     PassConfig,
-    AphroditeConfig,
 )
 from aphrodite.model_executor.kernels.linear import (
     AiterFp8BlockScaledMMKernel,
@@ -53,6 +51,8 @@ from aphrodite.utils.deep_gemm import (
     is_deep_gemm_e8m0_used,
     is_deep_gemm_supported,
 )
+from tests.compile.backend import TestBackend
+from tests.utils import TestFP8Layer
 
 FP8_DTYPE = current_platform.fp8_dtype()
 
@@ -92,9 +92,7 @@ ROCM_KERNEL_GROUPSHAPE_COMBINATIONS = [
 ]
 
 KERNEL_GROUPSHAPE_COMBINATIONS = (
-    CUDA_KERNEL_GROUPSHAPE_COMBINATIONS
-    if current_platform.is_cuda()
-    else ROCM_KERNEL_GROUPSHAPE_COMBINATIONS
+    CUDA_KERNEL_GROUPSHAPE_COMBINATIONS if current_platform.is_cuda() else ROCM_KERNEL_GROUPSHAPE_COMBINATIONS
 )
 
 # For Aiter tests we toggle use_aiter_quant_op
@@ -136,21 +134,13 @@ class TestModel(torch.nn.Module):
 
         if is_blockwise:
             block_size = group_shape.col
-            self.activation_quant_key = create_fp8_quant_key(
-                static=False, group_shape=group_shape
-            )
-            self.weight_quant_key = create_fp8_quant_key(
-                static=True, group_shape=GroupShape(block_size, block_size)
-            )
+            self.activation_quant_key = create_fp8_quant_key(static=False, group_shape=group_shape)
+            self.weight_quant_key = create_fp8_quant_key(static=True, group_shape=GroupShape(block_size, block_size))
 
         else:
             is_static = group_shape == GroupShape.PER_TENSOR
-            self.activation_quant_key = create_fp8_quant_key(
-                is_static, group_shape=group_shape
-            )
-            self.weight_quant_key = create_fp8_quant_key(
-                static=True, group_shape=group_shape
-            )
+            self.activation_quant_key = create_fp8_quant_key(is_static, group_shape=group_shape)
+            self.weight_quant_key = create_fp8_quant_key(static=True, group_shape=group_shape)
 
         self.fp8_linear_layers = [
             TestFP8Layer(
@@ -168,9 +158,7 @@ class TestModel(torch.nn.Module):
         for layer in self.fp8_linear_layers:
             layer.kernel.quant_fp8.use_aiter = use_aiter_quant
 
-        self.enable_quant_fp8_custom_op = self.fp8_linear_layers[
-            0
-        ].is_quant_fp8_enabled()
+        self.enable_quant_fp8_custom_op = self.fp8_linear_layers[0].is_quant_fp8_enabled()
 
     def forward(self, x):
         # avoid having graph input be an arg to a pattern directly
@@ -203,9 +191,7 @@ class TestModel(torch.nn.Module):
 
         # Common path
         return (
-            [QUANT_OPS[self.activation_quant_key]]
-            if self.enable_quant_fp8_custom_op
-            else [torch.ops.aten.reciprocal]
+            [QUANT_OPS[self.activation_quant_key]] if self.enable_quant_fp8_custom_op else [torch.ops.aten.reciprocal]
         )
 
     def ops_in_model_after(self):
@@ -294,9 +280,7 @@ def _run_fusion_test(
 @pytest.mark.parametrize("kernel_groupshape", KERNEL_GROUPSHAPE_COMBINATIONS)
 @pytest.mark.parametrize("enable_rms_norm_custom_op", [True, False])
 @pytest.mark.parametrize("enable_quant_fp8_custom_op", [True, False])
-@pytest.mark.skipif(
-    not current_platform.is_cuda_alike(), reason="Only test on CUDA and ROCm"
-)
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="Only test on CUDA and ROCm")
 def test_fusion_rmsnorm_quant(
     dtype,
     hidden_size,
@@ -311,9 +295,7 @@ def test_fusion_rmsnorm_quant(
     if not enable_quant_fp8_custom_op and group_shape.is_per_group():
         pytest.skip("Unsupported unwrapped quant fp8 op for blockwise quantization")
 
-    if group_shape == GroupShape(1, 64) and (
-        cutlass_block_fp8_supported() or is_deep_gemm_supported()
-    ):
+    if group_shape == GroupShape(1, 64) and (cutlass_block_fp8_supported() or is_deep_gemm_supported()):
         pytest.skip("Unsupported group shape 64 for CUTLASS/DeepGemm")
 
     # TODO(quant-rms-fusion): DeepGEMM UE8M0 activation quant on B200 lowers
@@ -327,14 +309,8 @@ def test_fusion_rmsnorm_quant(
         DeepGemmFp8BlockScaledMMKernel,
         FlashInferFp8DeepGEMMDynamicBlockScaledKernel,
     )
-    if (
-        dtype == torch.bfloat16
-        and force_kernel in deepgemm_kernels
-        and is_deep_gemm_e8m0_used()
-    ):
-        pytest.skip(
-            "rms+quant fusion does not yet match the packed UE8M0 DeepGEMM path"
-        )
+    if dtype == torch.bfloat16 and force_kernel in deepgemm_kernels and is_deep_gemm_e8m0_used():
+        pytest.skip("rms+quant fusion does not yet match the packed UE8M0 DeepGEMM path")
 
     custom_ops = []
     if enable_rms_norm_custom_op:
@@ -347,9 +323,7 @@ def test_fusion_rmsnorm_quant(
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
             custom_ops=custom_ops,
-            pass_config=PassConfig(
-                fuse_norm_quant=True, fuse_act_quant=True, eliminate_noops=True
-            ),
+            pass_config=PassConfig(fuse_norm_quant=True, fuse_act_quant=True, eliminate_noops=True),
         ),
     )
 
@@ -374,21 +348,15 @@ def test_fusion_rmsnorm_quant(
             use_aiter_quant=False,
         )
 
-        backend, _ = _run_fusion_test(
-            model, fusion_pass, aphrodite_config, dtype, hidden_size, num_tokens
-        )
-        backend.check_before_ops(
-            model.ops_in_model_before_partial(), fully_replaced=False
-        )
+        backend, _ = _run_fusion_test(model, fusion_pass, aphrodite_config, dtype, hidden_size, num_tokens)
+        backend.check_before_ops(model.ops_in_model_before_partial(), fully_replaced=False)
 
 
 @pytest.mark.parametrize("dtype", [torch.bfloat16])
 @pytest.mark.parametrize("hidden_size", [256])
 @pytest.mark.parametrize("num_tokens", [257])
 @pytest.mark.parametrize("eps", [1e-5, 1e-6])
-@pytest.mark.parametrize(
-    "kernel_groupshape_quant", AITER_KERNEL_GROUPSHAPE_COMBINATIONS
-)
+@pytest.mark.parametrize("kernel_groupshape_quant", AITER_KERNEL_GROUPSHAPE_COMBINATIONS)
 @pytest.mark.skipif(
     (not current_platform.is_rocm() or not IS_AITER_FOUND),
     reason="Only test on ROCm with aiter package installed",
@@ -436,9 +404,7 @@ def test_aiter_fusion_rmsnorm_quant(
             use_aiter_quant=use_aiter_quant_op,  # Toggle aiter quantization
         )
 
-        _run_fusion_test(
-            model, fusion_pass, aphrodite_config, dtype, hidden_size, num_tokens
-        )
+        _run_fusion_test(model, fusion_pass, aphrodite_config, dtype, hidden_size, num_tokens)
 
 
 class TestGatedModel(torch.nn.Module):
@@ -471,9 +437,7 @@ class TestGatedModel(torch.nn.Module):
             norm_before_gate=True,
         )
 
-        self.activation_quant_key = create_fp8_quant_key(
-            static=False, group_shape=group_shape
-        )
+        self.activation_quant_key = create_fp8_quant_key(static=False, group_shape=group_shape)
         self.weight_quant_key = create_fp8_quant_key(
             static=True, group_shape=GroupShape(group_shape.col, group_shape.col)
         )
@@ -565,9 +529,7 @@ def test_aiter_fusion_rmsnorm_gated_quant(
 
         # Register a mock GDN layer so the pass discovers num_heads/head_dim
         mock_gdn = _MockGDNLayer(num_v_heads=num_heads, head_v_dim=head_dim, tp_size=1)
-        aphrodite_config.compilation_config.static_forward_context["mock_gdn_layer"] = (
-            mock_gdn
-        )
+        aphrodite_config.compilation_config.static_forward_context["mock_gdn_layer"] = mock_gdn
 
         torch.set_default_device("cuda")
         torch.set_default_dtype(dtype)

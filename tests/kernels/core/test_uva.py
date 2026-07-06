@@ -6,9 +6,7 @@ import torch
 from aphrodite.utils.platform_utils import is_uva_available
 from aphrodite.utils.torch_utils import get_accelerator_view_from_cpu_tensor
 
-CUDA_DEVICES = [
-    f"cuda:{i}" for i in range(1 if torch.accelerator.device_count() == 1 else 2)
-]
+CUDA_DEVICES = [f"cuda:{i}" for i in range(1 if torch.accelerator.device_count() == 1 else 2)]
 
 
 @pytest.mark.skipif(not is_uva_available(), reason="UVA is not available.")

@@ -12,10 +12,10 @@ from aphrodite.kernels.helion.register import (
     ConfigPicker,
     ConfiguredHelionKernel,
     HelionKernelWrapper,
+    aphrodite_helion_lib,
     get_kernel_by_name,
     get_registered_kernels,
     register_kernel,
-    aphrodite_helion_lib,
 )
 from aphrodite.kernels.helion.utils import canonicalize_gpu_name, get_canonical_gpu_name
 

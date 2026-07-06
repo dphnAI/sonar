@@ -75,18 +75,16 @@ async def accumulate_streaming_response(
                                 )
 
                             if tool_call_delta.id:
-                                accumulated_tool_calls[tool_call_delta.index]["id"] = (
-                                    tool_call_delta.id
-                                )
+                                accumulated_tool_calls[tool_call_delta.index]["id"] = tool_call_delta.id
                             if tool_call_delta.function:
                                 if tool_call_delta.function.name:
-                                    accumulated_tool_calls[tool_call_delta.index][
-                                        "function"
-                                    ]["name"] += tool_call_delta.function.name
+                                    accumulated_tool_calls[tool_call_delta.index]["function"]["name"] += (
+                                        tool_call_delta.function.name
+                                    )
                                 if tool_call_delta.function.arguments:
-                                    accumulated_tool_calls[tool_call_delta.index][
-                                        "function"
-                                    ]["arguments"] += tool_call_delta.function.arguments
+                                    accumulated_tool_calls[tool_call_delta.index]["function"]["arguments"] += (
+                                        tool_call_delta.function.arguments
+                                    )
 
                     if choice.finish_reason:
                         finish_reason = choice.finish_reason
@@ -106,8 +104,7 @@ async def accumulate_streaming_response(
     # Only include tool_calls if there are any
     if accumulated_tool_calls:
         message_kwargs["tool_calls"] = [
-            {"id": tc["id"], "type": tc["type"], "function": tc["function"]}
-            for tc in accumulated_tool_calls
+            {"id": tc["id"], "type": tc["type"], "function": tc["function"]} for tc in accumulated_tool_calls
         ]
 
     message = ChatMessage(**message_kwargs)
@@ -138,9 +135,7 @@ async def accumulate_streaming_response(
     return response
 
 
-def verify_harmony_messages(
-    messages: list[Any], expected_messages: list[dict[str, Any]]
-):
+def verify_harmony_messages(messages: list[Any], expected_messages: list[dict[str, Any]]):
     assert len(messages) == len(expected_messages)
     for msg, expected in zip(messages, expected_messages):
         if "role" in expected:

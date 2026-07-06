@@ -9,9 +9,9 @@ import pytest_asyncio
 import torch
 from transformers import AutoConfig
 
+from aphrodite.utils.serial_utils import tensor2base64
 from tests.conftest import ImageTestAssets
 from tests.utils import RemoteOpenAIServer
-from aphrodite.utils.serial_utils import tensor2base64
 
 # any model with a chat template should work here
 MODEL_NAME = "llava-hf/llava-1.5-7b-hf"
@@ -37,9 +37,7 @@ def default_image_embeds_server_args() -> list[str]:
 
 @pytest.fixture(scope="module")
 def server_with_image_embeds(default_image_embeds_server_args):
-    with RemoteOpenAIServer(
-        MODEL_NAME, default_image_embeds_server_args, max_wait_seconds=600
-    ) as remote_server:
+    with RemoteOpenAIServer(MODEL_NAME, default_image_embeds_server_args, max_wait_seconds=600) as remote_server:
         yield remote_server
 
 

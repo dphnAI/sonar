@@ -39,9 +39,7 @@ class MistralLarge3ForCausalLM(DeepseekV3ForCausalLM):
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         return super().load_weights(map(self._remap_mistral_to_ds, weights))
 
-    def _remap_mistral_to_ds(
-        self, weight: tuple[str, torch.Tensor]
-    ) -> tuple[str, torch.Tensor]:
+    def _remap_mistral_to_ds(self, weight: tuple[str, torch.Tensor]) -> tuple[str, torch.Tensor]:
         """Remap Mistral parameters to DeepseekV2 parameters."""
         name, loaded_weight = weight
 

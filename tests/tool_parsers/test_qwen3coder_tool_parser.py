@@ -154,20 +154,14 @@ def _as_chat_completion_tools(
     return normalized
 
 
-def assert_tool_calls(
-    actual_tool_calls: list[ToolCall], expected_tool_calls: list[ToolCall]
-):
+def assert_tool_calls(actual_tool_calls: list[ToolCall], expected_tool_calls: list[ToolCall]):
     assert len(actual_tool_calls) == len(expected_tool_calls)
 
-    for actual_tool_call, expected_tool_call in zip(
-        actual_tool_calls, expected_tool_calls
-    ):
+    for actual_tool_call, expected_tool_call in zip(actual_tool_calls, expected_tool_calls):
         # Qwen3 parser doesn't generate IDs during extraction
         assert actual_tool_call.type == "function"
         assert actual_tool_call.function.name == expected_tool_call.function.name
-        assert json.loads(actual_tool_call.function.arguments) == json.loads(
-            expected_tool_call.function.arguments
-        )
+        assert json.loads(actual_tool_call.function.arguments) == json.loads(expected_tool_call.function.arguments)
 
 
 def stream_delta_message_generator(
@@ -187,16 +181,14 @@ def stream_delta_message_generator(
         previous_token_ids = all_token_ids[:i]
         current_token_ids = all_token_ids[: i + 1]
 
-        (new_tokens, delta_text, new_prefix_offset, new_read_offset) = (
-            detokenize_incrementally(
-                tokenizer=qwen3_tokenizer,
-                all_input_ids=current_token_ids,
-                prev_tokens=previous_tokens,
-                prefix_offset=prefix_offset,
-                read_offset=read_offset,
-                skip_special_tokens=False,
-                spaces_between_special_tokens=True,
-            )
+        (new_tokens, delta_text, new_prefix_offset, new_read_offset) = detokenize_incrementally(
+            tokenizer=qwen3_tokenizer,
+            all_input_ids=current_token_ids,
+            prev_tokens=previous_tokens,
+            prefix_offset=prefix_offset,
+            read_offset=read_offset,
+            skip_special_tokens=False,
+            spaces_between_special_tokens=True,
         )
 
         current_text = previous_text + delta_text
@@ -214,18 +206,14 @@ def stream_delta_message_generator(
             yield delta_message
 
         previous_text = current_text
-        previous_tokens = (
-            previous_tokens + new_tokens if previous_tokens else new_tokens
-        )
+        previous_tokens = previous_tokens + new_tokens if previous_tokens else new_tokens
         prefix_offset = new_prefix_offset
         read_offset = new_read_offset
 
 
 def test_extract_tool_calls_no_tools(qwen3_tool_parser):
     model_output = "This is a test response without any tool calls"
-    extracted_tool_calls = qwen3_tool_parser.extract_tool_calls(
-        model_output, request=None
-    )  # type: ignore[arg-type]
+    extracted_tool_calls = qwen3_tool_parser.extract_tool_calls(model_output, request=None)  # type: ignore[arg-type]
     assert not extracted_tool_calls.tools_called
     assert extracted_tool_calls.tool_calls == []
     assert extracted_tool_calls.content == model_output
@@ -259,9 +247,7 @@ fahrenheit
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Dallas", "state": "TX", "unit": "fahrenheit"}),
                     )
                 )
             ],
@@ -285,9 +271,7 @@ fahrenheit
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Dallas", "state": "TX", "unit": "fahrenheit"}),
                     )
                 )
             ],
@@ -355,17 +339,13 @@ fahrenheit
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Dallas", "state": "TX", "unit": "fahrenheit"}),
                     )
                 ),
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Orlando", "state": "FL", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Orlando", "state": "FL", "unit": "fahrenheit"}),
                     )
                 ),
             ],
@@ -410,9 +390,7 @@ def test_extract_tool_calls(
     expected_content,
 ):
     request = ChatCompletionRequest(model=MODEL, messages=[])
-    extracted_tool_calls = qwen3_tool_parser.extract_tool_calls(
-        model_output, request=request
-    )
+    extracted_tool_calls = qwen3_tool_parser.extract_tool_calls(model_output, request=request)
     assert extracted_tool_calls.tools_called
 
     assert_tool_calls(extracted_tool_calls.tool_calls, expected_tool_calls)
@@ -434,9 +412,7 @@ TX
 </function>"""
 
     request = ChatCompletionRequest(model=MODEL, messages=[])
-    extracted_tool_calls = qwen3_tool_parser.extract_tool_calls(
-        model_output, request=request
-    )
+    extracted_tool_calls = qwen3_tool_parser.extract_tool_calls(model_output, request=request)
 
     assert extracted_tool_calls.tools_called
     assert len(extracted_tool_calls.tool_calls) == 1
@@ -654,9 +630,7 @@ true
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=tools)
 
     tool_states = {}
-    for delta_message in stream_delta_message_generator(
-        parser, qwen3_tokenizer, model_output, request
-    ):
+    for delta_message in stream_delta_message_generator(parser, qwen3_tokenizer, model_output, request):
         if delta_message.tool_calls:
             for tool_call in delta_message.tool_calls:
                 idx = tool_call.index
@@ -710,9 +684,7 @@ fahrenheit
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Dallas", "state": "TX", "unit": "fahrenheit"}),
                     )
                 )
             ],
@@ -736,9 +708,7 @@ fahrenheit
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Dallas", "state": "TX", "unit": "fahrenheit"}),
                     )
                 )
             ],
@@ -806,17 +776,13 @@ celsius
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Dallas", "state": "TX", "unit": "fahrenheit"}),
                     )
                 ),
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Orlando", "state": "FL", "unit": "celsius"}
-                        ),
+                        arguments=json.dumps({"city": "Orlando", "state": "FL", "unit": "celsius"}),
                     )
                 ),
             ],
@@ -868,9 +834,7 @@ def test_extract_tool_calls_streaming(
     other_content = ""
     tool_states = {}  # Track state per tool index
 
-    for delta_message in stream_delta_message_generator(
-        qwen3_tool_parser, qwen3_tokenizer, model_output, request
-    ):
+    for delta_message in stream_delta_message_generator(qwen3_tool_parser, qwen3_tokenizer, model_output, request):
         # role should never be streamed from tool parser
         assert not delta_message.role
 
@@ -949,9 +913,7 @@ fahrenheit
 </tool_call>"""
 
     request = ChatCompletionRequest(model=MODEL, messages=[])
-    extracted_tool_calls = qwen3_tool_parser.extract_tool_calls(
-        model_output, request=request
-    )
+    extracted_tool_calls = qwen3_tool_parser.extract_tool_calls(model_output, request=request)
 
     # The parser should handle the malformed XML gracefully
     assert extracted_tool_calls.tools_called
@@ -971,9 +933,7 @@ fahrenheit
     assert "Let me check the weather for you:" in extracted_tool_calls.content
 
 
-def test_extract_tool_calls_streaming_missing_closing_tag(
-    qwen3_tool_parser, qwen3_tokenizer
-):
+def test_extract_tool_calls_streaming_missing_closing_tag(qwen3_tool_parser, qwen3_tokenizer):
     """Test streaming with missing closing </parameter> tag"""
     # Using get_current_weather from sample_tools but with malformed XML
     model_output = """Let me check the weather for you:
@@ -995,9 +955,7 @@ fahrenheit
     other_content = ""
     tool_states = {}
 
-    for delta_message in stream_delta_message_generator(
-        qwen3_tool_parser, qwen3_tokenizer, model_output, request
-    ):
+    for delta_message in stream_delta_message_generator(qwen3_tool_parser, qwen3_tokenizer, model_output, request):
         if delta_message.content:
             other_content += delta_message.content
 
@@ -1061,9 +1019,7 @@ TX
     request = ChatCompletionRequest(model=MODEL, messages=[])
 
     chunks = []
-    for delta_message in stream_delta_message_generator(
-        qwen3_tool_parser, qwen3_tokenizer, model_output, request
-    ):
+    for delta_message in stream_delta_message_generator(qwen3_tool_parser, qwen3_tokenizer, model_output, request):
         chunks.append(delta_message)
 
     # Should have multiple chunks
@@ -1086,11 +1042,7 @@ TX
     # Should have chunks with incremental arguments
     arg_chunks = []
     for chunk in chunks:
-        if (
-            chunk.tool_calls
-            and chunk.tool_calls[0].function
-            and chunk.tool_calls[0].function.arguments
-        ):
+        if chunk.tool_calls and chunk.tool_calls[0].function and chunk.tool_calls[0].function.arguments:
             arg_chunks.append(chunk.tool_calls[0].function.arguments)
 
     # Arguments should be streamed
@@ -1103,9 +1055,7 @@ TX
     assert parsed_args["state"] == "TX"
 
 
-def test_extract_tool_calls_streaming_missing_opening_tag(
-    qwen3_tool_parser, qwen3_tokenizer
-):
+def test_extract_tool_calls_streaming_missing_opening_tag(qwen3_tool_parser, qwen3_tokenizer):
     """Test streaming with missing opening <tool_call> tag
 
     This tests that the streaming parser correctly handles
@@ -1131,9 +1081,7 @@ fahrenheit
     other_content = ""
     tool_states = {}
 
-    for delta_message in stream_delta_message_generator(
-        qwen3_tool_parser, qwen3_tokenizer, model_output, request
-    ):
+    for delta_message in stream_delta_message_generator(qwen3_tool_parser, qwen3_tokenizer, model_output, request):
         if delta_message.content:
             other_content += delta_message.content
 
@@ -1185,11 +1133,7 @@ fahrenheit
 def test_malformed_xml_no_gt_delimiter(qwen3_tool_parser):
     """Regression: malformed XML without '>' must not crash (PR #36774)."""
     model_output = (
-        "<tool_call>\n"
-        "<function=get_current_weather\n"
-        "<parameter=city>Dallas</parameter>\n"
-        "</function>\n"
-        "</tool_call>"
+        "<tool_call>\n<function=get_current_weather\n<parameter=city>Dallas</parameter>\n</function>\n</tool_call>"
     )
 
     request = ChatCompletionRequest(model=MODEL, messages=[])
@@ -1218,9 +1162,7 @@ def test_none_tool_calls_filtered(qwen3_tool_parser):
     result = qwen3_tool_parser.extract_tool_calls(model_output, request=request)
     assert all(tc is not None for tc in result.tool_calls)
     assert result.tools_called
-    valid = [
-        tc for tc in result.tool_calls if tc.function.name == "get_current_weather"
-    ]
+    valid = [tc for tc in result.tool_calls if tc.function.name == "get_current_weather"]
     assert len(valid) == 1
     args = json.loads(valid[0].function.arguments)
     assert args["city"] == "Dallas"
@@ -1385,11 +1327,7 @@ def test_no_double_serialization_string_args(qwen3_tool_parser):
     ]
 
     model_output = (
-        "<tool_call>\n"
-        "<function=greet>\n"
-        "<parameter=message>hello world</parameter>\n"
-        "</function>\n"
-        "</tool_call>"
+        "<tool_call>\n<function=greet>\n<parameter=message>hello world</parameter>\n</function>\n</tool_call>"
     )
 
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=tools)

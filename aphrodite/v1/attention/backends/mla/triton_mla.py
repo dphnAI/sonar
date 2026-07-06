@@ -166,16 +166,12 @@ class TritonMLAImpl(MLACommonImpl[MLACommonMetadata]):
         unsupported_features = [alibi_slopes, sliding_window, logits_soft_cap]
         if any(unsupported_features):
             raise NotImplementedError(
-                "TritonMLAImpl does not support one of the following: "
-                "alibi_slopes, sliding_window, logits_soft_cap"
+                "TritonMLAImpl does not support one of the following: alibi_slopes, sliding_window, logits_soft_cap"
             )
 
         if attn_type != AttentionType.DECODER:
             raise NotImplementedError(
-                "Encoder self-attention and "
-                "encoder/decoder cross-attention "
-                "are not implemented for "
-                "TritonMLAImpl"
+                "Encoder self-attention and encoder/decoder cross-attention are not implemented for TritonMLAImpl"
             )
 
         # For FP8 KV cache, we dequantize to BF16 on load inside the
@@ -202,18 +198,14 @@ class TritonMLAImpl(MLACommonImpl[MLACommonMetadata]):
         assert isinstance(q, torch.Tensor)
         B = q.shape[0]
         q_num_heads = q.shape[1]
-        o = torch.zeros(
-            B, q_num_heads, self.kv_lora_rank, dtype=q.dtype, device=q.device
-        )
+        o = torch.zeros(B, q_num_heads, self.kv_lora_rank, dtype=q.dtype, device=q.device)
         lse = torch.zeros(B, q_num_heads, dtype=q.dtype, device=q.device)
 
         # For batch invariance, use only 1 split to ensure deterministic reduction
         if envs.APHRODITE_BATCH_INVARIANT:
             num_kv_splits = 1
         else:
-            num_kv_splits = _compute_num_kv_splits(
-                attn_metadata.max_seq_len, self._sm_count
-            )
+            num_kv_splits = _compute_num_kv_splits(attn_metadata.max_seq_len, self._sm_count)
 
         # NOTE: the +1 stores the LogSumExp (LSE) that the stage2 kernel uses to
         # merge partial attention outputs across splits. The scratch is served
@@ -227,9 +219,7 @@ class TritonMLAImpl(MLACommonImpl[MLACommonMetadata]):
                 (logits_shape, torch.float32),
             )
         else:
-            attn_logits = torch.empty(
-                logits_shape, dtype=torch.float32, device=q.device
-            )
+            attn_logits = torch.empty(logits_shape, dtype=torch.float32, device=q.device)
 
         # Add a head dim of 1
         kv_c_and_k_pe_cache = kv_c_and_k_pe_cache.unsqueeze(2)

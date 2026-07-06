@@ -89,17 +89,13 @@ class FunctionGemmaToolParser(ToolParser):
         request: ChatCompletionRequest,
     ) -> ExtractedToolCallInformation:
         if self.tool_call_start_token not in model_output:
-            return ExtractedToolCallInformation(
-                tools_called=False, tool_calls=[], content=model_output
-            )
+            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
 
         try:
             matches = self.tool_call_regex.findall(model_output)
 
             if not matches:
-                return ExtractedToolCallInformation(
-                    tools_called=False, tool_calls=[], content=model_output
-                )
+                return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
 
             tool_calls: list[ToolCall] = []
 
@@ -124,9 +120,7 @@ class FunctionGemmaToolParser(ToolParser):
 
             if tool_calls:
                 content_end = model_output.find(self.tool_call_start_token)
-                content = (
-                    model_output[:content_end].strip() if content_end > 0 else None
-                )
+                content = model_output[:content_end].strip() if content_end > 0 else None
 
                 return ExtractedToolCallInformation(
                     tools_called=True,
@@ -134,15 +128,11 @@ class FunctionGemmaToolParser(ToolParser):
                     content=content if content else None,
                 )
 
-            return ExtractedToolCallInformation(
-                tools_called=False, tool_calls=[], content=model_output
-            )
+            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
 
         except Exception:
             logger.exception("Error extracting tool calls from FunctionGemma response")
-            return ExtractedToolCallInformation(
-                tools_called=False, tool_calls=[], content=model_output
-            )
+            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
 
     def _buffer_delta_text(self, delta_text: str) -> str:
         """Buffer incoming delta text to handle multi-token special sequences."""
@@ -203,18 +193,14 @@ class FunctionGemmaToolParser(ToolParser):
             # In the middle of a function call
             if start_count > end_count:
                 last_start = current_text.rfind(self.tool_call_start_token)
-                partial_call = current_text[
-                    last_start + len(self.tool_call_start_token) :
-                ]
+                partial_call = current_text[last_start + len(self.tool_call_start_token) :]
 
                 if partial_call.startswith("call:"):
                     func_part = partial_call[5:]
 
                     if "{" in func_part:
                         func_name = func_part.split("{")[0]
-                        args_part = (
-                            func_part.split("{", 1)[1] if "{" in func_part else ""
-                        )
+                        args_part = func_part.split("{", 1)[1] if "{" in func_part else ""
 
                         if not self.current_tool_name_sent and func_name:
                             self.current_tool_name_sent = True
@@ -228,9 +214,7 @@ class FunctionGemmaToolParser(ToolParser):
                                         index=self.current_tool_id,
                                         type="function",
                                         id=make_tool_call_id(),
-                                        function=DeltaFunctionCall(
-                                            name=func_name
-                                        ).model_dump(exclude_none=True),
+                                        function=DeltaFunctionCall(name=func_name).model_dump(exclude_none=True),
                                     )
                                 ]
                             )
@@ -238,29 +222,21 @@ class FunctionGemmaToolParser(ToolParser):
                         if self.current_tool_name_sent and args_part:
                             current_args = self._parse_arguments(args_part)
                             if current_args:
-                                current_args_json = json.dumps(
-                                    current_args, ensure_ascii=False
-                                )
-                                prev_streamed = self.streamed_args_for_tool[
-                                    self.current_tool_id
-                                ]
+                                current_args_json = json.dumps(current_args, ensure_ascii=False)
+                                prev_streamed = self.streamed_args_for_tool[self.current_tool_id]
 
                                 if len(current_args_json) > len(prev_streamed):
                                     diff = current_args_json[len(prev_streamed) :]
-                                    self.streamed_args_for_tool[
-                                        self.current_tool_id
-                                    ] = current_args_json
-                                    self.prev_tool_call_arr[self.current_tool_id][
-                                        "arguments"
-                                    ] = current_args
+                                    self.streamed_args_for_tool[self.current_tool_id] = current_args_json
+                                    self.prev_tool_call_arr[self.current_tool_id]["arguments"] = current_args
 
                                     return DeltaMessage(
                                         tool_calls=[
                                             DeltaToolCall(
                                                 index=self.current_tool_id,
-                                                function=DeltaFunctionCall(
-                                                    arguments=diff
-                                                ).model_dump(exclude_none=True),
+                                                function=DeltaFunctionCall(arguments=diff).model_dump(
+                                                    exclude_none=True
+                                                ),
                                             )
                                         ]
                                     )
@@ -269,9 +245,7 @@ class FunctionGemmaToolParser(ToolParser):
 
             # Function call just ended
             if end_count > prev_end_count:
-                if self.current_tool_id >= 0 and self.current_tool_id < len(
-                    self.prev_tool_call_arr
-                ):
+                if self.current_tool_id >= 0 and self.current_tool_id < len(self.prev_tool_call_arr):
                     all_calls = self.tool_call_regex.findall(current_text)
                     args = {}
                     if self.current_tool_id < len(all_calls):
@@ -279,27 +253,19 @@ class FunctionGemmaToolParser(ToolParser):
                         if match[0]:
                             args_str = match[1]
                             args = self._parse_arguments(args_str)
-                            self.prev_tool_call_arr[self.current_tool_id][
-                                "arguments"
-                            ] = args
+                            self.prev_tool_call_arr[self.current_tool_id]["arguments"] = args
 
                     if args:
                         args_json = json.dumps(args, ensure_ascii=False)
-                        prev_streamed = self.streamed_args_for_tool[
-                            self.current_tool_id
-                        ]
+                        prev_streamed = self.streamed_args_for_tool[self.current_tool_id]
                         if len(args_json) > len(prev_streamed):
                             diff = args_json[len(prev_streamed) :]
-                            self.streamed_args_for_tool[self.current_tool_id] = (
-                                args_json
-                            )
+                            self.streamed_args_for_tool[self.current_tool_id] = args_json
                             return DeltaMessage(
                                 tool_calls=[
                                     DeltaToolCall(
                                         index=self.current_tool_id,
-                                        function=DeltaFunctionCall(
-                                            arguments=diff
-                                        ).model_dump(exclude_none=True),
+                                        function=DeltaFunctionCall(arguments=diff).model_dump(exclude_none=True),
                                     )
                                 ]
                             )

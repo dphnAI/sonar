@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Synthetic Metal attention backend.
 
 Kept in its own module so :mod:`aphrodite.metal.platform` (loaded during plugin

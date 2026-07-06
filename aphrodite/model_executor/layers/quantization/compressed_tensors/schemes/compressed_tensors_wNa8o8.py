@@ -72,8 +72,7 @@ class CompressedTensorsWNA8O8Int(CompressedTensorsScheme):
         self.is_int_quantized = quant_format == "int-quantized"
         if num_bits not in WNA8O8_SUPPORTED_TYPES_MAP:
             raise ValueError(
-                f"Unsupported num_bits = {num_bits} for WNA8O8Int; "
-                f"supported = {sorted(WNA8O8_SUPPORTED_TYPES_MAP)}"
+                f"Unsupported num_bits = {num_bits} for WNA8O8Int; supported = {sorted(WNA8O8_SUPPORTED_TYPES_MAP)}"
             )
         self.quant_type = WNA8O8_SUPPORTED_TYPES_MAP[num_bits]
         self._input_scale: torch.Tensor | None = None
@@ -122,13 +121,9 @@ class CompressedTensorsWNA8O8Int(CompressedTensorsScheme):
             w_s_param_name="weight_scale",
         )
 
-        self._register_weight(
-            layer, input_size, input_size_per_partition, params_dtype, weight_loader
-        )
+        self._register_weight(layer, input_size, input_size_per_partition, params_dtype, weight_loader)
 
-    def _register_weight(
-        self, layer, input_size, input_size_per_partition, params_dtype, weight_loader
-    ):
+    def _register_weight(self, layer, input_size, input_size_per_partition, params_dtype, weight_loader):
         out = layer.output_size_per_partition
         if self.is_int_quantized:
             # Plain int8 weight; packed to the canonical int32 layout after load.
@@ -159,9 +154,7 @@ class CompressedTensorsWNA8O8Int(CompressedTensorsScheme):
             )
             layer.register_parameter(
                 "weight_shape",
-                BaseAphroditeParameter(
-                    data=torch.empty(2, dtype=torch.int64), weight_loader=weight_loader
-                ),
+                BaseAphroditeParameter(data=torch.empty(2, dtype=torch.int64), weight_loader=weight_loader),
             )
 
         # Scale: per-output-channel, or per group along the input dim under TP.
@@ -172,16 +165,12 @@ class CompressedTensorsWNA8O8Int(CompressedTensorsScheme):
         scales = (input_size_per_partition if partitioned else input_size) // group_size
         scale_data = torch.empty(out, scales, dtype=params_dtype)
         if partitioned:
-            verify_group_size_divides_partition(
-                input_size_per_partition, group_size, self.layer_name
-            )
+            verify_group_size_divides_partition(input_size_per_partition, group_size, self.layer_name)
             weight_scale = GroupQuantScaleParameter(
                 data=scale_data, output_dim=0, input_dim=1, weight_loader=weight_loader
             )
         else:
-            weight_scale = ChannelQuantScaleParameter(
-                data=scale_data, output_dim=0, weight_loader=weight_loader
-            )
+            weight_scale = ChannelQuantScaleParameter(data=scale_data, output_dim=0, weight_loader=weight_loader)
         layer.register_parameter("weight_scale", weight_scale)
 
         for name, present in (
@@ -249,9 +238,7 @@ class CompressedTensorsWNA8O8Int(CompressedTensorsScheme):
         delattr(layer, name)
         return None if float(scale.reshape(-1)[0]) == 0.0 else scale
 
-    def apply_weights(
-        self, layer: torch.nn.Module, x: torch.Tensor, bias: torch.Tensor | None
-    ) -> torch.Tensor:
+    def apply_weights(self, layer: torch.nn.Module, x: torch.Tensor, bias: torch.Tensor | None) -> torch.Tensor:
         if self.has_input_act:
             x = fake_quant_static_int8(x, self._input_scale)
         out = self.kernel.apply_weights(layer, x, bias)

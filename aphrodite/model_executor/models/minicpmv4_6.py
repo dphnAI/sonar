@@ -156,9 +156,7 @@ class MiniCPMV4_6MultiModalProcessor(MiniCPMVMultiModalProcessor):
             return {}
 
         mm_items = self.info.parse_mm_data({"image": images}, validate=False)
-        parsed_images = mm_items.get_items(
-            "image", (MiniCPMVImageEmbeddingItems, ImageProcessorItems)
-        )
+        parsed_images = mm_items.get_items("image", (MiniCPMVImageEmbeddingItems, ImageProcessorItems))
 
         if isinstance(parsed_images, MiniCPMVImageEmbeddingItems):
             return {}
@@ -208,9 +206,7 @@ class MiniCPMV4_6MultiModalProcessor(MiniCPMVMultiModalProcessor):
             -1,
         )
         merger_flag = ds_mode != "4x" and insert_layer_id >= 0
-        image_inputs["use_vit_merger"] = [
-            torch.tensor([merger_flag], dtype=torch.bool) for _ in range(n_images)
-        ]
+        image_inputs["use_vit_merger"] = [torch.tensor([merger_flag], dtype=torch.bool) for _ in range(n_images)]
         return image_inputs
 
     def process_videos(
@@ -223,9 +219,7 @@ class MiniCPMV4_6MultiModalProcessor(MiniCPMVMultiModalProcessor):
             return {}
 
         mm_items = self.info.parse_mm_data({"video": videos}, validate=False)
-        parsed_videos = mm_items.get_items(
-            "video", (MiniCPMVVideoEmbeddingItems, VideoProcessorItems)
-        )
+        parsed_videos = mm_items.get_items("video", (MiniCPMVVideoEmbeddingItems, VideoProcessorItems))
 
         if isinstance(parsed_videos, MiniCPMVVideoEmbeddingItems):
             return {}
@@ -325,9 +319,7 @@ class MiniCPMV4_6MultiModalProcessor(MiniCPMVMultiModalProcessor):
         tokenizer = self.info.get_tokenizer()
         additional_placeholders = []
         for modality, pattern in placeholders:
-            sub_pattern = tokenizer.decode(
-                tokenizer.encode(pattern, add_special_tokens=False)
-            )
+            sub_pattern = tokenizer.decode(tokenizer.encode(pattern, add_special_tokens=False))
             if sub_pattern != pattern:
                 additional_placeholders.append((modality, sub_pattern))
         placeholders += additional_placeholders
@@ -532,9 +524,7 @@ class MiniCPMV4_6ProcessingInfo(MiniCPMVProcessingInfo):
                 patch_size,
                 allow_upscale=True,
             )
-            source_tokens = (
-                best_size[0] * best_size[1] // (patch_size * patch_size * token_divisor)
-            )
+            source_tokens = best_size[0] * best_size[1] // (patch_size * patch_size * token_divisor)
             return [0, 0], source_tokens, 0
 
         best_resize = image_processor.find_best_resize(
@@ -542,9 +532,7 @@ class MiniCPMV4_6ProcessingInfo(MiniCPMVProcessingInfo):
             scale_res,
             patch_size,
         )
-        source_tokens = (
-            best_resize[0] * best_resize[1] // (patch_size * patch_size * token_divisor)
-        )
+        source_tokens = best_resize[0] * best_resize[1] // (patch_size * patch_size * token_divisor)
         refine_size = image_processor.get_refine_size(
             hf_image_size,
             grids,
@@ -1004,9 +992,7 @@ class MiniCPMV4_6ForConditionalGeneration(
             finally:
                 config.model_type = saved_model_type
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
     # ----- Multimodal parsing -----
 
@@ -1145,29 +1131,17 @@ class MiniCPMV4_6ForConditionalGeneration(
                 use_vit_merger = bool(use_vit_merger_tensors.any().item())
             elif isinstance(use_vit_merger_tensors, list | tuple):
                 use_vit_merger = any(
-                    bool(t.any().item()) if isinstance(t, torch.Tensor) else bool(t)
-                    for t in use_vit_merger_tensors
+                    bool(t.any().item()) if isinstance(t, torch.Tensor) else bool(t) for t in use_vit_merger_tensors
                 )
 
         # Split kwargs into image / video buckets (videos are processed via
         # the same vision pipeline; their fields just carry a ``video_`` prefix).
-        image_kwargs = {
-            k: v
-            for k, v in kwargs.items()
-            if k in ("pixel_values", "image_embeds", "tgt_sizes")
-        }
-        video_kwargs = {
-            k.removeprefix("video_"): v
-            for k, v in kwargs.items()
-            if k.startswith("video_")
-        }
+        image_kwargs = {k: v for k, v in kwargs.items() if k in ("pixel_values", "image_embeds", "tgt_sizes")}
+        video_kwargs = {k.removeprefix("video_"): v for k, v in kwargs.items() if k.startswith("video_")}
 
         multimodal_embeddings: tuple[torch.Tensor, ...] = ()
 
-        if (
-            image_kwargs.get("pixel_values") is not None
-            or image_kwargs.get("image_embeds") is not None
-        ):
+        if image_kwargs.get("pixel_values") is not None or image_kwargs.get("image_embeds") is not None:
             image_input = self._parse_and_validate_vision_input(**image_kwargs)
             if image_input is not None:
                 multimodal_embeddings += tuple(
@@ -1177,10 +1151,7 @@ class MiniCPMV4_6ForConditionalGeneration(
                     )
                 )
 
-        if (
-            video_kwargs.get("pixel_values") is not None
-            or video_kwargs.get("image_embeds") is not None
-        ):
+        if video_kwargs.get("pixel_values") is not None or video_kwargs.get("image_embeds") is not None:
             video_input = self._parse_and_validate_vision_input(**video_kwargs)
             if video_input is not None:
                 multimodal_embeddings += tuple(
@@ -1274,9 +1245,7 @@ class MiniCPMV4_6ForConditionalGeneration(
         hf_config = aphrodite_config.model_config.hf_text_config
         tp_size = parallel_config.tensor_parallel_size
         num_spec = (
-            aphrodite_config.speculative_config.num_speculative_tokens
-            if aphrodite_config.speculative_config
-            else 0
+            aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
         )
         return MambaStateShapeCalculator.gated_delta_net_state_shape(
             tp_size,

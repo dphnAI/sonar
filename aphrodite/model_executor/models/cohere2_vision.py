@@ -187,9 +187,7 @@ class Cohere2VisionProcessingInfo(BaseProcessingInfo):
         )
 
 
-class Cohere2VisionDummyInputsBuilder(
-    BaseDummyInputsBuilder[Cohere2VisionProcessingInfo]
-):
+class Cohere2VisionDummyInputsBuilder(BaseDummyInputsBuilder[Cohere2VisionProcessingInfo]):
     def get_dummy_text(self, mm_counts: Mapping[str, int]) -> str:
         num_images = mm_counts.get("image", 0)
 
@@ -219,9 +217,7 @@ class Cohere2VisionDummyInputsBuilder(
         }
 
 
-class Cohere2VisionMultiModalProcessor(
-    BaseMultiModalProcessor[Cohere2VisionProcessingInfo]
-):
+class Cohere2VisionMultiModalProcessor(BaseMultiModalProcessor[Cohere2VisionProcessingInfo]):
     def _call_hf_processor(
         self,
         prompt: str,
@@ -237,10 +233,7 @@ class Cohere2VisionMultiModalProcessor(
         )
 
         # Ensure num_patches is available for proper tensor splitting
-        if (
-            "num_patches" not in processed_outputs
-            and (images := mm_data.get("images")) is not None
-        ):
+        if "num_patches" not in processed_outputs and (images := mm_data.get("images")) is not None:
             hf_processor = self.info.get_hf_processor(**mm_kwargs)
 
             # Fallback calculation if HF processor didn't provide num_patches
@@ -314,9 +307,7 @@ class Cohere2VisionMultiModalProcessor(
     info=Cohere2VisionProcessingInfo,
     dummy_inputs=Cohere2VisionDummyInputsBuilder,
 )
-class Cohere2VisionForConditionalGeneration(
-    nn.Module, SupportsMultiModal, SupportsPP, SupportsQuant
-):
+class Cohere2VisionForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, SupportsQuant):
     hf_to_aphrodite_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.vision_tower.": "vision_tower.",
@@ -358,9 +349,7 @@ class Cohere2VisionForConditionalGeneration(
                 architectures=config.text_config.architectures,
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
     @property
     def dtype(self):
@@ -370,9 +359,7 @@ class Cohere2VisionForConditionalGeneration(
         loader = AutoWeightsLoader(self)
         return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
 
-    def _process_image_input(
-        self, image_input: Cohere2VisionImagePixelInputs, **kwargs
-    ) -> list[torch.Tensor]:
+    def _process_image_input(self, image_input: Cohere2VisionImagePixelInputs, **kwargs) -> list[torch.Tensor]:
         """Process image pixels through vision tower and projector.
 
         Args:
@@ -394,9 +381,7 @@ class Cohere2VisionForConditionalGeneration(
         # Split and flatten embeddings per image
         return [e.flatten(0, 2) for e in image_embeds.split(num_patches.tolist())]
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> Cohere2VisionImagePixelInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> Cohere2VisionImagePixelInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         num_patches = kwargs.pop("num_patches", None)
         image_embeds = kwargs.pop("image_embeds", None)
@@ -415,17 +400,13 @@ class Cohere2VisionForConditionalGeneration(
             },
         )
 
-    def _patch_quant_config(
-        self, config: PretrainedConfig, quant_config: QuantizationConfig
-    ):
+    def _patch_quant_config(self, config: PretrainedConfig, quant_config: QuantizationConfig):
         # the awq models from OpenGVLab missing `modules_to_not_convert`
         # patch the quant_config to add `modules_to_not_convert` back
         if isinstance(quant_config, AutoAWQConfig):
             text_config = config.text_config
             llm_quant_config = getattr(text_config, "quantization_config", None)
-            if (not quant_config.modules_to_not_convert) and (
-                llm_quant_config is not None
-            ):
+            if (not quant_config.modules_to_not_convert) and (llm_quant_config is not None):
                 quant_config.modules_to_not_convert.append("vision_tower")
 
     def embed_multimodal(self, **kwargs: object) -> MultiModalEmbeddings:

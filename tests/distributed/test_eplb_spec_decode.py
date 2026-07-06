@@ -5,8 +5,8 @@ from __future__ import annotations
 import lm_eval
 import pytest
 
-from tests.utils import large_gpu_mark
 from aphrodite.platforms import current_platform
+from tests.utils import large_gpu_mark
 
 
 def get_model_args(
@@ -101,10 +101,9 @@ def test_eplb_spec_decode(
         num_fewshot=8,
     )
     measured_value = results["results"][TASK][FILTER]
-    assert (
-        measured_value - RTOL < expected_gsm8k_value
-        and measured_value + RTOL > expected_gsm8k_value
-    ), f"Expected: {expected_gsm8k_value} |  Measured: {measured_value}"
+    assert measured_value - RTOL < expected_gsm8k_value and measured_value + RTOL > expected_gsm8k_value, (
+        f"Expected: {expected_gsm8k_value} |  Measured: {measured_value}"
+    )
 
 
 @large_gpu_mark(min_gb=80)
@@ -135,7 +134,6 @@ def test_eplb_spec_decode_qwen3_next_mtp_async() -> None:
         num_fewshot=8,
     )
     measured_value = results["results"][TASK][FILTER]
-    assert (
-        measured_value - RTOL < expected_gsm8k_value
-        and measured_value + RTOL > expected_gsm8k_value
-    ), f"Expected: {expected_gsm8k_value} |  Measured: {measured_value}"
+    assert measured_value - RTOL < expected_gsm8k_value and measured_value + RTOL > expected_gsm8k_value, (
+        f"Expected: {expected_gsm8k_value} |  Measured: {measured_value}"
+    )

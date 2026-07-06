@@ -11,8 +11,6 @@ import pytest
 import torch
 from torch._subclasses.fake_tensor import FakeTensorMode
 
-from tests.kernels.helion.utils import skip_if_platform_unsupported
-from tests.kernels.quant_utils import FP8_DTYPE
 from aphrodite.kernels.helion.case_key import CaseKey
 from aphrodite.kernels.helion.config_manager import ConfigManager
 from aphrodite.kernels.helion.ops.per_token_group_fp8_quant import (
@@ -25,6 +23,8 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     get_fp8_min_max,
 )
 from aphrodite.utils.import_utils import has_helion
+from tests.kernels.helion.utils import skip_if_platform_unsupported
+from tests.kernels.quant_utils import FP8_DTYPE
 
 if not has_helion():
     pytest.skip(
@@ -33,13 +33,9 @@ if not has_helion():
     )
 
 
-def _generate_fake_input(
-    num_tokens: int, hidden_size: int, group_size: int
-) -> tuple[Any, ...]:
+def _generate_fake_input(num_tokens: int, hidden_size: int, group_size: int) -> tuple[Any, ...]:
     with FakeTensorMode():
-        input = torch.randn(
-            (num_tokens, hidden_size), device="cuda", dtype=torch.bfloat16
-        )
+        input = torch.randn((num_tokens, hidden_size), device="cuda", dtype=torch.bfloat16)
         output_q = torch.empty(input.shape, device=input.device, dtype=FP8_DTYPE)
         output_s = torch.empty(
             (num_tokens, hidden_size // group_size),
@@ -84,9 +80,7 @@ class TestPerTokenGroupFp8QuantConfigPicker:
 
         args = _generate_fake_input(16, 4096, 128)
         selected_key = pick_config(args, config_keys)
-        assert selected_key == CaseKey(
-            {"hidden_size": 4096, "group_size": 128, "num_tokens": 16}
-        )
+        assert selected_key == CaseKey({"hidden_size": 4096, "group_size": 128, "num_tokens": 16})
 
     def test_config_picker_closest_match(self):
         config_keys = [
@@ -102,9 +96,7 @@ class TestPerTokenGroupFp8QuantConfigPicker:
 
         args = _generate_fake_input(20, 3000, 70)
         selected_key = pick_config(args, config_keys)
-        assert selected_key == CaseKey(
-            {"hidden_size": 2048, "group_size": 64, "num_tokens": 32}
-        )
+        assert selected_key == CaseKey({"hidden_size": 2048, "group_size": 64, "num_tokens": 32})
 
     def test_config_picker_no_configs(self):
         config_keys: list[dict] = []
@@ -127,15 +119,11 @@ class TestPerTokenGroupFp8QuantConfigPicker:
 
         args = _generate_fake_input(64, 8192, 256)
         selected_key = pick_config(args, config_keys)
-        assert selected_key == CaseKey(
-            {"hidden_size": 4096, "group_size": 128, "num_tokens": 32}
-        )
+        assert selected_key == CaseKey({"hidden_size": 4096, "group_size": 128, "num_tokens": 32})
 
 
 class TestPerTokenGroupFp8QuantCorrectness:
-    @pytest.mark.parametrize(
-        "shape", [(31, 128), (32, 128), (63, 256), (64, 256), (16, 512), (2048, 5120)]
-    )
+    @pytest.mark.parametrize("shape", [(31, 128), (32, 128), (63, 256), (64, 256), (16, 512), (2048, 5120)])
     @pytest.mark.parametrize("column_major", [False, True])
     @pytest.mark.parametrize("tma_aligned", [False, True])
     @pytest.mark.parametrize("scale_ue8m0", [False, True])
@@ -154,10 +142,7 @@ class TestPerTokenGroupFp8QuantCorrectness:
         num_tokens, hidden_size = shape
         fp8_min, fp8_max = get_fp8_min_max()
         eps = 1e-10
-        input = (
-            torch.randn((num_tokens, hidden_size), device="cuda", dtype=torch.bfloat16)
-            * 8
-        )
+        input = torch.randn((num_tokens, hidden_size), device="cuda", dtype=torch.bfloat16) * 8
         ref_q = torch.empty(input.shape, device=input.device, dtype=FP8_DTYPE)
         ops_q = ref_q.clone()
 
@@ -165,14 +150,10 @@ class TestPerTokenGroupFp8QuantCorrectness:
         if column_major:
             if tma_aligned:
                 tma_alignment = 4
-                tma_aligned_m = (
-                    (num_tokens + tma_alignment - 1) // tma_alignment * tma_alignment
-                )
+                tma_aligned_m = (num_tokens + tma_alignment - 1) // tma_alignment * tma_alignment
                 shape = (num_tokens, groups_per_row)
                 stride = (1, tma_aligned_m)
-                ref_s = torch.empty_strided(
-                    shape, stride, device=input.device, dtype=torch.float32
-                )
+                ref_s = torch.empty_strided(shape, stride, device=input.device, dtype=torch.float32)
             else:
                 ref_s = torch.empty(
                     (groups_per_row, num_tokens),
@@ -180,9 +161,7 @@ class TestPerTokenGroupFp8QuantCorrectness:
                     dtype=torch.float32,
                 ).transpose(0, 1)
         else:
-            ref_s = torch.empty(
-                (num_tokens, groups_per_row), device=input.device, dtype=torch.float32
-            )
+            ref_s = torch.empty((num_tokens, groups_per_row), device=input.device, dtype=torch.float32)
 
         ops_s = ref_s.clone()
 
@@ -213,10 +192,7 @@ class TestPerTokenGroupFp8QuantCorrectness:
 
         assert torch.allclose(ref_s, ops_s)
         # allow 1 ULP difference
-        assert (
-            ref_q.view(torch.uint8).to(torch.int16)
-            - ops_q.view(torch.uint8).to(torch.int16)
-        ).abs().max() <= 1
+        assert (ref_q.view(torch.uint8).to(torch.int16) - ops_q.view(torch.uint8).to(torch.int16)).abs().max() <= 1
 
 
 class TestPerTokenGroupFp8QuantIntegration:

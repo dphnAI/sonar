@@ -91,12 +91,8 @@ def test_zero_expert_moe_forward(zero_expert_moe, num_tokens):
     zero_expert_num = 1
     total_experts = num_experts + zero_expert_num
 
-    hidden_states = torch.randn(
-        num_tokens, hidden_size, dtype=torch.bfloat16, device="cuda"
-    )
-    router_logits = torch.randn(
-        num_tokens, total_experts, dtype=torch.float32, device="cuda"
-    )
+    hidden_states = torch.randn(num_tokens, hidden_size, dtype=torch.bfloat16, device="cuda")
+    router_logits = torch.randn(num_tokens, total_experts, dtype=torch.float32, device="cuda")
 
     # Initialize weights to small random values to avoid NaN from
     # uninitialized memory.
@@ -109,9 +105,7 @@ def test_zero_expert_moe_forward(zero_expert_moe, num_tokens):
         get_forward_context().all_moe_layers = None
         output = layer.forward(hidden_states, router_logits)
 
-    assert output.shape == hidden_states.shape, (
-        f"Expected output shape {hidden_states.shape}, got {output.shape}"
-    )
+    assert output.shape == hidden_states.shape, f"Expected output shape {hidden_states.shape}, got {output.shape}"
     assert output.dtype == hidden_states.dtype
     assert not torch.isnan(output).any(), "Output contains NaN values"
 
@@ -140,9 +134,7 @@ def test_zero_expert_moe_output_decomposition(zero_expert_moe, num_tokens):
         dtype=torch.bfloat16,
         device="cuda",
     )
-    router_logits = torch.randn(
-        num_tokens, total_experts, dtype=torch.float32, device="cuda"
-    )
+    router_logits = torch.randn(num_tokens, total_experts, dtype=torch.float32, device="cuda")
 
     with torch.no_grad():
         for param in layer.parameters():
@@ -167,22 +159,14 @@ def test_zero_expert_moe_output_decomposition(zero_expert_moe, num_tokens):
         ).cuda()
 
         # Share weights from the zero expert layer.
-        plain_layer.routed_experts.w13_weight.data.copy_(
-            layer.routed_experts.w13_weight.data
-        )
-        plain_layer.routed_experts.w2_weight.data.copy_(
-            layer.routed_experts.w2_weight.data
-        )
-        plain_layer._quant_method.process_weights_after_loading(
-            plain_layer.routed_experts
-        )
+        plain_layer.routed_experts.w13_weight.data.copy_(layer.routed_experts.w13_weight.data)
+        plain_layer.routed_experts.w2_weight.data.copy_(layer.routed_experts.w2_weight.data)
+        plain_layer._quant_method.process_weights_after_loading(plain_layer.routed_experts)
 
         # Compute routing via the ZeroExpertRouter. This produces masked
         # topk_weights/topk_ids (zero expert entries have weight=0, id=0)
         # and stores zero_expert_output as a side effect.
-        topk_weights, topk_ids = layer.router.select_experts(
-            hidden_states, router_logits
-        )
+        topk_weights, topk_ids = layer.router.select_experts(hidden_states, router_logits)
         zero_output = layer.router.zero_expert_output
 
         # Compute real expert output using the plain layer with the masked
@@ -210,8 +194,7 @@ def test_zero_expert_moe_output_decomposition(zero_expert_moe, num_tokens):
         expected,
         atol=4e-3,
         rtol=4e-3,
-        msg="FusedMoE output should equal plain FusedMoE output "
-        "plus zero expert contribution",
+        msg="FusedMoE output should equal plain FusedMoE output plus zero expert contribution",
     )
 
 
@@ -236,9 +219,7 @@ def test_zero_expert_moe_zero_expert_is_identity(zero_expert_moe, num_tokens):
         device="cuda",
     )
     # Strongly bias toward the zero expert (index 4).
-    router_logits = torch.full(
-        (num_tokens, total_experts), -10.0, dtype=torch.float32, device="cuda"
-    )
+    router_logits = torch.full((num_tokens, total_experts), -10.0, dtype=torch.float32, device="cuda")
     router_logits[:, num_experts] = 10.0  # zero expert gets high logit
 
     with torch.no_grad():
@@ -267,12 +248,8 @@ def test_zero_expert_moe_zero_expert_is_identity(zero_expert_moe, num_tokens):
         # For each token, sum routing weights assigned to zero expert slots,
         # then multiply by hidden_states.
         zero_mask = topk_ids >= num_experts
-        zero_weight_per_token = (topk_weights * zero_mask.float()).sum(
-            dim=-1, keepdim=True
-        )
-        expected_zero_output = (hidden_states.float() * zero_weight_per_token).to(
-            hidden_states.dtype
-        )
+        zero_weight_per_token = (topk_weights * zero_mask.float()).sum(dim=-1, keepdim=True)
+        expected_zero_output = (hidden_states.float() * zero_weight_per_token).to(hidden_states.dtype)
 
         # Run routing directly to trigger zero expert computation
         # without going through the runner (which consumes the output).
@@ -280,16 +257,12 @@ def test_zero_expert_moe_zero_expert_is_identity(zero_expert_moe, num_tokens):
         actual_zero_output = layer.router.zero_expert_output
 
     assert actual_zero_output is not None
-    assert zero_mask.any(), (
-        "With high zero expert logit, at least some slots should route "
-        "to the zero expert"
-    )
+    assert zero_mask.any(), "With high zero expert logit, at least some slots should route to the zero expert"
 
     torch.testing.assert_close(
         actual_zero_output,
         expected_zero_output,
         atol=1e-3,
         rtol=1e-3,
-        msg="Zero expert identity output should equal "
-        "hidden_states * sum(zero_expert_weights)",
+        msg="Zero expert identity output should equal hidden_states * sum(zero_expert_weights)",
     )

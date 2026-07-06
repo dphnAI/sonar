@@ -126,9 +126,7 @@ class ParentRequest:
         return outputs, finished
 
     def observe_num_generation_tokens(self, num_generation_tokens: int):
-        self.max_num_generation_tokens = max(
-            num_generation_tokens, self.max_num_generation_tokens
-        )
+        self.max_num_generation_tokens = max(num_generation_tokens, self.max_num_generation_tokens)
         return self.max_num_generation_tokens
 
     @staticmethod
@@ -140,9 +138,7 @@ class ParentRequest:
         n_param = parent_req.n if parent_req is not None else 1
 
         if parent_req is not None:
-            num_generation_tokens = parent_req.observe_num_generation_tokens(
-                num_generation_tokens
-            )
+            num_generation_tokens = parent_req.observe_num_generation_tokens(num_generation_tokens)
 
         # Child requests finished, we can now record to iteration stats
         if parent_req is None or not parent_req.child_requests:

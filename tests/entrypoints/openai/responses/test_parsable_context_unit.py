@@ -46,9 +46,7 @@ class _NoOpParser(DelegatingParser):
         return None
 
     def extract_tool_calls(self, model_output, request):
-        return ExtractedToolCallInformation(
-            tools_called=False, tool_calls=[], content=model_output
-        )
+        return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
 
     def extract_tool_calls_streaming(self, *args, **kwargs):
         return None
@@ -79,9 +77,7 @@ class _ReasoningOnlyParser(DelegatingParser):
         return None
 
     def extract_tool_calls(self, model_output, request):
-        return ExtractedToolCallInformation(
-            tools_called=False, tool_calls=[], content=model_output
-        )
+        return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
 
     def extract_tool_calls_streaming(self, *args, **kwargs):
         return None
@@ -260,9 +256,7 @@ def test_process_empty_text_with_parser():
 def test_process_extracts_reasoning():
     """Parser that finds reasoning produces both reasoning and message items."""
     ctx = _make_context(_ReasoningOnlyParser)
-    ctx.append_output(
-        _make_request_output(text="<think>Let me check</think>The answer is 42")
-    )
+    ctx.append_output(_make_request_output(text="<think>Let me check</think>The answer is 42"))
 
     types = [m.type for m in ctx.response_messages]
     assert "reasoning" in types

@@ -67,23 +67,19 @@ def mhc_pre_torch(
     pre_logits = mixes[:, :hc_mult] * hc_scale[0] + hc_base[:hc_mult]
     pre_mix = torch.sigmoid(pre_logits) + hc_pre_eps
 
-    post_logits = (
-        mixes[:, hc_mult : 2 * hc_mult] * hc_scale[1] + hc_base[hc_mult : 2 * hc_mult]
-    )
+    post_logits = mixes[:, hc_mult : 2 * hc_mult] * hc_scale[1] + hc_base[hc_mult : 2 * hc_mult]
     post_mix = torch.sigmoid(post_logits) * hc_post_mult_value
 
-    comb_logits = mixes[:, 2 * hc_mult :].view(num_tokens, hc_mult, hc_mult) * hc_scale[
-        2
-    ] + hc_base[2 * hc_mult :].view(1, hc_mult, hc_mult)
+    comb_logits = mixes[:, 2 * hc_mult :].view(num_tokens, hc_mult, hc_mult) * hc_scale[2] + hc_base[
+        2 * hc_mult :
+    ].view(1, hc_mult, hc_mult)
     comb_mix = torch.softmax(comb_logits, dim=-1) + hc_sinkhorn_eps
     comb_mix = comb_mix / (comb_mix.sum(dim=-2, keepdim=True) + hc_sinkhorn_eps)
     for _ in range(sinkhorn_repeat - 1):
         comb_mix = comb_mix / (comb_mix.sum(dim=-1, keepdim=True) + hc_sinkhorn_eps)
         comb_mix = comb_mix / (comb_mix.sum(dim=-2, keepdim=True) + hc_sinkhorn_eps)
 
-    layer_input = torch.sum(
-        pre_mix.unsqueeze(-1) * residual_flat.to(torch.float32), dim=1
-    ).to(torch.bfloat16)
+    layer_input = torch.sum(pre_mix.unsqueeze(-1) * residual_flat.to(torch.float32), dim=1).to(torch.bfloat16)
     return (
         post_mix.view(*outer_shape, hc_mult, 1),
         comb_mix.view(*outer_shape, hc_mult, hc_mult),

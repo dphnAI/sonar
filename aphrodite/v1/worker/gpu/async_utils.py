@@ -32,9 +32,7 @@ class AsyncOutput(AsyncModelRunnerOutput):
             self.sampled_token_ids = async_copy_to_np(sampler_output.sampled_token_ids)
             self.logprobs_tensors: LogprobsTensors | None = None
             if sampler_output.logprobs_tensors is not None:
-                self.logprobs_tensors = (
-                    sampler_output.logprobs_tensors.to_cpu_nonblocking()
-                )
+                self.logprobs_tensors = sampler_output.logprobs_tensors.to_cpu_nonblocking()
             self.num_nans: np.ndarray | None = None
             if sampler_output.num_nans is not None:
                 self.num_nans = async_copy_to_np(sampler_output.num_nans)

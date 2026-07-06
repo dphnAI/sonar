@@ -61,9 +61,7 @@ class Gemma4RotaryEmbedding(RotaryEmbedding):
         rotary_dim), and non-rotated dims are zero-padded.
         """
         # HF formula: base ** (arange(0, 2*rope_angles, 2) / head_dim)
-        freq_exponents = (
-            torch.arange(0, 2 * self.rope_angles, 2, dtype=torch.float) / self.head_size
-        )
+        freq_exponents = torch.arange(0, 2 * self.rope_angles, 2, dtype=torch.float) / self.head_size
         inv_freq = 1.0 / (base**freq_exponents)
 
         # Zero-pad for non-rotated dims (identity rotation: cos=1, sin=0)

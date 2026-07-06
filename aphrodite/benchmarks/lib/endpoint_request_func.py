@@ -173,9 +173,7 @@ async def async_request_openai_completions(
     _validate_api_url(api_url, "OpenAI Completions API", "completions")
 
     payload = {
-        "model": request_func_input.model_name
-        if request_func_input.model_name
-        else request_func_input.model,
+        "model": request_func_input.model_name if request_func_input.model_name else request_func_input.model,
         "prompt": request_func_input.prompt,
         "repetition_penalty": 1.0,
         "max_tokens": request_func_input.output_len,
@@ -250,8 +248,7 @@ async def async_request_openai_completions(
                 else:
                     output.success = False
                     output.error = (
-                        "Never received a valid chunk to calculate TTFT."
-                        "This response will be marked as failed!"
+                        "Never received a valid chunk to calculate TTFT.This response will be marked as failed!"
                     )
                 output.generated_text = generated_text
                 output.latency = most_recent_timestamp - st
@@ -280,18 +277,13 @@ def _get_chat_content(
         elif isinstance(mm_content, dict):
             mm_contents.append(mm_content)
         else:
-            raise TypeError(
-                "multi_modal_content must be a dict or list[dict] for openai-chat"
-            )
+            raise TypeError("multi_modal_content must be a dict or list[dict] for openai-chat")
 
     prompt = request_func_input.prompt
     if (
         isinstance(prompt, list)
         and prompt
-        and all(
-            isinstance(item, dict) and isinstance(item.get("type"), str)
-            for item in prompt
-        )
+        and all(isinstance(item, dict) and isinstance(item.get("type"), str) for item in prompt)
     ):
         prompt_dicts: list[dict[str, Any]] = prompt  # type: ignore[assignment]
         if mm_position == "first":
@@ -313,9 +305,7 @@ def _is_chat_messages(prompt: Any) -> bool:
     if not prompt:
         return False
     return all(
-        isinstance(item, dict)
-        and isinstance(item.get("role"), str)
-        and isinstance(item.get("content"), (str, list))
+        isinstance(item, dict) and isinstance(item.get("role"), str) and isinstance(item.get("content"), (str, list))
         for item in prompt
     )
 
@@ -354,9 +344,7 @@ async def async_request_openai_chat_completions(
         messages = _get_chat_messages(request_func_input, mm_position=mm_position)
 
     payload = {
-        "model": request_func_input.model_name
-        if request_func_input.model_name
-        else request_func_input.model,
+        "model": request_func_input.model_name if request_func_input.model_name else request_func_input.model,
         "messages": messages,
         "max_completion_tokens": request_func_input.output_len,
         "stream": True,
@@ -447,9 +435,7 @@ async def async_request_openai_audio(
     _validate_api_url(api_url, "OpenAI Audio API", {"transcriptions", "translations"})
 
     payload = {
-        "model": request_func_input.model_name
-        if request_func_input.model_name
-        else request_func_input.model,
+        "model": request_func_input.model_name if request_func_input.model_name else request_func_input.model,
         "max_completion_tokens": request_func_input.output_len,
         "stream": True,
         "language": "en",
@@ -496,9 +482,7 @@ async def async_request_openai_audio(
         output.start_time = st
         most_recent_timestamp = st
         try:
-            async with session.post(
-                url=api_url, data=form, headers=headers
-            ) as response:
+            async with session.post(url=api_url, data=form, headers=headers) as response:
                 if response.status == 200:
                     handler = StreamedResponseHandler()
 
@@ -525,15 +509,11 @@ async def async_request_openai_audio(
 
                                     # Decoding phase
                                     else:
-                                        output.itl.append(
-                                            timestamp - most_recent_timestamp
-                                        )
+                                        output.itl.append(timestamp - most_recent_timestamp)
 
                                     generated_text += content or ""
                                 elif usage := data.get("usage"):
-                                    output.output_tokens = usage.get(
-                                        "completion_tokens"
-                                    )
+                                    output.output_tokens = usage.get("completion_tokens")
 
                                 most_recent_timestamp = timestamp
 
@@ -554,9 +534,7 @@ async def async_request_openai_audio(
 
     mm_audio = request_func_input.multi_modal_content
     if not isinstance(mm_audio, dict):
-        raise TypeError(
-            "multi_modal_content must be a dict containing 'audio' or 'audio_path'"
-        )
+        raise TypeError("multi_modal_content must be a dict containing 'audio' or 'audio_path'")
     if "audio" in mm_audio:
         with to_bytes(*mm_audio["audio"]) as f:
             input_audio_duration = soundfile.info(f).duration
@@ -575,9 +553,7 @@ async def async_request_openai_audio(
                 input_audio_duration=soundfile.info(audio_path).duration,
                 filename=os.path.basename(audio_path),
             )
-    raise TypeError(
-        "multi_modal_content must be a dict containing 'audio' or 'audio_path'"
-    )
+    raise TypeError("multi_modal_content must be a dict containing 'audio' or 'audio_path'")
 
 
 async def _run_pooling_request(
@@ -626,9 +602,7 @@ async def async_request_openai_embeddings(
     _validate_api_url(api_url, "OpenAI Embeddings API", "embeddings")
 
     payload = {
-        "model": request_func_input.model_name
-        if request_func_input.model_name
-        else request_func_input.model,
+        "model": request_func_input.model_name if request_func_input.model_name else request_func_input.model,
         "input": request_func_input.prompt,
         # Many embedding models have short context length,
         # this is to avoid dropping some of the requests.
@@ -656,15 +630,10 @@ async def async_request_aphrodite_rerank(
     api_url = request_func_input.api_url
     _validate_api_url(api_url, "Aphrodite score API", "rerank")
 
-    assert (
-        isinstance(request_func_input.prompt, list)
-        and len(request_func_input.prompt) > 1
-    )
+    assert isinstance(request_func_input.prompt, list) and len(request_func_input.prompt) > 1
 
     payload = {
-        "model": request_func_input.model_name
-        if request_func_input.model_name
-        else request_func_input.model,
+        "model": request_func_input.model_name if request_func_input.model_name else request_func_input.model,
         "query": request_func_input.prompt[0],
         "documents": request_func_input.prompt[1:],
         # Many reranker models have short context length,
@@ -696,9 +665,7 @@ async def async_request_openai_embeddings_chat(
     messages = _get_chat_messages(request_func_input, mm_position=mm_position)
 
     payload = {
-        "model": request_func_input.model_name
-        if request_func_input.model_name
-        else request_func_input.model,
+        "model": request_func_input.model_name if request_func_input.model_name else request_func_input.model,
         "messages": messages,
         # Many embedding models have short context length,
         # this is to avoid dropping some of the requests.
@@ -749,8 +716,7 @@ def _preprocess_vlm2vec(request_func_input: RequestFuncInput):
         else:
             # Text+Image input
             request_func_input.prompt = (
-                f"Represent the given image with the following question: "
-                f"{request_func_input.prompt}"
+                f"Represent the given image with the following question: {request_func_input.prompt}"
             )
 
 
@@ -792,9 +758,7 @@ async def async_request_infinity_embeddings(
     _validate_api_url(api_url, "Infinity Embeddings API", "embeddings")
 
     payload: dict[str, Any] = {
-        "model": request_func_input.model_name
-        if request_func_input.model_name
-        else request_func_input.model,
+        "model": request_func_input.model_name if request_func_input.model_name else request_func_input.model,
     }
 
     if request_func_input.prompt:
@@ -844,9 +808,7 @@ async def async_request_aphrodite_pooling(
     _validate_api_url(api_url, "Aphrodite Pooling API", "pooling")
 
     payload = {
-        "model": request_func_input.model_name
-        if request_func_input.model_name
-        else request_func_input.model,
+        "model": request_func_input.model_name if request_func_input.model_name else request_func_input.model,
         "truncate_prompt_tokens": -1,
     }
 

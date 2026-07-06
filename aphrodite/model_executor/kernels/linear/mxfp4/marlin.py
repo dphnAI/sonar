@@ -8,9 +8,7 @@ from .base import MxFp4LinearKernel, MxFp4LinearLayerConfig
 
 class MarlinMxFp4LinearKernel(MxFp4LinearKernel):
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
             is_fp4_marlin_supported,
         )

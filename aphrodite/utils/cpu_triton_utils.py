@@ -64,9 +64,7 @@ def _eagle_prepare_inputs_padded_kernel_impl(
     # and num_rejected_tokens_gpu, but Python allocates them as int32.
     orig_rejected_dtype = num_rejected_tokens_gpu.dtype
     rejected_i64 = (
-        num_rejected_tokens_gpu
-        if orig_rejected_dtype == torch.int64
-        else num_rejected_tokens_gpu.to(torch.int64)
+        num_rejected_tokens_gpu if orig_rejected_dtype == torch.int64 else num_rejected_tokens_gpu.to(torch.int64)
     )
     torch.ops._C.eagle_prepare_inputs_padded_kernel_impl(
         _ensure_int64(cu_num_draft_tokens),
@@ -220,8 +218,7 @@ def _copy_and_expand_dflash_inputs_kernel_impl(
 ):
     """Adapter between the DFlash Triton launch and the C++ CPU op."""
     assert block_table_stride == block_table_ptr.stride(0), (
-        "block_table_stride mismatch: "
-        f"{block_table_stride} vs {block_table_ptr.stride(0)}"
+        f"block_table_stride mismatch: {block_table_stride} vs {block_table_ptr.stride(0)}"
     )
 
     orig_ids_dtype = out_input_ids_ptr.dtype
@@ -295,9 +292,7 @@ def _copy_and_expand_dflash_inputs_kernel_impl(
                 out_query_positions_i64[query_out] = position
                 out_query_slot_mapping_i64[query_out] = slot
                 out_ids_i64[query_out] = (
-                    int(next_ids_i64[req_idx].item())
-                    if query_off == 0
-                    else parallel_drafting_token_id
+                    int(next_ids_i64[req_idx].item()) if query_off == 0 else parallel_drafting_token_id
                 )
 
                 if query_off > 0:
@@ -307,21 +302,13 @@ def _copy_and_expand_dflash_inputs_kernel_impl(
     if orig_ids_dtype != torch.int64:
         out_input_ids_ptr.copy_(out_ids_i64.to(orig_ids_dtype))
     if orig_context_positions_dtype != torch.int64:
-        out_context_positions_ptr.copy_(
-            out_context_positions_i64.to(orig_context_positions_dtype)
-        )
+        out_context_positions_ptr.copy_(out_context_positions_i64.to(orig_context_positions_dtype))
     if orig_query_positions_dtype != torch.int64:
-        out_query_positions_ptr.copy_(
-            out_query_positions_i64.to(orig_query_positions_dtype)
-        )
+        out_query_positions_ptr.copy_(out_query_positions_i64.to(orig_query_positions_dtype))
     if orig_context_slot_mapping_dtype != torch.int64:
-        out_context_slot_mapping_ptr.copy_(
-            out_context_slot_mapping_i64.to(orig_context_slot_mapping_dtype)
-        )
+        out_context_slot_mapping_ptr.copy_(out_context_slot_mapping_i64.to(orig_context_slot_mapping_dtype))
     if orig_query_slot_mapping_dtype != torch.int64:
-        out_query_slot_mapping_ptr.copy_(
-            out_query_slot_mapping_i64.to(orig_query_slot_mapping_dtype)
-        )
+        out_query_slot_mapping_ptr.copy_(out_query_slot_mapping_i64.to(orig_query_slot_mapping_dtype))
 
 
 def _rejection_greedy_sample_kernel_impl(
@@ -452,21 +439,11 @@ def _sample_recovered_tokens_kernel_impl(
         output_token_ids.copy_(output_i64.to(orig_dtype))
 
 
-eagle_prepare_inputs_padded_kernel = _FuncWrapper(
-    _eagle_prepare_inputs_padded_kernel_impl
-)
-eagle_prepare_next_token_padded_kernel = _FuncWrapper(
-    _eagle_prepare_next_token_padded_kernel_impl
-)
-copy_and_expand_eagle_inputs_kernel = _FuncWrapper(
-    _copy_and_expand_eagle_inputs_kernel_impl
-)
-copy_and_expand_dflash_inputs_kernel = _FuncWrapper(
-    _copy_and_expand_dflash_inputs_kernel_impl
-)
-eagle_step_slot_mapping_metadata_kernel = _FuncWrapper(
-    _eagle_step_slot_mapping_metadata_kernel_impl
-)
+eagle_prepare_inputs_padded_kernel = _FuncWrapper(_eagle_prepare_inputs_padded_kernel_impl)
+eagle_prepare_next_token_padded_kernel = _FuncWrapper(_eagle_prepare_next_token_padded_kernel_impl)
+copy_and_expand_eagle_inputs_kernel = _FuncWrapper(_copy_and_expand_eagle_inputs_kernel_impl)
+copy_and_expand_dflash_inputs_kernel = _FuncWrapper(_copy_and_expand_dflash_inputs_kernel_impl)
+eagle_step_slot_mapping_metadata_kernel = _FuncWrapper(_eagle_step_slot_mapping_metadata_kernel_impl)
 rejection_greedy_sample_kernel = _FuncWrapper(_rejection_greedy_sample_kernel_impl)
 rejection_random_sample_kernel = _FuncWrapper(_rejection_random_sample_kernel_impl)
 expand_kernel = _FuncWrapper(_expand_kernel_impl)

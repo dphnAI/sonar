@@ -290,9 +290,7 @@ def test_create_next_view_multi_tensor_layout(iid):
         for blk in range(2):
             row_offset = blk * 2 * PAGE_SIZE  # num_workers=1
             assert all(b == 1 for b in raw[row_offset : row_offset + PAGE_SIZE])
-            assert all(
-                b == 2 for b in raw[row_offset + PAGE_SIZE : row_offset + 2 * PAGE_SIZE]
-            )
+            assert all(b == 2 for b in raw[row_offset + PAGE_SIZE : row_offset + 2 * PAGE_SIZE])
         del raw, ta, tb
 
 
@@ -420,8 +418,7 @@ def test_multi_worker_race_exactly_one_creator(iid):
         creators = [r for r in regions if r._creator]
         assert len(creators) == 1, f"Expected 1 creator, got {len(creators)}"
         assert sum(1 for r in regions if not r._creator) == num_workers - 1, (
-            f"Expected {num_workers - 1} non-creators, got "
-            f"{sum(1 for r in regions if not r._creator)}"
+            f"Expected {num_workers - 1} non-creators, got {sum(1 for r in regions if not r._creator)}"
         )
 
         for r in regions:
@@ -495,9 +492,7 @@ def test_multiprocess_race_construct_and_write(iid):
             slot_start = (blk * num_workers + w) * PAGE_SIZE
             slot = raw[slot_start : slot_start + PAGE_SIZE]
             expected = w + 1  # fill_value = rank + 1
-            assert all(b == expected for b in slot), (
-                f"block {blk}, worker {w}: expected {expected} but got wrong bytes"
-            )
+            assert all(b == expected for b in slot), f"block {blk}, worker {w}: expected {expected} but got wrong bytes"
 
     # Unblock all workers to clean up.
     for _ in range(num_workers):

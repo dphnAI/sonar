@@ -110,9 +110,7 @@ def _build_serving_tokens(engine: AsyncLLM, **kwargs) -> ServingTokens:
     async def _fake_preprocess(*args, **kwargs):
         return [{"prompt_token_ids": [1, 2, 3]}]
 
-    serving.online_renderer.preprocess_completion = AsyncMock(
-        side_effect=_fake_preprocess
-    )
+    serving.online_renderer.preprocess_completion = AsyncMock(side_effect=_fake_preprocess)
     return serving
 
 
@@ -154,9 +152,7 @@ def _mock_engine() -> MagicMock:
     engine = MagicMock(spec=AsyncLLM)
     engine.errored = False
     engine.model_config = MockModelConfig()
-    engine.aphrodite_config = MockAphroditeConfig(
-        engine.model_config, parallel_config=MockParallelConfig()
-    )
+    engine.aphrodite_config = MockAphroditeConfig(engine.model_config, parallel_config=MockParallelConfig())
     engine.input_processor = MagicMock()
     engine.renderer = _build_renderer(engine.model_config)
     return engine
@@ -180,9 +176,7 @@ async def test_serve_tokens_skips_mm_cache_for_remote_engine_execution():
     engine = _mock_engine()
 
     async def mock_generate(*args, **kwargs):
-        yield _make_request_output(
-            "req-1", token_ids=[10], finish_reason="stop", finished=True
-        )
+        yield _make_request_output("req-1", token_ids=[10], finish_reason="stop", finished=True)
 
     engine.generate = MagicMock(side_effect=mock_generate)
     serving = _build_serving_tokens(engine)
@@ -197,10 +191,7 @@ async def test_serve_tokens_skips_mm_cache_for_remote_engine_execution():
     response = await serving.serve_tokens(request)
 
     assert isinstance(response, GenerateResponse)
-    assert (
-        serving.online_renderer.preprocess_completion.call_args.kwargs["skip_mm_cache"]
-        is True
-    )
+    assert serving.online_renderer.preprocess_completion.call_args.kwargs["skip_mm_cache"] is True
 
 
 @pytest.mark.asyncio
@@ -211,9 +202,7 @@ async def test_stream_basic():
     async def mock_generate(*args, **kwargs):
         yield _make_request_output("req-1", token_ids=[10])
         yield _make_request_output("req-1", token_ids=[20, 30])
-        yield _make_request_output(
-            "req-1", token_ids=[40], finish_reason="stop", finished=True
-        )
+        yield _make_request_output("req-1", token_ids=[40], finish_reason="stop", finished=True)
 
     engine.generate = MagicMock(side_effect=mock_generate)
     serving = _build_serving_tokens(engine)
@@ -250,9 +239,7 @@ async def test_stream_error_mid_generation():
 
     async def mock_generate(*args, **kwargs):
         yield _make_request_output("req-1", token_ids=[10])
-        yield _make_request_output(
-            "req-1", token_ids=[20], finish_reason="error", finished=True
-        )
+        yield _make_request_output("req-1", token_ids=[20], finish_reason="error", finished=True)
 
     engine.generate = MagicMock(side_effect=mock_generate)
     serving = _build_serving_tokens(engine)
@@ -270,9 +257,7 @@ async def test_stream_error_mid_generation():
         chunks.append(chunk)
 
     assert len(chunks) >= 2
-    assert any("Internal server error" in chunk for chunk in chunks), (
-        f"Expected error message in chunks: {chunks}"
-    )
+    assert any("Internal server error" in chunk for chunk in chunks), f"Expected error message in chunks: {chunks}"
     assert chunks[-1] == "data: [DONE]\n\n"
 
 
@@ -283,9 +268,7 @@ async def test_stream_error_with_empty_delta():
 
     async def mock_generate(*args, **kwargs):
         yield _make_request_output("req-1", token_ids=[10])
-        yield _make_request_output(
-            "req-1", token_ids=[], finish_reason="error", finished=True
-        )
+        yield _make_request_output("req-1", token_ids=[], finish_reason="error", finished=True)
 
     engine.generate = MagicMock(side_effect=mock_generate)
     serving = _build_serving_tokens(engine)
@@ -302,9 +285,7 @@ async def test_stream_error_with_empty_delta():
     async for chunk in response:
         chunks.append(chunk)
 
-    assert any("Internal server error" in chunk for chunk in chunks), (
-        f"Expected error message in chunks: {chunks}"
-    )
+    assert any("Internal server error" in chunk for chunk in chunks), f"Expected error message in chunks: {chunks}"
     assert chunks[-1] == "data: [DONE]\n\n"
 
 
@@ -316,9 +297,7 @@ async def test_stream_skips_empty_token_output():
     async def mock_generate(*args, **kwargs):
         yield _make_request_output("req-1", token_ids=[10])
         yield _make_request_output("req-1", token_ids=[])
-        yield _make_request_output(
-            "req-1", token_ids=[20], finish_reason="stop", finished=True
-        )
+        yield _make_request_output("req-1", token_ids=[20], finish_reason="stop", finished=True)
 
     engine.generate = MagicMock(side_effect=mock_generate)
     serving = _build_serving_tokens(engine)
@@ -352,9 +331,7 @@ async def test_stream_include_usage():
 
     async def mock_generate(*args, **kwargs):
         yield _make_request_output("req-1", token_ids=[10])
-        yield _make_request_output(
-            "req-1", token_ids=[20], finish_reason="stop", finished=True
-        )
+        yield _make_request_output("req-1", token_ids=[20], finish_reason="stop", finished=True)
 
     engine.generate = MagicMock(side_effect=mock_generate)
     serving = _build_serving_tokens(engine)
@@ -390,9 +367,7 @@ async def test_stream_continuous_usage():
 
     async def mock_generate(*args, **kwargs):
         yield _make_request_output("req-1", token_ids=[10])
-        yield _make_request_output(
-            "req-1", token_ids=[20], finish_reason="stop", finished=True
-        )
+        yield _make_request_output("req-1", token_ids=[20], finish_reason="stop", finished=True)
 
     engine.generate = MagicMock(side_effect=mock_generate)
     serving = _build_serving_tokens(engine)

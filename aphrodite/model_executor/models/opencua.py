@@ -121,9 +121,7 @@ class OpenCUAProcessor(Qwen2VLProcessor):
             if not isinstance(images, list):
                 images = [images]
             if len(images) > 0:
-                image_inputs = self.image_processor(
-                    images, return_tensors=return_tensors or "pt"
-                )
+                image_inputs = self.image_processor(images, return_tensors=return_tensors or "pt")
 
         combined_inputs = {**text_inputs, **image_inputs}
 
@@ -136,9 +134,7 @@ class OpenCUAMultiModalProcessor(BaseMultiModalProcessor[OpenCUAProcessingInfo])
         hf_inputs: BatchFeature,
         hf_processor_mm_kwargs: Mapping[str, object],
     ) -> Mapping[str, MultiModalFieldConfig]:
-        return _create_qwen2vl_field_factory(
-            self.info.get_hf_config().vision_config.spatial_merge_size
-        )(hf_inputs)
+        return _create_qwen2vl_field_factory(self.info.get_hf_config().vision_config.spatial_merge_size)(hf_inputs)
 
     def _hf_processor_applies_updates(
         self,
@@ -236,9 +232,7 @@ class OpenCUAForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         self.aphrodite_config = aphrodite_config
         self.multimodal_config = multimodal_config
         self.quant_config = quant_config
-        self.is_multimodal_pruning_enabled = (
-            multimodal_config.is_multimodal_pruning_enabled()
-        )
+        self.is_multimodal_pruning_enabled = multimodal_config.is_multimodal_pruning_enabled()
 
         with self._mark_tower_model(aphrodite_config, "image"):
             self.visual = OpenCUAVisionTransformer(
@@ -256,6 +250,4 @@ class OpenCUAForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
                 architectures=["Qwen2ForCausalLM"],
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors

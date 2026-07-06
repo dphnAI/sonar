@@ -603,6 +603,4 @@ def test_add_lora_fused_moe_early_exit(device):
         adapter_enabled=adapter_enabled,
     )
 
-    assert torch.equal(y, y_snapshot), (
-        "add_lora_fused_moe modified output tensor despite no_lora_flag_cpu=True"
-    )
+    assert torch.equal(y, y_snapshot), "add_lora_fused_moe modified output tensor despite no_lora_flag_cpu=True"

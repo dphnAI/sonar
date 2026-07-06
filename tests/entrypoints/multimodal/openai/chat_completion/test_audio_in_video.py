@@ -44,9 +44,7 @@ async def client(server):
 
 @pytest.mark.core_model
 @pytest.mark.asyncio
-async def test_online_audio_in_video(
-    client: openai.AsyncOpenAI, video_assets: VideoTestAssets
-):
+async def test_online_audio_in_video(client: openai.AsyncOpenAI, video_assets: VideoTestAssets):
     """Test video input with `audio_in_video=True`"""
 
     # we don't use video_urls above because they missed audio stream.
@@ -94,9 +92,7 @@ async def test_online_audio_in_video(
 
 @pytest.mark.core_model
 @pytest.mark.asyncio
-async def test_online_audio_in_video_multi_videos(
-    client: openai.AsyncOpenAI, video_assets: VideoTestAssets
-):
+async def test_online_audio_in_video_multi_videos(client: openai.AsyncOpenAI, video_assets: VideoTestAssets):
     """Test multi-video input with `audio_in_video=True`"""
 
     # we don't use video_urls above because they missed audio stream.
@@ -148,9 +144,7 @@ async def test_online_audio_in_video_multi_videos(
 
 @pytest.mark.core_model
 @pytest.mark.asyncio
-async def test_online_audio_in_video_interleaved(
-    client: openai.AsyncOpenAI, video_assets: VideoTestAssets
-):
+async def test_online_audio_in_video_interleaved(client: openai.AsyncOpenAI, video_assets: VideoTestAssets):
     """Test interleaved video/audio input with `audio_in_video=True`"""
 
     # we don't use video_urls above because they missed audio stream.

@@ -154,25 +154,15 @@ def _dcp_a2a_pack_send_kernel(
 
     for rank_idx in tl.static_range(N):
         src_head_idx = rank_idx * H_PER_RANK + local_head_idx
-        send_base = (
-            rank_idx * send_stride_N
-            + batch_idx * send_stride_B
-            + local_head_idx * send_stride_H
-        )
+        send_base = rank_idx * send_stride_N + batch_idx * send_stride_B + local_head_idx * send_stride_H
 
-        out_offsets = (
-            batch_idx * out_stride_B
-            + src_head_idx * out_stride_H
-            + d_offsets * out_stride_D
-        )
+        out_offsets = batch_idx * out_stride_B + src_head_idx * out_stride_H + d_offsets * out_stride_D
         tl.store(
             send_ptr + send_base + d_offsets * send_stride_D,
             tl.load(out_ptr + out_offsets),
         )
 
-        lse_val = tl.load(
-            lse_ptr + batch_idx * lse_stride_B + src_head_idx * lse_stride_H
-        )
+        lse_val = tl.load(lse_ptr + batch_idx * lse_stride_B + src_head_idx * lse_stride_H)
         if LSE_PACK_DIM == 1:
             tl.store(
                 send_ptr + send_base + HEAD_DIM * send_stride_D,
@@ -218,15 +208,9 @@ def _dcp_a2a_unpack_combine_kernel(
 
     lse_max = -float("inf")
     for rank_idx in tl.static_range(N):
-        recv_base = (
-            rank_idx * recv_stride_N
-            + batch_idx * recv_stride_B
-            + head_idx * recv_stride_H
-        )
+        recv_base = rank_idx * recv_stride_N + batch_idx * recv_stride_B + head_idx * recv_stride_H
         if LSE_PACK_DIM == 1:
-            lse_val = tl.load(recv_ptr + recv_base + HEAD_DIM * recv_stride_D).to(
-                tl.float32
-            )
+            lse_val = tl.load(recv_ptr + recv_base + HEAD_DIM * recv_stride_D).to(tl.float32)
         else:
             lo_raw = tl.load(recv_ptr + recv_base + HEAD_DIM * recv_stride_D)
             hi_raw = tl.load(recv_ptr + recv_base + (HEAD_DIM + 1) * recv_stride_D)
@@ -244,15 +228,9 @@ def _dcp_a2a_unpack_combine_kernel(
 
     lse_sum = 0.0
     for rank_idx in tl.static_range(N):
-        recv_base = (
-            rank_idx * recv_stride_N
-            + batch_idx * recv_stride_B
-            + head_idx * recv_stride_H
-        )
+        recv_base = rank_idx * recv_stride_N + batch_idx * recv_stride_B + head_idx * recv_stride_H
         if LSE_PACK_DIM == 1:
-            lse_val = tl.load(recv_ptr + recv_base + HEAD_DIM * recv_stride_D).to(
-                tl.float32
-            )
+            lse_val = tl.load(recv_ptr + recv_base + HEAD_DIM * recv_stride_D).to(tl.float32)
         else:
             lo_raw = tl.load(recv_ptr + recv_base + HEAD_DIM * recv_stride_D)
             hi_raw = tl.load(recv_ptr + recv_base + (HEAD_DIM + 1) * recv_stride_D)
@@ -276,15 +254,9 @@ def _dcp_a2a_unpack_combine_kernel(
 
     acc = tl.zeros([HEAD_DIM], dtype=tl.float32)
     for rank_idx in tl.static_range(N):
-        recv_base = (
-            rank_idx * recv_stride_N
-            + batch_idx * recv_stride_B
-            + head_idx * recv_stride_H
-        )
+        recv_base = rank_idx * recv_stride_N + batch_idx * recv_stride_B + head_idx * recv_stride_H
         if LSE_PACK_DIM == 1:
-            lse_val = tl.load(recv_ptr + recv_base + HEAD_DIM * recv_stride_D).to(
-                tl.float32
-            )
+            lse_val = tl.load(recv_ptr + recv_base + HEAD_DIM * recv_stride_D).to(tl.float32)
         else:
             lo_raw = tl.load(recv_ptr + recv_base + HEAD_DIM * recv_stride_D)
             hi_raw = tl.load(recv_ptr + recv_base + (HEAD_DIM + 1) * recv_stride_D)
@@ -301,14 +273,9 @@ def _dcp_a2a_unpack_combine_kernel(
         else:
             weight = tl.exp2(lse_val - global_lse)
         weight = tl.where(weight != weight, 0.0, weight)
-        acc += (
-            tl.load(recv_ptr + recv_base + d_offsets * recv_stride_D).to(tl.float32)
-            * weight
-        )
+        acc += tl.load(recv_ptr + recv_base + d_offsets * recv_stride_D).to(tl.float32) * weight
 
-    final_offsets = (
-        batch_idx * out_stride_B + head_idx * out_stride_H + d_offsets * out_stride_D
-    )
+    final_offsets = batch_idx * out_stride_B + head_idx * out_stride_H + d_offsets * out_stride_D
     tl.store(out_ptr + final_offsets, acc)
 
     if RETURN_LSE:
@@ -452,6 +419,4 @@ def dcp_a2a_lse_reduce(
     )
     work.wait()
 
-    return _dcp_a2a_unpack_combine(
-        recv_buffer, D, lse_pack_dim, return_lse, is_lse_base_on_e
-    )
+    return _dcp_a2a_unpack_combine(recv_buffer, D, lse_pack_dim, return_lse, is_lse_base_on_e)

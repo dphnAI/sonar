@@ -88,19 +88,13 @@ def get_timing_stats_from_engine(llm_engine: LLMEngine) -> dict[str, dict[str, f
                 encoder_stats[request_id] = dict(stats_dict)
             else:
                 # Aggregate timing metrics across workers
-                current_time = encoder_stats[request_id].get(
-                    "encoder_forward_secs", 0.0
-                )
+                current_time = encoder_stats[request_id].get("encoder_forward_secs", 0.0)
                 new_time = stats_dict.get("encoder_forward_secs", 0.0)
-                encoder_stats[request_id]["encoder_forward_secs"] = max(
-                    current_time, new_time
-                )
+                encoder_stats[request_id]["encoder_forward_secs"] = max(current_time, new_time)
 
                 current_calls = encoder_stats[request_id].get("num_encoder_calls", 0)
                 new_calls = stats_dict.get("num_encoder_calls", 0)
-                encoder_stats[request_id]["num_encoder_calls"] = max(
-                    current_calls, new_calls
-                )
+                encoder_stats[request_id]["num_encoder_calls"] = max(current_calls, new_calls)
 
     merged_stats = dict[str, dict[str, float]]()
 
@@ -201,8 +195,7 @@ def validate_args(args):
         )
     if args.dataset_name == "hf":
         supported_mm_datasets = (
-            VisionArenaDataset.SUPPORTED_DATASET_PATHS.keys()
-            | MultiModalConversationDataset.SUPPORTED_DATASET_PATHS
+            VisionArenaDataset.SUPPORTED_DATASET_PATHS.keys() | MultiModalConversationDataset.SUPPORTED_DATASET_PATHS
         )
         if args.dataset_path not in supported_mm_datasets:
             raise ValueError(
@@ -231,8 +224,7 @@ def benchmark_multimodal_processor(
     requests = get_requests(args, tokenizer)
 
     assert all(
-        llm.llm_engine.model_config.max_model_len
-        >= (request.prompt_len + request.expected_output_len)
+        llm.llm_engine.model_config.max_model_len >= (request.prompt_len + request.expected_output_len)
         for request in requests
     ), (
         "Please ensure that max_model_len is greater than the sum of "
@@ -252,9 +244,7 @@ def benchmark_multimodal_processor(
         for output_len in expected_output_lens
     ]
 
-    selected_percentiles = [
-        float(p) for p in getattr(args, "metric_percentiles", "99").split(",")
-    ]
+    selected_percentiles = [float(p) for p in getattr(args, "metric_percentiles", "99").split(",")]
 
     freeze_gc_heap()
 
@@ -268,9 +258,7 @@ def benchmark_multimodal_processor(
         warmup_requests = get_requests(warmup_args, tokenizer)
         warmup_prompts = [req.prompt for req in warmup_requests]
         warmup_output_lens = [req.expected_output_len for req in warmup_requests]
-        warmup_sampling_params = [
-            SamplingParams(max_tokens=output_len) for output_len in warmup_output_lens
-        ]
+        warmup_sampling_params = [SamplingParams(max_tokens=output_len) for output_len in warmup_output_lens]
         llm.chat(
             warmup_prompts,
             warmup_sampling_params,
@@ -283,9 +271,7 @@ def benchmark_multimodal_processor(
     print(f"Processing {len(prompts)} requests...")
     start_time = time.perf_counter()
 
-    outputs = llm.chat(
-        prompts, sampling_params, use_tqdm=not getattr(args, "disable_tqdm", False)
-    )
+    outputs = llm.chat(prompts, sampling_params, use_tqdm=not getattr(args, "disable_tqdm", False))
 
     end_time = time.perf_counter()
     total_time = end_time - start_time
@@ -300,9 +286,7 @@ def benchmark_multimodal_processor(
             "   - Stats were already retrieved (registry is cleared after retrieval)\n"
         )
 
-    mm_processor_metrics = calculate_mm_processor_metrics(
-        mm_stats_by_stage, selected_percentiles
-    )
+    mm_processor_metrics = calculate_mm_processor_metrics(mm_stats_by_stage, selected_percentiles)
 
     completed = len([o for o in outputs if o.finished])
     failed = len(outputs) - completed
@@ -336,9 +320,7 @@ def benchmark_multimodal_processor(
         mean_e2el_ms = float(np.mean(e2el_times))
         median_e2el_ms = float(np.median(e2el_times))
         std_e2el_ms = float(np.std(e2el_times))
-        percentiles_e2el_ms = [
-            (p, float(np.percentile(e2el_times, p))) for p in selected_percentiles
-        ]
+        percentiles_e2el_ms = [(p, float(np.percentile(e2el_times, p))) for p in selected_percentiles]
     else:
         mean_e2el_ms = 0.0
         median_e2el_ms = 0.0
@@ -346,10 +328,7 @@ def benchmark_multimodal_processor(
         percentiles_e2el_ms = [(p, 0.0) for p in selected_percentiles]
 
     encoder_summary = {}
-    if (
-        "num_encoder_calls" in mm_stats_by_stage
-        and mm_stats_by_stage["num_encoder_calls"]
-    ):
+    if "num_encoder_calls" in mm_stats_by_stage and mm_stats_by_stage["num_encoder_calls"]:
         encoder_calls = mm_stats_by_stage["num_encoder_calls"]
         encoder_summary = {
             "total_encoder_calls": int(sum(encoder_calls)),
@@ -430,8 +409,7 @@ def add_cli_args(parser: FlexibleArgumentParser) -> None:
         "--output-len",
         type=int,
         default=None,
-        help="Output length for each request. "
-        "Overrides the default output lengths from the dataset.",
+        help="Output length for each request. Overrides the default output lengths from the dataset.",
     )
 
     parser.add_argument(
@@ -465,9 +443,7 @@ def main(args: argparse.Namespace) -> None:
 
     if "mm_processor_stats" in result:
         print("\nMM Processor Metrics:")
-        selected_percentiles = [
-            float(p) for p in getattr(args, "metric_percentiles", "99").split(",")
-        ]
+        selected_percentiles = [float(p) for p in getattr(args, "metric_percentiles", "99").split(",")]
         mm_data = []
         for stage, metrics in result["mm_processor_stats"].items():
             row = {
@@ -486,16 +462,11 @@ def main(args: argparse.Namespace) -> None:
         if "encoder_summary" in result and result["encoder_summary"]:
             total_calls = result["encoder_summary"]["total_encoder_calls"]
             num_requests = result["encoder_summary"]["num_requests_with_encoder_calls"]
-            print(
-                f"\nSummary: {total_calls} total encoder calls "
-                f"across {num_requests} requests."
-            )
+            print(f"\nSummary: {total_calls} total encoder calls across {num_requests} requests.")
 
     if "mean_e2el_ms" in result:
         print("\nEnd-to-End Latency (ms):")
-        selected_percentiles = [
-            float(p) for p in getattr(args, "metric_percentiles", "99").split(",")
-        ]
+        selected_percentiles = [float(p) for p in getattr(args, "metric_percentiles", "99").split(",")]
 
         e2el_data = [
             {"Metric": "Mean", "Value (ms)": f"{result['mean_e2el_ms']:.2f}"},

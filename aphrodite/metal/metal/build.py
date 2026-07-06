@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """JIT build script for the native paged-attention Metal extension.
 
 Compiles ``paged_ops.cpp`` + nanobind into a shared library that dispatches
@@ -19,9 +20,7 @@ logger = logging.getLogger(__name__)
 
 _THIS_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _THIS_DIR.parents[2]
-_SOURCE_DIR = Path(
-    os.getenv("APHRODITE_METAL_SOURCE_DIR", str(_REPO_ROOT / "csrc" / "metal"))
-).expanduser()
+_SOURCE_DIR = Path(os.getenv("APHRODITE_METAL_SOURCE_DIR", str(_REPO_ROOT / "csrc" / "metal"))).expanduser()
 _SRC = _SOURCE_DIR / "paged_ops.cpp"
 _BUILD = _THIS_DIR / "build.py"
 _CONSTANTS = _THIS_DIR / "constants.py"
@@ -64,7 +63,7 @@ def build() -> Path:
 
     logger.info("Building native paged-attention extension ...")
 
-    py_include = sysconfig.get_paths()["include"]
+    py_include = Path(sysconfig.get_paths()["include"])
     nb_path = _find_package_path("nanobind")
     mlx_path = _find_package_path("mlx")
     mlx_include = mlx_path / "include"
@@ -120,11 +119,7 @@ def build() -> Path:
     result = subprocess.run(cmd, capture_output=True, text=True)
 
     if result.returncode != 0:
-        raise RuntimeError(
-            f"Failed to build paged_ops extension:\n"
-            f"stdout:\n{result.stdout}\n"
-            f"stderr:\n{result.stderr}"
-        )
+        raise RuntimeError(f"Failed to build paged_ops extension:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}")
 
     logger.info("Built %s", _OUT)
     return _OUT

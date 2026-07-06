@@ -15,6 +15,5 @@ from aphrodite.ir.op import IrOp
 def test_all_ops_have_input_generator():
     missing = [name for name, op in IrOp.registry.items() if not op.has_input_generator]
     assert not missing, (
-        f"IR ops without input generators: {missing}. "
-        f"Register one with @ir.ops.<name>.register_input_generator"
+        f"IR ops without input generators: {missing}. Register one with @ir.ops.<name>.register_input_generator"
     )

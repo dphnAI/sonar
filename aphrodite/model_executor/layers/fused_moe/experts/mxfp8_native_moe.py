@@ -86,18 +86,8 @@ def _mxfp8_grouped_gemm_kernel(
 
     a_ptrs = a_ptr + a_row[:, None] * stride_am + offs_k[None, :] * stride_ak
     as_ptrs = a_scale_ptr + a_row[:, None] * stride_asm + offs_sk[None, :] * stride_ask
-    b_ptrs = (
-        b_ptr
-        + off_e * stride_be
-        + offs_n[:, None] * stride_bn
-        + offs_k[None, :] * stride_bk
-    )
-    bs_ptrs = (
-        b_scale_ptr
-        + off_e * stride_bse
-        + offs_n[:, None] * stride_bsn
-        + offs_sk[None, :] * stride_bsk
-    )
+    b_ptrs = b_ptr + off_e * stride_be + offs_n[:, None] * stride_bn + offs_k[None, :] * stride_bk
+    bs_ptrs = b_scale_ptr + off_e * stride_bse + offs_n[:, None] * stride_bsn + offs_sk[None, :] * stride_bsk
 
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
     n_mask = offs_n < N

@@ -6,7 +6,7 @@ import pytest
 import torch
 
 import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from aphrodite.config import ParallelConfig, AphroditeConfig, set_current_aphrodite_config
+from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
@@ -39,13 +39,9 @@ try:
     from aphrodite.utils.flashinfer import has_flashinfer_cutlass_fused_moe
 except ImportError:
     if current_platform.is_rocm():
-        pytest.skip(
-            "flashinfer not supported for Aphrodite on ROCm", allow_module_level=True
-        )
+        pytest.skip("flashinfer not supported for Aphrodite on ROCm", allow_module_level=True)
 
-if not has_flashinfer_cutlass_fused_moe() or not current_platform.has_device_capability(
-    90
-):
+if not has_flashinfer_cutlass_fused_moe() or not current_platform.has_device_capability(90):
     pytest.skip(
         "Supported for sm >= 90",
         allow_module_level=True,
@@ -87,14 +83,11 @@ def quant_fp8_per_tensor_batches(a):
 def check_accuracy(ref_output, actual_output, atol=0.1, rtol=0.85, percent=0.925):
     close = torch.isclose(ref_output, actual_output, atol=atol, rtol=rtol)
     match_ratio = close.float().mean()
-    assert match_ratio >= percent, (
-        f"Match ratio {match_ratio:.4f} is below the threshold {percent:.4f}"
-    )
+    assert match_ratio >= percent, f"Match ratio {match_ratio:.4f} is below the threshold {percent:.4f}"
 
     mismatch_percent = 1.0 - match_ratio.item()
     assert mismatch_percent <= 1 - percent, (
-        f"Mismatch percentage {mismatch_percent:.4f} is above the threshold "
-        f"{1 - percent:.4f}"
+        f"Mismatch percentage {mismatch_percent:.4f} is above the threshold {1 - percent:.4f}"
     )
 
 
@@ -122,12 +115,7 @@ class TestData:
         is_gated = activation.is_gated
 
         hidden_states = torch.randn((m, k), device="cuda", dtype=torch.bfloat16) / 10
-        w13 = (
-            torch.randn(
-                (e, (2 * n) if is_gated else n, k), device="cuda", dtype=torch.bfloat16
-            )
-            / 10
-        )
+        w13 = torch.randn((e, (2 * n) if is_gated else n, k), device="cuda", dtype=torch.bfloat16) / 10
         w2 = torch.randn((e, k, n), device="cuda", dtype=torch.bfloat16) / 10
 
         # Scale to fp8
@@ -152,9 +140,7 @@ class TestData:
         if is_gated:
             layer.w13_weight.data = swap_w13_to_w31(layer.w13_weight.data)
         if is_trtllm:
-            rotate_weights_for_fi_trtllm_fp8_per_tensor_moe(
-                layer.w13_weight, layer.w2_weight, is_gated
-            )
+            rotate_weights_for_fi_trtllm_fp8_per_tensor_moe(layer.w13_weight, layer.w2_weight, is_gated)
         layer.custom_routing_function = Llama4MoE.custom_routing_function
         layer.routing_method_type = RoutingMethodType.Llama4
         layer.renormalize = False
@@ -206,9 +192,7 @@ def test_flashinfer_per_tensor_moe_fp8_no_graph(
         pytest.skip("Test is only supported for sm >= 100")
     set_random_seed(7)
     with set_current_aphrodite_config(aphrodite_config):
-        td = TestData.make_moe_tensors_8bit(
-            m, k, n, e, is_trtllm=True, activation=activation
-        )
+        td = TestData.make_moe_tensors_8bit(m, k, n, e, is_trtllm=True, activation=activation)
 
         score = torch.randn((m, e), device="cuda", dtype=torch.bfloat16)
         topk_weights, topk_ids = Llama4MoE.custom_routing_function(
@@ -289,9 +273,7 @@ def test_flashinfer_cutlass_moe_fp8_no_graph(
 ):
     set_random_seed(7)
     with set_current_aphrodite_config(aphrodite_config):
-        td = TestData.make_moe_tensors_8bit(
-            m, k, n, e, is_trtllm=False, activation=activation
-        )
+        td = TestData.make_moe_tensors_8bit(m, k, n, e, is_trtllm=False, activation=activation)
 
         score = torch.randn((m, e), device="cuda", dtype=torch.bfloat16)
         topk_weights, topk_ids = Llama4MoE.custom_routing_function(
@@ -390,28 +372,18 @@ def test_flashinfer_cutlass_moe_fp8_no_graph(
         (64, 4096, 4096),
     ],
 )
-def test_convert_moe_weights_to_flashinfer_trtllm_block_layout(
-    num_experts, intermediate, hidden
-):
+def test_convert_moe_weights_to_flashinfer_trtllm_block_layout(num_experts, intermediate, hidden):
     from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
         convert_moe_weights_to_flashinfer_trtllm_block_layout,
     )
 
-    w13 = torch.randn(
-        (num_experts, 2 * intermediate, hidden), dtype=torch.bfloat16, device="cuda"
-    )
-    w2 = torch.randn(
-        (num_experts, hidden, intermediate), dtype=torch.bfloat16, device="cuda"
-    )
+    w13 = torch.randn((num_experts, 2 * intermediate, hidden), dtype=torch.bfloat16, device="cuda")
+    w2 = torch.randn((num_experts, hidden, intermediate), dtype=torch.bfloat16, device="cuda")
 
     cache: dict[torch.Size, torch.Tensor] = {}
-    w13_converted, w2_converted = convert_moe_weights_to_flashinfer_trtllm_block_layout(
-        cache, w13, w2
-    )
+    w13_converted, w2_converted = convert_moe_weights_to_flashinfer_trtllm_block_layout(cache, w13, w2)
 
-    assert w13_converted.ndim == 4, (
-        f"Expected 4D tensor, got shape {w13_converted.shape}"
-    )
+    assert w13_converted.ndim == 4, f"Expected 4D tensor, got shape {w13_converted.shape}"
     assert w2_converted.ndim == 4, f"Expected 4D tensor, got shape {w2_converted.shape}"
 
     assert w13_converted.numel() == w13.numel(), "W13 element count should be preserved"

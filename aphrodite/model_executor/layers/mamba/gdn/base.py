@@ -40,11 +40,7 @@ class GatedDeltaNetAttention(PluggableLayer, MambaBase):
         self.cache_config = aphrodite_config.cache_config
         self.quant_config = aphrodite_config.quant_config
         self.speculative_config = aphrodite_config.speculative_config
-        self.num_spec = (
-            self.speculative_config.num_speculative_tokens
-            if self.speculative_config
-            else 0
-        )
+        self.num_spec = self.speculative_config.num_speculative_tokens if self.speculative_config else 0
 
     @property
     def mamba_type(self) -> MambaAttentionBackendEnum:

@@ -29,9 +29,7 @@ def test_structured_outputs_rejected_for_diffusion_models():
     """Diffusion LLMs denoise the canvas in parallel, which is incompatible
     with the token-by-token grammar FSM. The request must fail with a clear
     validation error instead of an FSM rejection mid-generation (#45436)."""
-    params = SamplingParams(
-        structured_outputs=StructuredOutputsParams(json=JSON_SCHEMA)
-    )
+    params = SamplingParams(structured_outputs=StructuredOutputsParams(json=JSON_SCHEMA))
     with pytest.raises(ValueError, match="not yet supported for diffusion"):
         params._validate_structured_outputs(
             _StubModelConfig(is_diffusion=True),

@@ -17,10 +17,10 @@ import lm_eval
 import pytest
 import torch
 
-from tests.utils import RemoteOpenAIServer, create_new_process_for_each_test
 from aphrodite.config.model import RunnerOption
 from aphrodite.logger import init_logger
 from aphrodite.platforms import current_platform
+from tests.utils import RemoteOpenAIServer, create_new_process_for_each_test
 
 from ..models.registry import HF_EXAMPLE_MODELS
 
@@ -144,12 +144,8 @@ else:
             ),
         ],
         "Qwen/Qwen2.5-1.5B-Instruct": [
-            CPTestSettings.detailed(
-                cp_kv_cache_interleave_size=16, attn_backend="FLASH_ATTN"
-            ),
-            CPTestSettings.detailed(
-                cp_kv_cache_interleave_size=16, attn_backend="FLASHINFER"
-            ),
+            CPTestSettings.detailed(cp_kv_cache_interleave_size=16, attn_backend="FLASH_ATTN"),
+            CPTestSettings.detailed(cp_kv_cache_interleave_size=16, attn_backend="FLASHINFER"),
         ],
     }
 
@@ -188,10 +184,7 @@ def _test_cp_gsm8k(
     if num_gpus_available < tp_size * pp_size:
         pytest.skip(f"Need at least {tp_size} x {pp_size} GPUs")
     if APHRODITE_MULTI_NODE and distributed_backend == "mp":
-        pytest.skip(
-            "Skipping multi-node pipeline parallel test for "
-            "multiprocessing distributed backend"
-        )
+        pytest.skip("Skipping multi-node pipeline parallel test for multiprocessing distributed backend")
     if multi_node_only and not APHRODITE_MULTI_NODE:
         pytest.skip("Not in multi-node setting")
 
@@ -242,11 +235,7 @@ def _test_cp_gsm8k(
     ) as remote_server:
         url = f"{remote_server.url_for('v1')}/completions"
 
-        model_args = (
-            f"model={model_id},"
-            f"base_url={url},"
-            f"num_concurrent={NUM_CONCURRENT},tokenized_requests=False"
-        )
+        model_args = f"model={model_id},base_url={url},num_concurrent={NUM_CONCURRENT},tokenized_requests=False"
 
         results = lm_eval.simple_evaluate(
             model="local-completions",
@@ -258,9 +247,7 @@ def _test_cp_gsm8k(
         # Validate accuracy is reasonable
         accuracy = results["results"][TASK][FILTER]
         min_accuracy = MIN_ACCURACY[model_id]
-        assert accuracy >= min_accuracy, (
-            f"TP+DCP accuracy too low: {accuracy:.3f} < {min_accuracy:.3f}"
-        )
+        assert accuracy >= min_accuracy, f"TP+DCP accuracy too low: {accuracy:.3f} < {min_accuracy:.3f}"
 
 
 @pytest.mark.parametrize(
@@ -288,15 +275,9 @@ def test_cp_generation(
     test_options: CPTestOptions,
     num_gpus_available,
 ):
-    if (
-        model_id == "deepseek-ai/DeepSeek-V2-Lite-Chat"
-        and torch.cuda.get_device_capability() < (9, 0)
-    ):
+    if model_id == "deepseek-ai/DeepSeek-V2-Lite-Chat" and torch.cuda.get_device_capability() < (9, 0):
         pytest.skip(reason="MLA+DCP requires compute capability of 9.0 or higher")
-    if (
-        model_id == "Qwen/Qwen2.5-1.5B-Instruct"
-        and torch.cuda.get_device_capability() != (9, 0)
-    ):
+    if model_id == "Qwen/Qwen2.5-1.5B-Instruct" and torch.cuda.get_device_capability() != (9, 0):
         pytest.skip(reason="GQA+DCP currently requires compute capability of 9.0")
 
     _test_cp_gsm8k(

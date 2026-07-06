@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Native paged-attention Metal kernels dispatched through MLX.
 
 Usage::
 
     from aphrodite.metal.metal import get_ops
+
     ops = get_ops()
     ops.reshape_and_cache(key, value, key_cache, value_cache, slot_mapping)
     ops.paged_attention_v1(out, query, key_cache, value_cache, ...)
@@ -25,9 +27,7 @@ logger = logging.getLogger(__name__)
 
 _THIS_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _THIS_DIR.parents[2]
-_SOURCE_DIR = Path(
-    os.getenv("APHRODITE_METAL_SOURCE_DIR", str(_REPO_ROOT / "csrc" / "metal"))
-).expanduser()
+_SOURCE_DIR = Path(os.getenv("APHRODITE_METAL_SOURCE_DIR", str(_REPO_ROOT / "csrc" / "metal"))).expanduser()
 _KERNELS_DIR = _SOURCE_DIR / "kernels_v1"
 _KERNELS_V2_DIR = _SOURCE_DIR / "kernels_v2"
 
@@ -142,12 +142,8 @@ def metal_unified_attention(
     )
 
     if use_partitioning:
-        exp_sums = mx.zeros(
-            (q.shape[0], q.shape[1], max_num_partitions), dtype=mx.float32
-        )
-        max_logits = mx.zeros(
-            (q.shape[0], q.shape[1], max_num_partitions), dtype=mx.float32
-        )
+        exp_sums = mx.zeros((q.shape[0], q.shape[1], max_num_partitions), dtype=mx.float32)
+        max_logits = mx.zeros((q.shape[0], q.shape[1], max_num_partitions), dtype=mx.float32)
         tmp_out = mx.zeros(
             (q.shape[0], q.shape[1], max_num_partitions, q.shape[2]),
             dtype=q.dtype,
@@ -207,7 +203,9 @@ def get_ops() -> ModuleType:
         return _ops_module
 
     try:
-        from aphrodite.metal.metal import _paged_ops as packaged_ops
+        from aphrodite.metal.metal import (  # type: ignore[attr-defined]
+            _paged_ops as packaged_ops,
+        )
 
         _ops_module = packaged_ops
         _ops_module.init_libraries(

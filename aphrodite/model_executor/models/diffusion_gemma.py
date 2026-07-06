@@ -73,9 +73,7 @@ class DiffusionGemmaSelfConditioning(nn.Module):
     and post_norm without learned scale.
     """
 
-    def __init__(
-        self, hidden_size: int, self_conditioning_size: int, eps: float = 1e-6
-    ):
+    def __init__(self, hidden_size: int, self_conditioning_size: int, eps: float = 1e-6):
         super().__init__()
         self.pre_norm = RMSNorm(hidden_size, eps=eps)
         self.post_norm = RMSNorm(hidden_size, eps=eps, has_weight=False)
@@ -89,9 +87,7 @@ class DiffusionGemmaSelfConditioning(nn.Module):
         soft_embeds: torch.Tensor,
     ) -> torch.Tensor:
         x = self.pre_norm(soft_embeds)
-        sc_signal = self.down_proj(
-            F.gelu(self.gate_proj(x), approximate="tanh") * self.up_proj(x)
-        )
+        sc_signal = self.down_proj(F.gelu(self.gate_proj(x), approximate="tanh") * self.up_proj(x))
         return self.post_norm(inputs_embeds + sc_signal)
 
 
@@ -117,9 +113,7 @@ class DiffusionGemmaProcessingInfo(Gemma4ProcessingInfo):
         # DiffusionGemma supports image and video inputs.
         return {"image": None, "video": None}
 
-    def get_mm_max_tokens_per_item(
-        self, seq_len: int, mm_counts: Mapping[str, int]
-    ) -> Mapping[str, int] | None:
+    def get_mm_max_tokens_per_item(self, seq_len: int, mm_counts: Mapping[str, int]) -> Mapping[str, int] | None:
         return super().get_mm_max_tokens_per_item(seq_len, mm_counts)
 
 
@@ -203,10 +197,7 @@ class DiffusionGemmaForConditionalGeneration(
             ]:
                 tower_quant = quant_config
             else:
-                quantizable = (
-                    vision_config.hidden_size % 64 == 0
-                    and vision_config.intermediate_size % 64 == 0
-                )
+                quantizable = vision_config.hidden_size % 64 == 0 and vision_config.intermediate_size % 64 == 0
                 tower_quant = quant_config if quantizable else None
 
             with self._mark_tower_model(aphrodite_config, {"image", "video"}):
@@ -246,27 +237,20 @@ class DiffusionGemmaForConditionalGeneration(
         # HF DiffusionGemma applies the final-logit softcap in fp32, before
         # any other processing. Do it manually in `compute_logits` so the
         # LogitsProcessor only handles the lm_head GEMM.
-        self.final_logit_softcapping = getattr(
-            text_config, "final_logit_softcapping", None
-        )
+        self.final_logit_softcapping = getattr(text_config, "final_logit_softcapping", None)
         self.logits_processor = LogitsProcessor(
             text_config.vocab_size,
             soft_cap=None,
         )
 
-        sc_size = (
-            getattr(config, "self_conditioning_size", None)
-            or text_config.intermediate_size
-        )
+        sc_size = getattr(config, "self_conditioning_size", None) or text_config.intermediate_size
         self.self_conditioning = DiffusionGemmaSelfConditioning(
             hidden_size=text_config.hidden_size,
             self_conditioning_size=sc_size,
             eps=getattr(text_config, "rms_norm_eps", 1e-6),
         )
 
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def compute_self_conditioning(
         self,
@@ -274,9 +258,9 @@ class DiffusionGemmaForConditionalGeneration(
         probs: torch.Tensor,
     ) -> torch.Tensor:
         embed_weight = self.model.embed_tokens.weight
-        soft_embeds = torch.matmul(
-            probs.to(embed_weight.dtype), embed_weight
-        ) * self.model.normalizer.to(inputs_embeds.dtype)
+        soft_embeds = torch.matmul(probs.to(embed_weight.dtype), embed_weight) * self.model.normalizer.to(
+            inputs_embeds.dtype
+        )
         return self.self_conditioning(inputs_embeds, soft_embeds)
 
     # ------------------------------------------------------------------ #
@@ -286,15 +270,9 @@ class DiffusionGemmaForConditionalGeneration(
     # are architecturally identical to Gemma4.  Delegate to avoid
     # maintaining a duplicate copy.
 
-    _parse_and_validate_image_input = (
-        Gemma4ForConditionalGeneration._parse_and_validate_image_input
-    )
-    _parse_and_validate_video_input = (
-        Gemma4ForConditionalGeneration._parse_and_validate_video_input
-    )
-    _parse_and_validate_multimodal_inputs = (
-        Gemma4ForConditionalGeneration._parse_and_validate_multimodal_inputs
-    )
+    _parse_and_validate_image_input = Gemma4ForConditionalGeneration._parse_and_validate_image_input
+    _parse_and_validate_video_input = Gemma4ForConditionalGeneration._parse_and_validate_video_input
+    _parse_and_validate_multimodal_inputs = Gemma4ForConditionalGeneration._parse_and_validate_multimodal_inputs
     _encoder_chunk = staticmethod(Gemma4ForConditionalGeneration._encoder_chunk)
     _process_image_input = Gemma4ForConditionalGeneration._process_image_input
     _process_video_input = Gemma4ForConditionalGeneration._process_video_input
@@ -353,11 +331,7 @@ class DiffusionGemmaForConditionalGeneration(
         self-conditioning separately.
         """
 
-        sc_params = dict(
-            (n, p)
-            for n, p in self.named_parameters()
-            if n.startswith("self_conditioning.")
-        )
+        sc_params = dict((n, p) for n, p in self.named_parameters() if n.startswith("self_conditioning."))
 
         # Collect vision tower + embedder parameters AND buffers for manual
         # loading.  The HF vision tower registers std_bias / std_scale as
@@ -536,9 +510,7 @@ def _compiled_sample_step(
     # Zero noise when temp==0 (greedy)
     noisy = scaled + gumbel * (temp[:, None, None] > 0).float()
     new_tokens = noisy.view(-1, noisy.shape[-1]).argmax(dim=-1).view(num_decode, CL)
-    argmax_tokens = (
-        scaled.view(-1, scaled.shape[-1]).argmax(dim=-1).view(num_decode, CL)
-    )
+    argmax_tokens = scaled.view(-1, scaled.shape[-1]).argmax(dim=-1).view(num_decode, CL)
 
     # ---- Phase 3: Probs, self-conditioning, confidence ----
     log_probs = scaled.log_softmax(dim=-1)
@@ -574,45 +546,33 @@ def _compiled_sample_step(
     step_tensor[decode_slots] = new_step_val
 
     # Random tokens for renoise / canvas reinit
-    random_tokens = torch.randint(
-        0, vocab_size, (num_decode, CL), device=device, dtype=canvas.dtype
-    )
+    random_tokens = torch.randint(0, vocab_size, (num_decode, CL), device=device, dtype=canvas.dtype)
 
     # Compute denoise canvas (accept/renoise)
     denoise_canvas = torch.where(eb_mask, new_tokens, random_tokens)
 
     # Canvas: commit → random reinit, denoise → accept/renoise result
-    canvas[decode_slots] = torch.where(
-        is_commit.unsqueeze(1), random_tokens, denoise_canvas
-    )
+    canvas[decode_slots] = torch.where(is_commit.unsqueeze(1), random_tokens, denoise_canvas)
 
     # History: write argmax_tokens for denoise requests at circular position
     hist_len = history_len_tensor[decode_slots]
     write_pos = hist_len % ST
     for i in range(ST):
         write_here = ((write_pos == i) & is_denoise).unsqueeze(1)
-        history[decode_slots, i] = torch.where(
-            write_here, argmax_tokens, history[decode_slots, i]
-        )
+        history[decode_slots, i] = torch.where(write_here, argmax_tokens, history[decode_slots, i])
 
     # Argmax canvas: update for denoise, preserve for commit
-    argmax_canvas[decode_slots] = torch.where(
-        is_denoise.unsqueeze(1), argmax_tokens, argmax_canvas[decode_slots]
-    )
+    argmax_canvas[decode_slots] = torch.where(is_denoise.unsqueeze(1), argmax_tokens, argmax_canvas[decode_slots])
 
     # History length: increment for denoise, reset for commit
     new_hist_len = torch.where(is_denoise, hist_len + 1, hist_len.new_zeros(num_decode))
     history_len_tensor[decode_slots] = new_hist_len
 
     # Sampled output: commit → emit argmax_canvas, denoise → 0 (pre-zeroed)
-    sampled[decode_idx] = argmax_canvas[decode_slots].to(
-        sampled.dtype
-    ) * is_commit.unsqueeze(1).to(sampled.dtype)
+    sampled[decode_idx] = argmax_canvas[decode_slots].to(sampled.dtype) * is_commit.unsqueeze(1).to(sampled.dtype)
     # Commit only the real canvas length (== CL except for a canvas truncated
     # near max_model_len); the padded tail positions are never emitted.
-    num_sampled[decode_idx] = is_commit.to(num_sampled.dtype) * valid_canvas_len.to(
-        num_sampled.dtype
-    )
+    num_sampled[decode_idx] = is_commit.to(num_sampled.dtype) * valid_canvas_len.to(num_sampled.dtype)
 
     # ---- Phase 6: Stability + convergence ----
     ref = history[decode_slots, 0]
@@ -622,13 +582,9 @@ def _compiled_sample_step(
     stable = mismatch == 0
 
     step_after = step_tensor[decode_slots]
-    converged = (stable & confident_tensor[decode_slots] & (new_hist_len >= ST)) | (
-        step_after >= max_denoising_steps
-    )
+    converged = (stable & confident_tensor[decode_slots] & (new_hist_len >= ST)) | (step_after >= max_denoising_steps)
     # Commit done → denoise next (False); denoise converged → commit next (True)
-    is_encoder_phase[decode_slots] = torch.where(
-        is_commit, is_commit.new_zeros(num_decode), converged
-    )
+    is_encoder_phase[decode_slots] = torch.where(is_commit, is_commit.new_zeros(num_decode), converged)
 
     # SC soft embedding: store ``probs @ embed_weight`` (the value the next step's
     # self-conditioning MLP consumes) only for slots that will denoise next — i.e.
@@ -642,9 +598,7 @@ def _compiled_sample_step(
     # probs spans the full vocab, so each rank multiplies its local vocab slice
     # [sc_vocab_start, sc_vocab_end) and the partials are summed across ranks.
     local_probs = probs[..., sc_vocab_start:sc_vocab_end].to(embed_weight.dtype)
-    soft_embeds = torch.matmul(
-        local_probs, embed_weight[: sc_vocab_end - sc_vocab_start]
-    )
+    soft_embeds = torch.matmul(local_probs, embed_weight[: sc_vocab_end - sc_vocab_start])
     if tp_size > 1:
         soft_embeds = torch.ops.aphrodite.all_reduce(soft_embeds, group_name=tp_group_name)
     soft_embeds = soft_embeds * normalizer
@@ -652,9 +606,7 @@ def _compiled_sample_step(
 
     # Overwrite canvas with argmax for newly converged denoise requests
     newly_converged = (converged & is_denoise).unsqueeze(1)
-    canvas[decode_slots] = torch.where(
-        newly_converged, argmax_canvas[decode_slots], canvas[decode_slots]
-    )
+    canvas[decode_slots] = torch.where(newly_converged, argmax_canvas[decode_slots], canvas[decode_slots])
 
     # ---- Phase 7: Copy canvas → draft_tokens for all slots ----
     draft_tokens[all_slots, :CL] = canvas[all_slots]
@@ -685,13 +637,9 @@ class DiffusionGemmaRequestStates:
         self.stability_threshold = stability_threshold
         self.device = device
 
-        self.is_encoder_phase = torch.zeros(
-            max_num_reqs, dtype=torch.bool, device=device
-        )
+        self.is_encoder_phase = torch.zeros(max_num_reqs, dtype=torch.bool, device=device)
         # Canvas tokens [max_num_reqs, canvas_length]
-        self.canvas = torch.zeros(
-            max_num_reqs, canvas_length, dtype=torch.int64, device=device
-        )
+        self.canvas = torch.zeros(max_num_reqs, canvas_length, dtype=torch.int64, device=device)
         # Step counter (counts up from 0 to max_denoising_steps)
         self.step = torch.zeros(
             max_num_reqs,
@@ -706,17 +654,13 @@ class DiffusionGemmaRequestStates:
             dtype=torch.int64,
             device=device,
         )
-        self.accepted_canvas_history_len = torch.zeros(
-            max_num_reqs, dtype=torch.int32, device=device
-        )
+        self.accepted_canvas_history_len = torch.zeros(max_num_reqs, dtype=torch.int32, device=device)
         # Latest argmax(processed_logits) per slot — what we COMMIT.
         # NOT `current_canvas` (which is the post-renoise stochastic input for
         # the next denoise step). We keep this separate from `canvas` because
         # canvas gets renoised in-place during denoise, while argmax_canvas is
         # the deterministic best-guess we ultimately emit.
-        self.argmax_canvas = torch.zeros(
-            max_num_reqs, canvas_length, dtype=torch.int64, device=device
-        )
+        self.argmax_canvas = torch.zeros(max_num_reqs, canvas_length, dtype=torch.int64, device=device)
 
         # Per-slot prompt length (set by add_request).
         self.prompt_len = torch.zeros(
@@ -806,9 +750,7 @@ class DiffusionGemmaModelState(ModelState):
 
         # Persistent buffer for per-request causal flags, updated in-place
         # so FULL CUDA graph replay sees the latest values.
-        self._causal_buf = torch.zeros(
-            self.max_num_reqs, dtype=torch.bool, device=device
-        )
+        self._causal_buf = torch.zeros(self.max_num_reqs, dtype=torch.bool, device=device)
 
         # Persistent inputs_embeds buffer — required so FULL CUDA graph
         # capture and runtime point at the SAME memory address.
@@ -832,9 +774,7 @@ class DiffusionGemmaModelState(ModelState):
             raise ValueError("DiffusionGemma requires an EntropyBound sampler_config")
         entropy_bound = sampler_cfg.get("entropy_bound")
         if entropy_bound is None or entropy_bound <= 0:
-            raise ValueError(
-                f"entropy_bound must be a positive float (got {entropy_bound})"
-            )
+            raise ValueError(f"entropy_bound must be a positive float (got {entropy_bound})")
         # The self-conditioning matmul (probs @ embed_tokens.weight) runs over a
         # vocab-parallel embedding shard. Hand the sampler this rank's vocab
         # slice and TP group so it can all-reduce the partial products.
@@ -882,9 +822,7 @@ class DiffusionGemmaModelState(ModelState):
         if not self.supports_mm_inputs:
             return None
 
-        mm_hashes, mm_kwargs = self.encoder_runner.prepare_mm_inputs(
-            scheduled_encoder_inputs
-        )
+        mm_hashes, mm_kwargs = self.encoder_runner.prepare_mm_inputs(scheduled_encoder_inputs)
         if mm_kwargs:
             encoder_outputs = self.encoder_runner.execute_mm_encoder(mm_kwargs)
             self.encoder_cache.encoder_outputs.update(zip(mm_hashes, encoder_outputs))
@@ -922,9 +860,7 @@ class DiffusionGemmaModelState(ModelState):
             end = int(query_start_loc_np[idx + 1])
             canvas = slice(start, end)
             soft = sc_embeds[slot, : end - start]
-            inputs_embeds[canvas] = self.model.self_conditioning(
-                inputs_embeds[canvas], soft.to(inputs_embeds.dtype)
-            )
+            inputs_embeds[canvas] = self.model.self_conditioning(inputs_embeds[canvas], soft.to(inputs_embeds.dtype))
 
     def prepare_inputs(self, input_batch, req_states) -> dict[str, Any]:
         states = self.diffusion_states
@@ -973,9 +909,7 @@ class DiffusionGemmaModelState(ModelState):
         # so the captured graph and runtime point to identical addresses.
         return {"inputs_embeds": self._inputs_embeds_buf[:num_tokens]}
 
-    def postprocess_state(
-        self, idx_mapping, num_sampled, num_computed_tokens=None
-    ) -> None:
+    def postprocess_state(self, idx_mapping, num_sampled, num_computed_tokens=None) -> None:
         return None
 
     def prepare_attn(
@@ -1006,9 +940,7 @@ class DiffusionGemmaModelState(ModelState):
         # Invariant: the sampler flips is_encoder_phase to False only after a
         # request's FINAL prompt chunk, so a prompt spanning multiple chunks
         # (longer than the token budget) stays causal for every chunk.
-        self._causal_buf[:actual_num_reqs] = self.diffusion_states.is_encoder_phase[
-            slots
-        ]
+        self._causal_buf[:actual_num_reqs] = self.diffusion_states.is_encoder_phase[slots]
         if actual_num_reqs < num_reqs:
             self._causal_buf[actual_num_reqs:num_reqs] = False
         causal: bool | torch.Tensor = self._causal_buf[:num_reqs]
@@ -1076,9 +1008,7 @@ class DiffusionSampler:
         self.sc_vocab_end = sc_vocab_end if sc_vocab_end is not None else vocab_size
         self.tp_size = tp_size
         self.tp_group_name = tp_group_name
-        self.canvas_length = (
-            diffusion_config.canvas_length if diffusion_config is not None else 32
-        )
+        self.canvas_length = diffusion_config.canvas_length if diffusion_config is not None else 32
         self.t_min = t_min
         self.t_max = t_max
         self.confidence_threshold = confidence_threshold
@@ -1134,9 +1064,7 @@ class DiffusionSampler:
     # Prefill
     # ------------------------------------------------------------------
 
-    def _finish_prefills(
-        self, input_batch: Any, prefill_indices_np: np.ndarray
-    ) -> None:
+    def _finish_prefills(self, input_batch: Any, prefill_indices_np: np.ndarray) -> None:
         """Transition requests whose prompt completes this step to denoising.
 
         Initializes their canvas, seeds draft tokens, and flips
@@ -1155,9 +1083,7 @@ class DiffusionSampler:
             return
         states.init_canvas(ps)
         self.req_states.draft_tokens[ps, : self.canvas_length] = states.canvas[ps]
-        ps_gpu = async_copy_to_gpu(
-            ps.astype(np.int64), device=states.is_encoder_phase.device
-        )
+        ps_gpu = async_copy_to_gpu(ps.astype(np.int64), device=states.is_encoder_phase.device)
         states.is_encoder_phase.index_fill_(0, ps_gpu, False)
 
     def _handle_prefill(
@@ -1195,9 +1121,7 @@ class DiffusionSampler:
         """Compute num_rejected and build SamplerOutput."""
         num_reqs = input_batch.num_reqs
 
-        self._query_lens.np[:num_reqs] = np.diff(
-            input_batch.query_start_loc_np[: num_reqs + 1]
-        )
+        self._query_lens.np[:num_reqs] = np.diff(input_batch.query_start_loc_np[: num_reqs + 1])
         self._num_logits.np[:num_reqs] = per_req_nlogits_np
         self._query_lens.copy_to_uva()
         self._num_logits.copy_to_uva()
@@ -1258,9 +1182,7 @@ class DiffusionSampler:
         # was truncated near max_model_len, in which case the scheduler gave us
         # fewer than CL logits for that request.
         valid_canvas_len_np = per_req_nlogits_np[per_req_nlogits_np > 0]
-        valid_canvas_len = async_copy_to_gpu(
-            valid_canvas_len_np.astype(np.int64), device=device
-        )
+        valid_canvas_len = async_copy_to_gpu(valid_canvas_len_np.astype(np.int64), device=device)
 
         # Pad any truncated canvas back to CL so the uniform-CL sampler math
         # holds. Phantom (padded) positions are zeroed → uniform logits → high

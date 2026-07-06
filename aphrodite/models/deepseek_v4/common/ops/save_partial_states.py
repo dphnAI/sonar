@@ -77,11 +77,7 @@ def _save_partial_states_kernel(
 
     block_idx = slot_id // block_size
     pos_in_block = slot_id % block_size
-    base_ptr = (
-        state_cache_ptr
-        + block_idx * state_cache_stride0
-        + pos_in_block * state_cache_stride1
-    )
+    base_ptr = state_cache_ptr + block_idx * state_cache_stride0 + pos_in_block * state_cache_stride1
 
     block = tl.arange(0, TRITON_BLOCK_SIZE)
     mask = block < HEAD_SIZE

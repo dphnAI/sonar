@@ -82,9 +82,7 @@ def test_models(example_prompts, model_name) -> None:
     for i in range(len(example_prompts)):
         generated_str = generations[i]
         expected_str = expected_strs[i]
-        assert expected_str == generated_str, (
-            f"Test{i}:\nExpected: {expected_str!r}\nAphrodite: {generated_str!r}"
-        )
+        assert expected_str == generated_str, f"Test{i}:\nExpected: {expected_str!r}\nAphrodite: {generated_str!r}"
 
 
 EAGER = [True, False]
@@ -110,18 +108,11 @@ SM_100_NVFP4_BACKENDS = [
     ],
 )
 def test_nvfp4(aphrodite_runner, model, eager, backend):
-    if backend == "flashinfer_cutedsl" and not (
-        current_platform.is_device_capability_family(100)
-    ):
+    if backend == "flashinfer_cutedsl" and not (current_platform.is_device_capability_family(100)):
         pytest.skip("The flashinfer_cutedsl backend is only supported on SM10x")
 
-    if (
-        not current_platform.has_device_capability(100)
-        and backend in SM_100_NVFP4_BACKENDS
-    ):
-        pytest.skip(
-            f"The backend {backend} is not supported with current_platform.has_device_capability(100) == False"
-        )
+    if not current_platform.has_device_capability(100) and backend in SM_100_NVFP4_BACKENDS:
+        pytest.skip(f"The backend {backend} is not supported with current_platform.has_device_capability(100) == False")
 
     with aphrodite_runner(model, enforce_eager=eager, linear_backend=backend) as llm:
         output = llm.generate_greedy(["1 2 3 4 5"], max_tokens=2)

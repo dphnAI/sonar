@@ -21,18 +21,14 @@ class MyGemma2Embedding(nn.Module):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
 
-        self.model = Gemma2Model(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = Gemma2Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
 
         pooler_config = aphrodite_config.model_config.pooler_config
         assert pooler_config is not None
 
         self.pooler = DispatchPooler.for_embedding(pooler_config)
 
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def forward(
         self,
@@ -56,7 +52,5 @@ class MyGemma2Embedding(nn.Module):
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
         weights = self.hf_to_aphrodite_mapper.apply(weights)
-        weights = (
-            (name, data) for name, data in weights if not name.startswith("lm_head.")
-        )
+        weights = ((name, data) for name, data in weights if not name.startswith("lm_head."))
         return self.model.load_weights(weights)

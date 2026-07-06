@@ -89,11 +89,7 @@ class FlashAttnPrefillBackend(MLAPrefillBackend):
         # FA3 on Hopper (SM90) and FA4 natively handle diff headdims.
         device_capability = current_platform.get_device_capability()
         self.requires_v_padding = self.vllm_flash_attn_version is None or not (
-            (
-                self.vllm_flash_attn_version == 3
-                and device_capability is not None
-                and device_capability[0] == 9
-            )
+            (self.vllm_flash_attn_version == 3 and device_capability is not None and device_capability[0] == 9)
             or self.vllm_flash_attn_version == 4
         )
 
@@ -107,8 +103,7 @@ class FlashAttnPrefillBackend(MLAPrefillBackend):
             return ()
         if compile_flash_attn_varlen_func_from_specs is None:
             raise RuntimeError(
-                "FA4 compile-only API is unavailable; CuTeDSL warmup does not "
-                "fall back to synthetic forward passes."
+                "FA4 compile-only API is unavailable; CuTeDSL warmup does not fall back to synthetic forward passes."
             )
 
         dtype = self.aphrodite_config.model_config.dtype
@@ -163,9 +158,7 @@ class FlashAttnPrefillBackend(MLAPrefillBackend):
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         maybe_padded_v = v
         if self.requires_v_padding:
-            maybe_padded_v = torch.nn.functional.pad(
-                v, [0, q.shape[-1] - v.shape[-1]], value=0
-            )
+            maybe_padded_v = torch.nn.functional.pad(v, [0, q.shape[-1] - v.shape[-1]], value=0)
 
         if self._is_aphrodite_fa:
             kwargs["return_softmax_lse"] = return_softmax_lse

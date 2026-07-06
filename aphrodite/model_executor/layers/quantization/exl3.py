@@ -3,7 +3,7 @@
 
 import json
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
 from huggingface_hub import hf_hub_download
@@ -19,6 +19,9 @@ from aphrodite.model_executor.layers.fused_moe import (
     FusedMoEMethodBase,
     RoutedExperts,
 )
+
+if TYPE_CHECKING:
+    from aphrodite.model_executor.layers.fused_moe.runner.shared_experts import SharedExperts
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
 from aphrodite.model_executor.layers.linear import (
@@ -1069,9 +1072,10 @@ class Exl3MoEMethod(FusedMoEMethodBase):
         x: torch.Tensor,
         topk_weights: torch.Tensor,
         topk_ids: torch.Tensor,
+        shared_experts: "SharedExperts | None",
         shared_experts_input: torch.Tensor | None,
     ) -> torch.Tensor:
-        del shared_experts_input
+        del shared_experts, shared_experts_input
         if layer.activation != MoEActivation.SILU:
             raise NotImplementedError(f"EXL3 MoE only supports SiLU, got {layer.activation}.")
         if layer.expert_map is not None:
@@ -1418,6 +1422,7 @@ class Exl3MoEMethod(FusedMoEMethodBase):
         layer: RoutedExperts,
         x: torch.Tensor,
         router_logits: torch.Tensor,
+        input_ids: torch.Tensor | None = None,
     ) -> torch.Tensor:
         raise NotImplementedError("EXL3 MoE uses external routing.")
 

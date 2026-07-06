@@ -54,9 +54,7 @@ MESSAGES = [
     ],
 )
 @pytest.mark.parametrize("enable_prefix_caching", [False, True])
-def test_mtp_speculative_mixed_batch_short_prefill(
-    aphrodite_runner, model_name, enable_prefix_caching
-):
+def test_mtp_speculative_mixed_batch_short_prefill(aphrodite_runner, model_name, enable_prefix_caching):
     """Test to ensure MTP speculative decoding correctly handles
     short prefill chunks that fall below the reorder_batch_threshold."""
 
@@ -102,9 +100,5 @@ def test_mtp_speculative_mixed_batch_short_prefill(
             print(f"Generated text: {generated_text!r}")
             responses.append(generated_text)
 
-        assert "64" in responses[0], (
-            "The first response should contain the correct value of 64."
-        )
-        assert "43" in responses[1], (
-            "The second response should contain the correct value of 42+1=43."
-        )
+        assert "64" in responses[0], "The first response should contain the correct value of 64."
+        assert "43" in responses[1], "The second response should contain the correct value of 42+1=43."

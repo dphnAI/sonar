@@ -41,9 +41,7 @@ class EncoderDecoderTokPrompt(TypedDict):
     decoder_prompt: DecoderTokPrompt | None
 
 
-SingletonTokPrompt: TypeAlias = (
-    DecoderOnlyTokPrompt | EncoderTokPrompt | DecoderTokPrompt
-)
+SingletonTokPrompt: TypeAlias = DecoderOnlyTokPrompt | EncoderTokPrompt | DecoderTokPrompt
 """
 A [`SingletonDictPrompt`][aphrodite.renderers.inputs.preprocess.SingletonDictPrompt]
 that has been tokenized.

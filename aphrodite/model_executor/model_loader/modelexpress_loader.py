@@ -7,7 +7,7 @@ import importlib
 
 from torch import nn
 
-from aphrodite.config import ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig
 from aphrodite.config.load import LoadConfig
 from aphrodite.model_executor.model_loader.base_loader import BaseModelLoader
 from aphrodite.tracing import instrument

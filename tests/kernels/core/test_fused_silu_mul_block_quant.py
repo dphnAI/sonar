@@ -6,7 +6,6 @@ import torch
 import torch.nn.functional as F
 
 import aphrodite._custom_ops as ops
-from tests.kernels.utils import opcheck
 from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
 )
@@ -14,6 +13,7 @@ from aphrodite.model_executor.layers.quantization.utils.int8_utils import (
     per_token_group_quant_int8,
 )
 from aphrodite.platforms import current_platform
+from tests.kernels.utils import opcheck
 
 DTYPES = [torch.float16, torch.bfloat16]
 QUANT_DTYPES = [current_platform.fp8_dtype(), torch.int8]
@@ -42,9 +42,7 @@ def ref_silu_and_mul_per_block_quant(
     silu_out = F.silu(gate) * up
 
     if quant_dtype == current_platform.fp8_dtype():
-        return per_token_group_quant_fp8(
-            silu_out, group_size=group_size, use_ue8m0=False
-        )
+        return per_token_group_quant_fp8(silu_out, group_size=group_size, use_ue8m0=False)
     elif quant_dtype == torch.int8:
         return per_token_group_quant_int8(silu_out, group_size=group_size)
     else:
@@ -91,9 +89,7 @@ def test_silu_and_mul_per_block_quant(
     ref_out, ref_scales = ref_silu_and_mul_per_block_quant(x, quant_dtype, group_size)
 
     # Fused kernel implementation
-    ops_out, ops_scales = ops.silu_and_mul_per_block_quant(
-        x, group_size, quant_dtype, None, is_scale_transposed
-    )
+    ops_out, ops_scales = ops.silu_and_mul_per_block_quant(x, group_size, quant_dtype, None, is_scale_transposed)
 
     # Check for NaN/Inf
     assert not torch.isnan(ops_out.float()).any(), "Kernel output contains NaN"
@@ -167,9 +163,7 @@ def test_silu_block_quant_shapes(
 @pytest.mark.parametrize("dtype", [torch.float16])
 @pytest.mark.parametrize("batch_size", [1, 16, 256])
 @pytest.mark.parametrize("hidden_size", [1024, 5120, 14336])
-def test_silu_block_quant_edge_cases(
-    default_aphrodite_config, dtype: torch.dtype, batch_size: int, hidden_size: int
-):
+def test_silu_block_quant_edge_cases(default_aphrodite_config, dtype: torch.dtype, batch_size: int, hidden_size: int):
     """Test edge cases: single token, large batch, large hidden size."""
     torch.set_default_device("cuda")
     x = torch.randn(batch_size, hidden_size * 2, dtype=dtype, device="cuda")

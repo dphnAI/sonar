@@ -45,9 +45,7 @@ def math_step_prompts():
 
 def step_reward_patch_hf_model(hf_model: HfRunner):
     # Patch the hf_runner to use the step reward function
-    def make_step_rewards(
-        logits: torch.Tensor, token_masks: torch.Tensor
-    ) -> list[list[float]]:
+    def make_step_rewards(logits: torch.Tensor, token_masks: torch.Tensor) -> list[list[float]]:
         probabilities = F.softmax(logits, dim=-1)
         probabilities = probabilities * token_masks.unsqueeze(-1)
 

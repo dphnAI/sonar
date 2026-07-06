@@ -52,9 +52,7 @@ def test_loading_missing_plugin():
     aphrodite_config = AphroditeConfig()
     renderer = MagicMock(spec=BaseRenderer)
     with pytest.raises(ValueError):
-        get_io_processor(
-            aphrodite_config, renderer=renderer, plugin_from_init="wrong_plugin"
-        )
+        get_io_processor(aphrodite_config, renderer=renderer, plugin_from_init="wrong_plugin")
 
 
 def test_loading_plugin(my_plugin_entry_points):
@@ -62,9 +60,7 @@ def test_loading_plugin(my_plugin_entry_points):
     aphrodite_config = MagicMock(spec=AphroditeConfig)
     renderer = MagicMock(spec=BaseRenderer)
 
-    result = get_io_processor(
-        aphrodite_config, renderer=renderer, plugin_from_init="my_plugin"
-    )
+    result = get_io_processor(aphrodite_config, renderer=renderer, plugin_from_init="my_plugin")
 
     assert isinstance(result, DummyIOProcessor)
 

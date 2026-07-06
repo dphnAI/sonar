@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from __future__ import annotations
 
 import platform
 from typing import TYPE_CHECKING, Any
 
 import mlx.core as mx
-from aphrodite.logger import init_logger
 
+from aphrodite.logger import init_logger
 from aphrodite.metal.metal import get_ops
 
 if TYPE_CHECKING:
@@ -31,9 +32,7 @@ def warm_up_paged_cache(cache: MetalPagedKVCache) -> None:
     try:
         ops = get_ops()
     except Exception as e:
-        raise RuntimeError(
-            f"Failed to load Metal kernel: {e}. macOS {macos_version}"
-        ) from e
+        raise RuntimeError(f"Failed to load Metal kernel: {e}. macOS {macos_version}") from e
 
     try:
         # Warm up against the concrete layer-0 cache shape. Per-layer cache
@@ -44,16 +43,12 @@ def warm_up_paged_cache(cache: MetalPagedKVCache) -> None:
         dummy_v = mx.zeros((1, warmup_kv_heads, warmup_head_dim), dtype=cache.dtype)
         dummy_slot = mx.zeros((1,), dtype=mx.int64)
         mx.eval(dummy_k, dummy_v, dummy_slot)
-        ops.reshape_and_cache(
-            dummy_k, dummy_v, cache.key_caches[0], cache.value_caches[0], dummy_slot
-        )
+        ops.reshape_and_cache(dummy_k, dummy_v, cache.key_caches[0], cache.value_caches[0], dummy_slot)
         mx.eval(cache.key_caches[0])
         logger.info("Paged attention Metal kernel warm-up complete")
     except RuntimeError as e:
         if _METAL_LANGUAGE_VERSION_ERROR in str(e):
-            raise RuntimeError(
-                f"Metal kernel incompatible with macOS {macos_version}: {e}"
-            ) from e
+            raise RuntimeError(f"Metal kernel incompatible with macOS {macos_version}: {e}") from e
         raise
 
 
@@ -125,9 +120,7 @@ class MHAPagedAttentionBackend:
             patch_model_attention_metal_kernel,
         )
 
-        return patch_model_attention_metal_kernel(
-            model, cache, self._block_size, cache_idx_map=self._cache_idx_map
-        )
+        return patch_model_attention_metal_kernel(model, cache, self._block_size, cache_idx_map=self._cache_idx_map)
 
     def warm_up(self) -> None:
         warm_up_paged_cache(self._require_initialized("warm_up"))

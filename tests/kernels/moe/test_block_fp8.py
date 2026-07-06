@@ -5,16 +5,6 @@ import pytest
 import torch
 
 import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from tests.kernels.moe.utils import (
-    make_dummy_moe_config,
-    make_test_quant_config,
-    make_test_weights,
-    modular_triton_fused_moe,
-)
-from tests.kernels.quant_utils import (
-    native_per_token_group_quant_fp8,
-    native_w8a8_block_matmul,
-)
 from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.model_executor.layers.fused_moe import (
@@ -40,6 +30,16 @@ from aphrodite.utils.deep_gemm import (
     is_deep_gemm_e8m0_used,
 )
 from aphrodite.utils.import_utils import has_deep_gemm
+from tests.kernels.moe.utils import (
+    make_dummy_moe_config,
+    make_test_quant_config,
+    make_test_weights,
+    modular_triton_fused_moe,
+)
+from tests.kernels.quant_utils import (
+    native_per_token_group_quant_fp8,
+    native_w8a8_block_matmul,
+)
 
 dg_available = has_deep_gemm()
 
@@ -129,9 +129,7 @@ def torch_w8a8_block_fp8_moe(a, w1, w2, w1_s, w2_s, topk_weight, topk_ids, block
             out[mask] = native_w8a8_block_matmul(
                 act_out_q, w2[i], act_out_s, w2_s[i], block_shape, output_dtype=a.dtype
             )
-    return (
-        out.view(B, -1, w2.shape[1]) * topk_weight.view(B, -1, 1).to(out.dtype)
-    ).sum(dim=1)
+    return (out.view(B, -1, w2.shape[1]) * topk_weight.view(B, -1, 1).to(out.dtype)).sum(dim=1)
 
 
 # Skip all tests if CUDA is not available
@@ -150,9 +148,7 @@ def setup_cuda():
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("seed", SEEDS)
 @torch.inference_mode()
-def test_w8a8_block_fp8_fused_moe(
-    M, N, K, E, topk, block_size, dtype, seed, monkeypatch, workspace_init
-):
+def test_w8a8_block_fp8_fused_moe(M, N, K, E, topk, block_size, dtype, seed, monkeypatch, workspace_init):
     if topk > E:
         pytest.skip(f"Skipping test; topk={topk} > E={E}")
 
@@ -188,9 +184,7 @@ def test_w8a8_block_fp8_fused_moe(
             block_size,
         )
 
-        out = fused_experts(
-            a, w1, w2, topk_weights, topk_ids, quant_config=quant_config
-        )
+        out = fused_experts(a, w1, w2, topk_weights, topk_ids, quant_config=quant_config)
 
         m_out = m_fused_moe.apply(
             a,
@@ -286,14 +280,10 @@ def test_w8a8_block_fp8_deep_gemm_fused_moe(M, N, K, E, topk, seed, monkeypatch)
 
     # Set the context to avoid lots of warning spam.
     with set_current_aphrodite_config(aphrodite_config):
-        ref_out = torch_w8a8_block_fp8_moe(
-            a, w1, w2, w1_s, w2_s, topk_weights, topk_ids, block_size
-        )
+        ref_out = torch_w8a8_block_fp8_moe(a, w1, w2, w1_s, w2_s, topk_weights, topk_ids, block_size)
 
         if use_compile:
-            deep_gemm_moe_fp8_fn = torch.compile(
-                deep_gemm_moe_fp8, backend="inductor", fullgraph=True
-            )
+            deep_gemm_moe_fp8_fn = torch.compile(deep_gemm_moe_fp8, backend="inductor", fullgraph=True)
             torch._dynamo.mark_dynamic(a, 0)
             torch._dynamo.mark_dynamic(topk_weights, 0)
             torch._dynamo.mark_dynamic(topk_ids, 0)
@@ -307,9 +297,7 @@ def test_w8a8_block_fp8_deep_gemm_fused_moe(M, N, K, E, topk, seed, monkeypatch)
             stream = torch.cuda.Stream()
             graph = torch.cuda.CUDAGraph()
             with torch.cuda.graph(graph, stream=stream):
-                out = deep_gemm_moe_fp8_fn(
-                    a, w1, w2, w1_s, w2_s, topk_weights, topk_ids
-                )
+                out = deep_gemm_moe_fp8_fn(a, w1, w2, w1_s, w2_s, topk_weights, topk_ids)
             torch.accelerator.synchronize()
             graph.replay()
             torch.accelerator.synchronize()

@@ -91,10 +91,7 @@ def merge_attn_states_kernel(
             tl.store(output_lse + head_idx * num_tokens + token_idx, s_lse)
 
         s_out = tl.load(
-            suffix_output
-            + token_idx * num_heads * prefix_head_stride
-            + head_idx * prefix_head_stride
-            + head_arange,
+            suffix_output + token_idx * num_heads * prefix_head_stride + head_idx * prefix_head_stride + head_arange,
             mask=head_mask,
         )
 
@@ -104,10 +101,7 @@ def merge_attn_states_kernel(
             s_out = s_out.to(output.dtype.element_ty)
 
         tl.store(
-            output
-            + token_idx * num_heads * output_head_stride
-            + head_idx * output_head_stride
-            + head_arange,
+            output + token_idx * num_heads * output_head_stride + head_idx * output_head_stride + head_arange,
             s_out,
             mask=head_mask,
         )
@@ -139,17 +133,11 @@ def merge_attn_states_kernel(
         tl.store(output_lse + head_idx * num_tokens + token_idx, out_lse)
 
     p_out = tl.load(
-        prefix_output
-        + token_idx * num_heads * prefix_head_stride
-        + head_idx * prefix_head_stride
-        + head_arange,
+        prefix_output + token_idx * num_heads * prefix_head_stride + head_idx * prefix_head_stride + head_arange,
         mask=head_mask,
     )
     s_out = tl.load(
-        suffix_output
-        + token_idx * num_heads * prefix_head_stride
-        + head_idx * prefix_head_stride
-        + head_arange,
+        suffix_output + token_idx * num_heads * prefix_head_stride + head_idx * prefix_head_stride + head_arange,
         mask=head_mask,
     )
 
@@ -166,10 +154,7 @@ def merge_attn_states_kernel(
         out = out.to(output.dtype.element_ty)
 
     tl.store(
-        output
-        + token_idx * num_heads * output_head_stride
-        + head_idx * output_head_stride
-        + head_arange,
+        output + token_idx * num_heads * output_head_stride + head_idx * output_head_stride + head_arange,
         out,
         mask=head_mask,
     )

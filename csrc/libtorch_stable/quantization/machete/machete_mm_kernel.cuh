@@ -127,7 +127,7 @@ struct MacheteKernelTemplate {
   // Currently only supports float scales
   using ChTokScalesEpilogue =
       typename aphrodite::c3x::ScaledEpilogue<ElementAccumulator, ElementD,
-                                         TileShape>;
+                                              TileShape>;
   static_assert((with_channel_scales || with_token_scales) ||
                     (std::is_same_v<ElementSChannel, float> &&
                      std::is_same_v<ElementSToken, float>),

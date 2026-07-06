@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Contiguous KV cache utilities (non-paged code path).
 
 Prefix caching (PrefixCacheManager) and batched KV cache merge/extract
@@ -22,9 +23,9 @@ from mlx_lm.models.cache import (
     RotatingKVCache,
     make_prompt_cache,
 )
-from aphrodite.logger import init_logger
 
 import aphrodite.metal.envs as envs
+from aphrodite.logger import init_logger
 from aphrodite.metal.v1.model_adapter import DefaultModelAdapter, ModelAdapter
 
 logger = init_logger(__name__)
@@ -64,8 +65,7 @@ def _get_prefix_cache_max_bytes() -> int:
             fraction = float(fraction_str)
             if not math.isfinite(fraction) or fraction <= 0 or fraction > 1:
                 logger.warning(
-                    "APHRODITE_METAL_PREFIX_CACHE_FRACTION=%r out of range (0, 1], "
-                    "using default %.2f",
+                    "APHRODITE_METAL_PREFIX_CACHE_FRACTION=%r out of range (0, 1], using default %.2f",
                     fraction_str,
                     _PREFIX_CACHE_DEFAULT_FRACTION,
                 )
@@ -142,9 +142,7 @@ class PrefixCacheManager:
     ):
         self._model_adapter = model_adapter or DefaultModelAdapter()
         self._cache: dict[bytes, CachedPrefix] = {}
-        self._max_bytes = (
-            max_bytes if max_bytes is not None else _get_prefix_cache_max_bytes()
-        )
+        self._max_bytes = max_bytes if max_bytes is not None else _get_prefix_cache_max_bytes()
         self._current_bytes = 0
         self._hits = 0
         self._misses = 0
@@ -193,7 +191,7 @@ class PrefixCacheManager:
         if prefix_hash in self._cache:
             return
 
-        cache_state = []
+        cache_state: list[tuple[Any, Any] | None] = []
         for layer_cache in cache:
             if isinstance(layer_cache, KVCache):
                 k = layer_cache.state[0]
@@ -223,9 +221,7 @@ class PrefixCacheManager:
         )
         self._current_bytes += entry_bytes
 
-    def restore_cache(
-        self, cached: CachedPrefix, model: Any, is_vlm: bool
-    ) -> list[AnyCache]:
+    def restore_cache(self, cached: CachedPrefix, model: Any, is_vlm: bool) -> list[AnyCache]:
         """Restore a cached prefix to a fresh KVCache.
 
         Only KVCache layers are restored. RotatingKVCache / ArraysCache layers
@@ -234,13 +230,16 @@ class PrefixCacheManager:
         cache_model = self._model_adapter.text_model(model) if is_vlm else model
         cache = make_prompt_cache(cache_model)
         for i, layer_cache in enumerate(cache):
-            if i < len(cached.cache_state) and cached.cache_state[i] is not None:
-                if isinstance(layer_cache, KVCache):
-                    k, v = cached.cache_state[i]
-                    layer_cache.state = [mx.array(k), mx.array(v)]
-                    # Keep RoPE position correct even if KVCache.state setter
-                    # behavior changes in future mlx-lm versions.
-                    layer_cache.offset = int(k.shape[2])
+            if i >= len(cached.cache_state) or not isinstance(layer_cache, KVCache):
+                continue
+            entry = cached.cache_state[i]
+            if entry is None:
+                continue
+            k, v = entry
+            layer_cache.state = [mx.array(k), mx.array(v)]
+            # Keep RoPE position correct even if KVCache.state setter
+            # behavior changes in future mlx-lm versions.
+            layer_cache.offset = int(k.shape[2])
         return cache
 
     @property
@@ -303,9 +302,7 @@ def _extract_arrays_cache(batch_cache: ArraysCache, idx: int) -> ArraysCache:
     """Extract a single request's ArraysCache from a batched ArraysCache."""
     state = batch_cache.state
     extracted = ArraysCache(len(state))
-    extracted.state = [
-        None if value is None else value[idx : idx + 1] for value in state
-    ]
+    extracted.state = [None if value is None else value[idx : idx + 1] for value in state]
     return extracted
 
 
@@ -328,14 +325,10 @@ def _merge_rotating_kv_caches(
         raise ValueError("caches must be non-empty")
 
     if any(c.keys is None or c.values is None for c in caches):
-        raise ValueError(
-            "Cannot merge unpopulated RotatingKVCache (keys/values is None)"
-        )
+        raise ValueError("Cannot merge unpopulated RotatingKVCache (keys/values is None)")
 
     if not all(c.max_size == caches[0].max_size for c in caches):
-        raise ValueError(
-            "BatchRotatingKVCache can only merge caches with the same maximum size"
-        )
+        raise ValueError("BatchRotatingKVCache can only merge caches with the same maximum size")
 
     # Pre-compute temporal-ordered keys/values and trim to the effective
     # sliding-window length.  ``_temporal_order`` may return an array larger
@@ -405,27 +398,21 @@ def _merge_kv_caches(
             arrays_caches: list[ArraysCache] = []
             for cache in layer_caches:
                 if not isinstance(cache, ArraysCache):
-                    raise TypeError(
-                        "Mixed cache types in a single layer: expected ArraysCache"
-                    )
+                    raise TypeError("Mixed cache types in a single layer: expected ArraysCache")
                 arrays_caches.append(cache)
             batch_cache = _merge_arrays_caches(arrays_caches)
         elif isinstance(layer_caches[0], RotatingKVCache):
             rotating_caches: list[RotatingKVCache] = []
             for cache in layer_caches:
                 if not isinstance(cache, RotatingKVCache):
-                    raise TypeError(
-                        "Mixed cache types in a single layer: expected RotatingKVCache"
-                    )
+                    raise TypeError("Mixed cache types in a single layer: expected RotatingKVCache")
                 rotating_caches.append(cache)
             batch_cache = _merge_rotating_kv_caches(rotating_caches)
         elif isinstance(layer_caches[0], KVCache):
             kv_caches: list[KVCache] = []
             for cache in layer_caches:
                 if not isinstance(cache, KVCache):
-                    raise TypeError(
-                        "Mixed cache types in a single layer: expected KVCache"
-                    )
+                    raise TypeError("Mixed cache types in a single layer: expected KVCache")
                 kv_caches.append(cache)
             batch_cache = BatchKVCache.merge(kv_caches)
         else:

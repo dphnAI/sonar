@@ -43,11 +43,7 @@ class KimiAudioProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: TextInput
-        | PreTokenizedInput
-        | list[TextInput]
-        | list[PreTokenizedInput]
-        | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         audio: AudioInput | None = None,
         return_tensors: str = "pt",
         **kwargs,
@@ -56,9 +52,7 @@ class KimiAudioProcessor(ProcessorMixin):
             if not isinstance(text, list):
                 text = [text]
 
-            text_inputs = self.tokenizer(
-                text, return_tensors=return_tensors, padding=True
-            )
+            text_inputs = self.tokenizer(text, return_tensors=return_tensors, padding=True)
         else:
             text_inputs = {}
 
@@ -74,9 +68,7 @@ class KimiAudioProcessor(ProcessorMixin):
                 length = aud.shape[-1]
                 if length % hop_length != 0:
                     pad_length = hop_length - (length % hop_length)
-                    aud = np.pad(
-                        aud, (0, pad_length), mode="constant", constant_values=0
-                    )
+                    aud = np.pad(aud, (0, pad_length), mode="constant", constant_values=0)
                 padded_audio.append(aud)
 
             # Use feature_extractor directly like Qwen3ASR does
@@ -89,13 +81,9 @@ class KimiAudioProcessor(ProcessorMixin):
             )
             # Rename to match Kimi-Audio expectations
             if "input_features" in audio_inputs:
-                audio_inputs["whisper_input_features"] = audio_inputs.pop(
-                    "input_features"
-                )
+                audio_inputs["whisper_input_features"] = audio_inputs.pop("input_features")
             if "attention_mask" in audio_inputs:
-                audio_inputs["feature_attention_mask"] = audio_inputs.pop(
-                    "attention_mask"
-                )
+                audio_inputs["feature_attention_mask"] = audio_inputs.pop("attention_mask")
         else:
             audio_inputs = {}
 

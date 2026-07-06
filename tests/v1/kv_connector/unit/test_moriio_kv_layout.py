@@ -23,15 +23,9 @@ if not (current_platform.is_rocm() and mori_available):
         allow_module_level=True,
     )
 
-moriio_common = importlib.import_module(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common"
-)
-moriio_engine = importlib.import_module(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine"
-)
-moriio_layout = importlib.import_module(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_layout"
-)
+moriio_common = importlib.import_module("aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_common")
+moriio_engine = importlib.import_module("aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine")
+moriio_layout = importlib.import_module("aphrodite.distributed.kv_transfer.kv_connector.v1.moriio.moriio_layout")
 msgpack = importlib.import_module("msgpack")
 
 ROLE = moriio_common.ROLE
@@ -44,9 +38,7 @@ MoRIIOWrapper = moriio_engine.MoRIIOWrapper
 MoRIIOWriter = moriio_engine.MoRIIOWriter
 
 
-def _full_spec(
-    block_size: int = 4, num_kv_heads: int = 2, head_size: int = 3
-) -> FullAttentionSpec:
+def _full_spec(block_size: int = 4, num_kv_heads: int = 2, head_size: int = 3) -> FullAttentionSpec:
     return FullAttentionSpec(
         block_size=block_size,
         num_kv_heads=num_kv_heads,
@@ -288,9 +280,7 @@ def test_kernel_block_layout_without_spec_dimensions_rejects_ambiguous_axes():
     )
 
     with pytest.raises(ValueError, match="Ambiguous MoRIIO kernel-block"):
-        moriio_layout.get_layer_transfer_geometry(
-            "layer", cache, worker.layer_to_spec, remote_num_blocks=8
-        )
+        moriio_layout.get_layer_transfer_geometry("layer", cache, worker.layer_to_spec, remote_num_blocks=8)
 
 
 def test_mixed_layers_compute_distinct_offsets_per_layer():
@@ -350,9 +340,7 @@ def test_write_transfer_plan_caches_offsets_per_geometry():
         kv_caches: dict[str, torch.Tensor]
         layer_name_to_local_kv_cache_metadata: dict[str, list[Any]]
 
-        def _compute_block_transfer_offsets(
-            self, layer_name, local_block_ids, remote_block_ids, remote_moriio_meta
-        ):
+        def _compute_block_transfer_offsets(self, layer_name, local_block_ids, remote_block_ids, remote_moriio_meta):
             calls.append(layer_name)
             call_id = len(calls)
             return ([call_id], [call_id + 10], [call_id + 20])
@@ -449,9 +437,7 @@ def test_write_completion_notifies_once_after_all_sealed_writes_finish():
             message_type=None,
             message_fields=None,
         ):
-            self.notifications.append(
-                (transfer_id, remote_ip, remote_port, message_type, message_fields)
-            )
+            self.notifications.append((transfer_id, remote_ip, remote_port, message_type, message_fields))
 
     wrapper = FakeWrapper()
     request_info = RemoteAllocInfo(block_ids=[4, 5], writes_expected=2)
@@ -460,9 +446,7 @@ def test_write_completion_notifies_once_after_all_sealed_writes_finish():
     request_info.completion_remote_notify_port = 7000
     request_info.completion_remote_ip = "127.0.0.1"
     wrapper.done_remote_allocate_req_dict["xfer"] = request_info
-    writer = _writer_with_fake_worker(
-        SimpleNamespace(moriio_wrapper=wrapper, tp_rank=2)
-    )
+    writer = _writer_with_fake_worker(SimpleNamespace(moriio_wrapper=wrapper, tp_rank=2))
     writer._scheduled_writes["xfer"] = 2
     writer._scheduled_layers["xfer"] = {"dense0", "indexer"}
     writer._sealed_writes["xfer"] = 2
@@ -697,15 +681,11 @@ def test_registration_regions_do_not_split_interleaved_or_mla_cache():
         },
     )
 
-    separated_regions = moriio_layout.iter_layer_registration_regions(
-        "separated", separated, worker.layer_to_spec
-    )
+    separated_regions = moriio_layout.iter_layer_registration_regions("separated", separated, worker.layer_to_spec)
     interleaved_regions = moriio_layout.iter_layer_registration_regions(
         "interleaved", interleaved, worker.layer_to_spec
     )
-    indexer_regions = moriio_layout.iter_layer_registration_regions(
-        "indexer", indexer, worker.layer_to_spec
-    )
+    indexer_regions = moriio_layout.iter_layer_registration_regions("indexer", indexer, worker.layer_to_spec)
 
     assert [region[0].data_ptr() for region in separated_regions] == [
         separated[0].data_ptr(),
@@ -727,9 +707,7 @@ def test_registration_regions_use_layer_num_blocks():
     cache = torch.empty((4, 2, 4, 2, 3), dtype=torch.bfloat16)
     worker = _worker({"layer": cache}, {"layer": _full_spec()}, num_blocks=8)
 
-    regions = moriio_layout.iter_layer_registration_regions(
-        "layer", cache, worker.layer_to_spec
-    )
+    regions = moriio_layout.iter_layer_registration_regions("layer", cache, worker.layer_to_spec)
 
     assert len(regions) == 1
     assert regions[0][1] == 4 * 2 * 48

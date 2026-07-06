@@ -83,8 +83,7 @@ def _check_aphrodite_model_forward(model: type[object] | object) -> bool:
 
     if missing_kws and (isinstance(model, type) and issubclass(model, nn.Module)):
         logger.warning(
-            "The model (%s) is missing "
-            "Aphrodite-specific keywords from its `forward` method: %s",
+            "The model (%s) is missing Aphrodite-specific keywords from its `forward` method: %s",
             model,
             missing_kws,
         )

@@ -88,15 +88,11 @@ class RocmAttentionMetadataBuilder(AttentionMetadataBuilder[RocmAttentionMetadat
         self.block_size = kv_cache_spec.block_size
 
         model_config = aphrodite_config.model_config
-        self.num_heads_q = model_config.get_num_attention_heads(
-            aphrodite_config.parallel_config
-        )
+        self.num_heads_q = model_config.get_num_attention_heads(aphrodite_config.parallel_config)
         self.num_heads_kv = model_config.get_num_kv_heads(aphrodite_config.parallel_config)
         self.headdim = model_config.get_head_size()
 
-    def build_for_cudagraph_capture(
-        self, common_attn_metadata: CommonAttentionMetadata
-    ) -> RocmAttentionMetadata:
+    def build_for_cudagraph_capture(self, common_attn_metadata: CommonAttentionMetadata) -> RocmAttentionMetadata:
         attn_metadata = self.build(0, common_attn_metadata)
         # When doing full graph capture, setting seq_lens to
         # max_model_len will cause graph capture to be extremely
@@ -129,12 +125,8 @@ class RocmAttentionMetadataBuilder(AttentionMetadataBuilder[RocmAttentionMetadat
         use_cascade = common_prefix_len > 0
 
         if use_cascade:
-            cu_prefix_query_lens = torch.tensor(
-                [0, num_actual_tokens], dtype=torch.int32, device=self.device
-            )
-            prefix_kv_lens = torch.tensor(
-                [common_prefix_len], dtype=torch.int32, device=self.device
-            )
+            cu_prefix_query_lens = torch.tensor([0, num_actual_tokens], dtype=torch.int32, device=self.device)
+            prefix_kv_lens = torch.tensor([common_prefix_len], dtype=torch.int32, device=self.device)
             suffix_kv_lens = common_attn_metadata.seq_lens.cpu() - common_prefix_len
             suffix_kv_lens = suffix_kv_lens.to(self.device)
         else:
@@ -330,9 +322,7 @@ class RocmAttentionImpl(AttentionImpl):
         """
         # For encoder attention, process FP8 quantization if needed
         if is_quantized_kv_cache(self.kv_cache_dtype):
-            raise NotImplementedError(
-                "quantization is not supported for encoder attention"
-            )
+            raise NotImplementedError("quantization is not supported for encoder attention")
 
         # Use encoder-specific metadata for sequence information
         query_start_loc = attn_metadata.query_start_loc
@@ -383,8 +373,7 @@ class RocmAttentionImpl(AttentionImpl):
         """
         if output_block_scale is not None:
             raise NotImplementedError(
-                "fused block_scale output quantization is not yet supported"
-                " for RocmAttentionImpl"
+                "fused block_scale output quantization is not yet supported for RocmAttentionImpl"
             )
 
         if attn_metadata is None:
@@ -414,9 +403,7 @@ class RocmAttentionImpl(AttentionImpl):
                 layer,
             )
 
-        key_cache, value_cache = PagedAttention.split_kv_cache(
-            kv_cache, self.num_kv_heads, self.head_size
-        )
+        key_cache, value_cache = PagedAttention.split_kv_cache(kv_cache, self.num_kv_heads, self.head_size)
 
         if is_quantized_kv_cache(self.kv_cache_dtype):
             key_cache = key_cache.view(self.fp8_dtype)
@@ -430,8 +417,7 @@ class RocmAttentionImpl(AttentionImpl):
             # in full precision.
             if query.dtype == self.fp8_dtype and layer._q_scale_float != 1.0:
                 raise NotImplementedError(
-                    "A non 1.0 q_scale with an fp8 query is not currently "
-                    "supported by RocmAttentionImpl."
+                    "A non 1.0 q_scale with an fp8 query is not currently supported by RocmAttentionImpl."
                 )
 
         cu_seqlens_q = attn_metadata.query_start_loc
@@ -476,9 +462,7 @@ class RocmAttentionImpl(AttentionImpl):
     ):
         if self.attn_type in (AttentionType.ENCODER_ONLY, AttentionType.ENCODER):
             return
-        key_cache, value_cache = PagedAttention.split_kv_cache(
-            kv_cache, self.num_kv_heads, self.head_size
-        )
+        key_cache, value_cache = PagedAttention.split_kv_cache(kv_cache, self.num_kv_heads, self.head_size)
 
         # Reshape the input keys and values and store them in the cache.
         # Get the actual block_size from value_cache

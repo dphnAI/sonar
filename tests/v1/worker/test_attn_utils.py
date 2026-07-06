@@ -47,9 +47,7 @@ def test_reshape_padded_flash_attention_kv_cache_strides_by_page():
     )
     assert spec.real_page_size_bytes == 256
 
-    raw_tensors = {
-        "layer": torch.zeros(spec.page_size_bytes * num_blocks, dtype=torch.int8)
-    }
+    raw_tensors = {"layer": torch.zeros(spec.page_size_bytes * num_blocks, dtype=torch.int8)}
     attn_groups = [
         AttentionGroup(
             backend=FakeFlashAttentionBackend,
@@ -71,10 +69,7 @@ def test_reshape_padded_flash_attention_kv_cache_strides_by_page():
     assert kv_cache.stride(0) == spec.page_size_bytes // 4
     assert kv_cache.stride(1) == spec.real_page_size_bytes // 2 // 4
     assert kv_cache[1, 0].storage_offset() == spec.page_size_bytes // 4
-    assert (
-        kv_cache[1, 1].storage_offset()
-        == (spec.page_size_bytes + spec.real_page_size_bytes // 2) // 4
-    )
+    assert kv_cache[1, 1].storage_offset() == (spec.page_size_bytes + spec.real_page_size_bytes // 2) // 4
 
 
 def test_reshape_padded_hnd_flash_attention_kv_cache_strides_by_page():
@@ -88,9 +83,7 @@ def test_reshape_padded_hnd_flash_attention_kv_cache_strides_by_page():
     )
     assert spec.real_page_size_bytes == 768
 
-    raw_tensors = {
-        "layer": torch.zeros(spec.page_size_bytes * num_blocks, dtype=torch.int8)
-    }
+    raw_tensors = {"layer": torch.zeros(spec.page_size_bytes * num_blocks, dtype=torch.int8)}
     attn_groups = [
         AttentionGroup(
             backend=FakeHNDFlashAttentionBackend,
@@ -114,10 +107,7 @@ def test_reshape_padded_hnd_flash_attention_kv_cache_strides_by_page():
     assert kv_cache.stride(2) == 2
     assert kv_cache.stride(3) == spec.block_size * spec.head_size
     assert kv_cache[1, 0].storage_offset() == spec.page_size_bytes // 4
-    assert (
-        kv_cache[1, 1].storage_offset()
-        == (spec.page_size_bytes + spec.real_page_size_bytes // 2) // 4
-    )
+    assert kv_cache[1, 1].storage_offset() == (spec.page_size_bytes + spec.real_page_size_bytes // 2) // 4
     assert (
         kv_cache[1, 1, 3, 2].storage_offset()
         == (
@@ -159,9 +149,7 @@ def test_reshape_padded_diff_kv_cache_does_not_infer_kv_dim():
         page_size_padded=384,
     )
 
-    raw_tensors = {
-        "layer": torch.zeros(spec.page_size_bytes * num_blocks, dtype=torch.int8)
-    }
+    raw_tensors = {"layer": torch.zeros(spec.page_size_bytes * num_blocks, dtype=torch.int8)}
     attn_groups = [
         AttentionGroup(
             backend=FakeDiffKVBackend,
@@ -216,9 +204,7 @@ def test_reshape_padded_quantized_kv_cache_preserves_scale_stride():
     assert spec.real_page_size_bytes == 128
     assert spec.page_size_bytes == 384
 
-    raw_tensors = {
-        "layer": torch.zeros(spec.page_size_bytes * num_blocks, dtype=torch.int8)
-    }
+    raw_tensors = {"layer": torch.zeros(spec.page_size_bytes * num_blocks, dtype=torch.int8)}
     attn_groups = [
         AttentionGroup(
             backend=FakePerTokenScaleBackend,

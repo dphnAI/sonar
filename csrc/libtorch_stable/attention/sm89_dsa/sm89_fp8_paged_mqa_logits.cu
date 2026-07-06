@@ -1,18 +1,19 @@
-// Paged fp8 MQA indexer logits for decode on sm89 (Ada), plus the (request, page) partition
-// table that schedules it.
+// Paged fp8 MQA indexer logits for decode on sm89 (Ada), plus the (request,
+// page) partition table that schedules it.
 //
-// logits[m, n] = sum_h w[m, h] * relu((q[m, h, :] . k[n, :]) * k_scale[n]),  n in [0, ke_m)
-// h ranges over NUM_HEADS indexer heads (32 or 64, templated).
+// logits[m, n] = sum_h w[m, h] * relu((q[m, h, :] . k[n, :]) * k_scale[n]),  n
+// in [0, ke_m) h ranges over NUM_HEADS indexer heads (32 or 64, templated).
 //
-// An indexer K-cache page (block_size=64, 132 B/token, SoA per page) holds 64 keys x 128 fp8
-// e4m3, key(token)-major, in bytes [0, 8192), then 64 fp32 per-token scales in
-// bytes [8192, 8448).
+// An indexer K-cache page (block_size=64, 132 B/token, SoA per page) holds 64
+// keys x 128 fp8 e4m3, key(token)-major, in bytes [0, 8192), then 64 fp32
+// per-token scales in bytes [8192, 8448).
 //
-// P persistent CTAs; the metadata kernel builds a (P+1, 2) i32 partition table splitting the
-// global page-count prefix sum, and CTA p owns work units [sched[p], sched[p+1]) in
-// (request, page) order. Per page a 4-stage cp.async ring feeds fp8 mma m16n8k32 (fp32
-// accumulate), then an in-register epilogue (scale, relu, weight, fixed-order reduction)
-// and 64 fp32 stores. No float atomics; deterministic.
+// P persistent CTAs; the metadata kernel builds a (P+1, 2) i32 partition table
+// splitting the global page-count prefix sum, and CTA p owns work units
+// [sched[p], sched[p+1]) in (request, page) order. Per page a 4-stage cp.async
+// ring feeds fp8 mma m16n8k32 (fp32 accumulate), then an in-register epilogue
+// (scale, relu, weight, fixed-order reduction) and 64 fp32 stores. No float
+// atomics; deterministic.
 
 // clang-format off
 

@@ -91,14 +91,11 @@ class NCCLWeightTransferUpdateInfo(WeightTransferUpdateInfo):
             )
         if len(self.shapes) != num_params:
             raise ValueError(
-                f"`shapes` should be of the same size as `names`: "
-                f"got {len(self.shapes)} and {len(self.names)}"
+                f"`shapes` should be of the same size as `names`: got {len(self.shapes)} and {len(self.names)}"
             )
 
 
-class NCCLWeightTransferEngine(
-    WeightTransferEngine[NCCLWeightTransferInitInfo, NCCLWeightTransferUpdateInfo]
-):
+class NCCLWeightTransferEngine(WeightTransferEngine[NCCLWeightTransferInitInfo, NCCLWeightTransferUpdateInfo]):
     """
     Weight transfer engine using NCCL for communication between trainer and workers.
 
@@ -130,9 +127,7 @@ class NCCLWeightTransferEngine(
             init_info: NCCL initialization info containing master address, port,
                       rank offset, and world size
         """
-        self.model_update_group = worker_init_process_group(
-            init_info, self.parallel_config
-        )
+        self.model_update_group = worker_init_process_group(init_info, self.parallel_config)
 
     def start_weight_update(self) -> None:
         """Initialize layerwise reloading for the incoming checkpoint weights."""
@@ -163,17 +158,12 @@ class NCCLWeightTransferEngine(
                         and packed flag
         """
         if self.model_update_group is None:
-            raise RuntimeError(
-                "NCCL weight transfer not initialized. "
-                "Call init_transfer_engine() first."
-            )
+            raise RuntimeError("NCCL weight transfer not initialized. Call init_transfer_engine() first.")
 
         if update_info.packed:
             # Build iterator of (name, (shape, dtype)) from update_info
             def state_dict_info_iterator():
-                for name, dtype_name, shape in zip(
-                    update_info.names, update_info.dtype_names, update_info.shapes
-                ):
+                for name, dtype_name, shape in zip(update_info.names, update_info.dtype_names, update_info.shapes):
                     dtype = getattr(torch, dtype_name)
                     yield (name, (shape, dtype))
 
@@ -188,14 +178,10 @@ class NCCLWeightTransferEngine(
             )
         else:
             # Use simple one-by-one broadcasting
-            for name, dtype_name, shape in zip(
-                update_info.names, update_info.dtype_names, update_info.shapes
-            ):
+            for name, dtype_name, shape in zip(update_info.names, update_info.dtype_names, update_info.shapes):
                 dtype = getattr(torch, dtype_name)
                 weight = torch.empty(shape, dtype=dtype, device=self.device)
-                self.model_update_group.broadcast(
-                    weight, src=0, stream=torch.cuda.current_stream()
-                )
+                self.model_update_group.broadcast(weight, src=0, stream=torch.cuda.current_stream())
                 self.model.load_weights([(name, weight)])
                 del weight
 

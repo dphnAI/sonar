@@ -133,8 +133,7 @@ class ColPaliModel(
             hidden_size = config.text_config.hidden_size
         if hidden_size is None:
             raise ValueError(
-                "Unable to determine text hidden size from config. "
-                "Expected 'hidden_size' or 'text_config.hidden_size'."
+                "Unable to determine text hidden size from config. Expected 'hidden_size' or 'text_config.hidden_size'."
             )
         self._proj_hidden_size = hidden_size
 

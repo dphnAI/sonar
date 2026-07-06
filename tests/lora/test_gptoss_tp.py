@@ -67,12 +67,8 @@ def generate_and_test(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> None:
         PROMPT_TEMPLATE.format(
             context="Give the average number of working horses on farms with more than 5000 total horses."  # noqa: E501
         ),  # noqa: E501
-        PROMPT_TEMPLATE.format(
-            context="What are the maximum and minimum number of cows across all farms."
-        ),
-        PROMPT_TEMPLATE.format(
-            context="Return the maximum and minimum number of cows across all farms."
-        ),
+        PROMPT_TEMPLATE.format(context="What are the maximum and minimum number of cows across all farms."),
+        PROMPT_TEMPLATE.format(context="Return the maximum and minimum number of cows across all farms."),
     ]
     sampling_params = aphrodite.SamplingParams(temperature=0, max_tokens=64)
     outputs = llm.generate(
@@ -99,9 +95,7 @@ def generate_and_test(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> None:
         False,
         pytest.param(
             True,
-            marks=pytest.mark.skipif(
-                current_platform.is_rocm(), reason="marlin not supported"
-            ),
+            marks=pytest.mark.skipif(current_platform.is_rocm(), reason="marlin not supported"),
         ),
     ],
 )
@@ -139,9 +133,7 @@ def test_gpt_oss_lora(
         False,
         pytest.param(
             True,
-            marks=pytest.mark.skipif(
-                current_platform.is_rocm(), reason="marlin not supported"
-            ),
+            marks=pytest.mark.skipif(current_platform.is_rocm(), reason="marlin not supported"),
         ),
     ],
 )

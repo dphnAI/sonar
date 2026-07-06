@@ -183,12 +183,8 @@ def test_run_aphrodite_dp_server_uses_python_server_by_default(monkeypatch):
     monkeypatch.setattr(dp_sup, "set_process_title", lambda *_args: None)
     monkeypatch.setattr(dp_sup, "decorate_logs", lambda *_args: None)
     monkeypatch.setattr(dp_sup.envs, "APHRODITE_RUST_FRONTEND_PATH", None, raising=False)
-    monkeypatch.setattr(
-        dp_sup, "_run_python_aphrodite_dp_server", lambda _args: calls.append("python")
-    )
-    monkeypatch.setattr(
-        dp_sup, "_run_rust_aphrodite_dp_server", lambda _args: calls.append("rust")
-    )
+    monkeypatch.setattr(dp_sup, "_run_python_aphrodite_dp_server", lambda _args: calls.append("python"))
+    monkeypatch.setattr(dp_sup, "_run_rust_aphrodite_dp_server", lambda _args: calls.append("rust"))
 
     dp_sup._run_aphrodite_dp_server(_make_unit_args(data_parallel_rank=4))
 
@@ -207,12 +203,8 @@ def test_run_aphrodite_dp_server_uses_rust_frontend_when_enabled(monkeypatch):
         "/tmp/aphrodite-rs",
         raising=False,
     )
-    monkeypatch.setattr(
-        dp_sup, "_run_python_aphrodite_dp_server", lambda _args: calls.append("python")
-    )
-    monkeypatch.setattr(
-        dp_sup, "_run_rust_aphrodite_dp_server", lambda _args: calls.append("rust")
-    )
+    monkeypatch.setattr(dp_sup, "_run_python_aphrodite_dp_server", lambda _args: calls.append("python"))
+    monkeypatch.setattr(dp_sup, "_run_rust_aphrodite_dp_server", lambda _args: calls.append("rust"))
 
     dp_sup._run_aphrodite_dp_server(_make_unit_args(data_parallel_rank=4))
 
@@ -247,9 +239,7 @@ async def test_handles_child_exit(
 ):
     supervisor = DPSupervisor(_make_unit_args())
     supervisor._processes = [
-        SimpleNamespace(
-            name="APIServer_DPRank_4", exitcode=None, is_alive=lambda: True
-        ),
+        SimpleNamespace(name="APIServer_DPRank_4", exitcode=None, is_alive=lambda: True),
         SimpleNamespace(name="APIServer_DPRank_5", exitcode=17, is_alive=lambda: False),
     ]
 
@@ -456,9 +446,7 @@ async def _poll_supervisor_health(expected_status: int, use_ssl: bool = False) -
             return True
 
 
-async def _poll_until_api_server_running(
-    port: int, retries: int = 10, use_ssl: bool = False
-) -> None:
+async def _poll_until_api_server_running(port: int, retries: int = 10, use_ssl: bool = False) -> None:
     scheme = "https" if use_ssl else "http"
     url = f"{scheme}://127.0.0.1:{port}/health"
     async with aiohttp.ClientSession() as session:
@@ -731,9 +719,7 @@ async def test_shutdown_timeout(monkeypatch: pytest.MonkeyPatch):
     args = _make_args(shutdown_timeout=_SHUTDOWN_TIMEOUT)
     aphrodite_server_ports = [_CHILD_PORT_BASE + i for i in range(_N_CHILDREN)]
 
-    async with _run_supervisor(
-        args, monkeypatch, launch_fn=launch_mock_aphrodite_with_drain
-    ) as (supervisor, _task):
+    async with _run_supervisor(args, monkeypatch, launch_fn=launch_mock_aphrodite_with_drain) as (supervisor, _task):
         for port in aphrodite_server_ports:
             await _poll_until_api_server_running(port)
 
@@ -751,8 +737,7 @@ async def test_shutdown_timeout(monkeypatch: pytest.MonkeyPatch):
         elapsed = time.perf_counter() - start_t
 
         assert elapsed >= _DRAIN_SECONDS, (
-            f"Supervisor exited after only {elapsed:.1f}s; "
-            f"expected >= {_DRAIN_SECONDS}s for request draining"
+            f"Supervisor exited after only {elapsed:.1f}s; expected >= {_DRAIN_SECONDS}s for request draining"
         )
 
         for p in supervisor._processes:

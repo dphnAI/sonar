@@ -7,6 +7,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    ChatCompletionRequest,
+)
+from aphrodite.entrypoints.openai.engine.protocol import DeltaMessage
+from aphrodite.parser.gemma4 import Gemma4Parser
 from tests.parser.engine.conftest import make_mock_tokenizer
 from tests.parser.engine.streaming_helpers import (
     collect_content,
@@ -14,11 +19,6 @@ from tests.parser.engine.streaming_helpers import (
     collect_tool_arguments,
     simulate_tool_streaming,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
-    ChatCompletionRequest,
-)
-from aphrodite.entrypoints.openai.engine.protocol import DeltaMessage
-from aphrodite.parser.gemma4 import Gemma4Parser
 
 # ── Special token IDs (arbitrary but consistent) ─────────────────────
 CHANNEL_START_ID = 50  # <|channel>
@@ -200,22 +200,13 @@ class TestGemma4StreamingReasoningThenToolCall:
         reasoning, content, tool_calls = _collect_fields(results)
 
         assert len(tool_calls) > 0, (
-            f"Expected tool_calls but got none. "
-            f"content={content!r}, reasoning={reasoning[:80]!r}..."
+            f"Expected tool_calls but got none. content={content!r}, reasoning={reasoning[:80]!r}..."
         )
 
-        names = [
-            tc.function.name for tc in tool_calls if tc.function and tc.function.name
-        ]
-        assert "get_current_weather" in names, (
-            f"Expected get_current_weather, got {names}"
-        )
+        names = [tc.function.name for tc in tool_calls if tc.function and tc.function.name]
+        assert "get_current_weather" in names, f"Expected get_current_weather, got {names}"
 
-        args_text = "".join(
-            tc.function.arguments
-            for tc in tool_calls
-            if tc.function and tc.function.arguments
-        )
+        args_text = "".join(tc.function.arguments for tc in tool_calls if tc.function and tc.function.arguments)
         if args_text:
             parsed_args = json.loads(args_text)
             assert parsed_args.get("city") == "Dallas"
@@ -234,12 +225,8 @@ class TestGemma4StreamingReasoningThenToolCall:
 
         _, content, _ = _collect_fields(results)
 
-        assert "call:" not in content, (
-            f"Tool call text leaked into content: {content!r}"
-        )
-        assert "get_current_weather" not in content, (
-            f"Function name leaked into content: {content!r}"
-        )
+        assert "call:" not in content, f"Tool call text leaked into content: {content!r}"
+        assert "get_current_weather" not in content, f"Function name leaked into content: {content!r}"
 
     def test_reasoning_extracted(self, parser, mock_tokenizer, request_obj):
         """Reasoning content should be captured."""
@@ -253,9 +240,7 @@ class TestGemma4StreamingReasoningThenToolCall:
 
         reasoning, _, _ = _collect_fields(results)
 
-        assert "weather" in reasoning.lower(), (
-            f"Expected reasoning about weather, got: {reasoning[:100]!r}"
-        )
+        assert "weather" in reasoning.lower(), f"Expected reasoning about weather, got: {reasoning[:100]!r}"
 
 
 # ── Prompt ends inside an open <|channel>thought\n block ─────────────
@@ -298,9 +283,7 @@ class TestGemma4PromptOpenReasoning:
         # the trailing ``<|channel>`` start token matters for detection.
         return [CHANNEL_START_ID, 3000, 3001]
 
-    def test_reasoning_not_leaked_into_content(
-        self, open_reasoning_parser, open_reasoning_tokenizer, request_obj
-    ):
+    def test_reasoning_not_leaked_into_content(self, open_reasoning_parser, open_reasoning_tokenizer, request_obj):
         results = _stream_tokens_batched(
             open_reasoning_parser,
             open_reasoning_tokenizer,
@@ -312,17 +295,12 @@ class TestGemma4PromptOpenReasoning:
         reasoning, content, _ = _collect_fields(results)
 
         assert "Sure, the answer is 42" in reasoning, (
-            f"Expected pre-<channel|> tokens in reasoning, got "
-            f"reasoning={reasoning!r} content={content!r}"
+            f"Expected pre-<channel|> tokens in reasoning, got reasoning={reasoning!r} content={content!r}"
         )
         for leaked in ("Sure", "answer", "42"):
-            assert leaked not in content, (
-                f"Reasoning text leaked into content: {content!r}"
-            )
+            assert leaked not in content, f"Reasoning text leaked into content: {content!r}"
 
-    def test_post_reasoning_text_in_content(
-        self, open_reasoning_parser, open_reasoning_tokenizer, request_obj
-    ):
+    def test_post_reasoning_text_in_content(self, open_reasoning_parser, open_reasoning_tokenizer, request_obj):
         results = _stream_tokens_batched(
             open_reasoning_parser,
             open_reasoning_tokenizer,
@@ -333,9 +311,7 @@ class TestGemma4PromptOpenReasoning:
 
         _, content, _ = _collect_fields(results)
 
-        assert "Hello world" in content, (
-            f"Post-<channel|> text missing from content: {content!r}"
-        )
+        assert "Hello world" in content, f"Post-<channel|> text missing from content: {content!r}"
 
     def test_new_turn_prompt_unchanged(self, parser, mock_tokenizer, request_obj):
         """When the prompt does NOT end in an open reasoning channel (e.g. a
@@ -353,9 +329,7 @@ class TestGemma4PromptOpenReasoning:
 
         reasoning, content, tool_calls = _collect_fields(results)
 
-        assert "weather" in reasoning.lower(), (
-            f"Expected reasoning about weather, got: {reasoning[:100]!r}"
-        )
+        assert "weather" in reasoning.lower(), f"Expected reasoning about weather, got: {reasoning[:100]!r}"
         assert len(tool_calls) > 0, f"Tool calls missing — content={content!r}"
 
 
@@ -397,9 +371,7 @@ class TestGemma4PreInitReasoningRobustness:
     def pre_init_parser(self, pre_init_tokenizer):
         return Gemma4Parser(pre_init_tokenizer)
 
-    def test_redundant_channel_open_swallowed_after_new_turn(
-        self, pre_init_parser, pre_init_tokenizer, request_obj
-    ):
+    def test_redundant_channel_open_swallowed_after_new_turn(self, pre_init_parser, pre_init_tokenizer, request_obj):
         # Prompt ends with ``<|turn>model\n``-style sentinel. With
         # ``enable_thinking=True`` (the default), ``is_reasoning_end``
         # returns ``False`` for a ``<|turn>`` tail, so the engine is
@@ -416,26 +388,16 @@ class TestGemma4PreInitReasoningRobustness:
 
         # ``thought\n`` prefix must be stripped from reasoning even though
         # the engine was pre-initialised to REASONING.
-        assert reasoning.startswith("Reason"), (
-            f"thought\\n prefix leaked into reasoning: {reasoning!r}"
-        )
-        assert "thought\n" not in reasoning, (
-            f"thought\\n prefix leaked into reasoning: {reasoning!r}"
-        )
+        assert reasoning.startswith("Reason"), f"thought\\n prefix leaked into reasoning: {reasoning!r}"
+        assert "thought\n" not in reasoning, f"thought\\n prefix leaked into reasoning: {reasoning!r}"
         assert "Reasoning body" in reasoning, f"Reasoning body missing: {reasoning!r}"
 
         # The redundant ``<|channel>`` opener must not appear as text.
-        assert "<|channel>" not in content, (
-            f"<|channel> leaked into content: {content!r}"
-        )
-        assert "<|channel>" not in reasoning, (
-            f"<|channel> leaked into reasoning: {reasoning!r}"
-        )
+        assert "<|channel>" not in content, f"<|channel> leaked into content: {content!r}"
+        assert "<|channel>" not in reasoning, f"<|channel> leaked into reasoning: {reasoning!r}"
 
         # Post-``<channel|>`` text must appear as content.
-        assert "Final content" in content, (
-            f"Post-<channel|> text missing from content: {content!r}"
-        )
+        assert "Final content" in content, f"Post-<channel|> text missing from content: {content!r}"
 
     def test_redundant_channel_open_swallowed_after_open_channel_prompt(
         self, pre_init_parser, pre_init_tokenizer, request_obj
@@ -454,12 +416,8 @@ class TestGemma4PreInitReasoningRobustness:
 
         reasoning, content, _ = _collect_fields(results)
 
-        assert "<|channel>" not in content, (
-            f"<|channel> leaked into content: {content!r}"
-        )
-        assert "thought\n" not in reasoning, (
-            f"thought\\n prefix leaked into reasoning: {reasoning!r}"
-        )
+        assert "<|channel>" not in content, f"<|channel> leaked into content: {content!r}"
+        assert "thought\n" not in reasoning, f"thought\\n prefix leaked into reasoning: {reasoning!r}"
         assert "Reasoning body" in reasoning
         assert "Final content" in content
 
@@ -613,8 +571,7 @@ class TestGemma4ReasoningTruncationWithHoldback:
         reasoning, content, tool_calls = _collect_fields(results)
 
         assert "efficiency" in reasoning, (
-            f"Reasoning truncated — missing 'efficiency'. "
-            f"Reasoning ends with: {reasoning[-60:]!r}"
+            f"Reasoning truncated — missing 'efficiency'. Reasoning ends with: {reasoning[-60:]!r}"
         )
 
     def test_both_tool_calls_extracted(self, parser_2, tokenizer_2, request_obj):
@@ -630,9 +587,7 @@ class TestGemma4ReasoningTruncationWithHoldback:
 
         _, _, tool_calls = _collect_fields(results)
 
-        names = [
-            tc.function.name for tc in tool_calls if tc.function and tc.function.name
-        ]
+        names = [tc.function.name for tc in tool_calls if tc.function and tc.function.name]
         assert len(names) >= 2, f"Expected 2 tool calls, got {len(names)}: {names}"
         assert names.count("bash") >= 2, f"Expected 2 bash tool calls, got {names}"
 
@@ -649,9 +604,7 @@ class TestGemma4ReasoningTruncationWithHoldback:
 
         _, content, _ = _collect_fields(results)
 
-        assert "call:" not in content, (
-            f"Tool call text leaked into content: {content!r}"
-        )
+        assert "call:" not in content, f"Tool call text leaked into content: {content!r}"
 
 
 # ── Simple mock tokenizer for tool-only tests ────────────────────────
@@ -702,12 +655,7 @@ class TestNonStreamingToolCalls:
         assert args == {"location": "London"}
 
     def test_multiple_arguments(self, tool_call_parser, mock_request):
-        text = (
-            "<|tool_call>call:get_weather{"
-            'location:<|"|>San Francisco<|"|>,'
-            'unit:<|"|>celsius<|"|>}'
-            "<tool_call|>"
-        )
+        text = '<|tool_call>call:get_weather{location:<|"|>San Francisco<|"|>,unit:<|"|>celsius<|"|>}<tool_call|>'
         result = tool_call_parser.extract_tool_calls(text, mock_request)
 
         assert result.tools_called is True
@@ -716,11 +664,7 @@ class TestNonStreamingToolCalls:
         assert args == {"location": "San Francisco", "unit": "celsius"}
 
     def test_text_before_tool_call(self, tool_call_parser, mock_request):
-        text = (
-            "Let me check the weather for you. "
-            '<|tool_call>call:get_weather{location:<|"|>Paris<|"|>}'
-            "<tool_call|>"
-        )
+        text = 'Let me check the weather for you. <|tool_call>call:get_weather{location:<|"|>Paris<|"|>}<tool_call|>'
         result = tool_call_parser.extract_tool_calls(text, mock_request)
 
         assert result.tools_called is True
@@ -757,13 +701,7 @@ class TestNonStreamingToolCalls:
         assert args == {"nested": {"inner": "value"}, "list": ["a", "b"]}
 
     def test_number_and_boolean(self, tool_call_parser, mock_request):
-        text = (
-            "<|tool_call>call:set_status{"
-            "is_active:true,"
-            "count:42,"
-            "score:3.14}"
-            "<tool_call|>"
-        )
+        text = "<|tool_call>call:set_status{is_active:true,count:42,score:3.14}<tool_call|>"
         result = tool_call_parser.extract_tool_calls(text, mock_request)
 
         assert result.tools_called is True
@@ -1008,9 +946,7 @@ class TestNonStreamingReasoningPlusToolCalls:
         )
         result = tool_call_parser.extract_tool_calls(model_output, mock_request)
 
-        assert result.tools_called is True, (
-            f"No tool calls found. content={result.content!r}"
-        )
+        assert result.tools_called is True, f"No tool calls found. content={result.content!r}"
         assert result.tool_calls[0].function.name == "get_weather"
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["city"] == "Raleigh"
@@ -1204,9 +1140,7 @@ class TestGemma4SchemaCoercionBoolNumberNull:
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["value"] is None
 
-    def test_null_stays_string_without_null_schema(
-        self, parser_with_tools, mock_request
-    ):
+    def test_null_stays_string_without_null_schema(self, parser_with_tools, mock_request):
         text = "<|tool_call>call:configure{label:null}<tool_call|>"
         result = parser_with_tools.extract_tool_calls(text, mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
@@ -1216,13 +1150,7 @@ class TestGemma4SchemaCoercionBoolNumberNull:
     def test_streaming_type_stability(self, parser_with_tools, mock_request):
         """Values streamed incrementally must not cause prefix
         incompatibility when types are coerced."""
-        text = (
-            "<|tool_call>call:configure{"
-            "enabled:true,"
-            "ratio:3.14,"
-            "label:hello}"
-            "<tool_call|>"
-        )
+        text = "<|tool_call>call:configure{enabled:true,ratio:3.14,label:hello}<tool_call|>"
         non_stream = parser_with_tools.extract_tool_calls(text, mock_request)
         ns_args = json.loads(non_stream.tool_calls[0].function.arguments)
 
@@ -1281,12 +1209,7 @@ class TestGemma4NestedSchemaCoercion:
         return Gemma4Parser(tool_call_tokenizer, tools=tools)
 
     def test_nested_object_coerced(self, parser_with_tools, mock_request):
-        text = (
-            "<|tool_call>call:search{"
-            'query:<|"|>aphrodite<|"|>,'
-            "filters:{language:python,min_stars:100}}"
-            "<tool_call|>"
-        )
+        text = '<|tool_call>call:search{query:<|"|>aphrodite<|"|>,filters:{language:python,min_stars:100}}<tool_call|>'
         result = parser_with_tools.extract_tool_calls(text, mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["query"] == "aphrodite"
@@ -1325,9 +1248,7 @@ class TestBareThoughtWithoutChannelOpener:
     def bare_thought_parser(self, bare_thought_tokenizer):
         return Gemma4Parser(bare_thought_tokenizer)
 
-    def test_bare_thought_reasoning_then_tool_call(
-        self, bare_thought_parser, bare_thought_tokenizer, request_obj
-    ):
+    def test_bare_thought_reasoning_then_tool_call(self, bare_thought_parser, bare_thought_tokenizer, request_obj):
         results = _stream_tokens_batched(
             bare_thought_parser,
             bare_thought_tokenizer,
@@ -1340,14 +1261,10 @@ class TestBareThoughtWithoutChannelOpener:
         assert reasoning == REASONING_TEXT
         assert content == ""
         assert len(tool_calls) > 0
-        names = [
-            tc.function.name for tc in tool_calls if tc.function and tc.function.name
-        ]
+        names = [tc.function.name for tc in tool_calls if tc.function and tc.function.name]
         assert "get_current_weather" in names
 
-    def test_bare_thought_larger_batches(
-        self, bare_thought_parser, bare_thought_tokenizer, request_obj
-    ):
+    def test_bare_thought_larger_batches(self, bare_thought_parser, bare_thought_tokenizer, request_obj):
         results = _stream_tokens_batched(
             bare_thought_parser,
             bare_thought_tokenizer,
@@ -1481,9 +1398,7 @@ class TestCommaInStringValueRegression:
     def multi_comma_parser(self, multi_comma_tokenizer):
         return Gemma4Parser(multi_comma_tokenizer)
 
-    def test_batched_streaming_comma_in_value(
-        self, comma_parser, comma_tokenizer, request_obj
-    ):
+    def test_batched_streaming_comma_in_value(self, comma_parser, comma_tokenizer, request_obj):
         results = _stream_tokens_batched(
             comma_parser,
             comma_tokenizer,
@@ -1493,18 +1408,12 @@ class TestCommaInStringValueRegression:
         )
         _, _, tool_calls = _collect_fields(results)
         assert len(tool_calls) > 0
-        args_text = "".join(
-            tc.function.arguments
-            for tc in tool_calls
-            if tc.function and tc.function.arguments
-        )
+        args_text = "".join(tc.function.arguments for tc in tool_calls if tc.function and tc.function.arguments)
         parsed = json.loads(args_text)
         assert parsed["location"] == "San Francisco, CA"
         assert parsed["unit"] == "celsius"
 
-    def test_batched_streaming_multiple_commas(
-        self, multi_comma_parser, multi_comma_tokenizer, request_obj
-    ):
+    def test_batched_streaming_multiple_commas(self, multi_comma_parser, multi_comma_tokenizer, request_obj):
         results = _stream_tokens_batched(
             multi_comma_parser,
             multi_comma_tokenizer,
@@ -1514,11 +1423,7 @@ class TestCommaInStringValueRegression:
         )
         _, _, tool_calls = _collect_fields(results)
         assert len(tool_calls) > 0
-        args_text = "".join(
-            tc.function.arguments
-            for tc in tool_calls
-            if tc.function and tc.function.arguments
-        )
+        args_text = "".join(tc.function.arguments for tc in tool_calls if tc.function and tc.function.arguments)
         parsed = json.loads(args_text)
         assert parsed["destination"] == "456 Oakwood Avenue, Rivermist, 83214"
 

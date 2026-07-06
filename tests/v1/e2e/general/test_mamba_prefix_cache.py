@@ -12,7 +12,6 @@ import pytest
 import torch
 
 import aphrodite.envs as envs
-from tests.utils import create_new_process_for_each_test
 from aphrodite import LLM, SamplingParams, TokensPrompt
 from aphrodite.config import CacheConfig
 from aphrodite.distributed import cleanup_dist_env_and_memory
@@ -33,6 +32,7 @@ from aphrodite.v1.worker.gpu_input_batch import CachedRequestState
 from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
 from aphrodite.v1.worker.lora_model_runner_mixin import GPUInputBatch
 from aphrodite.v1.worker.mamba_utils import get_mamba_groups
+from tests.utils import create_new_process_for_each_test
 
 
 @dataclass
@@ -80,8 +80,7 @@ def get_fake_sample_fn() -> SamplerOutput:
                 logprobs_tensors=None,
             )
         accepted_tokens = prompt_token_ids[
-            first_token_id_index : first_token_id_index
-            + min(num_accepted_tokens, logits.shape[0])
+            first_token_id_index : first_token_id_index + min(num_accepted_tokens, logits.shape[0])
         ]
         sampled_token_ids = accepted_tokens
         return SamplerOutput(
@@ -111,28 +110,17 @@ def get_fake_propose_draft_token_ids_fn():
     ) -> list[list[int]]:
         num_computed_tokens_cpu_tensor = self.input_batch.num_computed_tokens_cpu_tensor
         num_computed_tokens = num_computed_tokens_cpu_tensor[0].item()
-        if (
-            self.input_batch.num_tokens_no_spec[0].item()
-            <= self.input_batch.num_prompt_tokens[0].item()
-        ):
+        if self.input_batch.num_tokens_no_spec[0].item() <= self.input_batch.num_prompt_tokens[0].item():
             first_token_id_index = self.input_batch.num_prompt_tokens[0].item()
         else:
-            first_token_id_index = (
-                num_computed_tokens + 1
-            )  # bonus token isn't considered as computed
+            first_token_id_index = num_computed_tokens + 1  # bonus token isn't considered as computed
         first_token_id_index += self.input_batch.num_accepted_tokens_cpu[0].item()
         proposed_draft_token_ids = [
-            prompt_token_ids[
-                first_token_id_index : first_token_id_index + num_speculative_tokens
-            ]
+            prompt_token_ids[first_token_id_index : first_token_id_index + num_speculative_tokens]
         ]
 
         next_token_ids = torch.tensor(
-            prompt_token_ids[
-                first_token_id_index - 1 : first_token_id_index
-                - 1
-                + num_accepted_tokens
-            ],
+            prompt_token_ids[first_token_id_index - 1 : first_token_id_index - 1 + num_accepted_tokens],
             device=DEVICE_TYPE,
             dtype=torch.int32,
         )
@@ -199,9 +187,7 @@ def get_fake_allocate_slots_fn(original_allocate_slots_fn: Callable):
             has_scheduled_reqs,
         )
         if cur_step_action is not None:
-            cur_block_ids = self.coordinator.single_type_managers[0].req_to_blocks[
-                request.request_id
-            ]
+            cur_block_ids = self.coordinator.single_type_managers[0].req_to_blocks[request.request_id]
             not_null_block_flags = [not block.is_null for block in cur_block_ids]
             block_ids = [1 if block else 0 for block in not_null_block_flags]
             assert block_ids == cur_step_action.kv_cache_block_ids
@@ -223,15 +209,11 @@ def get_fake_execute_model_fn(original_execute_model_fn: Callable):
         intermediate_tensors: IntermediateTensors | None = None,
     ):
         if cur_step_action is not None:
-            num_scheduled_tokens = next(
-                iter(scheduler_output.num_scheduled_tokens.values())
-            )
+            num_scheduled_tokens = next(iter(scheduler_output.num_scheduled_tokens.values()))
             assert num_scheduled_tokens == cur_step_action.num_scheduled_tokens
         mamba_group_ids, mamba_spec = get_mamba_groups(self.kv_cache_config)
         mamba_group_id = mamba_group_ids[0]
-        mamba_layer_name = self.kv_cache_config.kv_cache_groups[
-            mamba_group_id
-        ].layer_names[0]
+        mamba_layer_name = self.kv_cache_config.kv_cache_groups[mamba_group_id].layer_names[0]
         nonlocal last_num_computed_tokens
         nonlocal num_prompt_tokens
 
@@ -240,41 +222,24 @@ def get_fake_execute_model_fn(original_execute_model_fn: Callable):
             and scheduler_output.scheduled_new_reqs[0].prompt_token_ids is not None
         ):
             # record number of prompt tokens
-            num_prompt_tokens = len(
-                scheduler_output.scheduled_new_reqs[0].prompt_token_ids
-            )
+            num_prompt_tokens = len(scheduler_output.scheduled_new_reqs[0].prompt_token_ids)
 
         if len(scheduler_output.scheduled_cached_reqs.req_ids) > 0:
-            num_computed_tokens = (
-                scheduler_output.scheduled_cached_reqs.num_computed_tokens[0]
-            )
-            if (
-                self.num_spec_tokens
-                and num_prompt_tokens is not None
-                and num_computed_tokens > num_prompt_tokens
-            ):
+            num_computed_tokens = scheduler_output.scheduled_cached_reqs.num_computed_tokens[0]
+            if self.num_spec_tokens and num_prompt_tokens is not None and num_computed_tokens > num_prompt_tokens:
                 # NOTE (tdoublep) with async scheduling, the scheduler does not have an
                 # accurate measure of the number of computed tokens; we need to subtract
                 # the number of reject tokens from the previous timestep.
                 num_computed_tokens -= num_speculative_tokens + 1 - num_accepted_tokens
-            if (
-                num_computed_tokens // BLOCK_SIZE
-                > last_num_computed_tokens // BLOCK_SIZE
-            ):
+            if num_computed_tokens // BLOCK_SIZE > last_num_computed_tokens // BLOCK_SIZE:
                 # generated a new aligned block in this step
                 block_idx = num_computed_tokens // mamba_spec.block_size - 1
                 block_id = (
-                    self.input_batch.block_table.block_tables[mamba_group_id]
-                    .block_table.cpu[0, block_idx]
-                    .item()
+                    self.input_batch.block_table.block_tables[mamba_group_id].block_table.cpu[0, block_idx].item()
                 )
                 if block_id != 0:
-                    kv_cache = self.compilation_config.static_forward_context[
-                        mamba_layer_name
-                    ].kv_cache
-                    mamba_kv_cache_dict[
-                        num_computed_tokens - num_computed_tokens % BLOCK_SIZE
-                    ] = (
+                    kv_cache = self.compilation_config.static_forward_context[mamba_layer_name].kv_cache
+                    mamba_kv_cache_dict[num_computed_tokens - num_computed_tokens % BLOCK_SIZE] = (
                         kv_cache[0][block_id].clone(),
                         kv_cache[1][block_id].clone(),
                     )
@@ -286,10 +251,7 @@ def get_fake_execute_model_fn(original_execute_model_fn: Callable):
         ret = original_execute_model_fn(self, scheduler_output, intermediate_tensors)
 
         if cur_step_action is not None:
-            assert (
-                cur_step_action.num_computed_tokens_start
-                == self.input_batch.num_computed_tokens_cpu[0].item()
-            )
+            assert cur_step_action.num_computed_tokens_start == self.input_batch.num_computed_tokens_cpu[0].item()
 
         return ret
 
@@ -315,19 +277,11 @@ def get_fake_process_mamba_fn(
             assert len(copy_info[0]) == len(copy_info[1]) == len(copy_info[2]) == 2
             mamba_group_ids, mamba_spec = get_mamba_groups(kv_cache_config)
             mamba_group_id = mamba_group_ids[0]
-            mamba_layer_name = kv_cache_config.kv_cache_groups[
-                mamba_group_id
-            ].layer_names[0]
+            mamba_layer_name = kv_cache_config.kv_cache_groups[mamba_group_id].layer_names[0]
             mamba_kv_cache = forward_context[mamba_layer_name].kv_cache[-1]
-            mamba_block_table = input_batch.block_table.block_tables[
-                mamba_group_id
-            ].block_table.cpu[0]
-            expected_temporal_src = mamba_kv_cache[
-                mamba_block_table[action[0]]
-            ].data_ptr()
-            expected_temporal_dest = mamba_kv_cache[
-                mamba_block_table[action[1]]
-            ].data_ptr()
+            mamba_block_table = input_batch.block_table.block_tables[mamba_group_id].block_table.cpu[0]
+            expected_temporal_src = mamba_kv_cache[mamba_block_table[action[0]]].data_ptr()
+            expected_temporal_dest = mamba_kv_cache[mamba_block_table[action[1]]].data_ptr()
             # -1 is qwen3-next's temporal. We skip checking conv as it is more complex.
             assert copy_info[0][-1] == expected_temporal_src
             assert copy_info[1][-1] == expected_temporal_dest
@@ -392,9 +346,7 @@ def _run_ref_mamba_state_worker():
         os.environ["APHRODITE_ENABLE_V1_MULTIPROCESSING"] = "0"
         num_generated_tokens = 8000
         num_prompt_tokens = 500
-        sampling_params = SamplingParams(
-            temperature=0.0, max_tokens=num_generated_tokens
-        )
+        sampling_params = SamplingParams(temperature=0.0, max_tokens=num_generated_tokens)
         prompt_dataset = datasets.load_dataset("heheda/a_long_article")
         full_prompt = prompt_dataset["train"][0]["text"]
         fake_execute_model_fn = get_fake_execute_model_fn(GPUModelRunner.execute_model)
@@ -420,8 +372,7 @@ def _run_ref_mamba_state_worker():
         # check_mamba_state_equal(ref_mamba_kv_cache_dict, mamba_kv_cache_dict)
         # torch.save(mamba_kv_cache_dict, "mamba_kv_cache_dict.pth")
         cpu_state_ref = {
-            key: tuple(tensor.detach().cpu() for tensor in tensors)
-            for key, tensors in mamba_kv_cache_dict.items()
+            key: tuple(tensor.detach().cpu() for tensor in tensors) for key, tensors in mamba_kv_cache_dict.items()
         }
         torch.save(cpu_state_ref, "mamba_kv_cache_dict_ref.pth")
         mamba_kv_cache_dict.clear()
@@ -433,9 +384,7 @@ def _run_ref_mamba_state_worker():
         raise
 
 
-def check_mamba_state_equal(
-    mamba_state_ref: dict, mamba_state_new: dict, keys_to_check: list[int]
-):
+def check_mamba_state_equal(mamba_state_ref: dict, mamba_state_new: dict, keys_to_check: list[int]):
     atol = 1e-2
     rtol = 1e-2
     for key in keys_to_check:
@@ -454,9 +403,7 @@ def check_mamba_state_equal(
                         f"[WARNING] found {diff_idx.shape[0] * 100 / ref.numel()}% of the elements are different"  # noqa: E501
                     )
                     continue
-                raise ValueError(
-                    f"Mamba state is not equal for key: {key} at index {i}"
-                )
+                raise ValueError(f"Mamba state is not equal for key: {key} at index {i}")
     return True
 
 
@@ -475,9 +422,7 @@ def apply_patch(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(GPUModelRunner, "_sample", fake_sample_fn)
 
     fake_propose_draft_token_ids_fn = get_fake_propose_draft_token_ids_fn()
-    monkeypatch.setattr(
-        GPUModelRunner, "propose_draft_token_ids", fake_propose_draft_token_ids_fn
-    )
+    monkeypatch.setattr(GPUModelRunner, "propose_draft_token_ids", fake_propose_draft_token_ids_fn)
 
     fake_execute_model_fn = get_fake_execute_model_fn(GPUModelRunner.execute_model)
     monkeypatch.setattr(GPUModelRunner, "execute_model", fake_execute_model_fn)
@@ -732,13 +677,9 @@ def get_mamba_prefix_cache_step_configs() -> dict[str, TestConfig]:
 
 
 def fill_following_kv_cache_block_ids(test_config: TestConfig) -> None:
-    for step_action_prev, step_action_next in zip(
-        test_config.step_actions[:-1], test_config.step_actions[1:]
-    ):
+    for step_action_prev, step_action_next in zip(test_config.step_actions[:-1], test_config.step_actions[1:]):
         if len(step_action_next.kv_cache_block_ids) == 0:
-            step_action_next.kv_cache_block_ids = (
-                step_action_prev.kv_cache_block_ids.copy()
-            )
+            step_action_next.kv_cache_block_ids = step_action_prev.kv_cache_block_ids.copy()
 
 
 @create_new_process_for_each_test()
@@ -772,9 +713,7 @@ def test_mamba_prefix_cache_mrv1(monkeypatch: pytest.MonkeyPatch):
         num_prompt_tokens = test_config.num_prompt_tokens
         global num_accepted_tokens
         num_accepted_tokens = test_config.num_accepted_tokens
-        sampling_params = SamplingParams(
-            temperature=0.0, max_tokens=num_generated_tokens
-        )
+        sampling_params = SamplingParams(temperature=0.0, max_tokens=num_generated_tokens)
         global cur_step_action_idx
         cur_step_action_idx = 0
         fill_following_kv_cache_block_ids(test_config)
@@ -822,9 +761,7 @@ def test_mamba_prefix_cache_mrv2(monkeypatch: pytest.MonkeyPatch):
 
     def temporal_states(model_state, block_tables, kv_cache_config):
         # Qwen3-Next keeps the temporal (ssm) state as the last Mamba cache.
-        forward_context = (
-            model_state.aphrodite_config.compilation_config.static_forward_context
-        )
+        forward_context = model_state.aphrodite_config.compilation_config.static_forward_context
         group_ids, _ = get_mamba_groups(kv_cache_config)
         for group_id in group_ids:
             block_table = block_tables[group_id]
@@ -843,18 +780,12 @@ def test_mamba_prefix_cache_mrv2(monkeypatch: pytest.MonkeyPatch):
     ) -> None:
         captured["block_tables"] = block_tables
         captured["kv_cache_config"] = kv_cache_config
-        expected = (
-            None if cur_step_action is None else cur_step_action.preprocess_copy_idx
-        )
+        expected = None if cur_step_action is None else cur_step_action.preprocess_copy_idx
         snapshots = []
         if expected is not None and expected != (-1, -1):
             for temporal, bt in temporal_states(self, block_tables, kv_cache_config):
-                snapshots.append(
-                    (temporal, bt, temporal_block(temporal, bt, expected[0]).clone())
-                )
-        ret = original_preprocess_state(
-            self, input_batch, block_tables, kv_cache_config, num_computed_tokens
-        )
+                snapshots.append((temporal, bt, temporal_block(temporal, bt, expected[0]).clone()))
+        ret = original_preprocess_state(self, input_batch, block_tables, kv_cache_config, num_computed_tokens)
         if cur_step_action is not None:
             req_idx = int(input_batch.idx_mapping[0].item())
             src_col = int(self._mamba_src_col_gpu[req_idx].item())
@@ -862,13 +793,10 @@ def test_mamba_prefix_cache_mrv2(monkeypatch: pytest.MonkeyPatch):
             dst = int(self._mamba_state_idx_gpu[req_idx].item())
             actual = (-1, -1) if src_col < 0 or src_col == dst else (src_col + off, dst)
             assert actual == expected, (
-                f"V2 align preprocess copy: expected={expected}, "
-                f"actual={actual}, {cur_step_action=}"
+                f"V2 align preprocess copy: expected={expected}, actual={actual}, {cur_step_action=}"
             )
             for temporal, bt, src_state in snapshots:
-                torch.testing.assert_close(
-                    temporal_block(temporal, bt, expected[1]), src_state
-                )
+                torch.testing.assert_close(temporal_block(temporal, bt, expected[1]), src_state)
         return ret
 
     def wrapped_postprocess_state(
@@ -888,21 +816,15 @@ def test_mamba_prefix_cache_mrv2(monkeypatch: pytest.MonkeyPatch):
             or block_tables is None
             or action.postprocess_copy_idx == (-1, -1)
         ):
-            return original_postprocess_state(
-                self, idx_mapping, num_sampled, num_computed_tokens
-            )
+            return original_postprocess_state(self, idx_mapping, num_sampled, num_computed_tokens)
         expected = action.postprocess_copy_idx
         snapshots = [
             (temporal, bt, temporal_block(temporal, bt, expected[0]).clone())
             for temporal, bt in temporal_states(self, block_tables, kv_cache_config)
         ]
-        ret = original_postprocess_state(
-            self, idx_mapping, num_sampled, num_computed_tokens
-        )
+        ret = original_postprocess_state(self, idx_mapping, num_sampled, num_computed_tokens)
         for temporal, bt, src_state in snapshots:
-            torch.testing.assert_close(
-                temporal_block(temporal, bt, expected[1]), src_state
-            )
+            torch.testing.assert_close(temporal_block(temporal, bt, expected[1]), src_state)
         return ret
 
     def wrapped_execute_model(
@@ -911,14 +833,10 @@ def test_mamba_prefix_cache_mrv2(monkeypatch: pytest.MonkeyPatch):
         *args: Any,
         **kwargs: Any,
     ):
-        events.extend(
-            req.num_computed_tokens for req in scheduler_output.scheduled_new_reqs
-        )
+        events.extend(req.num_computed_tokens for req in scheduler_output.scheduled_new_reqs)
         events.extend(scheduler_output.scheduled_cached_reqs.num_computed_tokens)
         if cur_step_action is not None:
-            num_scheduled_tokens = next(
-                iter(scheduler_output.num_scheduled_tokens.values())
-            )
+            num_scheduled_tokens = next(iter(scheduler_output.num_scheduled_tokens.values()))
             assert num_scheduled_tokens == cur_step_action.num_scheduled_tokens
         ret = original_execute_model(self, scheduler_output, *args, **kwargs)
         if cur_step_action is not None and self.execute_model_state is not None:
@@ -945,8 +863,7 @@ def test_mamba_prefix_cache_mrv2(monkeypatch: pytest.MonkeyPatch):
             dtype=torch.int64,
         )
         num_logits = torch.tensor(
-            input_batch.cu_num_logits_np[1 : num_reqs + 1]
-            - input_batch.cu_num_logits_np[:num_reqs],
+            input_batch.cu_num_logits_np[1 : num_reqs + 1] - input_batch.cu_num_logits_np[:num_reqs],
             device=hidden_states.device,
             dtype=torch.int32,
         )
@@ -976,12 +893,8 @@ def test_mamba_prefix_cache_mrv2(monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setattr(MRV2GPUModelRunner, "execute_model", wrapped_execute_model)
     monkeypatch.setattr(MRV2GPUModelRunner, "sample", fake_sample)
-    monkeypatch.setattr(
-        MambaHybridModelState, "preprocess_state", wrapped_preprocess_state
-    )
-    monkeypatch.setattr(
-        MambaHybridModelState, "postprocess_state", wrapped_postprocess_state
-    )
+    monkeypatch.setattr(MambaHybridModelState, "preprocess_state", wrapped_preprocess_state)
+    monkeypatch.setattr(MambaHybridModelState, "postprocess_state", wrapped_postprocess_state)
 
     engine = LLM(
         model=MODEL,
@@ -1022,9 +935,7 @@ def test_mamba_prefix_cache_mrv2(monkeypatch: pytest.MonkeyPatch):
                 sampling_params=sampling_params,
             )
             assert cur_step_action_idx == len(test_config.step_actions), test_name
-            assert (
-                engine.llm_engine.engine_core.engine_core.scheduler.reset_prefix_cache()
-            )
+            assert engine.llm_engine.engine_core.engine_core.scheduler.reset_prefix_cache()
 
         step_actions = []
         cur_step_action_idx = 0
@@ -1040,14 +951,9 @@ def test_mamba_prefix_cache_mrv2(monkeypatch: pytest.MonkeyPatch):
         _ = engine.generate([prompt], sampling_params=sampling_params)
         second_events = events[first_event_count:]
         prefix_hits = [
-            num_computed_tokens
-            for num_computed_tokens in second_events
-            if num_computed_tokens >= BLOCK_SIZE
+            num_computed_tokens for num_computed_tokens in second_events if num_computed_tokens >= BLOCK_SIZE
         ]
-        assert prefix_hits, (
-            "Expected the second identical prompt to hit prefix cache, "
-            f"got events={second_events!r}"
-        )
+        assert prefix_hits, f"Expected the second identical prompt to hit prefix cache, got events={second_events!r}"
         assert engine.llm_engine.engine_core.engine_core.scheduler.reset_prefix_cache()
     finally:
         del engine

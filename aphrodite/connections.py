@@ -63,11 +63,7 @@ def _is_retryable(exc: Exception) -> bool:
     if isinstance(exc, aiohttp.ServerDisconnectedError):
         return True
     # requests 5xx -- raise_for_status() throws HTTPError
-    if (
-        isinstance(exc, requests.exceptions.HTTPError)
-        and exc.response is not None
-        and exc.response.status_code >= 500
-    ):
+    if isinstance(exc, requests.exceptions.HTTPError) and exc.response is not None and exc.response.status_code >= 500:
         return True
     # aiohttp 5xx -- raise_for_status() throws ClientResponseError
     return isinstance(exc, aiohttp.ClientResponseError) and exc.status >= 500
@@ -85,9 +81,7 @@ def _log_retry(
 ) -> None:
     # args[0] is `self` (bound method), args[1] is the URL
     url = args[1] if len(args) > 1 else kwargs.get("url")
-    timeout_info = (
-        f"timeout={attempt_timeout:.3f}s" if base_timeout is not None else "no timeout"
-    )
+    timeout_info = f"timeout={attempt_timeout:.3f}s" if base_timeout is not None else "no timeout"
     next_timeout = (
         f" with timeout={base_timeout * (_RETRY_BACKOFF_FACTOR ** (attempt + 1)):.3f}s"
         if base_timeout is not None
@@ -122,11 +116,7 @@ def _sync_retry(
         max_retries = max(envs.APHRODITE_MEDIA_FETCH_MAX_RETRIES, 1)
 
         for attempt in range(max_retries):
-            attempt_timeout = (
-                base_timeout * (_RETRY_BACKOFF_FACTOR**attempt)
-                if base_timeout is not None
-                else None
-            )
+            attempt_timeout = base_timeout * (_RETRY_BACKOFF_FACTOR**attempt) if base_timeout is not None else None
             kwargs["timeout"] = attempt_timeout
             try:
                 return fn(*args, **kwargs)
@@ -168,11 +158,7 @@ def _async_retry(
         max_retries = max(envs.APHRODITE_MEDIA_FETCH_MAX_RETRIES, 1)
 
         for attempt in range(max_retries):
-            attempt_timeout = (
-                base_timeout * (_RETRY_BACKOFF_FACTOR**attempt)
-                if base_timeout is not None
-                else None
-            )
+            attempt_timeout = base_timeout * (_RETRY_BACKOFF_FACTOR**attempt) if base_timeout is not None else None
             kwargs["timeout"] = attempt_timeout
             try:
                 return await fn(*args, **kwargs)
@@ -226,9 +212,7 @@ class HTTPConnection:
         parsed_url = parse_url(url)
 
         if parsed_url.scheme not in ("http", "https"):
-            raise ValueError(
-                "Invalid HTTP URL: A valid HTTP URL must have scheme 'http' or 'https'."
-            )
+            raise ValueError("Invalid HTTP URL: A valid HTTP URL must have scheme 'http' or 'https'.")
 
     def _headers(self, **extras: str) -> MutableMapping[str, str]:
         return {"User-Agent": f"Aphrodite/{APHRODITE_VERSION}", **extras}
@@ -276,12 +260,8 @@ class HTTPConnection:
         )
 
     @_sync_retry
-    def get_bytes(
-        self, url: str, *, timeout: float | None = None, allow_redirects: bool = True
-    ) -> bytes:
-        with self.get_response(
-            url, timeout=timeout, allow_redirects=allow_redirects
-        ) as r:
+    def get_bytes(self, url: str, *, timeout: float | None = None, allow_redirects: bool = True) -> bytes:
+        with self.get_response(url, timeout=timeout, allow_redirects=allow_redirects) as r:
             r.raise_for_status()
 
             return r.content
@@ -294,9 +274,7 @@ class HTTPConnection:
         timeout: float | None = None,
         allow_redirects: bool = True,
     ) -> bytes:
-        async with await self.get_async_response(
-            url, timeout=timeout, allow_redirects=allow_redirects
-        ) as r:
+        async with await self.get_async_response(url, timeout=timeout, allow_redirects=allow_redirects) as r:
             r.raise_for_status()
 
             return await r.read()

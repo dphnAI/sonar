@@ -6,8 +6,6 @@ import copy
 import pytest
 import torch
 
-from tests.compile.backend import TestBackend
-from tests.utils import TestFP8Layer
 from aphrodite.compilation.passes.fusion.act_quant_fusion import (
     ActivationQuantFusionPass,
 )
@@ -19,10 +17,10 @@ from aphrodite.compilation.passes.utility.fix_functionalization import (
 from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
 from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
 from aphrodite.config import (
+    AphroditeConfig,
     CompilationConfig,
     ModelConfig,
     PassConfig,
-    AphroditeConfig,
     get_current_aphrodite_config,
     set_current_aphrodite_config,
 )
@@ -34,6 +32,8 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
 from aphrodite.model_executor.layers.rotary_embedding import get_rope
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import direct_register_custom_op
+from tests.compile.backend import TestBackend
+from tests.utils import TestFP8Layer
 
 TEST_FP8 = current_platform.supports_fp8()
 FP8_DTYPE = current_platform.fp8_dtype()
@@ -81,9 +81,7 @@ class TestFusedAddRMSNorm(torch.nn.Module):
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
 
-        self.gate_proj = torch.nn.Parameter(
-            torch.empty((intermediate_size, hidden_size))
-        )
+        self.gate_proj = torch.nn.Parameter(torch.empty((intermediate_size, hidden_size)))
         self.norm = RMSNorm(intermediate_size, 1e-05)
         self.norm.weight = torch.nn.Parameter(torch.ones(intermediate_size))
 
@@ -167,9 +165,7 @@ class TestRotaryEmbeddingSliceScatter(torch.nn.Module):
         self.num_heads = num_heads
         self.hidden_size = head_dim * num_heads
 
-        self.qkv_proj = torch.nn.Linear(
-            self.hidden_size, self.hidden_size * 3, bias=False
-        )
+        self.qkv_proj = torch.nn.Linear(self.hidden_size, self.hidden_size * 3, bias=False)
 
         self.rotary_emb = get_rope(
             self.head_dim,
@@ -263,19 +259,13 @@ MODELS_AND_DO_FUSION = {
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize(
     "model_class, do_fusion",
-    [
-        (model_class, do_fusion)
-        for model_class, fusions in MODELS_AND_DO_FUSION.items()
-        for do_fusion in fusions
-    ],
+    [(model_class, do_fusion) for model_class, fusions in MODELS_AND_DO_FUSION.items() for do_fusion in fusions],
 )
 @pytest.mark.skipif(
     not current_platform.is_cuda_alike(),
     reason="Only test on cuda and rocm platform",
 )
-def test_fix_functionalization(
-    model_class: torch.nn.Module, do_fusion: bool, dtype: torch.dtype
-):
+def test_fix_functionalization(model_class: torch.nn.Module, do_fusion: bool, dtype: torch.dtype):
     torch.set_default_device("cuda")
     torch.set_default_dtype(dtype)
     torch.manual_seed(0)
@@ -300,9 +290,7 @@ def test_fix_functionalization(
         act_quant_fusion_pass = ActivationQuantFusionPass(aphrodite_config)
 
         passes = (
-            [noop_pass, fusion_pass, act_quant_fusion_pass, cleanup_pass]
-            if do_fusion
-            else [noop_pass, cleanup_pass]
+            [noop_pass, fusion_pass, act_quant_fusion_pass, cleanup_pass] if do_fusion else [noop_pass, cleanup_pass]
         )
         func_pass = FixFunctionalizationPass(aphrodite_config)
 

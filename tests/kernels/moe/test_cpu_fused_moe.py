@@ -4,7 +4,6 @@
 import pytest
 import torch
 
-from tests.kernels.allclose_default import get_default_atol, get_default_rtol
 from aphrodite._custom_ops import (
     cpu_fused_moe,
     cpu_prepack_moe_weight,
@@ -13,6 +12,7 @@ from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.model_executor.layers.fused_moe.cpu_fused_moe import _CPU_MOE_ACT_FN
 from aphrodite.platforms import CpuArchEnum, current_platform
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.kernels.allclose_default import get_default_atol, get_default_rtol
 
 if not current_platform.is_cpu():
     pytest.skip("skipping CPU-only tests", allow_module_level=True)
@@ -78,9 +78,7 @@ def ref_fused_moe(
         if w2_bias is not None:
             curr_w2_bias = w2_bias[i].float()
 
-        gate_up = torch.nn.functional.linear(
-            tokens_for_this_expert, curr_w13, curr_w13_bias
-        )
+        gate_up = torch.nn.functional.linear(tokens_for_this_expert, curr_w13, curr_w13_bias)
         # Note: to simulate the kernel implementation
         gate_up = _CPU_MOE_ACT_FN[activation](gate_up).to(dtype=input.dtype).float()
         expert_out = torch.nn.functional.linear(gate_up, curr_w2, curr_w2_bias)
@@ -92,12 +90,7 @@ def ref_fused_moe(
     new_x = torch.empty_like(outs)
 
     new_x[idxs] = outs
-    final_out = (
-        new_x.view(*topk_ids.shape, -1)
-        .mul_(topk_weights.unsqueeze(dim=-1))
-        .sum(dim=1)
-        .type(input.dtype)
-    )
+    final_out = new_x.view(*topk_ids.shape, -1).mul_(topk_weights.unsqueeze(dim=-1)).sum(dim=1).type(input.dtype)
     return final_out
 
 
@@ -125,23 +118,15 @@ def test_cpu_fused_moe(
     topk_num = max(expert_num // 2, 1)
     up_dim = 2 * intermediate_size
 
-    input = torch.randn((batch_size, hidden_size), dtype=dtype) / (
-        0.5 * hidden_size**0.5
-    )
-    w13 = torch.randn((expert_num, up_dim, hidden_size), dtype=dtype) / (
-        0.5 * hidden_size**0.5
-    )
-    w2 = torch.randn((expert_num, hidden_size, intermediate_size), dtype=dtype) / (
-        0.5 * intermediate_size**0.5
-    )
+    input = torch.randn((batch_size, hidden_size), dtype=dtype) / (0.5 * hidden_size**0.5)
+    w13 = torch.randn((expert_num, up_dim, hidden_size), dtype=dtype) / (0.5 * hidden_size**0.5)
+    w2 = torch.randn((expert_num, hidden_size, intermediate_size), dtype=dtype) / (0.5 * intermediate_size**0.5)
     router_logits = torch.randn((batch_size, expert_num), dtype=dtype)
     w13_bias = None
     w2_bias = None
     if use_bias:
         w13_bias = torch.randn((expert_num, up_dim), dtype=dtype) / (0.5 * up_dim**0.5)
-        w2_bias = torch.randn((expert_num, hidden_size), dtype=dtype) / (
-            0.5 * hidden_size**0.5
-        )
+        w2_bias = torch.randn((expert_num, hidden_size), dtype=dtype) / (0.5 * hidden_size**0.5)
     score = torch.softmax(router_logits, dim=-1, dtype=torch.float32)
     topk_weight, topk_ids = torch.topk(score, topk_num)
     topk_ids = topk_ids.to(torch.int32)

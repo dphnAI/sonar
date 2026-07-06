@@ -48,9 +48,7 @@ def _xpu_qnorm_rope_kernel(
     # Load cos/sin for this position
     rope_pair_idx = tl.arange(0, HALF_ROPE)
     cos_val = tl.load(cos_sin_cache_ptr + pos * ROPE_DIM + rope_pair_idx).to(tl.float32)
-    sin_val = tl.load(
-        cos_sin_cache_ptr + pos * ROPE_DIM + HALF_ROPE + rope_pair_idx
-    ).to(tl.float32)
+    sin_val = tl.load(cos_sin_cache_ptr + pos * ROPE_DIM + HALF_ROPE + rope_pair_idx).to(tl.float32)
 
     if head_idx < num_heads:
         # ========== Q: per-head RMSNorm + GPT-J RoPE ==========

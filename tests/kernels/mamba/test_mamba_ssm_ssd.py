@@ -54,9 +54,7 @@ def ssd_minimal_discrete(X, A, B, C, block_len, initial_states=None):
     assert X.shape[1] % block_len == 0
 
     # Rearrange into blocks/chunks
-    X, A, B, C = (
-        rearrange(x, "b (c l) ... -> b c l ...", l=block_len) for x in (X, A, B, C)
-    )
+    X, A, B, C = (rearrange(x, "b (c l) ... -> b c l ...", l=block_len) for x in (X, A, B, C))
 
     A = rearrange(A, "b c l h -> b h c l")
     A_cumsum = torch.cumsum(A, dim=-1)
@@ -94,9 +92,7 @@ def ssd_minimal_discrete(X, A, B, C, block_len, initial_states=None):
 def generate_random_inputs(batch_size, seqlen, n_heads, d_head, itype, device=DEVICE):
     set_random_seed(0)
     A = -torch.exp(torch.rand(n_heads, dtype=itype, device=device))
-    dt = F.softplus(
-        torch.randn(batch_size, seqlen, n_heads, dtype=itype, device=device) - 4
-    )
+    dt = F.softplus(torch.randn(batch_size, seqlen, n_heads, dtype=itype, device=device) - 4)
     X = torch.randn((batch_size, seqlen, n_heads, d_head), dtype=itype, device=device)
     B = torch.randn((batch_size, seqlen, n_heads, d_head), dtype=itype, device=device)
     C = torch.randn((batch_size, seqlen, n_heads, d_head), dtype=itype, device=device)
@@ -124,14 +120,10 @@ def generate_continuous_batched_examples(
     # reference output.
 
     # generate the full-length example
-    A, dt, X, B, C = generate_random_inputs(
-        num_examples, full_length, n_heads, d_head, itype
-    )
+    A, dt, X, B, C = generate_random_inputs(num_examples, full_length, n_heads, d_head, itype)
 
     if return_naive_ref:
-        Y_min, final_state_min = ssd_minimal_discrete(
-            X * dt.unsqueeze(-1), A * dt, B, C, block_len=full_length // 4
-        )
+        Y_min, final_state_min = ssd_minimal_discrete(X * dt.unsqueeze(-1), A * dt, B, C, block_len=full_length // 4)
 
     # internal function that outputs a cont batch of examples
     # given a tuple of lengths for each example in the batch
@@ -145,10 +137,7 @@ def generate_continuous_batched_examples(
             last_taken[i] = (c + x) % full_length
             exhausted[i] = last_taken[i] == 0
 
-        return (
-            torch.concat([x[i, s:e] for i, (s, e) in enumerate(indices)]).unsqueeze(0)
-            for x in (dt, X, B, C)
-        )
+        return (torch.concat([x[i, s:e] for i, (s, e) in enumerate(indices)]).unsqueeze(0) for x in (dt, X, B, C))
 
     # internal function that maps "n" to the appropriate right boundary
     # value when forming continuous batches from examples of length given
@@ -165,9 +154,7 @@ def generate_continuous_batched_examples(
 
         # get the metadata
         cu_seqlens = torch.tensor((0,) + spec, device=device).cumsum(dim=0)
-        seq_idx = torch.zeros(
-            cu_seqlens[-1], dtype=torch.int32, device=cu_seqlens.device
-        )
+        seq_idx = torch.zeros(cu_seqlens[-1], dtype=torch.int32, device=cu_seqlens.device)
         for i, (srt, end) in enumerate(
             zip(
                 cu_seqlens,
@@ -189,9 +176,7 @@ def generate_continuous_batched_examples(
         B2 = B2.squeeze(0)
         C2 = C2.squeeze(0)
         yield (
-            [Y_min[s, IND_S[s] : IND_E[s]] for s in range(num_examples)]
-            if return_naive_ref
-            else None,
+            [Y_min[s, IND_S[s] : IND_E[s]] for s in range(num_examples)] if return_naive_ref else None,
             cu_seqlens,
             seq_idx,
             (A, dt2, X2, B2, C2),
@@ -221,14 +206,10 @@ def test_mamba_chunk_scan_single_example(d_head, n_heads, seq_len_chunk_size, it
 
     A, dt, X, B, C = generate_random_inputs(batch_size, seqlen, n_heads, d_head, itype)
 
-    Y_min, final_state_min = ssd_minimal_discrete(
-        X * dt.unsqueeze(-1), A * dt, B, C, chunk_size
-    )
+    Y_min, final_state_min = ssd_minimal_discrete(X * dt.unsqueeze(-1), A * dt, B, C, chunk_size)
 
     cu_seqlens = torch.tensor((0, seqlen), device=DEVICE).cumsum(dim=0)
-    cu_chunk_seqlens, last_chunk_indices, seq_idx_chunks = (
-        compute_varlen_chunk_metadata(cu_seqlens, chunk_size)
-    )
+    cu_chunk_seqlens, last_chunk_indices, seq_idx_chunks = compute_varlen_chunk_metadata(cu_seqlens, chunk_size)
     # varlen has implicit batch=1
     X = X.squeeze(0)
     dt = dt.squeeze(0)
@@ -320,9 +301,7 @@ def test_mamba_chunk_scan_cont_batch(d_head, n_heads, seq_len_chunk_size_cases, 
     ) in generate_continuous_batched_examples(
         cases, num_examples, seqlen, last_taken, exhausted, n_heads, d_head, itype
     ):
-        cu_chunk_seqlens, last_chunk_indices, seq_idx_chunks = (
-            compute_varlen_chunk_metadata(cu_seqlens, chunk_size)
-        )
+        cu_chunk_seqlens, last_chunk_indices, seq_idx_chunks = compute_varlen_chunk_metadata(cu_seqlens, chunk_size)
 
         Y = torch.empty_like(X)
         new_states = mamba_chunk_scan_combined_varlen(
@@ -406,9 +385,7 @@ def test_mamba_chunk_scan_cont_batch_prefill_chunking(chunk_size, seqlens):
     device = X.device
 
     ## full seqlen computation
-    cu_chunk_seqlens, last_chunk_indices, seq_idx_chunks = (
-        compute_varlen_chunk_metadata(cu_seqlens, chunk_size)
-    )
+    cu_chunk_seqlens, last_chunk_indices, seq_idx_chunks = compute_varlen_chunk_metadata(cu_seqlens, chunk_size)
     Y_ref = torch.empty_like(X)
     state_ref = mamba_chunk_scan_combined_varlen(
         X,
@@ -429,35 +406,21 @@ def test_mamba_chunk_scan_cont_batch_prefill_chunking(chunk_size, seqlens):
     ## chunked seqlen computation
     # first chunk
     chunked_seqlens = seqlens // 2
-    chunked_cu_seqlens = torch.cat(
-        [torch.tensor([0], device=device), torch.cumsum(chunked_seqlens, dim=0)], dim=0
-    )
+    chunked_cu_seqlens = torch.cat([torch.tensor([0], device=device), torch.cumsum(chunked_seqlens, dim=0)], dim=0)
     chunked_input_seq_len = chunked_cu_seqlens[-1]
     X_chunked = torch.zeros_like(X)[:chunked_input_seq_len, ...]
     dt_chunked = torch.zeros_like(dt)[:chunked_input_seq_len, ...]
     B_chunked = torch.zeros_like(B)[:chunked_input_seq_len, ...]
     C_chunked = torch.zeros_like(C)[:chunked_input_seq_len, ...]
     for i in range(num_sequences):
-        chunk_f = lambda x, i: x[
-            cu_seqlens[i] : cu_seqlens[i] + chunked_seqlens[i], ...
-        ]
+        chunk_f = lambda x, i: x[cu_seqlens[i] : cu_seqlens[i] + chunked_seqlens[i], ...]
 
-        X_chunked[chunked_cu_seqlens[i] : chunked_cu_seqlens[i + 1], ...] = chunk_f(
-            X, i
-        )
-        dt_chunked[chunked_cu_seqlens[i] : chunked_cu_seqlens[i + 1], ...] = chunk_f(
-            dt, i
-        )
-        B_chunked[chunked_cu_seqlens[i] : chunked_cu_seqlens[i + 1], ...] = chunk_f(
-            B, i
-        )
-        C_chunked[chunked_cu_seqlens[i] : chunked_cu_seqlens[i + 1], ...] = chunk_f(
-            C, i
-        )
+        X_chunked[chunked_cu_seqlens[i] : chunked_cu_seqlens[i + 1], ...] = chunk_f(X, i)
+        dt_chunked[chunked_cu_seqlens[i] : chunked_cu_seqlens[i + 1], ...] = chunk_f(dt, i)
+        B_chunked[chunked_cu_seqlens[i] : chunked_cu_seqlens[i + 1], ...] = chunk_f(B, i)
+        C_chunked[chunked_cu_seqlens[i] : chunked_cu_seqlens[i + 1], ...] = chunk_f(C, i)
 
-    cu_chunk_seqlens, last_chunk_indices, seq_idx_chunks = (
-        compute_varlen_chunk_metadata(chunked_cu_seqlens, chunk_size)
-    )
+    cu_chunk_seqlens, last_chunk_indices, seq_idx_chunks = compute_varlen_chunk_metadata(chunked_cu_seqlens, chunk_size)
     Y_partial = torch.empty_like(X_chunked)
     partial_state = mamba_chunk_scan_combined_varlen(
         X_chunked,
@@ -490,22 +453,20 @@ def test_mamba_chunk_scan_cont_batch_prefill_chunking(chunk_size, seqlens):
     remaining_B_chunked = torch.zeros_like(B)[:remaining_chunked_input_seq_len, ...]
     remaining_C_chunked = torch.zeros_like(C)[:remaining_chunked_input_seq_len, ...]
     for i in range(num_sequences):
-        remaining_chunk_f = lambda x, i: x[
-            cu_seqlens[i] + chunked_seqlens[i] : cu_seqlens[i + 1], ...
-        ]
+        remaining_chunk_f = lambda x, i: x[cu_seqlens[i] + chunked_seqlens[i] : cu_seqlens[i + 1], ...]
 
-        remaining_X_chunked[
-            remaining_chunked_cu_seqlens[i] : remaining_chunked_cu_seqlens[i + 1], ...
-        ] = remaining_chunk_f(X, i)
-        remaining_dt_chunked[
-            remaining_chunked_cu_seqlens[i] : remaining_chunked_cu_seqlens[i + 1], ...
-        ] = remaining_chunk_f(dt, i)
-        remaining_B_chunked[
-            remaining_chunked_cu_seqlens[i] : remaining_chunked_cu_seqlens[i + 1], ...
-        ] = remaining_chunk_f(B, i)
-        remaining_C_chunked[
-            remaining_chunked_cu_seqlens[i] : remaining_chunked_cu_seqlens[i + 1], ...
-        ] = remaining_chunk_f(C, i)
+        remaining_X_chunked[remaining_chunked_cu_seqlens[i] : remaining_chunked_cu_seqlens[i + 1], ...] = (
+            remaining_chunk_f(X, i)
+        )
+        remaining_dt_chunked[remaining_chunked_cu_seqlens[i] : remaining_chunked_cu_seqlens[i + 1], ...] = (
+            remaining_chunk_f(dt, i)
+        )
+        remaining_B_chunked[remaining_chunked_cu_seqlens[i] : remaining_chunked_cu_seqlens[i + 1], ...] = (
+            remaining_chunk_f(B, i)
+        )
+        remaining_C_chunked[remaining_chunked_cu_seqlens[i] : remaining_chunked_cu_seqlens[i + 1], ...] = (
+            remaining_chunk_f(C, i)
+        )
 
     # assert input chunking is correct
     concat_chunk_f = lambda pt1, pt2, i: torch.cat(
@@ -518,17 +479,15 @@ def test_mamba_chunk_scan_cont_batch_prefill_chunking(chunk_size, seqlens):
         ],
         dim=0,
     )
-    concat_batch_f = lambda pt1, pt2: torch.cat(
-        [concat_chunk_f(pt1, pt2, i) for i in range(num_sequences)], dim=0
-    )
+    concat_batch_f = lambda pt1, pt2: torch.cat([concat_chunk_f(pt1, pt2, i) for i in range(num_sequences)], dim=0)
 
     assert concat_batch_f(X_chunked, remaining_X_chunked).equal(X)
     assert concat_batch_f(dt_chunked, remaining_dt_chunked).equal(dt)
     assert concat_batch_f(B_chunked, remaining_B_chunked).equal(B)
     assert concat_batch_f(C_chunked, remaining_C_chunked).equal(C)
 
-    cu_chunk_seqlens, last_chunk_indices, seq_idx_chunks = (
-        compute_varlen_chunk_metadata(remaining_chunked_cu_seqlens, chunk_size)
+    cu_chunk_seqlens, last_chunk_indices, seq_idx_chunks = compute_varlen_chunk_metadata(
+        remaining_chunked_cu_seqlens, chunk_size
     )
 
     Y_chunked = torch.empty_like(remaining_X_chunked)

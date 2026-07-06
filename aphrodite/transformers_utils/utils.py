@@ -51,9 +51,7 @@ def modelscope_list_repo_files(
     # same as huggingface_hub.list_repo_files
     files = [
         file["Path"]
-        for file in api.get_model_files(
-            model_id=repo_id, revision=revision, recursive=True
-        )
+        for file in api.get_model_files(model_id=repo_id, revision=revision, recursive=True)
         if file["Type"] == "blob"
     ]
     return files
@@ -99,9 +97,7 @@ def maybe_model_redirect(model: str) -> str:
     if not Path(model_redirect_path).exists():
         return model
 
-    redirect_dict = _maybe_json_dict(model_redirect_path) or _maybe_space_split_dict(
-        model_redirect_path
-    )
+    redirect_dict = _maybe_json_dict(model_redirect_path) or _maybe_space_split_dict(model_redirect_path)
     if redirect_model := redirect_dict.get(model):
         logger.info("model redirect: [ %s ] -> [ %s ]", model, redirect_model)
         return redirect_model

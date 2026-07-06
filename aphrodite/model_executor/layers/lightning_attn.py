@@ -53,34 +53,12 @@ def _fwd_diag_kernel(
 
     # Calculate pointers to the query, key, value, and output tensors
     Q_block_ptr = (
-        Q
-        + qk_offset
-        + qk_block_offset
-        + q_cblock_offset
-        + tl.arange(0, CBLOCK)[:, None] * d
-        + tl.arange(0, d)[None, :]
+        Q + qk_offset + qk_block_offset + q_cblock_offset + tl.arange(0, CBLOCK)[:, None] * d + tl.arange(0, d)[None, :]
     )
-    K_trans_block_ptr = (
-        K
-        + qk_offset
-        + qk_block_offset
-        + tl.arange(0, CBLOCK)[None, :] * d
-        + tl.arange(0, d)[:, None]
-    )
-    V_block_ptr = (
-        V
-        + v_offset
-        + v_block_offset
-        + tl.arange(0, CBLOCK)[:, None] * e
-        + tl.arange(0, e)[None, :]
-    )
+    K_trans_block_ptr = K + qk_offset + qk_block_offset + tl.arange(0, CBLOCK)[None, :] * d + tl.arange(0, d)[:, None]
+    V_block_ptr = V + v_offset + v_block_offset + tl.arange(0, CBLOCK)[:, None] * e + tl.arange(0, e)[None, :]
     O_block_ptr = (
-        Out
-        + o_offset
-        + o_block_offset
-        + o_cblock_offset
-        + tl.arange(0, CBLOCK)[:, None] * e
-        + tl.arange(0, e)[None, :]
+        Out + o_offset + o_block_offset + o_cblock_offset + tl.arange(0, CBLOCK)[:, None] * e + tl.arange(0, e)[None, :]
     )
 
     # Load the decay rate for the current head
@@ -91,9 +69,7 @@ def _fwd_diag_kernel(
     q_index = tl.arange(0, CBLOCK) + i * CBLOCK
 
     # Load query values
-    q = tl.load(Q_block_ptr, mask=block_offset + q_index[:, None] < n, other=0.0).to(
-        tl.float32
-    )
+    q = tl.load(Q_block_ptr, mask=block_offset + q_index[:, None] < n, other=0.0).to(tl.float32)
 
     # Initialize output accumulator
     qkv = tl.zeros([CBLOCK, e], dtype=tl.float32)
@@ -178,25 +154,11 @@ def _fwd_kv_parallel(
 
     # Calculate pointers to the key, value, and key-value tensors
     K_trans_block_ptr = (
-        K
-        + k_offset
-        + k_block_offset
-        + tl.arange(0, CBLOCK)[None, :] * d
-        + tl.arange(0, D_FBLOCK)[:, None]
+        K + k_offset + k_block_offset + tl.arange(0, CBLOCK)[None, :] * d + tl.arange(0, D_FBLOCK)[:, None]
     )
-    V_block_ptr = (
-        V
-        + v_offset
-        + v_block_offset
-        + tl.arange(0, CBLOCK)[:, None] * e
-        + tl.arange(0, E_FBLOCK)[None, :]
-    )
+    V_block_ptr = V + v_offset + v_block_offset + tl.arange(0, CBLOCK)[:, None] * e + tl.arange(0, E_FBLOCK)[None, :]
     KV_block_ptr = (
-        KV
-        + kv_offset
-        + kv_block_offset
-        + tl.arange(0, D_FBLOCK)[:, None] * e
-        + tl.arange(0, E_FBLOCK)[None, :]
+        KV + kv_offset + kv_block_offset + tl.arange(0, D_FBLOCK)[:, None] * e + tl.arange(0, E_FBLOCK)[None, :]
     )
 
     # Load the decay factors for the current head and block
@@ -270,12 +232,7 @@ def _fwd_kv_reduce(
     kv_offset = off_bh * NUM_BLOCK * d * e
 
     # Calculate pointer to the key-value tensor
-    KV_block_ptr = (
-        KV
-        + kv_offset
-        + tl.arange(0, D_FBLOCK)[:, None] * e
-        + tl.arange(0, E_FBLOCK)[None, :]
-    )
+    KV_block_ptr = KV + kv_offset + tl.arange(0, D_FBLOCK)[:, None] * e + tl.arange(0, E_FBLOCK)[None, :]
 
     # Load the decay rate for the current head
     s_ptrs = S + off_h
@@ -284,10 +241,7 @@ def _fwd_kv_reduce(
     # Calculate pointer to the key-value history tensor
     kv_history_offset = off_bh * d * e
     KV_HISTORY_block_ptr = (
-        KV_HISTORY
-        + kv_history_offset
-        + tl.arange(0, D_FBLOCK)[:, None] * e
-        + tl.arange(0, E_FBLOCK)[None, :]
+        KV_HISTORY + kv_history_offset + tl.arange(0, D_FBLOCK)[:, None] * e + tl.arange(0, E_FBLOCK)[None, :]
     )
 
     # Load the previous key-value history
@@ -351,18 +305,9 @@ def _fwd_none_diag_kernel(
     kv_offset = off_bh * NUM_BLOCK * d * e + off_n * d * e + e_offset
 
     # Calculate pointers to the query, output, and key-value tensors
-    Q_block_ptr = (
-        Q + q_offset + tl.arange(0, CBLOCK)[:, None] * d + tl.arange(0, d)[None, :]
-    )
-    O_block_ptr = (
-        Out
-        + o_offset
-        + tl.arange(0, CBLOCK)[:, None] * e
-        + tl.arange(0, E_FBLOCK)[None, :]
-    )
-    KV_block_ptr = (
-        KV + kv_offset + tl.arange(0, d)[:, None] * e + tl.arange(0, E_FBLOCK)[None, :]
-    )
+    Q_block_ptr = Q + q_offset + tl.arange(0, CBLOCK)[:, None] * d + tl.arange(0, d)[None, :]
+    O_block_ptr = Out + o_offset + tl.arange(0, CBLOCK)[:, None] * e + tl.arange(0, E_FBLOCK)[None, :]
+    KV_block_ptr = KV + kv_offset + tl.arange(0, d)[:, None] * e + tl.arange(0, E_FBLOCK)[None, :]
 
     # Load the decay rate for the current head
     S_block_ptr = S + off_h
@@ -390,9 +335,7 @@ def _fwd_none_diag_kernel(
     qkv = qkv_diag + qkv_none_diag
 
     # Store the result
-    tl.store(
-        O_block_ptr, qkv.to(O_block_ptr.dtype.element_ty), mask=q_index[:, None] < n
-    )
+    tl.store(O_block_ptr, qkv.to(O_block_ptr.dtype.element_ty), mask=q_index[:, None] < n)
 
 
 class _attention(torch.autograd.Function):
@@ -574,9 +517,7 @@ def lightning_attention(
 
     # Initialize or clone key-value history
     if kv_history is None:
-        kv_history = torch.zeros(
-            (q.shape[0], q.shape[1], d, e), dtype=torch.float32, device=q.device
-        )
+        kv_history = torch.zeros((q.shape[0], q.shape[1], d, e), dtype=torch.float32, device=q.device)
     else:
         kv_history = kv_history.clone().contiguous()
 
@@ -635,9 +576,7 @@ def _linear_attn_decode_kernel(
     # Calculate offsets for dimensions
     qk_d_offsets = tl.arange(0, D)
     v_d_offsets = tl.arange(0, BLOCK_SIZE) + pid_d * BLOCK_SIZE
-    cache_d_offsets = (
-        qk_d_offsets[:, None] * cache_d0_stride + v_d_offsets[None, :] * cache_d1_stride
-    )
+    cache_d_offsets = qk_d_offsets[:, None] * cache_d0_stride + v_d_offsets[None, :] * cache_d1_stride
 
     # Calculate offsets for the current batch and head
     q_offset = batch_id * qkv_b_stride + head_id * qkv_h_stride

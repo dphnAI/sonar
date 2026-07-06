@@ -46,13 +46,9 @@ class TrtLlmNvFp4ExpertsBase:
 
         self.routing_method_type = self.moe_config.routing_method
         self.topk = moe_config.experts_per_token
-        self.intermediate_size_per_partition = (
-            moe_config.intermediate_size_per_partition
-        )
+        self.intermediate_size_per_partition = moe_config.intermediate_size_per_partition
         self.hidden_dim = moe_config.hidden_dim
-        self.hidden_dim_unpadded = (
-            moe_config.hidden_dim_unpadded or moe_config.hidden_dim
-        )
+        self.hidden_dim_unpadded = moe_config.hidden_dim_unpadded or moe_config.hidden_dim
         self.local_num_experts = moe_config.num_local_experts
         self.ep_rank = moe_config.moe_parallel_config.ep_rank
 
@@ -162,11 +158,7 @@ class TrtLlmNvFp4ExpertsBase:
     def _supports_current_device() -> bool:
         """Supports only Blackwell-family GPUs."""
         p = current_platform
-        return (
-            p.is_cuda()
-            and p.is_device_capability_family(100)
-            and has_flashinfer_trtllm_fused_moe()
-        )
+        return p.is_cuda() and p.is_device_capability_family(100) and has_flashinfer_trtllm_fused_moe()
 
     @staticmethod
     def _supports_no_act_and_mul() -> bool:
@@ -221,14 +213,10 @@ class TrtLlmNvFp4ExpertsBase:
             which is used as the CUDA grid.Y dimension, which we want to
             be <= MAX_GRID_Y. Solving for numTokens gives the formula below.
             """
-            return (
-                num_experts + (MAX_GRID_Y - num_experts + 1) * MAX_TILE_TOKENS_DIM - 1
-            ) // top_k
+            return (num_experts + (MAX_GRID_Y - num_experts + 1) * MAX_TILE_TOKENS_DIM - 1) // top_k
 
         # Using 305k or more causes IMA error in the kernel, so limit to 300k.
-        return min(
-            300000, _calc_max_supported_tokens(self.topk, self.moe_config.num_experts)
-        )
+        return min(300000, _calc_max_supported_tokens(self.topk, self.moe_config.num_experts))
 
 
 class TrtLlmNvFp4ExpertsModular(TrtLlmNvFp4ExpertsBase, mk.FusedMoEExpertsModular):
@@ -292,9 +280,7 @@ class TrtLlmNvFp4ExpertsModular(TrtLlmNvFp4ExpertsBase, mk.FusedMoEExpertsModula
             topk_ids=packed_tensor,
             routing_bias=None,
             hidden_states=hidden_states,
-            hidden_states_scale=a1q_scale.view(torch.float8_e4m3fn).reshape(
-                *hidden_states.shape[:-1], -1
-            ),
+            hidden_states_scale=a1q_scale.view(torch.float8_e4m3fn).reshape(*hidden_states.shape[:-1], -1),
             gemm1_weights=w1,
             gemm1_weights_scale=self.quant_config.w1_scale.view(torch.float8_e4m3fn),
             gemm1_bias=None,
@@ -373,9 +359,7 @@ class TrtLlmNvFp4ExpertsModular(TrtLlmNvFp4ExpertsBase, mk.FusedMoEExpertsModula
                 )
 
 
-class TrtLlmNvFp4ExpertsMonolithic(
-    TrtLlmNvFp4ExpertsBase, mk.FusedMoEExpertsMonolithic
-):
+class TrtLlmNvFp4ExpertsMonolithic(TrtLlmNvFp4ExpertsBase, mk.FusedMoEExpertsMonolithic):
     """
     Monolithic version of the kernel (router + experts).
     """
@@ -383,10 +367,7 @@ class TrtLlmNvFp4ExpertsMonolithic(
     @staticmethod
     def _supports_parallel_config(moe_parallel_config: FusedMoEParallelConfig) -> bool:
         """The modular implementation should be used for the Dp/Ep or EPLB case."""
-        return (
-            not moe_parallel_config.use_all2all_kernels
-            and not moe_parallel_config.enable_eplb
-        )
+        return not moe_parallel_config.use_all2all_kernels and not moe_parallel_config.enable_eplb
 
     @staticmethod
     def _supports_routing_method(
@@ -436,12 +417,8 @@ class TrtLlmNvFp4ExpertsMonolithic(
         assert a1q_scale is not None
         assert self.quant_config.w1_scale is not None
         assert self.quant_config.w2_scale is not None
-        assert (
-            apply_router_weight_on_input
-            and self.routing_method_type == RoutingMethodType.Llama4
-        ) or (
-            not apply_router_weight_on_input
-            and self.routing_method_type != RoutingMethodType.Llama4
+        assert (apply_router_weight_on_input and self.routing_method_type == RoutingMethodType.Llama4) or (
+            not apply_router_weight_on_input and self.routing_method_type != RoutingMethodType.Llama4
         )
 
         output1_scale_gate_scalar = self.quant_config.g1_alphas
@@ -453,9 +430,7 @@ class TrtLlmNvFp4ExpertsMonolithic(
             routing_logits=router_logits,
             routing_bias=e_score_correction_bias,
             hidden_states=hidden_states,
-            hidden_states_scale=a1q_scale.view(torch.float8_e4m3fn).reshape(
-                *hidden_states.shape[:-1], -1
-            ),
+            hidden_states_scale=a1q_scale.view(torch.float8_e4m3fn).reshape(*hidden_states.shape[:-1], -1),
             gemm1_weights=w1,
             gemm1_weights_scale=self.quant_config.w1_scale.view(torch.float8_e4m3fn),
             gemm1_bias=None,

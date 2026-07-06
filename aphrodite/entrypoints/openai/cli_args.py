@@ -60,9 +60,7 @@ class LoRAParserAction(argparse.Action):
                 except json.JSONDecodeError:
                     parser.error(f"Invalid JSON format for --lora-modules: {item}")
                 except TypeError as e:
-                    parser.error(
-                        f"Invalid fields for --lora-modules: {item} - {str(e)}"
-                    )
+                    parser.error(f"Invalid fields for --lora-modules: {item} - {str(e)}")
         setattr(namespace, self.dest, lora_list)
 
 
@@ -190,9 +188,7 @@ class BaseFrontendArgs:
         # Special case: Tool call parser shows built-in options.
         valid_tool_parsers = list(ToolParserManager.list_registered())
         parsers_str = ",".join(valid_tool_parsers)
-        frontend_kwargs["tool_call_parser"]["metavar"] = (
-            f"{{{parsers_str}}} or name registered in --tool-parser-plugin"
-        )
+        frontend_kwargs["tool_call_parser"]["metavar"] = f"{{{parsers_str}}} or name registered in --tool-parser-plugin"
         return frontend_kwargs
 
     @classmethod
@@ -214,9 +210,7 @@ class BaseFrontendArgs:
         )
         for key, value in frontend_kwargs.items():
             extra_flags = value.pop("flags", [])
-            frontend_group.add_argument(
-                *extra_flags, f"--{key.replace('_', '-')}", **value
-            )
+            frontend_group.add_argument(*extra_flags, f"--{key.replace('_', '-')}", **value)
 
         return parser
 
@@ -242,9 +236,7 @@ class FrontendArgs(BaseFrontendArgs):
     probe is declared failed in multi-port external LB mode."""
     uds: str | None = None
     """Unix domain socket path. If set, host and port arguments are ignored."""
-    uvicorn_log_level: Literal[
-        "critical", "error", "warning", "info", "debug", "trace"
-    ] = "info"
+    uvicorn_log_level: Literal["critical", "error", "warning", "info", "debug", "trace"] = "info"
     """Log level for uvicorn."""
     disable_uvicorn_access_log: bool = False
     """Disable uvicorn access log."""
@@ -354,16 +346,14 @@ def make_arg_parser(parser: FlexibleArgumentParser) -> FlexibleArgumentParser:
         "--headless",
         action="store_true",
         default=False,
-        help="Run in headless mode. See multi-node data parallel "
-        "documentation for more details.",
+        help="Run in headless mode. See multi-node data parallel documentation for more details.",
     )
     parser.add_argument(
         "--api-server-count",
         "-asc",
         type=int,
         default=None,
-        help="How many API server processes to run. "
-        "Defaults to data_parallel_size if not specified.",
+        help="How many API server processes to run. Defaults to data_parallel_size if not specified.",
     )
     parser.add_argument(
         "--config",
@@ -407,7 +397,5 @@ def validate_parsed_serve_args(args: argparse.Namespace):
 
 
 def create_parser_for_docs() -> FlexibleArgumentParser:
-    parser_for_docs = FlexibleArgumentParser(
-        prog="-m aphrodite.entrypoints.openai.api_server"
-    )
+    parser_for_docs = FlexibleArgumentParser(prog="-m aphrodite.entrypoints.openai.api_server")
     return make_arg_parser(parser_for_docs)

@@ -29,9 +29,7 @@ class LateInteractionRunner:
         self._query_uses.clear()
         self._doc_query_keys.clear()
 
-    def register_request(
-        self, req_id: str, pooling_params: PoolingParams | None
-    ) -> None:
+    def register_request(self, req_id: str, pooling_params: PoolingParams | None) -> None:
         mode, query_key, _ = self._parse_late_interaction_meta(pooling_params)
         if mode == LATE_INTERACTION_MODE_SCORE_DOC and query_key is not None:
             self._doc_query_keys[req_id] = query_key
@@ -56,15 +54,11 @@ class LateInteractionRunner:
 
         num_reqs = len(pooling_params)
         if len(raw_pooler_output) != num_reqs:
-            raise ValueError(
-                "raw_pooler_output and pooling_params must have the same length."
-            )
+            raise ValueError("raw_pooler_output and pooling_params must have the same length.")
         if len(req_ids) != num_reqs:
             raise ValueError("req_ids and pooling_params must have the same length.")
         if len(finished_mask) != num_reqs:
-            raise ValueError(
-                "finished_mask and pooling_params must have the same length."
-            )
+            raise ValueError("finished_mask and pooling_params must have the same length.")
 
         if not any(finished_mask):
             return raw_pooler_output
@@ -77,9 +71,7 @@ class LateInteractionRunner:
         score_query_keys: list[str] = []
         score_queries: list[torch.Tensor] = []
         score_docs: list[torch.Tensor] = []
-        for i, (req_id, output, params, finished) in enumerate(
-            zip(req_ids, outputs, pooling_params, finished_mask)
-        ):
+        for i, (req_id, output, params, finished) in enumerate(zip(req_ids, outputs, pooling_params, finished_mask)):
             if not finished or output is None:
                 continue
 
@@ -117,9 +109,7 @@ class LateInteractionRunner:
 
         if score_indices:
             score_values = compute_maxsim_score_batched(score_queries, score_docs)
-            for i, req_id, query_key, score in zip(
-                score_indices, score_req_ids, score_query_keys, score_values
-            ):
+            for i, req_id, query_key, score in zip(score_indices, score_req_ids, score_query_keys, score_values):
                 outputs[i] = score
                 self._doc_query_keys.pop(req_id, None)
                 self._release_query_use(query_key)
@@ -147,8 +137,7 @@ class LateInteractionRunner:
         query_key = late_interaction_params.query_key
         if not isinstance(query_key, str) or not query_key:
             raise ValueError(
-                "late-interaction request is missing a valid query key in "
-                "pooling_params.late_interaction_params."
+                "late-interaction request is missing a valid query key in pooling_params.late_interaction_params."
             )
 
         if mode == LATE_INTERACTION_MODE_CACHE_QUERY:
@@ -158,9 +147,7 @@ class LateInteractionRunner:
             try:
                 query_uses = max(1, int(query_uses_raw))
             except (TypeError, ValueError) as exc:
-                raise ValueError(
-                    "late-interaction query uses must be an integer value."
-                ) from exc
+                raise ValueError("late-interaction query uses must be an integer value.") from exc
             return mode, query_key, query_uses
 
         return mode, query_key, None

@@ -41,9 +41,7 @@ class BenchmarkSubcommand(CLISubcommand):
     def validate(self, args: argparse.Namespace) -> None:
         pass
 
-    def subparser_init(
-        self, subparsers: argparse._SubParsersAction
-    ) -> FlexibleArgumentParser:
+    def subparser_init(self, subparsers: argparse._SubParsersAction) -> FlexibleArgumentParser:
         bench_parser = subparsers.add_parser(
             self.name,
             help=self.help,
@@ -57,9 +55,7 @@ class BenchmarkSubcommand(CLISubcommand):
         # unnecessarily on every `aphrodite --help` and `aphrodite serve`.
         # Scan for the first positional arg so global flags (e.g. `-v`)
         # before the subcommand don't break detection.
-        first_positional = next(
-            (arg for arg in sys.argv[1:] if not arg.startswith("-")), None
-        )
+        first_positional = next((arg for arg in sys.argv[1:] if not arg.startswith("-")), None)
         if first_positional == self.name:
             previous_disable_level = logging.root.manager.disable
             logging.disable(logging.INFO)
@@ -76,9 +72,7 @@ class BenchmarkSubcommand(CLISubcommand):
                 )
                 cmd_subparser.set_defaults(dispatch_function=cmd_cls.cmd)
                 cmd_cls.add_cli_args(cmd_subparser)
-                cmd_subparser.epilog = APHRODITE_SUBCMD_PARSER_EPILOG.format(
-                    subcmd=f"{self.name} {cmd_cls.name}"
-                )
+                cmd_subparser.epilog = APHRODITE_SUBCMD_PARSER_EPILOG.format(subcmd=f"{self.name} {cmd_cls.name}")
         return bench_parser
 
 

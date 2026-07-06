@@ -8,13 +8,6 @@ import torch
 
 import aphrodite._custom_ops as ops
 import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from tests.kernels.moe.utils import make_test_weights, per_token_cast_to_fp8
-from tests.kernels.quantization.nvfp4_utils import (
-    FLOAT4_E2M1_MAX,
-    FLOAT8_E4M3_MAX,
-    dequantize_nvfp4_to_dtype,
-)
-from tests.kernels.utils import torch_experts
 from aphrodite.config import AphroditeConfig
 from aphrodite.distributed import (
     get_dp_group,
@@ -49,6 +42,13 @@ from aphrodite.utils.import_utils import (
     has_mori,
 )
 from aphrodite.utils.math_utils import next_power_of_2
+from tests.kernels.moe.utils import make_test_weights, per_token_cast_to_fp8
+from tests.kernels.quantization.nvfp4_utils import (
+    FLOAT4_E2M1_MAX,
+    FLOAT8_E4M3_MAX,
+    dequantize_nvfp4_to_dtype,
+)
+from tests.kernels.utils import torch_experts
 
 from .mk_objects import (
     TestMoEQuantConfig,
@@ -180,18 +180,10 @@ class Config:
             a_key = kFp8Dynamic128Sym
         elif self.is_per_out_ch_quant:
             w_key = kFp8StaticChannelSym
-            a_key = (
-                kFp8DynamicTokenSym
-                if self.is_per_act_token_quant
-                else kFp8StaticTensorSym
-            )
+            a_key = kFp8DynamicTokenSym if self.is_per_act_token_quant else kFp8StaticTensorSym
         else:
             w_key = kFp8StaticTensorSym
-            a_key = (
-                kFp8DynamicTensorSym
-                if self.is_per_act_token_quant
-                else kFp8StaticTensorSym
-            )
+            a_key = kFp8DynamicTensorSym if self.is_per_act_token_quant else kFp8StaticTensorSym
         fe_cls = self.fused_experts_type
         if hasattr(fe_cls, "_supports_quant_scheme"):
             try:
@@ -201,10 +193,7 @@ class Config:
         return True
 
     def is_fp8_block_quantized(self):
-        return (
-            self.quant_dtype == torch.float8_e4m3fn
-            and self.quant_block_shape is not None
-        )
+        return self.quant_dtype == torch.float8_e4m3fn and self.quant_block_shape is not None
 
     def is_batched_prepare_finalize(self):
         info = prepare_finalize_info(self.prepare_finalize_type)
@@ -240,10 +229,7 @@ class Config:
 
     def needs_deep_ep(self):
         info = prepare_finalize_info(self.prepare_finalize_type)
-        return (
-            info.backend == "deepep_high_throughput"
-            or info.backend == "deepep_low_latency"
-        )
+        return info.backend == "deepep_high_throughput" or info.backend == "deepep_low_latency"
 
     def needs_deep_ep_v2(self):
         info = prepare_finalize_info(self.prepare_finalize_type)
@@ -281,20 +267,12 @@ class Config:
 
         # check type support
         if self.quant_dtype is None:
-            if (
-                self.dtype not in self.pf_supported_types()
-                or self.dtype not in self.fe_supported_types()
-            ):
+            if self.dtype not in self.pf_supported_types() or self.dtype not in self.fe_supported_types():
                 return False, (
-                    f"Unsupported type {self.dtype} not in "
-                    f"{self.pf_supported_types()} and "
-                    f"{self.fe_supported_types()}."
+                    f"Unsupported type {self.dtype} not in {self.pf_supported_types()} and {self.fe_supported_types()}."
                 )
         else:
-            if (
-                self.quant_dtype not in self.pf_supported_types()
-                or self.quant_dtype not in self.fe_supported_types()
-            ):
+            if self.quant_dtype not in self.pf_supported_types() or self.quant_dtype not in self.fe_supported_types():
                 return False, (
                     f"Unsupported quant type {self.quant_dtype} "
                     f"not in {self.pf_supported_types()} and "
@@ -371,11 +349,7 @@ class WeightTensors:
 
     def is_quantized(self) -> bool:
         # or w1_scale is not None?
-        return (
-            self.w1.dtype == torch.float8_e4m3fn
-            or self.w1.dtype == torch.uint8
-            or self.w1.dtype == torch.int8
-        )
+        return self.w1.dtype == torch.float8_e4m3fn or self.w1.dtype == torch.uint8 or self.w1.dtype == torch.int8
 
     def to_current_device(self):
         device = torch.accelerator.current_device_index()
@@ -416,9 +390,7 @@ class WeightTensors:
             # or config.is_per_out_ch_quant
             per_out_ch_quant=config.is_per_act_token_quant,
         )
-        return WeightTensors(
-            w1=w1, w2=w2, w1_scale=w1_scale, w2_scale=w2_scale, w1_gs=w1_gs, w2_gs=w2_gs
-        )
+        return WeightTensors(w1=w1, w2=w2, w1_scale=w1_scale, w2_scale=w2_scale, w1_gs=w1_gs, w2_gs=w2_gs)
 
 
 @dataclass
@@ -470,9 +442,7 @@ class RankTensors:
         assert config.quant_block_shape is not None
         block_k = config.quant_block_shape[1]
         a_q, a_scales = per_token_cast_to_fp8(a, block_size=block_k)
-        return a_q.float().view((-1, block_k)).mul(a_scales.view(-1, 1)).view(m, k).to(
-            dtype
-        ), None
+        return a_q.float().view((-1, block_k)).mul(a_scales.view(-1, 1)).view(m, k).to(dtype), None
 
     @staticmethod
     def make(config: Config, pgi: ProcessGroupInfo):
@@ -492,9 +462,7 @@ class RankTensors:
 
         expert_map = None
         if config.world_size > 1:
-            expert_map = torch.full(
-                (global_num_experts,), fill_value=-1, dtype=torch.int32
-            )
+            expert_map = torch.full((global_num_experts,), fill_value=-1, dtype=torch.int32)
             s = pgi.rank * num_local_experts
             e = s + num_local_experts
             expert_map[s:e] = torch.tensor(list(range(num_local_experts)))
@@ -509,9 +477,7 @@ class RankTensors:
         )
 
 
-def reference_moe_impl(
-    config: Config, weights: WeightTensors, rank_tensors: RankTensors
-) -> torch.Tensor:
+def reference_moe_impl(config: Config, weights: WeightTensors, rank_tensors: RankTensors) -> torch.Tensor:
     if config.quant_dtype == "nvfp4":
         quant_blocksize = 16
         dtype = config.dtype
@@ -525,8 +491,7 @@ def reference_moe_impl(
         w2_gs = weights.w2_gs
 
         a_global_scale = (
-            (FLOAT8_E4M3_MAX * FLOAT4_E2M1_MAX)
-            / torch.amax(rank_tensors.hidden_states.flatten(), dim=-1)
+            (FLOAT8_E4M3_MAX * FLOAT4_E2M1_MAX) / torch.amax(rank_tensors.hidden_states.flatten(), dim=-1)
         ).to(torch.float32)
 
         assert w1_gs is not None
@@ -539,9 +504,7 @@ def reference_moe_impl(
         assert w2_blockscale.shape[1] % 128 == 0
         assert w2_blockscale.shape[2] % 4 == 0
 
-        a_fp4, a_scale_interleaved = ops.scaled_fp4_quant(
-            rank_tensors.hidden_states, a_global_scale
-        )
+        a_fp4, a_scale_interleaved = ops.scaled_fp4_quant(rank_tensors.hidden_states, a_global_scale)
 
         a = dequantize_nvfp4_to_dtype(
             a_fp4,
@@ -607,8 +570,7 @@ def reference_moe_impl(
         quant_dtype=quant_dtype,
         per_act_token_quant=per_act_token_quant,
         block_shape=block_shape,
-        apply_router_weights_on_input=config.topk == 1
-        and config.supports_apply_weight_on_input(),
+        apply_router_weights_on_input=config.topk == 1 and config.supports_apply_weight_on_input(),
     )
 
 
@@ -773,14 +735,11 @@ def run_modular_kernel(
         "activation": MoEActivation.SILU,
         "expert_map": rank_tensors.expert_map,
         "global_num_experts": config.E,
-        "apply_router_weight_on_input": config.topk == 1
-        and config.supports_apply_weight_on_input(),
+        "apply_router_weight_on_input": config.topk == 1 and config.supports_apply_weight_on_input(),
     }
 
     num_tokens = rank_tensors.hidden_states.shape[0]
-    num_tokens_across_dp = torch.tensor(
-        [num_tokens] * config.world_size, device="cuda", dtype=torch.int
-    )
+    num_tokens_across_dp = torch.tensor([num_tokens] * config.world_size, device="cuda", dtype=torch.int)
 
     torch.distributed.barrier()
 

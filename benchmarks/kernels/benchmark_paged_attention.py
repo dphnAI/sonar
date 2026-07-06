@@ -138,7 +138,8 @@ def main(
 
 if __name__ == "__main__":
     logger.warning(
-        "This script benchmarks the ROCm paged attention kernel. By default this is no longer used in Aphrodite inference."
+        "This script benchmarks the ROCm paged attention kernel. "
+        "By default this is no longer used in Aphrodite inference."
     )
     if not current_platform.is_rocm():
         raise RuntimeError("This benchmark requires the ROCm platform.")

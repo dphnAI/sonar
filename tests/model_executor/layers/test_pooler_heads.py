@@ -28,10 +28,7 @@ def _make_params(
     dimensions: int | None = None,
     use_activation: bool | None = None,
 ) -> list[PoolingParams]:
-    return [
-        PoolingParams(task=task, dimensions=dimensions, use_activation=use_activation)
-        for _ in range(n)
-    ]
+    return [PoolingParams(task=task, dimensions=dimensions, use_activation=use_activation) for _ in range(n)]
 
 
 def _make_metadata(pooling_params: list[PoolingParams]) -> PoolingMetadata:

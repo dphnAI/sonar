@@ -41,11 +41,7 @@ from aphrodite.scalar_type import scalar_types  # noqa: E402
 device = "cuda"
 
 gfx1100_only = pytest.mark.skipif(
-    not (
-        on_gfx1100()
-        and hasattr(torch.ops, "_rocm_C")
-        and hasattr(torch.ops._rocm_C, "moe_gptq_gemm_rdna3")
-    ),
+    not (on_gfx1100() and hasattr(torch.ops, "_rocm_C") and hasattr(torch.ops._rocm_C, "moe_gptq_gemm_rdna3")),
     reason="Requires gfx1100 with moe_gptq_gemm_rdna3 op",
 )
 
@@ -101,9 +97,7 @@ def _make_qzeros(E, groups, N):
 @pytest.mark.parametrize("M", NUM_TOKENS)
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("block_size_m", [1, 4])
-def test_fused_moe_w1_matches_dense(
-    E, K, N_inter, top_k, group_size, M, dtype, block_size_m
-):
+def test_fused_moe_w1_matches_dense(E, K, N_inter, top_k, group_size, M, dtype, block_size_m):
     """w1 GEMM via fused kernel matches per-expert dense kernel."""
     N_gate_up = N_inter * 2
     groups = K // group_size
@@ -221,9 +215,7 @@ def test_fused_moe_output_topk_reduces(E, K, N_inter, top_k, group_size, M, dtyp
     )
 
     atol = 1.0 if dtype == torch.bfloat16 else 0.1
-    assert torch.allclose(fused, ref, atol=atol, rtol=0.01), (
-        f"max diff: {(fused - ref).abs().max().item()}"
-    )
+    assert torch.allclose(fused, ref, atol=atol, rtol=0.01), f"max diff: {(fused - ref).abs().max().item()}"
 
 
 @gfx1100_only
@@ -323,8 +315,7 @@ def test_full_moe_e2e(E, K, N_inter, top_k, group_size, M, dtype):
     rel_l2 = (diff_l2 / ref_l2).item() if ref_l2 > 0 else 0.0
     threshold = 0.05 if dtype == torch.float16 else 0.10
     assert rel_l2 < threshold, (
-        f"rel L2 = {rel_l2:.4f} (threshold {threshold}), "
-        f"max abs diff: {(fused - ref).abs().max().item()}"
+        f"rel L2 = {rel_l2:.4f} (threshold {threshold}), max abs diff: {(fused - ref).abs().max().item()}"
     )
 
 

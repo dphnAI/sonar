@@ -12,7 +12,6 @@ import regex as re
 import torch
 from pydantic import BaseModel
 
-from tests.reasoning.utils import run_reasoning_extraction
 from aphrodite.config import StructuredOutputsConfig
 from aphrodite.distributed import cleanup_dist_env_and_memory
 from aphrodite.entrypoints.llm import LLM
@@ -23,6 +22,7 @@ from aphrodite.sampling_params import (
     SamplingParams,
     StructuredOutputsParams,
 )
+from tests.reasoning.utils import run_reasoning_extraction
 
 SAMPLE_REGEX = (
     r"((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.){3}"
@@ -232,9 +232,7 @@ def test_structured_output(
         model=model_name,
         enforce_eager=True,
         max_model_len=1024,
-        structured_outputs_config=dict(
-            backend=backend, disable_any_whitespace=backend in {"xgrammar", "guidance"}
-        ),
+        structured_outputs_config=dict(backend=backend, disable_any_whitespace=backend in {"xgrammar", "guidance"}),
         seed=120,
         tokenizer_mode=tokenizer_mode,
         load_format="auto" if not model_name.startswith("mistralai/") else "hf",
@@ -279,8 +277,7 @@ def test_structured_output(
             output_json = json.loads(generated_text)
         except json.JSONDecodeError as e:
             pytest.fail(
-                f"Invalid JSON from backend={backend}: {generated_text!r}\n"
-                f"Schema: {sample_json_schema}\nError: {e}"
+                f"Invalid JSON from backend={backend}: {generated_text!r}\nSchema: {sample_json_schema}\nError: {e}"
             )
         jsonschema.validate(instance=output_json, schema=sample_json_schema)
 
@@ -330,8 +327,7 @@ def test_structured_output(
     if backend.startswith("xgrammar"):
         with pytest.raises(
             ValueError,
-            match="The provided JSON schema contains features "
-            "not supported by xgrammar.",
+            match="The provided JSON schema contains features not supported by xgrammar.",
         ):
             prompt = (
                 f"Give an example JSON for an employee profile that "
@@ -472,10 +468,7 @@ def test_structured_output(
         structured_outputs=StructuredOutputsParams(regex=sample_regex),
     )
 
-    prompt = (
-        f"Give an example IPv4 address with this regex: {sample_regex}. "
-        f"Make the response as short as possible."
-    )
+    prompt = f"Give an example IPv4 address with this regex: {sample_regex}. Make the response as short as possible."
     outputs = llm.generate(
         [prompt] * 2,
         sampling_params=sampling_params,
@@ -499,16 +492,11 @@ def test_structured_output(
     sampling_params = SamplingParams(
         temperature=0.8,
         top_p=0.95,
-        structured_outputs=StructuredOutputsParams(
-            choice=sample_structured_outputs_choices
-        ),
+        structured_outputs=StructuredOutputsParams(choice=sample_structured_outputs_choices),
     )
 
     outputs = llm.generate(
-        (
-            "The best language for type-safe systems programming is "
-            "(Make the response as short as possible.) "
-        ),
+        ("The best language for type-safe systems programming is (Make the response as short as possible.) "),
         sampling_params=sampling_params,
         use_tqdm=True,
     )
@@ -556,10 +544,7 @@ def test_structured_output(
         try:
             output_json = json.loads(generated_text)
         except json.JSONDecodeError as e:
-            pytest.fail(
-                f"Invalid JSON from backend={backend}: {generated_text!r}\n"
-                f"Schema: {json_schema}\nError: {e}"
-            )
+            pytest.fail(f"Invalid JSON from backend={backend}: {generated_text!r}\nSchema: {json_schema}\nError: {e}")
         jsonschema.validate(instance=output_json, schema=json_schema)
 
     #
@@ -587,10 +572,7 @@ def test_structured_output(
     )
 
     outputs = llm.generate(
-        (
-            "Generate a description of a frog using 50 characters. "
-            "Make the response as short as possible."
-        ),
+        ("Generate a description of a frog using 50 characters. Make the response as short as possible."),
         sampling_params=sampling_params,
         use_tqdm=True,
     )
@@ -608,10 +590,7 @@ def test_structured_output(
         try:
             output_json = json.loads(generated_text)
         except json.JSONDecodeError as e:
-            pytest.fail(
-                f"Invalid JSON from backend={backend}: {generated_text!r}\n"
-                f"Schema: {json_schema}\nError: {e}"
-            )
+            pytest.fail(f"Invalid JSON from backend={backend}: {generated_text!r}\nSchema: {json_schema}\nError: {e}")
         jsonschema.validate(instance=output_json, schema=json_schema)
 
     if backend not in ["outlines", "lm-format-enforcer"]:
@@ -637,9 +616,7 @@ def test_structured_output(
         sampling_params = SamplingParams(
             temperature=0.0,
             max_tokens=4096,
-            structured_outputs=StructuredOutputsParams(
-                structural_tag=json.dumps(structural_tag_config)
-            ),
+            structured_outputs=StructuredOutputsParams(structural_tag=json.dumps(structural_tag_config)),
         )
 
         prompt = """
@@ -696,9 +673,7 @@ Make the response as short as possible.
             matches = re.findall(function_call_pattern, generated_text)
 
             if not matches:
-                print(
-                    f"Warning: No function calls found in response: {generated_text!r}"
-                )
+                print(f"Warning: No function calls found in response: {generated_text!r}")
                 continue
 
             # Take the first function call if multiple are found
@@ -709,9 +684,7 @@ Make the response as short as possible.
                 assert isinstance(json_content["city"], str)
                 print(f"Found valid function call: {generated_text!r}")
             except (json.JSONDecodeError, AssertionError) as e:
-                pytest.fail(
-                    f"Invalid function call format: {generated_text!r}\nError: {str(e)}"
-                )
+                pytest.fail(f"Invalid function call format: {generated_text!r}\nError: {str(e)}")
 
 
 @pytest.mark.parametrize(
@@ -759,9 +732,7 @@ def test_structured_output_with_reasoning_matrices(
         async_scheduling=async_scheduling,
     )
     tokenizer = llm.get_tokenizer()
-    reasoner = ReasoningParserManager.get_reasoning_parser(reasoning_parser)(
-        tokenizer=tokenizer
-    )
+    reasoner = ReasoningParserManager.get_reasoning_parser(reasoning_parser)(tokenizer=tokenizer)
 
     reasoning_prompt = "Solve the following math problem step-by-step, then provide the final answer as JSON object with a single key 'result'. Make sure to correct your reasoning if there are any issue should it arise.\nProblem: What is 5 * 8 + 2?"  # noqa: E501
     reasoning_schema = {
@@ -833,9 +804,7 @@ def test_structured_output_auto_mode(
     outputs = llm.generate(prompts, sampling_params=sampling_params, use_tqdm=True)
     # Make sure `auto` backend handling doesn't mess up sampling_params
     # and that we can reuse it without error.
-    outputs.extend(
-        llm.generate(prompts, sampling_params=sampling_params, use_tqdm=True)
-    )
+    outputs.extend(llm.generate(prompts, sampling_params=sampling_params, use_tqdm=True))
 
     assert outputs is not None
     for output in outputs:
@@ -886,9 +855,7 @@ def test_guidance_no_additional_properties():
             disable_any_whitespace=True,
             disable_additional_properties=True,
         )
-        sampling_params = SamplingParams(
-            temperature=0, max_tokens=256, structured_outputs=structured_outputs_params
-        )
+        sampling_params = SamplingParams(temperature=0, max_tokens=256, structured_outputs=structured_outputs_params)
 
         outputs = llm.generate(prompt, sampling_params=sampling_params)
         assert outputs is not None
@@ -950,9 +917,7 @@ def test_structured_output_batched_with_non_structured_outputs_requests(
         ),
     ]
 
-    outputs = llm.generate(
-        prompts=prompts, sampling_params=sampling_params, use_tqdm=True
-    )
+    outputs = llm.generate(prompts=prompts, sampling_params=sampling_params, use_tqdm=True)
 
     assert outputs is not None
 
@@ -997,9 +962,7 @@ def test_structured_output_with_structural_tag(backend: str):
         "type": "structural_tag",
         "format": {
             "type": "triggered_tags",
-            "tags": [
-                {"begin": "hello_flag", "content": {"type": "any_text"}, "end": "hello"}
-            ],
+            "tags": [{"begin": "hello_flag", "content": {"type": "any_text"}, "end": "hello"}],
             "triggers": ["hello"],
             "stop_after_first": False,
         },
@@ -1008,9 +971,7 @@ def test_structured_output_with_structural_tag(backend: str):
     sampling_params = SamplingParams(
         temperature=0.0,
         max_tokens=500,
-        structured_outputs=StructuredOutputsParams(
-            structural_tag=json.dumps(structural_tag_config)
-        ),
+        structured_outputs=StructuredOutputsParams(structural_tag=json.dumps(structural_tag_config)),
     )
 
     prompt = "Hello and repeat hello 10 times, do not say anything else. Only say hello hello hello, now start"

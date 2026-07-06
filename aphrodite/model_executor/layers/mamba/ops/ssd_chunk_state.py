@@ -70,16 +70,10 @@ def _chunk_cumsum_fwd_kernel(
 
     offs_h = pid_h * BLOCK_SIZE_H + tl.arange(0, BLOCK_SIZE_H)
     offs_c = tl.arange(0, BLOCK_SIZE_CHUNK)
-    dt_ptrs = dt_ptr + (
-        offs_h[:, None] * stride_dt_head + offs_c[None, :] * stride_dt_seqlen
-    )
+    dt_ptrs = dt_ptr + (offs_h[:, None] * stride_dt_head + offs_c[None, :] * stride_dt_seqlen)
     A_ptrs = A_ptr + offs_h * stride_A_head
-    dt_out_ptrs = dt_out_ptr + (
-        offs_h[:, None] * stride_dt_out_head + offs_c[None, :] * stride_dt_out_csize
-    )
-    dA_cs_ptrs = dA_cumsum_ptr + (
-        offs_h[:, None] * stride_dA_cs_head + offs_c[None, :] * stride_dA_cs_csize
-    )
+    dt_out_ptrs = dt_out_ptr + (offs_h[:, None] * stride_dt_out_head + offs_c[None, :] * stride_dt_out_csize)
+    dA_cs_ptrs = dA_cumsum_ptr + (offs_h[:, None] * stride_dA_cs_head + offs_c[None, :] * stride_dA_cs_csize)
     chunk_size_limit = chunk_seqlen_end - chunk_seqlen_start
 
     dt = tl.load(
@@ -88,17 +82,13 @@ def _chunk_cumsum_fwd_kernel(
         other=0.0,
     ).to(tl.float32)
     if HAS_DT_BIAS:
-        dt_bias = tl.load(
-            dt_bias_ptr + offs_h * stride_dt_bias_head, mask=offs_h < nheads, other=0.0
-        ).to(tl.float32)
+        dt_bias = tl.load(dt_bias_ptr + offs_h * stride_dt_bias_head, mask=offs_h < nheads, other=0.0).to(tl.float32)
         dt += dt_bias[:, None]
     if DT_SOFTPLUS:
         dt = tl.where(dt <= 20.0, softplus(dt), dt)
 
     dt = tl.clamp(dt, dt_min, dt_max)
-    dt = tl.where(
-        (offs_h[:, None] < nheads) & (offs_c[None, :] < chunk_size_limit), dt, 0.0
-    )
+    dt = tl.where((offs_h[:, None] < nheads) & (offs_c[None, :] < chunk_size_limit), dt, 0.0)
     tl.store(
         dt_out_ptrs,
         dt,
@@ -235,10 +225,7 @@ def _chunk_state_fwd_kernel(
     pid_n = tl.program_id(axis=0) % num_pid_n
     chunk_seqlen_start = tl.load(cu_chunk_seqlens_ptr + pid_c)
     chunk_seqlen_end = tl.load(cu_chunk_seqlens_ptr + pid_c + 1)
-    b_ptr += (
-        chunk_seqlen_start * stride_b_seqlen
-        + (pid_h // nheads_ngroups_ratio) * stride_b_head
-    )
+    b_ptr += chunk_seqlen_start * stride_b_seqlen + (pid_h // nheads_ngroups_ratio) * stride_b_head
     x_ptr += chunk_seqlen_start * stride_x_seqlen + pid_h * stride_x_head
     dt_ptr += pid_c * stride_dt_chunk + pid_h * stride_dt_head
     dA_cumsum_ptr += pid_c * stride_dA_cs_chunk + pid_h * stride_dA_cs_head
@@ -246,16 +233,10 @@ def _chunk_state_fwd_kernel(
     offs_m = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
     offs_n = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
     offs_k = tl.arange(0, BLOCK_SIZE_K)
-    x_ptrs = x_ptr + (
-        offs_m[:, None] * stride_x_hdim + offs_k[None, :] * stride_x_seqlen
-    )
-    b_ptrs = b_ptr + (
-        offs_n[None, :] * stride_b_dstate + offs_k[:, None] * stride_b_seqlen
-    )
+    x_ptrs = x_ptr + (offs_m[:, None] * stride_x_hdim + offs_k[None, :] * stride_x_seqlen)
+    b_ptrs = b_ptr + (offs_n[None, :] * stride_b_dstate + offs_k[:, None] * stride_b_seqlen)
     dt_ptrs = dt_ptr + offs_k * stride_dt_csize
-    dA_cs_last = tl.load(dA_cumsum_ptr + (chunk_size - 1) * stride_dA_cs_csize).to(
-        tl.float32
-    )
+    dA_cs_last = tl.load(dA_cumsum_ptr + (chunk_size - 1) * stride_dA_cs_csize).to(tl.float32)
     dA_cumsum_ptrs = dA_cumsum_ptr + offs_k * stride_dA_cs_csize
 
     chunk_size_limit = chunk_seqlen_end - chunk_seqlen_start
@@ -272,12 +253,8 @@ def _chunk_state_fwd_kernel(
             mask=(offs_k[:, None] < chunk_size_limit - k) & (offs_n[None, :] < dstate),
             other=0.0,
         ).to(tl.float32)
-        dA_cs_k = tl.load(
-            dA_cumsum_ptrs, mask=offs_k < chunk_size_limit - k, other=0.0
-        ).to(tl.float32)
-        dt_k = tl.load(dt_ptrs, mask=offs_k < chunk_size_limit - k, other=0.0).to(
-            tl.float32
-        )
+        dA_cs_k = tl.load(dA_cumsum_ptrs, mask=offs_k < chunk_size_limit - k, other=0.0).to(tl.float32)
+        dt_k = tl.load(dt_ptrs, mask=offs_k < chunk_size_limit - k, other=0.0).to(tl.float32)
         scale = fast_exp(tl.minimum(dA_cs_last - dA_cs_k, 0.0)) * dt_k
         b *= scale[:, None]
         b = b.to(x_ptr.dtype.element_ty)
@@ -293,9 +270,7 @@ def _chunk_state_fwd_kernel(
     states_ptr += pid_c * stride_states_chunk + pid_h * stride_states_head
     offs_m = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
     offs_n = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
-    states_ptrs = states_ptr + (
-        offs_m[:, None] * stride_states_hdim + offs_n[None, :] * stride_states_dstate
-    )
+    states_ptrs = states_ptr + (offs_m[:, None] * stride_states_hdim + offs_n[None, :] * stride_states_dstate)
     c_mask = (offs_m[:, None] < hdim) & (offs_n[None, :] < dstate)
     tl.store(states_ptrs, states, mask=c_mask)
 
@@ -314,12 +289,8 @@ def _chunk_cumsum_fwd(
     if dt_bias is not None:
         assert dt_bias.shape == (nheads,)
     nchunks = cu_chunk_seqlens.shape[0] - 1
-    dt_out = torch.empty(
-        nheads, nchunks, chunk_size, device=dt.device, dtype=torch.float32
-    )
-    dA_cumsum = torch.empty(
-        nheads, nchunks, chunk_size, device=dt.device, dtype=torch.float32
-    )
+    dt_out = torch.empty(nheads, nchunks, chunk_size, device=dt.device, dtype=torch.float32)
+    dA_cumsum = torch.empty(nheads, nchunks, chunk_size, device=dt.device, dtype=torch.float32)
     grid_chunk_cs = lambda META: (nchunks, triton.cdiv(nheads, META["BLOCK_SIZE_H"]))
     with torch.accelerator.device_index(dt.device.index):
         _chunk_cumsum_fwd_kernel[grid_chunk_cs](
@@ -350,9 +321,7 @@ def _chunk_cumsum_fwd(
     return dA_cumsum, dt_out
 
 
-def _chunk_state_fwd(
-    B, x, dt, dA_cumsum, cu_chunk_seqlens, states=None, states_in_fp32=True
-):
+def _chunk_state_fwd(B, x, dt, dA_cumsum, cu_chunk_seqlens, states=None, states_in_fp32=True):
     seqlen, nheads, headdim = x.shape
     _, nchunks, chunk_size = dt.shape
     _, ngroups, dstate = B.shape
@@ -365,13 +334,10 @@ def _chunk_state_fwd(
         assert states.shape == (nchunks, nheads, headdim, dstate)
     else:
         states_dtype = torch.float32 if states_in_fp32 else B.dtype
-        states = torch.empty(
-            (nchunks, nheads, headdim, dstate), device=x.device, dtype=states_dtype
-        )
+        states = torch.empty((nchunks, nheads, headdim, dstate), device=x.device, dtype=states_dtype)
 
     grid = lambda META: (
-        triton.cdiv(headdim, META["BLOCK_SIZE_M"])
-        * triton.cdiv(dstate, META["BLOCK_SIZE_N"]),
+        triton.cdiv(headdim, META["BLOCK_SIZE_M"]) * triton.cdiv(dstate, META["BLOCK_SIZE_N"]),
         nchunks,
         nheads,
     )

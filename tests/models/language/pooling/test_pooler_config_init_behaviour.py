@@ -4,8 +4,8 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from tests.models.utils import softmax
 from aphrodite.config import PoolerConfig
+from tests.models.utils import softmax
 
 
 @pytest.mark.parametrize(
@@ -40,12 +40,8 @@ def test_classify_models_using_activation(
         wo_activation = torch.tensor(wo_activation)
         w_activation = torch.tensor(w_activation)
 
-        assert not torch.allclose(wo_activation, w_activation, atol=1e-2), (
-            "pooler_config is not working"
-        )
-        assert torch.allclose(
-            softmax(wo_activation), w_activation, 1e-3 if dtype == "float" else 1e-2
-        )
+        assert not torch.allclose(wo_activation, w_activation, atol=1e-2), "pooler_config is not working"
+        assert torch.allclose(softmax(wo_activation), w_activation, 1e-3 if dtype == "float" else 1e-2)
 
 
 @pytest.mark.parametrize(
@@ -78,12 +74,10 @@ def test_embed_models_using_normalize(
     ) as aphrodite_model:
         w_normalize = torch.tensor(aphrodite_model.embed(example_prompts))
 
-    assert not torch.allclose(wo_normalize, w_normalize, atol=1e-2), (
-        "pooler_config normalize is not working"
+    assert not torch.allclose(wo_normalize, w_normalize, atol=1e-2), "pooler_config normalize is not working"
+    assert torch.allclose(F.normalize(wo_normalize, p=2, dim=-1), w_normalize, atol=1e-2), (
+        "w_normal should be close to normal(wo_normal)."
     )
-    assert torch.allclose(
-        F.normalize(wo_normalize, p=2, dim=-1), w_normalize, atol=1e-2
-    ), "w_normal should be close to normal(wo_normal)."
 
 
 @pytest.mark.parametrize(
@@ -120,12 +114,8 @@ def test_reward_models_using_activation(
         wo = torch.tensor(wo)
         w = torch.tensor(w)
 
-        assert not torch.allclose(wo, w, atol=1e-2), (
-            "pooler_config activation is not working"
-        )
-        assert torch.allclose(softmax(wo), w, atol=1e-2), (
-            "w_activation should be close to activation(wo_activation)."
-        )
+        assert not torch.allclose(wo, w, atol=1e-2), "pooler_config activation is not working"
+        assert torch.allclose(softmax(wo), w, atol=1e-2), "w_activation should be close to activation(wo_activation)."
 
 
 @pytest.mark.parametrize(
@@ -159,9 +149,7 @@ def test_multi_vector_retrieval_models_using_normalize(
         w_normalize = aphrodite_model.token_embed(example_prompts)
 
     for wo, w in zip(wo_normalize, w_normalize):
-        assert not torch.allclose(wo, w, atol=1e-2), (
-            "pooler_config normalize is not working"
-        )
+        assert not torch.allclose(wo, w, atol=1e-2), "pooler_config normalize is not working"
         assert torch.allclose(F.normalize(wo, p=2, dim=-1), w, atol=1e-2), (
             "w_normal should be close to normal(wo_normal)."
         )

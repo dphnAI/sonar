@@ -13,9 +13,7 @@ from aphrodite.v1.metrics.reader import Gauge, get_metrics_snapshot
 logger = init_logger(__name__)
 
 
-def create_orca_header(
-    metrics_format: str, named_metrics: list[tuple[str, float]]
-) -> Mapping[str, str] | None:
+def create_orca_header(metrics_format: str, named_metrics: list[tuple[str, float]]) -> Mapping[str, str] | None:
     """
     Creates ORCA headers named 'endpoint-load-metrics' in the specified format
     and adds custom metrics to named_metrics.

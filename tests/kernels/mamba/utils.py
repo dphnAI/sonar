@@ -6,9 +6,7 @@ import torch.nn.functional as F
 from einops import rearrange, repeat
 
 
-def selective_state_update_ref(
-    state, x, dt, A, B, C, D=None, z=None, dt_bias=None, dt_softplus=False
-):
+def selective_state_update_ref(state, x, dt, A, B, C, D=None, z=None, dt_bias=None, dt_softplus=False):
     """
     Argument:
         state: (batch, dim, dstate) or (batch, nheads, dim, dstate)
@@ -58,17 +56,11 @@ def selective_state_update_ref(
         assert dt_bias.shape == (nheads, dim)
         dt = dt + dt_bias
     dt = F.softplus(dt) if dt_softplus else dt
-    dA = torch.exp(
-        rearrange(dt, "b h d -> b h d 1") * A
-    )  # (batch, nheads, dim, dstate)
+    dA = torch.exp(rearrange(dt, "b h d -> b h d 1") * A)  # (batch, nheads, dim, dstate)
     B = repeat(B, "b g n -> b (g h) n", h=nheads // ngroups)  # (batch, nheads, dstate)
     C = repeat(C, "b g n -> b (g h) n", h=nheads // ngroups)  # (batch, nheads, dstate)
-    dB = rearrange(dt, "b h d -> b h d 1") * rearrange(
-        B, "b h n -> b h 1 n"
-    )  # (batch, nheads, dim, dstate)
-    state.copy_(
-        state * dA + dB * rearrange(x, "b h d -> b h d 1")
-    )  # (batch, dim, dstate
+    dB = rearrange(dt, "b h d -> b h d 1") * rearrange(B, "b h n -> b h 1 n")  # (batch, nheads, dim, dstate)
+    state.copy_(state * dA + dB * rearrange(x, "b h d -> b h d 1"))  # (batch, dim, dstate
     out = torch.einsum("bhdn,bhn->bhd", state.to(C.dtype), C)
     if D is not None:
         out += (x * D).to(out.dtype)

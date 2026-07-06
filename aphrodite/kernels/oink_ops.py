@@ -15,9 +15,7 @@ from torch import Tensor
 from aphrodite import ir
 from aphrodite.platforms import current_platform
 
-OINK_AVAILABLE = current_platform.has_device_capability(100) and hasattr(
-    torch.ops, "oink"
-)
+OINK_AVAILABLE = current_platform.has_device_capability(100) and hasattr(torch.ops, "oink")
 
 
 def has_oink_op(name: str) -> bool:
@@ -35,9 +33,7 @@ def _can_view_as_2d(x: Tensor) -> bool:
     # respect to each other (size-1 dims are ignored).
     for dim in range(x.dim() - 1):
         # Strides for size-1 dims are irrelevant and can be arbitrary.
-        if x.size(dim + 1) != 1 and x.stride(dim) != x.stride(dim + 1) * x.size(
-            dim + 1
-        ):
+        if x.size(dim + 1) != 1 and x.stride(dim) != x.stride(dim + 1) * x.size(dim + 1):
             return False
     return True
 
@@ -73,9 +69,7 @@ and no variance_size override.
 """
 
 
-@ir.ops.rms_norm.register_impl(
-    "oink", supports_args=oink_rms_supported, supported=has_oink_op("rmsnorm")
-)
+@ir.ops.rms_norm.register_impl("oink", supports_args=oink_rms_supported, supported=has_oink_op("rmsnorm"))
 def rms_norm(
     x: Tensor,
     weight: Tensor | None,

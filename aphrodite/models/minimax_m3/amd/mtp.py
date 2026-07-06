@@ -76,9 +76,7 @@ class MiniMaxM3MultiTokenPredictorLayer(nn.Module):
             force_sparse_attn=True,
             force_moe=True,
         )
-        self.final_layernorm = MiniMAXGemmaRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.final_layernorm = MiniMAXGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -96,9 +94,7 @@ class MiniMaxM3MultiTokenPredictorLayer(nn.Module):
         # previous hidden states.
         inputs_embeds = self.enorm(inputs_embeds)
         previous_hidden_states = self.hnorm(previous_hidden_states)
-        hidden_states, _ = self.eh_proj(
-            torch.cat([inputs_embeds, previous_hidden_states], dim=-1)
-        )
+        hidden_states, _ = self.eh_proj(torch.cat([inputs_embeds, previous_hidden_states], dim=-1))
 
         # Apply transformer layer.
         hidden_states, residual = self.transformer_layer(
@@ -122,9 +118,7 @@ class MiniMaxM3MultiTokenPredictor(nn.Module):
         self.num_mtp_layers = config.num_mtp_modules
         self.layers = torch.nn.ModuleDict(
             {
-                str(idx): MiniMaxM3MultiTokenPredictorLayer(
-                    aphrodite_config, f"{prefix}.layers.{idx}"
-                )
+                str(idx): MiniMaxM3MultiTokenPredictorLayer(aphrodite_config, f"{prefix}.layers.{idx}")
                 for idx in range(self.num_mtp_layers)
             }
         )
@@ -187,9 +181,7 @@ class MiniMaxM3MTP(nn.Module):
         inputs_embeds: torch.Tensor | None = None,
         spec_step_idx: int = 0,
     ) -> torch.Tensor:
-        return self.model(
-            input_ids, positions, hidden_states, inputs_embeds, spec_step_idx
-        )
+        return self.model(input_ids, positions, hidden_states, inputs_embeds, spec_step_idx)
 
     def compute_logits(
         self,
@@ -198,9 +190,7 @@ class MiniMaxM3MTP(nn.Module):
     ) -> torch.Tensor | None:
         current_step_idx = spec_step_idx % self.model.num_mtp_layers
         mtp_layer = self.model.layers[str(current_step_idx)]
-        return self.logits_processor(
-            self.lm_head, mtp_layer.final_layernorm(hidden_states)
-        )
+        return self.logits_processor(self.lm_head, mtp_layer.final_layernorm(hidden_states))
 
     def _get_mtp_layer_idx_from_weight_name(self, name: str) -> int | None:
         """Return the MTP layer index in *.mtp.layers.{idx}.*, else None."""
@@ -311,9 +301,7 @@ class MiniMaxM3MTP(nn.Module):
                         continue
                     name = remapped_name
                     param = params_dict[name]
-                    weight_loader = getattr(
-                        param, "weight_loader", default_weight_loader
-                    )
+                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
                     weight_loader(param, loaded_weight)
 
             loaded_params.add(name)
@@ -323,8 +311,6 @@ class MiniMaxM3MTP(nn.Module):
         # Validate that weights were loaded for each MTP layer.
         for layer_idx in range(self.model.num_mtp_layers):
             if layer_idx not in loaded_mtp_layers:
-                raise ValueError(
-                    f"Failed to load MTP layer {layer_idx} weights from checkpoint."
-                )
+                raise ValueError(f"Failed to load MTP layer {layer_idx} weights from checkpoint.")
 
         return loaded_params

@@ -31,7 +31,7 @@ import torch
 from torch import nn
 from transformers import PretrainedConfig
 
-from aphrodite.config import CacheConfig, ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
 from aphrodite.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
@@ -78,9 +78,7 @@ class HYV3SharedHead(nn.Module):
         quant_config: QuantizationConfig | None = None,
     ) -> None:
         super().__init__()
-        self.head = ParallelLMHead(
-            config.vocab_size, config.hidden_size, quant_config=quant_config
-        )
+        self.head = ParallelLMHead(config.vocab_size, config.hidden_size, quant_config=quant_config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return hidden_states
@@ -125,14 +123,10 @@ class HYV3MultiTokenPredictorLayer(nn.Module):
         inputs_embeds = self.enorm(inputs_embeds)
         previous_hidden_states = self.hnorm(previous_hidden_states)
 
-        hidden_states = self.eh_proj(
-            torch.cat([inputs_embeds, previous_hidden_states], dim=-1)
-        )
+        hidden_states = self.eh_proj(torch.cat([inputs_embeds, previous_hidden_states], dim=-1))
 
         # HYV3DecoderLayer returns (hidden_states, residual)
-        hidden_states, residual = self.mtp_block(
-            positions=positions, hidden_states=hidden_states, residual=None
-        )
+        hidden_states, residual = self.mtp_block(positions=positions, hidden_states=hidden_states, residual=None)
         hidden_states = residual + hidden_states
         hidden_states = self.final_layernorm(hidden_states)
         return hidden_states
@@ -195,9 +189,7 @@ class HYV3MultiTokenPredictor(nn.Module):
     ) -> torch.Tensor:
         current_step_idx = spec_step_idx % self.num_mtp_layers
         mtp_layer = self.layers[str(self.mtp_start_layer_idx + current_step_idx)]
-        logits = self.logits_processor(
-            mtp_layer.shared_head.head, mtp_layer.shared_head(hidden_states)
-        )
+        logits = self.logits_processor(mtp_layer.shared_head.head, mtp_layer.shared_head(hidden_states))
         return logits
 
 
@@ -206,9 +198,7 @@ class HYV3MTP(nn.Module):
         super().__init__()
         self.config = aphrodite_config.model_config.hf_config
         self.quant_config = aphrodite_config.quant_config
-        self.model = HYV3MultiTokenPredictor(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = HYV3MultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
 
         self.sampler = Sampler()
 
@@ -221,9 +211,7 @@ class HYV3MTP(nn.Module):
         inputs_embeds: torch.Tensor | None = None,
         spec_step_idx: int = 0,
     ) -> torch.Tensor:
-        hidden_states = self.model(
-            input_ids, positions, hidden_states, inputs_embeds, spec_step_idx
-        )
+        hidden_states = self.model(input_ids, positions, hidden_states, inputs_embeds, spec_step_idx)
         return hidden_states
 
     def compute_logits(
@@ -243,9 +231,7 @@ class HYV3MTP(nn.Module):
 
     def _split_qkv_weight(self, qkv: torch.Tensor):
         num_attention_heads = self.config.num_attention_heads
-        num_kv_heads = getattr(
-            self.config, "num_key_value_heads", self.config.num_attention_heads
-        )
+        num_kv_heads = getattr(self.config, "num_key_value_heads", self.config.num_attention_heads)
         num_key_value_groups = num_attention_heads // num_kv_heads
         hidden_size = self.config.hidden_size
 
@@ -256,9 +242,7 @@ class HYV3MTP(nn.Module):
         else:
             attention_head_dim = self.config.hidden_size // num_attention_heads
 
-        qkv = qkv.reshape(
-            num_kv_heads, num_key_value_groups + 2, attention_head_dim, hidden_size
-        )
+        qkv = qkv.reshape(num_kv_heads, num_key_value_groups + 2, attention_head_dim, hidden_size)
         q, k, v = torch.split(qkv, (num_key_value_groups, 1, 1), dim=1)
         q = q.reshape(-1, hidden_size)
         k = k.reshape(-1, hidden_size)
@@ -266,9 +250,7 @@ class HYV3MTP(nn.Module):
         return torch.concat((q, k, v))
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
-        if self.quant_config is not None and (
-            cache_scale_mapper := self.quant_config.get_cache_scale_mapper()
-        ):
+        if self.quant_config is not None and (cache_scale_mapper := self.quant_config.get_cache_scale_mapper()):
             weights = cache_scale_mapper.apply(weights)
         cla_factor = _get_cla_factor(self.config)
         stacked_params_mapping = [
@@ -281,9 +263,7 @@ class HYV3MTP(nn.Module):
         ]
 
         num_attention_heads = self.config.num_attention_heads
-        num_kv_heads = getattr(
-            self.config, "num_key_value_heads", self.config.num_attention_heads
-        )
+        num_kv_heads = getattr(self.config, "num_key_value_heads", self.config.num_attention_heads)
         split_params_mapping = [
             (".gate_up_proj", ".gate_and_up_proj", 2, [(1, 1), (0, 1)], None),
             (
@@ -326,9 +306,7 @@ class HYV3MTP(nn.Module):
                 target_name = v3_shared_weights[name]
                 if target_name in params_dict:
                     param = params_dict[target_name]
-                    weight_loader = getattr(
-                        param, "weight_loader", default_weight_loader
-                    )
+                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
                     weight_loader(param, loaded_weight)
                 continue
 
@@ -401,9 +379,7 @@ class HYV3MTP(nn.Module):
                 for shard_id, num in split_param:
                     new_offset = offset + num * units
                     if func:
-                        weight_loader(
-                            param, func(loaded_weight)[offset:new_offset], shard_id
-                        )
+                        weight_loader(param, func(loaded_weight)[offset:new_offset], shard_id)
                     else:
                         weight_loader(param, loaded_weight[offset:new_offset], shard_id)
                     offset = new_offset
@@ -440,9 +416,7 @@ class HYV3MTP(nn.Module):
                         name = name.replace("router.gate.", "gate.")
 
                     param = params_dict[name]
-                    weight_loader = getattr(
-                        param, "weight_loader", default_weight_loader
-                    )
+                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
                     weight_loader(param, loaded_weight)
 
     def _rewrite_spec_layer_name(self, spec_layer: int, name: str) -> str:
@@ -462,7 +436,5 @@ class HYV3MTP(nn.Module):
                 break
         if not spec_layer_weight:
             # Transformer block weights go under .mtp_block
-            name = name.replace(
-                f"model.layers.{spec_layer}.", f"model.layers.{spec_layer}.mtp_block."
-            )
+            name = name.replace(f"model.layers.{spec_layer}.", f"model.layers.{spec_layer}.mtp_block.")
         return name

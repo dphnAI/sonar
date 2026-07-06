@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Speech-to-Text model constructor registry."""
 
 from __future__ import annotations
@@ -22,10 +23,7 @@ def get_stt_model_constructor(model_type: str) -> STTModelConstructor:
     try:
         return _STT_MODEL_CONSTRUCTORS[model_type]
     except KeyError:
-        raise ValueError(
-            f"Unsupported STT model_type: {model_type!r}. "
-            "Expected 'whisper' or 'qwen3_asr'."
-        ) from None
+        raise ValueError(f"Unsupported STT model_type: {model_type!r}. Expected 'whisper' or 'qwen3_asr'.") from None
 
 
 def _construct_whisper_model(config_dict: dict, dtype: mx.Dtype) -> WhisperModel:

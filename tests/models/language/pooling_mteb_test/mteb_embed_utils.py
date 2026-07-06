@@ -68,9 +68,7 @@ class MtebEmbedMixin(mteb.EncoderProtocol):
         # Cosine similarity
         norm1 = np.linalg.norm(embeddings1, axis=1, keepdims=True)
         norm2 = np.linalg.norm(embeddings2, axis=1, keepdims=True)
-        sim = np.sum(embeddings1 * embeddings2, axis=1) / (
-            norm1.flatten() * norm2.flatten()
-        )
+        sim = np.sum(embeddings1 * embeddings2, axis=1) / (norm1.flatten() * norm2.flatten())
         return sim
 
 
@@ -103,9 +101,7 @@ class AphroditeMtebEncoder(MtebEmbedMixin):
         # Hoping to discover potential scheduling
         # issues by randomizing the order.
         sentences = [
-            self.prompt_prefix + text if self.prompt_prefix else text
-            for batch in inputs
-            for text in batch["text"]
+            self.prompt_prefix + text if self.prompt_prefix else text for batch in inputs for text in batch["text"]
         ]
         r = self.rng.permutation(len(sentences))
         sentences = [sentences[i] for i in r]
@@ -133,9 +129,7 @@ class OpenAIClientMtebEncoder(MtebEmbedMixin):
         r = self.rng.permutation(len(sentences))
         sentences = [sentences[i] for i in r]
 
-        embeddings = self.client.embeddings.create(
-            model=self.model_name, input=sentences
-        )
+        embeddings = self.client.embeddings.create(model=self.model_name, input=sentences)
         outputs = [d.embedding for d in embeddings.data]
         embeds = np.array(outputs)
         embeds = embeds[np.argsort(r)]
@@ -191,15 +185,9 @@ def mteb_test_embed_models(
         if model_info.attn_type is not None:
             assert model_config.attn_type == model_info.attn_type
         if model_info.is_prefix_caching_supported is not None:
-            assert (
-                model_config.is_prefix_caching_supported
-                == model_info.is_prefix_caching_supported
-            )
+            assert model_config.is_prefix_caching_supported == model_info.is_prefix_caching_supported
         if model_info.is_chunked_prefill_supported is not None:
-            assert (
-                model_config.is_chunked_prefill_supported
-                == model_info.is_chunked_prefill_supported
-            )
+            assert model_config.is_chunked_prefill_supported == model_info.is_chunked_prefill_supported
 
         aphrodite_main_score = run_mteb_embed_task(
             AphroditeMtebEncoder(aphrodite_model, prompt_prefix=prompt_prefix), MTEB_EMBED_TASKS
@@ -230,9 +218,7 @@ def mteb_test_embed_models(
             if hf_model_callback is not None:
                 hf_model_callback(hf_model)
 
-            st_main_score = run_mteb_embed_task(
-                HfMtebEncoder(hf_model), MTEB_EMBED_TASKS
-            )
+            st_main_score = run_mteb_embed_task(HfMtebEncoder(hf_model), MTEB_EMBED_TASKS)
             st_dtype = next(hf_model.model.parameters()).dtype
 
             # Check embeddings close to hf outputs

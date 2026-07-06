@@ -129,9 +129,7 @@ def _reference(
 @pytest.mark.parametrize("use_fp4", [False, True])
 @pytest.mark.parametrize("use_cutedsl", [False, True])
 @torch.inference_mode()
-def test_fused_indexer_q_rope_quant_matches_unfused(
-    num_tokens, cache_dtype, use_fp4, use_cutedsl
-):
+def test_fused_indexer_q_rope_quant_matches_unfused(num_tokens, cache_dtype, use_fp4, use_cutedsl):
     if use_cutedsl and not has_cutedsl():
         pytest.skip("cutedsl (cutlass) not installed")
 
@@ -139,17 +137,13 @@ def test_fused_indexer_q_rope_quant_matches_unfused(
     torch.manual_seed(0)
 
     q = torch.randn(num_tokens, N_HEAD, HEAD_DIM, dtype=torch.bfloat16, device=device)
-    positions = torch.randint(
-        0, MAX_POS, (num_tokens,), dtype=torch.int64, device=device
-    )
+    positions = torch.randint(0, MAX_POS, (num_tokens,), dtype=torch.int64, device=device)
     cos_sin_cache = torch.randn(MAX_POS, ROPE_DIM, dtype=cache_dtype, device=device)
     weights = torch.randn(num_tokens, N_HEAD, dtype=torch.bfloat16, device=device)
     softmax_scale = HEAD_DIM**-0.5
     head_scale = N_HEAD**-0.5
 
-    q_quant_ref, weights_ref = _reference(
-        positions, q, cos_sin_cache, weights, softmax_scale, head_scale, use_fp4
-    )
+    q_quant_ref, weights_ref = _reference(positions, q, cos_sin_cache, weights, softmax_scale, head_scale, use_fp4)
     # use_cutedsl=False: force the triton path even when cutedsl is installed
     # by patching the dispatcher's has_cutedsl() binding to return False.
     cutedsl_patch = (
@@ -176,21 +170,17 @@ def test_fused_indexer_q_rope_quant_matches_unfused(
         q_quant_fused, q_scale_fused = q_quant_fused
 
         assert torch.equal(q_scale_ref, q_scale_fused), (
-            f"q_scale mismatch: "
-            f"{(q_scale_ref != q_scale_fused).sum().item()} "
-            f"/ {q_scale_ref.numel()} bytes differ"
+            f"q_scale mismatch: {(q_scale_ref != q_scale_fused).sum().item()} / {q_scale_ref.numel()} bytes differ"
         )
 
     # fp8 tensors aren't directly comparable via torch.equal — reinterpret as int8.
     ref_bits = q_quant_ref.view(torch.int8)
     fused_bits = q_quant_fused.view(torch.int8)
     assert torch.equal(ref_bits, fused_bits), (
-        f"q_quant_fused mismatch: "
-        f"{(ref_bits != fused_bits).sum().item()} / {ref_bits.numel()} bytes differ"
+        f"q_quant_fused mismatch: {(ref_bits != fused_bits).sum().item()} / {ref_bits.numel()} bytes differ"
     )
 
     assert weights_fused.dtype == torch.float32
     assert torch.equal(weights_ref, weights_fused), (
-        f"weights mismatch: max abs diff "
-        f"{(weights_ref - weights_fused).abs().max().item()}"
+        f"weights mismatch: max abs diff {(weights_ref - weights_fused).abs().max().item()}"
     )

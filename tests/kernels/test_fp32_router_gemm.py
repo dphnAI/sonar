@@ -58,9 +58,7 @@ def test_bf16_activation(num_tokens: int, hidden_dim: int, num_experts: int):
     _requires_sm90()
     torch.manual_seed(42)
     device = torch.device("cuda")
-    mat_a_bf16 = torch.randn(
-        num_tokens, hidden_dim, dtype=torch.bfloat16, device=device
-    )
+    mat_a_bf16 = torch.randn(num_tokens, hidden_dim, dtype=torch.bfloat16, device=device)
     mat_b = torch.randn(num_experts, hidden_dim, dtype=torch.float32, device=device)
 
     out = fp32_router_gemm(mat_a_bf16, mat_b)

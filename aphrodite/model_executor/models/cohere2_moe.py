@@ -9,7 +9,7 @@ from torch import nn
 from transformers import CohereConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed import (
     get_pp_group,
     get_tensor_model_parallel_world_size,
@@ -119,11 +119,7 @@ class Cohere2MoeMLP(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = (
-            intermediate_size
-            if intermediate_size is not None
-            else config.intermediate_size
-        )
+        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
         self.gate_up_proj = MergedColumnParallelLinear(
             self.hidden_size,
             [self.intermediate_size] * 2,
@@ -165,9 +161,7 @@ class Cohere2MoeAttention(nn.Module):
         self.hidden_size = config.hidden_size
         self.total_num_heads = config.num_attention_heads
         self.num_heads = self.total_num_heads // tp_size
-        self.head_dim = getattr(
-            config, "head_dim", self.hidden_size // self.total_num_heads
-        )
+        self.head_dim = getattr(config, "head_dim", self.hidden_size // self.total_num_heads)
         self.total_num_kv_heads = config.num_key_value_heads
         if self.total_num_kv_heads >= tp_size:
             assert self.total_num_kv_heads % tp_size == 0
@@ -177,9 +171,9 @@ class Cohere2MoeAttention(nn.Module):
         self.q_size = self.num_heads * self.head_dim
         self.kv_size = self.num_kv_heads * self.head_dim
         self.scaling = self.head_dim**-0.5
-        self.max_position_embeddings = getattr(
-            config, "model_max_length", None
-        ) or getattr(config, "max_position_embeddings", 8192)
+        self.max_position_embeddings = getattr(config, "model_max_length", None) or getattr(
+            config, "max_position_embeddings", 8192
+        )
         self.qkv_proj = QKVParallelLinear(
             self.hidden_size,
             self.head_dim,
@@ -205,21 +199,15 @@ class Cohere2MoeAttention(nn.Module):
 
         self.sliding_window = None
         layer_types = getattr(config, "layer_types", None)
-        if (
-            layer_types is not None
-            and layer_types[self.layer_idx] == "sliding_attention"
-        ):
+        if layer_types is not None and layer_types[self.layer_idx] == "sliding_attention":
             self.sliding_window = config.sliding_window
 
         # Prefix-dense layers have full attention (no sliding window). When
         # prefix_dense_sliding_window_pattern == 1, they keep RoPE even though
         # they are not sliding-window layers.
-        prefix_dense_sliding_window_pattern = getattr(
-            config, "prefix_dense_sliding_window_pattern", 1
-        )
+        prefix_dense_sliding_window_pattern = getattr(config, "prefix_dense_sliding_window_pattern", 1)
         self.force_rope = bool(
-            is_prefix_dense_layer(config, self.layer_idx)
-            and prefix_dense_sliding_window_pattern == 1
+            is_prefix_dense_layer(config, self.layer_idx) and prefix_dense_sliding_window_pattern == 1
         )
 
         self.attn = Attention(
@@ -264,14 +252,10 @@ class Cohere2Moe(nn.Module):
 
         if self.tp_size > config.num_experts:
             raise ValueError(
-                f"Tensor parallel size {self.tp_size} is greater than "
-                f"the number of experts {config.num_experts}."
+                f"Tensor parallel size {self.tp_size} is greater than the number of experts {config.num_experts}."
             )
 
-        if (
-            hasattr(config, "expert_selection_fn")
-            and config.expert_selection_fn == "sigmoid"
-        ):
+        if hasattr(config, "expert_selection_fn") and config.expert_selection_fn == "sigmoid":
             self.custom_routing_function = token_choice_with_bias
         else:
             self.custom_routing_function = None
@@ -292,9 +276,7 @@ class Cohere2Moe(nn.Module):
                 quant_config=quant_config,
                 prefix=f"{prefix}.shared_experts",
             )
-            self.shared_expert_combination_strategy = getattr(
-                config, "shared_expert_combination_strategy", "sum"
-            )
+            self.shared_expert_combination_strategy = getattr(config, "shared_expert_combination_strategy", "sum")
             assert self.shared_expert_combination_strategy in ("average", "sum"), (
                 "shared_expert_combination_strategy must be one of ['average', 'sum']"
             )
@@ -351,17 +333,13 @@ class Cohere2MoeDecoderLayer(nn.Module):
         if config.mlp_layer_types[self.layer_idx] == "dense":
             self.mlp = Cohere2MoeMLP(
                 config=config,
-                intermediate_size=getattr(
-                    config, "prefix_dense_intermediate_size", config.intermediate_size
-                ),
+                intermediate_size=getattr(config, "prefix_dense_intermediate_size", config.intermediate_size),
                 quant_config=quant_config,
                 reduce_results=True,
                 prefix=f"{prefix}.mlp",
             )
         else:
-            self.mlp = Cohere2Moe(
-                config=config, quant_config=quant_config, prefix=f"{prefix}.mlp"
-            )
+            self.mlp = Cohere2Moe(config=config, quant_config=quant_config, prefix=f"{prefix}.mlp")
 
         norm_cls, norm_eps = select_norm_impl(config)
         self.input_layernorm = norm_cls(param_shape=(config.hidden_size,), eps=norm_eps)
@@ -399,9 +377,7 @@ class Cohere2MoeModel(nn.Module):
         self.quant_config = quant_config
         self.vocab_size = config.vocab_size
         self.org_vocab_size = config.vocab_size
-        self.embed_tokens = VocabParallelEmbedding(
-            config.vocab_size, config.hidden_size
-        )
+        self.embed_tokens = VocabParallelEmbedding(config.vocab_size, config.hidden_size)
 
         # Decoder layers read per-layer MLP layout from config.mlp_layer_types
         # (dense MLP vs MoE) and use it for weight loading. Transformers >=5.10
@@ -411,17 +387,13 @@ class Cohere2MoeModel(nn.Module):
             first_k_dense_replace = getattr(config, "first_k_dense_replace", None)
             n = config.num_hidden_layers
             if first_k_dense_replace is not None:
-                config.mlp_layer_types = ["dense"] * first_k_dense_replace + [
-                    "sparse"
-                ] * (n - first_k_dense_replace)
+                config.mlp_layer_types = ["dense"] * first_k_dense_replace + ["sparse"] * (n - first_k_dense_replace)
             else:
                 config.mlp_layer_types = ["sparse"] * n
 
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
-            lambda prefix: Cohere2MoeDecoderLayer(
-                config, cache_config, quant_config, prefix=prefix
-            ),
+            lambda prefix: Cohere2MoeDecoderLayer(config, cache_config, quant_config, prefix=prefix),
             prefix=f"{prefix}.layers",
         )
         norm_cls, norm_eps = select_norm_impl(config)
@@ -453,9 +425,7 @@ class Cohere2MoeModel(nn.Module):
         for layer in islice(self.layers, self.start_layer, self.end_layer):
             hidden_states, residual = layer(positions, hidden_states, residual)
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
         hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
 
@@ -497,15 +467,9 @@ class Cohere2MoeForCausalLM(nn.Module, SupportsPP, SupportsQuant):
         self.unpadded_vocab_size = config.vocab_size
         self.quant_config = quant_config
         self.logits_scale = config.logit_scale
-        self.logits_processor = LogitsProcessor(
-            self.unpadded_vocab_size, config.vocab_size, scale=self.logits_scale
-        )
-        self.model = Cohere2MoeModel(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.logits_processor = LogitsProcessor(self.unpadded_vocab_size, config.vocab_size, scale=self.logits_scale)
+        self.model = Cohere2MoeModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.get_input_embeddings(input_ids)

@@ -47,11 +47,7 @@ PACK_FACTOR = 8  # 8 x 4-bit nibbles per int32
 # Skip everything in this module unless we are on the only architecture the
 # kernel is built/registered for.
 gfx1100_only = pytest.mark.skipif(
-    not (
-        on_gfx1100()
-        and hasattr(torch.ops, "_rocm_C")
-        and hasattr(torch.ops._rocm_C, "gptq_gemm_rdna3")
-    ),
+    not (on_gfx1100() and hasattr(torch.ops, "_rocm_C") and hasattr(torch.ops._rocm_C, "gptq_gemm_rdna3")),
     reason="requires gfx1100 with the _rocm_C.gptq_gemm_rdna3 op built in",
 )
 
@@ -84,9 +80,7 @@ def _reference(
     K, N = q_int4_kn.shape
     s_full = scales_gn.repeat_interleave(group_size, dim=0).to(torch.float32)  # [K,N]
     if zeros_gn is None:
-        z_full = torch.full(
-            (K, N), float(WEIGHT_TYPE.bias), device=x_mk.device, dtype=torch.float32
-        )
+        z_full = torch.full((K, N), float(WEIGHT_TYPE.bias), device=x_mk.device, dtype=torch.float32)
     else:
         z_full = (zeros_gn + 1).repeat_interleave(group_size, dim=0).to(torch.float32)
     w_fp = (q_int4_kn.to(torch.float32) - z_full) * s_full  # [K, N]
@@ -203,9 +197,7 @@ _REL_L2_TOL = {torch.float16: 5e-2, torch.bfloat16: 1e-2}
 
 
 def _assert_close(out: torch.Tensor, ref: torch.Tensor, dtype: torch.dtype):
-    rel_l2 = (out.to(torch.float32) - ref.to(torch.float32)).norm() / ref.to(
-        torch.float32
-    ).norm()
+    rel_l2 = (out.to(torch.float32) - ref.to(torch.float32)).norm() / ref.to(torch.float32).norm()
     tol = _REL_L2_TOL[dtype]
     assert rel_l2 < tol, f"relative L2 error {rel_l2:.4f} exceeds {tol} for {dtype}"
 
@@ -230,9 +222,7 @@ MKNG_SHAPES = [
 @gfx1100_only
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("has_zp", [False, True], ids=["no_zp", "with_zp"])
-@pytest.mark.parametrize(
-    "M,K,N,G", MKNG_SHAPES, ids=[f"m{m}_k{k}_n{n}_g{g}" for m, k, n, g in MKNG_SHAPES]
-)
+@pytest.mark.parametrize("M,K,N,G", MKNG_SHAPES, ids=[f"m{m}_k{k}_n{n}_g{g}" for m, k, n, g in MKNG_SHAPES])
 def test_rdna3_w4a16_matches_reference(dtype, has_zp, M, K, N, G, dist_init):
     set_random_seed(0)
     assert K % G == 0 and K % PACK_FACTOR == 0 and N % PACK_FACTOR == 0
@@ -240,14 +230,8 @@ def test_rdna3_w4a16_matches_reference(dtype, has_zp, M, K, N, G, dist_init):
     groups = K // G
     x_mk = (0.25 * torch.randn((M, K), device=device, dtype=torch.float32)).to(dtype)
     q_int4_kn = torch.randint(0, 16, (K, N), device=device, dtype=torch.int32)
-    scales_gn = (
-        0.05 * torch.rand((groups, N), device=device, dtype=torch.float32) + 0.01
-    ).to(dtype)
-    zeros_gn = (
-        torch.randint(0, 16, (groups, N), device=device, dtype=torch.int32)
-        if has_zp
-        else None
-    )
+    scales_gn = (0.05 * torch.rand((groups, N), device=device, dtype=torch.float32) + 0.01).to(dtype)
+    zeros_gn = torch.randint(0, 16, (groups, N), device=device, dtype=torch.int32) if has_zp else None
 
     out = _run_kernel(x_mk, q_int4_kn, scales_gn, zeros_gn, G, None, dtype)
     ref = _reference(x_mk, q_int4_kn, scales_gn, zeros_gn, G, None)
@@ -267,9 +251,7 @@ def test_rdna3_w4a16_bias(dtype, M, dist_init):
 
     x_mk = (0.25 * torch.randn((M, K), device=device, dtype=torch.float32)).to(dtype)
     q_int4_kn = torch.randint(0, 16, (K, N), device=device, dtype=torch.int32)
-    scales_gn = (
-        0.05 * torch.rand((groups, N), device=device, dtype=torch.float32) + 0.01
-    ).to(dtype)
+    scales_gn = (0.05 * torch.rand((groups, N), device=device, dtype=torch.float32) + 0.01).to(dtype)
     bias = (0.1 * torch.randn(N, device=device, dtype=torch.float32)).to(dtype)
 
     out = _run_kernel(x_mk, q_int4_kn, scales_gn, None, G, bias, dtype)

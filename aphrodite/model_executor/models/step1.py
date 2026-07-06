@@ -10,7 +10,7 @@ from collections.abc import Iterable
 import torch
 from torch import nn
 
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
@@ -94,9 +94,7 @@ class StepAttention(nn.Module):
         self.num_heads = self.total_num_heads // tp_size
         self.head_dim = self.hidden_size // self.total_num_heads
 
-        total_num_kv_heads = getattr(
-            config, "num_attention_groups", getattr(config, "num_key_value_heads", 1)
-        )
+        total_num_kv_heads = getattr(config, "num_attention_groups", getattr(config, "num_key_value_heads", 1))
         if total_num_kv_heads is None or total_num_kv_heads <= 0:
             total_num_kv_heads = 1
         self.total_num_kv_heads = total_num_kv_heads
@@ -246,9 +244,7 @@ class StepDecoderModel(nn.Module, EagleModelMixin):
         self.config = config
         self.quant_config = quant_config
         # Need embed_tokens on first rank, and also on last rank if tie_word_embeddings
-        if get_pp_group().is_first_rank or (
-            config.tie_word_embeddings and get_pp_group().is_last_rank
-        ):
+        if get_pp_group().is_first_rank or (config.tie_word_embeddings and get_pp_group().is_last_rank):
             self.embed_tokens = VocabParallelEmbedding(
                 config.vocab_size,
                 config.hidden_size,
@@ -296,14 +292,10 @@ class StepDecoderModel(nn.Module, EagleModelMixin):
         aux_hidden_states = self._maybe_add_hidden_state([], 0, hidden_states, residual)
         for idx, layer in enumerate(self.layers[self.start_layer : self.end_layer]):
             hidden_states, residual = layer(positions, hidden_states, residual)
-            self._maybe_add_hidden_state(
-                aux_hidden_states, idx + 1, hidden_states, residual
-            )
+            self._maybe_add_hidden_state(aux_hidden_states, idx + 1, hidden_states, residual)
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
 
         hidden_states, _ = self.norm(hidden_states, residual)
         if aux_hidden_states:
@@ -353,9 +345,7 @@ class Step1ForCausalLM(nn.Module, SupportsPP, SupportsEagle, SupportsEagle3):
             self.lm_head = PPMissingLayer()
             self.logits_processor = None  # type: ignore[assignment]
 
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)

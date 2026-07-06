@@ -20,17 +20,12 @@ class WorkerProfiler(ABC):
     def __init__(self, profiler_config: ProfilerConfig) -> None:
         self._delay_iters = profiler_config.delay_iterations
         if self._delay_iters > 0:
-            logger.info_once(
-                "GPU profiling will start "
-                f"{self._delay_iters} steps after start_profile."
-            )
+            logger.info_once(f"GPU profiling will start {self._delay_iters} steps after start_profile.")
 
         self._max_iters = profiler_config.max_iterations
         if self._max_iters > 0:
             logger.info_once(
-                "GPU profiling will stop "
-                f"after {self._max_iters} worker steps, "
-                "or when stop_profile is received."
+                f"GPU profiling will stop after {self._max_iters} worker steps, or when stop_profile is received."
             )
 
         # Track when the profiler gets triggered by start_profile
@@ -71,10 +66,7 @@ class WorkerProfiler(ABC):
     def start(self) -> None:
         """Attempt to start the profiler, accounting for delayed starts."""
         if self._active:
-            logger.debug(
-                "start_profile received when profiler is already active. "
-                "Ignoring request."
-            )
+            logger.debug("start_profile received when profiler is already active. Ignoring request.")
             return
         self._active = True
         if self._delay_iters == 0:
@@ -88,11 +80,7 @@ class WorkerProfiler(ABC):
 
         self._active_iteration_count += 1
 
-        if (
-            not self._running
-            and self._delay_iters > 0
-            and self._active_iteration_count == self._delay_iters
-        ):
+        if not self._running and self._delay_iters > 0 and self._active_iteration_count == self._delay_iters:
             logger.info_once("Starting profiler after delay...")
             self._call_start()
 
@@ -101,11 +89,7 @@ class WorkerProfiler(ABC):
         if self._running and self._profiler_step():
             self._profiling_for_iters += 1
 
-        if (
-            self._max_iters > 0
-            and self._running
-            and self._profiling_for_iters > self._max_iters
-        ):
+        if self._max_iters > 0 and self._running and self._profiling_for_iters > self._max_iters:
             # Automatically stop the profiler after max iters
             # will be marked as not running, but leave as active so that stop
             # can clean up properly
@@ -126,9 +110,7 @@ class WorkerProfiler(ABC):
     def stop(self) -> None:
         """Attempt to stop the profiler, accounting for overlapped calls."""
         if not self._active:
-            logger.debug(
-                "stop_profile received when profiler is not active. Ignoring request."
-            )
+            logger.debug("stop_profile received when profiler is not active. Ignoring request.")
             return
         self._active = False
         self._active_iteration_count = 0
@@ -176,8 +158,7 @@ class TorchProfilerWrapper(WorkerProfiler):
                 torch_profiler_trace_dir,
             )
             logger.debug(
-                "Profiler config: record_shapes=%s,"
-                "profile_memory=%s,with_stack=%s,with_flops=%s",
+                "Profiler config: record_shapes=%s,profile_memory=%s,with_stack=%s,with_flops=%s",
                 profiler_config.torch_profiler_record_shapes,
                 profiler_config.torch_profiler_with_memory,
                 profiler_config.torch_profiler_with_stack,
@@ -277,9 +258,7 @@ class TorchProfilerWrapper(WorkerProfiler):
                 print(table)
 
         if self.dump_cpu_time_total:
-            table = self._build_profiler_table(
-                sort_key="self_cpu_time_total", row_limit=50
-            )
+            table = self._build_profiler_table(sort_key="self_cpu_time_total", row_limit=50)
             self._write_profiler_table(rank, table)
 
             # only print profiler results on rank 0

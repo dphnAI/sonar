@@ -44,9 +44,7 @@ async def lifespan(app: FastAPI):
                 "client": httpx.AsyncClient(
                     timeout=None,
                     base_url=f"http://{host}:{port}/v1",
-                    limits=httpx.Limits(
-                        max_connections=None, max_keepalive_connections=None
-                    ),
+                    limits=httpx.Limits(max_connections=None, max_keepalive_connections=None),
                 ),
                 "host": host,
                 "port": port,
@@ -60,9 +58,7 @@ async def lifespan(app: FastAPI):
                 "client": httpx.AsyncClient(
                     timeout=None,
                     base_url=f"http://{host}:{port}/v1",
-                    limits=httpx.Limits(
-                        max_connections=None, max_keepalive_connections=None
-                    ),
+                    limits=httpx.Limits(max_connections=None, max_keepalive_connections=None),
                 ),
                 "host": host,
                 "port": port,
@@ -182,9 +178,7 @@ async def _prefill(client_info, endpoint, req_data, request_id):
 
 async def _stream_decode(client_info, endpoint, req_data, request_id):
     headers = _auth_headers(request_id)
-    async with client_info["client"].stream(
-        "POST", endpoint, json=req_data, headers=headers
-    ) as resp:
+    async with client_info["client"].stream("POST", endpoint, json=req_data, headers=headers) as resp:
         resp.raise_for_status()
         async for chunk in resp.aiter_bytes():
             yield chunk
@@ -254,9 +248,7 @@ async def _handle_completions_decoder_first(api: str, request: Request):
 
             async def _run_decode():
                 try:
-                    async for chunk in _stream_decode(
-                        decode_client, api, decode_data, request_id
-                    ):
+                    async for chunk in _stream_decode(decode_client, api, decode_data, request_id):
                         await queue.put(("data", chunk))
                 except Exception as exc:
                     await queue.put(("error", exc))

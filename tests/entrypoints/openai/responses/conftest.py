@@ -67,10 +67,7 @@ async def retry_for_tool_call(
     for attempt in range(max_retries):
         response = await client.responses.create(model=model, **create_kwargs)
         last_response = response
-        if any(
-            getattr(item, "type", None) == expected_tool_type
-            for item in response.output
-        ):
+        if any(getattr(item, "type", None) == expected_tool_type for item in response.output):
             return response
     assert last_response is not None
     return last_response
@@ -90,9 +87,7 @@ async def retry_streaming_for(
     """
     last_events: list = []
     for attempt in range(max_retries):
-        stream = await client.responses.create(
-            model=model, stream=True, **create_kwargs
-        )
+        stream = await client.responses.create(model=model, stream=True, **create_kwargs)
         events: list = []
         async for event in stream:
             events.append(event)
@@ -127,9 +122,7 @@ def _validate_event_pairing(events: list, pairs_of_event_types: dict[str, str]) 
         if etype in end_events:
             expected_start = pairs_of_event_types[etype]
             assert stack and stack[-1] == expected_start, (
-                f"Stack mismatch for {etype}: "
-                f"expected {expected_start}, "
-                f"got {stack[-1] if stack else '<empty>'}"
+                f"Stack mismatch for {etype}: expected {expected_start}, got {stack[-1] if stack else '<empty>'}"
             )
             stack.pop()
         elif etype in start_events:
@@ -147,33 +140,22 @@ def _validate_event_ordering(events: list) -> None:
     assert len(events) >= 2, f"Expected at least 2 events, got {len(events)}"
 
     # First event must be response.created
-    assert events[0].type == "response.created", (
-        f"First event must be response.created, got {events[0].type}"
-    )
+    assert events[0].type == "response.created", f"First event must be response.created, got {events[0].type}"
     # Last event must be response.completed
-    assert events[-1].type == "response.completed", (
-        f"Last event must be response.completed, got {events[-1].type}"
-    )
+    assert events[-1].type == "response.completed", f"Last event must be response.completed, got {events[-1].type}"
 
     # response.in_progress, if present, must be the second event
-    in_progress_indices = [
-        i for i, e in enumerate(events) if e.type == "response.in_progress"
-    ]
+    in_progress_indices = [i for i, e in enumerate(events) if e.type == "response.in_progress"]
     if in_progress_indices:
         assert in_progress_indices == [1], (
-            f"response.in_progress must be the second event, "
-            f"found at indices {in_progress_indices}"
+            f"response.in_progress must be the second event, found at indices {in_progress_indices}"
         )
 
     # Exactly one created and one completed
     created_count = sum(1 for e in events if e.type == "response.created")
     completed_count = sum(1 for e in events if e.type == "response.completed")
-    assert created_count == 1, (
-        f"Expected exactly 1 response.created, got {created_count}"
-    )
-    assert completed_count == 1, (
-        f"Expected exactly 1 response.completed, got {completed_count}"
-    )
+    assert created_count == 1, f"Expected exactly 1 response.created, got {created_count}"
+    assert completed_count == 1, f"Expected exactly 1 response.completed, got {completed_count}"
 
 
 def _validate_field_consistency(events: list) -> None:
@@ -231,13 +213,11 @@ def _validate_field_consistency(events: list) -> None:
 
             if active_item_id is not None and done_item_id:
                 assert done_item_id == active_item_id, (
-                    f"output_item.done item.id mismatch: "
-                    f"expected {active_item_id}, got {done_item_id}"
+                    f"output_item.done item.id mismatch: expected {active_item_id}, got {done_item_id}"
                 )
             if active_output_index is not None and output_index is not None:
                 assert output_index == active_output_index, (
-                    f"output_item.done output_index mismatch: "
-                    f"expected {active_output_index}, got {output_index}"
+                    f"output_item.done output_index mismatch: expected {active_output_index}, got {output_index}"
                 )
 
             active_item_id = None
@@ -253,10 +233,7 @@ def _validate_field_consistency(events: list) -> None:
             _assert_item_fields(event, etype, active_item_id, active_output_index)
             content_index = getattr(event, "content_index", None)
             if active_content_index is None:
-                assert content_index == 0, (
-                    f"{etype} for a new item must start at content_index 0, "
-                    f"got {content_index}"
-                )
+                assert content_index == 0, f"{etype} for a new item must start at content_index 0, got {content_index}"
             active_content_index = content_index
             continue
 
@@ -267,8 +244,7 @@ def _validate_field_consistency(events: list) -> None:
         content_index = getattr(event, "content_index", None)
         if content_index is not None and active_content_index is not None:
             assert content_index == active_content_index, (
-                f"{etype} content_index mismatch: "
-                f"expected {active_content_index}, got {content_index}"
+                f"{etype} content_index mismatch: expected {active_content_index}, got {content_index}"
             )
 
 
@@ -288,14 +264,11 @@ def _assert_item_fields(
         )
     if active_output_index is not None and output_index is not None:
         assert output_index == active_output_index, (
-            f"{etype} output_index mismatch: "
-            f"expected {active_output_index}, got {output_index}"
+            f"{etype} output_index mismatch: expected {active_output_index}, got {output_index}"
         )
 
 
-def validate_streaming_event_stack(
-    events: list, pairs_of_event_types: dict[str, str]
-) -> None:
+def validate_streaming_event_stack(events: list, pairs_of_event_types: dict[str, str]) -> None:
     """Validate streaming events: pairing, ordering, and field consistency.
 
     Checks three aspects:

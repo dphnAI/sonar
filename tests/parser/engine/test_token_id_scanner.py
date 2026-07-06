@@ -308,12 +308,8 @@ class TestEndToEndReasoningHoldback:
 
         all_events.extend(engine.finish())
 
-        reasoning_text = "".join(
-            e.value for e in all_events if e.type == EventType.REASONING_CHUNK
-        )
-        content_text = "".join(
-            e.value for e in all_events if e.type == EventType.TEXT_CHUNK
-        )
+        reasoning_text = "".join(e.value for e in all_events if e.type == EventType.REASONING_CHUNK)
+        content_text = "".join(e.value for e in all_events if e.type == EventType.TEXT_CHUNK)
 
         assert "processed is appropriate." in reasoning_text
         assert "Understood." in content_text
@@ -356,9 +352,7 @@ class TestEndToEndReasoningHoldback:
 
         all_events.extend(engine.finish())
 
-        reasoning_text = "".join(
-            e.value for e in all_events if e.type == EventType.REASONING_CHUNK
-        )
+        reasoning_text = "".join(e.value for e in all_events if e.type == EventType.REASONING_CHUNK)
 
         assert "`hostname`." in reasoning_text
 
@@ -572,8 +566,7 @@ class TestStreamInterval10:
         events: list = []
         events.extend(
             engine.feed(
-                "<|channel>thought\nword0 word1 word2 word3 word4 "
-                "word5 word6 word7 word8 ",
+                "<|channel>thought\nword0 word1 word2 word3 word4 word5 word6 word7 word8 ",
                 [
                     _CHANNEL_START_TID,
                     _TOK[0],
@@ -679,8 +672,7 @@ class TestStreamInterval10:
         events: list = []
         events.extend(
             engine.feed(
-                "<|channel>thought\nword0 word1 word2 word3 word4 "
-                "word5 word6 word7 word8 ",
+                "<|channel>thought\nword0 word1 word2 word3 word4 word5 word6 word7 word8 ",
                 [
                     _CHANNEL_START_TID,
                     _TOK[0],
@@ -841,8 +833,7 @@ class TestStreamInterval10:
 
         events.extend(
             engine.feed(
-                "<channel|>w0 w1 w2 Here is what I recommend: start with "
-                "the fundamentals and build up from there.",
+                "<channel|>w0 w1 w2 Here is what I recommend: start with the fundamentals and build up from there.",
                 [
                     _TOK[3],
                     _TOK[4],
@@ -907,11 +898,7 @@ class TestRebuildFromAnchorsLiteralLookalike:
         assert '{"name":"f"}' in joined_text
 
     def test_multiple_tool_calls_with_literal_between(self, tool_scanner):
-        delta_text = (
-            '<tool_call>{"name":"a"}</tool_call>'
-            " see <tool_call> syntax "
-            '<tool_call>{"name":"b"}</tool_call>'
-        )
+        delta_text = '<tool_call>{"name":"a"}</tool_call> see <tool_call> syntax <tool_call>{"name":"b"}</tool_call>'
         delta_token_ids = [
             TOOL_START_ID,
             1,

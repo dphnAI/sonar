@@ -137,17 +137,13 @@ class RocmAiterUnifiedAttentionImpl(RocmAttentionImpl):
             kv_sharing_target_layer_name,
             sinks,
         )
-        logger.info_once(
-            "Using aiter unified attention for RocmAiterUnifiedAttentionImpl"
-        )
+        logger.info_once("Using aiter unified attention for RocmAiterUnifiedAttentionImpl")
         from aiter.ops.triton.unified_attention import unified_attention
 
         self.unified_attention = unified_attention
         self.supports_quant_query_input = True
 
-    def _split_kv_cache(
-        self, kv_cache: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def _split_kv_cache(self, kv_cache: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         # Blocks-first ``(num_blocks, 2, ...)``. The model runner normalizes any
         # shared decoder/cross-attention allocation to this layout, so no
         # per-backend restriding is needed here.
@@ -179,8 +175,7 @@ class RocmAiterUnifiedAttentionImpl(RocmAttentionImpl):
         """
         if output_block_scale is not None:
             raise NotImplementedError(
-                "fused block_scale output quantization is not yet supported"
-                " for RocmAttentionImpl"
+                "fused block_scale output quantization is not yet supported for RocmAttentionImpl"
             )
 
         if attn_metadata is None:

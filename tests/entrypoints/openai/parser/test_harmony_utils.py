@@ -5,7 +5,6 @@ import pytest
 from openai.types.responses import FunctionTool
 from openai_harmony import DeveloperContent, Message, Role
 
-from tests.entrypoints.openai.utils import verify_harmony_messages
 from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionToolsParam
 from aphrodite.entrypoints.openai.parser.harmony_utils import (
     auto_drop_analysis_messages,
@@ -20,6 +19,7 @@ from aphrodite.entrypoints.openai.responses.harmony import (
     response_input_to_harmony,
     response_previous_input_to_harmony,
 )
+from tests.entrypoints.openai.utils import verify_harmony_messages
 
 _TOOL_PARAMETERS = {
     "type": "object",
@@ -257,9 +257,7 @@ class TestCommonParseInputToHarmonyMessage:
     response_previous_input_to_harmony functions.
     """
 
-    @pytest.fixture(
-        params=[parse_chat_input_to_harmony_message, response_previous_input_to_harmony]
-    )
+    @pytest.fixture(params=[parse_chat_input_to_harmony_message, response_previous_input_to_harmony])
     def parse_function(self, request):
         return request.param
 
@@ -714,9 +712,7 @@ class TestParseChatInputToHarmonyMessage:
             "content": "The weather in San Francisco is sunny, 72°F",
         }
 
-        messages = parse_chat_input_to_harmony_message(
-            chat_msg, tool_id_names=tool_id_names
-        )
+        messages = parse_chat_input_to_harmony_message(chat_msg, tool_id_names=tool_id_names)
 
         verify_harmony_messages(
             messages,
@@ -748,9 +744,7 @@ class TestParseChatInputToHarmonyMessage:
             ],
         }
 
-        messages = parse_chat_input_to_harmony_message(
-            chat_msg, tool_id_names=tool_id_names
-        )
+        messages = parse_chat_input_to_harmony_message(chat_msg, tool_id_names=tool_id_names)
 
         verify_harmony_messages(
             messages,
@@ -774,9 +768,7 @@ class TestParseChatInputToHarmonyMessage:
             "content": "",
         }
 
-        messages = parse_chat_input_to_harmony_message(
-            chat_msg, tool_id_names=tool_id_names
-        )
+        messages = parse_chat_input_to_harmony_message(chat_msg, tool_id_names=tool_id_names)
 
         verify_harmony_messages(
             messages,
@@ -800,9 +792,7 @@ class TestParseChatInputToHarmonyMessage:
             "content": None,
         }
 
-        messages = parse_chat_input_to_harmony_message(
-            chat_msg, tool_id_names=tool_id_names
-        )
+        messages = parse_chat_input_to_harmony_message(chat_msg, tool_id_names=tool_id_names)
 
         verify_harmony_messages(
             messages,
@@ -820,57 +810,45 @@ class TestParseChatInputToHarmonyMessage:
 class TestAutoDropAnalysisMessages:
     def test_no_analysis_messages(self) -> None:
         messages = [
-            Message.from_role_and_content(
-                Role.ASSISTANT, "The answer is 4."
-            ).with_channel("final"),
+            Message.from_role_and_content(Role.ASSISTANT, "The answer is 4.").with_channel("final"),
         ]
         cleaned_messages = auto_drop_analysis_messages(messages)
         assert cleaned_messages == messages
 
     def test_only_analysis_message(self) -> None:
         messages = [
-            Message.from_role_and_content(
-                Role.ASSISTANT, "I'm thinking about the user's question."
-            ).with_channel("analysis"),
+            Message.from_role_and_content(Role.ASSISTANT, "I'm thinking about the user's question.").with_channel(
+                "analysis"
+            ),
         ]
         cleaned_messages = auto_drop_analysis_messages(messages)
         assert cleaned_messages == messages
 
     def test_multiple_analysis_messages_without_final_message(self) -> None:
         messages = [
-            Message.from_role_and_content(
-                Role.ASSISTANT, "I'm thinking about the user's question."
-            ).with_channel("analysis"),
-            Message.from_role_and_content(
-                Role.ASSISTANT, "I'm thinking more."
-            ).with_channel("analysis"),
-            Message.from_role_and_content(
-                Role.ASSISTANT, "I'm thinking even more."
-            ).with_channel("analysis"),
+            Message.from_role_and_content(Role.ASSISTANT, "I'm thinking about the user's question.").with_channel(
+                "analysis"
+            ),
+            Message.from_role_and_content(Role.ASSISTANT, "I'm thinking more.").with_channel("analysis"),
+            Message.from_role_and_content(Role.ASSISTANT, "I'm thinking even more.").with_channel("analysis"),
         ]
         cleaned_messages = auto_drop_analysis_messages(messages)
         assert cleaned_messages == messages
 
     def test_only_final_message(self) -> None:
         messages = [
-            Message.from_role_and_content(
-                Role.ASSISTANT, "The answer is 4."
-            ).with_channel("final"),
+            Message.from_role_and_content(Role.ASSISTANT, "The answer is 4.").with_channel("final"),
         ]
         cleaned_messages = auto_drop_analysis_messages(messages)
         assert cleaned_messages == messages
 
     def test_drops_one_analysis_messages_before_final_message(self) -> None:
         messages = [
-            Message.from_role_and_content(
-                Role.ASSISTANT, "I'm thinking about the user's question."
-            ).with_channel("analysis"),
-            Message.from_role_and_content(
-                Role.ASSISTANT, "The answer is 4."
-            ).with_channel("final"),
-            Message.from_role_and_content(
-                Role.ASSISTANT, "I should think harder."
-            ).with_channel("analysis"),
+            Message.from_role_and_content(Role.ASSISTANT, "I'm thinking about the user's question.").with_channel(
+                "analysis"
+            ),
+            Message.from_role_and_content(Role.ASSISTANT, "The answer is 4.").with_channel("final"),
+            Message.from_role_and_content(Role.ASSISTANT, "I should think harder.").with_channel("analysis"),
         ]
         cleaned_messages = auto_drop_analysis_messages(messages)
         # Should have dropped the first analysis message
@@ -878,21 +856,13 @@ class TestAutoDropAnalysisMessages:
 
     def test_drops_all_analysis_messages_before_final_message(self) -> None:
         messages = [
-            Message.from_role_and_content(
-                Role.ASSISTANT, "I'm thinking about the user's question."
-            ).with_channel("analysis"),
-            Message.from_role_and_content(
-                Role.ASSISTANT, "I'm thinking more."
-            ).with_channel("analysis"),
-            Message.from_role_and_content(
-                Role.ASSISTANT, "I'm thinking even more."
-            ).with_channel("analysis"),
-            Message.from_role_and_content(
-                Role.ASSISTANT, "The answer is 4."
-            ).with_channel("final"),
-            Message.from_role_and_content(
-                Role.ASSISTANT, "I should think harder."
-            ).with_channel("analysis"),
+            Message.from_role_and_content(Role.ASSISTANT, "I'm thinking about the user's question.").with_channel(
+                "analysis"
+            ),
+            Message.from_role_and_content(Role.ASSISTANT, "I'm thinking more.").with_channel("analysis"),
+            Message.from_role_and_content(Role.ASSISTANT, "I'm thinking even more.").with_channel("analysis"),
+            Message.from_role_and_content(Role.ASSISTANT, "The answer is 4.").with_channel("final"),
+            Message.from_role_and_content(Role.ASSISTANT, "I should think harder.").with_channel("analysis"),
         ]
         cleaned_messages = auto_drop_analysis_messages(messages)
         # Should have dropped the first 3 analysis messages
@@ -900,24 +870,14 @@ class TestAutoDropAnalysisMessages:
 
     def test_multiple_analysis_messages_with_multiple_final_messages(self) -> None:
         messages = [
-            Message.from_role_and_content(
-                Role.ASSISTANT, "I'm thinking about the user's question."
-            ).with_channel("analysis"),
-            Message.from_role_and_content(
-                Role.ASSISTANT, "I'm thinking more."
-            ).with_channel("analysis"),
-            Message.from_role_and_content(
-                Role.ASSISTANT, "I'm thinking even more."
-            ).with_channel("analysis"),
-            Message.from_role_and_content(
-                Role.ASSISTANT, "The answer is 4."
-            ).with_channel("final"),
-            Message.from_role_and_content(
-                Role.ASSISTANT, "I should think harder."
-            ).with_channel("analysis"),
-            Message.from_role_and_content(
-                Role.ASSISTANT, "The answer is 5."
-            ).with_channel("final"),
+            Message.from_role_and_content(Role.ASSISTANT, "I'm thinking about the user's question.").with_channel(
+                "analysis"
+            ),
+            Message.from_role_and_content(Role.ASSISTANT, "I'm thinking more.").with_channel("analysis"),
+            Message.from_role_and_content(Role.ASSISTANT, "I'm thinking even more.").with_channel("analysis"),
+            Message.from_role_and_content(Role.ASSISTANT, "The answer is 4.").with_channel("final"),
+            Message.from_role_and_content(Role.ASSISTANT, "I should think harder.").with_channel("analysis"),
+            Message.from_role_and_content(Role.ASSISTANT, "The answer is 5.").with_channel("final"),
         ]
         cleaned_messages = auto_drop_analysis_messages(messages)
         # Should have dropped all those analysis messages
@@ -927,12 +887,10 @@ class TestAutoDropAnalysisMessages:
 
     def test_drops_non_assistant_analysis_messages(self) -> None:
         messages = [
-            Message.from_role_and_content(
-                Role.TOOL, "The tool thinks we should think harder."
-            ).with_channel("analysis"),
-            Message.from_role_and_content(
-                Role.ASSISTANT, "The answer is 4."
-            ).with_channel("final"),
+            Message.from_role_and_content(Role.TOOL, "The tool thinks we should think harder.").with_channel(
+                "analysis"
+            ),
+            Message.from_role_and_content(Role.ASSISTANT, "The answer is 4.").with_channel("final"),
         ]
         cleaned_messages = auto_drop_analysis_messages(messages)
         # Should have dropped the analysis message
@@ -943,9 +901,7 @@ def test_has_custom_tools() -> None:
     assert not has_custom_tools(set())
     assert not has_custom_tools({"web_search_preview", "code_interpreter", "container"})
     assert has_custom_tools({"others"})
-    assert has_custom_tools(
-        {"web_search_preview", "code_interpreter", "container", "others"}
-    )
+    assert has_custom_tools({"web_search_preview", "code_interpreter", "container", "others"})
 
 
 class TestGetSystemMessage:
@@ -969,9 +925,7 @@ class TestGetSystemMessage:
             sys_msg = get_system_message(with_custom_tools=with_tools)
             valid_channels = sys_msg.content[0].channel_config.valid_channels
             for channel in ("analysis", "commentary", "final"):
-                assert channel in valid_channels, (
-                    f"{channel} missing when with_custom_tools={with_tools}"
-                )
+                assert channel in valid_channels, f"{channel} missing when with_custom_tools={with_tools}"
 
     def test_unsupported_reasoning_effort_raises_clear_error(self) -> None:
         with pytest.raises(
@@ -1024,9 +978,7 @@ class TestResponseInputToHarmonyReasoningItem:
 
         assert msg is not None
         assert msg.author.role == Role.ASSISTANT
-        assert msg.content[0].text == (
-            "First, let me analyze\nSecond, I should consider\nFinally, the answer is"
-        )
+        assert msg.content[0].text == ("First, let me analyze\nSecond, I should consider\nFinally, the answer is")
         assert msg.channel == "analysis"
 
     def test_reasoning_without_content_returns_none(self):

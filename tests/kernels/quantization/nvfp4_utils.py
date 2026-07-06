@@ -8,9 +8,7 @@ from aphrodite.scalar_type import scalar_types
 FLOAT4_E2M1_MAX = scalar_types.float4_e2m1f.max()
 FLOAT8_E4M3_MAX = torch.finfo(torch.float8_e4m3fn).max
 
-kE2M1ToFloat = torch.tensor(
-    [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0], dtype=torch.float32
-)
+kE2M1ToFloat = torch.tensor([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0], dtype=torch.float32)
 
 
 def convert_swizzled_to_linear(a_sf_swizzled: torch.Tensor, m, k, block_size):
@@ -23,9 +21,7 @@ def convert_swizzled_to_linear(a_sf_swizzled: torch.Tensor, m, k, block_size):
     return out[0:m, 0:k]
 
 
-def convert_swizzled_8x4_layout_to_linear(
-    a_sf_swizzled: torch.Tensor, m, k, block_size
-):
+def convert_swizzled_8x4_layout_to_linear(a_sf_swizzled: torch.Tensor, m, k, block_size):
     m_tiles = (m + 8 - 1) // 8
     f = block_size * 4
     k_tiles = (k + f - 1) // f
@@ -136,10 +132,9 @@ def dequant_nvfp4_kv_cache(
     fp4_vals = fp4_vals.reshape(*shape[:-1], head_size)
 
     # Dequant: fp4_val * block_scale * global_scale per 16-element group
-    return (
-        fp4_vals.reshape(*shape[:-1], scale_dim, 16)
-        * (sf_f32 * global_scale).unsqueeze(-1)
-    ).reshape(*shape[:-1], head_size)
+    return (fp4_vals.reshape(*shape[:-1], scale_dim, 16) * (sf_f32 * global_scale).unsqueeze(-1)).reshape(
+        *shape[:-1], head_size
+    )
 
 
 def get_nvfp4_global_scale(a: torch.Tensor):

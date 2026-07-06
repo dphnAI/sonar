@@ -4,8 +4,8 @@
 import pytest
 import torch
 
-from tests.kernels.utils import opcheck
 from aphrodite._custom_ops import permute_cols
+from tests.kernels.utils import opcheck
 
 if not hasattr(torch.ops._C, "permute_cols"):
     pytest.skip(reason="permute_cols is not supported on ROCm", allow_module_level=True)

@@ -10,7 +10,6 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from tests.v1.kv_connector.unit.utils import create_aphrodite_config
 from aphrodite import LLM, SamplingParams
 from aphrodite.config import KVTransferConfig
 from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
@@ -31,6 +30,7 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl import (
 )
 from aphrodite.v1.kv_cache_interface import KVCacheConfig
 from aphrodite.v1.outputs import KVConnectorOutput, KVConnectorWorkerMetadata
+from tests.v1.kv_connector.unit.utils import create_aphrodite_config
 
 MODEL_NAME = "meta-llama/Llama-3.2-1B-Instruct"
 
@@ -62,9 +62,7 @@ class MockConnector(KVConnectorBase_V1):
         return mock
 
     @classmethod
-    def build_kv_connector_stats(
-        cls, data: dict[str, Any] | None = None
-    ) -> KVConnectorStats | None:
+    def build_kv_connector_stats(cls, data: dict[str, Any] | None = None) -> KVConnectorStats | None:
         return MockConnectorStats(data=data) if data is not None else None
 
     def start_load_kv(self, forward_context, **kwargs):
@@ -124,9 +122,7 @@ class MockHMAConnector(KVConnectorBase_V1, SupportsHMA):
 
 # Register mock connectors
 KVConnectorFactory.register_connector("MockConnector", __name__, MockConnector.__name__)
-KVConnectorFactory.register_connector(
-    "MockHMAConnector", __name__, MockHMAConnector.__name__
-)
+KVConnectorFactory.register_connector("MockHMAConnector", __name__, MockHMAConnector.__name__)
 
 
 @pytest.fixture
@@ -145,9 +141,7 @@ def mc() -> MultiConnector:
         },
     )
 
-    kv_cache_config = KVCacheConfig(
-        num_blocks=0, kv_cache_tensors=[], kv_cache_groups=[]
-    )
+    kv_cache_config = KVCacheConfig(num_blocks=0, kv_cache_tensors=[], kv_cache_groups=[])
 
     mc = MultiConnector(
         aphrodite_config=aphrodite_config,
@@ -168,10 +162,7 @@ def _compare_directories(dir1: Path, dir2: Path) -> bool:
         print(f"  Right only: {dcmp.right_only}")
         print(f"  Different files: {dcmp.diff_files}")
         return False
-    for sub_dir in dcmp.common_dirs:
-        if not _compare_directories(dir1 / sub_dir, dir2 / sub_dir):
-            return False
-    return True
+    return all(_compare_directories(dir1 / sub_dir, dir2 / sub_dir) for sub_dir in dcmp.common_dirs)
 
 
 def test_multi_example_connector_consistency():
@@ -231,15 +222,10 @@ def test_multi_example_connector_consistency():
     local_subdirs = list(storage_1_path.iterdir())
     external_subdirs = list(storage_2_path.iterdir())
 
-    assert len(local_subdirs) > 0, (
-        f"Local storage path {storage_1_path} is empty after generation."
-    )
-    assert len(external_subdirs) > 0, (
-        f"External storage path {storage_2_path} is empty after generation."
-    )
+    assert len(local_subdirs) > 0, f"Local storage path {storage_1_path} is empty after generation."
+    assert len(external_subdirs) > 0, f"External storage path {storage_2_path} is empty after generation."
     assert len(local_subdirs) == len(external_subdirs), (
-        f"Mismatch in number of cache entries: "
-        f"Local={len(local_subdirs)}, External={len(external_subdirs)}"
+        f"Mismatch in number of cache entries: Local={len(local_subdirs)}, External={len(external_subdirs)}"
     )
 
     # The subdirectories should correspond to the prompt hashes
@@ -253,11 +239,8 @@ def test_multi_example_connector_consistency():
     # Compare the contents of each corresponding cache directory
     for subdir_name in local_subdir_names:
         print(f"Comparing contents of cache directory: {subdir_name}")
-        assert _compare_directories(
-            storage_1_path / subdir_name, storage_2_path / subdir_name
-        ), (
-            f"Contents differ for cache directory '{subdir_name}' between "
-            f"{storage_1_path} and {storage_2_path}"
+        assert _compare_directories(storage_1_path / subdir_name, storage_2_path / subdir_name), (
+            f"Contents differ for cache directory '{subdir_name}' between {storage_1_path} and {storage_2_path}"
         )
 
     events = get_connector_events()
@@ -396,9 +379,7 @@ def get_connector_events() -> dict[str, list[str]]:
 def test_engine_id_conflict():
     configs = [KVTransferConfig() for _ in range(2)]
     ids = [config.engine_id for config in configs]
-    assert ids[0] != ids[1], (
-        f"Engine IDs should be different for different configs. Got {ids}"
-    )
+    assert ids[0] != ids[1], f"Engine IDs should be different for different configs. Got {ids}"
 
 
 def test_multi_connector_handle_preemptions_integration():
@@ -411,8 +392,8 @@ def test_multi_connector_handle_preemptions_integration():
     TestExampleConnector sub-connectors and verifies the calls are logged.
     """
     from tests.v1.kv_connector.unit.utils import (
-        create_scheduler,
         create_aphrodite_config,
+        create_scheduler,
     )
 
     storage_path = Path(tempfile.mkdtemp())
@@ -468,12 +449,10 @@ def test_multi_connector_handle_preemptions_integration():
 
         # Both SCHEDULER-role connectors should have logged handle_preemptions
         assert "handle_preemptions" in events.get("preempt1-SCHEDULER", []), (
-            f"preempt1-SCHEDULER should have handle_preemptions call. "
-            f"Got events: {events}"
+            f"preempt1-SCHEDULER should have handle_preemptions call. Got events: {events}"
         )
         assert "handle_preemptions" in events.get("preempt2-SCHEDULER", []), (
-            f"preempt2-SCHEDULER should have handle_preemptions call. "
-            f"Got events: {events}"
+            f"preempt2-SCHEDULER should have handle_preemptions call. Got events: {events}"
         )
 
     finally:
@@ -573,9 +552,7 @@ class TestMultiConnectorStats:
             },
         }
 
-        with pytest.raises(
-            ValueError, match="Connector 'UnknownConnector' is not registered."
-        ):
+        with pytest.raises(ValueError, match="Connector 'UnknownConnector' is not registered."):
             MultiConnector.build_kv_connector_stats(data=serialized_data)
 
     def test_build_kv_connector_stats_with_already_instantiated_objects(self):
@@ -668,9 +645,7 @@ class TestMultiConnectorStats:
 
     def test_build_kv_connector_stats_handles_malformed_data(self):
         """Test that malformed data raises appropriate errors."""
-        serialized_data = {
-            "NixlConnector": {"wrong_field": {"transfer_duration": [1.5]}}
-        }
+        serialized_data = {"NixlConnector": {"wrong_field": {"transfer_duration": [1.5]}}}
 
         with pytest.raises(AssertionError, match="Expected a dict with a 'data' field"):
             MultiConnector.build_kv_connector_stats(data=serialized_data)
@@ -738,9 +713,7 @@ class TestMultiConnectorStats:
             }
         )
 
-        stats2 = MultiKVConnectorStats(
-            data={"ExampleConnector": KVConnectorStats(data={"field": [1, 2]})}
-        )
+        stats2 = MultiKVConnectorStats(data={"ExampleConnector": KVConnectorStats(data={"field": [1, 2]})})
 
         result = stats1.aggregate(stats2)
 
@@ -833,9 +806,7 @@ def test_multi_connector_overrides_all_base_methods():
     } - KVConnectorBase_V1.__abstractmethods__
 
     missing = [
-        name
-        for name in sorted(base_members)
-        if name not in INHERITED_OK and name not in MultiConnector.__dict__
+        name for name in sorted(base_members) if name not in INHERITED_OK and name not in MultiConnector.__dict__
     ]
 
     if missing:
@@ -867,16 +838,12 @@ def test_multi_connector_worker_metadata(mc):
             self.data = data
 
     class MockConnectorWorkerMetadata0(MockConnectorWorkerMetadata):
-        def aggregate(
-            self, other: KVConnectorWorkerMetadata
-        ) -> KVConnectorWorkerMetadata:
+        def aggregate(self, other: KVConnectorWorkerMetadata) -> KVConnectorWorkerMetadata:
             assert isinstance(other, MockConnectorWorkerMetadata)
             return MockConnectorWorkerMetadata0(data=self.data | other.data)
 
     class MockConnectorWorkerMetadata1(MockConnectorWorkerMetadata):
-        def aggregate(
-            self, other: KVConnectorWorkerMetadata
-        ) -> KVConnectorWorkerMetadata:
+        def aggregate(self, other: KVConnectorWorkerMetadata) -> KVConnectorWorkerMetadata:
             assert isinstance(other, MockConnectorWorkerMetadata)
             return MockConnectorWorkerMetadata1(data=self.data | other.data)
 
@@ -970,12 +937,8 @@ def test_multi_connector_worker_metadata(mc):
 
     # multi worker meta
     kv_connector_output.kv_connector_worker_meta = mc_worker_meta_01a_01b
-    mc._connectors[0].update_connector_output.side_effect = verify_worker_metadata(
-        connector0_md
-    )
-    mc._connectors[1].update_connector_output.side_effect = verify_worker_metadata(
-        connector1_md
-    )
+    mc._connectors[0].update_connector_output.side_effect = verify_worker_metadata(connector0_md)
+    mc._connectors[1].update_connector_output.side_effect = verify_worker_metadata(connector1_md)
     mc.update_connector_output(kv_connector_output)
     assert_update_connector_output_called(mc)
     assert kv_connector_output.kv_connector_worker_meta == mc_worker_meta_01a_01b
@@ -1041,9 +1004,7 @@ def test_multi_connector_hma_support_detection():
     assert mc_mixed2._all_support_hma is False
 
 
-@pytest.mark.skipif(
-    not torch.cuda.is_available(), reason="Requires GPU to instantiate LLM"
-)
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="Requires GPU to instantiate LLM")
 def test_multi_connector_mixed_hma_disables_hybrid_kv_cache(monkeypatch):
     """
     When MultiConnector wraps a mix of HMA (NixlConnector) and non-HMA
@@ -1069,9 +1030,7 @@ def test_multi_connector_mixed_hma_disables_hybrid_kv_cache(monkeypatch):
                 {
                     "kv_connector": "MockConnector",
                     "kv_role": "kv_both",
-                    "kv_connector_module_path": (
-                        "tests.v1.kv_connector.unit.test_multi_connector"
-                    ),
+                    "kv_connector_module_path": ("tests.v1.kv_connector.unit.test_multi_connector"),
                 },
             ],
         },
@@ -1092,10 +1051,7 @@ def test_multi_connector_mixed_hma_disables_hybrid_kv_cache(monkeypatch):
         )
         try:
             # HMA should be auto-disabled when user has not expressed a preference.
-            assert (
-                llm.llm_engine.aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager
-                is True
-            )
+            assert llm.llm_engine.aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager is True
             # The scheduler-side MultiConnector should detect the mixed
             # HMA support among its sub-connectors.
             scheduler = llm.llm_engine.engine_core.engine_core.scheduler

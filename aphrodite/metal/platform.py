@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Metal Platform implementation for Aphrodite."""
 
 import logging
@@ -7,13 +8,13 @@ from typing import TYPE_CHECKING
 
 import psutil
 import torch
-from aphrodite.platforms.interface import DeviceCapability, Platform, PlatformEnum
 
 from aphrodite.metal.config import (
     enable_contiguous_kv_fast_path,
     get_config,
     should_use_contiguous_kv_fast_path,
 )
+from aphrodite.platforms.interface import DeviceCapability, Platform, PlatformEnum
 
 if TYPE_CHECKING:
     from aphrodite.config import AphroditeConfig
@@ -157,9 +158,7 @@ class MetalPlatform(Platform):
         if config.use_mlx:
             import mlx.core as mx
 
-            device_type = (
-                mx.DeviceType.gpu if config.mlx_device == "gpu" else mx.DeviceType.cpu
-            )
+            device_type = mx.DeviceType.gpu if config.mlx_device == "gpu" else mx.DeviceType.cpu
             mx.set_default_device(mx.Device(device_type))
 
     @classmethod
@@ -250,8 +249,9 @@ class MetalPlatform(Platform):
             config.v_quant = add.get("v_quant", "q3_0")
             config._validate_turboquant()
             logger.info(
-                f"TurboQuant enabled via --additional-config: "
-                f"k_quant={config.k_quant}, v_quant={config.v_quant}"
+                "TurboQuant enabled via --additional-config: k_quant=%s, v_quant=%s",
+                config.k_quant,
+                config.v_quant,
             )
 
         scheduler_config = aphrodite_config.scheduler_config
@@ -269,7 +269,7 @@ class MetalPlatform(Platform):
             )
 
         if config.debug:
-            logger.info(f"Metal config: {config}")
+            logger.info("Metal config: %s", config)
 
         # Set worker class for Metal
         if parallel_config.worker_cls == "auto":
@@ -288,8 +288,7 @@ class MetalPlatform(Platform):
                 # handles mixed prefill + decode in a single forward pass,
                 # so chunked prefill works correctly.
                 logger.info(
-                    "Metal: chunked prefill enabled (paged attention), "
-                    "max_num_batched_tokens=%d",
+                    "Metal: chunked prefill enabled (paged attention), max_num_batched_tokens=%d",
                     scheduler_config.max_num_batched_tokens,
                 )
             else:
@@ -315,8 +314,7 @@ class MetalPlatform(Platform):
                         scheduler_config.max_num_scheduled_tokens = model_max
 
                 logger.info(
-                    "Metal: disabled chunked prefill (non-paged path), "
-                    "max_num_batched_tokens=%d",
+                    "Metal: disabled chunked prefill (non-paged path), max_num_batched_tokens=%d",
                     scheduler_config.max_num_batched_tokens,
                 )
 
@@ -337,11 +335,7 @@ class MetalPlatform(Platform):
         from aphrodite.metal.stt.policy import apply_stt_scheduler_policy
         from aphrodite.metal.utils import get_model_download_path
 
-        resolved_model = (
-            get_model_download_path(model_config.model)
-            if model_config is not None
-            else None
-        )
+        resolved_model = get_model_download_path(model_config.model) if model_config is not None else None
         if resolved_model is not None and is_stt_model(resolved_model):
             was_async_scheduling = bool(scheduler_config.async_scheduling)
             apply_stt_scheduler_policy(model_config, scheduler_config)
@@ -353,8 +347,9 @@ class MetalPlatform(Platform):
         total_mem = cls.get_device_total_memory()
         available_mem = cls.get_device_available_memory()
         logger.info(
-            f"Metal memory: {total_mem / 1e9:.1f}GB total, "
-            f"{available_mem / 1e9:.1f}GB available"
+            "Metal memory: %.1fGB total, %.1fGB available",
+            total_mem / 1e9,
+            available_mem / 1e9,
         )
 
     @classmethod
@@ -363,9 +358,7 @@ class MetalPlatform(Platform):
         return True
 
     @classmethod
-    def _find_non_ssm_backend(
-        cls, aphrodite_config: "AphroditeConfig"
-    ) -> "type[AttentionBackend] | None":
+    def _find_non_ssm_backend(cls, aphrodite_config: "AphroditeConfig") -> "type[AttentionBackend] | None":
         """Return a Metal-specific backend for block_size calculation.
 
         Since MLX models don't populate static_forward_context, the default
@@ -448,13 +441,11 @@ class MetalPlatform(Platform):
         from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 
         if selected_backend and selected_backend != AttentionBackendEnum.CPU_ATTN:
-            logger.info(f"Cannot use {selected_backend} backend on Metal/MLX.")
+            logger.info("Cannot use %s backend on Metal/MLX.", selected_backend)
         if attn_selector_config.use_mla:
             # MLA attention is handled by the aphrodite metal model runner (MLAPagedAttentionWrapper),
             # not by Aphrodite's attention backend selector. Continue to return CPU_ATTN below.
-            logger.info(
-                "MLA model detected; attention handled by aphrodite metal model runner"
-            )
+            logger.info("MLA model detected; attention handled by aphrodite metal model runner")
         if attn_selector_config.use_sparse:
             raise NotImplementedError("Sparse Attention is not supported on Metal/MLX.")
         return AttentionBackendEnum.CPU_ATTN.get_path()

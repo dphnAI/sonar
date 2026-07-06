@@ -95,9 +95,7 @@ def _make_manager() -> P2PSecondaryTierManager:
 
 class TestRemoteIdFromParams:
     def test_valid_params(self):
-        result = P2PSecondaryTierManager._remote_id_from_params(
-            {"remote_host": "10.0.0.1", "remote_port": 8000}
-        )
+        result = P2PSecondaryTierManager._remote_id_from_params({"remote_host": "10.0.0.1", "remote_port": 8000})
         assert result == "10.0.0.1:8000"
 
     def test_missing_host(self):
@@ -105,9 +103,7 @@ class TestRemoteIdFromParams:
         assert result is None
 
     def test_missing_port(self):
-        result = P2PSecondaryTierManager._remote_id_from_params(
-            {"remote_host": "10.0.0.1"}
-        )
+        result = P2PSecondaryTierManager._remote_id_from_params({"remote_host": "10.0.0.1"})
         assert result is None
 
     def test_empty_dict(self):
@@ -259,9 +255,7 @@ class TestSubmitLoad:
     def test_empty_keys_succeeds_immediately(self):
         """Empty key list succeeds immediately."""
         mgr = _make_manager()
-        job = _job_metadata(
-            job_id=1, keys=[], block_ids=[], kv_params=_prefill_kv_params()
-        )
+        job = _job_metadata(job_id=1, keys=[], block_ids=[], kv_params=_prefill_kv_params())
         mgr.submit_load(job)
         assert mgr._finished_jobs == [JobResult(job_id=1, success=True)]
 
@@ -501,9 +495,7 @@ class TestGetFinished:
         mgr = self._make()
         from aphrodite.v1.kv_offload.tiering.p2p.manager import _UnboundStoreBatch
 
-        mgr._unbound_stores["req-fresh"] = [
-            _UnboundStoreBatch(job_id=99, keys=[b"k"], block_ids=[0])
-        ]
+        mgr._unbound_stores["req-fresh"] = [_UnboundStoreBatch(job_id=99, keys=[b"k"], block_ids=[0])]
         list(mgr.get_finished_jobs())
         assert "req-fresh" in mgr._unbound_stores
 
@@ -534,9 +526,7 @@ class TestGetFinished:
         """submit_store on an unbound id appends a batch with a fresh
         submitted_at stamp so the unbound-store sweep can age it out."""
         mgr = _make_manager()
-        job = _job_metadata(
-            job_id=1, kv_params=_decode_kv_params(kv_request_id="req-1")
-        )
+        job = _job_metadata(job_id=1, kv_params=_decode_kv_params(kv_request_id="req-1"))
         before = time.monotonic()
         mgr.submit_store(job)
         after = time.monotonic()
@@ -810,9 +800,7 @@ class _FakeData:
     def get_agent_metadata(self) -> bytes:
         return f"meta-{self._local_id}".encode()
 
-    def add_remote_peer(
-        self, peer_id, agent_metadata, base_addr, num_blocks, block_len
-    ) -> None:
+    def add_remote_peer(self, peer_id, agent_metadata, base_addr, num_blocks, block_len) -> None:
         self._remote_peers[peer_id] = {
             "agent_metadata": agent_metadata,
             "base_addr": base_addr,
@@ -1122,10 +1110,7 @@ class TestPollOnce:
 
         assert mgr._kv_to_session["req-1"] is sess
         assert "req-1" not in mgr._unbound_stores
-        replayed = [
-            (kv_req_id, list(keys), job_id)
-            for kv_req_id, keys, _, job_id in sess.stores_added
-        ]
+        replayed = [(kv_req_id, list(keys), job_id) for kv_req_id, keys, _, job_id in sess.stores_added]
         assert replayed == [("req-1", [b"k1"], 5), ("req-1", [b"k2"], 6)]
 
     def test_new_fetch_id_with_no_unbound_still_binds(self):
@@ -1279,12 +1264,7 @@ class TestOnScheduleEnd:
         mgr = _make_manager()
         before_sessions = dict(mgr._sessions)
         before_jobs = list(mgr._finished_jobs)
-        assert (
-            mgr.on_schedule_end(
-                ScheduleEndContext(new_req_ids=[], preempted_req_ids=())
-            )
-            is None
-        )
+        assert mgr.on_schedule_end(ScheduleEndContext(new_req_ids=[], preempted_req_ids=())) is None
         assert mgr._sessions == before_sessions
         assert mgr._finished_jobs == before_jobs
 

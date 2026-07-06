@@ -22,8 +22,7 @@ def apply_fastokens_patch() -> None:
         import fastokens
     except ImportError as e:
         raise ImportError(
-            f"The 'fastokens' package (>= {_MIN_FASTOKENS_VERSION}) is required "
-            "when APHRODITE_USE_FASTOKENS=1."
+            f"The 'fastokens' package (>= {_MIN_FASTOKENS_VERSION}) is required when APHRODITE_USE_FASTOKENS=1."
         ) from e
 
     try:

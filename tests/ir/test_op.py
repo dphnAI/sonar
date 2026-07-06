@@ -37,9 +37,7 @@ def custom_add_op(fake_aphrodite_ir):
         x.add_(20)
         return x
 
-    @_custom_add.register_impl(
-        "impl_even", supports_args=lambda x, y: x.size(1) % 2 == 0
-    )
+    @_custom_add.register_impl("impl_even", supports_args=lambda x, y: x.size(1) % 2 == 0)
     def impl_even(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         return x + y + 50
 
@@ -47,9 +45,7 @@ def custom_add_op(fake_aphrodite_ir):
 
 
 def test_registration_overloads(fake_aphrodite_ir):
-    assert all(
-        n not in IrOp.registry for n in ["_custom_sub", "_custom_mul", "_custom_div"]
-    )
+    assert all(n not in IrOp.registry for n in ["_custom_sub", "_custom_mul", "_custom_div"])
 
     # Calling with decorator
     @aphrodite.ir.register_op()
@@ -88,9 +84,7 @@ def test_no_kw_only_args(fake_aphrodite_ir):
     with pytest.raises(ValueError, match="keyword-only arguments"):
 
         @aphrodite.ir.register_op
-        def _custom_kwarg_op(
-            x: torch.Tensor, y: torch.Tensor, *, kwarg: int = 0
-        ) -> torch.Tensor:
+        def _custom_kwarg_op(x: torch.Tensor, y: torch.Tensor, *, kwarg: int = 0) -> torch.Tensor:
             return x + y + kwarg
 
     assert "_custom_kwarg_op" not in IrOp.registry
@@ -167,11 +161,7 @@ class TestIrOpCustomAdd:
     ):
         _custom_add = custom_add_op
         op_fn = _custom_add if overload == "default" else _custom_add.maybe_inplace
-        torch_op = (
-            _custom_add.torch_op
-            if overload == "default"
-            else _custom_add.maybe_inplace.torch_op
-        )
+        torch_op = _custom_add.torch_op if overload == "default" else _custom_add.maybe_inplace.torch_op
 
         def fn(x, y):
             return op_fn(x, y)
@@ -279,9 +269,7 @@ class TestIrOpImplDispatch:
             (["impl_a"], ["impl_even", "impl_b"]),
         ],
     )
-    def test_set_default_priority(
-        self, custom_add_op, default: list[str], override: list[str]
-    ):
+    def test_set_default_priority(self, custom_add_op, default: list[str], override: list[str]):
         _custom_add = custom_add_op
         assert _custom_add.get_priority() == []
 
@@ -301,11 +289,7 @@ class TestIrOpImplDispatch:
     def test_dispatch_priority_order(self, custom_add_op, overload: str):
         _custom_add = custom_add_op
         op_fn = _custom_add if overload == "default" else _custom_add.maybe_inplace
-        torch_op = (
-            _custom_add.torch_op
-            if overload == "default"
-            else _custom_add.maybe_inplace.torch_op
-        )
+        torch_op = _custom_add.torch_op if overload == "default" else _custom_add.maybe_inplace.torch_op
 
         x = torch.tensor(1, dtype=torch.int32)
         y = torch.tensor(2, dtype=torch.int32)
@@ -431,9 +415,7 @@ def custom_mm_op(fake_aphrodite_ir):
     """Fixture that registers ``_custom_mm`` (isolated by ``fake_aphrodite_ir``)."""
 
     @aphrodite.ir.register_op
-    def _custom_mm(
-        x: torch.Tensor, y: torch.Tensor, bias: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def _custom_mm(x: torch.Tensor, y: torch.Tensor, bias: torch.Tensor | None = None) -> torch.Tensor:
         tmp = x @ y
         return tmp if bias is None else tmp + bias
 
@@ -445,9 +427,7 @@ def test_default_args(custom_mm_op):
 
     # Test that default args are properly applied when dispatching and calling
     @_custom_mm.register_impl("impl_mm", supports_args=lambda x, y, bias=None: True)
-    def impl_mm(
-        x: torch.Tensor, y: torch.Tensor, bias: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def impl_mm(x: torch.Tensor, y: torch.Tensor, bias: torch.Tensor | None = None) -> torch.Tensor:
         tmp = x @ y
         return tmp + 50 if bias is None else tmp + bias + 100
 
@@ -472,17 +452,13 @@ def test_bad_impl_registrations(custom_mm_op):
     with pytest.raises(ValueError, match="does not match native schema"):
 
         @_custom_mm.register_impl("impl_mm_bad_schema_2")
-        def impl_mm_bad_schema_2(
-            x: torch.Tensor, y: torch.Tensor, b: torch.Tensor | None = None
-        ) -> torch.Tensor:
+        def impl_mm_bad_schema_2(x: torch.Tensor, y: torch.Tensor, b: torch.Tensor | None = None) -> torch.Tensor:
             return x @ y + b - 2
 
     with pytest.raises(ValueError, match="does not match native schema"):
 
         @_custom_mm.register_impl("impl_mm_bad_schema_3")
-        def impl_mm_bad_schema_3(
-            x: torch.Tensor, y: torch.Tensor, bias: torch.Tensor
-        ) -> torch.Tensor:
+        def impl_mm_bad_schema_3(x: torch.Tensor, y: torch.Tensor, bias: torch.Tensor) -> torch.Tensor:
             return x @ y + bias - 5
 
     # check supports_args with incorrect params
@@ -496,9 +472,7 @@ def test_bad_impl_registrations(custom_mm_op):
 
     with pytest.raises(ValueError, match="number of parameters"):
 
-        @_custom_mm.register_impl(
-            "impl_mm_bad_supports_args_2", supports_args=lambda x, y: True
-        )
+        @_custom_mm.register_impl("impl_mm_bad_supports_args_2", supports_args=lambda x, y: True)
         def impl_mm_bad_supports_args(
             x: torch.Tensor, y: torch.Tensor, bias: torch.Tensor | None = None
         ) -> torch.Tensor:
@@ -506,9 +480,7 @@ def test_bad_impl_registrations(custom_mm_op):
 
     with pytest.raises(ValueError, match="keyword-only parameters"):
 
-        @_custom_mm.register_impl(
-            "impl_mm_bad_supports_args_3", supports_args=lambda x, y, *, b: True
-        )
+        @_custom_mm.register_impl("impl_mm_bad_supports_args_3", supports_args=lambda x, y, *, b: True)
         def impl_mm_bad_supports_args_2(
             x: torch.Tensor, y: torch.Tensor, bias: torch.Tensor | None = None
         ) -> torch.Tensor:
@@ -516,9 +488,7 @@ def test_bad_impl_registrations(custom_mm_op):
 
     with pytest.raises(ValueError, match="does not match native parameter"):
 
-        @_custom_mm.register_impl(
-            "impl_mm_bad_supports_args_4", supports_args=lambda x, y, b: True
-        )
+        @_custom_mm.register_impl("impl_mm_bad_supports_args_4", supports_args=lambda x, y, b: True)
         def impl_mm_bad_supports_args_4(
             x: torch.Tensor, y: torch.Tensor, bias: torch.Tensor | None = None
         ) -> torch.Tensor:
@@ -526,9 +496,7 @@ def test_bad_impl_registrations(custom_mm_op):
 
     with pytest.raises(ValueError, match="does not match native default"):
 
-        @_custom_mm.register_impl(
-            "impl_mm_bad_supports_args_5", supports_args=lambda x, y, bias=1: True
-        )
+        @_custom_mm.register_impl("impl_mm_bad_supports_args_5", supports_args=lambda x, y, bias=1: True)
         def impl_mm_bad_supports_args_5(
             x: torch.Tensor, y: torch.Tensor, bias: torch.Tensor | None = None
         ) -> torch.Tensor:

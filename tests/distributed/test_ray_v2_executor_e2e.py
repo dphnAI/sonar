@@ -79,9 +79,7 @@ class _AsyncLLMActor:
 
         params = SamplingParams(max_tokens=16)
         result = None
-        async for output in self.engine.generate(
-            prompt, params, request_id="test_request_id"
-        ):
+        async for output in self.engine.generate(prompt, params, request_id="test_request_id"):
             result = output
         assert result is not None
         return result.outputs[0].text
@@ -91,18 +89,14 @@ class _AsyncLLMActor:
 
         params = SamplingParams(max_tokens=16)
         result = None
-        async for output in self.engine.generate(
-            prompt, params, request_id="test_request_id"
-        ):
+        async for output in self.engine.generate(prompt, params, request_id="test_request_id"):
             result = output
         assert result is not None
         text = result.outputs[0].text
 
         env_results = {}
         for name in env_names:
-            vals = await self.engine.collective_rpc(
-                _get_env_var, timeout=10, args=(name,)
-            )
+            vals = await self.engine.collective_rpc(_get_env_var, timeout=10, args=(name,))
             env_results[name] = vals
         return text, env_results
 
@@ -192,9 +186,7 @@ def test_env_var_and_runtime_env_propagation():
         ray.get(actor.start.remote(pg, ray_runtime_env=ray_runtime_env))
 
         all_env_names = list(sentinel_vars) + ["RAY_RUNTIME_ENV_TEST"]
-        text, env_results = ray.get(
-            actor.generate_and_get_worker_envs.remote("Hello world", all_env_names)
-        )
+        text, env_results = ray.get(actor.generate_and_get_worker_envs.remote("Hello world", all_env_names))
         assert len(text) > 0
 
         for name, expected in sentinel_vars.items():

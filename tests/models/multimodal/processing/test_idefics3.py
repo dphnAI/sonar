@@ -48,11 +48,7 @@ def test_processor_override(
     hf_processor_mm_kwargs = {} if kwargs_on_init else mm_processor_kwargs
 
     # Build the image str / prompt based on the number of images we pass
-    placeholders = (
-        "<image>"
-        if num_imgs == 1
-        else "\n".join(f"Image-{i}: <image>\n" for i in range(1, num_imgs + 1))
-    )
+    placeholders = "<image>" if num_imgs == 1 else "\n".join(f"Image-{i}: <image>\n" for i in range(1, num_imgs + 1))
     prompt = f"<|begin_of_text|>User:{placeholders}\n<end_of_utterance>\nAssistant:"  # noqa: E501
 
     # Build mm_data

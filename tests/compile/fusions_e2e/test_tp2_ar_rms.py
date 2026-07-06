@@ -36,9 +36,7 @@ from .models import (
     qwen3_a3b_fp8,
 )
 
-pytestmark = pytest.mark.skipif(
-    not current_platform.is_cuda_alike(), reason="Only test CUDA/ROCm"
-)
+pytestmark = pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="Only test CUDA/ROCm")
 
 
 @multi_gpu_test(num_gpus=2)
@@ -53,9 +51,7 @@ pytestmark = pytest.mark.skipif(
         deepseek_v3_fp8,
     ],
 )
-@pytest.mark.parametrize(
-    "attn_backend", [TRITON_ATTN, FLASHINFER_ATTN, FLASHINFER_MLA_ATTN]
-)
+@pytest.mark.parametrize("attn_backend", [TRITON_ATTN, FLASHINFER_ATTN, FLASHINFER_MLA_ATTN])
 @pytest.mark.parametrize("n_layers", [4])
 @pytest.mark.parametrize("custom_ops", custom_ops_combos("quant_fp8", "rms_norm"))
 @pytest.mark.parametrize("inductor_graph_partition", INDUCTOR_GRAPH_PARTITION)

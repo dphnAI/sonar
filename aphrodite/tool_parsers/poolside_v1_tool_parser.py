@@ -75,18 +75,11 @@ class PoolsideV1ToolParser(ToolParser):
         self.tool_calls_start_token = self.tool_call_start_token
 
         self.func_call_regex = re.compile(r"<tool_call>.*?</tool_call>", re.DOTALL)
-        self.func_detail_regex = re.compile(
-            r"<tool_call>\s*([^\n<]+?)\s*\n?\s*(<arg_key>.*?)?</tool_call>", re.DOTALL
-        )
-        self.func_arg_regex = re.compile(
-            r"<arg_key>(.*?)</arg_key>\s*<arg_value>(.*?)</arg_value>", re.DOTALL
-        )
+        self.func_detail_regex = re.compile(r"<tool_call>\s*([^\n<]+?)\s*\n?\s*(<arg_key>.*?)?</tool_call>", re.DOTALL)
+        self.func_arg_regex = re.compile(r"<arg_key>(.*?)</arg_key>\s*<arg_value>(.*?)</arg_value>", re.DOTALL)
 
         if not self.model_tokenizer:
-            raise ValueError(
-                "The model tokenizer must be passed to the ToolParser "
-                "constructor during construction."
-            )
+            raise ValueError("The model tokenizer must be passed to the ToolParser constructor during construction.")
 
         self.tool_call_start_token_id = self.vocab.get(self.tool_call_start_token)
         self.tool_call_end_token_id = self.vocab.get(self.tool_call_end_token)
@@ -171,9 +164,7 @@ class PoolsideV1ToolParser(ToolParser):
         """
         if request.tools:
             tc = request.tool_choice
-            if tc == "required" or isinstance(
-                tc, (ChatCompletionNamedToolChoiceParam, ToolChoiceFunction)
-            ):
+            if tc == "required" or isinstance(tc, (ChatCompletionNamedToolChoiceParam, ToolChoiceFunction)):
                 request.skip_special_tokens = False
                 return request
         request = super().adjust_request(request)
@@ -227,23 +218,15 @@ class PoolsideV1ToolParser(ToolParser):
                 )
         except Exception:
             logger.exception("Failed to extract tool call spec")
-            return ExtractedToolCallInformation(
-                tools_called=False, tool_calls=[], content=model_output
-            )
+            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
         else:
             if len(tool_calls) > 0:
-                content: str | None = model_output[
-                    : model_output.find(self.tool_calls_start_token)
-                ]
+                content: str | None = model_output[: model_output.find(self.tool_calls_start_token)]
                 # Normalize empty/whitespace-only content to None
                 if not content or not content.strip():
                     content = None
-                return ExtractedToolCallInformation(
-                    tools_called=True, tool_calls=tool_calls, content=content
-                )
-            return ExtractedToolCallInformation(
-                tools_called=False, tool_calls=[], content=model_output
-            )
+                return ExtractedToolCallInformation(tools_called=True, tool_calls=tool_calls, content=content)
+            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
 
     def extract_tool_calls_streaming(
         self,
@@ -361,9 +344,7 @@ class PoolsideV1ToolParser(ToolParser):
 
                 key = (self._pending_key or "").strip()
 
-                is_string = self._is_string_type(
-                    self._current_tool_name, key, request.tools
-                )
+                is_string = self._is_string_type(self._current_tool_name, key, request.tools)
 
                 if is_string:
                     # String type: stream incrementally
@@ -410,9 +391,7 @@ class PoolsideV1ToolParser(ToolParser):
                 # Finalize prev_tool_call_arr with complete parsed arguments
                 if self._current_tool_name:
                     try:
-                        full_args_str = self.streamed_args_for_tool[
-                            self.current_tool_id
-                        ]
+                        full_args_str = self.streamed_args_for_tool[self.current_tool_id]
                         args_dict = json.loads(full_args_str)
                         self.prev_tool_call_arr[self.current_tool_id] = {
                             "name": self._current_tool_name,
@@ -444,8 +423,7 @@ class PoolsideV1ToolParser(ToolParser):
         tool_calls = list(pending_deltas.values())
         if content is None and len(tool_calls) == 0:
             wants_logprobs = getattr(request, "logprobs", None) or (
-                isinstance(request, ResponsesRequest)
-                and request.is_include_output_logprobs()
+                isinstance(request, ResponsesRequest) and request.is_include_output_logprobs()
             )
             if wants_logprobs:
                 return DeltaMessage(content="")
@@ -454,9 +432,7 @@ class PoolsideV1ToolParser(ToolParser):
 
     def _ensure_tool_state(self) -> None:
         while len(self._tool_call_ids) <= self.current_tool_id:
-            self._tool_call_ids.append(
-                make_tool_call_id(id_type="random", func_name=None, idx=None)
-            )
+            self._tool_call_ids.append(make_tool_call_id(id_type="random", func_name=None, idx=None))
         while len(self.streamed_args_for_tool) <= self.current_tool_id:
             self.streamed_args_for_tool.append("")
         while len(self.prev_tool_call_arr) <= self.current_tool_id:
@@ -509,9 +485,7 @@ class PoolsideV1ToolParser(ToolParser):
         assert delta.function is not None
         return delta
 
-    def _update_tool_name(
-        self, pending: dict[int, DeltaToolCall], tool_name: str
-    ) -> None:
+    def _update_tool_name(self, pending: dict[int, DeltaToolCall], tool_name: str) -> None:
         self.prev_tool_call_arr[self.current_tool_id] = {
             "name": self._current_tool_name,
             "arguments": {},
@@ -549,9 +523,7 @@ class PoolsideV1ToolParser(ToolParser):
         except Exception:
             return None
 
-    def _update_tool_args(
-        self, pending: dict[int, DeltaToolCall], fragment: str
-    ) -> None:
+    def _update_tool_args(self, pending: dict[int, DeltaToolCall], fragment: str) -> None:
         result = self._complete_json_prefix(
             self.streamed_args_for_tool[self.current_tool_id],
             Allow.ALL,

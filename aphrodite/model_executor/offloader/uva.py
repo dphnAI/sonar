@@ -44,9 +44,7 @@ class UVAOffloader(BaseOffloader):
         self.cpu_offload_params = cpu_offload_params or set()
 
         self.pin_memory = should_pin_memory()
-        self.uva_offloading = (
-            is_uva_available() and not envs.APHRODITE_WEIGHT_OFFLOADING_DISABLE_UVA
-        )
+        self.uva_offloading = is_uva_available() and not envs.APHRODITE_WEIGHT_OFFLOADING_DISABLE_UVA
 
     def wrap_modules(
         self,
@@ -88,9 +86,7 @@ class UVAOffloader(BaseOffloader):
                 # Add dots here to ensure we match full segments only
                 # e.g., "experts.w2_weight" matches "mlp.experts.w2_weight"
                 # but not "mlp.experts.w2_weight_scale"
-                should_offload = any(
-                    f".{param}." in f".{name}." for param in self.cpu_offload_params
-                )
+                should_offload = any(f".{param}." in f".{name}." for param in self.cpu_offload_params)
                 if not should_offload:
                     continue
 

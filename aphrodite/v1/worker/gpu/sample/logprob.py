@@ -48,9 +48,7 @@ def _topk_log_softmax_kernel(
     for j in range(0, topk, TOPK_BLOCK_SIZE):
         k_offset = j + tl.arange(0, TOPK_BLOCK_SIZE)
         k_mask = k_offset < topk
-        topk_ids = tl.load(
-            topk_ids_ptr + req_idx * topk + k_offset, mask=k_mask, other=0
-        )
+        topk_ids = tl.load(topk_ids_ptr + req_idx * topk + k_offset, mask=k_mask, other=0)
         logits = tl.load(row_ptr + topk_ids, mask=k_mask)
         logits = logits.to(tl.float32)
         o = logits - max_val - lse
@@ -80,9 +78,7 @@ def _ranks_kernel(
     tl.store(output_ptr + req_idx, n)
 
 
-def compute_token_logprobs(
-    logits: torch.Tensor, token_ids: torch.Tensor
-) -> torch.Tensor:
+def compute_token_logprobs(logits: torch.Tensor, token_ids: torch.Tensor) -> torch.Tensor:
     # NOTE(woosuk): To save GPU memory, we do not materialize the full
     # [batch_size, vocab_size] logprobs tensor. The kernel computes
     # max + logsumexp per row and only emits logprobs at `token_ids`.
@@ -246,9 +242,7 @@ class LogprobTokenIdsState:
             return
         n = len(token_ids)
         if n > MAX_LOGPROB_TOKEN_IDS:
-            raise ValueError(
-                f"Too many logprob_token_ids: {n}. The max is {MAX_LOGPROB_TOKEN_IDS}."
-            )
+            raise ValueError(f"Too many logprob_token_ids: {n}. The max is {MAX_LOGPROB_TOKEN_IDS}.")
         self.num_token_ids.np[req_idx] = n
         self.token_ids.stage_write(req_idx, 0, token_ids)
 

@@ -154,9 +154,7 @@ class DualQueueThreadPool:
         # Wait for tasks, process from primary queue first, fall back to secondary.
         while True:
             with self._condition:
-                self._condition.wait_for(
-                    lambda: self._stop or self._load_q or self._store_q
-                )
+                self._condition.wait_for(lambda: self._stop or self._load_q or self._store_q)
                 if self._stop:
                     return
                 primary = self._load_q if load_priority else self._store_q

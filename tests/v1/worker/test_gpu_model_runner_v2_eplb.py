@@ -176,9 +176,7 @@ def test_v2_sample_tokens_runs_eplb_on_non_last_pp_rank(monkeypatch):
     events = []
     runner = _make_runner(is_last_pp_rank=False, num_speculative_steps=0)
     runner.execute_model_state = SimpleNamespace(
-        input_batch=SimpleNamespace(
-            num_reqs=2, idx_mapping=torch.zeros(2, dtype=torch.int32)
-        ),
+        input_batch=SimpleNamespace(num_reqs=2, idx_mapping=torch.zeros(2, dtype=torch.int32)),
         attn_metadata=None,
         slot_mappings_by_layer=None,
         hidden_states=None,
@@ -194,9 +192,7 @@ def test_v2_sample_tokens_runs_eplb_on_non_last_pp_rank(monkeypatch):
         return True
 
     runner.pp_handler = SimpleNamespace(receive=fake_receive)
-    runner.postprocess_num_computed_tokens = lambda *args, **kwargs: events.append(
-        "postprocess_num_computed_tokens"
-    )
+    runner.postprocess_num_computed_tokens = lambda *args, **kwargs: events.append("postprocess_num_computed_tokens")
     runner.eplb.step = lambda *args, **kwargs: events.append("eplb")
 
     output = mrv2.GPUModelRunner.sample_tokens(runner, None)

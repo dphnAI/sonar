@@ -61,8 +61,7 @@ def run_aphrodite(
     llm = LLM.from_engine_args(engine_args)
     all_requests = list(warmup_requests or []) + requests
     assert all(
-        llm.llm_engine.model_config.max_model_len
-        >= (request.prompt_len + request.expected_output_len)
+        llm.llm_engine.model_config.max_model_len >= (request.prompt_len + request.expected_output_len)
         for request in all_requests
     ), (
         "Please ensure that max_model_len is greater than the sum of"
@@ -155,9 +154,7 @@ def _run_aphrodite_requests(
                 llm.wake_up(tags=["scheduling"])
             outputs = llm.wait_for_completion(output_type=RequestOutput, use_tqdm=True)
         else:
-            outputs = llm.generate(
-                prompts, sampling_params, lora_request=lora_requests, use_tqdm=True
-            )
+            outputs = llm.generate(prompts, sampling_params, lora_request=lora_requests, use_tqdm=True)
 
         if do_profile:
             llm.stop_profile()
@@ -168,10 +165,7 @@ def _run_aphrodite_requests(
         for request in requests:
             if isinstance(request.prompt, str):
                 beam_prompts.append(TextPrompt(prompt=request.prompt))
-            elif (
-                isinstance(request.prompt, dict)
-                and "prompt_token_ids" in request.prompt
-            ):
+            elif isinstance(request.prompt, dict) and "prompt_token_ids" in request.prompt:
                 token_ids = request.prompt["prompt_token_ids"]
                 assert isinstance(token_ids, list)
                 beam_prompts.append(TokensPrompt(prompt_token_ids=token_ids))
@@ -219,8 +213,7 @@ def run_aphrodite_chat(
 
     all_requests = list(warmup_requests or []) + requests
     assert all(
-        llm.llm_engine.model_config.max_model_len
-        >= (request.prompt_len + request.expected_output_len)
+        llm.llm_engine.model_config.max_model_len >= (request.prompt_len + request.expected_output_len)
         for request in all_requests
     ), (
         "Please ensure that max_model_len is greater than the sum of "
@@ -271,10 +264,7 @@ def _run_aphrodite_chat_requests(
                 elif isinstance(request.multi_modal_data, dict):
                     content.append(request.multi_modal_data)
                 else:
-                    raise TypeError(
-                        "Could not process multimodal content of type: "
-                        f"{type(request.multi_modal_data)}"
-                    )
+                    raise TypeError(f"Could not process multimodal content of type: {type(request.multi_modal_data)}")
             prompts.append([{"role": "user", "content": content}])
         sampling_params.append(
             SamplingParams(
@@ -328,9 +318,7 @@ async def run_aphrodite_async(
         model_config = llm.model_config
         all_requests = list(warmup_requests or []) + requests
         assert all(
-            model_config.max_model_len
-            >= (request.prompt_len + request.expected_output_len)
-            for request in all_requests
+            model_config.max_model_len >= (request.prompt_len + request.expected_output_len) for request in all_requests
         ), (
             "Please ensure that max_model_len is greater than the sum of"
             " prompt_len and expected_output_len for all requests."
@@ -401,12 +389,8 @@ async def _run_aphrodite_async_requests(
     start = time.perf_counter()
     if do_profile:
         await llm.start_profile()
-    for i, (prompt_item, sp, lr) in enumerate(
-        zip(prompts, sampling_params, lora_requests)
-    ):
-        generator = llm.generate(
-            prompt_item, sp, lora_request=lr, request_id=f"{request_id_prefix}{i}"
-        )
+    for i, (prompt_item, sp, lr) in enumerate(zip(prompts, sampling_params, lora_requests)):
+        generator = llm.generate(prompt_item, sp, lora_request=lr, request_id=f"{request_id_prefix}{i}")
         generators.append(generator)
     all_gens = merge_async_iterators(*generators)
     async for _i, _res in all_gens:
@@ -429,12 +413,8 @@ def run_hf(
     enable_torch_compile: bool = False,
     warmup_requests: list[SampleRequest] | None = None,
 ) -> float:
-    assert isinstance(tokenizer, PreTrainedTokenizerBase), (
-        "the hf backend only supports HF tokenizers"
-    )
-    llm = AutoModelForCausalLM.from_pretrained(
-        model, dtype=dtype, trust_remote_code=trust_remote_code
-    )
+    assert isinstance(tokenizer, PreTrainedTokenizerBase), "the hf backend only supports HF tokenizers"
+    llm = AutoModelForCausalLM.from_pretrained(model, dtype=dtype, trust_remote_code=trust_remote_code)
     if llm.config.model_type == "llama":
         # To enable padding in the HF backend.
         tokenizer.pad_token = tokenizer.eos_token
@@ -453,9 +433,7 @@ def run_hf(
             disable_detokenize,
         )
 
-    elapsed_time, _ = _run_hf_requests(
-        llm, tokenizer, requests, n, max_batch_size, disable_detokenize
-    )
+    elapsed_time, _ = _run_hf_requests(llm, tokenizer, requests, n, max_batch_size, disable_detokenize)
     return elapsed_time
 
 
@@ -485,10 +463,7 @@ def _run_hf_requests(
             # Check if we can add more requests to the batch.
             next_prompt_len = requests[i + 1].prompt_len
             next_output_len = requests[i + 1].expected_output_len
-            if (
-                max(max_prompt_len, next_prompt_len)
-                + max(max_output_len, next_output_len)
-            ) <= 2048:
+            if (max(max_prompt_len, next_prompt_len) + max(max_output_len, next_output_len)) <= 2048:
                 # We can add more requests to the batch.
                 continue
 
@@ -517,18 +492,14 @@ def _run_hf_requests(
     return end - start, None
 
 
-def save_to_pytorch_benchmark_format(
-    args: argparse.Namespace, results: dict[str, Any]
-) -> None:
+def save_to_pytorch_benchmark_format(args: argparse.Namespace, results: dict[str, Any]) -> None:
     pt_records = convert_to_pytorch_benchmark_format(
         args=args,
         metrics={
             "requests_per_second": [results["requests_per_second"]],
             "tokens_per_second": [results["tokens_per_second"]],
         },
-        extra_info={
-            k: results[k] for k in ["elapsed_time", "num_requests", "total_num_tokens"]
-        },
+        extra_info={k: results[k] for k in ["elapsed_time", "num_requests", "total_num_tokens"]},
     )
     if pt_records:
         # Don't use json suffix here as we don't want CI to pick it up
@@ -553,23 +524,16 @@ def get_requests(args, tokenizer):
     }
 
     if args.dataset_name == "random" or (
-        args.dataset_path is None
-        and args.dataset_name not in {"prefix_repetition", "random-mm", "random-rerank"}
+        args.dataset_path is None and args.dataset_name not in {"prefix_repetition", "random-mm", "random-rerank"}
     ):
         sample_kwargs["range_ratio"] = args.random_range_ratio
         # prefer random_* arguments, fall back to regular arguments
         random_prefix_len = getattr(args, "random_prefix_len", None)
-        sample_kwargs["prefix_len"] = (
-            random_prefix_len if random_prefix_len is not None else args.prefix_len
-        )
+        sample_kwargs["prefix_len"] = random_prefix_len if random_prefix_len is not None else args.prefix_len
         random_input_len = getattr(args, "random_input_len", None)
-        sample_kwargs["input_len"] = (
-            random_input_len if random_input_len is not None else args.input_len
-        )
+        sample_kwargs["input_len"] = random_input_len if random_input_len is not None else args.input_len
         random_output_len = getattr(args, "random_output_len", None)
-        sample_kwargs["output_len"] = (
-            random_output_len if random_output_len is not None else args.output_len
-        )
+        sample_kwargs["output_len"] = random_output_len if random_output_len is not None else args.output_len
         dataset_cls = RandomDataset
     elif args.dataset_name == "sharegpt":
         dataset_cls = ShareGPTDataset
@@ -592,9 +556,7 @@ def get_requests(args, tokenizer):
         dataset_cls = BurstGPTDataset
     elif args.dataset_name == "custom_audio":
         dataset_cls = CustomAudioDataset
-        sample_kwargs["enable_multimodal_chat"] = getattr(
-            args, "enable_multimodal_chat", False
-        )
+        sample_kwargs["enable_multimodal_chat"] = getattr(args, "enable_multimodal_chat", False)
         custom_output_len = getattr(args, "custom_output_len", None)
         if custom_output_len is not None:
             sample_kwargs["output_len"] = custom_output_len
@@ -661,47 +623,31 @@ def get_requests(args, tokenizer):
         # prefer random_* arguments, fall back to regular arguments
         random_input_len = getattr(args, "random_input_len", None)
         sample_kwargs["input_len"] = (
-            random_input_len
-            if random_input_len is not None
-            else getattr(args, "input_len", None)
+            random_input_len if random_input_len is not None else getattr(args, "input_len", None)
         )
         random_output_len = getattr(args, "random_output_len", None)
         sample_kwargs["output_len"] = (
-            random_output_len
-            if random_output_len is not None
-            else getattr(args, "output_len", None)
+            random_output_len if random_output_len is not None else getattr(args, "output_len", None)
         )
-        sample_kwargs["base_items_per_request"] = getattr(
-            args, "random_mm_base_items_per_request", None
-        )
-        sample_kwargs["num_mm_items_range_ratio"] = getattr(
-            args, "random_mm_num_mm_items_range_ratio", None
-        )
-        sample_kwargs["limit_mm_per_prompt"] = getattr(
-            args, "random_mm_limit_mm_per_prompt", None
-        )
+        sample_kwargs["base_items_per_request"] = getattr(args, "random_mm_base_items_per_request", None)
+        sample_kwargs["num_mm_items_range_ratio"] = getattr(args, "random_mm_num_mm_items_range_ratio", None)
+        sample_kwargs["limit_mm_per_prompt"] = getattr(args, "random_mm_limit_mm_per_prompt", None)
         sample_kwargs["bucket_config"] = getattr(args, "random_mm_bucket_config", None)
         sample_kwargs["enable_multimodal_chat"] = True
         random_prefix_len = getattr(args, "random_prefix_len", None)
         prefix_len = getattr(args, "prefix_len", None)
-        sample_kwargs["prefix_len"] = (
-            random_prefix_len if random_prefix_len is not None else prefix_len
-        )
+        sample_kwargs["prefix_len"] = random_prefix_len if random_prefix_len is not None else prefix_len
         sample_kwargs["range_ratio"] = args.random_range_ratio
     elif args.dataset_name == "random-rerank":
         dataset_cls = RandomDatasetForReranking
         # prefer random_* arguments, fall back to regular arguments
         random_input_len = getattr(args, "random_input_len", None)
         sample_kwargs["input_len"] = (
-            random_input_len
-            if random_input_len is not None
-            else getattr(args, "input_len", None)
+            random_input_len if random_input_len is not None else getattr(args, "input_len", None)
         )
         random_output_len = getattr(args, "random_output_len", None)
         sample_kwargs["output_len"] = (
-            random_output_len
-            if random_output_len is not None
-            else getattr(args, "output_len", None)
+            random_output_len if random_output_len is not None else getattr(args, "output_len", None)
         )
         sample_kwargs["batchsize"] = getattr(args, "random_batch_size", 1)
         sample_kwargs["is_reranker"] = not getattr(args, "no_reranker", False)
@@ -725,11 +671,7 @@ def filter_requests_for_dp(requests, data_parallel_size):
     global_rank = int(os.environ["RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
     data_parallel_rank = global_rank // (world_size // data_parallel_size)
-    return [
-        r
-        for i, r in enumerate(requests)
-        if i % data_parallel_size == data_parallel_rank
-    ]
+    return [r for i, r in enumerate(requests) if i % data_parallel_size == data_parallel_rank]
 
 
 def validate_args(args):
@@ -759,26 +701,18 @@ def validate_args(args):
         raise ValueError("--prequeue-requests is not supported with --async-engine")
 
     # === Dataset Configuration ===
-    if (
-        not args.dataset
-        and not args.dataset_path
-        and args.dataset_name not in {"prefix_repetition"}
-    ):
+    if not args.dataset and not args.dataset_path and args.dataset_name not in {"prefix_repetition"}:
         print("When dataset path is not set, it will default to random dataset")
         args.dataset_name = "random"
         random_input_len = getattr(args, "random_input_len", None)
         if args.input_len is None and random_input_len is None:
-            raise ValueError(
-                "Either --input-len or --random-input-len must be provided "
-                "for a random dataset"
-            )
+            raise ValueError("Either --input-len or --random-input-len must be provided for a random dataset")
 
     # === Dataset Name Specific Checks ===
     # --hf-subset and --hf-split: only used
     # when dataset_name is 'hf'
     if args.dataset_name != "hf" and (
-        getattr(args, "hf_subset", None) is not None
-        or getattr(args, "hf_split", None) is not None
+        getattr(args, "hf_subset", None) is not None or getattr(args, "hf_split", None) is not None
     ):
         warnings.warn(
             "--hf-subset and --hf-split will be ignored \
@@ -795,9 +729,7 @@ def validate_args(args):
             | MultiModalConversationDataset.SUPPORTED_DATASET_PATHS
             | ConversationDataset.SUPPORTED_DATASET_PATHS
         ):
-            assert args.backend == "aphrodite-chat", (
-                f"{args.dataset_path} needs to use aphrodite-chat as the backend."
-            )
+            assert args.backend == "aphrodite-chat", f"{args.dataset_path} needs to use aphrodite-chat as the backend."
         elif args.dataset_path in (
             InstructCoderDataset.SUPPORTED_DATASET_PATHS
             | AIMODataset.SUPPORTED_DATASET_PATHS
@@ -807,18 +739,13 @@ def validate_args(args):
             | AIMODataset.SUPPORTED_DATASET_PATHS
             | ASRDataset.SUPPORTED_DATASET_PATHS
         ):
-            assert args.backend == "aphrodite", (
-                f"{args.dataset_path} needs to use aphrodite as the backend."
-            )
+            assert args.backend == "aphrodite", f"{args.dataset_path} needs to use aphrodite as the backend."
         else:
             raise ValueError(f"{args.dataset_path} is not supported by hf dataset.")
 
     # --random-range-ratio: only used when dataset_name is 'random',
     # 'random-mm', or 'random-rerank'
-    if (
-        args.dataset_name not in {"random", "random-mm", "random-rerank"}
-        and args.random_range_ratio is not None
-    ):
+    if args.dataset_name not in {"random", "random-mm", "random-rerank"} and args.random_range_ratio is not None:
         warnings.warn(
             "--random-range-ratio will be ignored since \
                 --dataset-name is not 'random', 'random-mm', or 'random-rerank'.",
@@ -827,8 +754,7 @@ def validate_args(args):
 
     # --random-batch-size: only used when dataset_name is 'random-rerank'
     if (
-        args.dataset_name != "random-rerank"
-        and getattr(args, "random_batch_size", None) is not None
+        args.dataset_name != "random-rerank" and getattr(args, "random_batch_size", None) is not None
     ) and args.random_batch_size != 1:
         warnings.warn(
             "--random-batch-size will be ignored since \
@@ -846,10 +772,7 @@ def validate_args(args):
 
     # --prefix-len: only used when dataset_name is 'random', 'random-mm',
     # 'sonnet', or not set.
-    if (
-        args.dataset_name not in {"random", "random-mm", "sonnet", None}
-        and args.prefix_len is not None
-    ):
+    if args.dataset_name not in {"random", "random-mm", "sonnet", None} and args.prefix_len is not None:
         warnings.warn(
             "--prefix-len will be ignored since --dataset-name\
                  is not 'random', 'random-mm', 'sonnet', or not set.",
@@ -898,10 +821,7 @@ def validate_args(args):
     if args.backend != "hf" and args.hf_max_batch_size is not None:
         raise ValueError("HF max batch size is only for HF backend.")
 
-    if (
-        args.backend in {"hf", "mii"}
-        and getattr(args, "quantization", None) is not None
-    ):
+    if args.backend in {"hf", "mii"} and getattr(args, "quantization", None) is not None:
         raise ValueError("Quantization is only for Aphrodite backend.")
 
     if args.backend == "mii" and args.dtype != "auto":
@@ -911,9 +831,7 @@ def validate_args(args):
     if args.backend == "mii" and args.tokenizer != args.model:
         raise ValueError("Tokenizer must be the same as the model for MII backend.")
 
-    if args.data_parallel_size > 1 and (
-        args.distributed_executor_backend != "external_launcher" or args.async_engine
-    ):
+    if args.data_parallel_size > 1 and (args.distributed_executor_backend != "external_launcher" or args.async_engine):
         # --data-parallel is not supported fully.
         # Old issue: https://github.com/vllm-project/vllm/issues/16222
         # Currently we only support data parallel with external launcher
@@ -958,9 +876,7 @@ def add_cli_args(parser: FlexibleArgumentParser):
         "be a json in form of list[dict[..., conversations: "
         "list[dict[..., value: <prompt_or_response>]]]]",
     )
-    parser.add_argument(
-        "--dataset-path", type=str, default=None, help="Path to the dataset"
-    )
+    parser.add_argument("--dataset-path", type=str, default=None, help="Path to the dataset")
     parser.add_argument(
         "--no-oversample",
         action="store_true",
@@ -987,15 +903,10 @@ def add_cli_args(parser: FlexibleArgumentParser):
         "--output-len",
         type=int,
         default=None,
-        help="Output length for each request. Overrides the "
-        "output length from the dataset.",
+        help="Output length for each request. Overrides the output length from the dataset.",
     )
-    parser.add_argument(
-        "--n", type=int, default=1, help="Number of generated sequences per prompt."
-    )
-    parser.add_argument(
-        "--num-prompts", type=int, default=1000, help="Number of prompts to process."
-    )
+    parser.add_argument("--n", type=int, default=1, help="Number of generated sequences per prompt.")
+    parser.add_argument("--num-prompts", type=int, default=1000, help="Number of prompts to process.")
     parser.add_argument(
         "--num-warmups",
         type=int,
@@ -1043,10 +954,7 @@ def add_cli_args(parser: FlexibleArgumentParser):
     parser.add_argument(
         "--disable-detokenize",
         action="store_true",
-        help=(
-            "Do not detokenize the response (i.e. do not include "
-            "detokenization time in the measurement)"
-        ),
+        help=("Do not detokenize the response (i.e. do not include detokenization time in the measurement)"),
     )
     # LoRA
     parser.add_argument(
@@ -1069,8 +977,7 @@ def add_cli_args(parser: FlexibleArgumentParser):
         "--prefix-len",
         type=int,
         default=0,
-        help="Number of fixed prefix tokens before the random "
-        "context in a request (default: 0).",
+        help="Number of fixed prefix tokens before the random context in a request (default: 0).",
     )
 
     # hf dataset
@@ -1109,8 +1016,7 @@ def add_cli_args(parser: FlexibleArgumentParser):
         "--prefix-repetition-prefix-len",
         type=int,
         default=None,
-        help="Number of prefix tokens per request, used only for prefix "
-        "repetition dataset.",
+        help="Number of prefix tokens per request, used only for prefix repetition dataset.",
     )
     parser.add_argument(
         "--prefix-repetition-suffix-len",
@@ -1130,8 +1036,7 @@ def add_cli_args(parser: FlexibleArgumentParser):
         "--prefix-repetition-output-len",
         type=int,
         default=None,
-        help="Number of output tokens per request, used only for prefix "
-        "repetition dataset.",
+        help="Number of output tokens per request, used only for prefix repetition dataset.",
     )
 
     # (random, random-mm, random-rerank)
@@ -1161,9 +1066,7 @@ def main(args: argparse.Namespace):
         args.seed = 0
     random.seed(args.seed)
     # Sample the requests.
-    if (
-        args.backend == "hf" or args.backend == "mii"
-    ) and args.tokenizer_mode == "auto":
+    if (args.backend == "hf" or args.backend == "mii") and args.tokenizer_mode == "auto":
         # mistral_common tokenizer is only supported on aphrodite and aphrodite-chat backends;
         # for hf and mii backends, we use hf tokenizer
         args.tokenizer_mode = "hf"
@@ -1242,13 +1145,9 @@ def main(args: argparse.Namespace):
         for ro in request_outputs:
             if not isinstance(ro, RequestOutput):
                 continue
-            total_prompt_tokens += (
-                len(ro.prompt_token_ids) if ro.prompt_token_ids else 0
-            )
+            total_prompt_tokens += len(ro.prompt_token_ids) if ro.prompt_token_ids else 0
             total_output_tokens += sum(
-                len(o.token_ids)
-                for o in ro.outputs
-                if o is not None and o.token_ids is not None
+                len(o.token_ids) for o in ro.outputs if o is not None and o.token_ids is not None
             )
         total_num_tokens = total_prompt_tokens + total_output_tokens
     else:

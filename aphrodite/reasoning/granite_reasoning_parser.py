@@ -32,9 +32,7 @@ class GraniteReasoningParser(ReasoningParser):
         self.think_start_expr = r"(?:Here's|Here is) my thought process:"
         self.response_start_expr = r"(?:Here's|Here is) my response:"
 
-        self.reasoning_regex = re.compile(
-            rf"{self.think_start_expr}(.*?){self.response_start_expr}(.*)", re.DOTALL
-        )
+        self.reasoning_regex = re.compile(rf"{self.think_start_expr}(.*?){self.response_start_expr}(.*)", re.DOTALL)
 
         self.valid_think_starts = [
             "Here's my thought process:",
@@ -47,9 +45,7 @@ class GraniteReasoningParser(ReasoningParser):
         self.seq_boundary_start = "Here"
 
         # The longest any thinking / start of response message can be
-        self.longest_think_start = max(
-            len(think_start) for think_start in self.valid_think_starts
-        )
+        self.longest_think_start = max(len(think_start) for think_start in self.valid_think_starts)
 
     def extract_reasoning(
         self, model_output: str, request: "ChatCompletionRequest | ResponsesRequest"
@@ -113,15 +109,11 @@ class GraniteReasoningParser(ReasoningParser):
         # Either we haven't finished the start of the reasoning sequence,
         # or the model is generating something unexpected.
         if not reasoning:
-            delta_message = self._get_delta_message_with_no_reasoning_bounds(
-                current_text, delta_text
-            )
+            delta_message = self._get_delta_message_with_no_reasoning_bounds(current_text, delta_text)
         # We have a start of reasoning message, but have not yet finished
         # the start of response sequence.
         elif not content:
-            delta_message = self._get_delta_message_with_no_response_bounds(
-                current_text, reasoning, delta_text
-            )
+            delta_message = self._get_delta_message_with_no_response_bounds(current_text, reasoning, delta_text)
         # We've finished both the start of reasoning and start of response seq.
         else:
             # This should never happen since we matched on the response
@@ -143,9 +135,7 @@ class GraniteReasoningParser(ReasoningParser):
         Returns:
             bool: True if any of the possible reasoning start seqs match.
         """
-        return any(
-            think_start.startswith(text) for think_start in self.valid_think_starts
-        )
+        return any(think_start.startswith(text) for think_start in self.valid_think_starts)
 
     def _is_response_start_substr(self, text: str) -> bool:
         """Check if a text matches one of the possible start response seqs.
@@ -156,10 +146,7 @@ class GraniteReasoningParser(ReasoningParser):
         Returns:
             bool: True if any of the possible response start seqs match.
         """
-        return any(
-            response_start.startswith(text)
-            for response_start in self.valid_response_starts
-        )
+        return any(response_start.startswith(text) for response_start in self.valid_response_starts)
 
     def _get_delta_message_with_no_reasoning_bounds(
         self,
@@ -219,8 +206,7 @@ class GraniteReasoningParser(ReasoningParser):
         # careful here, since the final token (:) will match the reasoning
         # content and fully parse it out; we should not pass the : back.
         ends_with_start_response_seq = any(
-            current_text.endswith(response_start)
-            for response_start in self.valid_response_starts
+            current_text.endswith(response_start) for response_start in self.valid_response_starts
         )
         if reasoning is None or ends_with_start_response_seq:
             return DeltaMessage(reasoning=None, content=None)
@@ -235,21 +221,9 @@ class GraniteReasoningParser(ReasoningParser):
         delta_idx = delta_text.rfind(self.seq_boundary_start)
 
         # Check the state of potential start of response substring matches.
-        prev_was_substr = (
-            self._is_response_start_substr(previous_text[prev_idx:])
-            if prev_idx >= 0
-            else False
-        )
-        delta_continues_substr = (
-            self._is_response_start_substr(current_text[prev_idx:])
-            if prev_idx >= 0
-            else False
-        )
-        delta_new_substr = (
-            self._is_response_start_substr(delta_text[delta_idx:])
-            if delta_idx >= 0
-            else False
-        )
+        prev_was_substr = self._is_response_start_substr(previous_text[prev_idx:]) if prev_idx >= 0 else False
+        delta_continues_substr = self._is_response_start_substr(current_text[prev_idx:]) if prev_idx >= 0 else False
+        delta_new_substr = self._is_response_start_substr(delta_text[delta_idx:]) if delta_idx >= 0 else False
 
         # Delta only contains potential continued response sequence text.
         if delta_continues_substr:
@@ -302,9 +276,7 @@ class GraniteReasoningParser(ReasoningParser):
             delta_reasoning = None
         else:
             # Get the starting offset
-            start_reasoning_idx = (
-                len(reasoning) + response_seq_len + len(response_content) - 1
-            )
+            start_reasoning_idx = len(reasoning) + response_seq_len + len(response_content) - 1
             delta_offset = len(current_text) - len(delta_text)
             start_offset = start_reasoning_idx - delta_offset
             if start_offset < 0:
@@ -316,9 +288,7 @@ class GraniteReasoningParser(ReasoningParser):
             content=delta_content,
         )
 
-    def _get_content_sections(
-        self, current_text: str
-    ) -> tuple[str | None, int | None, str | None]:
+    def _get_content_sections(self, current_text: str) -> tuple[str | None, int | None, str | None]:
         """Parse the text to extract the reasoning content / content
         if we have them.
 
@@ -333,11 +303,7 @@ class GraniteReasoningParser(ReasoningParser):
         current_chunk_start = 0
         start_reasoning = None
         parsed_content = False
-        delimiter_idxs = [
-            idx
-            for idx, char in enumerate(current_text)
-            if char == self.seq_boundary_end
-        ]
+        delimiter_idxs = [idx for idx, char in enumerate(current_text) if char == self.seq_boundary_end]
 
         for current_chunk_end in delimiter_idxs:
             current_chunk = current_text[current_chunk_start:current_chunk_end]

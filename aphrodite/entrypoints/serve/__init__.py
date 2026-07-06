@@ -33,10 +33,7 @@ def register_aphrodite_serve_api_routers(app: FastAPI):
 
 
 def register_aphrodite_dev_api_routers(app: FastAPI):
-    logger.warning(
-        "SECURITY WARNING: Development endpoints are enabled! "
-        "This should NOT be used in production!"
-    )
+    logger.warning("SECURITY WARNING: Development endpoints are enabled! This should NOT be used in production!")
 
     from .dev.cache.api_router import attach_router as attach_cache_router
 

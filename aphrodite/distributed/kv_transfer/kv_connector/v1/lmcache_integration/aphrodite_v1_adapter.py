@@ -101,10 +101,7 @@ tmp_disagg_tracker: dict[str, DisaggSpec] = {}
 
 def extract_request_configs(sampling_params: SamplingParams) -> dict | None:
     request_configs = None
-    if (
-        sampling_params.extra_args is not None
-        and "kv_transfer_params" in sampling_params.extra_args
-    ):
+    if sampling_params.extra_args is not None and "kv_transfer_params" in sampling_params.extra_args:
         kv_transfer_params = sampling_params.extra_args.get("kv_transfer_params")
         if kv_transfer_params is None:
             return None
@@ -302,9 +299,7 @@ class ReqMeta:
         # 3. if save_decode_cache is False and it is in decode phase
 
         skip_leading_tokens = tracker.num_saved_tokens
-        chunk_boundary = (
-            cdiv(tracker.num_saved_tokens + 1, lmcache_chunk_size) * lmcache_chunk_size
-        )
+        chunk_boundary = cdiv(tracker.num_saved_tokens + 1, lmcache_chunk_size) * lmcache_chunk_size
 
         # NOTE(vladnosiv): for disagg, you cannot skip saving, as saving is a
         # trqansfer. Check if request_configs has lmcache.skip_save set to True
@@ -343,20 +338,15 @@ class ReqMeta:
         # If the request has multimodal hashes, apply them to the token ids
         if tracker.mm_hashes:
             token_ids_tensor = torch.tensor(token_ids)
-            assert tracker.mm_positions is not None, (
-                "tracker got mm_hashes but no mm_positions"
-            )
-            apply_mm_hashes_to_token_ids(
-                token_ids_tensor, tracker.mm_hashes, tracker.mm_positions
-            )
+            assert tracker.mm_positions is not None, "tracker got mm_hashes but no mm_positions"
+            apply_mm_hashes_to_token_ids(token_ids_tensor, tracker.mm_hashes, tracker.mm_positions)
             token_ids = token_ids_tensor.tolist()
 
         num_blocks = len(tracker.allocated_block_ids)
 
         if len(token_ids) > num_blocks * block_size:
             logger.error(
-                "The number of tokens is more than the number of blocks."
-                "Something might be wrong in scheduling logic!"
+                "The number of tokens is more than the number of blocks.Something might be wrong in scheduling logic!"
             )
             logger.error(
                 "Num tokens: %d, num blocks: %d, block size: %d",
@@ -367,10 +357,7 @@ class ReqMeta:
 
         block_ids = torch.tensor(tracker.allocated_block_ids, dtype=torch.long)
         block_offsets = torch.arange(0, block_size, dtype=torch.long)
-        slot_mapping = (
-            block_offsets.reshape((1, block_size))
-            + block_ids.reshape((num_blocks, 1)) * block_size
-        )
+        slot_mapping = block_offsets.reshape((1, block_size)) + block_ids.reshape((num_blocks, 1)) * block_size
 
         slot_mapping = slot_mapping.flatten()[: len(token_ids)]
         assert slot_mapping.dtype == torch.long
@@ -405,27 +392,18 @@ def need_gpu_interim_buffer(lmcache_config: LMCacheEngineConfig):
 def _calculate_mtp_layers(aphrodite_config, model_config):
     num_mtp_layers = 0
     if aphrodite_config is not None and aphrodite_config.speculative_config is not None:
-        logger.info(
-            "aphrodite_config.speculative_config: %s", aphrodite_config.speculative_config
-        )
+        logger.info("aphrodite_config.speculative_config: %s", aphrodite_config.speculative_config)
         # TODO(baoloongmao): Support other MTP methods
         if aphrodite_config.speculative_config.method == "deepseek_mtp":
-            num_mtp_layers = getattr(
-                model_config.hf_config, "num_nextn_predict_layers", 0
-            )
+            num_mtp_layers = getattr(model_config.hf_config, "num_nextn_predict_layers", 0)
 
         elif aphrodite_config.speculative_config.use_eagle():
             try:
                 draft_model_config = aphrodite_config.speculative_config.draft_model_config
-                num_mtp_layers = draft_model_config.get_num_layers(
-                    aphrodite_config.parallel_config
-                )
+                num_mtp_layers = draft_model_config.get_num_layers(aphrodite_config.parallel_config)
                 logger.info("EAGLE detected %d extra layer(s)", num_mtp_layers)
             except Exception:
-                logger.info(
-                    "EAGLE detected, but failed to get the number of extra layers"
-                    "falling back to 1"
-                )
+                logger.info("EAGLE detected, but failed to get the number of extra layersfalling back to 1")
                 num_mtp_layers = 1
     return num_mtp_layers
 
@@ -453,17 +431,12 @@ def _init_lmcache_engine(
     parallel_config = aphrodite_config.parallel_config
     cache_config = aphrodite_config.cache_config
 
-    assert isinstance(lmcache_config, LMCacheEngineConfig), (
-        "LMCache v1 configuration is should be passed."
-    )
+    assert isinstance(lmcache_config, LMCacheEngineConfig), "LMCache v1 configuration is should be passed."
 
     kv_dtype = get_kv_cache_torch_dtype(cache_config.cache_dtype, model_config.dtype)
 
     use_mla = mla_enabled(model_config)
-    if use_mla and (
-        lmcache_config.remote_serde != "naive"
-        and lmcache_config.remote_serde is not None
-    ):
+    if use_mla and (lmcache_config.remote_serde != "naive" and lmcache_config.remote_serde is not None):
         raise ValueError("MLA only works with naive serde mode..")
 
     # construct kv shape (for mem pool)
@@ -499,9 +472,7 @@ def _init_lmcache_engine(
 
     use_gpu = need_gpu_interim_buffer(lmcache_config)
     aphrodite_gpu_connector: (
-        APHRODITEBufferLayerwiseGPUConnector
-        | APHRODITEPagedMemGPUConnectorV2
-        | APHRODITEPagedMemLayerwiseGPUConnector
+        APHRODITEBufferLayerwiseGPUConnector | APHRODITEPagedMemGPUConnectorV2 | APHRODITEPagedMemLayerwiseGPUConnector
     )
 
     if use_mla and lmcache_config.use_layerwise:
@@ -580,14 +551,10 @@ class LMCacheConnectorV1Impl:
         self.kv_role = aphrodite_config.kv_transfer_config.kv_role
         self.worker_count = aphrodite_config.parallel_config.tensor_parallel_size
         config = lmcache_get_or_create_config()
-        assert isinstance(config, LMCacheEngineConfig), (
-            "LMCache v1 configuration is should be passed for Aphrodite v1."
-        )
+        assert isinstance(config, LMCacheEngineConfig), "LMCache v1 configuration is should be passed for Aphrodite v1."
         # Put the leading with "lmcache." and matched configs from
         # aphrodite extra_config to the config
-        kv_connector_extra_config = (
-            aphrodite_config.kv_transfer_config.kv_connector_extra_config
-        )
+        kv_connector_extra_config = aphrodite_config.kv_transfer_config.kv_connector_extra_config
         if kv_connector_extra_config:
             for key, value in kv_connector_extra_config.items():
                 if key.startswith("lmcache."):
@@ -606,9 +573,7 @@ class LMCacheConnectorV1Impl:
         self._stats_monitor = LMCStatsMonitor.GetOrCreate()
         if role == KVConnectorRole.SCHEDULER:
             # Create lookup client using factory
-            self.lookup_client = LookupClientFactory.create_lookup_client(
-                aphrodite_config, config
-            )
+            self.lookup_client = LookupClientFactory.create_lookup_client(aphrodite_config, config)
             self._unfinished_requests: dict[str, Request] = {}
             self._lookup_requests_in_step: list[str] = []
             self.lmcache_engine = None
@@ -631,9 +596,7 @@ class LMCacheConnectorV1Impl:
 
             # Create lookup server using factory
             assert self.lmcache_engine is not None
-            self.lookup_server = LookupClientFactory.create_lookup_server(
-                self.lmcache_engine, aphrodite_config
-            )
+            self.lookup_server = LookupClientFactory.create_lookup_server(self.lmcache_engine, aphrodite_config)
 
             self.offload_server = ZMQOffloadServer(
                 self.lmcache_engine,
@@ -660,22 +623,16 @@ class LMCacheConnectorV1Impl:
 
         # Whether to discard partial chunks
         self._discard_partial_chunks = (
-            aphrodite_config.kv_transfer_config.get_from_extra_config(
-                "discard_partial_chunks", False
-            )
+            aphrodite_config.kv_transfer_config.get_from_extra_config("discard_partial_chunks", False)
             or not config.save_unfull_chunk
         )
 
         self._lmcache_chunk_size = config.chunk_size
         self._save_decode_cache = config.save_decode_cache
 
-        self.skip_last_n_tokens = aphrodite_config.kv_transfer_config.get_from_extra_config(
-            "skip_last_n_tokens", 0
-        )
+        self.skip_last_n_tokens = aphrodite_config.kv_transfer_config.get_from_extra_config("skip_last_n_tokens", 0)
 
-        self.num_layers = aphrodite_config.model_config.get_num_layers(
-            aphrodite_config.parallel_config
-        )
+        self.num_layers = aphrodite_config.model_config.get_num_layers(aphrodite_config.parallel_config)
         self.current_layer = 0
 
         self.force_skip_save = bool(os.environ.get("LMCACHE_FORCE_SKIP_SAVE", False))
@@ -706,8 +663,7 @@ class LMCacheConnectorV1Impl:
             self.api_server = None  # type: ignore[assignment]
             self.plugin_launcher = None  # type: ignore[assignment]
         logger.info(
-            "LMCache initialized for role %s with version %s, "
-            "aphrodite version %s, lmcache cache_engine metadata: %s",
+            "LMCache initialized for role %s with version %s, aphrodite version %s, lmcache cache_engine metadata: %s",
             role,
             utils.get_version(),
             APHRODITE_VERSION,
@@ -731,31 +687,23 @@ class LMCacheConnectorV1Impl:
             "model_config": {
                 "model": getattr(aphrodite_config.model_config, "model", None),
                 "dtype": str(getattr(aphrodite_config.model_config, "dtype", None)),
-                "max_model_len": getattr(
-                    aphrodite_config.model_config, "max_model_len", None
-                ),
+                "max_model_len": getattr(aphrodite_config.model_config, "max_model_len", None),
                 "vocab_size": aphrodite_config.model_config.get_vocab_size(),
-                "num_layers": getattr(
-                    aphrodite_config.model_config, "get_num_layers", lambda _: None
-                )(aphrodite_config.parallel_config),
+                "num_layers": getattr(aphrodite_config.model_config, "get_num_layers", lambda _: None)(
+                    aphrodite_config.parallel_config
+                ),
                 "num_attention_heads": getattr(
                     aphrodite_config.model_config, "get_num_attention_heads", lambda _: None
                 )(aphrodite_config.parallel_config),
-                "num_kv_heads": getattr(
-                    aphrodite_config.model_config, "get_num_kv_heads", lambda _: None
-                )(aphrodite_config.parallel_config),
-                "head_size": getattr(
-                    aphrodite_config.model_config, "get_head_size", lambda: None
-                )(),
+                "num_kv_heads": getattr(aphrodite_config.model_config, "get_num_kv_heads", lambda _: None)(
+                    aphrodite_config.parallel_config
+                ),
+                "head_size": getattr(aphrodite_config.model_config, "get_head_size", lambda: None)(),
             },
             "cache_config": {
                 "block_size": getattr(aphrodite_config.cache_config, "block_size", None),
-                "cache_dtype": str(
-                    getattr(aphrodite_config.cache_config, "cache_dtype", None)
-                ),
-                "gpu_memory_utilization": getattr(
-                    aphrodite_config.cache_config, "gpu_memory_utilization", None
-                ),
+                "cache_dtype": str(getattr(aphrodite_config.cache_config, "cache_dtype", None)),
+                "gpu_memory_utilization": getattr(aphrodite_config.cache_config, "gpu_memory_utilization", None),
             },
         }
 
@@ -842,14 +790,10 @@ class LMCacheConnectorV1Impl:
             slot_mapping = request.slot_mapping.cuda()
             assert len(tokens) == len(slot_mapping)
 
-            self._stats_monitor.update_interval_aphrodite_hit_tokens(
-                request.load_spec.aphrodite_cached_tokens
-            )
+            self._stats_monitor.update_interval_aphrodite_hit_tokens(request.load_spec.aphrodite_cached_tokens)
             token_mask = torch.ones(len(tokens), dtype=torch.bool)
             masked_token_count = (
-                request.load_spec.aphrodite_cached_tokens
-                // self._lmcache_chunk_size
-                * self._lmcache_chunk_size
+                request.load_spec.aphrodite_cached_tokens // self._lmcache_chunk_size * self._lmcache_chunk_size
             )
             token_mask[:masked_token_count] = False
 
@@ -890,9 +834,7 @@ class LMCacheConnectorV1Impl:
 
                 # Check the result
                 num_retrieved_tokens = ret_token_mask.sum().item()
-                num_expected_tokens = (
-                    lmcache_cached_tokens - request.load_spec.aphrodite_cached_tokens
-                )
+                num_expected_tokens = lmcache_cached_tokens - request.load_spec.aphrodite_cached_tokens
                 if num_retrieved_tokens < num_expected_tokens:
                     logger.error(
                         "The number of retrieved tokens is less than the "
@@ -954,9 +896,7 @@ class LMCacheConnectorV1Impl:
             # Don't do save if the role is kv_consumer
             return
         if self._parent._connector_metadata is None:
-            logger.warning(
-                "In connector.save_kv_layer, but the connector metadata is None"
-            )
+            logger.warning("In connector.save_kv_layer, but the connector metadata is None")
             return
         connector_metadata = self._parent._get_connector_metadata()
         assert isinstance(connector_metadata, LMCacheConnectorMetadata)
@@ -992,18 +932,13 @@ class LMCacheConnectorV1Impl:
                     if skip_leading_tokens == len(token_ids):
                         continue  # skip this request
                     # Align to lmcache chunk size
-                    skip_leading_tokens = (
-                        skip_leading_tokens
-                        // self._lmcache_chunk_size
-                        * self._lmcache_chunk_size
-                    )
+                    skip_leading_tokens = skip_leading_tokens // self._lmcache_chunk_size * self._lmcache_chunk_size
 
                 store_mask = torch.ones(len(token_ids), dtype=torch.bool)
                 store_mask[:skip_leading_tokens] = False
 
                 logger.info(
-                    "Storing KV cache for %d out of %d tokens "
-                    "(skip_leading_tokens=%d) for request %s",
+                    "Storing KV cache for %d out of %d tokens (skip_leading_tokens=%d) for request %s",
                     len(token_ids) - skip_leading_tokens,
                     len(token_ids),
                     skip_leading_tokens,
@@ -1056,9 +991,7 @@ class LMCacheConnectorV1Impl:
 
         for request in connector_metadata.requests:
             save_spec = request.save_spec
-            if (
-                save_spec is None or not save_spec.can_save
-            ) and self.kv_role != "kv_producer":
+            if (save_spec is None or not save_spec.can_save) and self.kv_role != "kv_producer":
                 continue
 
             token_ids = request.token_ids
@@ -1074,25 +1007,18 @@ class LMCacheConnectorV1Impl:
             skip_leading_tokens = save_spec.skip_leading_tokens
             if self.kv_role == "kv_producer":
                 assert request.disagg_spec is not None
-                skip_leading_tokens = min(
-                    skip_leading_tokens, request.disagg_spec.num_transferred_tokens
-                )
+                skip_leading_tokens = min(skip_leading_tokens, request.disagg_spec.num_transferred_tokens)
 
             if skip_leading_tokens == len(token_ids):
                 continue  # skip this request
             # Align to lmcache chunk size
-            skip_leading_tokens = (
-                skip_leading_tokens
-                // self._lmcache_chunk_size
-                * self._lmcache_chunk_size
-            )
+            skip_leading_tokens = skip_leading_tokens // self._lmcache_chunk_size * self._lmcache_chunk_size
 
             store_mask = torch.ones(len(token_ids), dtype=torch.bool)
             store_mask[:skip_leading_tokens] = False
 
             logger.info(
-                "Storing KV cache for %d out of %d tokens "
-                "(skip_leading_tokens=%d) for request %s",
+                "Storing KV cache for %d out of %d tokens (skip_leading_tokens=%d) for request %s",
                 len(token_ids) - skip_leading_tokens,
                 len(token_ids),
                 skip_leading_tokens,
@@ -1105,9 +1031,7 @@ class LMCacheConnectorV1Impl:
                     request.disagg_spec.is_last_prefill = True
             else:
                 token_len = len(token_ids)
-                aligned_token_len = (
-                    token_len // self._lmcache_chunk_size * self._lmcache_chunk_size
-                )
+                aligned_token_len = token_len // self._lmcache_chunk_size * self._lmcache_chunk_size
                 token_ids = token_ids[:aligned_token_len]
                 store_mask = store_mask[:aligned_token_len]
                 slot_mapping = slot_mapping[:aligned_token_len]
@@ -1128,9 +1052,7 @@ class LMCacheConnectorV1Impl:
                 request.disagg_spec.num_transferred_tokens = len(token_ids)
 
     @_lmcache_nvtx_annotate
-    def get_finished(
-        self, finished_req_ids: set[str]
-    ) -> tuple[set[str] | None, set[str] | None]:
+    def get_finished(self, finished_req_ids: set[str]) -> tuple[set[str] | None, set[str] | None]:
         return None, None
 
     ###################
@@ -1155,9 +1077,7 @@ class LMCacheConnectorV1Impl:
             the number of tokens that can be loaded from the
             external KV cache beyond what is already computed.
         """
-        if self.kv_role == "kv_producer" and not hasattr(
-            self.lookup_client, "supports_producer_reuse"
-        ):
+        if self.kv_role == "kv_producer" and not hasattr(self.lookup_client, "supports_producer_reuse"):
             return 0
 
         self._requests_priority[request.request_id] = request.priority
@@ -1240,18 +1160,12 @@ class LMCacheConnectorV1Impl:
         # successfully scheduled.
         self.lookup_client.clear_lookup_status(request.request_id)
 
-        kv_transfer_params = (
-            request.kv_transfer_params
-            if hasattr(request, "kv_transfer_params")
-            else None
-        )
+        kv_transfer_params = request.kv_transfer_params if hasattr(request, "kv_transfer_params") else None
 
         if kv_transfer_params is not None and "disagg_spec" in kv_transfer_params:
             req_disagg_spec = kv_transfer_params["disagg_spec"]
 
-            receiver_id = req_disagg_spec["receiver_host"] + str(
-                req_disagg_spec["receiver_init_port"]
-            )
+            receiver_id = req_disagg_spec["receiver_host"] + str(req_disagg_spec["receiver_init_port"])
 
             disagg_spec = DisaggSpec(
                 req_id=req_disagg_spec["req_id"],
@@ -1274,10 +1188,7 @@ class LMCacheConnectorV1Impl:
             return
 
         # Only check for non-prompt-hit case
-        if (
-            self.load_specs[request.request_id].lmcache_cached_tokens
-            != request.num_tokens
-        ):
+        if self.load_specs[request.request_id].lmcache_cached_tokens != request.num_tokens:
             assert (
                 num_external_tokens > 0
                 and num_external_tokens
@@ -1293,9 +1204,7 @@ class LMCacheConnectorV1Impl:
         self.load_specs[request.request_id].can_load = True
 
     @_lmcache_nvtx_annotate
-    def build_connector_meta(
-        self, scheduler_output: SchedulerOutput
-    ) -> KVConnectorMetadata:
+    def build_connector_meta(self, scheduler_output: SchedulerOutput) -> KVConnectorMetadata:
         """Attach the connector metadata to the request object.
 
         This function should NOT modify other fields in the scheduler_output
@@ -1321,18 +1230,14 @@ class LMCacheConnectorV1Impl:
         for request in scheduler_output.scheduled_new_reqs:
             # Right now, we only load KV for new requests
             load_spec = self.load_specs.pop(request.req_id, None)
-            num_tokens_to_compute = (
-                request.num_computed_tokens
-                + scheduler_output.num_scheduled_tokens[request.req_id]
-            )
+            num_tokens_to_compute = request.num_computed_tokens + scheduler_output.num_scheduled_tokens[request.req_id]
             lmcache_cached_tokens = 0
             if load_spec is not None:
                 lmcache_cached_tokens = load_spec.lmcache_cached_tokens
             request_priority = self._requests_priority.pop(request.req_id, 0)
 
             skip_save = force_skip_save or (
-                self.config.priority_limit is not None
-                and request_priority > self.config.priority_limit
+                self.config.priority_limit is not None and request_priority > self.config.priority_limit
             )
 
             request_tracker = RequestTracker.from_new_request(
@@ -1381,14 +1286,9 @@ class LMCacheConnectorV1Impl:
             num_new_tokens = scheduler_output.num_scheduled_tokens[req_id]
             if cached_request := self._unfinished_requests.get(req_id):
                 num_current_tokens = len(request_tracker.token_ids)
-                new_token_ids = cached_request.all_token_ids[
-                    num_current_tokens : num_current_tokens + num_new_tokens
-                ]
+                new_token_ids = cached_request.all_token_ids[num_current_tokens : num_current_tokens + num_new_tokens]
             else:
-                raise ValueError(
-                    f"Request {req_id} is not in _unfinished_requests, "
-                    f"but it is scheduled to be cached"
-                )
+                raise ValueError(f"Request {req_id} is not in _unfinished_requests, but it is scheduled to be cached")
             new_block_ids = cached_reqs.new_block_ids[i]
 
             request_tracker.update(new_token_ids, new_block_ids)
@@ -1412,11 +1312,7 @@ class LMCacheConnectorV1Impl:
         request: "Request",
         block_ids: list[int],
     ) -> tuple[bool, dict[str, Any] | None]:
-        params = (
-            request.kv_transfer_params
-            if hasattr(request, "kv_transfer_params")
-            else None
-        )
+        params = request.kv_transfer_params if hasattr(request, "kv_transfer_params") else None
         return_params = None
 
         # NOTE: Used to stream back the first token

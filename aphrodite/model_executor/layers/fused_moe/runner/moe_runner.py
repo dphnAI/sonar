@@ -178,9 +178,7 @@ def _moe_forward_shared_fake(
     # `shared_out`: matches `shared_experts_input` if provided (latent MoE),
     # else `hidden_states`.
     if hidden_dim_unpadded > 0:
-        fused_out = hidden_states.new_empty(
-            (*hidden_states.shape[:-1], hidden_dim_unpadded)
-        )
+        fused_out = hidden_states.new_empty((*hidden_states.shape[:-1], hidden_dim_unpadded))
     else:
         fused_out = torch.empty_like(hidden_states)
     if shared_experts_input is not None:
@@ -292,9 +290,7 @@ class MoERunner(MoERunnerInterface):
         # For smuggling this layer into the fused moe custom op
         register_layer_for_moe_forward_op(get_current_aphrodite_config(), self)
 
-    def load_weights(
-        self, weights: Iterable[tuple[str, torch.Tensor]]
-    ) -> Iterable[str]:
+    def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> Iterable[str]:
         return self.routed_experts.load_weights(weights)
 
     def _select_forward(self) -> Callable:
@@ -305,9 +301,7 @@ class MoERunner(MoERunnerInterface):
             return _moe_forward if self._shared_experts is None else _moe_forward_shared
 
         return (
-            torch.ops.aphrodite.moe_forward
-            if self._shared_experts is None
-            else torch.ops.aphrodite.moe_forward_shared
+            torch.ops.aphrodite.moe_forward if self._shared_experts is None else torch.ops.aphrodite.moe_forward_shared
         )
 
     @property
@@ -347,9 +341,7 @@ class MoERunner(MoERunnerInterface):
     def _quant_method(self) -> FusedMoEMethodBase:
         return self.routed_experts.quant_method
 
-    def apply_routed_input_transform(
-        self, hidden_states: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    def apply_routed_input_transform(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Apply transform for routed experts (e.g., latent projection).
 
         This is called by FusedMoE.forward_native. The original hidden_states
@@ -408,10 +400,7 @@ class MoERunner(MoERunnerInterface):
 
     @property
     def _fused_output_is_reduced(self) -> bool:
-        return (
-            self._quant_method.moe_kernel is not None
-            and self._quant_method.moe_kernel.output_is_reduced()
-        )
+        return self._quant_method.moe_kernel is not None and self._quant_method.moe_kernel.output_is_reduced()
 
     def _maybe_reduce_shared_expert_output(
         self,
@@ -463,10 +452,7 @@ class MoERunner(MoERunnerInterface):
         if _USE_LAYERNAME:
             return LayerName(self.layer_name)
         # Can be unavailable or None in unittests
-        if (
-            is_forward_context_available()
-            and get_forward_context().all_moe_layers is not None
-        ):
+        if is_forward_context_available() and get_forward_context().all_moe_layers is not None:
             return "from_forward_context"
         return self.layer_name
 
@@ -483,14 +469,9 @@ class MoERunner(MoERunnerInterface):
         fused MoE kernel. The returned trunc_size is used by
         _maybe_reduce_final_output to strip the padding from the result.
         """
-        shared_experts_hidden_dim = (
-            shared_experts_input.shape[-1] if shared_experts_input is not None else 0
-        )
+        shared_experts_hidden_dim = shared_experts_input.shape[-1] if shared_experts_input is not None else 0
         transformed_hidden_dim: int | None = hidden_states.shape[-1]
-        if (
-            not self._quant_method.skip_forward_padding
-            and self.moe_config.hidden_dim != transformed_hidden_dim
-        ):
+        if not self._quant_method.skip_forward_padding and self.moe_config.hidden_dim != transformed_hidden_dim:
             assert transformed_hidden_dim is not None
             hidden_states = F.pad(
                 hidden_states,
@@ -551,9 +532,7 @@ class MoERunner(MoERunnerInterface):
         via the router, and the actual fused MoE computation. Returns
         (shared_expert_output, fused_expert_output).
         """
-        self._maybe_apply_shared_experts(
-            shared_experts_input, SharedExpertsOrder.NO_OVERLAP
-        )
+        self._maybe_apply_shared_experts(shared_experts_input, SharedExpertsOrder.NO_OVERLAP)
 
         if self.routed_experts.quant_method.is_monolithic:
             # Monolithic kernels: pass router_logits to routed_experts
@@ -598,11 +577,7 @@ class MoERunner(MoERunnerInterface):
         returns a no-op context.
         """
         ctx = get_forward_context()
-        return (
-            ctx.dp_metadata.sp_local_sizes(self.moe_config.sp_size)
-            if ctx.dp_metadata
-            else nullcontext()
-        )
+        return ctx.dp_metadata.sp_local_sizes(self.moe_config.sp_size) if ctx.dp_metadata else nullcontext()
 
     def _maybe_sync_shared_experts_stream(
         self,
@@ -660,20 +635,16 @@ class MoERunner(MoERunnerInterface):
 
         # Apply transform for routed experts (e.g., latent projection
         # for latent MoE)
-        hidden_states, shared_experts_input = self.apply_routed_input_transform(
-            hidden_states
-        )
+        hidden_states, shared_experts_input = self.apply_routed_input_transform(hidden_states)
 
         # Record before `_maybe_pad_hidden_states` pads activations to match
         # `moe_config.hidden_dim`, e.g. after `align_trtllm_fp4_moe_hidden_dim_for_fi`
         # so routed output can be trimmed before
         # shared+routed add / latent up proj if needed.
 
-        hidden_states, og_hidden_dim_pre_xform, og_hidden_dim_post_xform = (
-            self._maybe_pad_hidden_states(
-                shared_experts_input,
-                hidden_states,
-            )
+        hidden_states, og_hidden_dim_pre_xform, og_hidden_dim_post_xform = self._maybe_pad_hidden_states(
+            shared_experts_input,
+            hidden_states,
         )
 
         result = self._forward_entry(
@@ -682,9 +653,7 @@ class MoERunner(MoERunnerInterface):
             shared_experts_input,
             input_ids,
             self._encode_layer_name(),
-            self.moe_config.hidden_dim_unpadded
-            if self._quant_method.has_unpadded_output
-            else 0,
+            self.moe_config.hidden_dim_unpadded if self._quant_method.has_unpadded_output else 0,
         )
 
         #
@@ -706,9 +675,7 @@ class MoERunner(MoERunnerInterface):
         # See note above re: the two all-reduce points.
         shared_output = self._maybe_reduce_shared_expert_output(shared_output)
 
-        shared_output, fused_output = self._maybe_apply_routed_scale_to_output(
-            shared_output, fused_output
-        )
+        shared_output, fused_output = self._maybe_apply_routed_scale_to_output(shared_output, fused_output)
 
         # Apply output transform (e.g. latent -> full dim)
         fused_output = self.apply_routed_output_transform(fused_output)
@@ -724,9 +691,7 @@ class MoERunner(MoERunnerInterface):
 
     @property
     def do_naive_dispatch_combine(self) -> bool:
-        return (
-            self.moe_config.dp_size > 1 and not self._quant_method.supports_internal_mk
-        )
+        return self.moe_config.dp_size > 1 and not self._quant_method.supports_internal_mk
 
     def _maybe_dispatch(
         self,
@@ -767,9 +732,7 @@ class MoERunner(MoERunnerInterface):
         hidden_states: torch.Tensor,
     ) -> torch.Tensor | tuple[torch.Tensor | None, torch.Tensor]:
         if self.do_naive_dispatch_combine:
-            hidden_states = get_ep_group().combine(
-                hidden_states, self.moe_config.is_sequence_parallel
-            )
+            hidden_states = get_ep_group().combine(hidden_states, self.moe_config.is_sequence_parallel)
 
         if self.moe_config.pcp_size > 1:
             hidden_states = get_pcp_group().reduce_scatter(
@@ -852,10 +815,7 @@ class MoERunner(MoERunnerInterface):
     def maybe_init_modular_kernel(self) -> None:
         # NOTE(rob): WIP refactor. For quant methods that own the MK
         # we create the MK during process_weights_after_loading.
-        if (
-            self.routed_experts.quant_method.supports_internal_mk
-            or self.routed_experts.quant_method.is_monolithic
-        ):
+        if self.routed_experts.quant_method.supports_internal_mk or self.routed_experts.quant_method.is_monolithic:
             return None
 
         self.routed_experts._ensure_moe_quant_config_init()
@@ -868,13 +828,9 @@ class MoERunner(MoERunnerInterface):
         else:
             base_quant_method = self.routed_experts.quant_method
 
-        prepare_finalize = base_quant_method.maybe_make_prepare_finalize(
-            routing_tables=routing_tables
-        )
+        prepare_finalize = base_quant_method.maybe_make_prepare_finalize(routing_tables=routing_tables)
         if prepare_finalize is not None:
-            logger.debug(
-                "%s for %s(%s)", prepare_finalize.__class__.__name__, self, id(self)
-            )
+            logger.debug("%s for %s(%s)", prepare_finalize.__class__.__name__, self, id(self))
             self._replace_quant_method(
                 FusedMoEModularMethod.make(
                     self.routed_experts,

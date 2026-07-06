@@ -50,8 +50,5 @@ def test_gemma4_routing_kernel_triton(
         bad = (ref_is != tri_is).any(dim=-1).nonzero(as_tuple=True)[0]
         if len(bad):
             r = bad[0].item()
-            print(
-                f"  first bad row {r}: ref_ids={ref_ids[r].tolist()} "
-                f"tri_ids={tri_ids[r].tolist()}"
-            )
+            print(f"  first bad row {r}: ref_ids={ref_ids[r].tolist()} tri_ids={tri_ids[r].tolist()}")
         assert all_match

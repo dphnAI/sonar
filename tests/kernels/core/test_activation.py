@@ -6,8 +6,6 @@ import random
 import pytest
 import torch
 
-from tests.kernels.allclose_default import get_default_atol, get_default_rtol
-from tests.kernels.utils import opcheck
 from aphrodite.model_executor.layers.activation import (
     FastGELU,
     FatreluAndMul,
@@ -22,14 +20,14 @@ from aphrodite.model_executor.layers.activation import (
     swiglustep_and_mul_triton,
 )
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.kernels.allclose_default import get_default_atol, get_default_rtol
+from tests.kernels.utils import opcheck
 
 DTYPES = [torch.half, torch.bfloat16, torch.float]
 NUM_TOKENS = [7, 83, 2048]  # Arbitrary values for testing
 D = [512, 13824]  # Arbitrary values for testing
 SEEDS = [0]
-CUDA_DEVICES = [
-    f"cuda:{i}" for i in range(1 if torch.accelerator.device_count() == 1 else 2)
-]
+CUDA_DEVICES = [f"cuda:{i}" for i in range(1 if torch.accelerator.device_count() == 1 else 2)]
 
 
 @pytest.mark.parametrize(
@@ -97,9 +95,7 @@ def test_act_and_mul(
         def _get_rtol(output) -> float:
             return rtol[output.dtype]
 
-        torch.testing.assert_close(
-            out, ref_out, atol=get_default_atol(out), rtol=_get_rtol(out)
-        )
+        torch.testing.assert_close(out, ref_out, atol=get_default_atol(out), rtol=_get_rtol(out))
     else:
         # The SiluAndMul, MulAndSilu, GELU and FatReLU implementations are
         # equivalent to the native PyTorch implementations, so we can do exact
@@ -151,9 +147,7 @@ def test_silu_and_mul_with_clamp(
         torch.bfloat16: 2e-2,
         torch.float: 1.3e-6,
     }
-    torch.testing.assert_close(
-        out, ref_out, atol=get_default_atol(out), rtol=rtol[out.dtype]
-    )
+    torch.testing.assert_close(out, ref_out, atol=get_default_atol(out), rtol=rtol[out.dtype])
 
     # Verify clamping is actually being applied: the clamped output should
     # differ from the unclamped SiluAndMul output when inputs are large.
@@ -164,13 +158,9 @@ def test_silu_and_mul_with_clamp(
 
     # Verify gate clamping semantics with a controlled scalar case.
     # gate=large_val is clamped to limit first, then silu(limit) * 1.0.
-    x_gate = torch.tensor(
-        [[swiglu_limit * 20.0, 1.0]], dtype=torch.float32, device=device
-    )
+    x_gate = torch.tensor([[swiglu_limit * 20.0, 1.0]], dtype=torch.float32, device=device)
     out_gate = SiluAndMulWithClamp(swiglu_limit, compile_native=False)(x_gate)
-    expected_gate = torch.nn.functional.silu(
-        torch.tensor(swiglu_limit, dtype=torch.float32)
-    ).item()
+    expected_gate = torch.nn.functional.silu(torch.tensor(swiglu_limit, dtype=torch.float32)).item()
     torch.testing.assert_close(
         out_gate,
         torch.tensor([[expected_gate]], dtype=torch.float32, device=device),
@@ -179,9 +169,7 @@ def test_silu_and_mul_with_clamp(
     )
 
     # Verify up clamping semantics: up >> limit gets clamped to limit.
-    x_up = torch.tensor(
-        [[1.0, swiglu_limit * 20.0]], dtype=torch.float32, device=device
-    )
+    x_up = torch.tensor([[1.0, swiglu_limit * 20.0]], dtype=torch.float32, device=device)
     out_up = SiluAndMulWithClamp(swiglu_limit, compile_native=False)(x_up)
     silu_1 = torch.nn.functional.silu(torch.tensor(1.0)).item()
     torch.testing.assert_close(
@@ -226,9 +214,7 @@ def test_activation(
     fn = activation[1]
     out = layer(x)
     ref_out = layer.forward_native(x)
-    torch.testing.assert_close(
-        out, ref_out, atol=get_default_atol(out), rtol=get_default_rtol(out)
-    )
+    torch.testing.assert_close(out, ref_out, atol=get_default_atol(out), rtol=get_default_rtol(out))
 
     out = torch.empty_like(x)
     opcheck(fn, (out, x))

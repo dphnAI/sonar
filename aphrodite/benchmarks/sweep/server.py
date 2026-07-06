@@ -109,13 +109,9 @@ class ServerProcess:
             # Check if server process has crashed
             if self._server_process.poll() is not None:
                 returncode = self._server_process.returncode
-                raise RuntimeError(
-                    f"Server process crashed with return code {returncode}"
-                )
+                raise RuntimeError(f"Server process crashed with return code {returncode}")
             if time.monotonic() - start_time > timeout:
-                raise TimeoutError(
-                    f"Server failed to become ready within {timeout} seconds."
-                )
+                raise TimeoutError(f"Server failed to become ready within {timeout} seconds.")
             time.sleep(1)
 
     def reset_caches(self) -> None:
@@ -132,8 +128,7 @@ class ServerProcess:
         elif server_cmd[0].endswith("infinity_emb"):
             if "--vector-disk-cache" in server_cmd:
                 raise NotImplementedError(
-                    "Infinity server uses caching but does not expose a method "
-                    "to reset the cache"
+                    "Infinity server uses caching but does not expose a method to reset the cache"
                 )
         else:
             raise NotImplementedError(

@@ -24,9 +24,7 @@ CONFIG = AutoConfig.from_pretrained(MODEL_NAME)
 
 
 @pytest.fixture(scope="module", params=["use-lora"])
-def default_server_args(
-    request: pytest.FixtureRequest, opt125_lora_files: str
-) -> list[str]:
+def default_server_args(request: pytest.FixtureRequest, opt125_lora_files: str) -> list[str]:
     args = [
         # use half precision for speed and memory savings in CI environment
         "--dtype",
@@ -206,9 +204,7 @@ async def test_completions_with_prompt_embeds(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME, LORA_SERVING_MODEL_NAME])
-async def test_completions_errors_with_prompt_embeds(
-    client_with_prompt_embeds: openai.AsyncOpenAI, model_name: str
-):
+async def test_completions_errors_with_prompt_embeds(client_with_prompt_embeds: openai.AsyncOpenAI, model_name: str):
     # Test error case: invalid prompt_embeds
     with pytest.raises(BadRequestError):
         await client_with_prompt_embeds.completions.create(

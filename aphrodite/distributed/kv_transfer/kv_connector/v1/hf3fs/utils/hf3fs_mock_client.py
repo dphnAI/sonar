@@ -44,12 +44,8 @@ class Hf3fsClient:
                     buffer_data = f.read(num_bytes)
 
                     if len(buffer_data) == num_bytes == self._bytes_per_page:
-                        tensor_data = self._convert_buffer_to_tensor(
-                            buffer_data, tensor.dtype
-                        )
-                        tensor.copy_(
-                            tensor_data.reshape(tensor.shape).to(tensor.device)
-                        )
+                        tensor_data = self._convert_buffer_to_tensor(buffer_data, tensor.dtype)
+                        tensor.copy_(tensor_data.reshape(tensor.shape).to(tensor.device))
                         results.append(self._bytes_per_page)
                     else:
                         logger.error(
@@ -64,9 +60,7 @@ class Hf3fsClient:
 
         return results
 
-    def _convert_buffer_to_tensor(
-        self, buffer_data: bytes, dtype: torch.dtype
-    ) -> torch.Tensor:
+    def _convert_buffer_to_tensor(self, buffer_data: bytes, dtype: torch.dtype) -> torch.Tensor:
         """Convert buffer data to tensor with proper dtype handling."""
         if dtype == torch.bfloat16:
             tensor_data = torch.frombuffer(buffer_data, dtype=torch.uint16)
@@ -74,9 +68,7 @@ class Hf3fsClient:
         else:
             return torch.frombuffer(buffer_data, dtype=dtype)
 
-    def batch_write(
-        self, offsets: list[int], tensors: list[torch.Tensor], event: torch.Event
-    ) -> list[int]:
+    def batch_write(self, offsets: list[int], tensors: list[torch.Tensor], event: torch.Event) -> list[int]:
         """Write data from tensors to file at specified offsets."""
         results = []
 

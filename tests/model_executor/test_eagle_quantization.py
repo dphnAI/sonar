@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import pytest
 import torch
 
-from aphrodite.config import LoadConfig, ModelConfig, SpeculativeConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, LoadConfig, ModelConfig, SpeculativeConfig
 from aphrodite.model_executor.models.utils import get_draft_quant_config
 from aphrodite.platforms import current_platform
 
@@ -29,15 +29,11 @@ def test_get_draft_quant_config_with_draft_model():
     mock_aphrodite_config.load_config = mock_load_config
 
     mock_quant_config = Mock()
-    with patch.object(
-        AphroditeConfig, "get_quantization_config", return_value=mock_quant_config
-    ):
+    with patch.object(AphroditeConfig, "get_quantization_config", return_value=mock_quant_config):
         result = get_draft_quant_config(mock_aphrodite_config)
 
         # Verify the function calls get_quantization_config with draft model config
-        AphroditeConfig.get_quantization_config.assert_called_once_with(
-            mock_draft_model_config, mock_load_config
-        )
+        AphroditeConfig.get_quantization_config.assert_called_once_with(mock_draft_model_config, mock_load_config)
         assert result == mock_quant_config
 
 
@@ -151,9 +147,7 @@ def test_eagle3_lm_head_receives_quant_config():
 
         MockLMHead.assert_called_once()
         call_kwargs = MockLMHead.call_args.kwargs
-        assert "quant_config" in call_kwargs, (
-            "ParallelLMHead must receive quant_config for quantized lm_head weights"
-        )
+        assert "quant_config" in call_kwargs, "ParallelLMHead must receive quant_config for quantized lm_head weights"
         assert call_kwargs["quant_config"] is mock_quant_config, (
             "ParallelLMHead must receive the draft model's quant_config"
         )

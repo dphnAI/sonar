@@ -73,9 +73,7 @@ class TestCase(NamedTuple):
         ),
     ],
 )
-async def test_chat_session_root_path_with_api_key(
-    server: RemoteOpenAIServer, test_case: TestCase
-):
+async def test_chat_session_root_path_with_api_key(server: RemoteOpenAIServer, test_case: TestCase):
     saying: str = "Here is a common saying about apple. An apple a day, keeps"
     ctx = contextlib.nullcontext()
     if test_case.expected_error is not None:

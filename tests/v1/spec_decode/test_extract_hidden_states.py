@@ -9,11 +9,8 @@ import pytest
 import torch
 from transformers import CLIPVisionConfig, LlamaConfig, LlavaConfig, PretrainedConfig
 
-from tests.v1.attention.utils import (
-    BatchSpec,
-    create_common_attn_metadata,
-)
 from aphrodite.config import (
+    AphroditeConfig,
     AttentionConfig,
     CacheConfig,
     DeviceConfig,
@@ -21,7 +18,6 @@ from aphrodite.config import (
     ParallelConfig,
     SchedulerConfig,
     SpeculativeConfig,
-    AphroditeConfig,
 )
 from aphrodite.config.load import LoadConfig
 from aphrodite.platforms import current_platform
@@ -31,6 +27,10 @@ from aphrodite.transformers_utils.configs.extract_hidden_states import (
 )
 from aphrodite.v1.spec_decode.extract_hidden_states import ExtractHiddenStatesProposer
 from aphrodite.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
+from tests.v1.attention.utils import (
+    BatchSpec,
+    create_common_attn_metadata,
+)
 
 model_dir = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 DEVICE_TYPE = current_platform.device_type
@@ -123,9 +123,7 @@ def test_proposer_initialization_missing_layer_ids():
         attention_config=AttentionConfig(),
     )
 
-    with pytest.raises(
-        ValueError, match="eagle_aux_hidden_state_layer_ids must be set"
-    ):
+    with pytest.raises(ValueError, match="eagle_aux_hidden_state_layer_ids must be set"):
         ExtractHiddenStatesProposer(aphrodite_config=aphrodite_config, device=device)
 
 
@@ -155,9 +153,7 @@ def test_prepare_next_token_ids_padded():
         mock_requests[req_id] = mock_request
 
     # explicitly discard the last request
-    discarded_req_mask = torch.tensor(
-        [False, False, False, True], dtype=torch.bool, device=device
-    )
+    discarded_req_mask = torch.tensor([False, False, False, True], dtype=torch.bool, device=device)
 
     # With num_speculative_tokens=1, sampled_token_ids has shape [batch_size, 1]
     sampled_token_ids = torch.tensor(
@@ -172,17 +168,13 @@ def test_prepare_next_token_ids_padded():
     )
 
     expected_next_token_ids_cpu = [1, 4, 30, 40]
-    expected_next_token_ids_tensor = torch.tensor(
-        expected_next_token_ids_cpu, dtype=torch.int32, device=device
-    )
+    expected_next_token_ids_tensor = torch.tensor(expected_next_token_ids_cpu, dtype=torch.int32, device=device)
 
     proposer = _create_proposer(num_speculative_tokens=1)
 
     # valid_sampled_tokens_count tracks if token is valid (not -1 and in vocab range)
     # It doesn't depend on whether the request is discarded
-    expected_valid_sampled_tokens_count = torch.tensor(
-        [1, 1, 0, 1], dtype=torch.int32, device=device
-    )
+    expected_valid_sampled_tokens_count = torch.tensor([1, 1, 0, 1], dtype=torch.int32, device=device)
 
     next_token_ids, valid_sampled_tokens_count = proposer.prepare_next_token_ids_padded(
         sampled_token_ids,
@@ -211,9 +203,7 @@ def test_propose():
     num_tokens = 5
     num_hidden_layers = 4
 
-    proposer = _create_proposer(
-        num_speculative_tokens=1, layer_ids=list(range(num_hidden_layers))
-    )
+    proposer = _create_proposer(num_speculative_tokens=1, layer_ids=list(range(num_hidden_layers)))
     hidden_size = proposer.hidden_size
 
     # Create mock model
@@ -244,14 +234,11 @@ def test_propose():
     # Create target hidden states: list of tensors, one per layer
     # Each tensor has shape [num_tokens, hidden_size]
     target_hidden_states = [
-        torch.randn(num_tokens, hidden_size, dtype=proposer.dtype, device=device)
-        for _ in range(num_hidden_layers)
+        torch.randn(num_tokens, hidden_size, dtype=proposer.dtype, device=device) for _ in range(num_hidden_layers)
     ]
 
     # Sampled token IDs from target model
-    sampled_token_ids = torch.tensor(
-        [42, 60], dtype=torch.int32, device=device
-    ).unsqueeze(-1)
+    sampled_token_ids = torch.tensor([42, 60], dtype=torch.int32, device=device).unsqueeze(-1)
 
     # Call propose
     draft_tokens = proposer.propose(
@@ -273,9 +260,7 @@ def test_propose():
     # Verify hidden states were copied to the buffer The stacked hidden states
     # should have shape [num_tokens, num_hidden_layers, hidden_size]
     expected_stacked = torch.stack(target_hidden_states, dim=1)
-    assert torch.allclose(
-        proposer.hidden_states[:num_tokens], expected_stacked, atol=1e-6
-    )
+    assert torch.allclose(proposer.hidden_states[:num_tokens], expected_stacked, atol=1e-6)
 
 
 @pytest.mark.parametrize("num_hidden_layers", [1, 4, 8])
@@ -286,9 +271,7 @@ def test_propose_different_layer_counts(num_hidden_layers):
     batch_size = 2
     num_tokens = 5
 
-    proposer = _create_proposer(
-        num_speculative_tokens=1, layer_ids=list(range(num_hidden_layers))
-    )
+    proposer = _create_proposer(num_speculative_tokens=1, layer_ids=list(range(num_hidden_layers)))
     hidden_size = proposer.hidden_size
 
     # Setup mocks
@@ -313,13 +296,10 @@ def test_propose_different_layer_counts(num_hidden_layers):
 
     # Create target hidden states
     target_hidden_states = [
-        torch.randn(num_tokens, hidden_size, dtype=proposer.dtype, device=device)
-        for _ in range(num_hidden_layers)
+        torch.randn(num_tokens, hidden_size, dtype=proposer.dtype, device=device) for _ in range(num_hidden_layers)
     ]
 
-    sampled_token_ids = torch.tensor(
-        [42, 60], dtype=torch.int32, device=device
-    ).unsqueeze(-1)
+    sampled_token_ids = torch.tensor([42, 60], dtype=torch.int32, device=device).unsqueeze(-1)
 
     draft_tokens = proposer.propose(
         num_speculative_tokens=1,
@@ -374,9 +354,7 @@ def test_extract_hidden_states_text_only_config_regression():
 
     assert speculative_config.draft_model_config is not None
     # For text-only models, hf_text_config should be the config itself.
-    assert speculative_config.draft_model_config.hf_text_config is (
-        speculative_config.draft_model_config.hf_config
-    )
+    assert speculative_config.draft_model_config.hf_text_config is (speculative_config.draft_model_config.hf_config)
     assert (
         speculative_config.draft_model_config.hf_text_config.num_attention_heads
         == model_config.hf_text_config.num_attention_heads
@@ -416,14 +394,10 @@ def test_extract_hidden_states_config_preserves_vlm_text_config():
     # Serialization must still round-trip correctly.
     serialized = extract_config.to_dict()
     assert isinstance(serialized["text_config"], dict)
-    assert serialized["text_config"]["num_attention_heads"] == (
-        text_config.num_attention_heads
-    )
+    assert serialized["text_config"]["num_attention_heads"] == (text_config.num_attention_heads)
 
     json_str = json.loads(extract_config.to_json_string())
-    assert json_str["text_config"]["num_attention_heads"] == (
-        text_config.num_attention_heads
-    )
+    assert json_str["text_config"]["num_attention_heads"] == (text_config.num_attention_heads)
 
 
 def test_extract_hidden_states_speculative_config_vlm():

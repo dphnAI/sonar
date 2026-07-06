@@ -43,9 +43,7 @@ class NixlPullConnectorWorker(NixlBaseConnectorWorker):
         We check for these trnxs to complete in each step().
         """
         for req_id, meta in metadata.reqs_to_recv.items():
-            meta.local_physical_block_ids = self._logical_to_kernel_block_ids(
-                meta.local_block_ids
-            )
+            meta.local_physical_block_ids = self._logical_to_kernel_block_ids(meta.local_block_ids)
             assert meta.remote is not None
             # Remote block IDs are kept logical here; expanded in
             # _read_blocks_for_req using the remote engine's phys ratio.
@@ -119,15 +117,11 @@ class NixlPullConnectorWorker(NixlBaseConnectorWorker):
             ReadSpec(
                 remote_rank=rank,
                 local_block_ids=[
-                    list(local_block_ids[g])
-                    if rank in plan.source_ranks_per_group[g]
-                    else []
+                    list(local_block_ids[g]) if rank in plan.source_ranks_per_group[g] else []
                     for g in range(num_groups)
                 ],
                 remote_block_ids=[
-                    list(remote_block_ids[g])
-                    if rank in plan.source_ranks_per_group[g]
-                    else []
+                    list(remote_block_ids[g]) if rank in plan.source_ranks_per_group[g] else []
                     for g in range(num_groups)
                 ],
             )
@@ -159,14 +153,10 @@ class NixlPullConnectorWorker(NixlBaseConnectorWorker):
             else:
                 # Single read from remote, we write to the whole memory region.
                 # Also handle remote block size different from local block size.
-                local_xfer_side_handle = self.src_xfer_handles_by_block_size[
-                    remote_block_size
-                ]
+                local_xfer_side_handle = self.src_xfer_handles_by_block_size[remote_block_size]
 
             # Destination handle: remote_engine_id -> remote_rank -> handle.
-            remote_xfer_side_handle = self.dst_xfer_side_handles[meta.remote.engine_id][
-                spec.remote_rank
-            ]
+            remote_xfer_side_handle = self.dst_xfer_side_handles[meta.remote.engine_id][spec.remote_rank]
 
             self._read_blocks(
                 read_spec=spec,
@@ -205,17 +195,13 @@ class NixlPullConnectorWorker(NixlBaseConnectorWorker):
         remote_block_ids = read_spec.remote_block_ids
 
         remote_info = self.transfer_topo.get_engine_info(dst_engine_id)
-        block_size_ratio = self.transfer_topo.block_size_ratio(
-            remote_info.remote_block_size
-        )
+        block_size_ratio = self.transfer_topo.block_size_ratio(remote_info.remote_block_size)
         if block_size_ratio > 1:
             # TODO (NickLucche) assume HMA is off. Change to handle multiple KV groups.
             assert not self._is_hma_required
             local_block_ids0 = local_block_ids[0] if local_block_ids else []
             remote_block_ids0 = remote_block_ids[0]
-            local_block_ids_mapped = self.get_mapped_blocks(
-                np.asarray(local_block_ids0), block_size_ratio
-            ).tolist()
+            local_block_ids_mapped = self.get_mapped_blocks(np.asarray(local_block_ids0), block_size_ratio).tolist()
             if len(local_block_ids_mapped) > len(remote_block_ids0):
                 # NOTE:
                 # get_mapped_blocks will always expand block_ids for n times.
@@ -228,9 +214,7 @@ class NixlPullConnectorWorker(NixlBaseConnectorWorker):
                 # Then we clip local to align with prefill
                 # [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] to
                 # [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-                local_block_ids_mapped = local_block_ids_mapped[
-                    : len(remote_block_ids0)
-                ]
+                local_block_ids_mapped = local_block_ids_mapped[: len(remote_block_ids0)]
             local_block_ids = [local_block_ids_mapped] if local_block_ids_mapped else []
             remote_block_ids = [remote_block_ids0]
         # NOTE(rob): having the staging blocks be on the READER side is
@@ -256,8 +240,7 @@ class NixlPullConnectorWorker(NixlBaseConnectorWorker):
             except Exception as e:
                 self._log_failure(
                     failure_type="notification_failed",
-                    msg="P worker blocks will be freed after timeout. "
-                    "This may indicate network issues.",
+                    msg="P worker blocks will be freed after timeout. This may indicate network issues.",
                     req_id=request_id,
                     error=e,
                     dst_engine_id=dst_engine_id,
@@ -267,11 +250,7 @@ class NixlPullConnectorWorker(NixlBaseConnectorWorker):
                 self.xfer_stats.record_failed_notification()
             return
 
-        assert (
-            len(remote_block_ids)
-            == len(local_block_ids)
-            == len(self.kv_cache_config.kv_cache_groups)
-        )
+        assert len(remote_block_ids) == len(local_block_ids) == len(self.kv_cache_config.kv_cache_groups)
         remote_physical_per_logical = remote_info.remote_physical_blocks_per_logical
         local_block_ids, remote_block_ids = self._apply_prefix_caching(
             local_block_ids, remote_block_ids, remote_physical_per_logical
@@ -347,10 +326,7 @@ class NixlPullConnectorWorker(NixlBaseConnectorWorker):
                     continue
 
                 req_id, tp_size = msg.rsplit(":", 1)
-                if (
-                    req_id not in self._reqs_to_send
-                    and req_id not in self._reqs_to_process
-                ):
+                if req_id not in self._reqs_to_send and req_id not in self._reqs_to_process:
                     logger.error(
                         "Potentially invalid KV blocks for "
                         "unrecognized request %s were retrieved by "
@@ -365,16 +341,11 @@ class NixlPullConnectorWorker(NixlBaseConnectorWorker):
 
                 # Number of reads *per producer* to wait for.
                 # When remote D TP > local P TP we expect `tp_ratio` reads.
-                consumers_per_producer = (
-                    -tp_ratio if n_consumers > self.world_size else 1
-                )
+                consumers_per_producer = -tp_ratio if n_consumers > self.world_size else 1
 
                 self.consumer_notification_counts_by_req[req_id] += 1
                 # Wait all consumers (D) to be done reading before freeing.
-                if (
-                    self.consumer_notification_counts_by_req[req_id]
-                    == consumers_per_producer
-                ):
+                if self.consumer_notification_counts_by_req[req_id] == consumers_per_producer:
                     notified_req_ids.add(req_id)
                     del self.consumer_notification_counts_by_req[req_id]
                     self._reqs_to_process.remove(req_id)

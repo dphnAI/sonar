@@ -46,9 +46,7 @@ def _swiglu_oai_kernel(
     pid_i = tl.program_id(1)
     cols = pid_i * BLOCK_I + tl.arange(0, BLOCK_I)
     mask = cols < n_inter
-    gate = tl.load(g_ptr + row * stride_gm + cols * stride_gn, mask=mask, other=0.0).to(
-        tl.float32
-    )
+    gate = tl.load(g_ptr + row * stride_gm + cols * stride_gn, mask=mask, other=0.0).to(tl.float32)
     up = tl.load(
         g_ptr + row * stride_gm + (n_inter + cols) * stride_gn,
         mask=mask,
@@ -118,9 +116,7 @@ def _swiglu_oai_quant_kernel(
         aq,
         mask=m_mask[:, None],
     )
-    tl.store(
-        as_ptr + offs_m * stride_sm + pid_b * stride_sk, sb.to(tl.uint8), mask=m_mask
-    )
+    tl.store(as_ptr + offs_m * stride_sm + pid_b * stride_sk, sb.to(tl.uint8), mask=m_mask)
 
 
 def swiglu_oai_quantize_mxfp8(
@@ -146,15 +142,11 @@ def swiglu_oai_quantize_mxfp8(
 
     two_i = gate_up.shape[-1]
     n_inter = two_i // 2
-    assert n_inter % MXFP8_BLOCK_SIZE == 0, (
-        f"fused swiglu+quant needs I % {MXFP8_BLOCK_SIZE} == 0, got I={n_inter}"
-    )
+    assert n_inter % MXFP8_BLOCK_SIZE == 0, f"fused swiglu+quant needs I % {MXFP8_BLOCK_SIZE} == 0, got I={n_inter}"
     g1 = gate_up.reshape(-1, two_i).contiguous()
     M = g1.shape[0]
     aq = torch.empty((M, n_inter), dtype=MXFP8_VALUE_DTYPE, device=g1.device)
-    asc = torch.empty(
-        (M, n_inter // MXFP8_BLOCK_SIZE), dtype=MXFP8_SCALE_DTYPE, device=g1.device
-    )
+    asc = torch.empty((M, n_inter // MXFP8_BLOCK_SIZE), dtype=MXFP8_SCALE_DTYPE, device=g1.device)
     grid = (triton.cdiv(M, block_m), n_inter // MXFP8_BLOCK_SIZE)
     _swiglu_oai_quant_kernel[grid](
         g1,

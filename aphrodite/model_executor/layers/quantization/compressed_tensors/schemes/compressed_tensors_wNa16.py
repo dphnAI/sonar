@@ -26,8 +26,8 @@ from aphrodite.model_executor.parameter import (
     BaseAphroditeParameter,
     ChannelQuantScaleParameter,
     GroupQuantScaleParameter,
-    PackedColumnParameter,
     PackedAphroditeParameter,
+    PackedColumnParameter,
     RowAphroditeParameter,
 )
 from aphrodite.scalar_type import scalar_types
@@ -77,8 +77,7 @@ class CompressedTensorsWNA16(CompressedTensorsScheme):
 
         if num_bits not in WNA16_SUPPORTED_TYPES_MAP:
             raise ValueError(
-                f"Unsupported num_bits = {num_bits}. "
-                f"Supported num_bits = {list(WNA16_SUPPORTED_TYPES_MAP)}"
+                f"Unsupported num_bits = {num_bits}. Supported num_bits = {list(WNA16_SUPPORTED_TYPES_MAP)}"
             )
 
         if not self.symmetric and num_bits not in WNA16_ZP_SUPPORTED_TYPES_MAP:
@@ -89,9 +88,7 @@ class CompressedTensorsWNA16(CompressedTensorsScheme):
             )
 
         self.quant_type = (
-            WNA16_ZP_SUPPORTED_TYPES_MAP[num_bits]
-            if not self.symmetric
-            else WNA16_SUPPORTED_TYPES_MAP[num_bits]
+            WNA16_ZP_SUPPORTED_TYPES_MAP[num_bits] if not self.symmetric else WNA16_SUPPORTED_TYPES_MAP[num_bits]
         )
 
     @classmethod
@@ -145,16 +142,12 @@ class CompressedTensorsWNA16(CompressedTensorsScheme):
         # If group_size is -1, we are in channelwise case.
         group_size = self.group_size if self.group_size != -1 else input_size
         row_parallel = input_size != input_size_per_partition
-        partition_scales = not marlin_repeat_scales_on_all_ranks(
-            self.has_g_idx, self.group_size, row_parallel
-        )
+        partition_scales = not marlin_repeat_scales_on_all_ranks(self.has_g_idx, self.group_size, row_parallel)
 
         scales_and_zp_size = input_size // group_size
 
         if partition_scales:
-            verify_group_size_divides_partition(
-                input_size_per_partition, group_size, self.layer_name
-            )
+            verify_group_size_divides_partition(input_size_per_partition, group_size, self.layer_name)
             scales_and_zp_size = input_size_per_partition // group_size
 
         packed_input_dim = math.ceil(input_size_per_partition * self.num_bits / 32)
@@ -201,9 +194,7 @@ class CompressedTensorsWNA16(CompressedTensorsScheme):
                     **zeros_args,
                 )
         else:
-            weight_scale = GroupQuantScaleParameter(
-                output_dim=0, input_dim=1, **weight_scale_args
-            )
+            weight_scale = GroupQuantScaleParameter(output_dim=0, input_dim=1, **weight_scale_args)
             if not self.symmetric:
                 qzeros = PackedAphroditeParameter(
                     input_dim=1,
@@ -215,9 +206,7 @@ class CompressedTensorsWNA16(CompressedTensorsScheme):
 
         # A 2D array defining the original shape of the weights
         # before packing
-        weight_shape = BaseAphroditeParameter(
-            data=torch.empty(2, dtype=torch.int64), weight_loader=weight_loader
-        )
+        weight_shape = BaseAphroditeParameter(data=torch.empty(2, dtype=torch.int64), weight_loader=weight_loader)
 
         layer.register_parameter("weight_packed", weight)
         layer.register_parameter("weight_scale", weight_scale)
@@ -251,7 +240,5 @@ class CompressedTensorsWNA16(CompressedTensorsScheme):
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         self.kernel.process_weights_after_loading(layer)
 
-    def apply_weights(
-        self, layer: torch.nn.Module, x: torch.Tensor, bias: torch.Tensor | None
-    ) -> torch.Tensor:
+    def apply_weights(self, layer: torch.nn.Module, x: torch.Tensor, bias: torch.Tensor | None) -> torch.Tensor:
         return self.kernel.apply_weights(layer, x, bias)

@@ -4,12 +4,12 @@
 import pytest
 import torch
 
-from tests.kernels.quant_utils import FP8_DTYPE
-from tests.kernels.utils import fp8_ulp_distance, opcheck
 from aphrodite import ir
 from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm, RMSNorm
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.kernels.quant_utils import FP8_DTYPE
+from tests.kernels.utils import fp8_ulp_distance, opcheck
 
 if current_platform.is_rocm():
     from aphrodite.platforms.rocm import on_gfx90a
@@ -23,9 +23,7 @@ NUM_TOKENS = [7, 83, 4096]  # Arbitrary values for testing
 HIDDEN_SIZES = [8, 768, 769, 5120, 5125, 8192]  # Arbitrary values for testing
 ADD_RESIDUAL = [False, True] if not on_mi250 else [True]
 SEEDS = [0]
-CUDA_DEVICES = [
-    f"cuda:{i}" for i in range(1 if torch.accelerator.device_count() == 1 else 2)
-]
+CUDA_DEVICES = [f"cuda:{i}" for i in range(1 if torch.accelerator.device_count() == 1 else 2)]
 
 
 def _rms_norm_tolerance(dtype: torch.dtype) -> dict[str, float]:
@@ -81,9 +79,7 @@ def test_rms_norm(
             (x, residual, layer.weight.data, layer.variance_epsilon),
         )
     else:
-        opcheck(
-            torch.ops._C.rms_norm, (out, x, layer.weight.data, layer.variance_epsilon)
-        )
+        opcheck(torch.ops._C.rms_norm, (out, x, layer.weight.data, layer.variance_epsilon))
 
 
 @pytest.mark.parametrize("num_tokens", NUM_TOKENS)
@@ -181,9 +177,7 @@ def test_fused_rms_norm_quant(
         x_unfused = x_unfused_base[..., :hidden_size]
         assert x_unfused.is_contiguous() != strided_input
         torch.ops._C.fused_add_rms_norm(x_unfused, residual, weight, 1e-6)
-        torch.ops._C.static_scaled_fp8_quant(
-            out_quant, x_unfused.contiguous(), quant_scale_t
-        )
+        torch.ops._C.static_scaled_fp8_quant(out_quant, x_unfused.contiguous(), quant_scale_t)
 
         torch.accelerator.synchronize()
         torch.testing.assert_close(residual_fused, residual, atol=1e-2, rtol=1e-2)
@@ -192,9 +186,7 @@ def test_fused_rms_norm_quant(
             (out_quant_fused, x, residual_fused, weight, quant_scale_t, 1e-6),
         )
     else:
-        torch.ops._C.rms_norm_static_fp8_quant(
-            out_quant_fused, x, weight, quant_scale_t, 1e-6
-        )
+        torch.ops._C.rms_norm_static_fp8_quant(out_quant_fused, x, weight, quant_scale_t, 1e-6)
 
         torch.ops._C.rms_norm(out_norm, x, weight, 1e-6)
         torch.ops._C.static_scaled_fp8_quant(out_quant, out_norm, quant_scale_t)
@@ -210,9 +202,7 @@ def test_fused_rms_norm_quant(
         ulp = fp8_ulp_distance(out_quant, out_quant_fused)
         max_outliers = ulp.numel() // 100_000 + 8
         num_outliers = int((ulp > 0).sum().item())
-        assert num_outliers <= max_outliers, (
-            f"FP8 quant mismatch: {num_outliers} fp8 outliers (allowed {max_outliers})"
-        )
+        assert num_outliers <= max_outliers, f"FP8 quant mismatch: {num_outliers} fp8 outliers (allowed {max_outliers})"
     else:
         torch.testing.assert_close(
             out_quant.to(dtype=torch.float32),
@@ -242,9 +232,7 @@ def test_gemma_rms_norm_mixed_input_weight_dtype(default_aphrodite_config) -> No
     x_fp32 = x.float()
     weight_fp32 = layer.weight.data.float() + 1.0
     variance = x_fp32.pow(2).mean(dim=-1, keepdim=True)
-    ref = (x_fp32 * torch.rsqrt(variance + layer.variance_epsilon) * weight_fp32).to(
-        x.dtype
-    )
+    ref = (x_fp32 * torch.rsqrt(variance + layer.variance_epsilon) * weight_fp32).to(x.dtype)
 
     assert out.dtype == x.dtype
     torch.testing.assert_close(out, ref, atol=1e-2, rtol=1e-2)

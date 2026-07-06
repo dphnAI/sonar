@@ -46,10 +46,9 @@ def cpu_gdn_attention_core(
     if attn_metadata_i.num_actual_tokens == 0:
         return
 
-    assert (
-        attn_metadata_i.spec_sequence_masks is None
-        and attn_metadata_i.num_accepted_tokens is None
-    ), "speculative decode not supported in CPU GDN attention."
+    assert attn_metadata_i.spec_sequence_masks is None and attn_metadata_i.num_accepted_tokens is None, (
+        "speculative decode not supported in CPU GDN attention."
+    )
     assert mixed_qkv.dtype == torch.bfloat16, "CPU GDN attention requires BF16."
 
     state_indices_tensor = attn_metadata_i.non_spec_state_indices_tensor
@@ -68,9 +67,7 @@ def cpu_gdn_attention_core(
     else:
         if not is_conv_state_dim_first():
             conv_state = conv_state.transpose(-1, -2)
-        conv_weights = layer.conv1d.weight.view(
-            layer.conv1d.weight.size(0), layer.conv1d.weight.size(2)
-        )
+        conv_weights = layer.conv1d.weight.view(layer.conv1d.weight.size(0), layer.conv1d.weight.size(2))
 
     # [num_allocated_slots, num_v_heads / tp_size, v_dim, k_dim]
     ssm_state = layer.kv_cache[1]
@@ -147,16 +144,9 @@ def cpu_gdn_attention_core(
         prefill_mixed_qkv = mixed_qkv[prefill_token_start:prefill_token_end]
         prefill_b = b[prefill_token_start:prefill_token_end]
         prefill_a = a[prefill_token_start:prefill_token_end]
-        prefill_state_indices = state_indices_tensor[
-            num_decodes : num_decodes + num_prefills
-        ]
-        prefill_query_start_loc = (
-            query_start_loc[num_decodes : num_decodes + num_prefills + 1]
-            - num_decode_tokens
-        )
-        prefill_has_initial_state = has_initial_state[
-            num_decodes : num_decodes + num_prefills
-        ]
+        prefill_state_indices = state_indices_tensor[num_decodes : num_decodes + num_prefills]
+        prefill_query_start_loc = query_start_loc[num_decodes : num_decodes + num_prefills + 1] - num_decode_tokens
+        prefill_has_initial_state = has_initial_state[num_decodes : num_decodes + num_prefills]
 
         if is_amx:
             prefill_mixed_qkv = ops.causal_conv1d_fwd_cpu(
@@ -183,9 +173,7 @@ def cpu_gdn_attention_core(
             ).transpose(0, 1)
 
         query, key, value = layer.rearrange_mixed_qkv(prefill_mixed_qkv)
-        g, beta = ops.fused_gdn_gating_cpu(
-            A_log=layer.A_log, a=prefill_a, b=prefill_b, dt_bias=layer.dt_bias
-        )
+        g, beta = ops.fused_gdn_gating_cpu(A_log=layer.A_log, a=prefill_a, b=prefill_b, dt_bias=layer.dt_bias)
 
         initial_state = ssm_state[prefill_state_indices]
         initial_state[~prefill_has_initial_state, ...] = 0
@@ -201,9 +189,7 @@ def cpu_gdn_attention_core(
             head_first=False,
             use_qk_l2norm_in_kernel=True,
         )
-        ssm_state[prefill_state_indices] = last_recurrent_state.to(
-            ssm_state.dtype, copy=False
-        )
+        ssm_state[prefill_state_indices] = last_recurrent_state.to(ssm_state.dtype, copy=False)
         core_attn_out[prefill_token_start:prefill_token_end] = attn_out.squeeze(0)
 
 

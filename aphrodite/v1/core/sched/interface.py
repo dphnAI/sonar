@@ -81,9 +81,7 @@ class SchedulerInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_grammar_bitmask(
-        self, scheduler_output: "SchedulerOutput"
-    ) -> "GrammarOutput | None":
+    def get_grammar_bitmask(self, scheduler_output: "SchedulerOutput") -> "GrammarOutput | None":
         raise NotImplementedError
 
     @abstractmethod
@@ -204,9 +202,7 @@ class SchedulerInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def reset_prefix_cache(
-        self, reset_running_requests: bool = False, reset_connector: bool = False
-    ) -> bool:
+    def reset_prefix_cache(self, reset_running_requests: bool = False, reset_connector: bool = False) -> bool:
         """Reset the prefix cache for KV cache.
 
         This is particularly required when the model weights are live-updated.

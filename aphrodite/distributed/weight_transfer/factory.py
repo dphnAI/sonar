@@ -58,9 +58,7 @@ class WeightTransferEngineFactory:
             # Lazy loading path
             module_path = module_path_or_cls
             if class_name is None:
-                raise ValueError(
-                    "class_name is required when registering with module path"
-                )
+                raise ValueError("class_name is required when registering with module path")
 
             def loader() -> type[WeightTransferEngine]:
                 module = importlib.import_module(module_path)
@@ -97,10 +95,7 @@ class WeightTransferEngineFactory:
         backend = config.backend
         if backend not in cls._registry:
             available = list(cls._registry.keys())
-            raise ValueError(
-                f"Invalid weight transfer backend: {backend}. "
-                f"Available engines: {available}"
-            )
+            raise ValueError(f"Invalid weight transfer backend: {backend}. Available engines: {available}")
         engine_cls = cls._registry[backend]()
 
         logger.info(

@@ -33,9 +33,7 @@ def test_mrcr_correctness(config_filename):
     server_args = shlex.split(cfg.get("server_args", ""))
     server_args += ["--trust-remote-code", "--disable-uvicorn-access-log"]
 
-    print(
-        f"MRCR eval for {cfg['model_name']} (threshold {cfg['match_ratio_threshold']})"
-    )
+    print(f"MRCR eval for {cfg['model_name']} (threshold {cfg['match_ratio_threshold']})")
 
     with RemoteOpenAIServer(
         cfg["model_name"],
@@ -76,8 +74,6 @@ def test_mrcr_correctness(config_filename):
     else:
         measured = results["match_ratio"]
         if measured < threshold - tol:
-            failures.append(
-                f"match_ratio: {measured:.4f} < {threshold:.4f} - {tol:.4f}"
-            )
+            failures.append(f"match_ratio: {measured:.4f} < {threshold:.4f} - {tol:.4f}")
 
     assert not failures, "MRCR thresholds failed: " + "; ".join(failures)

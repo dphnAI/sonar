@@ -87,9 +87,7 @@ class TrtllmRaggedPrefillBackend(MLAPrefillBackend):
         prefill_metadata: "MLACommonPrefillMetadata",
     ) -> None:
         super().prepare_metadata(prefill_metadata)
-        self._query_seq_lens = (
-            prefill_metadata.query_start_loc[1:] - prefill_metadata.query_start_loc[:-1]
-        )
+        self._query_seq_lens = prefill_metadata.query_start_loc[1:] - prefill_metadata.query_start_loc[:-1]
 
     def run_prefill_new_tokens(
         self,
@@ -167,14 +165,10 @@ class TrtllmRaggedPrefillBackend(MLAPrefillBackend):
             bmm1_scale=self.scale,
             bmm2_scale=1.0,
             o_sf_scale=1.0,
-            batch_size=self._prefill_metadata.chunked_context.seq_lens[chunk_idx].shape[
-                0
-            ],
+            batch_size=self._prefill_metadata.chunked_context.seq_lens[chunk_idx].shape[0],
             window_left=-1,
             cum_seq_lens_q=self._prefill_metadata.query_start_loc,
-            cum_seq_lens_kv=self._prefill_metadata.chunked_context.cu_seq_lens[
-                chunk_idx
-            ],
+            cum_seq_lens_kv=self._prefill_metadata.chunked_context.cu_seq_lens[chunk_idx],
             enable_pdl=False,
             is_causal=False,
             return_lse=True,

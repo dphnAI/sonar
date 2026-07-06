@@ -137,9 +137,7 @@ def _fused_indexer_q_rope_quant_kernel(
     # Store quantized values to index_q_fp8. FNUZ (e4m3fnuz) on gfx942, OCP
     # (e4m3fn) elsewhere -- matches the K cache.
     fp8_dtype = tl.float8e4b8 if USE_FNUZ else tl.float8e4nv
-    fp8_base_ptr = (
-        index_q_fp8_ptr + tok_idx * index_q_fp8_stride0 + head_idx * index_q_fp8_stride1
-    )
+    fp8_base_ptr = index_q_fp8_ptr + tok_idx * index_q_fp8_stride0 + head_idx * index_q_fp8_stride1
     if INDEX_Q_NOPE_DIM > 0:
         tl.store(
             fp8_base_ptr + nope_offset,
@@ -163,9 +161,7 @@ def _fused_indexer_q_rope_quant_kernel(
     # apply per-token Q scale inline. See the MXFP4 kernel below for the
     # contrasting convention (scales live with the Q values, weights are NOT
     # q-scaled).
-    index_weights = tl.load(
-        index_weights_ptr + tok_idx * index_weights_stride + head_idx
-    )
+    index_weights = tl.load(index_weights_ptr + tok_idx * index_weights_stride + head_idx)
     index_weights = index_weights.to(tl.float32)
     index_weights *= index_q_scale
     index_weights *= index_weights_softmax_scale
@@ -220,16 +216,8 @@ def _fused_indexer_q_rope_mxfp4_kernel(
     pos = tl.load(pos_ptr + tok_idx)
 
     q_base = index_q_ptr + tok_idx * index_q_stride0 + head_idx * index_q_stride1
-    out_base = (
-        index_q_mxfp4_ptr
-        + tok_idx * index_q_mxfp4_stride0
-        + head_idx * index_q_mxfp4_stride1
-    )
-    scale_base = (
-        index_q_scale_ptr
-        + tok_idx * index_q_scale_stride0
-        + head_idx * index_q_scale_stride1
-    )
+    out_base = index_q_mxfp4_ptr + tok_idx * index_q_mxfp4_stride0 + head_idx * index_q_mxfp4_stride1
+    scale_base = index_q_scale_ptr + tok_idx * index_q_scale_stride0 + head_idx * index_q_scale_stride1
 
     half_off = tl.arange(0, HALF_BLOCK)
 
@@ -247,15 +235,10 @@ def _fused_indexer_q_rope_mxfp4_kernel(
     rot_q_base = q_base + INDEX_Q_NOPE_DIM
     for b in tl.static_range(NUM_ROPE_BLOCKS):
         pair_off = b * HALF_BLOCK + half_off  # indices in [0, HALF_ROT_DIM)
-        cos_b = tl.load(
-            index_q_cos_sin_ptr + pos * index_q_cos_sin_stride + pair_off
-        ).to(tl.float32)
-        sin_b = tl.load(
-            index_q_cos_sin_ptr
-            + pos * index_q_cos_sin_stride
-            + pair_off
-            + INDEX_Q_HALF_ROT_DIM
-        ).to(tl.float32)
+        cos_b = tl.load(index_q_cos_sin_ptr + pos * index_q_cos_sin_stride + pair_off).to(tl.float32)
+        sin_b = tl.load(index_q_cos_sin_ptr + pos * index_q_cos_sin_stride + pair_off + INDEX_Q_HALF_ROT_DIM).to(
+            tl.float32
+        )
         x_even = tl.load(rot_q_base + pair_off * 2).to(tl.float32)
         x_odd = tl.load(rot_q_base + pair_off * 2 + 1).to(tl.float32)
         r_even = x_even * cos_b - x_odd * sin_b
@@ -275,9 +258,7 @@ def _fused_indexer_q_rope_mxfp4_kernel(
     # (T, H, HEAD_DIM // MXFP4_BLOCK) alongside the packed values, so each
     # per-block scale is applied by the downstream MXFP4 logits kernel when
     # dequantizing Q — there is no per-token scalar to fold into `weights`.
-    index_weights = tl.load(
-        index_weights_ptr + tok_idx * index_weights_stride + head_idx
-    ).to(tl.float32)
+    index_weights = tl.load(index_weights_ptr + tok_idx * index_weights_stride + head_idx).to(tl.float32)
     index_weights *= index_weights_softmax_scale
     index_weights *= index_weights_head_scale
     tl.store(
@@ -336,8 +317,7 @@ def fused_indexer_q_rope_quant(
 
     if use_fp4:
         assert index_q_head_dim % MXFP4_BLOCK_SIZE == 0, (
-            f"head_dim={index_q_head_dim} must be a multiple of MXFP4 block "
-            f"size {MXFP4_BLOCK_SIZE}"
+            f"head_dim={index_q_head_dim} must be a multiple of MXFP4 block size {MXFP4_BLOCK_SIZE}"
         )
         num_scale_blocks = index_q_head_dim // MXFP4_BLOCK_SIZE
         index_q_packed = torch.empty(

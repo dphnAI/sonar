@@ -67,14 +67,9 @@ class RustToolParser(ToolParser):
         self._error: Exception | None = None
 
         if not self.model_tokenizer:
-            raise ValueError(
-                "The model tokenizer must be passed to the ToolParser "
-                "constructor during construction."
-            )
+            raise ValueError("The model tokenizer must be passed to the ToolParser constructor during construction.")
 
-        logger.debug(
-            "Aphrodite successfully imported tool parser %s", self.__class__.__name__
-        )
+        logger.debug("Aphrodite successfully imported tool parser %s", self.__class__.__name__)
 
     def adjust_request(
         self, request: ChatCompletionRequest | ResponsesRequest
@@ -109,16 +104,12 @@ class RustToolParser(ToolParser):
                 strict = getattr(tool.function, "strict", None)
             else:
                 continue
-            tools.append(
-                _rust_tool_parser_module().Tool(name, description, parameters, strict)
-            )
+            tools.append(_rust_tool_parser_module().Tool(name, description, parameters, strict))
         return tools
 
     def _new_parser(self) -> Any:
         """Create a fresh Rust parser with the current tool schemas."""
-        return _rust_tool_parser_module().ToolParser(
-            self.rust_parser_name, self._rust_tools()
-        )
+        return _rust_tool_parser_module().ToolParser(self.rust_parser_name, self._rust_tools())
 
     def _get_parser(self) -> Any:
         if self._parser is None:
@@ -141,9 +132,7 @@ class RustToolParser(ToolParser):
         while len(self.streamed_args_for_tool) <= index:
             self.streamed_args_for_tool.append("")
 
-    def _record_delta(
-        self, index: int, name: str | None, arguments: str | None
-    ) -> str | None:
+    def _record_delta(self, index: int, name: str | None, arguments: str | None) -> str | None:
         """Mirror a Rust parser delta into Aphrodite streaming bookkeeping.
 
         ``prev_tool_call_arr`` and ``streamed_args_for_tool`` are read later by
@@ -162,16 +151,12 @@ class RustToolParser(ToolParser):
 
         if arguments is not None:
             self.streamed_args_for_tool[index] += arguments
-            self.prev_tool_call_arr[index]["arguments"] = self.streamed_args_for_tool[
-                index
-            ]
+            self.prev_tool_call_arr[index]["arguments"] = self.streamed_args_for_tool[index]
             self.current_tool_id = index
 
         return tool_call_id
 
-    def _delta_message_from_parser_output(
-        self, parser_output: Any | None
-    ) -> DeltaMessage | None:
+    def _delta_message_from_parser_output(self, parser_output: Any | None) -> DeltaMessage | None:
         """Translate one Rust parser output into a Aphrodite ``DeltaMessage``."""
         if parser_output is None:
             return None
@@ -220,9 +205,7 @@ class RustToolParser(ToolParser):
             }
             output.append(parser.finish())
         except Exception:
-            logger.exception(
-                "Error parsing %s tool call output.", self.rust_parser_name
-            )
+            logger.exception("Error parsing %s tool call output.", self.rust_parser_name)
             return None
         return output.coalesce(), tool_call_ids
 
@@ -232,10 +215,7 @@ class RustToolParser(ToolParser):
         request: ChatCompletionRequest,
     ) -> ExtractedToolCallInformation:
         """Extract tool calls from complete model output (non-streaming)."""
-        if (
-            self.tool_call_start_token is not None
-            and self.tool_call_start_token not in model_output
-        ):
+        if self.tool_call_start_token is not None and self.tool_call_start_token not in model_output:
             return ExtractedToolCallInformation(
                 tools_called=False,
                 tool_calls=[],
@@ -260,8 +240,7 @@ class RustToolParser(ToolParser):
                 continue
             tool_calls.append(
                 ToolCall(
-                    id=tool_call_ids.get(parsed_tool_call.tool_index)
-                    or make_tool_call_id(),
+                    id=tool_call_ids.get(parsed_tool_call.tool_index) or make_tool_call_id(),
                     type="function",
                     function=FunctionCall(name=name, arguments=arguments),
                 )

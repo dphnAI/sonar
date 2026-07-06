@@ -4,9 +4,7 @@ import pytest
 
 
 def pytest_addoption(parser):
-    parser.addoption(
-        "--subtests", action="store", type=str, default=None, help="subtest ids"
-    )
+    parser.addoption("--subtests", action="store", type=str, default=None, help="subtest ids")
 
 
 @pytest.fixture

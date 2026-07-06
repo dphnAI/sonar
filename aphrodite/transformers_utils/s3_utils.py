@@ -16,19 +16,11 @@ except ImportError:
 
 
 def _filter_allow(paths: list[str], patterns: list[str]) -> list[str]:
-    return [
-        path
-        for path in paths
-        if any(fnmatch.fnmatch(path, pattern) for pattern in patterns)
-    ]
+    return [path for path in paths if any(fnmatch.fnmatch(path, pattern) for pattern in patterns)]
 
 
 def _filter_ignore(paths: list[str], patterns: list[str]) -> list[str]:
-    return [
-        path
-        for path in paths
-        if not any(fnmatch.fnmatch(path, pattern) for pattern in patterns)
-    ]
+    return [path for path in paths if not any(fnmatch.fnmatch(path, pattern) for pattern in patterns)]
 
 
 def glob(

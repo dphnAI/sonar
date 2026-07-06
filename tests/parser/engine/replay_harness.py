@@ -347,8 +347,7 @@ def accumulate_deltas(
         "reasoning": "".join(reasoning_parts),
         "content": "".join(content_parts),
         "tool_calls": [
-            {"name": tc["name"], "arguments": "".join(tc["_args_parts"])}
-            for tc in tool_calls_by_idx.values()
+            {"name": tc["name"], "arguments": "".join(tc["_args_parts"])} for tc in tool_calls_by_idx.values()
         ],
     }
 
@@ -367,30 +366,20 @@ def assert_parse_output(actual: ParseOutput, sample: Sample) -> None:
     """Compare actual parse output against expected values from a sample."""
     if sample.expected_reasoning is not None:
         assert actual.reasoning == sample.expected_reasoning, (
-            f"Reasoning mismatch:\n"
-            f"  expected: {sample.expected_reasoning!r}\n"
-            f"  actual:   {actual.reasoning!r}"
+            f"Reasoning mismatch:\n  expected: {sample.expected_reasoning!r}\n  actual:   {actual.reasoning!r}"
         )
 
     if sample.expected_content is not None:
         assert actual.content == sample.expected_content, (
-            f"Content mismatch:\n"
-            f"  expected: {sample.expected_content!r}\n"
-            f"  actual:   {actual.content!r}"
+            f"Content mismatch:\n  expected: {sample.expected_content!r}\n  actual:   {actual.content!r}"
         )
     if sample.expected_tool_calls is not None:
         assert len(actual.tool_calls) == len(sample.expected_tool_calls), (
-            f"Tool call count mismatch: "
-            f"expected {len(sample.expected_tool_calls)}, "
-            f"got {len(actual.tool_calls)}"
+            f"Tool call count mismatch: expected {len(sample.expected_tool_calls)}, got {len(actual.tool_calls)}"
         )
-        for i, (expected_tc, actual_tc) in enumerate(
-            zip(sample.expected_tool_calls, actual.tool_calls)
-        ):
+        for i, (expected_tc, actual_tc) in enumerate(zip(sample.expected_tool_calls, actual.tool_calls)):
             assert actual_tc["name"] == expected_tc["name"], (
-                f"Tool call {i} name mismatch: "
-                f"expected {expected_tc['name']!r}, "
-                f"got {actual_tc['name']!r}"
+                f"Tool call {i} name mismatch: expected {expected_tc['name']!r}, got {actual_tc['name']!r}"
             )
             if "arguments" in expected_tc:
                 expected_args = expected_tc["arguments"]
@@ -399,14 +388,9 @@ def assert_parse_output(actual: ParseOutput, sample: Sample) -> None:
                     try:
                         actual_args = json.loads(actual_args_str)
                     except json.JSONDecodeError as e:
-                        raise AssertionError(
-                            f"Tool call {i} arguments not valid JSON: "
-                            f"{actual_args_str!r}"
-                        ) from e
+                        raise AssertionError(f"Tool call {i} arguments not valid JSON: {actual_args_str!r}") from e
                     assert actual_args == expected_args, (
-                        f"Tool call {i} arguments mismatch:\n"
-                        f"  expected: {expected_args}\n"
-                        f"  actual:   {actual_args}"
+                        f"Tool call {i} arguments mismatch:\n  expected: {expected_args}\n  actual:   {actual_args}"
                     )
 
 
@@ -418,9 +402,5 @@ def assert_no_terminal_leakage(
     """Assert that none of *terminals* appear in reasoning or content."""
     suffix = f" ({context})" if context else ""
     for terminal in terminals:
-        assert terminal not in actual.reasoning, (
-            f"{terminal!r} leaked into reasoning{suffix}"
-        )
-        assert terminal not in actual.content, (
-            f"{terminal!r} leaked into content{suffix}"
-        )
+        assert terminal not in actual.reasoning, f"{terminal!r} leaked into reasoning{suffix}"
+        assert terminal not in actual.content, f"{terminal!r} leaked into content{suffix}"

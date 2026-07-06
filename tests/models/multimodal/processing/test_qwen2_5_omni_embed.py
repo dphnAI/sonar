@@ -32,9 +32,7 @@ TEXT_TOKEN_ID = 0
 # ---------------------------------------------------------------------------
 
 
-def make_token_seq(
-    audio_n: int, image_n: int, video_n: int, text_prefix: int = 3, text_sep: int = 2
-):
+def make_token_seq(audio_n: int, image_n: int, video_n: int, text_prefix: int = 3, text_sep: int = 2):
     """
     Build a flat token sequence:
       [text_prefix] [AUDIO * audio_n] [text_sep] [IMAGE * image_n]
@@ -51,17 +49,11 @@ def make_token_seq(
         + [TEXT_TOKEN_ID] * text_sep
     )
     input_ids = torch.tensor(tokens)
-    is_multimodal = (
-        (input_ids == AUDIO_TOKEN_ID)
-        | (input_ids == IMAGE_TOKEN_ID)
-        | (input_ids == VIDEO_TOKEN_ID)
-    )
+    is_multimodal = (input_ids == AUDIO_TOKEN_ID) | (input_ids == IMAGE_TOKEN_ID) | (input_ids == VIDEO_TOKEN_ID)
     return input_ids, is_multimodal
 
 
-def make_interleaved_seq(
-    video_chunks: list[int], audio_chunks: list[int], text_prefix: int = 2
-):
+def make_interleaved_seq(video_chunks: list[int], audio_chunks: list[int], text_prefix: int = 2):
     """
     Build an interleaved sequence like use_audio_in_video:
       [text] [V*v0] [A*a0] [V*v1] [A*a1] ...
@@ -85,36 +77,28 @@ class TestCheckInterleavedAudioVideo:
         input_ids, is_multimodal = make_token_seq(5, 0, 4)
         is_video = is_multimodal & (input_ids == VIDEO_TOKEN_ID)
         is_audio = is_multimodal & (input_ids == AUDIO_TOKEN_ID)
-        assert not check_interleaved_audio_video(
-            is_video, is_audio, is_video.sum().item(), is_audio.sum().item()
-        )
+        assert not check_interleaved_audio_video(is_video, is_audio, is_video.sum().item(), is_audio.sum().item())
 
     def test_non_interleaved_with_image(self):
         """Audio + image + video (the mixed_modalities case) → not interleaved."""
         input_ids, is_multimodal = make_token_seq(5, 4, 6)
         is_video = is_multimodal & (input_ids == VIDEO_TOKEN_ID)
         is_audio = is_multimodal & (input_ids == AUDIO_TOKEN_ID)
-        assert not check_interleaved_audio_video(
-            is_video, is_audio, is_video.sum().item(), is_audio.sum().item()
-        )
+        assert not check_interleaved_audio_video(is_video, is_audio, is_video.sum().item(), is_audio.sum().item())
 
     def test_no_audio(self):
         """Video only → not interleaved."""
         input_ids, is_multimodal = make_token_seq(0, 0, 6)
         is_video = is_multimodal & (input_ids == VIDEO_TOKEN_ID)
         is_audio = is_multimodal & (input_ids == AUDIO_TOKEN_ID)
-        assert not check_interleaved_audio_video(
-            is_video, is_audio, is_video.sum().item(), is_audio.sum().item()
-        )
+        assert not check_interleaved_audio_video(is_video, is_audio, is_video.sum().item(), is_audio.sum().item())
 
     def test_interleaved(self):
         """V A V A interleaved → True."""
         input_ids, is_multimodal = make_interleaved_seq([4, 4], [3, 3])
         is_video = is_multimodal & (input_ids == VIDEO_TOKEN_ID)
         is_audio = is_multimodal & (input_ids == AUDIO_TOKEN_ID)
-        assert check_interleaved_audio_video(
-            is_video, is_audio, is_video.sum().item(), is_audio.sum().item()
-        )
+        assert check_interleaved_audio_video(is_video, is_audio, is_video.sum().item(), is_audio.sum().item())
 
     def test_batched_non_interleaved_no_false_positive(self):
         """
@@ -132,15 +116,13 @@ class TestCheckInterleavedAudioVideo:
         sep = torch.tensor([TEXT_TOKEN_ID] * 3)
         batched_ids = torch.cat([single_ids, sep] * 5)
         is_multimodal = (
-            (batched_ids == AUDIO_TOKEN_ID)
-            | (batched_ids == IMAGE_TOKEN_ID)
-            | (batched_ids == VIDEO_TOKEN_ID)
+            (batched_ids == AUDIO_TOKEN_ID) | (batched_ids == IMAGE_TOKEN_ID) | (batched_ids == VIDEO_TOKEN_ID)
         )
         is_video = is_multimodal & (batched_ids == VIDEO_TOKEN_ID)
         is_audio = is_multimodal & (batched_ids == AUDIO_TOKEN_ID)
-        assert not check_interleaved_audio_video(
-            is_video, is_audio, is_video.sum().item(), is_audio.sum().item()
-        ), "Batched non-interleaved requests should not be detected as interleaved"
+        assert not check_interleaved_audio_video(is_video, is_audio, is_video.sum().item(), is_audio.sum().item()), (
+            "Batched non-interleaved requests should not be detected as interleaved"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -179,9 +161,7 @@ def make_mock_model(hidden: int = 8):
     # _embed_text_input_ids: delegate to SupportsMultiModal's implementation
     from aphrodite.model_executor.models.interfaces import SupportsMultiModal
 
-    model._embed_text_input_ids = (
-        lambda *a, **kw: SupportsMultiModal._embed_text_input_ids(model, *a, **kw)
-    )
+    model._embed_text_input_ids = lambda *a, **kw: SupportsMultiModal._embed_text_input_ids(model, *a, **kw)
 
     # super().embed_input_ids → use SupportsMultiModal.embed_input_ids
     def fake_super_embed(
@@ -198,11 +178,7 @@ def make_mock_model(hidden: int = 8):
         )
 
     # Bind embed_input_ids as the real method
-    model.embed_input_ids = (
-        lambda *a, **kw: Qwen2_5OmniThinkerForConditionalGeneration.embed_input_ids(
-            model, *a, **kw
-        )
-    )
+    model.embed_input_ids = lambda *a, **kw: Qwen2_5OmniThinkerForConditionalGeneration.embed_input_ids(model, *a, **kw)
 
     # Store super-embed for use inside the method
     model._super_embed_input_ids = fake_super_embed
@@ -210,9 +186,7 @@ def make_mock_model(hidden: int = 8):
     return model, hidden
 
 
-def build_mm_embeds(
-    audio_n, image_n, video_n, hidden, audio_val=10.0, image_val=20.0, video_val=30.0
-):
+def build_mm_embeds(audio_n, image_n, video_n, hidden, audio_val=10.0, image_val=20.0, video_val=30.0):
     """
     Build multimodal_embeddings list in position order (audio, image, video).
     Each embedding is filled with a distinct constant so we can verify placement.
@@ -237,9 +211,7 @@ class TestEmbedInputIds:
         mm_embeds = build_mm_embeds(audio_n, image_n, video_n, hidden)
 
         model, _ = make_mock_model(hidden)
-        result = model.embed_input_ids(
-            input_ids, mm_embeds, is_multimodal=is_multimodal
-        )
+        result = model.embed_input_ids(input_ids, mm_embeds, is_multimodal=is_multimodal)
         return result, input_ids, is_multimodal
 
     def test_audio_only(self):
@@ -328,9 +300,7 @@ class TestEmbedInputIds:
         ]
 
         model, _ = make_mock_model(hidden)
-        result = model.embed_input_ids(
-            input_ids, mm_embeds, is_multimodal=is_multimodal
-        )
+        result = model.embed_input_ids(input_ids, mm_embeds, is_multimodal=is_multimodal)
 
         video_pos = (input_ids == VIDEO_TOKEN_ID).nonzero(as_tuple=True)[0]
         audio_pos = (input_ids == AUDIO_TOKEN_ID).nonzero(as_tuple=True)[0]

@@ -53,11 +53,7 @@ class Exaone4_5MultiTokenPredictor(ExaoneMoeMultiTokenPredictor):
         text_config = config.text_config
 
         self.config = config
-        lora_vocab = (
-            (lora_config.lora_extra_vocab_size * (lora_config.max_loras or 1))
-            if lora_config
-            else 0
-        )
+        lora_vocab = (lora_config.lora_extra_vocab_size * (lora_config.max_loras or 1)) if lora_config else 0
         self.vocab_size = config.vocab_size + lora_vocab
         self.org_vocab_size = config.vocab_size
 
@@ -89,12 +85,8 @@ class Exaone4_5MultiTokenPredictor(ExaoneMoeMultiTokenPredictor):
         )
 
         self.norm = RMSNorm(text_config.hidden_size, eps=text_config.rms_norm_eps)
-        self.pre_fc_norm_hidden = RMSNorm(
-            text_config.hidden_size, eps=text_config.rms_norm_eps
-        )
-        self.pre_fc_norm_embedding = RMSNorm(
-            text_config.hidden_size, eps=text_config.rms_norm_eps
-        )
+        self.pre_fc_norm_hidden = RMSNorm(text_config.hidden_size, eps=text_config.rms_norm_eps)
+        self.pre_fc_norm_embedding = RMSNorm(text_config.hidden_size, eps=text_config.rms_norm_eps)
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.embed_tokens(input_ids)
@@ -130,9 +122,7 @@ class Exaone4_5MultiTokenPredictor(ExaoneMoeMultiTokenPredictor):
         )
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
 
         hidden_states = self.norm(hidden_states)
         return hidden_states
@@ -148,9 +138,7 @@ class Exaone4_5_MTP(ExaoneMoeMTP, SupportsMultiModal):
 
         nn.Module.__init__(self)
         self.config = config
-        self.model = Exaone4_5MultiTokenPredictor(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "mtp")
-        )
+        self.model = Exaone4_5MultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "mtp"))
         self.unpadded_vocab_size = config.vocab_size
         self.lm_head = ParallelLMHead(
             self.unpadded_vocab_size,
@@ -160,9 +148,7 @@ class Exaone4_5_MTP(ExaoneMoeMTP, SupportsMultiModal):
         )
         if config.tie_word_embeddings:
             self.lm_head.weight = self.model.embed_tokens.weight
-        self.logits_processor = LogitsProcessor(
-            self.unpadded_vocab_size, config.vocab_size
-        )
+        self.logits_processor = LogitsProcessor(self.unpadded_vocab_size, config.vocab_size)
 
     def embed_input_ids(
         self,

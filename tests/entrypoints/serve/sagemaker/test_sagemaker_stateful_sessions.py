@@ -52,9 +52,7 @@ async def test_close_session_badrequest(
     url = basic_server_with_lora.url_for("invocations")
     create_response = requests.post(url, json={"requestType": "NEW_SESSION"})
     create_response.raise_for_status()
-    valid_session_id, expiration = create_response.headers.get(
-        HEADER_SAGEMAKER_NEW_SESSION_ID, ""
-    ).split(";")
+    valid_session_id, expiration = create_response.headers.get(HEADER_SAGEMAKER_NEW_SESSION_ID, "").split(";")
     assert valid_session_id
 
     close_request_json = {"requestType": "CLOSE"}
@@ -88,9 +86,7 @@ async def test_close_session_invalidrequest(
     url = basic_server_with_lora.url_for("invocations")
     create_response = requests.post(url, json={"requestType": "NEW_SESSION"})
     create_response.raise_for_status()
-    valid_session_id, expiration = create_response.headers.get(
-        HEADER_SAGEMAKER_NEW_SESSION_ID, ""
-    ).split(";")
+    valid_session_id, expiration = create_response.headers.get(HEADER_SAGEMAKER_NEW_SESSION_ID, "").split(";")
     assert valid_session_id
 
     close_request_json = {"requestType": "CLOSE"}
@@ -118,9 +114,7 @@ async def test_session(basic_server_with_lora: RemoteOpenAIServer):
     url = basic_server_with_lora.url_for("invocations")
     create_response = requests.post(url, json={"requestType": "NEW_SESSION"})
     create_response.raise_for_status()
-    valid_session_id, expiration = create_response.headers.get(
-        HEADER_SAGEMAKER_NEW_SESSION_ID, ""
-    ).split(";")
+    valid_session_id, expiration = create_response.headers.get(HEADER_SAGEMAKER_NEW_SESSION_ID, "").split(";")
     assert valid_session_id
 
     # test invocation with session id
@@ -148,7 +142,4 @@ async def test_session(basic_server_with_lora: RemoteOpenAIServer):
     )
     close_response.raise_for_status()
 
-    assert (
-        close_response.headers.get(HEADER_SAGEMAKER_CLOSED_SESSION_ID)
-        == valid_session_id
-    )
+    assert close_response.headers.get(HEADER_SAGEMAKER_CLOSED_SESSION_ID) == valid_session_id

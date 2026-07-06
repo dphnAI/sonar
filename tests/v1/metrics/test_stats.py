@@ -39,9 +39,7 @@ def test_prefill_kv_computed_with_cache():
     assert finished_req.request_id == "test-req-001"
 
     # Verify calculation: prefill KV = prompt tokens - cached tokens
-    prefill_kv_computed = finished_req.num_prompt_tokens - max(
-        finished_req.num_cached_tokens, 0
-    )
+    prefill_kv_computed = finished_req.num_prompt_tokens - max(finished_req.num_cached_tokens, 0)
     assert prefill_kv_computed == 8800  # 10000 - 1200
 
 
@@ -70,9 +68,7 @@ def test_prefill_kv_computed_no_cache():
     assert finished_req.request_id == "test-req-002"
 
     # Verify calculation: prefill KV = full prompt when no cache
-    prefill_kv_computed = finished_req.num_prompt_tokens - max(
-        finished_req.num_cached_tokens, 0
-    )
+    prefill_kv_computed = finished_req.num_prompt_tokens - max(finished_req.num_cached_tokens, 0)
     assert prefill_kv_computed == 2000
 
 
@@ -97,9 +93,7 @@ def test_prefill_kv_computed_edge_cases():
 
     finished_req = iteration_stats.finished_requests[0]
     # max() should handle negative values
-    prefill_kv_computed = finished_req.num_prompt_tokens - max(
-        finished_req.num_cached_tokens, 0
-    )
+    prefill_kv_computed = finished_req.num_prompt_tokens - max(finished_req.num_cached_tokens, 0)
     assert prefill_kv_computed == 100  # Should treat negative as 0
     assert finished_req.request_id == "test-req-003"
 
@@ -115,9 +109,7 @@ def test_prefill_kv_computed_edge_cases():
     )
 
     finished_req2 = iteration_stats2.finished_requests[0]
-    prefill_kv_computed2 = finished_req2.num_prompt_tokens - max(
-        finished_req2.num_cached_tokens, 0
-    )
+    prefill_kv_computed2 = finished_req2.num_prompt_tokens - max(finished_req2.num_cached_tokens, 0)
     assert prefill_kv_computed2 == 0  # All cached, nothing computed
     assert finished_req2.request_id == "test-req-004"
 

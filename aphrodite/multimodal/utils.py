@@ -146,11 +146,7 @@ def argsort_mm_positions(
         A list of `(modality, idx)`, which can be used to access an item
         by `mm_positions[modality][idx]`.
     """
-    flat_items = (
-        (modality, idx, item)
-        for modality, items in mm_positions.items()
-        for idx, item in enumerate(items)
-    )
+    flat_items = ((modality, idx, item) for modality, items in mm_positions.items() for idx, item in enumerate(items))
 
     sorted_flat_items = sorted(flat_items, key=lambda x: x[2].offset)
 
@@ -210,10 +206,7 @@ def group_and_batch_mm_items(
         - `num_items` is the corresponding number of items.
     """
     group_ids = [
-        tuple(
-            (key, _get_group_hash(elem))
-            for key, elem in sorted(item.items(), key=lambda kv: kv[0])
-        )
+        tuple((key, _get_group_hash(elem)) for key, elem in sorted(item.items(), key=lambda kv: kv[0]))
         for item in items
     ]
     group_sizes = [sum(1 for _ in group) for _, group in groupby(group_ids)]

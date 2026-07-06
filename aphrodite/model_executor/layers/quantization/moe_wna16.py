@@ -59,9 +59,7 @@ class MoeWNA16Config(QuantizationConfig):
             pass
         elif self.linear_quant_method in ("awq", "awq_marlin"):
             capability_tuple = current_platform.get_device_capability()
-            device_capability = (
-                -1 if capability_tuple is None else capability_tuple.to_int()
-            )
+            device_capability = -1 if capability_tuple is None else capability_tuple.to_int()
             awq_min_capability = AutoAWQConfig.get_min_capability()
             if device_capability < awq_min_capability:
                 raise ValueError(
@@ -105,9 +103,7 @@ class MoeWNA16Config(QuantizationConfig):
             modules_to_not_convert = []
         elif linear_quant_method in ("awq", "awq_marlin"):
             has_zp = cls.get_from_keys(config, ["zero_point"])
-            modules_to_not_convert = cls.get_from_keys_or(
-                config, ["modules_to_not_convert"], None
-            )
+            modules_to_not_convert = cls.get_from_keys_or(config, ["modules_to_not_convert"], None)
         else:
             raise ValueError("moe_wna16 only support gptq and awq.")
 
@@ -122,9 +118,7 @@ class MoeWNA16Config(QuantizationConfig):
         )
 
     @classmethod
-    def override_quantization_method(
-        cls, hf_quant_cfg, user_quant, hf_config=None
-    ) -> QuantizationMethods | None:
+    def override_quantization_method(cls, hf_quant_cfg, user_quant, hf_config=None) -> QuantizationMethods | None:
         can_convert = cls.is_moe_wna16_compatible(hf_quant_cfg)
         if can_convert and user_quant == "moe_wna16":
             return cls.get_name()
@@ -138,26 +132,18 @@ class MoeWNA16Config(QuantizationConfig):
         desc_act = quant_config.get("desc_act")
 
         capability_tuple = current_platform.get_device_capability()
-        device_capability = (
-            -1 if capability_tuple is None else capability_tuple.to_int()
-        )
+        device_capability = -1 if capability_tuple is None else capability_tuple.to_int()
         # Avoid circular import
         from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
 
         awq_min_capability = AutoAWQConfig.get_min_capability()
 
         gptq_compatible = quant_method == "gptq" and not desc_act and num_bits in [4, 8]
-        awq_compatible = (
-            quant_method == "awq"
-            and num_bits == 4
-            and device_capability >= awq_min_capability
-        )
+        awq_compatible = quant_method == "awq" and num_bits == 4 and device_capability >= awq_min_capability
 
         return gptq_compatible or awq_compatible
 
-    def get_quant_method(
-        self, layer: torch.nn.Module, prefix: str
-    ) -> "QuantizeMethodBase | None":
+    def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> "QuantizeMethodBase | None":
         if is_layer_skipped_quant(prefix, self.modules_to_not_convert):
             if isinstance(layer, RoutedExperts):
                 return UnquantizedFusedMoEMethod(layer.moe_config)
@@ -170,13 +156,9 @@ class MoeWNA16Config(QuantizationConfig):
             )
 
             if self.linear_quant_method == "gptq":
-                return AutoGPTQConfig.from_config(self.full_config).get_quant_method(
-                    layer, prefix
-                )
+                return AutoGPTQConfig.from_config(self.full_config).get_quant_method(layer, prefix)
             elif self.linear_quant_method in ("awq", "awq_marlin"):
-                return AutoAWQConfig.from_config(self.full_config).get_quant_method(
-                    layer, prefix
-                )
+                return AutoAWQConfig.from_config(self.full_config).get_quant_method(layer, prefix)
             else:
                 raise ValueError("moe_wna16 only support gptq and awq.")
         elif isinstance(layer, RoutedExperts):
@@ -313,23 +295,15 @@ class MoeWNA16Method(FusedMoEMethodBase):
             if not self.quant_config.has_zp:
                 invalid_param_keys += ["w13_qzeros", "w2_qzeros"]
             for key in invalid_param_keys:
-                param = torch.nn.Parameter(
-                    torch.empty((0,), dtype=torch.int32), requires_grad=False
-                )
+                param = torch.nn.Parameter(torch.empty((0,), dtype=torch.int32), requires_grad=False)
                 layer.register_parameter(key, param)
                 set_weight_attrs(param, extra_weight_attrs)
 
-    def get_fused_moe_quant_config(
-        self, layer: RoutedExperts
-    ) -> FusedMoEQuantConfig | None:
+    def get_fused_moe_quant_config(self, layer: RoutedExperts) -> FusedMoEQuantConfig | None:
         weight_bits = self.quant_config.weight_bits
         has_zp = self.quant_config.has_zp
         assert weight_bits == 4 or weight_bits == 8
-        config_builder = (
-            int4_w4a16_moe_quant_config
-            if weight_bits == 4
-            else int8_w8a16_moe_quant_config
-        )
+        config_builder = int4_w4a16_moe_quant_config if weight_bits == 4 else int8_w8a16_moe_quant_config
 
         return config_builder(
             w1_scale=layer.w13_scales,
@@ -454,28 +428,20 @@ class MoeWNA16Method(FusedMoEMethodBase):
                     loaded_weight = loaded_weight.T
 
             # repeat the qzeros/scales to fit new group size
-            if (
-                layer.group_size_div_factor > 1
-                and "qzeros" in weight_name
-                or "scales" in weight_name
-            ):
-                loaded_weight = loaded_weight.repeat_interleave(
-                    layer.group_size_div_factor, 1
-                )
+            if layer.group_size_div_factor > 1 and "qzeros" in weight_name or "scales" in weight_name:
+                loaded_weight = loaded_weight.repeat_interleave(layer.group_size_div_factor, 1)
 
             if "w13_qzeros" in weight_name:
-                tensor = loaded_weight.view(
-                    layer.moe_config.tp_size, -1, loaded_weight.size(1)
-                )[tp_rank]
+                tensor = loaded_weight.view(layer.moe_config.tp_size, -1, loaded_weight.size(1))[tp_rank]
                 if shard_id == "w1":
                     param.data[expert_id, : shard_size // 2] = tensor
                 else:
                     param.data[expert_id, shard_size // 2 :] = tensor
                 return True if return_success else None
             elif "w2_qzeros" in weight_name:
-                param.data[expert_id] = loaded_weight.view(
-                    loaded_weight.size(0), layer.moe_config.tp_size, -1
-                )[:, tp_rank]
+                param.data[expert_id] = loaded_weight.view(loaded_weight.size(0), layer.moe_config.tp_size, -1)[
+                    :, tp_rank
+                ]
                 return True if return_success else None
             else:
                 # Delegate to the original loader, passing return_success

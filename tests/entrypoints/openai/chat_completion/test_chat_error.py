@@ -114,9 +114,7 @@ def _build_serving_chat(engine: AsyncLLM) -> OpenAIServingChat:
             [{"prompt_token_ids": [1, 2, 3]}],
         )
 
-    serving_chat.online_renderer.preprocess_chat = AsyncMock(
-        side_effect=_fake_preprocess_chat
-    )
+    serving_chat.online_renderer.preprocess_chat = AsyncMock(side_effect=_fake_preprocess_chat)
     return serving_chat
 
 
@@ -187,10 +185,7 @@ async def test_openai_chat_keeps_mm_cache_for_engine_execution():
     result = await serving_chat.render_chat_request(request)
 
     assert isinstance(result, tuple)
-    assert (
-        serving_chat.online_renderer.preprocess_chat.call_args.kwargs["skip_mm_cache"]
-        is False
-    )
+    assert serving_chat.online_renderer.preprocess_chat.call_args.kwargs["skip_mm_cache"] is False
 
 
 def _build_serving_render(engine: AsyncLLM) -> ServingRender:
@@ -215,9 +210,7 @@ def _build_serving_render(engine: AsyncLLM) -> ServingRender:
             [{"prompt_token_ids": [1, 2, 3]}],
         )
 
-    serving_render.online_renderer.preprocess_chat = AsyncMock(
-        side_effect=_fake_preprocess_chat
-    )
+    serving_render.online_renderer.preprocess_chat = AsyncMock(side_effect=_fake_preprocess_chat)
     return serving_render
 
 
@@ -239,10 +232,7 @@ async def test_renderer_only_chat_request_skips_mm_cache():
     result = await serving_render.render_chat_request(request)
 
     assert result.token_ids == [1, 2, 3]
-    assert (
-        serving_render.online_renderer.preprocess_chat.call_args.kwargs["skip_mm_cache"]
-        is True
-    )
+    assert serving_render.online_renderer.preprocess_chat.call_args.kwargs["skip_mm_cache"] is True
 
 
 @pytest.mark.asyncio
@@ -320,9 +310,7 @@ async def test_chat_error_stream():
         chunks.append(chunk)
 
     assert len(chunks) >= 2
-    assert any("Internal server error" in chunk for chunk in chunks), (
-        f"Expected error message in chunks: {chunks}"
-    )
+    assert any("Internal server error" in chunk for chunk in chunks), f"Expected error message in chunks: {chunks}"
     assert chunks[-1] == "data: [DONE]\n\n"
 
 
@@ -335,9 +323,7 @@ async def test_chat_error_stream():
 )
 def test_system_message_warns_on_image(image_content):
     """Test that system messages with image content trigger a warning."""
-    with patch(
-        "aphrodite.entrypoints.openai.chat_completion.protocol.logger"
-    ) as mock_logger:
+    with patch("aphrodite.entrypoints.openai.chat_completion.protocol.logger") as mock_logger:
         ChatCompletionRequest(
             model=MODEL_NAME,
             messages=[
@@ -416,9 +402,7 @@ def test_user_message_accepts_image():
 )
 def test_system_message_warns_on_audio(audio_content):
     """Test that system messages with audio content trigger a warning."""
-    with patch(
-        "aphrodite.entrypoints.openai.chat_completion.protocol.logger"
-    ) as mock_logger:
+    with patch("aphrodite.entrypoints.openai.chat_completion.protocol.logger") as mock_logger:
         ChatCompletionRequest(
             model=MODEL_NAME,
             messages=[
@@ -444,9 +428,7 @@ def test_system_message_warns_on_audio(audio_content):
 )
 def test_system_message_warns_on_video(video_content):
     """Test that system messages with video content trigger a warning."""
-    with patch(
-        "aphrodite.entrypoints.openai.chat_completion.protocol.logger"
-    ) as mock_logger:
+    with patch("aphrodite.entrypoints.openai.chat_completion.protocol.logger") as mock_logger:
         ChatCompletionRequest(
             model=MODEL_NAME,
             messages=[

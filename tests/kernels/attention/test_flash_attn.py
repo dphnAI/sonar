@@ -73,11 +73,7 @@ def ref_paged_attn(
         mask = torch.triu(empty_mask, diagonal=kv_len - query_len + 1).bool()
         if sliding_window is not None:
             sliding_window_mask = (
-                torch.triu(
-                    empty_mask, diagonal=kv_len - (query_len + sliding_window) + 1
-                )
-                .bool()
-                .logical_not()
+                torch.triu(empty_mask, diagonal=kv_len - (query_len + sliding_window) + 1).bool().logical_not()
             )
             mask |= sliding_window_mask
         if soft_cap is not None:
@@ -93,9 +89,7 @@ def ref_paged_attn(
 
 
 @pytest.mark.parametrize("use_out", [True, False])
-@pytest.mark.parametrize(
-    "seq_lens", [[(1, 1328), (5, 18), (129, 463)], [(1, 523), (1, 37), (1, 2011)]]
-)
+@pytest.mark.parametrize("seq_lens", [[(1, 1328), (5, 18), (129, 463)], [(1, 523), (1, 37), (1, 2011)]])
 @pytest.mark.parametrize("num_heads", NUM_HEADS)
 @pytest.mark.parametrize("head_size", HEAD_SIZES)
 @pytest.mark.parametrize("block_size", BLOCK_SIZES)
@@ -122,14 +116,10 @@ def test_varlen_with_paged_kv(
     torch.set_default_device("cuda")
     if not is_fa_version_supported(fa_version):
         pytest.skip(
-            f"Flash attention version {fa_version} not supported due "
-            f'to: "{fa_version_unsupported_reason(fa_version)}"'
+            f'Flash attention version {fa_version} not supported due to: "{fa_version_unsupported_reason(fa_version)}"'
         )
     if q_dtype is not None and (dtype != torch.bfloat16 or fa_version == 2):
-        pytest.skip(
-            "Flash attention with quantized inputs is only "
-            "supported on version 3 with bfloat16 base type"
-        )
+        pytest.skip("Flash attention with quantized inputs is only supported on version 3 with bfloat16 base type")
     set_random_seed(0)
     num_seqs = len(seq_lens)
     query_lens = [x[0] for x in seq_lens]
@@ -143,19 +133,13 @@ def test_varlen_with_paged_kv(
     scale = head_size**-0.5
 
     query = torch.randn(sum(query_lens), num_query_heads, head_size, dtype=dtype)
-    key_cache = torch.randn(
-        num_blocks, block_size, num_kv_heads, head_size, dtype=dtype
-    )
+    key_cache = torch.randn(num_blocks, block_size, num_kv_heads, head_size, dtype=dtype)
     value_cache = torch.randn_like(key_cache)
-    cu_query_lens = torch.tensor([0] + query_lens, dtype=torch.int32).cumsum(
-        dim=0, dtype=torch.int32
-    )
+    cu_query_lens = torch.tensor([0] + query_lens, dtype=torch.int32).cumsum(dim=0, dtype=torch.int32)
     kv_lens = torch.tensor(kv_lens, dtype=torch.int32)
 
     max_num_blocks_per_seq = (max_kv_len + block_size - 1) // block_size
-    block_tables = torch.randint(
-        0, num_blocks, (num_seqs, max_num_blocks_per_seq), dtype=torch.int32
-    )
+    block_tables = torch.randint(0, num_blocks, (num_seqs, max_num_blocks_per_seq), dtype=torch.int32)
 
     out = torch.empty_like(query) if use_out else None
 

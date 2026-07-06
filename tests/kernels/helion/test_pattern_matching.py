@@ -69,9 +69,7 @@ class TestMakeFxHop:
 
     @pytest.mark.skip(reason="SymInt proxy tracking issue with PyTorch 2.11+")
     def test_make_fx_symbolic(self):
-        def raw_add_scale(
-            x: torch.Tensor, y: torch.Tensor, scale: float
-        ) -> tuple[torch.Tensor, int, torch.Tensor]:
+        def raw_add_scale(x: torch.Tensor, y: torch.Tensor, scale: float) -> tuple[torch.Tensor, int, torch.Tensor]:
             out_x = torch.empty_like(x)
             out_y = torch.empty_like(x)
             for tile in hl.tile(x.size()):
@@ -97,9 +95,7 @@ class TestMakeFxHop:
             gm = make_fx(fn, tracing_mode="symbolic")(input_x, input_y)
 
         hop_nodes = [
-            n
-            for n in gm.graph.nodes
-            if n.op == "call_function" and n.target is helion_kernel_wrapper_mutation
+            n for n in gm.graph.nodes if n.op == "call_function" and n.target is helion_kernel_wrapper_mutation
         ]
         assert len(hop_nodes) == 1
         node = hop_nodes[0]
@@ -135,9 +131,7 @@ class TestMakeFxHop:
             M, N = x.size()
             out = torch.empty_like(x)
             for tile_m, tile_n in hl.tile([M, N]):
-                out[tile_m, tile_n] = (
-                    torch.nn.functional.silu(x[tile_m, tile_n]) * y[tile_m, tile_n]
-                )
+                out[tile_m, tile_n] = torch.nn.functional.silu(x[tile_m, tile_n]) * y[tile_m, tile_n]
             return out
 
         with _helion_mock_context():
@@ -165,16 +159,11 @@ class TestMakeFxHop:
             decompositions = select_decomp_table()
             input_x = torch.randn(8, 16)
             input_y = torch.randn(8, 16)
-            gm = make_fx(model, decompositions, tracing_mode="symbolic")(
-                input_x, input_y
-            )
+            gm = make_fx(model, decompositions, tracing_mode="symbolic")(input_x, input_y)
 
             def count_hop_nodes(graph):
                 return sum(
-                    1
-                    for n in graph.nodes
-                    if n.op == "call_function"
-                    and n.target is helion_kernel_wrapper_mutation
+                    1 for n in graph.nodes if n.op == "call_function" and n.target is helion_kernel_wrapper_mutation
                 )
 
             assert count_hop_nodes(gm.graph) == 0
@@ -187,10 +176,7 @@ class TestMakeFxHop:
             assert count_hop_nodes(gm.graph) == 1
 
             hop_node = next(
-                n
-                for n in gm.graph.nodes
-                if n.op == "call_function"
-                and n.target is helion_kernel_wrapper_mutation
+                n for n in gm.graph.nodes if n.op == "call_function" and n.target is helion_kernel_wrapper_mutation
             )
 
             # raw_silu_mul returns empty_like(x), so output shape == input shape

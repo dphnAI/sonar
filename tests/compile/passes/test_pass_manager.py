@@ -11,7 +11,7 @@ from aphrodite.compilation.passes.inductor_pass import (
     pass_context,
 )
 from aphrodite.compilation.passes.pass_manager import PostGradPassManager
-from aphrodite.config import ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig
 from aphrodite.config.utils import Range
 
 

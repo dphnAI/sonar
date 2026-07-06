@@ -44,9 +44,7 @@ def test_prompts():
     return prompts
 
 
-use_fork_for_test = (
-    fork_new_process_for_each_test if not current_platform.is_rocm() else lambda x: x
-)
+use_fork_for_test = fork_new_process_for_each_test if not current_platform.is_rocm() else lambda x: x
 
 
 @use_fork_for_test
@@ -69,9 +67,7 @@ def test_kv_sharing_fast_prefill(
         # This allows Aphrodite compilation backend to handle allocating and
         # managing buffers for cudagraph
         cudagraph_copy_inputs=True,
-        mode=CompilationMode.APHRODITE_COMPILE
-        if not enforce_eager
-        else CompilationMode.NONE,
+        mode=CompilationMode.APHRODITE_COMPILE if not enforce_eager else CompilationMode.NONE,
     )
     batch_size = 10
 

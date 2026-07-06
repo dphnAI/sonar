@@ -11,11 +11,11 @@ from datetime import datetime
 from typing import Any
 
 import torch
+from tqdm import tqdm
+
 from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
     _w8a8_triton_block_scaled_mm,
 )
-from tqdm import tqdm
-
 from aphrodite.platforms import current_platform
 from aphrodite.triton_utils import triton
 from aphrodite.utils.argparse_utils import FlexibleArgumentParser

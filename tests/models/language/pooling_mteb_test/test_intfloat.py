@@ -21,9 +21,7 @@ MODELS = [
     ),
     EmbedModelInfo("intfloat/e5-base", architecture="BertModel", enable_test=False),
     EmbedModelInfo("intfloat/e5-large", architecture="BertModel", enable_test=False),
-    EmbedModelInfo(
-        "intfloat/multilingual-e5-small", architecture="BertModel", enable_test=False
-    ),
+    EmbedModelInfo("intfloat/multilingual-e5-small", architecture="BertModel", enable_test=False),
     ########## XLMRobertaModel
     EmbedModelInfo(
         "intfloat/multilingual-e5-base",
@@ -54,7 +52,5 @@ def test_embed_models_mteb(hf_runner, aphrodite_runner, model_info: EmbedModelIn
 
 
 @pytest.mark.parametrize("model_info", MODELS)
-def test_embed_models_correctness(
-    hf_runner, aphrodite_runner, model_info: EmbedModelInfo, example_prompts
-) -> None:
+def test_embed_models_correctness(hf_runner, aphrodite_runner, model_info: EmbedModelInfo, example_prompts) -> None:
     correctness_test_embed_models(hf_runner, aphrodite_runner, model_info, example_prompts)

@@ -178,9 +178,7 @@ dbo_yield_and_switch_from_comm_to_compute = _register_ubatch_function(
 dbo_switch_to_comm = _register_ubatch_function(UBatchContext.switch_to_comm)
 dbo_switch_to_compute = _register_ubatch_function(UBatchContext.switch_to_compute)
 dbo_switch_to_comm_sync = _register_ubatch_function(UBatchContext.switch_to_comm_sync)
-dbo_switch_to_compute_sync = _register_ubatch_function(
-    UBatchContext.switch_to_compute_sync
-)
+dbo_switch_to_compute_sync = _register_ubatch_function(UBatchContext.switch_to_compute_sync)
 
 
 def dbo_register_recv_hook(recv_hook):

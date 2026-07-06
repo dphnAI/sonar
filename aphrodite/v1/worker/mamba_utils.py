@@ -111,9 +111,7 @@ def _copy_mamba_state_block(
         copy_size = num_elems_to_copy * state_elem_size
     else:
         # Temporal state: copy state[bt[src_col + token_bias]] -> state[bt[dst_col]]
-        actual_src_block_id = tl.load(block_table_base + src_col + token_bias).to(
-            tl.int64
-        )
+        actual_src_block_id = tl.load(block_table_base + src_col + token_bias).to(tl.int64)
         src_addr = state_base_addr + actual_src_block_id * state_block_stride
         # Use natural block data size (inner_size * elem_size), NOT
         # state_block_stride which is the page stride and can exceed the
@@ -439,10 +437,9 @@ class MambaCopyBuffers:
         make_buffer: Callable[..., CpuGpuBuffer],
     ) -> "MambaCopyBuffers":
         mamba_group_ids, mamba_spec = get_mamba_groups(kv_cache_config)
-        entries_per_req = sum(
-            len(kv_cache_config.kv_cache_groups[gid].layer_names)
-            for gid in mamba_group_ids
-        ) * len(copy_funcs)
+        entries_per_req = sum(len(kv_cache_config.kv_cache_groups[gid].layer_names) for gid in mamba_group_ids) * len(
+            copy_funcs
+        )
         n = max_num_reqs * entries_per_req
 
         return cls(
@@ -523,48 +520,25 @@ class MambaSpecDecodeGPUContext:
         mamba_group_ids, mamba_spec = get_mamba_groups(kv_cache_config)
 
         # Count total layers across all mamba groups
-        num_layers = sum(
-            len(kv_cache_config.kv_cache_groups[gid].layer_names)
-            for gid in mamba_group_ids
-        )
+        num_layers = sum(len(kv_cache_config.kv_cache_groups[gid].layer_names) for gid in mamba_group_ids)
         total_states = num_layers * num_state_types
 
         return cls(
-            state_base_addrs=torch.zeros(
-                total_states, dtype=torch.int64, device=device
-            ),
-            state_block_strides=torch.zeros(
-                total_states, dtype=torch.int64, device=device
-            ),
-            state_elem_sizes=torch.zeros(
-                total_states, dtype=torch.int32, device=device
-            ),
-            state_inner_sizes=torch.zeros(
-                total_states, dtype=torch.int64, device=device
-            ),
-            state_conv_widths=torch.zeros(
-                total_states, dtype=torch.int32, device=device
-            ),
-            state_group_indices=torch.zeros(
-                total_states, dtype=torch.int32, device=device
-            ),
-            state_dim_row_count=torch.zeros(
-                total_states, dtype=torch.int32, device=device
-            ),
-            state_dim_row_stride=torch.zeros(
-                total_states, dtype=torch.int64, device=device
-            ),
+            state_base_addrs=torch.zeros(total_states, dtype=torch.int64, device=device),
+            state_block_strides=torch.zeros(total_states, dtype=torch.int64, device=device),
+            state_elem_sizes=torch.zeros(total_states, dtype=torch.int32, device=device),
+            state_inner_sizes=torch.zeros(total_states, dtype=torch.int64, device=device),
+            state_conv_widths=torch.zeros(total_states, dtype=torch.int32, device=device),
+            state_group_indices=torch.zeros(total_states, dtype=torch.int32, device=device),
+            state_dim_row_count=torch.zeros(total_states, dtype=torch.int32, device=device),
+            state_dim_row_stride=torch.zeros(total_states, dtype=torch.int64, device=device),
             block_size=mamba_spec.block_size,
             num_layers=num_layers,
             num_state_types=num_state_types,
             mamba_group_ids=mamba_group_ids,
             num_groups=len(mamba_group_ids),
-            num_accepted_tokens_out=torch.zeros(
-                max_num_reqs, dtype=torch.int32, device=device
-            ),
-            block_table_ptrs=torch.zeros(
-                len(mamba_group_ids), dtype=torch.int64, device=device
-            ),
+            num_accepted_tokens_out=torch.zeros(max_num_reqs, dtype=torch.int32, device=device),
+            block_table_ptrs=torch.zeros(len(mamba_group_ids), dtype=torch.int64, device=device),
             mamba_state_idx_buf=make_buffer(max_num_reqs, dtype=torch.int32),
             num_scheduled_tokens_buf=make_buffer(max_num_reqs, dtype=torch.int32),
             num_computed_tokens_buf=make_buffer(max_num_reqs, dtype=torch.int32),
@@ -633,32 +607,24 @@ class MambaSpecDecodeGPUContext:
                         block_stride_elems = state.stride(0)
                     else:
                         block_stride_elems = state.numel()
-                    self.state_block_strides[idx] = (
-                        block_stride_elems * state.element_size()
-                    )
+                    self.state_block_strides[idx] = block_stride_elems * state.element_size()
 
                     # Element size
                     self.state_elem_sizes[idx] = state.element_size()
 
                     copy_func = mamba_state_copy_funcs[state_type_idx]
-                    assert (
-                        copy_func is get_conv_copy_spec
-                        or copy_func is get_temporal_copy_spec
-                    ), f"unexpected copy func: {copy_func}"
+                    assert copy_func is get_conv_copy_spec or copy_func is get_temporal_copy_spec, (
+                        f"unexpected copy func: {copy_func}"
+                    )
                     if copy_func is get_conv_copy_spec:
                         if state.dim() != 3:
-                            raise ValueError(
-                                "Expected 3D conv state cache, got "
-                                f"shape {tuple(state.shape)}"
-                            )
+                            raise ValueError(f"Expected 3D conv state cache, got shape {tuple(state.shape)}")
                         if is_conv_state_dim_first():
                             # DS layout: state_len is the slide axis.
                             self.state_conv_widths[idx] = state.size(2)
                             self.state_inner_sizes[idx] = 1
                             self.state_dim_row_count[idx] = state.size(1)
-                            self.state_dim_row_stride[idx] = (
-                                state.stride(1) * state.element_size()
-                            )
+                            self.state_dim_row_stride[idx] = state.stride(1) * state.element_size()
                         else:
                             # SD layout: dim is contiguous.
                             self.state_conv_widths[idx] = state.size(1)
@@ -671,9 +637,7 @@ class MambaSpecDecodeGPUContext:
                         # state tensor is as_strided with padded page strides
                         # (state_block_stride would be the page size, too big).
                         self.state_conv_widths[idx] = 0
-                        self.state_inner_sizes[idx] = (
-                            state[0].numel() if state.dim() > 1 else 1
-                        )
+                        self.state_inner_sizes[idx] = state[0].numel() if state.dim() > 1 else 1
 
                     self.state_group_indices[idx] = group_local_idx
                     idx += 1
@@ -682,13 +646,9 @@ class MambaSpecDecodeGPUContext:
         # `block_tables[i]` is the persistent 2D int32 block-table tensor for
         # `mamba_group_ids[i]`; `data_ptr()` / `stride(0)` are stable for the
         # engine's lifetime, so we capture them once here.
-        assert len(block_tables) == self.num_groups, (
-            f"expected {self.num_groups} block tables, got {len(block_tables)}"
-        )
+        assert len(block_tables) == self.num_groups, f"expected {self.num_groups} block tables, got {len(block_tables)}"
         strides = {bt.stride(0) for bt in block_tables}
-        assert len(strides) == 1, (
-            f"all mamba block tables must share stride(0), got {strides}"
-        )
+        assert len(strides) == 1, f"all mamba block tables must share stride(0), got {strides}"
         self.block_table_stride_req = int(next(iter(strides)))
         for i, bt in enumerate(block_tables):
             self.block_table_ptrs[i] = bt.data_ptr()
@@ -722,9 +682,7 @@ class MambaSpecDecodeGPUContext:
             return
 
         # Initialize output to current values (unchanged unless src==dst)
-        self.num_accepted_tokens_out[:num_reqs].copy_(
-            num_accepted_tokens_gpu[:num_reqs]
-        )
+        self.num_accepted_tokens_out[:num_reqs].copy_(num_accepted_tokens_gpu[:num_reqs])
 
         total_states = self.num_layers * self.num_state_types
         grid = (num_reqs, total_states)
@@ -866,9 +824,7 @@ class MambaBuffers:
         with_postprocess_align: bool,
     ) -> "MambaBuffers":
         return cls(
-            preprocess=MambaCopyBuffers.create(
-                max_num_reqs, kv_cache_config, copy_funcs, make_buffer
-            ),
+            preprocess=MambaCopyBuffers.create(max_num_reqs, kv_cache_config, copy_funcs, make_buffer),
             postprocess_align=(
                 MambaSpecDecodeGPUContext.create(
                     max_num_reqs=max_num_reqs,
@@ -910,9 +866,7 @@ def collect_mamba_copy_meta(
             attention = forward_context[layer_name]
             kv_caches: list[torch.Tensor] = attention.kv_cache
             for state, state_copy_func in zip(kv_caches, mamba_state_copy_funcs):
-                copy_spec = state_copy_func(
-                    state, block_ids, src_block_idx, accept_token_bias + 1
-                )
+                copy_spec = state_copy_func(state, block_ids, src_block_idx, accept_token_bias + 1)
 
                 src_ptrs_np[offset] = copy_spec.start_addr
                 dst_ptrs_np[offset] = state[dest_block_id].data_ptr()
@@ -985,8 +939,7 @@ def preprocess_mamba(
 
         num_scheduled_tokens = scheduler_output.num_scheduled_tokens[req_id]
         num_blocks: int = (
-            cdiv(req_state.num_computed_tokens + num_scheduled_tokens, block_size)
-            + num_speculative_blocks
+            cdiv(req_state.num_computed_tokens + num_scheduled_tokens, block_size) + num_speculative_blocks
         )
 
         # We always save the current running state at the last
@@ -1094,10 +1047,7 @@ def postprocess_mamba_align_gpu(
             kv_cache_config,
             forward_context,
             mamba_state_copy_funcs,
-            [
-                input_batch.block_table[gid].get_device_tensor(num_reqs)
-                for gid in ctx.mamba_group_ids
-            ],
+            [input_batch.block_table[gid].get_device_tensor(num_reqs) for gid in ctx.mamba_group_ids],
         )
 
     ctx.run_fused_postprocess(
@@ -1113,9 +1063,7 @@ def postprocess_mamba_align_gpu(
     # ``num_accepted_tokens_gpu``; the kernel only overwrites entries to 1
     # when src_block_idx == dest_block_idx (copy within the same block), so
     # the original count is preserved for everyone else.
-    num_accepted_tokens_cpu_tensor[:num_reqs].copy_(
-        ctx.num_accepted_tokens_out[:num_reqs], non_blocking=True
-    )
+    num_accepted_tokens_cpu_tensor[:num_reqs].copy_(ctx.num_accepted_tokens_out[:num_reqs], non_blocking=True)
 
 
 def stage_postprocess_metadata_to_gpu(

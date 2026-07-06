@@ -102,11 +102,7 @@ class Step3ToolParser(ToolParser):
                             params[key] = float(value)
                     elif typ == "boolean":
                         lower_val = value.lower()
-                        params[key] = (
-                            lower_val == "true"
-                            if lower_val in ("true", "false")
-                            else value
-                        )
+                        params[key] = lower_val == "true" if lower_val in ("true", "false") else value
                     elif typ == "null":
                         params[key] = None if value.lower() == "null" else value
                 break
@@ -143,10 +139,7 @@ class Step3ToolParser(ToolParser):
 
                 start_pos = unprocessed_text.find(self.TOOL_CALLS_BEGIN)
                 if start_pos == -1:
-                    if (
-                        self.TOOL_CALLS_BEGIN.startswith(unprocessed_text.strip())
-                        and unprocessed_text
-                    ):
+                    if self.TOOL_CALLS_BEGIN.startswith(unprocessed_text.strip()) and unprocessed_text:
                         return None  # It's a prefix, wait.
                     self.position = len(current_text)
                     return DeltaMessage(content=unprocessed_text)
@@ -167,9 +160,7 @@ class Step3ToolParser(ToolParser):
                 continue
 
             # Check if we are between tool calls.
-            tool_finished = self.current_tool_id != -1 and self.prev_tool_call_arr[
-                self.current_tool_id
-            ].get("finished")
+            tool_finished = self.current_tool_id != -1 and self.prev_tool_call_arr[self.current_tool_id].get("finished")
             if self.current_tool_id == -1 or tool_finished:
                 if unprocessed_text.startswith(self.TOOL_CALL_BEGIN):
                     self.position += len(self.TOOL_CALL_BEGIN)
@@ -187,9 +178,7 @@ class Step3ToolParser(ToolParser):
                     return None
 
             # STATE: Parsing an active tool call.
-            if self.current_tool_id != -1 and not self.prev_tool_call_arr[
-                self.current_tool_id
-            ].get("finished", False):
+            if self.current_tool_id != -1 and not self.prev_tool_call_arr[self.current_tool_id].get("finished", False):
                 end_tool_pos = unprocessed_text.find(self.TOOL_CALL_END)
                 if end_tool_pos == -1:
                     tool_body = unprocessed_text
@@ -240,9 +229,7 @@ class Step3ToolParser(ToolParser):
                             tool_calls=[
                                 DeltaToolCall(
                                     index=self.current_tool_id,
-                                    function=DeltaFunctionCall(
-                                        arguments=final_args_json
-                                    ),
+                                    function=DeltaFunctionCall(arguments=final_args_json),
                                 )
                             ]
                         )
@@ -258,15 +245,11 @@ class Step3ToolParser(ToolParser):
         request: ChatCompletionRequest,
     ) -> ExtractedToolCallInformation:
         if self.TOOL_CALLS_BEGIN not in model_output:
-            return ExtractedToolCallInformation(
-                tools_called=False, tool_calls=[], content=model_output
-            )
+            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
 
         pre_text, rest = model_output.split(self.TOOL_CALLS_BEGIN, 1)
         if self.TOOL_CALLS_END not in rest:
-            return ExtractedToolCallInformation(
-                tools_called=False, tool_calls=[], content=model_output
-            )
+            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
 
         tool_block, post_text = rest.split(self.TOOL_CALLS_END, 1)
         content = (pre_text + post_text).strip()
@@ -291,17 +274,11 @@ class Step3ToolParser(ToolParser):
             if function_name and params_dict is not None:
                 params_dict = self._cast_arguments(function_name, params_dict)
                 params_str = json.dumps(params_dict, ensure_ascii=False)
-                tool_calls.append(
-                    ToolCall(
-                        function=FunctionCall(name=function_name, arguments=params_str)
-                    )
-                )
+                tool_calls.append(ToolCall(function=FunctionCall(name=function_name, arguments=params_str)))
         if tool_calls:
             return ExtractedToolCallInformation(
                 tools_called=True,
                 tool_calls=tool_calls,
                 content=content if content else None,
             )
-        return ExtractedToolCallInformation(
-            tools_called=False, tool_calls=[], content=model_output
-        )
+        return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)

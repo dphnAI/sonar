@@ -8,10 +8,9 @@ from contextlib import contextmanager
 import pytest
 import torch
 
-from tests.models.utils import check_logprobs_close
 from aphrodite import LLM, SamplingParams
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CompilationConfig, AphroditeConfig, set_current_aphrodite_config
+from aphrodite.config import AphroditeConfig, CompilationConfig, set_current_aphrodite_config
 from aphrodite.config.compilation import (
     CompilationMode,
     DynamicShapesConfig,
@@ -19,6 +18,7 @@ from aphrodite.config.compilation import (
 )
 from aphrodite.forward_context import set_forward_context
 from aphrodite.utils.torch_utils import is_torch_equal_or_newer
+from tests.models.utils import check_logprobs_close
 
 
 def get_test_models():
@@ -55,9 +55,7 @@ def test_dynamic_shapes_compilation(
     evaluate_guards,
 ):
     """Test that all dynamic shapes types compile successfully"""
-    if shapes_type == DynamicShapesType.UNBACKED and not is_torch_equal_or_newer(
-        "2.11.0"
-    ):
+    if shapes_type == DynamicShapesType.UNBACKED and not is_torch_equal_or_newer("2.11.0"):
         # NOTE[ROCm]: shape_id (used by Qwen2/Llama to relate input dims) only
         # landed in torch 2.11, but the ROCm CI still runs torch 2.10.x. On
         # older torch there's no way to express it, so unbacked shapes go
@@ -133,18 +131,12 @@ def test_dynamic_shapes_compilation(
     ],
 )
 @pytest.mark.parametrize("evaluate_guards", [False, True])
-def test_model_specialization_with_evaluate_guards(
-    monkeypatch, use_aot_compile, dynamic_shapes_type, evaluate_guards
-):
+def test_model_specialization_with_evaluate_guards(monkeypatch, use_aot_compile, dynamic_shapes_type, evaluate_guards):
     """Test that evaluate_guards correctly detects shape specialization
     violations.
     """
 
-    if (
-        use_aot_compile == "1"
-        and dynamic_shapes_type == DynamicShapesType.BACKED
-        and evaluate_guards
-    ):
+    if use_aot_compile == "1" and dynamic_shapes_type == DynamicShapesType.BACKED and evaluate_guards:
         pytest.skip("evaluate_guards for backed does not work with aot_compile=1")
 
     @support_torch_compile
@@ -208,12 +200,7 @@ def test_model_specialization_with_evaluate_guards(
 
             model(input1)
 
-            if evaluate_guards and (
-                not (
-                    is_01_specialization
-                    and dynamic_shapes_type == DynamicShapesType.BACKED
-                )
-            ):
+            if evaluate_guards and (not (is_01_specialization and dynamic_shapes_type == DynamicShapesType.BACKED)):
                 # This should fail because guards were added.
                 with pytest.raises(RuntimeError) as excinfo:
                     model(input2)

@@ -36,9 +36,7 @@ def add_cli_args(parser: FlexibleArgumentParser):
         )
         cmd_subparser.set_defaults(dispatch_function=entrypoint)
         cmd.add_cli_args(cmd_subparser)
-        cmd_subparser.epilog = APHRODITE_SUBCMD_PARSER_EPILOG.format(
-            subcmd=f"sweep {cmd.parser_name}"
-        )
+        cmd_subparser.epilog = APHRODITE_SUBCMD_PARSER_EPILOG.format(subcmd=f"sweep {cmd.parser_name}")
 
 
 def main(args: argparse.Namespace):

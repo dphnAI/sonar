@@ -137,9 +137,7 @@ class _FakeAudioEncoder:
         hidden_states = torch.ones(1, int(lengths.sum().item()), 8)
         if not output_deepstack_hidden_states:
             return hidden_states, None
-        return hidden_states, [
-            hidden_states * scale for scale in range(2, 2 + self.deepstack_layers)
-        ]
+        return hidden_states, [hidden_states * scale for scale in range(2, 2 + self.deepstack_layers)]
 
 
 def _patch_tensor_parallel_for_linear_layers(monkeypatch, tp_size=1, tp_rank=0):
@@ -148,18 +146,10 @@ def _patch_tensor_parallel_for_linear_layers(monkeypatch, tp_size=1, tp_rank=0):
     import aphrodite.model_executor.parameter as parameter_module
 
     for module in (moss_audio_module, linear_layers, parameter_module):
-        monkeypatch.setattr(
-            module, "get_tensor_model_parallel_world_size", lambda: tp_size
-        )
-    monkeypatch.setattr(
-        linear_layers, "get_tensor_model_parallel_rank", lambda: tp_rank
-    )
-    monkeypatch.setattr(
-        parameter_module, "get_tensor_model_parallel_rank", lambda: tp_rank
-    )
-    monkeypatch.setattr(
-        linear_layers, "tensor_model_parallel_all_reduce", lambda tensor: tensor
-    )
+        monkeypatch.setattr(module, "get_tensor_model_parallel_world_size", lambda: tp_size)
+    monkeypatch.setattr(linear_layers, "get_tensor_model_parallel_rank", lambda: tp_rank)
+    monkeypatch.setattr(parameter_module, "get_tensor_model_parallel_rank", lambda: tp_rank)
+    monkeypatch.setattr(linear_layers, "tensor_model_parallel_all_reduce", lambda tensor: tensor)
 
 
 def _build_moss_audio_processor(cache=None):
@@ -199,8 +189,7 @@ def _assert_mm_inputs_equal(left, right):
             [*[ord(char) for char in "before "], MOSS_AUDIO_BOS_TOKEN_ID],
         ),
         (
-            f"before {MOSS_AUDIO_BOS_TOKEN}{MOSS_AUDIO_TOKEN}"
-            f"{MOSS_AUDIO_TOKEN}{MOSS_AUDIO_EOS_TOKEN} after",
+            f"before {MOSS_AUDIO_BOS_TOKEN}{MOSS_AUDIO_TOKEN}{MOSS_AUDIO_TOKEN}{MOSS_AUDIO_EOS_TOKEN} after",
             [*[ord(char) for char in "before "], MOSS_AUDIO_BOS_TOKEN_ID],
         ),
         ("Describe this audio.", [MOSS_AUDIO_BOS_TOKEN_ID]),
@@ -208,25 +197,19 @@ def _assert_mm_inputs_equal(left, right):
 )
 def test_moss_audio_processor_expands_audio_placeholders(prompt, prefix):
     raw_mel_len = 17
-    processed = MossAudioProcessor(_Tokenizer())(
-        text=prompt, audio=[torch.zeros(160 * raw_mel_len)]
-    )
+    processed = MossAudioProcessor(_Tokenizer())(text=prompt, audio=[torch.zeros(160 * raw_mel_len)])
     input_ids = processed["input_ids"][0].tolist()
 
     assert input_ids[: len(prefix)] == prefix
     assert input_ids.count(MOSS_AUDIO_BOS_TOKEN_ID) == 1
     assert input_ids.count(MOSS_AUDIO_EOS_TOKEN_ID) == 1
-    assert input_ids.count(MOSS_AUDIO_TOKEN_ID) == (
-        MossAudioEncoder.compute_num_audio_tokens(raw_mel_len)
-    )
+    assert input_ids.count(MOSS_AUDIO_TOKEN_ID) == (MossAudioEncoder.compute_num_audio_tokens(raw_mel_len))
     assert processed["audio_data"].shape == (1, 128, raw_mel_len)
     assert processed["audio_data_seqlens"].tolist() == [raw_mel_len]
 
 
 def test_moss_audio_processor_preserves_placeholder_without_audio():
-    processed = MossAudioProcessor(_Tokenizer())(
-        text=f"before {MOSS_AUDIO_PLACEHOLDER} after"
-    )
+    processed = MossAudioProcessor(_Tokenizer())(text=f"before {MOSS_AUDIO_PLACEHOLDER} after")
 
     assert processed["input_ids"][0].tolist() == [
         *[ord(char) for char in "before "],
@@ -280,9 +263,7 @@ def test_moss_audio_multimodal_processor_handles_token_and_cache_paths():
     expected_audio_tokens = MossAudioEncoder.compute_num_audio_tokens(raw_mel_len)
     prompt_token_ids = baseline_text["prompt_token_ids"]
     assert prompt_token_ids.count(MOSS_AUDIO_TOKEN_ID) == expected_audio_tokens
-    assert baseline_text["mm_placeholders"]["audio"][0].length == (
-        expected_audio_tokens + 2
-    )
+    assert baseline_text["mm_placeholders"]["audio"][0].length == (expected_audio_tokens + 2)
 
     _assert_mm_inputs_equal(baseline_text, baseline_token)
     _assert_mm_inputs_equal(baseline_text, cached_text_miss)
@@ -312,9 +293,7 @@ def test_moss_audio_error_paths():
         )
 
     with pytest.raises(ValueError, match="too short"):
-        MossAudioProcessor(_Tokenizer())(
-            text=MOSS_AUDIO_PLACEHOLDER, audio=[torch.empty(0)]
-        )
+        MossAudioProcessor(_Tokenizer())(text=MOSS_AUDIO_PLACEHOLDER, audio=[torch.empty(0)])
     with pytest.raises(ValueError, match="too short"):
         model._parse_and_validate_audio_input(
             audio_data=torch.zeros(1, 128, 1),
@@ -352,8 +331,7 @@ def test_moss_audio_embed_multimodal_packs_by_audio(deepstack_scales):
     model.audio_encoder = _FakeAudioEncoder(len(deepstack_scales))
     model.audio_adapter = lambda hidden_states: hidden_states * 5
     model.deepstack_audio_merger_list = [
-        lambda hidden_states, scale=scale: hidden_states * scale
-        for scale in deepstack_scales
+        lambda hidden_states, scale=scale: hidden_states * scale for scale in deepstack_scales
     ]
     model.deepstack_input_embeds = None
 
@@ -371,9 +349,7 @@ def test_moss_audio_embed_multimodal_packs_by_audio(deepstack_scales):
         assert model.deepstack_input_embeds is None
         return
 
-    main_embeddings, deepstack_embeddings = model._split_multimodal_embeddings(
-        embeddings, hidden_size=8
-    )
+    main_embeddings, deepstack_embeddings = model._split_multimodal_embeddings(embeddings, hidden_size=8)
     assert [embeds.shape for embeds in main_embeddings] == [
         torch.Size([1, 8]),
         torch.Size([2, 8]),
@@ -509,9 +485,7 @@ def test_moss_qwen3_deepstack_keys_for_pp(monkeypatch):
         model.layers = torch.nn.ModuleList([AddOne() for _ in range(num_layers)])
         model.norm = lambda hidden_states, residual: (hidden_states, residual)
         model._maybe_add_hidden_state = lambda aux, *args: aux
-        model.deepstack_inject_layer_indices = (
-            range(0) if deepstack_layers is None else deepstack_layers
-        )
+        model.deepstack_inject_layer_indices = range(0) if deepstack_layers is None else deepstack_layers
         return model
 
     _patch_pp_group(monkeypatch, first=True, last=True)
@@ -630,10 +604,7 @@ def test_moss_audio_encoder_loads_realistic_attention_weight_names(monkeypatch):
     ]
     params = dict(encoder.named_parameters(remove_duplicate=False))
     assert "layers.0.self_attn.k_proj.bias" not in params
-    weights = {
-        name: torch.full_like(params[name], fill_value=float(i + 1))
-        for i, name in enumerate(weight_names)
-    }
+    weights = {name: torch.full_like(params[name], fill_value=float(i + 1)) for i, name in enumerate(weight_names)}
 
     loaded = AutoWeightsLoader(encoder).load_weights(weights.items())
 

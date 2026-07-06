@@ -77,9 +77,7 @@ class HCXVisionImagePixelInputs(TensorSchema):
     """
 
     type: Literal["pixel_values"] = "pixel_values"
-    pixel_values_images: Annotated[
-        list[torch.Tensor], TensorShape("n", "g", 3, "h", "w", dynamic_dims={"g"})
-    ]
+    pixel_values_images: Annotated[list[torch.Tensor], TensorShape("n", "g", 3, "h", "w", dynamic_dims={"g"})]
     image_sizes_images: Annotated[torch.Tensor, TensorShape("n", 2)]
 
 
@@ -153,9 +151,7 @@ class HCXVisionDummyInputsBuilder(BaseDummyInputsBuilder[HCXVisionProcessingInfo
         self,
         mm_counts: Mapping[str, int],
     ) -> str:
-        dummy_text = IMAGE_TOKEN * mm_counts.get(
-            "image", 0
-        ) + VIDEO_TOKEN * mm_counts.get("video", 0)
+        dummy_text = IMAGE_TOKEN * mm_counts.get("image", 0) + VIDEO_TOKEN * mm_counts.get("video", 0)
         return dummy_text
 
     def get_dummy_mm_data(
@@ -231,9 +227,7 @@ class HCXVisionMultiModalProcessor(BaseMultiModalProcessor[HCXVisionProcessingIn
                     _processed_outputs[k] = v[0]
 
             if images:
-                _processed_outputs["image_sizes_images"] = torch.tensor(
-                    _processed_outputs["image_sizes_images"]
-                )
+                _processed_outputs["image_sizes_images"] = torch.tensor(_processed_outputs["image_sizes_images"])
                 _processed_outputs["vision_query_lengths_images"] = torch.tensor(
                     _processed_outputs["vision_query_lengths_images"]
                 )
@@ -241,21 +235,15 @@ class HCXVisionMultiModalProcessor(BaseMultiModalProcessor[HCXVisionProcessingIn
             if videos:
                 _idx_per_video = [
                     0,
-                    *accumulate(
-                        get_num_combined_frames(len(video)) for video in videos
-                    ),
+                    *accumulate(get_num_combined_frames(len(video)) for video in videos),
                 ]
                 _processed_outputs["pixel_values_videos"] = [
-                    _processed_outputs["pixel_values_videos"][
-                        _idx_per_video[i] : _idx_per_video[i + 1]
-                    ]
+                    _processed_outputs["pixel_values_videos"][_idx_per_video[i] : _idx_per_video[i + 1]]
                     for i in range(len(videos))
                 ]
                 _processed_outputs["vision_query_lengths_videos"] = [
                     torch.tensor(
-                        _processed_outputs["vision_query_lengths_videos"][
-                            _idx_per_video[i] : _idx_per_video[i + 1]
-                        ]
+                        _processed_outputs["vision_query_lengths_videos"][_idx_per_video[i] : _idx_per_video[i + 1]]
                     )
                     for i in range(len(videos))
                 ]
@@ -393,9 +381,7 @@ class HCXVisionMlp(nn.Module):
             self.act = act_layer()
             self.fc2 = nn.Linear(2 * hidden_features, out_features)
         else:
-            raise NotImplementedError(
-                "{} is not implemented".format(self.mm_projector_type)
-            )
+            raise NotImplementedError("{} is not implemented".format(self.mm_projector_type))
 
     def forward(self, x):
         x = self.fc1(x)
@@ -428,9 +414,7 @@ class HCXVisionCAbstractor(nn.Module):
 
         # Positional embedding
         if pos_emb:
-            self.pos_emb = torch.nn.Parameter(
-                torch.zeros(1, num_input_tokens, encoder_hidden_size)
-            )
+            self.pos_emb = torch.nn.Parameter(torch.zeros(1, num_input_tokens, encoder_hidden_size))
             self.pos_emb.data.normal_(mean=0.0, std=0.02)
         else:
             self.pos_emb = None
@@ -441,9 +425,7 @@ class HCXVisionCAbstractor(nn.Module):
         else:
             self.prenorm = None
 
-        self.build_net(
-            num_queries, encoder_hidden_size, hidden_size, output_hidden_size
-        )
+        self.build_net(num_queries, encoder_hidden_size, hidden_size, output_hidden_size)
         self.dtype = next(self.parameters()).dtype
 
     def forward(
@@ -479,9 +461,7 @@ class HCXVisionCAbstractor(nn.Module):
 
         if num_queries_vis_abstractors is not None:
             assert num_grids is not None
-            return self._forward_adaptive_num_query(
-                x, num_queries_vis_abstractors, num_grids
-            )
+            return self._forward_adaptive_num_query(x, num_queries_vis_abstractors, num_grids)
 
         x = self.net(x)
         x = rearrange(x, "b d h w -> b (h w) d")
@@ -520,9 +500,7 @@ class HCXVisionCAbstractor(nn.Module):
         depth: int = 3,
         mlp_depth: int = 2,
     ):
-        assert (n_queries**0.5).is_integer(), (
-            f"n_queries must be square number. n_queries: {n_queries}"
-        )
+        assert (n_queries**0.5).is_integer(), f"n_queries must be square number. n_queries: {n_queries}"
         hw = int(n_queries**0.5)
 
         # RegBlock = ResBlock + SE
@@ -607,9 +585,7 @@ class HCXVisionForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
         self.dtype = aphrodite_config.model_config.dtype
 
         ## possible_resolution should be matched with preprocessor_config.json
-        config.possible_resolutions = self._init_possible_resolutions(
-            config, vision_config
-        )
+        config.possible_resolutions = self._init_possible_resolutions(config, vision_config)
 
         with self._mark_tower_model(aphrodite_config, {"image", "video"}):
             self.vision_model = init_vision_tower_for_hcxvision(
@@ -619,14 +595,10 @@ class HCXVisionForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
                 require_post_norm=False,
                 prefix=maybe_prefix(prefix, "vision_model"),
             )
-            self.mm_projector = self._init_mm_projector(
-                config, text_config, vision_config
-            )
+            self.mm_projector = self._init_mm_projector(config, text_config, vision_config)
 
             if config.anyres:
-                self.image_newline = nn.Parameter(
-                    torch.empty(text_config.hidden_size, dtype=self.dtype)
-                )
+                self.image_newline = nn.Parameter(torch.empty(text_config.hidden_size, dtype=self.dtype))
 
         with self._mark_language_model(aphrodite_config):
             self.language_model = init_aphrodite_registered_model(
@@ -639,9 +611,7 @@ class HCXVisionForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
         self.vision_config = vision_config
         self.text_config = text_config
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
     @classmethod
     def get_placeholder_str(cls, modality: str, i: int) -> str | None:
@@ -761,9 +731,7 @@ class HCXVisionForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
         pixel_values_image_flat = flatten_bn(pixel_values_images, concat=True)
 
         visual_token_idx = 0 if "siglip" in self.vision_config.model_type else 1
-        image_forward_outs = self.vision_model(pixel_values_image_flat)[
-            :, visual_token_idx:
-        ]
+        image_forward_outs = self.vision_model(pixel_values_image_flat)[:, visual_token_idx:]
 
         image_forward_outs = image_forward_outs.to(dtype=self.mm_projector.dtype)
         image_forward_outs = self.mm_projector(image_forward_outs)  # b (h w) d
@@ -795,9 +763,7 @@ class HCXVisionForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
         )
 
         visual_token_idx = 0 if "siglip" in self.vision_config.model_type else 1
-        video_forward_outs = self.vision_model(pixel_values_videos_flat)[
-            :, visual_token_idx:
-        ]
+        video_forward_outs = self.vision_model(pixel_values_videos_flat)[:, visual_token_idx:]
 
         video_forward_outs = video_forward_outs.to(dtype=self.mm_projector.dtype)
 
@@ -814,27 +780,19 @@ class HCXVisionForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
             # slowfast (first_last_frames_slow)
             assert len_total_frames != 0
             if len_total_frames <= 2:
-                num_queries_vis_abstractors.append(
-                    self.config.num_queries_vis_abstractor_video_slow
-                )
+                num_queries_vis_abstractors.append(self.config.num_queries_vis_abstractor_video_slow)
                 grid_idx += len_total_frames
                 num_grids.append(grid_idx)
             else:
-                num_queries_vis_abstractors.append(
-                    self.config.num_queries_vis_abstractor_video_slow
-                )
+                num_queries_vis_abstractors.append(self.config.num_queries_vis_abstractor_video_slow)
                 grid_idx += 1
                 num_grids.append(grid_idx)
 
-                num_queries_vis_abstractors.append(
-                    self.config.num_queries_vis_abstractor_video_fast
-                )
+                num_queries_vis_abstractors.append(self.config.num_queries_vis_abstractor_video_fast)
                 grid_idx += len_total_frames - 2
                 num_grids.append(grid_idx)
 
-                num_queries_vis_abstractors.append(
-                    self.config.num_queries_vis_abstractor_video_slow
-                )
+                num_queries_vis_abstractors.append(self.config.num_queries_vis_abstractor_video_slow)
                 grid_idx += 1
                 num_grids.append(grid_idx)
         else:
@@ -842,20 +800,14 @@ class HCXVisionForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
             for pixel_values_frames in pixel_values_videos:
                 for pixel_values_frame in pixel_values_frames:
                     if len(pixel_values_frame) > 0:
-                        num_queries_vis_abstractors.append(
-                            self.config.num_queries_vis_abstractor_video_slow
-                        )
+                        num_queries_vis_abstractors.append(self.config.num_queries_vis_abstractor_video_slow)
                         grid_idx += 1
                         num_grids.append(grid_idx)
-                        num_queries_vis_abstractors.append(
-                            self.config.num_queries_vis_abstractor_video_fast
-                        )
+                        num_queries_vis_abstractors.append(self.config.num_queries_vis_abstractor_video_fast)
                         grid_idx = grid_idx + len(pixel_values_frame) - 1
                         num_grids.append(grid_idx)
 
-        video_forward_outs = self.mm_projector(
-            video_forward_outs, num_queries_vis_abstractors, num_grids
-        )
+        video_forward_outs = self.mm_projector(video_forward_outs, num_queries_vis_abstractors, num_grids)
 
         video_features = []  # what we want to return
         target_features = []
@@ -879,16 +831,13 @@ class HCXVisionForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
             elif video_group_size < target_group_size:
                 raise RuntimeError(f"{video_group_size=} < {target_group_size=}")
 
-        assert len(target_features) == 0, (
-            f"target_features is not empty!! {target_features}"
-        )
+        assert len(target_features) == 0, f"target_features is not empty!! {target_features}"
         assert len(video_groups) == len(video_features)
 
         feats_per_video = [len(video) for video in pixel_values_videos]
         idxs_per_video = [0, *accumulate(feats_per_video)]
         return tuple(
-            torch.cat(video_features[idxs_per_video[i] : idxs_per_video[i + 1]])
-            for i in range(len(feats_per_video))
+            torch.cat(video_features[idxs_per_video[i] : idxs_per_video[i + 1]]) for i in range(len(feats_per_video))
         )
 
     def _prepare_multimodal_kwargs(self, **kwargs: object):
@@ -952,8 +901,7 @@ class HCXVisionForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
                             possible_resolutions.append([i, j])
 
                 possible_resolutions = [
-                    [ys * vision_config.image_size, xs * vision_config.image_size]
-                    for ys, xs in possible_resolutions
+                    [ys * vision_config.image_size, xs * vision_config.image_size] for ys, xs in possible_resolutions
                 ]
             return possible_resolutions
         else:
@@ -972,8 +920,7 @@ class HCXVisionForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
         elif config.mm_projector_type == "cabstractor":
             mm_projector = HCXVisionCAbstractor(
                 num_queries=config.num_queries_vis_abstractor_image,
-                num_input_tokens=(vision_config.image_size // vision_config.patch_size)
-                ** 2,
+                num_input_tokens=(vision_config.image_size // vision_config.patch_size) ** 2,
                 encoder_hidden_size=input_hidden_size,
                 hidden_size=input_hidden_size,
                 output_hidden_size=text_config.hidden_size,
@@ -1023,14 +970,11 @@ def select_best_resolution(original_size: tuple, possible_resolutions: list) -> 
             int(original_width * scale),
             int(original_height * scale),
         )
-        effective_resolution = min(
-            downscaled_width * downscaled_height, original_width * original_height
-        )
+        effective_resolution = min(downscaled_width * downscaled_height, original_width * original_height)
         wasted_resolution = (width * height) - effective_resolution
 
         if effective_resolution > max_effective_resolution or (
-            effective_resolution == max_effective_resolution
-            and wasted_resolution < min_wasted_resolution
+            effective_resolution == max_effective_resolution and wasted_resolution < min_wasted_resolution
         ):
             max_effective_resolution = effective_resolution
             min_wasted_resolution = wasted_resolution
@@ -1044,16 +988,10 @@ def get_anyres_image_grid_shape(
     grid_pinpoints: str | list[tuple[int, int]],
     patch_size: int,
 ) -> tuple[int, int]:
-    possible_resolutions = (
-        grid_pinpoints
-        if isinstance(grid_pinpoints, list)
-        else ast.literal_eval(grid_pinpoints)
-    )
+    possible_resolutions = grid_pinpoints if isinstance(grid_pinpoints, list) else ast.literal_eval(grid_pinpoints)
 
     original_width, original_height = image_size
-    height, width = select_best_resolution(
-        (original_height, original_width), possible_resolutions
-    )
+    height, width = select_best_resolution((original_height, original_width), possible_resolutions)
     return width // patch_size, height // patch_size
 
 
@@ -1070,16 +1008,10 @@ def reshape_and_unpad_image_features(
     base_image_feature = image_feature[0]
     image_feature = image_feature[1:]
 
-    assert height * width == base_image_feature.shape[0], (
-        f"{height=} * {width=} != {base_image_feature.shape[0]=}"
-    )
+    assert height * width == base_image_feature.shape[0], f"{height=} * {width=} != {base_image_feature.shape[0]=}"
 
-    num_patch_width, num_patch_height = get_anyres_image_grid_shape(
-        image_size, possible_resolutions, grid_size
-    )
-    image_feature = image_feature.view(
-        num_patch_height, num_patch_width, height, width, -1
-    )
+    num_patch_width, num_patch_height = get_anyres_image_grid_shape(image_size, possible_resolutions, grid_size)
+    image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
 
     if unpad:
         image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
@@ -1088,9 +1020,7 @@ def reshape_and_unpad_image_features(
         image_feature = torch.cat(
             (
                 image_feature,
-                image_newline[:, None, None]
-                .expand(*image_feature.shape[:-1], 1)
-                .to(image_feature.device),
+                image_newline[:, None, None].expand(*image_feature.shape[:-1], 1).to(image_feature.device),
             ),
             dim=-1,
         )
@@ -1116,9 +1046,7 @@ def anyres_postprocessing(
     height = width = grid_size // patch_size
 
     if num_queries_vis_abstractor > 0:
-        assert (num_queries_vis_abstractor**0.5).is_integer(), (
-            "n_queries must be square number"
-        )
+        assert (num_queries_vis_abstractor**0.5).is_integer(), "n_queries must be square number"
         height = width = int(num_queries_vis_abstractor**0.5)
 
     # post-processing (unpad, add newline)
@@ -1137,9 +1065,7 @@ def anyres_postprocessing(
             )
         else:
             image_feature = image_feature[0]
-            image_feature = torch.cat(
-                (image_feature, image_newline[None].to(image_feature.device)), dim=0
-            )
+            image_feature = torch.cat((image_feature, image_newline[None].to(image_feature.device)), dim=0)
         new_image_features.append(image_feature)
 
     return new_image_features

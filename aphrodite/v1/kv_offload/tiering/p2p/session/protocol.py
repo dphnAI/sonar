@@ -187,10 +187,7 @@ class FetchMsg:
         hashes = msg[FetchMsg.BLOCK_HASHES]
         indexes = msg[FetchMsg.BLOCK_INDEXES]
         if len(hashes) != len(indexes):
-            raise ValueError(
-                f"block_hashes/block_indexes length mismatch: "
-                f"{len(hashes)} vs {len(indexes)}"
-            )
+            raise ValueError(f"block_hashes/block_indexes length mismatch: {len(hashes)} vs {len(indexes)}")
         for idx in indexes:
             if not isinstance(idx, int) or idx < 0:
                 raise ValueError(f"block_indexes: invalid index {idx!r}")

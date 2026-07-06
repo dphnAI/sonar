@@ -82,14 +82,10 @@ class LoadConfig:
       was quantized using torchao and saved using safetensors.
       Needs `torchao >= 0.14.0`.
     """
-    safetensors_prefetch_num_threads: int = Field(
-        default=DEFAULT_SAFETENSORS_PREFETCH_NUM_THREADS, ge=1
-    )
+    safetensors_prefetch_num_threads: int = Field(default=DEFAULT_SAFETENSORS_PREFETCH_NUM_THREADS, ge=1)
     """Number of worker threads used to prefetch safetensors checkpoint files
     into the OS page cache when safetensors prefetching is enabled."""
-    safetensors_prefetch_block_size: int = Field(
-        default=DEFAULT_SAFETENSORS_PREFETCH_BLOCK_SIZE, ge=1
-    )
+    safetensors_prefetch_block_size: int = Field(default=DEFAULT_SAFETENSORS_PREFETCH_BLOCK_SIZE, ge=1)
     """Read size in bytes for each safetensors checkpoint file prefetch."""
     model_loader_extra_config: dict | TensorizerConfig = Field(default_factory=dict)
     """Extra config for model loader. This will be passed to the model loader
@@ -137,9 +133,7 @@ class LoadConfig:
         return load_format.lower()
 
     @field_validator("ignore_patterns", mode="after")
-    def _validate_ignore_patterns(
-        cls, ignore_patterns: list[str] | str
-    ) -> list[str] | str:
+    def _validate_ignore_patterns(cls, ignore_patterns: list[str] | str) -> list[str] | str:
         if ignore_patterns != ["original/**/*"] and len(ignore_patterns) > 0:
             logger.info(
                 "Ignoring the following patterns when downloading weights: %s",

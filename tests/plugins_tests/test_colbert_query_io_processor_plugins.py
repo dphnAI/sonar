@@ -7,8 +7,8 @@ from typing import TypedDict
 import pytest
 import requests
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.entrypoints.pooling.pooling.protocol import IOProcessorResponse
+from tests.utils import RemoteOpenAIServer
 
 
 # Test configuration for ColBERT query plugin
@@ -86,9 +86,7 @@ def _post_pooling(server: RemoteOpenAIServer, data: dict):
 
 def test_colbert_query_plugin_query_online(server: RemoteOpenAIServer):
     """Queries are expanded to exactly query_maxlen token vectors."""
-    parsed_response = _post_pooling(
-        server, {"input": model_config["query_input"], "input_type": "query"}
-    )
+    parsed_response = _post_pooling(server, {"input": model_config["query_input"], "input_type": "query"})
 
     data = _get_attr_or_val(parsed_response, "data")
     assert len(data) == 1
@@ -102,9 +100,7 @@ def test_colbert_query_plugin_query_online(server: RemoteOpenAIServer):
 
 def test_colbert_query_plugin_document_online(server: RemoteOpenAIServer):
     """Documents return one vector per token, with no mask expansion."""
-    parsed_response = _post_pooling(
-        server, {"input": model_config["document_input"], "input_type": "document"}
-    )
+    parsed_response = _post_pooling(server, {"input": model_config["document_input"], "input_type": "document"})
 
     data = _get_attr_or_val(parsed_response, "data")
     assert len(data) == 1
@@ -144,11 +140,7 @@ def test_colbert_query_plugin_batch_online(server: RemoteOpenAIServer):
 @pytest.mark.parametrize("input_type", ["query", "document"])
 def test_colbert_query_plugin_offline(aphrodite_runner, input_type: str):
     """Test the ColBERT query plugin in offline mode."""
-    input_text = (
-        model_config["query_input"]
-        if input_type == "query"
-        else model_config["document_input"]
-    )
+    input_text = model_config["query_input"] if input_type == "query" else model_config["document_input"]
     prompt = {
         "data": {
             "input": input_text,

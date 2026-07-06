@@ -22,6 +22,4 @@ def test_ppl(hf_runner, aphrodite_runner, model_info: GenerateModelInfo):
     if model_info.name == "Qwen/Qwen3.5-0.8B":
         aphrodite_extra_kwargs["language_model_only"] = True
 
-    wikitext_ppl_test(
-        hf_runner, aphrodite_runner, model_info, aphrodite_extra_kwargs=aphrodite_extra_kwargs
-    )
+    wikitext_ppl_test(hf_runner, aphrodite_runner, model_info, aphrodite_extra_kwargs=aphrodite_extra_kwargs)

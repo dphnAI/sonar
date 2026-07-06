@@ -66,11 +66,7 @@ def ref_paged_attn(
         mask = torch.triu(empty_mask, diagonal=kv_len - query_len + 1).bool()
         if sliding_window is not None:
             sliding_window_mask = (
-                torch.triu(
-                    empty_mask, diagonal=kv_len - (query_len + sliding_window) + 1
-                )
-                .bool()
-                .logical_not()
+                torch.triu(empty_mask, diagonal=kv_len - (query_len + sliding_window) + 1).bool().logical_not()
             )
             mask |= sliding_window_mask
         if soft_cap is not None:
@@ -86,9 +82,7 @@ def ref_paged_attn(
 
 
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="Only ROCm is supported")
-@pytest.mark.parametrize(
-    "seq_lens", [[(10, 1328), (5, 18), (129, 463)], [(8, 523), (24, 37), (3, 2011)]]
-)
+@pytest.mark.parametrize("seq_lens", [[(10, 1328), (5, 18), (129, 463)], [(8, 523), (24, 37), (3, 2011)]])
 @pytest.mark.parametrize("num_heads", NUM_HEADS)
 @pytest.mark.parametrize("head_size", HEAD_SIZES)
 @pytest.mark.parametrize("block_size", BLOCK_SIZES)
@@ -128,25 +122,17 @@ def test_varlen_with_paged_kv(
     scale = head_size**-0.5
 
     query = torch.randn(sum(query_lens), num_query_heads, head_size, dtype=dtype)
-    key_cache = torch.randn(
-        num_blocks, block_size, num_kv_heads, head_size, dtype=dtype
-    )
+    key_cache = torch.randn(num_blocks, block_size, num_kv_heads, head_size, dtype=dtype)
     value_cache = torch.randn_like(key_cache)
-    cu_query_lens = torch.tensor([0] + query_lens, dtype=torch.int32).cumsum(
-        dim=0, dtype=torch.int32
-    )
+    cu_query_lens = torch.tensor([0] + query_lens, dtype=torch.int32).cumsum(dim=0, dtype=torch.int32)
 
-    cu_seq_lens = torch.tensor([0] + kv_lens, dtype=torch.int32).cumsum(
-        dim=0, dtype=torch.int32
-    )
+    cu_seq_lens = torch.tensor([0] + kv_lens, dtype=torch.int32).cumsum(dim=0, dtype=torch.int32)
     # Save kv_lens as list before converting to tensor
     kv_lens_list = kv_lens
     kv_lens = torch.tensor(kv_lens, dtype=torch.int32)
 
     max_num_blocks_per_seq = (max_kv_len + block_size - 1) // block_size
-    block_tables = torch.randint(
-        0, num_blocks, (num_seqs, max_num_blocks_per_seq), dtype=torch.int32
-    )
+    block_tables = torch.randint(0, num_blocks, (num_seqs, max_num_blocks_per_seq), dtype=torch.int32)
 
     output = torch.empty_like(query)
 
@@ -182,9 +168,7 @@ def test_varlen_with_paged_kv(
 
     # Allocate buffers for gathered KV
     total_kv_tokens = sum(kv_lens_list)
-    gathered_key = torch.empty(
-        total_kv_tokens, num_kv_heads, head_size, dtype=maybe_quantized_key_cache.dtype
-    )
+    gathered_key = torch.empty(total_kv_tokens, num_kv_heads, head_size, dtype=maybe_quantized_key_cache.dtype)
     gathered_value = torch.empty(
         total_kv_tokens,
         num_kv_heads,
@@ -199,12 +183,8 @@ def test_varlen_with_paged_kv(
         key=gathered_key,
         value=gathered_value,
         block_tables=block_tables,
-        k_scales=k_scale_tensor
-        if k_scale_tensor is not None
-        else torch.ones(1, dtype=torch.float32),
-        v_scales=v_scale_tensor
-        if v_scale_tensor is not None
-        else torch.ones(1, dtype=torch.float32),
+        k_scales=k_scale_tensor if k_scale_tensor is not None else torch.ones(1, dtype=torch.float32),
+        v_scales=v_scale_tensor if v_scale_tensor is not None else torch.ones(1, dtype=torch.float32),
         cu_seqlens_kv=cu_seq_lens,
         token_to_batch=token_to_batch,
         seq_starts=seq_starts,

@@ -15,9 +15,7 @@ def build_transform(input_size: int):
     return T.Compose(
         [
             T.Lambda(lambda img: convert_image_mode(img, "RGB")),
-            T.Resize(
-                (input_size, input_size), interpolation=T.InterpolationMode.BICUBIC
-            ),
+            T.Resize((input_size, input_size), interpolation=T.InterpolationMode.BICUBIC),
             T.ToTensor(),
         ]
     )
@@ -39,9 +37,7 @@ def find_closest_aspect_ratio(
     for rw, rh in target_ratios:
         target_aspect_ratio = rw / rh
         size_factor = min((rw * rh * image_size * image_size) / area, 0.6)
-        ratio_closeness = min(
-            target_aspect_ratio / aspect_ratio, aspect_ratio / target_aspect_ratio
-        )
+        ratio_closeness = min(target_aspect_ratio / aspect_ratio, aspect_ratio / target_aspect_ratio)
         factor = size_factor * ratio_closeness
 
         if factor > best_factor:

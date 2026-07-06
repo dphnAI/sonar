@@ -319,16 +319,17 @@ void static_scaled_fp8_quant(
         APHRODITE_STABLE_DISPATCH_FP8_TYPES(
             out.scalar_type(), "scaled_fp8_quant_kernel_fp8_type", [&] {
               APHRODITE_STABLE_DISPATCH_BOOL(scale_stride_i == 0, S0_ZERO, [&] {
-                APHRODITE_STABLE_DISPATCH_BOOL(scale_stride_j == 0, S1_ZERO, [&] {
-                  aphrodite::scaled_fp8_quant_kernel_strided_group_shape<
-                      scalar_t, fp8_t, S0_ZERO, S1_ZERO>
-                      <<<grid, block, 0, stream>>>(
-                          out.mutable_data_ptr<fp8_t>(),
-                          input.const_data_ptr<scalar_t>(),
-                          scale.const_data_ptr<float>(), hidden_size,
-                          in_row_stride, out_row_stride, group_m, group_n,
-                          scale_stride_i, scale_stride_j);
-                });
+                APHRODITE_STABLE_DISPATCH_BOOL(
+                    scale_stride_j == 0, S1_ZERO, [&] {
+                      aphrodite::scaled_fp8_quant_kernel_strided_group_shape<
+                          scalar_t, fp8_t, S0_ZERO, S1_ZERO>
+                          <<<grid, block, 0, stream>>>(
+                              out.mutable_data_ptr<fp8_t>(),
+                              input.const_data_ptr<scalar_t>(),
+                              scale.const_data_ptr<float>(), hidden_size,
+                              in_row_stride, out_row_stride, group_m, group_n,
+                              scale_stride_i, scale_stride_j);
+                    });
               });
             });
       });
@@ -370,7 +371,8 @@ void dynamic_scaled_fp8_quant(torch::stable::Tensor& out,          // [..., d]
                       input.const_data_ptr<scalar_t>(), hidden_size,
                       in_row_stride, static_cast<int64_t>(num_tokens));
 
-              aphrodite::scaled_fp8_quant_kernel_strided_dynamic<scalar_t, fp8_t>
+              aphrodite::scaled_fp8_quant_kernel_strided_dynamic<scalar_t,
+                                                                 fp8_t>
                   <<<grid, block, 0, stream>>>(out.mutable_data_ptr<fp8_t>(),
                                                input.const_data_ptr<scalar_t>(),
                                                scale.const_data_ptr<float>(),
@@ -408,15 +410,14 @@ void dynamic_per_token_scaled_fp8_quant(
         APHRODITE_STABLE_DISPATCH_FP8_TYPES(
             out.scalar_type(),
             "dynamic_per_token_scaled_fp8_quant_kernel_fp8_type", [&] {
-              aphrodite::dynamic_per_token_scaled_fp8_quant_kernel_strided<scalar_t,
-                                                                      fp8_t>
-                  <<<grid, block, 0, stream>>>(
-                      out.mutable_data_ptr<fp8_t>(),
-                      scales.mutable_data_ptr<float>(),
-                      input.const_data_ptr<scalar_t>(),
-                      scale_ub.has_value() ? scale_ub->const_data_ptr<float>()
-                                           : nullptr,
-                      hidden_size, in_row_stride, out_row_stride);
+              aphrodite::dynamic_per_token_scaled_fp8_quant_kernel_strided<
+                  scalar_t, fp8_t><<<grid, block, 0, stream>>>(
+                  out.mutable_data_ptr<fp8_t>(),
+                  scales.mutable_data_ptr<float>(),
+                  input.const_data_ptr<scalar_t>(),
+                  scale_ub.has_value() ? scale_ub->const_data_ptr<float>()
+                                       : nullptr,
+                  hidden_size, in_row_stride, out_row_stride);
             });
       });
 }

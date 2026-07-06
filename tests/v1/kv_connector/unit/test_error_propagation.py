@@ -10,10 +10,10 @@ from aphrodite.v1.core.sched.scheduler import Scheduler
 from aphrodite.v1.request import FinishReason, Request, RequestStatus
 
 from .utils import (
+    create_aphrodite_config,
     create_model_runner_output,
     create_request,
     create_scheduler,
-    create_aphrodite_config,
 )
 
 pytestmark = pytest.mark.cpu_test
@@ -45,9 +45,7 @@ def test_error_propagation_sync_load(fail_scheduler: Scheduler):
     invalid_block_idx = 50
 
     num_prompt_tokens = num_prompt_blocks * fail_scheduler.block_size
-    num_external_computed_tokens = (
-        num_external_computed_blocks * fail_scheduler.block_size
-    )
+    num_external_computed_tokens = num_external_computed_blocks * fail_scheduler.block_size
 
     request = create_request(num_tokens=num_prompt_tokens)
     fail_scheduler.add_request(request=request)
@@ -57,8 +55,8 @@ def test_error_propagation_sync_load(fail_scheduler: Scheduler):
     }
 
     fail_scheduler.connector = Mock()
-    fail_scheduler.connector.get_num_new_matched_tokens.side_effect = (
-        _make_get_num_new_matched_tokens(req_num_new_matched_tokens, False)
+    fail_scheduler.connector.get_num_new_matched_tokens.side_effect = _make_get_num_new_matched_tokens(
+        req_num_new_matched_tokens, False
     )
     fail_scheduler.connector.request_finished.return_value = (False, None)
     fail_scheduler.connector.take_events.return_value = ()
@@ -99,9 +97,7 @@ def test_error_propagation_async_load(fail_scheduler: Scheduler):
     invalid_block_idx = 50
 
     num_prompt_tokens = num_prompt_blocks * fail_scheduler.block_size
-    num_external_computed_tokens = (
-        num_external_computed_blocks * fail_scheduler.block_size
-    )
+    num_external_computed_tokens = num_external_computed_blocks * fail_scheduler.block_size
 
     request = create_request(num_tokens=num_prompt_tokens)
     fail_scheduler.add_request(request=request)
@@ -111,8 +107,8 @@ def test_error_propagation_async_load(fail_scheduler: Scheduler):
     }
 
     fail_scheduler.connector = Mock()
-    fail_scheduler.connector.get_num_new_matched_tokens.side_effect = (
-        _make_get_num_new_matched_tokens(req_num_new_matched_tokens, True)
+    fail_scheduler.connector.get_num_new_matched_tokens.side_effect = _make_get_num_new_matched_tokens(
+        req_num_new_matched_tokens, True
     )
     fail_scheduler.connector.request_finished.return_value = (False, None)
     fail_scheduler.connector.take_events.return_value = ()

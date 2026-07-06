@@ -21,6 +21,5 @@ if envs.APHRODITE_USE_MODELSCOPE:
         patch_hub()
     except ImportError as err:
         raise ImportError(
-            "Please install modelscope>=1.18.1 via "
-            "`pip install modelscope>=1.18.1` to use ModelScope."
+            "Please install modelscope>=1.18.1 via `pip install modelscope>=1.18.1` to use ModelScope."
         ) from err

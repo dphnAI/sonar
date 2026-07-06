@@ -169,9 +169,7 @@ async def custom_sagemaker_invocation_handler(request: Request):
             assert ping_data["source"] == "customer_override"
             assert ping_data["message"] == "Custom ping from customer script"
             assert invoke_data["source"] == "customer_override"
-            assert invoke_data["predictions"] == [
-                "Custom response from customer script"
-            ]
+            assert invoke_data["predictions"] == ["Custom response from customer script"]
 
     def test_customer_decorator_usage(self, monkeypatch, tmp_path):
         """Test customer scenario: using @custom_ping_handler and

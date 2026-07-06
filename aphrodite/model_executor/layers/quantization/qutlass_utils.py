@@ -98,9 +98,7 @@ def triton_mx_block_rearrange(scale_tensor: torch.Tensor) -> torch.Tensor:
     Returns:
         Rearranged tensor in block-scaled swizzle format
     """
-    assert scale_tensor.element_size() == 1, (
-        "Expected element size to be 1 byte (8 bits)"
-    )
+    assert scale_tensor.element_size() == 1, "Expected element size to be 1 byte (8 bits)"
     assert scale_tensor.is_contiguous(), "Input tensor must be contiguous"
 
     rows, cols = scale_tensor.shape
@@ -142,9 +140,7 @@ def triton_mx_block_rearrange(scale_tensor: torch.Tensor) -> torch.Tensor:
     return out
 
 
-def to_blocked(
-    input_matrix: torch.Tensor, backend: Literal["torch", "triton"] = "triton"
-) -> torch.Tensor:
+def to_blocked(input_matrix: torch.Tensor, backend: Literal["torch", "triton"] = "triton") -> torch.Tensor:
     """
     Rearrange a large matrix by breaking it into blocks and applying
     the rearrangement pattern.

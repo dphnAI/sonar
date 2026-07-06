@@ -146,9 +146,7 @@ class MiniCPMOProcessor(ProcessorMixin):
             fbank_feat_in_chunk = int(chunk_length * 100)
             cnn_feat_in_chunk = (fbank_feat_in_chunk - 1) // 2 + 1
             audio_embeds_in_chunk = (cnn_feat_in_chunk - pool_step) // pool_step + 1
-            num_audio_chunks = (
-                output_lens + audio_embeds_in_chunk - 1
-            ) // audio_embeds_in_chunk
+            num_audio_chunks = (output_lens + audio_embeds_in_chunk - 1) // audio_embeds_in_chunk
 
             place_holders = ""
             total_unk_len = 0
@@ -191,12 +189,7 @@ class MiniCPMOProcessor(ProcessorMixin):
         # audio placeholder not dependent on audio_parts
         for audios in audios_list:
             if audios:
-                audio_ph_list.append(
-                    [
-                        self.get_audio_placeholder(len(a), chunk_input, chunk_length)
-                        for a in audios
-                    ]
-                )
+                audio_ph_list.append([self.get_audio_placeholder(len(a), chunk_input, chunk_length) for a in audios])
             else:
                 audio_ph_list.append([])
 
@@ -228,9 +221,7 @@ class MiniCPMOProcessor(ProcessorMixin):
                     final_merge_audio.append(audio)
                 else:
                     for i in range(math.ceil(len(audio) / max_audio_inp_len)):
-                        final_merge_audio.append(
-                            audio[i * max_audio_inp_len : (i + 1) * max_audio_inp_len]
-                        )
+                        final_merge_audio.append(audio[i * max_audio_inp_len : (i + 1) * max_audio_inp_len])
 
             if audios:
                 audio_inputs = self.feature_extractor(
@@ -279,9 +270,7 @@ class MiniCPMOProcessor(ProcessorMixin):
                 result = result[1:]
             if len(result) > 0 and result[-1] == self.tokenizer.eos_id:
                 result = result[:-1]
-            result_text.append(
-                self.tokenizer.decode(result, *args[1:], **kwargs).strip()
-            )
+            result_text.append(self.tokenizer.decode(result, *args[1:], **kwargs).strip())
         return result_text
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode
@@ -298,10 +287,7 @@ class MiniCPMOProcessor(ProcessorMixin):
             result = result[1:]
         if len(result) > 0 and (
             result[-1] == self.tokenizer.eos_id
-            or (
-                hasattr(self.tokenizer, "eot_id")
-                and result[-1] == self.tokenizer.eot_id
-            )
+            or (hasattr(self.tokenizer, "eot_id") and result[-1] == self.tokenizer.eot_id)
         ):
             result = result[:-1]
         return self.tokenizer.decode(result, *args[1:], **kwargs).strip()
@@ -313,12 +299,8 @@ class MiniCPMOProcessor(ProcessorMixin):
         input_ids = torch.tensor(input_ids, dtype=torch.int32)
 
         ## image bound
-        start_cond = (input_ids == self.tokenizer.im_start_id) | (
-            input_ids == self.tokenizer.slice_start_id
-        )
-        end_cond = (input_ids == self.tokenizer.im_end_id) | (
-            input_ids == self.tokenizer.slice_end_id
-        )
+        start_cond = (input_ids == self.tokenizer.im_start_id) | (input_ids == self.tokenizer.slice_start_id)
+        end_cond = (input_ids == self.tokenizer.im_end_id) | (input_ids == self.tokenizer.slice_end_id)
 
         image_start_idx = torch.where(start_cond)[0]
         image_start_idx += 1
@@ -340,16 +322,12 @@ class MiniCPMOProcessor(ProcessorMixin):
         audio_start_idx = torch.where(input_ids == self.tokenizer.audio_start_id)[0]
         audio_end_idx = torch.where(input_ids == self.tokenizer.audio_end_id)[0]
         assert len(audio_start_idx) == len(audio_end_idx)
-        audio_bounds = torch.hstack(
-            [(audio_start_idx + 1).unsqueeze(-1), audio_end_idx.unsqueeze(-1)]
-        )
+        audio_bounds = torch.hstack([(audio_start_idx + 1).unsqueeze(-1), audio_end_idx.unsqueeze(-1)])
 
         spk_start_idx = torch.where(input_ids == self.tokenizer.spk_start_id)[0]
         spk_end_idx = torch.where(input_ids == self.tokenizer.spk_end_id)[0]
         assert len(spk_start_idx) == len(spk_end_idx)
-        spk_bounds = torch.hstack(
-            [(spk_start_idx + 1).unsqueeze(-1), spk_end_idx.unsqueeze(-1)]
-        )
+        spk_bounds = torch.hstack([(spk_start_idx + 1).unsqueeze(-1), spk_end_idx.unsqueeze(-1)])
 
         return input_ids, image_bounds, audio_bounds, spk_bounds
 
@@ -416,13 +394,11 @@ class MiniCPMOProcessor(ProcessorMixin):
             audio_id = 0
             for i, chunk in enumerate(text_chunks):
                 if chunk == image_tag:
-                    image_placeholder = (
-                        self.image_processor.get_slice_image_placeholder(
-                            image_sizes[index][image_id],
-                            image_id,
-                            max_slice_nums,
-                            use_image_id,
-                        )
+                    image_placeholder = self.image_processor.get_slice_image_placeholder(
+                        image_sizes[index][image_id],
+                        image_id,
+                        max_slice_nums,
+                        use_image_id,
                     )
                     image_id += 1
                     text_chunks[i] = image_placeholder
@@ -432,18 +408,14 @@ class MiniCPMOProcessor(ProcessorMixin):
                     text_chunks[i] = audio_placeholder
 
             final_text = "".join(text_chunks)
-            input_ids, image_bounds, audio_bounds, spk_bounds = self._convert(
-                final_text, max_length, **kwargs
-            )
+            input_ids, image_bounds, audio_bounds, spk_bounds = self._convert(final_text, max_length, **kwargs)
 
             input_ids_list.append(input_ids)
             image_bounds_list.append(image_bounds)
             audio_bounds_list.append(audio_bounds)
             spk_bounds_list.append(spk_bounds)
 
-        padded_input_ids, padding_lengths = self.pad(
-            input_ids_list, padding_side="left"
-        )
+        padded_input_ids, padding_lengths = self.pad(input_ids_list, padding_side="left")
         attention_mask = torch.ones_like(padded_input_ids, dtype=torch.bool)
         for i, length in enumerate(padding_lengths):
             image_bounds_list[i] = image_bounds_list[i] + length
@@ -471,13 +443,7 @@ class MiniCPMOProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(
-            dict.fromkeys(
-                tokenizer_input_names
-                + image_processor_input_names
-                + feature_extractor_input_names
-            )
-        )
+        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names + feature_extractor_input_names))
 
     def pad(
         self,
@@ -519,10 +485,7 @@ class MiniCPMOProcessor(ProcessorMixin):
                 )
             tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
         else:
-            tensor = (
-                torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype)
-                + padding_value
-            )
+            tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
 
         padding_length = []
         for i, item in enumerate(items):
@@ -587,9 +550,7 @@ class ChatTTSProcessor:
         assert len(text_list) == len(audio_list)
         input_ids_varlen = []
         for text in text_list:
-            input_ids_ = self.text_tokenizer.encode(
-                text, return_tensors="pt", add_special_tokens=False
-            )  # [1, seq_len]
+            input_ids_ = self.text_tokenizer.encode(text, return_tensors="pt", add_special_tokens=False)  # [1, seq_len]
             input_ids_ = input_ids_.squeeze(0)  # [seq_len]
             input_ids_varlen.append(input_ids_)
 

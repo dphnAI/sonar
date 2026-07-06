@@ -71,9 +71,7 @@ class MiMoV2MTPLayer(nn.Module):
         # Predictor head components
         self.enorm = RMSNorm(config.hidden_size, eps=config.layernorm_epsilon)
         self.hnorm = RMSNorm(config.hidden_size, eps=config.layernorm_epsilon)
-        self.eh_proj = ReplicatedLinear(
-            config.hidden_size * 2, config.hidden_size, bias=False
-        )
+        self.eh_proj = ReplicatedLinear(config.hidden_size * 2, config.hidden_size, bias=False)
 
         # MTP uses the SWA attention configuration
         # implementation.
@@ -94,9 +92,7 @@ class MiMoV2MTPLayer(nn.Module):
             v_scale=getattr(config, "attention_value_scale", None),
             sliding_window_size=sliding_window_size,
             attention_bias=config.attention_bias,
-            add_swa_attention_sink_bias=getattr(
-                config, "add_swa_attention_sink_bias", False
-            ),
+            add_swa_attention_sink_bias=getattr(config, "add_swa_attention_sink_bias", False),
             layer_id=0,
             rope_theta=swa_rope_theta,
             max_position_embeddings=getattr(config, "max_position_embeddings", 32768),
@@ -104,9 +100,7 @@ class MiMoV2MTPLayer(nn.Module):
             partial_rotary_factor=getattr(config, "partial_rotary_factor", 1.0),
             prefix=f"{prefix}.self_attn",
         )
-        self.pre_mlp_layernorm = RMSNorm(
-            config.hidden_size, eps=config.layernorm_epsilon
-        )
+        self.pre_mlp_layernorm = RMSNorm(config.hidden_size, eps=config.layernorm_epsilon)
         self.mlp = MiMoV2MLP(
             hidden_size=config.hidden_size,
             intermediate_size=config.intermediate_size,
@@ -123,11 +117,7 @@ class MiMoV2MTPLayer(nn.Module):
         previous_hidden_states: torch.Tensor,
     ) -> torch.Tensor:
         # Combine token embedding and previous hidden state
-        h, _ = self.eh_proj(
-            torch.cat(
-                [self.enorm(inputs_embeds), self.hnorm(previous_hidden_states)], dim=-1
-            )
-        )
+        h, _ = self.eh_proj(torch.cat([self.enorm(inputs_embeds), self.hnorm(previous_hidden_states)], dim=-1))
 
         # Transformer block with fused residual norms
         residual = h
@@ -202,9 +192,7 @@ class MiMoV2MultiTokenPredictor(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.embed_input_ids(input_ids)
         current_step_idx = spec_step_idx % self.num_mtp_layers
-        return self.mtp.layers[str(current_step_idx)](
-            inputs_embeds, positions, previous_hidden_states
-        )
+        return self.mtp.layers[str(current_step_idx)](inputs_embeds, positions, previous_hidden_states)
 
     def compute_logits(
         self,
@@ -219,9 +207,7 @@ class MiMoV2MTP(nn.Module):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
         super().__init__()
         self.config = aphrodite_config.model_config.hf_config
-        self.model = MiMoV2MultiTokenPredictor(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = MiMoV2MultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
         self.lm_head = ParallelLMHead(
             self.config.vocab_size,
             self.config.hidden_size,
@@ -240,9 +226,7 @@ class MiMoV2MTP(nn.Module):
         inputs_embeds: torch.Tensor | None = None,
         spec_step_idx: int = 0,
     ) -> torch.Tensor:
-        return self.model(
-            input_ids, positions, hidden_states, inputs_embeds, spec_step_idx
-        )
+        return self.model(input_ids, positions, hidden_states, inputs_embeds, spec_step_idx)
 
     def compute_logits(
         self,
@@ -272,11 +256,7 @@ class MiMoV2MTP(nn.Module):
                 continue
 
             # Only load MTP-related weights, shared embeddings, and lm_head
-            if (
-                "model.mtp" not in name
-                and "model.embed_tokens" not in name
-                and not name.startswith("lm_head")
-            ):
+            if "model.mtp" not in name and "model.embed_tokens" not in name and not name.startswith("lm_head"):
                 continue
 
             # Support fused qkv_proj checkpoint (Pro format).
@@ -300,10 +280,7 @@ class MiMoV2MTP(nn.Module):
                 if weight_name not in name:
                     continue
                 name_rewritten = name.replace(weight_name, param_name)
-                if (
-                    name_rewritten.endswith(".bias")
-                    and name_rewritten not in params_dict
-                ):
+                if name_rewritten.endswith(".bias") and name_rewritten not in params_dict:
                     continue
                 if name_rewritten not in params_dict:
                     continue
@@ -327,9 +304,7 @@ class MiMoV2MTP(nn.Module):
             if "attention_sink_bias" in name:
                 total_heads = loaded_weight.shape[0]
                 heads_per_rank = total_heads // tp_size
-                loaded_weight = loaded_weight.narrow(
-                    0, tp_rank * heads_per_rank, heads_per_rank
-                )
+                loaded_weight = loaded_weight.narrow(0, tp_rank * heads_per_rank, heads_per_rank)
 
             weight_loader = getattr(param, "weight_loader", default_weight_loader)
             weight_loader(param, loaded_weight)

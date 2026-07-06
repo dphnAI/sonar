@@ -4,24 +4,20 @@ import pytest
 import torch
 
 import aphrodite._custom_ops as ops
-from tests.kernels.utils import opcheck
 from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.kernels.utils import opcheck
 
 DTYPES = [torch.bfloat16, torch.float16]
 QUANT_DTYPES = [current_platform.fp8_dtype()]
 NUM_TOKENS = [1, 17, 86, 1234, 3045]  # Arbitrary values for testing
 HIDDEN_SIZES = [16, 48, 128, 1562, 4096]  # Arbitrary values for testing
 SEEDS = [0]
-CUDA_DEVICES = [
-    f"cuda:{i}" for i in range(1 if torch.accelerator.device_count() == 1 else 2)
-]
+CUDA_DEVICES = [f"cuda:{i}" for i in range(1 if torch.accelerator.device_count() == 1 else 2)]
 
 
-def ref_impl(
-    silu_and_mul: SiluAndMul, x: torch.Tensor, scale: torch.Tensor
-) -> torch.Tensor:
+def ref_impl(silu_and_mul: SiluAndMul, x: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
     silu_and_mul_out = silu_and_mul.forward_native(x)
     out, scales = ops.scaled_fp8_quant(silu_and_mul_out, scale)
     return out
@@ -65,7 +61,5 @@ def test_silu_and_mul(
     assert ref_out.dtype == quant_dtype
     assert ops_out.dtype == quant_dtype
     assert ref_out.shape == ops_out.shape
-    assert torch.allclose(
-        ref_out.to(dtype=torch.float32), ops_out.to(dtype=torch.float32)
-    )
+    assert torch.allclose(ref_out.to(dtype=torch.float32), ops_out.to(dtype=torch.float32))
     opcheck(torch.ops._C.silu_and_mul_quant, (ops_out, x, scale))

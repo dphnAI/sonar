@@ -6,10 +6,10 @@ import requests
 import torch
 import torch.nn.functional as F
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.entrypoints.pooling.pooling.protocol import PoolingResponse
 from aphrodite.entrypoints.pooling.scoring.protocol import RerankResponse, ScoreResponse
 from aphrodite.platforms import current_platform
+from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "BAAI/bge-reranker-base"
 DTYPE = "half"
@@ -61,9 +61,7 @@ async def test_basic(server: RemoteOpenAIServer):
 
 
 @pytest.mark.asyncio
-async def test_score_api_queries_str_1_documents_str_1(
-    hf_model, server: RemoteOpenAIServer
-):
+async def test_score_api_queries_str_1_documents_str_1(hf_model, server: RemoteOpenAIServer):
     score_response = requests.post(
         server.url_for("score"),
         json={
@@ -87,9 +85,7 @@ async def test_score_api_queries_str_1_documents_str_1(
 
 
 @pytest.mark.asyncio
-async def test_score_api_queries_str_1_documents_str_n(
-    hf_model, server: RemoteOpenAIServer
-):
+async def test_score_api_queries_str_1_documents_str_n(hf_model, server: RemoteOpenAIServer):
     text_pairs = [
         [TEXTS_1[0], TEXTS_2[0]],
         [TEXTS_1[0], TEXTS_2[1]],
@@ -118,9 +114,7 @@ async def test_score_api_queries_str_1_documents_str_n(
 
 
 @pytest.mark.asyncio
-async def test_score_api_queries_str_n_documents_str_n(
-    hf_model, server: RemoteOpenAIServer
-):
+async def test_score_api_queries_str_n_documents_str_n(hf_model, server: RemoteOpenAIServer):
     text_pairs = [
         [TEXTS_1[0], TEXTS_2[0]],
         [TEXTS_1[1], TEXTS_2[1]],
@@ -381,22 +375,16 @@ async def test_invocations(server: RemoteOpenAIServer):
     rerank_response = requests.post(server.url_for("rerank"), json=request_args)
     rerank_response.raise_for_status()
 
-    invocation_response = requests.post(
-        server.url_for("invocations"), json=request_args
-    )
+    invocation_response = requests.post(server.url_for("invocations"), json=request_args)
     invocation_response.raise_for_status()
 
     rerank_output = rerank_response.json()
     invocation_output = invocation_response.json()
 
     assert rerank_output.keys() == invocation_output.keys()
-    for rerank_result, invocations_result in zip(
-        rerank_output["results"], invocation_output["results"]
-    ):
+    for rerank_result, invocations_result in zip(rerank_output["results"], invocation_output["results"]):
         assert rerank_result.keys() == invocations_result.keys()
-        assert rerank_result["relevance_score"] == pytest.approx(
-            invocations_result["relevance_score"], rel=0.01
-        )
+        assert rerank_result["relevance_score"] == pytest.approx(invocations_result["relevance_score"], rel=0.01)
 
 
 @pytest.mark.asyncio
@@ -425,12 +413,8 @@ async def test_use_activation(server: RemoteOpenAIServer):
     w_activation = await get_outputs(use_activation=True)
     wo_activation = await get_outputs(use_activation=False)
 
-    assert torch.allclose(default, w_activation, atol=1e-2), (
-        "Default should use activation."
-    )
-    assert not torch.allclose(w_activation, wo_activation, atol=1e-2), (
-        "wo_activation should not use activation."
-    )
+    assert torch.allclose(default, w_activation, atol=1e-2), "Default should use activation."
+    assert not torch.allclose(w_activation, wo_activation, atol=1e-2), "wo_activation should not use activation."
     assert torch.allclose(F.sigmoid(wo_activation), w_activation, atol=1e-2), (
         "w_activation should be close to activation(wo_activation)."
     )

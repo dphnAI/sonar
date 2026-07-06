@@ -186,10 +186,7 @@ def _fused_kv_compress_norm_rope_insert_sparse_attn(
 
     # Precomputed row base shared by score and kv loads
     row_base = (
-        state_cache_ptr
-        + block_numbers_i64 * state_cache_stride0
-        + block_offsets * state_cache_stride1
-        + head_offset
+        state_cache_ptr + block_numbers_i64 * state_cache_stride0 + block_offsets * state_cache_stride1 + head_offset
     )
 
     combined_mask = mask_pos[:, None] & mask[None, :]
@@ -225,11 +222,7 @@ def _fused_kv_compress_norm_rope_insert_sparse_attn(
 
     cache_block_ptr = k_cache_ptr + kv_block_idx.to(tl.int64) * KV_BLOCK_STRIDE
     fp8_ptr = cache_block_ptr + kv_pos_in_block * TOKEN_STRIDE
-    scale_ptr = (
-        cache_block_ptr
-        + kv_cache_block_size * TOKEN_STRIDE
-        + kv_pos_in_block * SCALE_DIM
-    )
+    scale_ptr = cache_block_ptr + kv_cache_block_size * TOKEN_STRIDE + kv_pos_in_block * SCALE_DIM
 
     NOPE_HEAD_DIM: tl.constexpr = HEAD_SIZE - ROPE_HEAD_DIM  # 448
     HALF_ROPE: tl.constexpr = ROPE_HEAD_DIM // 2  # 32
@@ -379,10 +372,7 @@ def _fused_kv_compress_norm_rope_insert_indexer_attn(
     block_numbers_i64 = block_numbers.to(tl.int64)
 
     row_base = (
-        state_cache_ptr
-        + block_numbers_i64 * state_cache_stride0
-        + block_offsets * state_cache_stride1
-        + head_offset
+        state_cache_ptr + block_numbers_i64 * state_cache_stride0 + block_offsets * state_cache_stride1 + head_offset
     )
 
     combined_mask = mask_pos[:, None] & mask[None, :]
@@ -417,11 +407,7 @@ def _fused_kv_compress_norm_rope_insert_indexer_attn(
 
     cache_block_ptr = k_cache_ptr + kv_block_idx.to(tl.int64) * KV_BLOCK_STRIDE
     fp8_ptr = cache_block_ptr + kv_pos_in_block * TOKEN_STRIDE
-    scale_ptr = (
-        cache_block_ptr
-        + kv_cache_block_size * TOKEN_STRIDE
-        + kv_pos_in_block * SCALE_DIM
-    )
+    scale_ptr = cache_block_ptr + kv_cache_block_size * TOKEN_STRIDE + kv_pos_in_block * SCALE_DIM
 
     NOPE_HEAD_DIM: tl.constexpr = HEAD_SIZE - ROPE_HEAD_DIM
     HALF_ROPE: tl.constexpr = ROPE_HEAD_DIM // 2
@@ -558,10 +544,7 @@ def _fused_kv_compress_norm_rope_insert_indexer_mxfp4_attn(
     block_numbers_i64 = block_numbers.to(tl.int64)
 
     row_base = (
-        state_cache_ptr
-        + block_numbers_i64 * state_cache_stride0
-        + block_offsets * state_cache_stride1
-        + head_offset
+        state_cache_ptr + block_numbers_i64 * state_cache_stride0 + block_offsets * state_cache_stride1 + head_offset
     )
 
     combined_mask = mask_pos[:, None] & mask[None, :]
@@ -596,11 +579,7 @@ def _fused_kv_compress_norm_rope_insert_indexer_mxfp4_attn(
 
     cache_block_ptr = k_cache_ptr + kv_block_idx.to(tl.int64) * KV_BLOCK_STRIDE
     val_ptr = cache_block_ptr + kv_pos_in_block * TOKEN_STRIDE
-    scale_ptr = (
-        cache_block_ptr
-        + kv_cache_block_size * TOKEN_STRIDE
-        + kv_pos_in_block * SCALE_DIM
-    )
+    scale_ptr = cache_block_ptr + kv_cache_block_size * TOKEN_STRIDE + kv_pos_in_block * SCALE_DIM
 
     NOPE_HEAD_DIM: tl.constexpr = HEAD_SIZE - ROPE_HEAD_DIM
     HALF_ROPE: tl.constexpr = ROPE_HEAD_DIM // 2
@@ -657,9 +636,7 @@ def _fused_kv_compress_norm_rope_insert_indexer_mxfp4_attn(
     ue8m0 = (log2_ratio + 127.0).to(tl.uint8)  # [N_QUANT_BLOCKS]
 
     inv_scale_col = tl.reshape(inv_scale, (N_QUANT_BLOCKS, 1))
-    packed = _fp32x2_to_fp4x2(
-        even_2d * inv_scale_col, odd_2d * inv_scale_col
-    )  # (N_BLOCKS, HALF_BLOCK) uint8
+    packed = _fp32x2_to_fp4x2(even_2d * inv_scale_col, odd_2d * inv_scale_col)  # (N_BLOCKS, HALF_BLOCK) uint8
     packed_flat = tl.reshape(packed, (TOKEN_STRIDE,))
 
     tl.store(val_ptr + tl.arange(0, TOKEN_STRIDE), packed_flat)

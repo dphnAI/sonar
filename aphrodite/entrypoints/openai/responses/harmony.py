@@ -177,10 +177,7 @@ def response_input_to_harmony(
         call_id = response_msg["call_id"]
         call_response: ResponseFunctionToolCall | None = None
         for prev_response in reversed(prev_responses):
-            if (
-                isinstance(prev_response, ResponseFunctionToolCall)
-                and prev_response.call_id == call_id
-            ):
+            if isinstance(prev_response, ResponseFunctionToolCall) and prev_response.call_id == call_id:
                 call_response = prev_response
                 break
         if call_response is None:
@@ -271,9 +268,7 @@ def _parse_browser_tool_call(message: Message, recipient: str) -> ResponseOutput
             "Invalid JSON in browser tool call, using error placeholder: %s",
             content.text,
         )
-        json_retry_output_message = (
-            f"Invalid JSON args, caught and retried: {content.text}"
-        )
+        json_retry_output_message = f"Invalid JSON args, caught and retried: {content.text}"
         browser_call = {
             "query": json_retry_output_message,
             "url": json_retry_output_message,
@@ -282,13 +277,9 @@ def _parse_browser_tool_call(message: Message, recipient: str) -> ResponseOutput
 
     # Create appropriate action based on recipient
     if recipient == "browser.search":
-        action = ActionSearch(
-            query=f"cursor:{browser_call.get('query', '')}", type="search"
-        )
+        action = ActionSearch(query=f"cursor:{browser_call.get('query', '')}", type="search")
     elif recipient == "browser.open":
-        action = ActionOpenPage(
-            url=f"cursor:{browser_call.get('url', '')}", type="open_page"
-        )
+        action = ActionOpenPage(url=f"cursor:{browser_call.get('url', '')}", type="open_page")
     elif recipient == "browser.find":
         action = ActionFind(
             pattern=browser_call.get("pattern", ""),
@@ -306,9 +297,7 @@ def _parse_browser_tool_call(message: Message, recipient: str) -> ResponseOutput
     )
 
 
-def _parse_function_call(
-    message: Message, recipient: str, incomplete: bool = False
-) -> list[ResponseOutputItem]:
+def _parse_function_call(message: Message, recipient: str, incomplete: bool = False) -> list[ResponseOutputItem]:
     """Parse function calls into function tool call items."""
     function_name = extract_function_from_recipient(recipient)
     output_items = []
@@ -334,18 +323,14 @@ def _parse_reasoning(message: Message) -> list[ResponseOutputItem]:
             id=f"rs_{random_uuid()}",
             summary=[],
             type="reasoning",
-            content=[
-                ResponseReasoningTextContent(text=content.text, type="reasoning_text")
-            ],
+            content=[ResponseReasoningTextContent(text=content.text, type="reasoning_text")],
             status=None,
         )
         output_items.append(reasoning_item)
     return output_items
 
 
-def _parse_final_message(
-    message: Message, incomplete: bool = False
-) -> ResponseOutputItem:
+def _parse_final_message(message: Message, incomplete: bool = False) -> ResponseOutputItem:
     """Parse final channel messages into output message items."""
     contents = []
     for content in message.content:
@@ -385,9 +370,7 @@ def _parse_mcp_recipient(recipient: str) -> tuple[str, str]:
     return server_label, tool_name
 
 
-def _parse_mcp_call(
-    message: Message, recipient: str, incomplete: bool = False
-) -> list[ResponseOutputItem]:
+def _parse_mcp_call(message: Message, recipient: str, incomplete: bool = False) -> list[ResponseOutputItem]:
     """Parse MCP calls into MCP call items."""
     # Handle built-in tools that need server_label mapping
     if recipient in BUILTIN_TOOL_TO_MCP_SERVER_LABEL:
@@ -458,9 +441,7 @@ def harmony_to_response_output(
 
         # Function calls (with or without "functions." prefix)
         elif is_function_recipient(recipient, function_tool_names):
-            output_items.extend(
-                _parse_function_call(message, recipient, incomplete=incomplete)
-            )
+            output_items.extend(_parse_function_call(message, recipient, incomplete=incomplete))
 
         # Built-in MCP tools (python, browser, container)
         elif recipient in BUILTIN_TOOL_TO_MCP_SERVER_LABEL:
@@ -468,9 +449,7 @@ def harmony_to_response_output(
 
         # All other recipients are MCP calls
         else:
-            output_items.extend(
-                _parse_mcp_call(message, recipient, incomplete=incomplete)
-            )
+            output_items.extend(_parse_mcp_call(message, recipient, incomplete=incomplete))
 
     # No recipient - handle based on channel for non-tool messages
     else:

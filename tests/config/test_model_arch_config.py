@@ -64,22 +64,15 @@ def _load_groundtruth(filename: str) -> dict:
         return json.load(f)
 
 
-def _assert_model_arch_config(
-    model_config, expected: dict, check_head_size: bool = True
-):
+def _assert_model_arch_config(model_config, expected: dict, check_head_size: bool = True):
     """Assert model_arch_config matches expected values."""
     model_arch_config = model_config.model_arch_config
     assert model_arch_config.architectures == expected["architectures"]
     assert model_arch_config.model_type == expected["model_type"]
     assert model_arch_config.text_model_type == expected["text_model_type"]
     assert model_arch_config.hidden_size == expected["hidden_size"]
-    assert (
-        model_arch_config.total_num_hidden_layers == expected["total_num_hidden_layers"]
-    )
-    assert (
-        model_arch_config.total_num_attention_heads
-        == expected["total_num_attention_heads"]
-    )
+    assert model_arch_config.total_num_hidden_layers == expected["total_num_hidden_layers"]
+    assert model_arch_config.total_num_attention_heads == expected["total_num_attention_heads"]
     assert model_arch_config.vocab_size == expected["vocab_size"]
     assert model_arch_config.total_num_kv_heads == expected["total_num_kv_heads"]
     assert model_arch_config.num_experts == expected["num_experts"]
@@ -97,19 +90,14 @@ def _assert_model_arch_config(
         assert model_arch_config.head_size == expected["head_size"]
 
 
-def _assert_model_config_methods(
-    model_config, expected: dict, check_head_size: bool = True
-):
+def _assert_model_config_methods(model_config, expected: dict, check_head_size: bool = True):
     """Assert model_config methods return expected values."""
     assert model_config.architectures == expected["architectures"]
     assert model_config.get_vocab_size() == expected["vocab_size"]
     assert model_config.get_hidden_size() == expected["hidden_size"]
     assert model_config.get_total_num_kv_heads() == expected["total_num_kv_heads"]
     assert model_config.get_num_experts() == expected["num_experts"]
-    assert (
-        model_config.get_total_num_hidden_layers()
-        == expected["total_num_hidden_layers"]
-    )
+    assert model_config.get_total_num_hidden_layers() == expected["total_num_hidden_layers"]
 
     if check_head_size:
         assert model_config.get_head_size() == expected["head_size"]
@@ -137,20 +125,14 @@ def test_base_model_arch_config(model: str):
     groundtruth = _load_groundtruth("base_model_arch_groundtruth.json")
     expected = groundtruth[model]
 
-    model_config = ModelConfig(
-        model, trust_remote_code=model in BASE_TRUST_REMOTE_CODE_MODELS
-    )
+    model_config = ModelConfig(model, trust_remote_code=model in BASE_TRUST_REMOTE_CODE_MODELS)
 
     _assert_model_arch_config(model_config, expected)
     _assert_model_config_methods(model_config, expected)
 
 
-@pytest.mark.parametrize(
-    "target_model,draft_model,trust_remote_code", SPECULATIVE_MODELS
-)
-def test_draft_model_arch_config(
-    target_model: str, draft_model: str, trust_remote_code: bool
-):
+@pytest.mark.parametrize("target_model,draft_model,trust_remote_code", SPECULATIVE_MODELS)
+def test_draft_model_arch_config(target_model: str, draft_model: str, trust_remote_code: bool):
     """Test model architecture config for draft/speculative models."""
     groundtruth = _load_groundtruth("draft_model_arch_groundtruth.json")
     expected = groundtruth[draft_model]
@@ -169,6 +151,4 @@ def test_draft_model_arch_config(
     check_head_size = isinstance(expected["head_size"], int)
 
     _assert_model_arch_config(model_config, expected, check_head_size=check_head_size)
-    _assert_model_config_methods(
-        model_config, expected, check_head_size=check_head_size
-    )
+    _assert_model_config_methods(model_config, expected, check_head_size=check_head_size)

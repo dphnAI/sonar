@@ -70,9 +70,7 @@ logger = lmcache_init_logger(__name__)
 def reformat_block_ids(block_ids: tuple[list[int], ...] | None) -> list[int]:
     if block_ids is None:
         return []
-    assert isinstance(block_ids, tuple), (
-        f"Expected block_ids to be a tuple of lists, but got {type(block_ids)}"
-    )
+    assert isinstance(block_ids, tuple), f"Expected block_ids to be a tuple of lists, but got {type(block_ids)}"
 
     if len(block_ids) > 1:
         raise RuntimeError(
@@ -235,18 +233,12 @@ class LMCacheMPRequestTracker:
     def needs_retrieve(self) -> bool:
         """Check whether the current request needs retrieve, will be used
         update_stage_after_alloc"""
-        return (
-            self.num_lmcache_hit_blocks > self.num_aphrodite_hit_blocks
-            and self.state != LMCacheMPRequestState.READY
-        )
+        return self.num_lmcache_hit_blocks > self.num_aphrodite_hit_blocks and self.state != LMCacheMPRequestState.READY
 
     def is_ready_for_retrieving(self) -> bool:
         """Check whether the current request is ready for retrieving,
         will be used in process_loading_requests"""
-        return (
-            self.state == LMCacheMPRequestState.WAITING_FOR_LOAD
-            and self.needs_retrieve()
-        )
+        return self.state == LMCacheMPRequestState.WAITING_FOR_LOAD and self.needs_retrieve()
 
     ####
     # Update internal states
@@ -394,12 +386,10 @@ class LMCacheMPRequestMetadata:
         start = tracker.num_aphrodite_hit_blocks // blocks_in_chunk * blocks_in_chunk
         end = tracker.num_lmcache_hit_blocks
         assert end % blocks_in_chunk == 0, (
-            "The number of LMCache hit blocks should be a multiple of the "
-            "number of blocks in a lmcache chunk. "
+            "The number of LMCache hit blocks should be a multiple of the number of blocks in a lmcache chunk. "
         )
         assert len(tracker.block_hashes) >= end, (
-            "The number of block hashes should be greater than or equal to the "
-            "number of LMCache hit blocks. "
+            "The number of block hashes should be greater than or equal to the number of LMCache hit blocks. "
         )
         if end > start:
             block_ids = tracker.allocated_block_ids[start:end]
@@ -482,21 +472,11 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
         super().__init__(aphrodite_config, role, kv_cache_config)
 
         assert aphrodite_config.kv_transfer_config is not None
-        server_host = aphrodite_config.kv_transfer_config.get_from_extra_config(
-            "lmcache.mp.host", "tcp://localhost"
-        )
-        server_port = aphrodite_config.kv_transfer_config.get_from_extra_config(
-            "lmcache.mp.port", 5555
-        )
-        mq_timeout = float(
-            aphrodite_config.kv_transfer_config.get_from_extra_config(
-                "lmcache.mp.mq_timeout", 300.0
-            )
-        )
+        server_host = aphrodite_config.kv_transfer_config.get_from_extra_config("lmcache.mp.host", "tcp://localhost")
+        server_port = aphrodite_config.kv_transfer_config.get_from_extra_config("lmcache.mp.port", 5555)
+        mq_timeout = float(aphrodite_config.kv_transfer_config.get_from_extra_config("lmcache.mp.mq_timeout", 300.0))
         heartbeat_interval = float(
-            aphrodite_config.kv_transfer_config.get_from_extra_config(
-                "lmcache.mp.heartbeat_interval", 10.0
-            )
+            aphrodite_config.kv_transfer_config.get_from_extra_config("lmcache.mp.heartbeat_interval", 10.0)
         )
 
         server_url = f"{server_host}:{server_port}"
@@ -592,9 +572,7 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
             event = torch.Event(interprocess=True)
             event.record()
 
-        self.worker_adapter.batched_submit_retrieve_requests(
-            request_ids, ops, event, cache_salts=cache_salts
-        )
+        self.worker_adapter.batched_submit_retrieve_requests(request_ids, ops, event, cache_salts=cache_salts)
 
     def wait_for_layer_load(self, layer_name: str) -> None:
         """
@@ -640,10 +618,7 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
         """
         # In MLA scenario, only the first rank of the pipeline group
         # needs to save the KV cache.
-        if (
-            self.worker_adapter.use_mla
-            and not self.worker_adapter.is_first_rank_of_pp_group
-        ):
+        if self.worker_adapter.use_mla and not self.worker_adapter.is_first_rank_of_pp_group:
             return
 
         metadata = self._get_connector_metadata()
@@ -666,13 +641,9 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
             event = torch.Event(interprocess=True)
             event.record()
 
-        self.worker_adapter.batched_submit_store_requests(
-            request_ids, ops, event, cache_salts=cache_salts
-        )
+        self.worker_adapter.batched_submit_store_requests(request_ids, ops, event, cache_salts=cache_salts)
 
-    def get_finished(
-        self, finished_req_ids: set[str]
-    ) -> tuple[set[str] | None, set[str] | None]:
+    def get_finished(self, finished_req_ids: set[str]) -> tuple[set[str] | None, set[str] | None]:
         """
         Notifies worker-side connector ids of requests that have
         finished generating tokens on the worker.
@@ -780,10 +751,7 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
         if ret == 0:
             return 0, False
 
-        assert (
-            ret % (self.scheduler_adapter.num_blocks_per_chunk() * self.aphrodite_block_size)
-            == 0
-        )
+        assert ret % (self.scheduler_adapter.num_blocks_per_chunk() * self.aphrodite_block_size) == 0
 
         # Update num stored blocks for the tracker
         num_aphrodite_blocks = num_computed_tokens // self.aphrodite_block_size
@@ -795,14 +763,10 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
         tracker.num_lmcache_hit_blocks = num_lmcache_blocks
 
         need_to_load = max(0, ret - num_computed_tokens)
-        logger.debug(
-            "Aphrodite hit is: %d, Need to load is %d", num_computed_tokens, need_to_load
-        )
+        logger.debug("Aphrodite hit is: %d, Need to load is %d", num_computed_tokens, need_to_load)
         return need_to_load, need_to_load > 0
 
-    def update_state_after_alloc(
-        self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int
-    ):
+    def update_state_after_alloc(self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int):
         """
         Update KVConnector state after block allocation.
 
@@ -840,11 +804,7 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
         if tracker.state == LMCacheMPRequestState.PREFETCHING:
             # If need to retrieve, change to WAITING_FOR_LOAD
             # Otherwise, change to READY
-            tracker.state = (
-                LMCacheMPRequestState.WAITING_FOR_LOAD
-                if condition
-                else LMCacheMPRequestState.READY
-            )
+            tracker.state = LMCacheMPRequestState.WAITING_FOR_LOAD if condition else LMCacheMPRequestState.READY
             # Clean up lookup future in scheduler adapter
             self.scheduler_adapter.cleanup_lookup_result(request.request_id)
 
@@ -876,9 +836,7 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
                         free_end,
                     )
 
-    def build_connector_meta(
-        self, scheduler_output: SchedulerOutput
-    ) -> KVConnectorMetadata:
+    def build_connector_meta(self, scheduler_output: SchedulerOutput) -> KVConnectorMetadata:
         """
         Build the connector metadata for this step.
 
@@ -935,20 +893,13 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
         params: dict[str, Any] | None = getattr(request, "kv_transfer_params", None)
         return_params: dict[str, Any] | None = {} if params is not None else None
 
-        if (
-            params is not None
-            and return_params is not None
-            and "num_lmcache_extra_cached_tokens" in params
-        ):
+        if params is not None and return_params is not None and "num_lmcache_extra_cached_tokens" in params:
             request_tracker = self._get_request_tracker(request.request_id)
             num_extra_cached_blocks = max(
                 0,
-                request_tracker.num_lmcache_hit_blocks
-                - request_tracker.num_aphrodite_hit_blocks,
+                request_tracker.num_lmcache_hit_blocks - request_tracker.num_aphrodite_hit_blocks,
             )
-            return_params["num_lmcache_extra_cached_tokens"] = (
-                num_extra_cached_blocks * self.aphrodite_block_size
-            )
+            return_params["num_lmcache_extra_cached_tokens"] = num_extra_cached_blocks * self.aphrodite_block_size
 
         # Clean up request tracker to prevent memory leak
         self._cleanup_request_tracker(request.request_id)
@@ -979,10 +930,7 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
         """
 
         if cls is KVConnectorBase_V1:
-            raise TypeError(
-                "get_required_kvcache_layout should not be called "
-                "on the abstract base class"
-            )
+            raise TypeError("get_required_kvcache_layout should not be called on the abstract base class")
         return None
 
     def get_finished_count(self) -> int | None:
@@ -997,9 +945,7 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
         return None
 
     @classmethod
-    def build_kv_connector_stats(
-        cls, data: dict[str, Any] | None = None
-    ) -> "KVConnectorStats | None":
+    def build_kv_connector_stats(cls, data: dict[str, Any] | None = None) -> "KVConnectorStats | None":
         """
         KVConnectorStats resolution method. This method allows dynamically
         registered connectors to return their own KVConnectorStats object,
@@ -1149,20 +1095,13 @@ class LMCacheMPConnectorUpstream(KVConnectorBase_V1):
             self.scheduler_adapter.report_block_allocations(records)
 
     def _get_request_tracker(self, request_id: str) -> LMCacheMPRequestTracker:
-        assert request_id in self.request_trackers, (
-            f"Request tracker for request_id {request_id} not found. "
-        )
+        assert request_id in self.request_trackers, f"Request tracker for request_id {request_id} not found. "
         return self.request_trackers[request_id]
 
-    def _get_or_create_request_tracker(
-        self, request: "Request"
-    ) -> LMCacheMPRequestTracker:
+    def _get_or_create_request_tracker(self, request: "Request") -> LMCacheMPRequestTracker:
         request_id = request.request_id
         # Remove the old trackers that is created before the preemption
-        if (
-            request.status == RequestStatus.PREEMPTED
-            and request_id in self.request_trackers
-        ):
+        if request.status == RequestStatus.PREEMPTED and request_id in self.request_trackers:
             tracker = self.request_trackers[request_id]
 
             # NOTE: since this function may be called multiple times
@@ -1209,15 +1148,11 @@ def _resolve_lmcache_mp_connector() -> type[KVConnectorBase_V1]:
             LMCacheMPConnector as _ExternalLMCacheMPConnector,
         )
 
-        logger.info(
-            "Using external LMCacheMPConnector from "
-            "lmcache.integration.aphrodite.lmcache_mp_connector"
-        )
+        logger.info("Using external LMCacheMPConnector from lmcache.integration.aphrodite.lmcache_mp_connector")
         return _ExternalLMCacheMPConnector
     except ImportError as e:
         logger.info(
-            "External LMCacheMPConnector is not available (%s), "
-            "falling back to builtin implementation in Aphrodite.",
+            "External LMCacheMPConnector is not available (%s), falling back to builtin implementation in Aphrodite.",
             e,
         )
         return LMCacheMPConnectorUpstream

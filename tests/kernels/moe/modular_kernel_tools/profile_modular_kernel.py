@@ -48,9 +48,7 @@ def do_profile(
         torch.accelerator.synchronize(device)
 
     # TODO (varun): Add a descriptive trace file name
-    tprof.export_chrome_trace(
-        f"{config.torch_trace_dir_path}/m{config.M}_{pgi.rank}_trace.json"
-    )
+    tprof.export_chrome_trace(f"{config.torch_trace_dir_path}/m{config.M}_{pgi.rank}_trace.json")
 
 
 def profile_modular_kernel(
@@ -88,9 +86,7 @@ def profile_modular_kernel(
     # make modular kernel
     mk = make_modular_kernel(config, aphrodite_config, quant_config)
 
-    topk_ids = rank_tensors.topk_ids.to(
-        mk.prepare_finalize.topk_indices_dtype() or rank_tensors.topk_ids.dtype
-    )
+    topk_ids = rank_tensors.topk_ids.to(mk.prepare_finalize.topk_indices_dtype() or rank_tensors.topk_ids.dtype)
 
     # impls might update the tensor in place
     hidden_states = rank_tensors.hidden_states.clone()
@@ -104,14 +100,11 @@ def profile_modular_kernel(
         "activation": MoEActivation.SILU,
         "expert_map": rank_tensors.expert_map,
         "global_num_experts": config.E,
-        "apply_router_weight_on_input": config.topk == 1
-        and config.supports_apply_weight_on_input(),
+        "apply_router_weight_on_input": config.topk == 1 and config.supports_apply_weight_on_input(),
     }
 
     num_tokens = hidden_states.shape[0]
-    num_tokens_across_dp = torch.tensor(
-        [num_tokens] * config.world_size, device="cpu", dtype=torch.int
-    )
+    num_tokens_across_dp = torch.tensor([num_tokens] * config.world_size, device="cpu", dtype=torch.int)
 
     with set_forward_context(
         None,
@@ -158,9 +151,7 @@ def rank_worker(
 def run(config: Config):
     weights: WeightTensors = WeightTensors.make(config)
     aphrodite_config, env_dict = config.make_env_data()
-    parallel_launch_with_config(
-        config.world_size, rank_worker, aphrodite_config, env_dict, config, weights
-    )
+    parallel_launch_with_config(config.world_size, rank_worker, aphrodite_config, env_dict, config, weights)
 
 
 if __name__ == "__main__":
@@ -174,9 +165,7 @@ if __name__ == "__main__":
         )
     )
     args = parser.parse_args()
-    assert args.torch_trace_dir_path is not None, (
-        "Please pass in a directory to store torch traces"
-    )
+    assert args.torch_trace_dir_path is not None, "Please pass in a directory to store torch traces"
     config = make_config(args)
 
     run(config)

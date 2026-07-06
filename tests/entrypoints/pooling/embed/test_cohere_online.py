@@ -81,9 +81,7 @@ def _cohere_embed(
     return resp.json()
 
 
-def _openai_embed(
-    server: RemoteOpenAIServer, model_name: str, texts: list[str]
-) -> dict:
+def _openai_embed(server: RemoteOpenAIServer, model_name: str, texts: list[str]) -> dict:
     body = {"model": model_name, "input": texts, "encoding_format": "float"}
     resp = requests.post(server.url_for("/v1/embeddings"), json=body)
     resp.raise_for_status()
@@ -101,9 +99,7 @@ def _cosine_sim(a: list[float], b: list[float]) -> float:
 
 
 def test_basic_embed(server: RemoteOpenAIServer, model_name: str):
-    r = _cohere_embed(
-        server, model_name, texts=["hello world"], embedding_types=["float"]
-    )
+    r = _cohere_embed(server, model_name, texts=["hello world"], embedding_types=["float"])
     assert "embeddings" in r
     assert len(r["embeddings"]["float"]) == 1
     assert len(r["embeddings"]["float"][0]) > 0
@@ -181,9 +177,7 @@ def test_batch(server: RemoteOpenAIServer, model_name: str):
 
 
 def test_l2_normalized(server: RemoteOpenAIServer, model_name: str):
-    r = _cohere_embed(
-        server, model_name, texts=["hello world"], embedding_types=["float"]
-    )
+    r = _cohere_embed(server, model_name, texts=["hello world"], embedding_types=["float"])
     emb = np.array(r["embeddings"]["float"][0])
     assert abs(float(np.linalg.norm(emb)) - 1.0) < 0.01
 
@@ -305,6 +299,5 @@ def test_truncate_start_vs_end_differ(server: RemoteOpenAIServer, model_name: st
     emb_start = r_start["embeddings"]["float"][0]
     cos = _cosine_sim(emb_end, emb_start)
     assert cos < 0.99, (
-        f"START and END truncation should produce different embeddings "
-        f"for long input, but cosine similarity was {cos}"
+        f"START and END truncation should produce different embeddings for long input, but cosine similarity was {cos}"
     )

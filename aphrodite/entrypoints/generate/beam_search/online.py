@@ -48,9 +48,7 @@ class BeamSearchOnlineMixin(ABC):
             raise NotImplementedError("Embedding prompt not supported for beam search")
 
         # Extract prompt tokens and text based on model type
-        decoder_prompt = (
-            prompt if prompt["type"] != "enc_dec" else prompt["decoder_prompt"]
-        )
+        decoder_prompt = prompt if prompt["type"] != "enc_dec" else prompt["decoder_prompt"]
         prompt_text = decoder_prompt.get("prompt")
         prompt_token_ids = decoder_prompt["prompt_token_ids"]
 
@@ -127,9 +125,7 @@ class BeamSearchOnlineMixin(ABC):
                 if result.outputs[0].logprobs is not None:
                     logprobs = result.outputs[0].logprobs[0]
                     for token_id, logprob_obj in logprobs.items():
-                        candidate_logprob = (
-                            current_beam.cum_logprob + logprob_obj.logprob
-                        )
+                        candidate_logprob = current_beam.cum_logprob + logprob_obj.logprob
                         if token_id == eos_token_id and not ignore_eos:
                             completed.append(
                                 BeamSearchSequence(
@@ -207,9 +203,7 @@ class BeamSearchOnlineMixin(ABC):
                     token_ids=beam.tokens[tokenized_length:],
                     index=i,
                     logprobs=beam.logprobs,
-                    finish_reason=beam.finish_reason
-                    if beam.finish_reason is not None
-                    else "length",
+                    finish_reason=beam.finish_reason if beam.finish_reason is not None else "length",
                     stop_reason=beam.stop_reason,
                 )
                 for (i, beam) in enumerate(best_beams)

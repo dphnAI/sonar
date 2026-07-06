@@ -13,10 +13,10 @@ from aphrodite.compilation.backends import set_model_tag
 from aphrodite.compilation.counter import compilation_counter
 from aphrodite.compilation.decorators import ignore_torch_compile, support_torch_compile
 from aphrodite.config import (
+    AphroditeConfig,
     CompilationConfig,
     CompilationMode,
     CUDAGraphMode,
-    AphroditeConfig,
     set_current_aphrodite_config,
 )
 from aphrodite.forward_context import BatchDescriptor, set_forward_context
@@ -63,11 +63,9 @@ class Attention(nn.Module):
 
     def rms_norm_ref(self, x: torch.Tensor) -> torch.Tensor:
         x_f32 = x.float()
-        return (
-            x_f32
-            * torch.rsqrt(torch.mean(x_f32.square(), dim=-1, keepdim=True) + 1e-6)
-            * self.rms_norm_weight
-        ).to(x.dtype)
+        return (x_f32 * torch.rsqrt(torch.mean(x_f32.square(), dim=-1, keepdim=True) + 1e-6) * self.rms_norm_weight).to(
+            x.dtype
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.pre_attn(x)
@@ -197,9 +195,7 @@ def run_model(
 @pytest.mark.parametrize("use_inductor_graph_partition", [False, True])
 @pytest.mark.parametrize("use_bytecode_hook", [True, False])
 @create_new_process_for_each_test("spawn")
-def test_multi_graph_piecewise_compile(
-    use_inductor_graph_partition: bool, use_bytecode_hook: bool, monkeypatch
-):
+def test_multi_graph_piecewise_compile(use_inductor_graph_partition: bool, use_bytecode_hook: bool, monkeypatch):
     # Set the environment variable for this test
     monkeypatch.setenv("APHRODITE_USE_BYTECODE_HOOK", "1" if use_bytecode_hook else "0")
 

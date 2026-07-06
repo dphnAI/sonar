@@ -48,13 +48,9 @@ def _run_gsm8k_eval(server: RemoteOpenAIServer, stage: str) -> float:
         port=server.port,
     )
     accuracy = result["accuracy"]
-    print(
-        f"[{stage}] GSM8K accuracy: {accuracy:.3f} "
-        f"({result['num_questions']} questions)"
-    )
+    print(f"[{stage}] GSM8K accuracy: {accuracy:.3f} ({result['num_questions']} questions)")
     assert accuracy >= EXPECTED_ACCURACY, (
-        f"[{stage}] GSM8K accuracy {accuracy:.3f} is below "
-        f"expected threshold {EXPECTED_ACCURACY}"
+        f"[{stage}] GSM8K accuracy {accuracy:.3f} is below expected threshold {EXPECTED_ACCURACY}"
     )
     return accuracy
 
@@ -98,9 +94,7 @@ def _base_serve_args(use_async_eplb: bool = False) -> list[str]:
     return args
 
 
-@pytest.mark.parametrize(
-    "use_async_eplb", [False, True], ids=["sync_eplb", "async_eplb"]
-)
+@pytest.mark.parametrize("use_async_eplb", [False, True], ids=["sync_eplb", "async_eplb"])
 @multi_gpu_test(num_gpus=4)
 def test_elastic_ep_scaling(use_async_eplb: bool):
     if use_async_eplb:
@@ -111,9 +105,7 @@ def test_elastic_ep_scaling(use_async_eplb: bool):
 
     aphrodite_serve_args = _base_serve_args(use_async_eplb)
 
-    with RemoteOpenAIServer(
-        MODEL_NAME, aphrodite_serve_args, env_dict={}, max_wait_seconds=1200
-    ) as server:
+    with RemoteOpenAIServer(MODEL_NAME, aphrodite_serve_args, env_dict={}, max_wait_seconds=1200) as server:
         initial_accuracy = _run_gsm8k_eval(server, "Initial (2 GPUs)")
 
         assert _send_scale_command(server, 4)
@@ -136,20 +128,12 @@ def test_elastic_ep_scaling(use_async_eplb: bool):
 
         print("\nAccuracy Summary:")
         print(f"  Initial:    {initial_accuracy:.3f}")
-        print(
-            f"  Scale up:   {scale_up_accuracy:.3f} "
-            f"(diff: {scale_up_accuracy - initial_accuracy:+.3f})"
-        )
-        print(
-            f"  Scale down: {scale_down_accuracy:.3f} "
-            f"(diff: {scale_down_accuracy - initial_accuracy:+.3f})"
-        )
+        print(f"  Scale up:   {scale_up_accuracy:.3f} (diff: {scale_up_accuracy - initial_accuracy:+.3f})")
+        print(f"  Scale down: {scale_down_accuracy:.3f} (diff: {scale_down_accuracy - initial_accuracy:+.3f})")
         print(f"  Tolerance:  {ACCURACY_TOL:.3f}")
 
 
-@pytest.mark.parametrize(
-    "use_async_eplb", [False, True], ids=["sync_eplb", "async_eplb"]
-)
+@pytest.mark.parametrize("use_async_eplb", [False, True], ids=["sync_eplb", "async_eplb"])
 @multi_gpu_test(num_gpus=4)
 def test_elastic_ep_scaling_uneven(use_async_eplb: bool):
     """Test scale up with uneven worker distribution.
@@ -166,9 +150,7 @@ def test_elastic_ep_scaling_uneven(use_async_eplb: bool):
 
     aphrodite_serve_args = _base_serve_args(use_async_eplb)
 
-    with RemoteOpenAIServer(
-        MODEL_NAME, aphrodite_serve_args, env_dict={}, max_wait_seconds=1200
-    ) as server:
+    with RemoteOpenAIServer(MODEL_NAME, aphrodite_serve_args, env_dict={}, max_wait_seconds=1200) as server:
         initial_accuracy = _run_gsm8k_eval(server, "Initial (2 GPUs)")
 
         # Scale 2 -> 3: This has remainder = 1 % 2 = 1
@@ -194,12 +176,6 @@ def test_elastic_ep_scaling_uneven(use_async_eplb: bool):
 
         print("\nAccuracy Summary (Uneven Scaling):")
         print(f"  Initial:    {initial_accuracy:.3f}")
-        print(
-            f"  Scale up:   {scale_up_accuracy:.3f} "
-            f"(diff: {scale_up_accuracy - initial_accuracy:+.3f})"
-        )
-        print(
-            f"  Scale down: {scale_down_accuracy:.3f} "
-            f"(diff: {scale_down_accuracy - initial_accuracy:+.3f})"
-        )
+        print(f"  Scale up:   {scale_up_accuracy:.3f} (diff: {scale_up_accuracy - initial_accuracy:+.3f})")
+        print(f"  Scale down: {scale_down_accuracy:.3f} (diff: {scale_down_accuracy - initial_accuracy:+.3f})")
         print(f"  Tolerance:  {ACCURACY_TOL:.3f}")

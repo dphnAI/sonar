@@ -1,30 +1,38 @@
-// Sparse MLA forward attention for decode on sm89 (Ada), gathering top-k KV directly from the
-// fp8_ds_mla 656B pool by slot.
+// Sparse MLA forward attention for decode on sm89 (Ada), gathering top-k KV
+// directly from the fp8_ds_mla 656B pool by slot.
 //
-//   out[t, i] = softmax_k(q[t, i, :576] . kv[idx[t, k], :576] * sm_scale) @ kv[idx[t, k], :512]
+//   out[t, i] = softmax_k(q[t, i, :576] . kv[idx[t, k], :576] * sm_scale) @
+//   kv[idx[t, k], :512]
 //
 // A 656B AoS pool row is 512 fp8 e4m3 "nope" bytes at [0, 512), 4 fp32
 // per-128-tile scales at [512, 528), and 64 bf16 rope values at [528, 656).
 //
 // Grid (T, ceil(h/16)); 128 threads / 4 warps; BI=32 keys per iteration.
-//   2-stage cp.async staging ring of raw 656B rows (by slot; -1 uses slot 0 + score mask)
-//   -> dequant nope fp8->bf16 (x tile scale) + rope passthrough into sKV [32 x 584]
-//   -> QK bf16 mma m16n8k16 (warp w owns keys [8w, 8w+8); 36 k-steps over 576 dims)
-//   -> masked scaled scores to smem; redundant per-lane online softmax (fixed order)
-//   -> PV bf16 mma (warp w owns out cols [128w, 128w+128); B-frags via ldmatrix.x4.trans)
-// l==0 rows (all -1 indices) write 0 output / -inf LSE. No atomics and fixed reduction
-// orders, so bitwise run-to-run deterministic. Static shapes and -1 handling keep it
-// CUDA-graph-safe.
+//   2-stage cp.async staging ring of raw 656B rows (by slot; -1 uses slot 0 +
+//   score mask)
+//   -> dequant nope fp8->bf16 (x tile scale) + rope passthrough into sKV [32 x
+//   584]
+//   -> QK bf16 mma m16n8k16 (warp w owns keys [8w, 8w+8); 36 k-steps over 576
+//   dims)
+//   -> masked scaled scores to smem; redundant per-lane online softmax (fixed
+//   order)
+//   -> PV bf16 mma (warp w owns out cols [128w, 128w+128); B-frags via
+//   ldmatrix.x4.trans)
+// l==0 rows (all -1 indices) write 0 output / -inf LSE. No atomics and fixed
+// reduction orders, so bitwise run-to-run deterministic. Static shapes and -1
+// handling keep it CUDA-graph-safe.
 //
-// Optional topk_lens[T] (requires front-compacted index rows, valid slots first then -1)
-// clamps the key loop to ceil(len/BI) tiles. The skipped tiles are all-(-1) no-ops in the
-// full loop (alpha == 1, sum == 0, P == 0), so the result is identical; DCP passes its
-// per-rank valid counts here to skip the ~(1 - 1/dcp_world_size) non-owned candidates.
-// The loop bound is read from device memory under a fixed grid, so it stays graph-safe.
+// Optional topk_lens[T] (requires front-compacted index rows, valid slots first
+// then -1) clamps the key loop to ceil(len/BI) tiles. The skipped tiles are
+// all-(-1) no-ops in the full loop (alpha == 1, sum == 0, P == 0), so the
+// result is identical; DCP passes its per-rank valid counts here to skip the
+// ~(1 - 1/dcp_world_size) non-owned candidates. The loop bound is read from
+// device memory under a fixed grid, so it stays graph-safe.
 //
-// cp.async pipeline invariant. The prologue commits exactly STAGES groups (empty commits
-// pad when n_iters < STAGES) and each loop iteration commits exactly one (empty past the
-// tail), so cp_async_wait<STAGES-1> always guarantees iteration `it`'s group has landed.
+// cp.async pipeline invariant. The prologue commits exactly STAGES groups
+// (empty commits pad when n_iters < STAGES) and each loop iteration commits
+// exactly one (empty past the tail), so cp_async_wait<STAGES-1> always
+// guarantees iteration `it`'s group has landed.
 
 // clang-format off
 

@@ -15,15 +15,15 @@ import torch
 import aphrodite.envs as envs
 from aphrodite.compilation.backends import AphroditeBackend
 from aphrodite.compilation.caching import (
-    StandaloneCompiledArtifacts,
     AphroditeSerializableFunction,
+    StandaloneCompiledArtifacts,
 )
 from aphrodite.compilation.counter import compilation_counter
 from aphrodite.compilation.decorators import support_torch_compile
 from aphrodite.config import (
+    AphroditeConfig,
     CompilationConfig,
     CompilationMode,
-    AphroditeConfig,
     set_current_aphrodite_config,
 )
 from aphrodite.envs import disable_envs_cache
@@ -175,9 +175,7 @@ def test_save_and_load_slice(monkeypatch: pytest.MonkeyPatch):
     with use_aphrodite_config(aphrodite_config):
         payload = AphroditeSerializableFunction.serialize_graph_module(gm)
         fake_mode = FakeTensorMode(shape_env=ShapeEnv())
-        loaded_gm = AphroditeSerializableFunction.deserialize_graph_module(
-            payload, fake_mode
-        )
+        loaded_gm = AphroditeSerializableFunction.deserialize_graph_module(payload, fake_mode)
 
     assert gm.code == loaded_gm.code
 
@@ -224,8 +222,7 @@ def test_cache_load_returns_tuple_consistency(monkeypatch: pytest.MonkeyPatch):
 
             # Verify cache was actually loaded
             assert cached_mod.was_aot_compile_fn_loaded_from_disk, (
-                "Expected was_aot_compile_fn_loaded_from_disk to be True after "
-                "loading from cache"
+                "Expected was_aot_compile_fn_loaded_from_disk to be True after loading from cache"
             )
 
             # Verify cached result has same type as fresh result
@@ -236,9 +233,7 @@ def test_cache_load_returns_tuple_consistency(monkeypatch: pytest.MonkeyPatch):
             )
 
             # Verify values match
-            assert torch.allclose(cached_result, fresh_result), (
-                "Cached result values should match fresh compilation"
-            )
+            assert torch.allclose(cached_result, fresh_result), "Cached result values should match fresh compilation"
 
 
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
@@ -268,12 +263,8 @@ def test_cache_load_returns_tuple_consistency_tuple_output(
                 fresh_result_type = type(fresh_result)
 
             # Verify fresh result is a tuple
-            assert isinstance(fresh_result, tuple), (
-                f"Fresh compile should return tuple, got {fresh_result_type}"
-            )
-            assert len(fresh_result) == 2, (
-                f"Fresh compile should return 2-tuple, got {len(fresh_result)}"
-            )
+            assert isinstance(fresh_result, tuple), f"Fresh compile should return tuple, got {fresh_result_type}"
+            assert len(fresh_result) == 2, f"Fresh compile should return 2-tuple, got {len(fresh_result)}"
 
             disable_envs_cache()
 
@@ -287,8 +278,7 @@ def test_cache_load_returns_tuple_consistency_tuple_output(
 
             # Verify cache was actually loaded
             assert cached_mod.was_aot_compile_fn_loaded_from_disk, (
-                "Expected was_aot_compile_fn_loaded_from_disk to be True after "
-                "loading from cache"
+                "Expected was_aot_compile_fn_loaded_from_disk to be True after loading from cache"
             )
 
             # Verify cached result is also a tuple
@@ -297,9 +287,7 @@ def test_cache_load_returns_tuple_consistency_tuple_output(
                 "This indicates the returns_tuple logic is not preserving "
                 "tuple outputs when loading from cache."
             )
-            assert len(cached_result) == 2, (
-                f"Cache load should return 2-tuple, got {len(cached_result)}"
-            )
+            assert len(cached_result) == 2, f"Cache load should return 2-tuple, got {len(cached_result)}"
 
             # Verify values match
             assert torch.allclose(cached_result[0], fresh_result[0]), (
@@ -348,9 +336,7 @@ def test_shape_env(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
-def test_partition_wrapper_applied_on_aot_load(
-    monkeypatch: pytest.MonkeyPatch, aphrodite_tmp_cache: Path, mocker
-):
+def test_partition_wrapper_applied_on_aot_load(monkeypatch: pytest.MonkeyPatch, aphrodite_tmp_cache: Path, mocker):
     """
     Test that partition wrappers are applied when loading AOT cached functions.
 
@@ -407,16 +393,11 @@ def test_partition_wrapper_applied_on_aot_load(
 
         # Verify partition wrapper was called on AOT load.
         assert spy.call_count >= 2, (
-            "Expected partition wrapper to be set and cleared on AOT load, "
-            f"got {spy.call_count} calls"
+            f"Expected partition wrapper to be set and cleared on AOT load, got {spy.call_count} calls"
         )
         # First call should set a wrapper, last call should clear it
-        assert spy.call_args_list[0][0][0] is not None, (
-            "First call on AOT load should set a wrapper function"
-        )
-        assert spy.call_args_list[-1][0][0] is None, (
-            "Last call on AOT load should clear the wrapper"
-        )
+        assert spy.call_args_list[0][0][0] is not None, "First call on AOT load should set a wrapper function"
+        assert spy.call_args_list[-1][0][0] is None, "Last call on AOT load should clear the wrapper"
 
         # Reset for the next check.
         spy.reset_mock()
@@ -427,15 +408,10 @@ def test_partition_wrapper_applied_on_aot_load(
 
         # Verify partition wrapper was called on the subsequent call.
         assert spy.call_count >= 2, (
-            "Expected partition wrapper set and cleared on subsequent "
-            f"call, got {spy.call_count} calls"
+            f"Expected partition wrapper set and cleared on subsequent call, got {spy.call_count} calls"
         )
-        assert spy.call_args_list[0][0][0] is not None, (
-            "First call on subsequent call should set a wrapper function"
-        )
-        assert spy.call_args_list[-1][0][0] is None, (
-            "Last call on subsequent call should clear the wrapper"
-        )
+        assert spy.call_args_list[0][0][0] is not None, "First call on subsequent call should set a wrapper function"
+        assert spy.call_args_list[-1][0][0] is None, "Last call on subsequent call should clear the wrapper"
 
 
 @create_new_process_for_each_test("spawn")
@@ -765,9 +741,7 @@ class TestStandaloneCompiledArtifactsIntegration:
         def add_1(x: torch.Tensor):
             return x + 1
 
-        gm = torch._dynamo.functional_export.dynamo_graph_capture_for_export(add_1)(
-            *example_inputs
-        )
+        gm = torch._dynamo.functional_export.dynamo_graph_capture_for_export(add_1)(*example_inputs)
 
         gm.graph._codegen = torch.fx.graph.CodeGen()
         gm._dynamo_bytecode_flatten = None
@@ -801,9 +775,7 @@ class TestStandaloneCompiledArtifactsIntegration:
 
 
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
-def test_disable_compile_cache_skips_aot_save(
-    monkeypatch: pytest.MonkeyPatch, fresh_aphrodite_cache: str
-):
+def test_disable_compile_cache_skips_aot_save(monkeypatch: pytest.MonkeyPatch, fresh_aphrodite_cache: str):
     """When APHRODITE_DISABLE_COMPILE_CACHE=1, AOT artifacts must not be saved."""
     monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", "1")
     monkeypatch.setenv("APHRODITE_USE_AOT_COMPILE", "1")
@@ -831,15 +803,11 @@ def test_disable_compile_cache_skips_aot_save(
     if os.path.isdir(aot_dir):
         for root, _dirs, files in os.walk(aot_dir):
             for f in files:
-                assert f != "model", (
-                    f"AOT artifact unexpectedly saved at {os.path.join(root, f)}"
-                )
+                assert f != "model", f"AOT artifact unexpectedly saved at {os.path.join(root, f)}"
 
 
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
-def test_disable_compile_cache_skips_aot_load(
-    monkeypatch: pytest.MonkeyPatch, fresh_aphrodite_cache: str
-):
+def test_disable_compile_cache_skips_aot_load(monkeypatch: pytest.MonkeyPatch, fresh_aphrodite_cache: str):
     """When APHRODITE_DISABLE_COMPILE_CACHE=1, AOT artifacts must not be loaded."""
     # Phase 1: compile and save with cache enabled
     monkeypatch.setenv("APHRODITE_USE_AOT_COMPILE", "1")
@@ -875,9 +843,7 @@ def test_disable_compile_cache_skips_aot_load(
 
 
 @pytest.mark.skipif(not is_torch_equal_or_newer("2.10.0"), reason="requires torch 2.10")
-def test_aot_counters_on_save_and_load(
-    monkeypatch: pytest.MonkeyPatch, fresh_aphrodite_cache: str
-):
+def test_aot_counters_on_save_and_load(monkeypatch: pytest.MonkeyPatch, fresh_aphrodite_cache: str):
     """Verify AOT counters are incremented correctly on save and load."""
     monkeypatch.setenv("APHRODITE_USE_AOT_COMPILE", "1")
     disable_envs_cache()

@@ -43,9 +43,7 @@ def resolve_flashinfer_autotune_file(runner: "GPUModelRunner") -> Path:
 
 def write_flashinfer_autotune_cache(cache_path: Path, contents: bytes) -> None:
     cache_path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(
-        dir=cache_path.parent, suffix=".tmp", prefix=f".{cache_path.name}."
-    )
+    fd, tmp_path = tempfile.mkstemp(dir=cache_path.parent, suffix=".tmp", prefix=f".{cache_path.name}.")
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(contents)

@@ -55,8 +55,7 @@ def _fp8_attention():
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch(
-            "aphrodite.model_executor.layers.attention.mm_encoder_attention"
-            ".get_vit_attn_backend",
+            "aphrodite.model_executor.layers.attention.mm_encoder_attention.get_vit_attn_backend",
             return_value=AttentionBackendEnum.FLASHINFER,
         ),
     ):
@@ -87,9 +86,7 @@ def _build_cu_seqlens_and_meta(
     )
 
     max_seqlen = torch.tensor(
-        MMEncoderAttention.compute_max_seqlen(
-            AttentionBackendEnum.FLASHINFER, cu_seqlens_np
-        ),
+        MMEncoderAttention.compute_max_seqlen(AttentionBackendEnum.FLASHINFER, cu_seqlens_np),
         dtype=torch.int32,
     )
 
@@ -167,9 +164,7 @@ def test_fp8_attn_output_shape(
 @pytest.mark.parametrize("head_dim", HEAD_DIMS)
 @pytest.mark.parametrize("seq_len", SEQ_LENS)
 @pytest.mark.parametrize("num_heads", NUM_HEADS)
-def test_fp8_vs_bf16_close(
-    head_dim: int, seq_len: int, num_heads: int, _fp8_attention
-) -> None:
+def test_fp8_vs_bf16_close(head_dim: int, seq_len: int, num_heads: int, _fp8_attention) -> None:
     """FP8 attention output should be reasonably close to BF16 baseline."""
     from aphrodite.model_executor.layers.attention.mm_encoder_attention import (
         MMEncoderAttention,
@@ -261,19 +256,13 @@ def test_fp8_vs_bf16_close(
     print(f"  cosine_sim={cosine_sim:.6f}")
     print(
         f"  abs_diff: max={abs_diff_flat.max().item():.6f}, "
-        f"mean={abs_diff_flat.mean().item():.6f}, "
-        + ", ".join(f"p{p}={abs_pct[p]:.6f}" for p in pcts)
+        f"mean={abs_diff_flat.mean().item():.6f}, " + ", ".join(f"p{p}={abs_pct[p]:.6f}" for p in pcts)
     )
     print(
         f"  rel_diff: max={rel_diff_flat.max().item():.6f}, "
-        f"mean={rel_diff_flat.mean().item():.6f}, "
-        + ", ".join(f"p{p}={rel_pct[p]:.6f}" for p in pcts)
+        f"mean={rel_diff_flat.mean().item():.6f}, " + ", ".join(f"p{p}={rel_pct[p]:.6f}" for p in pcts)
     )
 
-    assert abs_diff_flat.max().item() < 0.3, (
-        f"FP8 vs BF16 max abs diff too large: {abs_diff_flat.max().item()}"
-    )
-    assert abs_diff_flat.mean().item() < 0.03, (
-        f"FP8 vs BF16 mean abs diff too large: {abs_diff_flat.mean().item()}"
-    )
+    assert abs_diff_flat.max().item() < 0.3, f"FP8 vs BF16 max abs diff too large: {abs_diff_flat.max().item()}"
+    assert abs_diff_flat.mean().item() < 0.03, f"FP8 vs BF16 mean abs diff too large: {abs_diff_flat.mean().item()}"
     assert cosine_sim > 0.99, f"Cosine similarity too low: {cosine_sim:.6f}"

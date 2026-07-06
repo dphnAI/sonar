@@ -51,9 +51,7 @@ class CompressedTensorsW4A4Nvfp4MoEMethod(CompressedTensorsMoEMethod):
             activation_key=None if use_a16 else kNvfp4Dynamic,
         )
 
-        self.use_global_sf = is_global_sf_supported_for_nvfp4_backend(
-            self.nvfp4_backend
-        )
+        self.use_global_sf = is_global_sf_supported_for_nvfp4_backend(self.nvfp4_backend)
 
     def create_weights(
         self,
@@ -107,9 +105,7 @@ class CompressedTensorsW4A4Nvfp4MoEMethod(CompressedTensorsMoEMethod):
             requires_grad=False,
         )
         layer.register_parameter("w13_weight_scale", w13_weight_scale)
-        extra_weight_attrs.update(
-            {"quant_method": FusedMoeWeightScaleSupported.GROUP.value}
-        )
+        extra_weight_attrs.update({"quant_method": FusedMoeWeightScaleSupported.GROUP.value})
         set_weight_attrs(w13_weight_scale, extra_weight_attrs)
 
         w2_weight_scale = torch.nn.Parameter(
@@ -123,9 +119,7 @@ class CompressedTensorsW4A4Nvfp4MoEMethod(CompressedTensorsMoEMethod):
             requires_grad=False,
         )
         layer.register_parameter("w2_weight_scale", w2_weight_scale)
-        extra_weight_attrs.update(
-            {"quant_method": FusedMoeWeightScaleSupported.GROUP.value}
-        )
+        extra_weight_attrs.update({"quant_method": FusedMoeWeightScaleSupported.GROUP.value})
         set_weight_attrs(w2_weight_scale, extra_weight_attrs)
 
         # Weight Global Scales
@@ -134,18 +128,12 @@ class CompressedTensorsW4A4Nvfp4MoEMethod(CompressedTensorsMoEMethod):
             requires_grad=False,
         )
         layer.register_parameter("w13_weight_global_scale", w13_weight_scale_2)
-        extra_weight_attrs.update(
-            {"quant_method": FusedMoeWeightScaleSupported.TENSOR.value}
-        )
+        extra_weight_attrs.update({"quant_method": FusedMoeWeightScaleSupported.TENSOR.value})
         set_weight_attrs(w13_weight_scale_2, extra_weight_attrs)
 
-        w2_weight_scale_2 = torch.nn.Parameter(
-            torch.empty(num_experts, dtype=torch.float32), requires_grad=False
-        )
+        w2_weight_scale_2 = torch.nn.Parameter(torch.empty(num_experts, dtype=torch.float32), requires_grad=False)
         layer.register_parameter("w2_weight_global_scale", w2_weight_scale_2)
-        extra_weight_attrs.update(
-            {"quant_method": FusedMoeWeightScaleSupported.TENSOR.value}
-        )
+        extra_weight_attrs.update({"quant_method": FusedMoeWeightScaleSupported.TENSOR.value})
         set_weight_attrs(w2_weight_scale_2, extra_weight_attrs)
 
         # Input Global Scales
@@ -154,18 +142,12 @@ class CompressedTensorsW4A4Nvfp4MoEMethod(CompressedTensorsMoEMethod):
             requires_grad=False,
         )
         layer.register_parameter("w13_input_global_scale", w13_input_scale)
-        extra_weight_attrs.update(
-            {"quant_method": FusedMoeWeightScaleSupported.TENSOR.value}
-        )
+        extra_weight_attrs.update({"quant_method": FusedMoeWeightScaleSupported.TENSOR.value})
         set_weight_attrs(w13_input_scale, extra_weight_attrs)
 
-        w2_input_scale = torch.nn.Parameter(
-            torch.empty(num_experts, dtype=torch.float32), requires_grad=False
-        )
+        w2_input_scale = torch.nn.Parameter(torch.empty(num_experts, dtype=torch.float32), requires_grad=False)
         layer.register_parameter("w2_input_global_scale", w2_input_scale)
-        extra_weight_attrs.update(
-            {"quant_method": FusedMoeWeightScaleSupported.TENSOR.value}
-        )
+        extra_weight_attrs.update({"quant_method": FusedMoeWeightScaleSupported.TENSOR.value})
         set_weight_attrs(w2_input_scale, extra_weight_attrs)
 
     def process_weights_after_loading(self, layer: RoutedExperts) -> None:
@@ -176,14 +158,10 @@ class CompressedTensorsW4A4Nvfp4MoEMethod(CompressedTensorsMoEMethod):
         # requires this naming convention. However, the name change breaks
         # reloading because the state dict no longer matches disk. Once we
         # remove MKM, we should revert this change to ensure compatibility.
-        layer.w13_weight = torch.nn.Parameter(
-            layer.w13_weight_packed.data, requires_grad=False
-        )
+        layer.w13_weight = torch.nn.Parameter(layer.w13_weight_packed.data, requires_grad=False)
         delattr(layer, "w13_weight_packed")
 
-        layer.w2_weight = torch.nn.Parameter(
-            layer.w2_weight_packed.data, requires_grad=False
-        )
+        layer.w2_weight = torch.nn.Parameter(layer.w2_weight_packed.data, requires_grad=False)
         delattr(layer, "w2_weight_packed")
 
         # Use a single gscale for w13.
@@ -191,8 +169,7 @@ class CompressedTensorsW4A4Nvfp4MoEMethod(CompressedTensorsMoEMethod):
             layer.w13_weight_global_scale[:, 0], layer.w13_weight_global_scale[:, 1]
         ):
             logger.warning_once(
-                "w1_weight_global_scale must match w3_weight_global_scale. "
-                "Accuracy may be affected.",
+                "w1_weight_global_scale must match w3_weight_global_scale. Accuracy may be affected.",
             )
         w13_weight_global_scale = layer.w13_weight_global_scale[:, 0].contiguous()
 

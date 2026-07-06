@@ -63,9 +63,7 @@ def release_device_memory_under_pressure(device: torch.device) -> bool:
     if device.type != "cuda" or not current_platform.is_integrated_gpu(device.index):
         return False
 
-    releasable = torch.accelerator.memory_reserved(
-        device
-    ) - torch.accelerator.memory_allocated(device)
+    releasable = torch.accelerator.memory_reserved(device) - torch.accelerator.memory_allocated(device)
     if releasable < _UMA_MIN_RELEASE_BYTES:
         return False
 
@@ -139,9 +137,7 @@ class MemorySnapshot:
         # After `torch.accelerator.reset_peak_memory_stats()`,
         # `torch.accelerator.memory_reserved()` will keep growing, and only shrink
         # when we call `torch.accelerator.empty_cache()` or OOM happens.
-        self.torch_peak = torch.accelerator.memory_stats(device).get(
-            "allocated_bytes.all.peak", 0
-        )
+        self.torch_peak = torch.accelerator.memory_stats(device).get("allocated_bytes.all.peak", 0)
 
         self.free_memory, self.total_memory = torch.accelerator.get_memory_info(device)
         if current_platform.is_integrated_gpu(device.index):
@@ -166,8 +162,7 @@ class MemorySnapshot:
     def __sub__(self, other: "MemorySnapshot") -> "MemorySnapshot":
         if self.device_ != other.device_:
             raise ValueError(
-                "The two snapshots should be from the same device! "
-                f"Found: {self.device_} vs. {other.device_}"
+                f"The two snapshots should be from the same device! Found: {self.device_} vs. {other.device_}"
             )
 
         return MemorySnapshot(
@@ -308,6 +303,4 @@ def memory_profiling(
 
     non_torch_memory = result.non_torch_increase
     peak_activation_memory = result.torch_peak_increase
-    result.non_kv_cache_memory = (
-        non_torch_memory + peak_activation_memory + result.weights_memory
-    )
+    result.non_kv_cache_memory = non_torch_memory + peak_activation_memory + result.weights_memory

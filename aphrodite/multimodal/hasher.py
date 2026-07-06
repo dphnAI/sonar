@@ -60,9 +60,7 @@ class MultiModalHasher:
 
         if isinstance(obj, Image.Image):
             exif = obj.getexif()
-            if Image.ExifTags.Base.ImageID in exif and isinstance(
-                exif[Image.ExifTags.Base.ImageID], uuid.UUID
-            ):
+            if Image.ExifTags.Base.ImageID in exif and isinstance(exif[Image.ExifTags.Base.ImageID], uuid.UUID):
                 return (exif[Image.ExifTags.Base.ImageID].bytes,)
 
             data = {"mode": obj.mode, "data": np.asarray(obj)}
@@ -76,9 +74,7 @@ class MultiModalHasher:
 
         if isinstance(obj, MediaWithBytes) and isinstance(obj.media, Image.Image):
             exif = obj.media.getexif()
-            if Image.ExifTags.Base.ImageID in exif and isinstance(
-                exif[Image.ExifTags.Base.ImageID], uuid.UUID
-            ):
+            if Image.ExifTags.Base.ImageID in exif and isinstance(exif[Image.ExifTags.Base.ImageID], uuid.UUID):
                 return (exif[Image.ExifTags.Base.ImageID].bytes,)
 
             return cls.iter_item_to_bytes("image", obj.original_bytes)
@@ -124,9 +120,7 @@ class MultiModalHasher:
                 },
             )
 
-        logger.warning(
-            "No serialization method found for %s. Falling back to pickle.", type(obj)
-        )
+        logger.warning("No serialization method found for %s. Falling back to pickle.", type(obj))
 
         return (pickle.dumps(obj),)
 

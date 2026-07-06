@@ -28,9 +28,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # Allow changing the head dtype used by transformers in tests
     "APHRODITE_CI_HF_DTYPE": lambda: os.getenv("APHRODITE_CI_HF_DTYPE", None),
     # Allow control over whether tests use enforce_eager
-    "APHRODITE_CI_ENFORCE_EAGER": lambda: maybe_convert_bool(
-        os.getenv("APHRODITE_CI_ENFORCE_EAGER", None)
-    ),
+    "APHRODITE_CI_ENFORCE_EAGER": lambda: maybe_convert_bool(os.getenv("APHRODITE_CI_ENFORCE_EAGER", None)),
 }
 
 

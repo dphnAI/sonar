@@ -58,9 +58,7 @@ class MRotaryEmbeddingInterleaved(MRotaryEmbedding):
         if sum(self.mrope_section) != rotary_dim // 2:
             raise ValueError("Sum of mrope_section must equal rotary_dim // 2.")
         if not self.mrope_interleaved:
-            raise ValueError(
-                "mrope_interleaved must be True when mrope_section is provided."
-            )
+            raise ValueError("mrope_interleaved must be True when mrope_section is provided.")
 
         # Generate interleaved indices
         if len(mrope_section) == 2:
@@ -68,13 +66,9 @@ class MRotaryEmbeddingInterleaved(MRotaryEmbedding):
             mrope_dim = self.get_mrope_interleaved_id_list(h_num, w_num, 0)
         elif len(mrope_section) == 3:
             t_num, h_num, w_num = mrope_section[0], mrope_section[1], mrope_section[2]
-            mrope_dim = self.get_mrope_interleaved_id_list(
-                t_num, h_num, w_num, force_last=True
-            )
+            mrope_dim = self.get_mrope_interleaved_id_list(t_num, h_num, w_num, force_last=True)
         else:
-            raise AssertionError(
-                "Cannot support the length of mrope section is not 2 or 3."
-            )
+            raise AssertionError("Cannot support the length of mrope section is not 2 or 3.")
 
         mrope_dim = mrope_dim * 2
         self.mrope_dim = mrope_dim
@@ -90,10 +84,7 @@ class MRotaryEmbeddingInterleaved(MRotaryEmbedding):
         mrope_section_3d = [1] * len(self.mrope_dim)
         mrope_dim = self.mrope_dim
         cos_sin = torch.cat(
-            [
-                m[mrope_dim[i]]
-                for i, m in enumerate(cos_sin.split(mrope_section_3d, dim=-1))
-            ],
+            [m[mrope_dim[i]] for i, m in enumerate(cos_sin.split(mrope_section_3d, dim=-1))],
             dim=-1,
         )
         return cos_sin, torch.arange(cos_sin.shape[0], device=positions.device)
@@ -136,9 +127,7 @@ class MRotaryEmbeddingInterleaved(MRotaryEmbedding):
         return query, key
 
     @staticmethod
-    def get_mrope_interleaved_id_list(
-        a: int, b: int, c: int, force_last: bool = False
-    ) -> list[int]:
+    def get_mrope_interleaved_id_list(a: int, b: int, c: int, force_last: bool = False) -> list[int]:
         """
         Generate an interleaved list of indices for multi-modal rotary embedding.
 

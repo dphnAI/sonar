@@ -54,12 +54,7 @@ def _tilelang_hc_prenorm_gemm(
             2,
         )
         return
-    if (
-        n_splits == 1
-        and use_default_config
-        and x.shape[0] < 128
-        and x.shape[1] % 1024 == 0
-    ):
+    if n_splits == 1 and use_default_config and x.shape[0] < 128 and x.shape[1] % 1024 == 0:
         hc_prenorm_gemm_tilelang(
             x,
             fn,
@@ -173,22 +168,12 @@ def mhc_pre_tilelang(
     else:
         n_splits = 1
 
-    post_mix = torch.empty(
-        num_tokens, hc_mult, dtype=torch.float32, device=residual.device
-    )
-    comb_mix = torch.empty(
-        num_tokens, hc_mult2, dtype=torch.float32, device=residual.device
-    )
-    layer_input = torch.empty(
-        num_tokens, hidden_size, dtype=torch.bfloat16, device=residual.device
-    )
+    post_mix = torch.empty(num_tokens, hc_mult, dtype=torch.float32, device=residual.device)
+    comb_mix = torch.empty(num_tokens, hc_mult2, dtype=torch.float32, device=residual.device)
+    layer_input = torch.empty(num_tokens, hidden_size, dtype=torch.bfloat16, device=residual.device)
 
-    gemm_out_mul = torch.empty(
-        n_splits, num_tokens, hc_mult3, dtype=torch.float32, device=residual.device
-    )
-    gemm_out_sqrsum = torch.empty(
-        n_splits, num_tokens, dtype=torch.float32, device=residual.device
-    )
+    gemm_out_mul = torch.empty(n_splits, num_tokens, hc_mult3, dtype=torch.float32, device=residual.device)
+    gemm_out_sqrsum = torch.empty(n_splits, num_tokens, dtype=torch.float32, device=residual.device)
 
     residual_2d = residual_flat.view(num_tokens, hc_mult * hidden_size)
     if use_deep_gemm:
@@ -418,9 +403,7 @@ def mhc_fused_post_pre_tilelang(
             # these number are from deepgemm kernel impl
             block_k = 64
             block_m = 64
-            n_splits = compute_num_split(
-                block_k, hc_hidden_size, cdiv(num_tokens, block_m)
-            )
+            n_splits = compute_num_split(block_k, hc_hidden_size, cdiv(num_tokens, block_m))
         else:
             n_splits = 1
 
@@ -620,9 +603,7 @@ def hc_head_fused_kernel_tilelang(
 ) -> torch.Tensor:
     """Apply the fused hc_head kernel and return the (T, H) bf16 result."""
     num_tokens, hc_mult, hidden_size = hs_flat.shape
-    out = torch.empty(
-        num_tokens, hidden_size, dtype=torch.bfloat16, device=hs_flat.device
-    )
+    out = torch.empty(num_tokens, hidden_size, dtype=torch.bfloat16, device=hs_flat.device)
     if num_tokens == 0:
         return out
     from aphrodite.model_executor.kernels.mhc.tilelang_kernels import hc_head_fuse_tilelang
@@ -650,9 +631,7 @@ def _hc_head_fused_kernel_tilelang_fake(
     hc_eps: float,
 ) -> torch.Tensor:
     num_tokens, _, hidden_size = hs_flat.shape
-    return torch.empty(
-        num_tokens, hidden_size, dtype=torch.bfloat16, device=hs_flat.device
-    )
+    return torch.empty(num_tokens, hidden_size, dtype=torch.bfloat16, device=hs_flat.device)
 
 
 direct_register_custom_op(

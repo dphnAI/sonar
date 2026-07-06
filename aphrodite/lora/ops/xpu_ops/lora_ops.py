@@ -13,9 +13,7 @@ def _bgmv_shrink_impl(
     lora_indices_tensor: torch.Tensor,
     scaling: float,
 ) -> None:
-    torch.ops._xpu_C.bgmv_shrink(
-        output_tensor, inputs, lora_a_weights, lora_indices_tensor, scaling
-    )
+    torch.ops._xpu_C.bgmv_shrink(output_tensor, inputs, lora_a_weights, lora_indices_tensor, scaling)
 
 
 def _bgmv_expand_impl(
@@ -146,9 +144,7 @@ def bgmv_shrink(
     lora_indices_tensor: torch.Tensor,
     scaling: float = 1.0,
 ) -> None:
-    torch.ops.aphrodite.xpu_bgmv_shrink(
-        inputs, lora_a_weights, output_tensor, lora_indices_tensor, scaling
-    )
+    torch.ops.aphrodite.xpu_bgmv_shrink(inputs, lora_a_weights, output_tensor, lora_indices_tensor, scaling)
 
 
 def bgmv_expand(
@@ -158,9 +154,7 @@ def bgmv_expand(
     lora_indices_tensor: torch.Tensor,
     add_inputs: bool = True,
 ) -> None:
-    torch.ops.aphrodite.xpu_bgmv_expand(
-        inputs, lora_b_weights, output_tensor, lora_indices_tensor, add_inputs
-    )
+    torch.ops.aphrodite.xpu_bgmv_expand(inputs, lora_b_weights, output_tensor, lora_indices_tensor, add_inputs)
 
 
 def bgmv_expand_slice(

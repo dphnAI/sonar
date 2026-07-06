@@ -99,10 +99,7 @@ def use_memory_pool_with_allocator(
 ) -> Iterator[tuple[Any, Any]]:
     mem_mod = _xpu_memory_module()
     if not _supports_xpu_mem_pool(mem_mod):
-        raise RuntimeError(
-            "torch.xpu.memory MemPool APIs are not available "
-            "(need MemPool and use_mem_pool)."
-        )
+        raise RuntimeError("torch.xpu.memory MemPool APIs are not available (need MemPool and use_mem_pool).")
     new_alloc = get_pluggable_allocator(python_malloc_fn, python_free_func)
     mem_pool = mem_mod.MemPool(new_alloc._allocator)
     with mem_mod.use_mem_pool(mem_pool):

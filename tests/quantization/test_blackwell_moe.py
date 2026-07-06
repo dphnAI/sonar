@@ -7,13 +7,11 @@ from typing import Any
 
 import pytest
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.platforms import current_platform
+from tests.utils import RemoteOpenAIServer
 
 if not current_platform.is_device_capability_family(100):
-    pytest.skip(
-        "This test only runs on Blackwell GPUs (SM10x).", allow_module_level=True
-    )
+    pytest.skip("This test only runs on Blackwell GPUs (SM10x).", allow_module_level=True)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -135,12 +133,7 @@ def test_deepseek_fp8_block_moe_aphrodite_triton(monkeypatch: pytest.MonkeyPatch
     )
 
 
-@pytest.mark.skip(
-    reason=(
-        "Known issue: lack of kernel support. "
-        "Expected failure: assert self.block_quant is None"
-    )
-)
+@pytest.mark.skip(reason=("Known issue: lack of kernel support. Expected failure: assert self.block_quant is None"))
 def test_deepseek_fp8_block_moe_flashinfer_cutlass(monkeypatch: pytest.MonkeyPatch):
     can_initialize(
         "deepseek-ai/DeepSeek-V3.1",

@@ -190,10 +190,7 @@ def _parse_score_content(
 
     mm_placeholder_storage = mm_parser.mm_placeholder_storage()
 
-    if (
-        len(mm_placeholder_storage) != 1
-        or len(next(iter(mm_placeholder_storage.values()))) != 1
-    ):
+    if len(mm_placeholder_storage) != 1 or len(next(iter(mm_placeholder_storage.values()))) != 1:
         raise ValueError("Only one multi-modal item is supported")
 
     return next(iter(mm_placeholder_storage.values()))[0]
@@ -251,10 +248,7 @@ def compress_token_type_ids(token_type_ids: list[int]) -> int:
     if not found.
     """
     first_one = len(token_type_ids)
-    err_msg = (
-        "Token type ids are expected to be a sequence"
-        " of zeros followed by a sequence of ones"
-    )
+    err_msg = "Token type ids are expected to be a sequence of zeros followed by a sequence of ones"
     for i, type_id in enumerate(token_type_ids):
         if type_id == 0 and first_one < i:
             raise ValueError(err_msg)

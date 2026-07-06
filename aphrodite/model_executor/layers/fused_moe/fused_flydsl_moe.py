@@ -53,15 +53,13 @@ def moe_sorting(
 ):
     topk_ids_i32 = topk_ids.to(torch.int32)
     topk_w_f32 = topk_weights.to(torch.float32)
-    sorted_ids, sorted_w, sorted_expert_ids, num_valid_ids, _moe_buf = (
-        aiter_moe_sorting(
-            topk_ids_i32,
-            topk_w_f32,
-            num_experts,
-            model_dim,
-            torch.float16,
-            block_m,
-        )
+    sorted_ids, sorted_w, sorted_expert_ids, num_valid_ids, _moe_buf = aiter_moe_sorting(
+        topk_ids_i32,
+        topk_w_f32,
+        num_experts,
+        model_dim,
+        torch.float16,
+        block_m,
     )
     if num_valid_ids.numel() > 1:
         num_valid_ids = num_valid_ids[:1].contiguous()
@@ -84,9 +82,7 @@ def build_routing_buffers(
         block_m=tile_m,
     )
     if res is None:
-        raise RuntimeError(
-            "aiter moe_sorting failed/unavailable; cannot build routing buffers."
-        )
+        raise RuntimeError("aiter moe_sorting failed/unavailable; cannot build routing buffers.")
     sorted_token_ids, sorted_weights, sorted_expert_ids, num_valid_ids = res
 
     sorted_token_ids = sorted_token_ids.contiguous()
@@ -107,13 +103,8 @@ def build_routing_buffers(
 @functools.lru_cache
 def try_get_optimal_config(num_experts, inter_dim):
     device_name = current_platform.get_device_name().replace(" ", "_")
-    json_file_name = (
-        f"E={num_experts},N={inter_dim},device_name={device_name},"
-        "dtype=int4_w4a16,backend=flydsl.json"
-    )
-    config_file_path = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), "configs", json_file_name
-    )
+    json_file_name = f"E={num_experts},N={inter_dim},device_name={device_name},dtype=int4_w4a16,backend=flydsl.json"
+    config_file_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "configs", json_file_name)
     if os.path.exists(config_file_path):
         with open(config_file_path) as f:
             logger.info_once(
@@ -125,8 +116,7 @@ def try_get_optimal_config(num_experts, inter_dim):
             return {int(key): val for key, val in tuned_config.items()}
 
     logger.warning_once(
-        "Using default FlyDSL MoE config. Performance might be sub-optimal! "
-        "Config file not found at %s",
+        "Using default FlyDSL MoE config. Performance might be sub-optimal! Config file not found at %s",
         config_file_path,
         scope="local",
     )
@@ -168,9 +158,7 @@ def fused_flydsl_moe_impl(
         tuned_config["tile_k2"] = tile_k2
     else:
         tuned_config = try_get_optimal_config(num_experts, inter_dim)
-        tuned_config = tuned_config[
-            min(tuned_config.keys(), key=lambda x: abs(x - tokens))
-        ]
+        tuned_config = tuned_config[min(tuned_config.keys(), key=lambda x: abs(x - tokens))]
     out_torch_dtype = torch.bfloat16 if out_dtype == "bf16" else torch.float16
 
     tile_m = tuned_config["tile_m"]
@@ -197,9 +185,7 @@ def fused_flydsl_moe_impl(
 
     scale_x_1d = torch.empty((0,), device=device, dtype=torch.float32)
     sorted_weights_1d = sorted_weights.view(-1).contiguous()
-    out_stage1 = torch.empty(
-        (tokens, topk, inter_dim), device=device, dtype=out_torch_dtype
-    )
+    out_stage1 = torch.empty((tokens, topk, inter_dim), device=device, dtype=out_torch_dtype)
 
     stream = torch.cuda.current_stream()
 

@@ -20,10 +20,7 @@ from aphrodite.platforms import current_platform
 from aphrodite.utils.import_utils import has_helion
 
 if not has_helion():
-    raise ImportError(
-        "Helion kernel requires helion to be installed. "
-        "Install it with: pip install helion"
-    )
+    raise ImportError("Helion kernel requires helion to be installed. Install it with: pip install helion")
 
 import helion
 import helion.language as hl
@@ -45,9 +42,7 @@ def generate_inputs() -> dict[CaseKey, tuple[Any, ...]]:
     scale_dtype: torch.dtype = torch.float32
     inputs = {}
 
-    for hidden_size, group_size, num_tokens in product(
-        hidden_size_list, group_size_list, num_tokens_list
-    ):
+    for hidden_size, group_size, num_tokens in product(hidden_size_list, group_size_list, num_tokens_list):
         input = torch.randn(num_tokens, hidden_size, device="cuda", dtype=in_dtype)
         result = torch.empty(input.shape, device=input.device, dtype=out_dtype)
         scale = torch.empty(
@@ -119,9 +114,7 @@ def pick_config(args: tuple[Any, ...], config_keys: list[CaseKey]) -> CaseKey | 
     for key in config_keys:
         if key.is_default():
             continue
-        configs.setdefault(key["hidden_size"], {}).setdefault(
-            key["group_size"], []
-        ).append(key["num_tokens"])
+        configs.setdefault(key["hidden_size"], {}).setdefault(key["group_size"], []).append(key["num_tokens"])
 
     if not configs:
         return None
@@ -129,9 +122,7 @@ def pick_config(args: tuple[Any, ...], config_keys: list[CaseKey]) -> CaseKey | 
     best_hidden_size = min(configs, key=lambda s: abs(s - hidden_size))
     best_group_size = min(configs[best_hidden_size], key=lambda s: abs(s - group_size))
     available_num_tokens = sorted(configs[best_hidden_size][best_group_size])
-    best_num_tokens = next(
-        (n for n in available_num_tokens if n >= num_tokens), available_num_tokens[-1]
-    )
+    best_num_tokens = next((n for n in available_num_tokens if n >= num_tokens), available_num_tokens[-1])
 
     result = CaseKey(
         {
@@ -256,18 +247,14 @@ def rms_norm_per_block_quant(
 
         m_idx = tile_m.begin + hl.arange(tile_m.block_size)
         m_blk = m_idx[:, None, None]
-        for tile_gn, tile_n in hl.tile(
-            [groups_per_row, group_size], block_size=[None, group_size]
-        ):
+        for tile_gn, tile_n in hl.tile([groups_per_row, group_size], block_size=[None, group_size]):
             gn_idx = tile_gn.index
             n_offset = tile_n.index
             n_idx = gn_idx[:, None] * group_size + n_offset[None, :]
             n_blk = n_idx[None, :, :]
             mask = (gn_idx < groups_per_row)[None, :, None]
 
-            x_blk = hl.load(input, [m_blk, n_blk], extra_mask=mask).to(
-                dtype=torch.float32
-            )
+            x_blk = hl.load(input, [m_blk, n_blk], extra_mask=mask).to(dtype=torch.float32)
             if residual is not None:
                 r_blk = hl.load(residual, [m_blk, n_blk], extra_mask=mask)
                 x_blk = x_blk + r_blk
@@ -294,6 +281,4 @@ def rms_norm_per_block_quant(
             hl.store(result, [m_blk, n_blk], y_blk, extra_mask=mask)
 
             if residual is not None:
-                hl.store(
-                    residual, [m_blk, n_blk], x_blk.to(residual.dtype), extra_mask=mask
-                )
+                hl.store(residual, [m_blk, n_blk], x_blk.to(residual.dtype), extra_mask=mask)

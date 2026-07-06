@@ -252,9 +252,7 @@ def test_resolve_chat_template_kwargs(sample_json_schema, model, expected_kwargs
         tools=tools,
         model_config=model_config,
     )
-    with pytest.raises(
-        ValueError, match="Found unexpected chat template kwargs from request"
-    ):
+    with pytest.raises(ValueError, match="Found unexpected chat template kwargs from request"):
         # should raise error if `chat_template_kwargs` contains
         # `chat_template` or `tokenize`
         resolve_chat_template_kwargs(
@@ -275,9 +273,9 @@ def test_resolve_chat_template_kwargs(sample_json_schema, model, expected_kwargs
     # to receive standard HuggingFace parameters instead of declaring them explicitly
     hf_base_params = _get_hf_base_chat_template_params()
     # Verify common HF parameters are in the base class
-    assert {"add_generation_prompt", "tools", "continue_final_message"}.issubset(
-        hf_base_params
-    ), f"Expected HF base params not found in {hf_base_params}"
+    assert {"add_generation_prompt", "tools", "continue_final_message"}.issubset(hf_base_params), (
+        f"Expected HF base params not found in {hf_base_params}"
+    )
 
     # Test with a mock tokenizer that uses **kwargs (like Kimi K2)
     class MockTokenizerWithKwargs:
@@ -291,9 +289,7 @@ def test_resolve_chat_template_kwargs(sample_json_schema, model, expected_kwargs
         "continue_final_message": False,
         "unknown_param": "should_be_filtered",
     }
-    resolved_mock = resolve_chat_template_kwargs(
-        mock_tokenizer, chat_template, mock_kwargs, raise_on_unexpected=False
-    )
+    resolved_mock = resolve_chat_template_kwargs(mock_tokenizer, chat_template, mock_kwargs, raise_on_unexpected=False)
     # HF base params should pass through even with **kwargs tokenizer
     assert "add_generation_prompt" in resolved_mock
     assert "tools" in resolved_mock
@@ -538,9 +534,7 @@ def test_resolve_content_format_examples(template_path, expected_format):
     "model,template,add_generation_prompt,continue_final_message,expected_output",
     MODEL_TEMPLATE_GENERATION_OUTPUT,
 )
-def test_get_gen_prompt(
-    model, template, add_generation_prompt, continue_final_message, expected_output
-):
+def test_get_gen_prompt(model, template, add_generation_prompt, continue_final_message, expected_output):
     model_info = HF_EXAMPLE_MODELS.find_hf_info(model)
     model_info.check_available_online(on_fail="skip")
 
@@ -568,9 +562,7 @@ def test_get_gen_prompt(
     # Create a mock request object using keyword arguments
     mock_request = ChatCompletionRequest(
         model=model,
-        messages=TEST_MESSAGES + [ASSISTANT_MESSAGE_TO_CONTINUE]
-        if continue_final_message
-        else TEST_MESSAGES,
+        messages=TEST_MESSAGES + [ASSISTANT_MESSAGE_TO_CONTINUE] if continue_final_message else TEST_MESSAGES,
         add_generation_prompt=add_generation_prompt,
         continue_final_message=continue_final_message,
     )
@@ -589,8 +581,7 @@ def test_get_gen_prompt(
 
     # Test assertion
     assert result == expected_output, (
-        f"The generated prompt does not match the expected output for "
-        f"model {model} and template {template}"
+        f"The generated prompt does not match the expected output for model {model} and template {template}"
     )
 
 
@@ -733,9 +724,7 @@ class TestSafeApplyChatTemplateDeveloperRole:
         assert "You are a helpful assistant." in result
         assert "<|im_start|>developer" not in result
 
-    def test_developer_preserved_when_template_supports_it(
-        self, model_config, tokenizer
-    ):
+    def test_developer_preserved_when_template_supports_it(self, model_config, tokenizer):
         conversation = [
             {"role": "developer", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Hello"},
@@ -783,9 +772,7 @@ class TestSafeApplyChatTemplateDeveloperRole:
         assert "<|im_start|>system" in result
         assert "You are helpful." in result
 
-    def test_developer_at_non_first_position_consolidated(
-        self, model_config, tokenizer
-    ):
+    def test_developer_at_non_first_position_consolidated(self, model_config, tokenizer):
         conversation = [
             {"role": "system", "content": "You are helpful."},
             {"role": "user", "content": "Hello"},

@@ -146,7 +146,8 @@ void silu_and_mul_nvfp4_quant_sm1xxa(
 
   int num_packed_cols = int(n / CVT_FP4_ELTS_PER_THREAD);
 
-  int grid_y = aphrodite::div_round_up(num_packed_cols, static_cast<int>(block.x));
+  int grid_y =
+      aphrodite::div_round_up(num_packed_cols, static_cast<int>(block.x));
   int grid_x = std::min(
       int(m), std::max(1, (multiProcessorCount * numBlocksPerSM) / grid_y));
   dim3 grid(grid_x, grid_y);
@@ -155,9 +156,10 @@ void silu_and_mul_nvfp4_quant_sm1xxa(
       input.scalar_type(), "silu_and_mul_nvfp4_quant_kernel", [&] {
         using cuda_type = aphrodite::CUDATypeConverter<scalar_t>::Type;
         auto input_ptr = static_cast<cuda_type const*>(input.data_ptr());
-        aphrodite::silu_mul_cvt_fp16_to_fp4<cuda_type><<<grid, block, 0, stream>>>(
-            m, n, num_packed_cols, input_ptr, input_sf_ptr,
-            reinterpret_cast<uint32_t*>(output_ptr),
-            reinterpret_cast<uint32_t*>(sf_out));
+        aphrodite::silu_mul_cvt_fp16_to_fp4<cuda_type>
+            <<<grid, block, 0, stream>>>(
+                m, n, num_packed_cols, input_ptr, input_sf_ptr,
+                reinterpret_cast<uint32_t*>(output_ptr),
+                reinterpret_cast<uint32_t*>(sf_out));
       });
 }

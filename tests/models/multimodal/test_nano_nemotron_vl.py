@@ -108,9 +108,7 @@ def test_nano_nemotron_vl_loads_vision_weights_without_sound_encoder():
     )
 
     assert language_model.loaded_weights == [("layers.0.weight", language_weight)]
-    assert vision_model.loaded_weights == [
-        ("radio_model.encoder.weight", vision_weight)
-    ]
+    assert vision_model.loaded_weights == [("radio_model.encoder.weight", vision_weight)]
 
 
 def test_nano_nemotron_vl_requires_sound_encoder_for_sound_weights():

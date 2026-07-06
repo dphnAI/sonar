@@ -50,9 +50,7 @@ def test_chat_flag_forwarded_to_tok_params():
     on = ChatCompletionRequest(model="m", messages=messages, return_token_offsets=True)
     assert on.build_tok_params(cfg).return_token_offsets is True
 
-    null = ChatCompletionRequest(
-        model="m", messages=messages, return_token_offsets=None
-    )
+    null = ChatCompletionRequest(model="m", messages=messages, return_token_offsets=None)
     assert null.build_tok_params(cfg).return_token_offsets is False
 
 
@@ -74,7 +72,5 @@ def test_generate_request_token_offsets_survive_json_round_trip():
     assert dumped["token_offsets"] == [(0, 1), (1, 3)]
     # Re-validate from the dumped dict (sampling_params doesn't round-trip
     # cleanly via dump, so re-inject a fresh instance).
-    again = GenerateRequest.model_validate(
-        {**dumped, "sampling_params": SamplingParams()}
-    )
+    again = GenerateRequest.model_validate({**dumped, "sampling_params": SamplingParams()})
     assert again.token_offsets == [(0, 1), (1, 3)]

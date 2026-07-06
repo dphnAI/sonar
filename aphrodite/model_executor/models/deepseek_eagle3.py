@@ -105,9 +105,7 @@ class DeepseekV2Eagle3DecoderLayer(nn.Module):
         )
 
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.hidden_norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -116,16 +114,12 @@ class DeepseekV2Eagle3DecoderLayer(nn.Module):
         else:
             self._residual_norm = self._norm_after_residual
 
-    def _norm_before_residual(
-        self, hidden_states: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def _norm_before_residual(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         hidden_states = self.hidden_norm(hidden_states)
         residual = hidden_states
         return hidden_states, residual
 
-    def _norm_after_residual(
-        self, hidden_states: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def _norm_after_residual(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         residual = hidden_states
         hidden_states = self.hidden_norm(hidden_states)
         return hidden_states, residual
@@ -205,9 +199,7 @@ class DeepseekV2Eagle3Model(nn.Module):
             num_aux_hidden_states = len(layer_ids) if layer_ids else 3
         self.num_aux_hidden_states = num_aux_hidden_states
 
-        target_hidden_size = getattr(
-            self.config, "target_hidden_size", self.config.hidden_size
-        )
+        target_hidden_size = getattr(self.config, "target_hidden_size", self.config.hidden_size)
         fc_input_size = target_hidden_size * num_aux_hidden_states
 
         self.fc = ReplicatedLinear(
@@ -223,10 +215,7 @@ class DeepseekV2Eagle3Model(nn.Module):
         use_fc_norm = getattr(self.config, "fc_norm", False)
         if use_fc_norm:
             self.fc_norm = nn.ModuleList(
-                [
-                    RMSNorm(target_hidden_size, eps=self.config.rms_norm_eps)
-                    for _ in range(self.num_aux_hidden_states)
-                ]
+                [RMSNorm(target_hidden_size, eps=self.config.rms_norm_eps) for _ in range(self.num_aux_hidden_states)]
             )
         else:
             self.fc_norm = None
@@ -295,9 +284,7 @@ class Eagle3DeepseekV2ForCausalLM(LocalArgmaxMixin, DeepseekV2ForCausalLM):
             base_vocab_size = getattr(self.config, "vocab_size", None)
             self.config.draft_vocab_size = base_vocab_size
 
-        target_layer_num = aphrodite_config.model_config.get_num_layers(
-            aphrodite_config.parallel_config
-        )
+        target_layer_num = aphrodite_config.model_config.get_num_layers(aphrodite_config.parallel_config)
 
         # Store target layer count in draft config
         self.config.target_layer_count = target_layer_num
@@ -314,9 +301,7 @@ class Eagle3DeepseekV2ForCausalLM(LocalArgmaxMixin, DeepseekV2ForCausalLM):
             self.config.hidden_size,
             prefix=maybe_prefix(prefix, "lm_head"),
         )
-        self.logits_processor = LogitsProcessor(
-            self.config.draft_vocab_size, scale=logit_scale
-        )
+        self.logits_processor = LogitsProcessor(self.config.draft_vocab_size, scale=logit_scale)
         self.draft_id_to_target_id = nn.Parameter(
             torch.zeros(self.config.draft_vocab_size, dtype=torch.long),
             requires_grad=False,
@@ -346,8 +331,7 @@ class Eagle3DeepseekV2ForCausalLM(LocalArgmaxMixin, DeepseekV2ForCausalLM):
         logits = self.logits_processor(self.lm_head, hidden_states)
         if self.draft_id_to_target_id is None:
             assert logits.shape[1] == self.config.vocab_size, (
-                "Expected logits to have shape "
-                f"(*, {self.config.vocab_size}), but got {logits.shape}"
+                f"Expected logits to have shape (*, {self.config.vocab_size}), but got {logits.shape}"
             )
             return logits
 

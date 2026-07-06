@@ -11,7 +11,6 @@ import torch.distributed
 from torch.distributed import ProcessGroup
 
 import aphrodite.envs as envs
-from tests.kernels.moe.utils import check_accuracy, make_dummy_moe_config
 from aphrodite import _custom_ops as ops
 from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.activation import SiluAndMul
@@ -31,6 +30,7 @@ from aphrodite.platforms import current_platform
 from aphrodite.utils.import_utils import has_deep_ep
 from aphrodite.utils.torch_utils import set_random_seed
 from aphrodite.v1.worker.workspace import init_workspace_manager
+from tests.kernels.moe.utils import check_accuracy, make_dummy_moe_config
 
 from ...utils import multi_gpu_test
 from .parallel_utils import ProcessGroupInfo, parallel_launch
@@ -53,9 +53,7 @@ requires_deep_ep = pytest.mark.skipif(
 MAX_TOKENS_PER_RANK = 64
 
 
-def make_weights(
-    e, n, k, dtype
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+def make_weights(e, n, k, dtype) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Return weights w1, w2, w1_scale, w2_scale
     """
@@ -76,12 +74,8 @@ def make_weights(
     w1_scale = torch.empty((e, n_b_scales, 1), device="cuda", dtype=torch.float32)
     w2_scale = torch.empty((e, k_b_scales, 1), device="cuda", dtype=torch.float32)
     for expert in range(e):
-        w1_q[expert], w1_scale[expert] = ops.scaled_fp8_quant(
-            w1[expert], use_per_token_if_dynamic=True
-        )
-        w2_q[expert], w2_scale[expert] = ops.scaled_fp8_quant(
-            w2[expert], use_per_token_if_dynamic=True
-        )
+        w1_q[expert], w1_scale[expert] = ops.scaled_fp8_quant(w1[expert], use_per_token_if_dynamic=True)
+        w2_q[expert], w2_scale[expert] = ops.scaled_fp8_quant(w2[expert], use_per_token_if_dynamic=True)
     return w1_q, w2_q, w1_scale, w2_scale
 
 
@@ -107,19 +101,13 @@ class TestTensors:
     def make(config: TestConfig, low_latency_mode: bool) -> "TestTensors":
         # TODO (varun) - check that float16 works ?
         assert config.dtype in [torch.bfloat16, current_platform.fp8_dtype()]
-        token_dtype = (
-            torch.bfloat16
-            if config.dtype == current_platform.fp8_dtype()
-            else config.dtype
-        )
-        rank_tokens = (
-            torch.randn((config.m, config.k), device="cuda", dtype=token_dtype) / 10
-        )
+        token_dtype = torch.bfloat16 if config.dtype == current_platform.fp8_dtype() else config.dtype
+        rank_tokens = torch.randn((config.m, config.k), device="cuda", dtype=token_dtype) / 10
         rank_token_scales = None
 
-        topk = torch.randint(
-            low=0, high=config.num_experts, size=(config.m, config.topk), device="cuda"
-        ).to(dtype=torch.int64)
+        topk = torch.randint(low=0, high=config.num_experts, size=(config.m, config.topk), device="cuda").to(
+            dtype=torch.int64
+        )
         topk_weights = torch.randn(topk.shape, dtype=torch.float32, device="cuda")
         return TestTensors(
             rank_tokens=rank_tokens,
@@ -153,9 +141,7 @@ def make_modular_kernel(
             use_fp8_dispatch=use_fp8_dispatch,
         )
     else:
-        assert not use_fp8_dispatch, (
-            "FP8 Dispatch is valid only for low-latency kernels"
-        )
+        assert not use_fp8_dispatch, "FP8 Dispatch is valid only for low-latency kernels"
         ht_args = DeepEPHTArgs(num_local_experts=num_local_experts)
 
     a2a: DeepEPHTPrepareAndFinalize | DeepEPLLPrepareAndFinalize = make_deepep_a2a(
@@ -281,9 +267,7 @@ def deep_ep_moe_impl(
         if not skip_result_store:
             out_hidden_states[chunk_start:chunk_end, :].copy_(out, non_blocking=True)
 
-    max_num_tokens_per_dp = (
-        MAX_TOKENS_PER_RANK if low_latency_mode else total_num_tokens
-    )
+    max_num_tokens_per_dp = MAX_TOKENS_PER_RANK if low_latency_mode else total_num_tokens
 
     for chunk_start_ in range(0, total_num_tokens, max_num_tokens_per_dp):
         chunk_start = chunk_start_
@@ -292,9 +276,7 @@ def deep_ep_moe_impl(
         chunk_start = min(chunk_start, total_num_tokens - 1)
         chunk_end = min(chunk_end, total_num_tokens)
 
-        process_chunk(
-            chunk_start, chunk_end, skip_result_store=chunk_start_ >= total_num_tokens
-        )
+        process_chunk(chunk_start, chunk_end, skip_result_store=chunk_start_ >= total_num_tokens)
 
     return out_hidden_states
 
@@ -320,11 +302,7 @@ def torch_moe_impl(
         assert not per_act_token_quant
         a = test_tensors.rank_tokens
         aq, aq_scale = per_token_group_quant_fp8(a, 128, use_ue8m0=False)
-        a = (
-            (aq.view(-1, 128).to(torch.float32) * aq_scale.view(-1, 1))
-            .view(a.shape)
-            .to(a.dtype)
-        )
+        a = (aq.view(-1, 128).to(torch.float32) * aq_scale.view(-1, 1)).view(a.shape).to(a.dtype)
 
     is_quantized = w1.dtype == current_platform.fp8_dtype()
     a_dtype = a.dtype
@@ -345,9 +323,7 @@ def torch_moe_impl(
             e_w = topk_weights[i][j]
             w1_e = w1[e]
             w2_e = w2[e]
-            o_i += (
-                SiluAndMul()(a_i @ w1_e.transpose(0, 1)) @ w2_e.transpose(0, 1)
-            ) * e_w
+            o_i += (SiluAndMul()(a_i @ w1_e.transpose(0, 1)) @ w2_e.transpose(0, 1)) * e_w
 
     if is_quantized:
         out = out.to(dtype=a_dtype)
@@ -396,9 +372,7 @@ def _deep_ep_moe(
     init_workspace_manager(device)
 
     if not low_latency_mode:
-        assert not use_fp8_dispatch, (
-            "FP8 dispatch interface is available only in low-latency mode"
-        )
+        assert not use_fp8_dispatch, "FP8 dispatch interface is available only in low-latency mode"
 
     is_quantized = w1.dtype == current_platform.fp8_dtype()
     device_idx = torch.accelerator.current_device_index()

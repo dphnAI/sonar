@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Model-specific compatibility adapter for MetalModelRunner."""
 
 from __future__ import annotations
@@ -26,22 +27,16 @@ class ModelAdapter(Protocol):
         view of the model before constructing input processors, etc.
         """
 
-    def resolve_max_head_dim(
-        self, args: dict[str, Any], head_dim: int | None
-    ) -> int | None:
+    def resolve_max_head_dim(self, args: dict[str, Any], head_dim: int | None) -> int | None:
         """Resolve the head dimension used for cache sizing."""
 
-    def require_uniform_kv_heads(
-        self, args: dict[str, Any], num_kv_heads: int | None
-    ) -> None:
+    def require_uniform_kv_heads(self, args: dict[str, Any], num_kv_heads: int | None) -> None:
         """Raise when paged attention cannot support the model's KV layout."""
 
     def text_model(self, model: Any) -> Any:
         """Return the callable model used for text-only execution."""
 
-    def build_yoco_cache_mapping(
-        self, args: dict[str, Any]
-    ) -> tuple[int, dict[int, int]] | None:
+    def build_yoco_cache_mapping(self, args: dict[str, Any]) -> tuple[int, dict[int, int]] | None:
         """Build YOCO layer→cache_idx mapping, or None if not applicable."""
 
     def build_per_layer_kv_shapes(
@@ -54,9 +49,7 @@ class ModelAdapter(Protocol):
     ) -> tuple[list[int], list[int]] | None:
         """Return per-layer ``(kv_heads, head_dim)`` lists, or None for uniform."""
 
-    def build_sliding_window_per_layer(
-        self, args: dict[str, Any], num_layers: int
-    ) -> list[int] | None:
+    def build_sliding_window_per_layer(self, args: dict[str, Any], num_layers: int) -> list[int] | None:
         """Return per-layer sliding window sizes, or None for no enforcement."""
 
 
@@ -105,12 +98,7 @@ class DefaultModelAdapter(ModelAdapter):
             return True
 
         architectures = getattr(hf_config, "architectures", ()) or ()
-        if not any(
-            arch in _TEXT_BACKBONE_OVERRIDE_ARCHITECTURES for arch in architectures
-        ):
-            return False
-
-        return True
+        return any(arch in _TEXT_BACKBONE_OVERRIDE_ARCHITECTURES for arch in architectures)
 
     def should_force_text_backbone(self, hf_config: Any) -> bool:
         """Whether the current serve mode should use the text-only path.
@@ -150,24 +138,19 @@ class DefaultModelAdapter(ModelAdapter):
         multimodal_mode = self._multimodal_mode()
         model_config.multimodal_config = None
         logger.info(
-            "Metal: forcing text-only backbone for model_type=%s "
-            "(multimodal_mode=%s, cleared multimodal_config)",
+            "Metal: forcing text-only backbone for model_type=%s (multimodal_mode=%s, cleared multimodal_config)",
             getattr(hf_config, "model_type", "unknown"),
             multimodal_mode,
         )
 
-    def resolve_max_head_dim(
-        self, args: dict[str, Any], head_dim: int | None
-    ) -> int | None:
+    def resolve_max_head_dim(self, args: dict[str, Any], head_dim: int | None) -> int | None:
         """Handle Gemma4 variable head dims (sliding vs full attention)."""
         global_head_dim = args.get("global_head_dim")
         if global_head_dim and head_dim:
             return max(int(head_dim), int(global_head_dim))
         return head_dim
 
-    def require_uniform_kv_heads(
-        self, args: dict[str, Any], num_kv_heads: int | None
-    ) -> None:
+    def require_uniform_kv_heads(self, args: dict[str, Any], num_kv_heads: int | None) -> None:
         """Reject configs with mismatched KV head counts under the uniform path.
 
         Called from :meth:`aphrodite.metal.v1.cache_policy.ModelCachePolicy.\
@@ -180,11 +163,7 @@ validate_paged_attention_support` only when ``kv_heads_per_layer`` has
         sizing, so fail fast here instead.
         """
         global_kv_heads = args.get("num_global_key_value_heads")
-        if (
-            global_kv_heads
-            and num_kv_heads
-            and int(global_kv_heads) != int(num_kv_heads)
-        ):
+        if global_kv_heads and num_kv_heads and int(global_kv_heads) != int(num_kv_heads):
             raise ValueError(
                 f"Paged attention does not support variable KV head count "
                 f"without per-layer shape support: "
@@ -200,9 +179,7 @@ validate_paged_attention_support` only when ``kv_heads_per_layer`` has
             return model.language_model
         return model
 
-    def build_yoco_cache_mapping(
-        self, args: dict[str, Any]
-    ) -> tuple[int, dict[int, int]] | None:
+    def build_yoco_cache_mapping(self, args: dict[str, Any]) -> tuple[int, dict[int, int]] | None:
         """Build the layer→cache_idx mapping for YOCO KV sharing.
 
         Gemma4's "You Only Cache Once" architecture only caches K/V for
@@ -290,9 +267,7 @@ validate_paged_attention_support` only when ``kv_heads_per_layer`` has
             return None
 
         global_kv_heads = args.get("num_global_key_value_heads")
-        full_kv_heads = (
-            int(global_kv_heads) if global_kv_heads is not None else int(num_kv_heads)
-        )
+        full_kv_heads = int(global_kv_heads) if global_kv_heads is not None else int(num_kv_heads)
         full_head_dim = int(global_head_dim)
         sliding_kv_heads = int(num_kv_heads)
         sliding_head_dim = int(head_dim)
@@ -314,9 +289,7 @@ validate_paged_attention_support` only when ``kv_heads_per_layer`` has
                 )
         return kv_heads_per_layer, head_dim_per_layer
 
-    def build_sliding_window_per_layer(
-        self, args: dict[str, Any], num_layers: int
-    ) -> list[int] | None:
+    def build_sliding_window_per_layer(self, args: dict[str, Any], num_layers: int) -> list[int] | None:
         """Return per-layer sliding window sizes for Gemma4, else None.
 
         Gemma4 sliding-attention layers enforce a local window

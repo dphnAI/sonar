@@ -74,13 +74,9 @@ def make_feature_matrix(csv_file_path: str):
 
     import pandas as pd
 
-    def add_to_results(
-        config: Config, success: Result, results_df: pd.DataFrame | None = None
-    ):
+    def add_to_results(config: Config, success: Result, results_df: pd.DataFrame | None = None):
         config_dict = asdict(config)
-        config_dict["prepare_finalize_type"] = config_dict[
-            "prepare_finalize_type"
-        ].__name__
+        config_dict["prepare_finalize_type"] = config_dict["prepare_finalize_type"].__name__
         config_dict["fused_experts_type"] = config_dict["fused_experts_type"].__name__
         config_dict["per_tensor_act_quant"] = config.is_per_tensor_act_quant
         quant_config_dict = config_dict["quant_config"]
@@ -110,14 +106,10 @@ def make_feature_matrix(csv_file_path: str):
     FE_TYPES = MK_FUSED_EXPERT_TYPES
     Q_TYPES = MK_QUANT_CONFIGS
 
-    combinations = list(
-        product(Ms, Ks, Ns, Es, TOPKs, DTYPEs, PF_TYPES, FE_TYPES, Q_TYPES)
-    )
+    combinations = list(product(Ms, Ks, Ns, Es, TOPKs, DTYPEs, PF_TYPES, FE_TYPES, Q_TYPES))
 
     results_df: pd.DataFrame | None = None
-    for m, k, n, e, topks, dtype, pf_type, experts_type, quant_config in tqdm(
-        combinations
-    ):
+    for m, k, n, e, topks, dtype, pf_type, experts_type, quant_config in tqdm(combinations):
         config = Config(
             Ms=[m],
             K=k,
@@ -179,11 +171,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     csv_path = args.feature_matrix_csv_file_path
-    assert csv_path.endswith("csv"), (
-        f"Need a file path ending with .csv, got {csv_path}"
-    )
-    assert Path(csv_path).parent.is_dir(), (
-        f"Cannot find parent directory for {Path(csv_path).parent}"
-    )
+    assert csv_path.endswith("csv"), f"Need a file path ending with .csv, got {csv_path}"
+    assert Path(csv_path).parent.is_dir(), f"Cannot find parent directory for {Path(csv_path).parent}"
 
     make_feature_matrix(args.feature_matrix_csv_file_path)

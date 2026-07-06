@@ -149,9 +149,7 @@ class Sm100ChunkUWKernel:
         TMEM_ALLOC_BAR = 4
 
         def allocate_tensor(smem, dtype, layout):
-            return smem.allocate_tensor(
-                dtype, layout.outer, byte_alignment=128, swizzle=layout.inner
-            )
+            return smem.allocate_tensor(dtype, layout.outer, byte_alignment=128, swizzle=layout.inner)
 
         smem = cutlass.utils.SmemAllocator()
         sK = allocate_tensor(smem, BFloat16, K_tma.smem_layout)[None, 0, None, None]
@@ -221,9 +219,7 @@ class Sm100ChunkUWKernel:
                 # domain_offset() to shift the pointer first.
                 mbar = tma_mbar + stage_id
                 gK = cute.local_tile(
-                    cute.domain_offset(
-                        (bos, 0), K_tma.tma_tensor[None, k_head_id, None]
-                    ),
+                    cute.domain_offset((bos, 0), K_tma.tma_tensor[None, k_head_id, None]),
                     tiler=(BT, K_dim),
                     coord=(chunk_id, 0),
                 )
@@ -240,9 +236,7 @@ class Sm100ChunkUWKernel:
                     STAGE_SIZE = BT * (K_dim + V_dim) * 2
                     cute.arch.mbarrier_arrive_and_expect_tx(mbar, STAGE_SIZE)
                 simple_tma_copy(K_tma.atom, gK, sK[None, None, stage_id], mbar)
-                simple_tma_copy(
-                    V_tma.atom, gV, sV[None, None, stage_id], mbar, EVICT_FIRST
-                )
+                simple_tma_copy(V_tma.atom, gV, sV[None, None, stage_id], mbar, EVICT_FIRST)
 
                 stage_id = (stage_id + 1) % num_stages
                 if stage_id == 0:
@@ -372,9 +366,7 @@ class Sm100ChunkUWKernel:
             tid_ = tid % 128
             warp_id_ = warp_id % 4
 
-            def store_ab_abg(
-                Ai_f32, s_beta, s_beta_g, warp_id_, lane_id, tile_col, Ab_tmem_base
-            ):
+            def store_ab_abg(Ai_f32, s_beta, s_beta_g, warp_id_, lane_id, tile_col, Ab_tmem_base):
                 # compute Ab and Abg from Ai, then store to tmem
                 beta_col = cute.make_rmem_tensor((2, 2), Float32)
                 beta_g_col = cute.make_rmem_tensor((2, 2), Float32)
@@ -491,9 +483,7 @@ class Sm100ChunkUWKernel:
                     # mode2 is top and bottom 8 rows
                     # mode3 is next 16 columns
                     col_coord = (None, lane_id % 4, None, i)
-                    s_g_cu_view = cute.make_tensor(
-                        s_g_cu[None, stage_id].iterator, (2, 4, 2, BT // 16)
-                    )
+                    s_g_cu_view = cute.make_tensor(s_g_cu[None, stage_id].iterator, (2, 4, 2, BT // 16))
                     g_cu_col = s_g_cu_view[col_coord].load().reshape((2, 1, 2))
 
                     Gamma = cute.math.exp(g_cu_row - g_cu_col, fastmath=True)
@@ -508,9 +498,7 @@ class Sm100ChunkUWKernel:
                     # CuteDSL doesn't generate cvt.bf16x2.f32 here for some reasons
                     packed = cute.make_rmem_tensor(4, Uint32)
                     for j in cutlass.range_constexpr(4):
-                        packed[j] = cvt.fp32x2_to_bf16x2(
-                            A_masked[j * 2], A_masked[j * 2 + 1]
-                        )
+                        packed[j] = cvt.fp32x2_to_bf16x2(A_masked[j * 2], A_masked[j * 2 + 1])
 
                     # store to smem
                     cute.copy(
@@ -547,9 +535,7 @@ class Sm100ChunkUWKernel:
 
                 # construct rmem-backed identity matrix
                 eye = cute.make_rmem_tensor(4, Uint32)
-                eye[0] = Uint32(lane_id % 9 == 0) * Uint32(0x00003F80) + Uint32(
-                    lane_id % 9 == 4
-                ) * Uint32(0x3F800000)
+                eye[0] = Uint32(lane_id % 9 == 0) * Uint32(0x00003F80) + Uint32(lane_id % 9 == 4) * Uint32(0x3F800000)
                 eye[1] = 0
                 eye[2] = 0
                 eye[3] = eye[0]
@@ -665,9 +651,7 @@ class Sm100ChunkUWKernel:
                     acc[None, 0] = mma_bf16(Ai, mma_B[None, 0], zeros_f32)
                     acc[None, 1] = mma_bf16(Ai, mma_B[None, 1], zeros_f32)
 
-                    cute.copy(
-                        ldsm_atom, sA_ldsm[None, (warp_id_, tile_col + 1)], Ai_bf16
-                    )
+                    cute.copy(ldsm_atom, sA_ldsm[None, (warp_id_, tile_col + 1)], Ai_bf16)
                     cute.copy(
                         ldsm_trans_atom,
                         sAi_ldsm[None, (tile_col + 1, tile_col)],
@@ -754,12 +738,8 @@ class Sm100ChunkUWKernel:
             parity = 0
 
             # ((BT, num_global_chunks), V_dim)
-            gU_tiles = cute.logical_divide(
-                U_tma.tma_tensor[None, head_id, None], (BT, None)
-            )
-            gW_tiles = cute.logical_divide(
-                W_tma.tma_tensor[None, head_id, None], (BT, None)
-            )
+            gU_tiles = cute.logical_divide(U_tma.tma_tensor[None, head_id, None], (BT, None))
+            gW_tiles = cute.logical_divide(W_tma.tma_tensor[None, head_id, None], (BT, None))
 
             # sW shape: [BT, (64, K_dim/64)]
             # sW_view shape: [(8, 2), (4, K_dim/64)]
@@ -801,9 +781,7 @@ class Sm100ChunkUWKernel:
                     cute.arch.mbarrier_wait(mma_u_mbar + stage_id, parity)
                 elif warp_id == 1:
                     # don't need to commit
-                    simple_tma_copy(
-                        W_tma.atom, sW, gW_tiles[(None, global_chunk_id), None]
-                    )
+                    simple_tma_copy(W_tma.atom, sW, gW_tiles[(None, global_chunk_id), None])
                 cute.arch.barrier(barrier_id=EPI_BAR, number_of_threads=128)
                 _tcgen05.fence_after_thread_sync()
 
@@ -818,9 +796,7 @@ class Sm100ChunkUWKernel:
                 cute.arch.barrier(barrier_id=EPI_BAR, number_of_threads=128)
                 fence_before_tma_store()
                 if warp_id == 1:
-                    simple_tma_copy(
-                        U_tma.atom, sU, gU_tiles[(None, global_chunk_id), None]
-                    )
+                    simple_tma_copy(U_tma.atom, sU, gU_tiles[(None, global_chunk_id), None])
                     with cute.arch.elect_one():
                         cute.arch.cp_async_bulk_commit_group()
 

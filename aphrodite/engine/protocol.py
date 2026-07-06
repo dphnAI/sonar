@@ -6,7 +6,7 @@ from collections.abc import AsyncGenerator, Iterable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from aphrodite.config import ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig
 from aphrodite.distributed.weight_transfer.base import (
     WeightTransferInitRequest,
     WeightTransferUpdateRequest,
@@ -64,10 +64,7 @@ class EngineClient(ABC):
     @abstractmethod
     def generate(
         self,
-        prompt: EngineCoreRequest
-        | PromptType
-        | EngineInput
-        | AsyncGenerator[StreamingInput, None],
+        prompt: EngineCoreRequest | PromptType | EngineInput | AsyncGenerator[StreamingInput, None],
         sampling_params: SamplingParams,
         request_id: str,
         *,
@@ -154,9 +151,7 @@ class EngineClient(ABC):
         ...
 
     @abstractmethod
-    async def reset_prefix_cache(
-        self, reset_running_requests: bool = False, reset_connector: bool = False
-    ) -> bool:
+    async def reset_prefix_cache(self, reset_running_requests: bool = False, reset_connector: bool = False) -> bool:
         """Reset the prefix cache and optionally any configured connector cache"""
         ...
 
@@ -218,9 +213,7 @@ class EngineClient(ABC):
         """Shutdown the engine with optional timeout."""
         ...
 
-    async def scale_elastic_ep(
-        self, new_data_parallel_size: int, drain_timeout: int = 300
-    ) -> None:
+    async def scale_elastic_ep(self, new_data_parallel_size: int, drain_timeout: int = 300) -> None:
         """Scale the engine"""
         raise NotImplementedError
 
@@ -238,9 +231,7 @@ class EngineClient(ABC):
         """Get supported tasks"""
         raise NotImplementedError
 
-    async def init_weight_transfer_engine(
-        self, init_request: WeightTransferInitRequest
-    ) -> None:
+    async def init_weight_transfer_engine(self, init_request: WeightTransferInitRequest) -> None:
         """Initialize weight transfer for RL training."""
         raise NotImplementedError
 

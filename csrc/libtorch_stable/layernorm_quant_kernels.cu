@@ -231,7 +231,7 @@ void rms_norm_static_fp8_quant(
               dim3 block(block_size);
               APHRODITE_STABLE_DISPATCH_VEC_SIZE(calculated_vec_size, [&] {
                 aphrodite::rms_norm_static_fp8_quant_kernel<scalar_t, fp8_t,
-                                                       vec_size>
+                                                            vec_size>
                     <<<grid, block, 0, stream>>>(
                         out.mutable_data_ptr<fp8_t>(),
                         input.const_data_ptr<scalar_t>(), input_stride,
@@ -243,21 +243,20 @@ void rms_norm_static_fp8_quant(
       });
 }
 
-#define LAUNCH_FUSED_ADD_RMS_NORM(width)                                     \
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                       \
-      input.scalar_type(), "fused_add_rms_norm_kernel_scalar_type", [&] {    \
-        APHRODITE_STABLE_DISPATCH_FP8_TYPES(                                      \
-            out.scalar_type(), "fused_add_rms_norm_kernel_fp8_type", [&] {   \
-              aphrodite::fused_add_rms_norm_static_fp8_quant_kernel<scalar_t,     \
-                                                               width, fp8_t> \
-                  <<<grid, block, 0, stream>>>(                              \
-                      out.mutable_data_ptr<fp8_t>(),                         \
-                      input.mutable_data_ptr<scalar_t>(), input_stride,      \
-                      residual.mutable_data_ptr<scalar_t>(),                 \
-                      weight.const_data_ptr<scalar_t>(),                     \
-                      scale.const_data_ptr<float>(), epsilon, num_tokens,    \
-                      hidden_size);                                          \
-            });                                                              \
+#define LAUNCH_FUSED_ADD_RMS_NORM(width)                                   \
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                \
+      input.scalar_type(), "fused_add_rms_norm_kernel_scalar_type", [&] {  \
+        APHRODITE_STABLE_DISPATCH_FP8_TYPES(                               \
+            out.scalar_type(), "fused_add_rms_norm_kernel_fp8_type", [&] { \
+              aphrodite::fused_add_rms_norm_static_fp8_quant_kernel<       \
+                  scalar_t, width, fp8_t><<<grid, block, 0, stream>>>(     \
+                  out.mutable_data_ptr<fp8_t>(),                           \
+                  input.mutable_data_ptr<scalar_t>(), input_stride,        \
+                  residual.mutable_data_ptr<scalar_t>(),                   \
+                  weight.const_data_ptr<scalar_t>(),                       \
+                  scale.const_data_ptr<float>(), epsilon, num_tokens,      \
+                  hidden_size);                                            \
+            });                                                            \
       });
 void fused_add_rms_norm_static_fp8_quant(
     torch::stable::Tensor& out,       // [..., hidden_size],

@@ -65,8 +65,7 @@ def map_w4a8_int8_backend(runner_backend: MoEBackend) -> W4A8Int8MoeBackend:
     if backend := mapping.get(runner_backend):
         return backend
     raise ValueError(
-        f"moe_backend='{runner_backend}' is not supported for W4A8 Int8 MoE. "
-        f"Expected one of {list(mapping.keys())}."
+        f"moe_backend='{runner_backend}' is not supported for W4A8 Int8 MoE. Expected one of {list(mapping.keys())}."
     )
 
 
@@ -100,31 +99,22 @@ def select_w4a8_int8_moe_backend(
 
     def _make_log_backend(backend: W4A8Int8MoeBackend) -> str:
         available_backend_strs = [b.value for b in AVAILABLE_BACKENDS]
-        return (
-            f"Using {backend.value} W4A8 Int8 MoE backend out "
-            f"of potential backends: {available_backend_strs}."
-        )
+        return f"Using {backend.value} W4A8 Int8 MoE backend out of potential backends: {available_backend_strs}."
 
     def _make_log_unsupported(backend: W4A8Int8MoeBackend, reason: str | None) -> str:
         if reason:
             return (
-                f"W4A8 Int8 MoE backend {backend.value} does not support the "
-                f"deployment configuration since {reason}."
+                f"W4A8 Int8 MoE backend {backend.value} does not support the deployment configuration since {reason}."
             )
         else:
-            return (
-                f"W4A8 Int8 MoE backend '{backend.value}' does not support the "
-                "deployment configuration."
-            )
+            return f"W4A8 Int8 MoE backend '{backend.value}' does not support the deployment configuration."
 
     def _return_or_raise(
         backend: W4A8Int8MoeBackend,
     ) -> tuple[W4A8Int8MoeBackend, type[mk.FusedMoEExperts]]:
         reason = None
         for k_cls in backend_to_kernel_cls(backend):
-            supported, reason = k_cls.is_supported_config(
-                k_cls, config, weight_key, activation_key, activation_format
-            )
+            supported, reason = k_cls.is_supported_config(k_cls, config, weight_key, activation_key, activation_format)
             if supported:
                 logger.info_once(_make_log_backend(backend))
                 return backend, k_cls
@@ -152,9 +142,7 @@ def select_w4a8_int8_moe_backend(
             else:
                 logger.debug_once(_make_log_unsupported(backend, reason))
 
-    raise NotImplementedError(
-        "No W4A8 Int8 MoE backend supports the deployment configuration."
-    )
+    raise NotImplementedError("No W4A8 Int8 MoE backend supports the deployment configuration.")
 
 
 def make_w4a8_int8_moe_quant_config(
@@ -342,10 +330,7 @@ def make_w4a8_int8_moe_kernel(
     # Create Experts.
     # W4A8 Int8 currently only supports monolithic interface
     if not issubclass(experts_cls, mk.FusedMoEExpertsMonolithic):
-        raise ValueError(
-            f"W4A8 Int8 MoE only supports monolithic experts, "
-            f"but got {experts_cls.__name__}"
-        )
+        raise ValueError(f"W4A8 Int8 MoE only supports monolithic experts, but got {experts_cls.__name__}")
 
     experts = experts_cls(
         moe_config=moe_config,

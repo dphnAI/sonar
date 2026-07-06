@@ -9,7 +9,7 @@ from torch import nn
 from transformers import LlamaConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.model_executor.layers.linear import (
     ColumnParallelLinear,
@@ -62,9 +62,7 @@ class MistralMLP(nn.Module):
             prefix=f"{prefix}.down_proj",
         )
         if hidden_act != "silu":
-            raise ValueError(
-                f"Unsupported activation: {hidden_act}. Only silu is supported for now."
-            )
+            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu is supported for now.")
         self.act_fn = SiluAndMul()
 
     def forward(self, x):
@@ -103,24 +101,19 @@ class MistralAttention(LlamaAttention):
             attn_type=attn_type,
         )
 
-        llama_4_scaling_config: dict[str, int | float | str] | None = getattr(
-            config, "llama_4_scaling", None
-        )
+        llama_4_scaling_config: dict[str, int | float | str] | None = getattr(config, "llama_4_scaling", None)
         self.do_llama_4_scaling = llama_4_scaling_config is not None
         if self.do_llama_4_scaling:
             assert llama_4_scaling_config is not None
-            self.llama_4_scaling_original_max_position_embeddings = (
-                llama_4_scaling_config["original_max_position_embeddings"]
-            )
+            self.llama_4_scaling_original_max_position_embeddings = llama_4_scaling_config[
+                "original_max_position_embeddings"
+            ]
             self.llama_4_scaling_beta = llama_4_scaling_config["beta"]
 
     def _get_llama_4_attn_scale(self, positions: torch.Tensor) -> torch.Tensor:
         # Llama4 scaling
         scaling = 1 + self.llama_4_scaling_beta * torch.log(
-            1
-            + torch.floor(
-                positions / self.llama_4_scaling_original_max_position_embeddings
-            )
+            1 + torch.floor(positions / self.llama_4_scaling_original_max_position_embeddings)
         )
         # Broadcast over head_dim
         return scaling.unsqueeze(-1)
@@ -222,9 +215,7 @@ class MistralModel(LlamaModel):
         inputs_embeds: torch.Tensor | None = None,
         t_cond: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors | tuple[torch.Tensor, list[torch.Tensor]]:
-        return super().forward(
-            input_ids, positions, intermediate_tensors, inputs_embeds, t_cond=t_cond
-        )
+        return super().forward(input_ids, positions, intermediate_tensors, inputs_embeds, t_cond=t_cond)
 
 
 class MistralForCausalLM(LlamaForCausalLM):
@@ -272,19 +263,14 @@ class MistralForCausalLM(LlamaForCausalLM):
         prefix: str = "",
         layer_type: type[nn.Module] = MistralDecoderLayer,
     ):
-        return MistralModel(
-            aphrodite_config=aphrodite_config, prefix=prefix, layer_type=layer_type
-        )
+        return MistralModel(aphrodite_config=aphrodite_config, prefix=prefix, layer_type=layer_type)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(
             self,
             skip_prefixes=(["lm_head."] if self.config.tie_word_embeddings else None),
         )
-        return loader.load_weights(
-            self.maybe_remap_mistral(name, loaded_weight)
-            for name, loaded_weight in weights
-        )
+        return loader.load_weights(self.maybe_remap_mistral(name, loaded_weight) for name, loaded_weight in weights)
 
     def maybe_remap_mistral(
         self,
@@ -294,11 +280,7 @@ class MistralForCausalLM(LlamaForCausalLM):
         def permute(w: torch.Tensor, n_heads: int, attn_out: int):
             attn_in = self.config.head_dim * n_heads
 
-            return (
-                w.view(n_heads, attn_in // n_heads // 2, 2, attn_out)
-                .transpose(1, 2)
-                .reshape(attn_in, attn_out)
-            )
+            return w.view(n_heads, attn_in // n_heads // 2, 2, attn_out).transpose(1, 2).reshape(attn_in, attn_out)
 
         mapping = self.mistral_mapping
         modules = name.split(".")
@@ -307,24 +289,12 @@ class MistralForCausalLM(LlamaForCausalLM):
         # If using quantized model in mistral format,
         # quantization scales (qscale_weight) also need to be sliced
         if "wk" in modules and modules[-1] == "weight":
-            loaded_weight = permute(
-                loaded_weight, self.config.num_key_value_heads, self.config.hidden_size
-            )
-        elif (
-            "wk" in modules
-            and modules[-1] == "qscale_weight"
-            and loaded_weight.numel() > 1
-        ):
+            loaded_weight = permute(loaded_weight, self.config.num_key_value_heads, self.config.hidden_size)
+        elif "wk" in modules and modules[-1] == "qscale_weight" and loaded_weight.numel() > 1:
             loaded_weight = permute(loaded_weight, self.config.num_key_value_heads, 1)
         elif "wq" in modules and modules[-1] == "weight":
-            loaded_weight = permute(
-                loaded_weight, self.config.num_attention_heads, self.config.hidden_size
-            )
-        elif (
-            "wq" in modules
-            and modules[-1] == "qscale_weight"
-            and loaded_weight.numel() > 1
-        ):
+            loaded_weight = permute(loaded_weight, self.config.num_attention_heads, self.config.hidden_size)
+        elif "wq" in modules and modules[-1] == "qscale_weight" and loaded_weight.numel() > 1:
             loaded_weight = permute(loaded_weight, self.config.num_attention_heads, 1)
 
         num_modules = len(modules)

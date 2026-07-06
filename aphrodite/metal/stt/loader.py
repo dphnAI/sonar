@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Speech-to-Text model loading."""
 
 from __future__ import annotations
@@ -21,9 +22,7 @@ _SUPPORTED_LOAD_DTYPES = frozenset({mx.float16, mx.float32, mx.bfloat16})
 def load_model(model_path: str | Path, dtype: mx.Dtype = mx.float16):
     """Load an STT model from a local directory or HuggingFace repo."""
     if isinstance(model_path, str) and not model_path.strip():
-        raise ValueError(
-            "model_path must be a non-empty local path or HuggingFace repo ID."
-        )
+        raise ValueError("model_path must be a non-empty local path or HuggingFace repo ID.")
     _validate_load_dtype(dtype)
 
     resolved_model_path = _resolve_model_path(model_path)
@@ -39,9 +38,7 @@ def _validate_load_dtype(dtype: mx.Dtype) -> None:
     """Validate the floating-point dtype used for model loading."""
     if dtype not in _SUPPORTED_LOAD_DTYPES:
         names = ", ".join(sorted(str(d) for d in _SUPPORTED_LOAD_DTYPES))
-        raise TypeError(
-            f"Unsupported STT model dtype: {dtype!r}. Must be one of {names}."
-        )
+        raise TypeError(f"Unsupported STT model dtype: {dtype!r}. Must be one of {names}.")
 
 
 def _read_config(model_path: Path) -> dict:
@@ -76,9 +73,7 @@ def _resolve_model_path(model_path: str | Path) -> Path:
     try:
         from huggingface_hub import snapshot_download
     except ImportError as e:  # pragma: no cover
-        raise ValueError(
-            f"Could not download model {model_path}: huggingface_hub is not installed"
-        ) from e
+        raise ValueError(f"Could not download model {model_path}: huggingface_hub is not installed") from e
 
     try:
         return Path(snapshot_download(repo_id=str(model_path)))

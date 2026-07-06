@@ -188,10 +188,7 @@ def _assert_mm_data_is_vision_chunk_input(
     vision_chunk_data = mm_data.get("vision_chunk")
     assert vision_chunk_data is not None
 
-    assert (
-        isinstance(vision_chunk_data, list)
-        and len(vision_chunk_data) == vision_chunk_count
-    )
+    assert isinstance(vision_chunk_data, list) and len(vision_chunk_data) == vision_chunk_count
 
 
 def _assert_mm_uuids(
@@ -256,9 +253,7 @@ def test_parse_chat_messages_single_image(
         content_format="string",
     )
 
-    assert conversation == [
-        {"role": "user", "content": "<|image_1|>\nWhat's in the image?"}
-    ]
+    assert conversation == [{"role": "user", "content": "<|image_1|>\nWhat's in the image?"}]
     _assert_mm_data_is_image_input(mm_data, 1)
     _assert_mm_uuids(mm_uuids, 1, expected_uuids=[None])
 
@@ -288,9 +283,7 @@ def test_parse_chat_messages_single_image_with_uuid(
         content_format="string",
     )
 
-    assert conversation == [
-        {"role": "user", "content": "<|image_1|>\nWhat's in the image?"}
-    ]
+    assert conversation == [{"role": "user", "content": "<|image_1|>\nWhat's in the image?"}]
     _assert_mm_data_is_image_input(mm_data, 1)
     _assert_mm_uuids(mm_uuids, 1, expected_uuids=[image_uuid])
 
@@ -318,9 +311,7 @@ def test_parse_chat_messages_single_empty_image_with_uuid(
         content_format="string",
     )
 
-    assert conversation == [
-        {"role": "user", "content": "<|image_1|>\nWhat's in the image?"}
-    ]
+    assert conversation == [{"role": "user", "content": "<|image_1|>\nWhat's in the image?"}]
     _assert_mm_data_is_image_input(mm_data, 1, skipped_image_indices=[0])
     _assert_mm_uuids(mm_uuids, 1, expected_uuids=[image_uuid])
 
@@ -351,9 +342,7 @@ def test_parse_chat_messages_single_image_with_bad_uuid_format(
         content_format="string",
     )
 
-    assert conversation == [
-        {"role": "user", "content": "<|image_1|>\nWhat's in the image?"}
-    ]
+    assert conversation == [{"role": "user", "content": "<|image_1|>\nWhat's in the image?"}]
     _assert_mm_data_is_image_input(mm_data, 1)
     _assert_mm_uuids(mm_uuids, 1, expected_uuids=[None])
 
@@ -508,9 +497,7 @@ async def test_parse_chat_messages_single_image_with_uuid_async(
         content_format="string",
     )
 
-    assert conversation == [
-        {"role": "user", "content": "<|image_1|>\nWhat's in the image?"}
-    ]
+    assert conversation == [{"role": "user", "content": "<|image_1|>\nWhat's in the image?"}]
     _assert_mm_data_is_image_input(mm_data, 1)
     _assert_mm_uuids(mm_uuids, 1, expected_uuids=[image_uuid])
 
@@ -539,9 +526,7 @@ async def test_parse_chat_messages_empty_image_with_uuid_async(
         content_format="string",
     )
 
-    assert conversation == [
-        {"role": "user", "content": "<|image_1|>\nWhat's in the image?"}
-    ]
+    assert conversation == [{"role": "user", "content": "<|image_1|>\nWhat's in the image?"}]
     _assert_mm_data_is_image_input(mm_data, 1, skipped_image_indices=[0])
     _assert_mm_uuids(mm_uuids, 1, expected_uuids=[image_uuid])
 
@@ -724,9 +709,7 @@ async def test_parse_chat_messages_single_image_async(
         content_format="string",
     )
 
-    assert conversation == [
-        {"role": "user", "content": "<|image_1|>\nWhat's in the image?"}
-    ]
+    assert conversation == [{"role": "user", "content": "<|image_1|>\nWhat's in the image?"}]
     _assert_mm_data_is_image_input(mm_data, 1)
     _assert_mm_uuids(mm_uuids, 1, expected_uuids=[None])
 
@@ -1211,9 +1194,7 @@ def test_parse_chat_messages_multiple_dict_image_embeds(
                             "image_grid_thw": tensor2base64(grid_thw),
                         },
                     }
-                    for embeds, grid_thw in zip(
-                        image_embeds.chunk(batch_size), image_grid_thw
-                    )
+                    for embeds, grid_thw in zip(image_embeds.chunk(batch_size), image_grid_thw)
                 ]
                 + [
                     {"type": "text", "text": "Describe these two images."},
@@ -1326,8 +1307,7 @@ def test_parse_chat_messages_placeholder_one_already_in_prompt(
                     {"type": "image_url", "image_url": {"url": image_url}},
                     {
                         "type": "text",
-                        "text": "What's in <|image_1|> and how does it compare to "
-                        "the other one?",
+                        "text": "What's in <|image_1|> and how does it compare to the other one?",
                     },
                 ],
             }
@@ -1339,8 +1319,7 @@ def test_parse_chat_messages_placeholder_one_already_in_prompt(
     assert conversation == [
         {
             "role": "user",
-            "content": "<|image_2|>\nWhat's in <|image_1|> and how does it compare to "
-            "the other one?",
+            "content": "<|image_2|>\nWhat's in <|image_1|> and how does it compare to the other one?",
         }
     ]
     _assert_mm_data_is_image_input(mm_data, 2)
@@ -1918,9 +1897,7 @@ def test_parse_chat_messages_multiple_modals_with_uuids_multiple_messages_interl
     ]
 
     _assert_mm_data_inputs(mm_data, {"image": 2, "video": 1, "audio": 1})
-    _assert_mm_uuids(
-        mm_uuids, 2, modality="image", expected_uuids=["image_123", "image_123"]
-    )
+    _assert_mm_uuids(mm_uuids, 2, modality="image", expected_uuids=["image_123", "image_123"])
     _assert_mm_uuids(mm_uuids, 1, modality="video", expected_uuids=["video_123"])
     _assert_mm_uuids(mm_uuids, 1, modality="audio", expected_uuids=["audio_123"])
 
@@ -1992,9 +1969,7 @@ def test_parse_chat_messages_multiple_modals_with_uuids_multiple_empty_media_mes
         {"image": 2, "video": 1, "audio": 1},
         skipped_media_indices={"image": [0, 1], "video": [0], "audio": [0]},
     )
-    _assert_mm_uuids(
-        mm_uuids, 2, modality="image", expected_uuids=["image_123", "image_123"]
-    )
+    _assert_mm_uuids(mm_uuids, 2, modality="image", expected_uuids=["image_123", "image_123"])
     _assert_mm_uuids(mm_uuids, 1, modality="video", expected_uuids=["video_123"])
     _assert_mm_uuids(mm_uuids, 1, modality="audio", expected_uuids=["audio_123"])
 
@@ -2174,8 +2149,7 @@ def test_parse_chat_messages_single_empty_audio_with_uuid(
     assert conversation == [
         {
             "role": "user",
-            "content": "Audio 1: <|audio_bos|><|AUDIO|><|audio_eos|>\nWhat does the "
-            "audio say?",
+            "content": "Audio 1: <|audio_bos|><|AUDIO|><|audio_eos|>\nWhat does the audio say?",
         }
     ]
     _assert_mm_data_inputs(mm_data, {"audio": 1})
@@ -2208,8 +2182,7 @@ async def test_parse_chat_messages_single_empty_audio_with_uuid_async(
     assert conversation == [
         {
             "role": "user",
-            "content": "Audio 1: <|audio_bos|><|AUDIO|><|audio_eos|>\nWhat does the "
-            "audio say?",
+            "content": "Audio 1: <|audio_bos|><|AUDIO|><|audio_eos|>\nWhat does the audio say?",
         }
     ]
     _assert_mm_data_inputs(mm_data, {"audio": 1})
@@ -2392,17 +2365,12 @@ def test_parse_chat_messages_mixed_vision_chunk(
         content_format="string",
     )
 
-    image_placeholder = (
-        "<|media_begin|>image<|media_content|><|media_pad|><|media_end|>"
-    )
+    image_placeholder = "<|media_begin|>image<|media_content|><|media_pad|><|media_end|>"
     video_placeholder = "<|kimi_k25_video_placeholder|>"
     expected_conversation = [
         {
             "role": "user",
-            "content": (
-                f"{image_placeholder}\n{video_placeholder}\n"
-                "Analyze this image and video."
-            ),
+            "content": (f"{image_placeholder}\n{video_placeholder}\nAnalyze this image and video."),
         }
     ]
 
@@ -2443,25 +2411,18 @@ def test_parse_chat_messages_mixed_vision_chunk_with_uuid(
         content_format="string",
     )
 
-    image_placeholder = (
-        "<|media_begin|>image<|media_content|><|media_pad|><|media_end|>"
-    )
+    image_placeholder = "<|media_begin|>image<|media_content|><|media_pad|><|media_end|>"
     video_placeholder = "<|kimi_k25_video_placeholder|>"
     expected_conversation = [
         {
             "role": "user",
-            "content": (
-                f"{image_placeholder}\n{video_placeholder}\n"
-                "Analyze this image and video."
-            ),
+            "content": (f"{image_placeholder}\n{video_placeholder}\nAnalyze this image and video."),
         }
     ]
 
     assert conversation == expected_conversation
     _assert_mm_data_is_vision_chunk_input(mm_data, 2)
-    _assert_mm_uuids(
-        mm_uuids, 2, expected_uuids=[image_uuid, video_uuid], modality="vision_chunk"
-    )
+    _assert_mm_uuids(mm_uuids, 2, expected_uuids=[image_uuid, video_uuid], modality="vision_chunk")
 
 
 @pytest.mark.asyncio
@@ -2493,17 +2454,12 @@ async def test_parse_chat_messages_mixed_vision_chunk_async(
         content_format="string",
     )
 
-    image_placeholder = (
-        "<|media_begin|>image<|media_content|><|media_pad|><|media_end|>"
-    )
+    image_placeholder = "<|media_begin|>image<|media_content|><|media_pad|><|media_end|>"
     video_placeholder = "<|kimi_k25_video_placeholder|>"
     expected_conversation = [
         {
             "role": "user",
-            "content": (
-                f"{image_placeholder}\n{video_placeholder}\n"
-                "Analyze this image and video."
-            ),
+            "content": (f"{image_placeholder}\n{video_placeholder}\nAnalyze this image and video."),
         }
     ]
 
@@ -2545,25 +2501,18 @@ async def test_parse_chat_messages_mixed_vision_chunk_with_uuid_async(
         content_format="string",
     )
 
-    image_placeholder = (
-        "<|media_begin|>image<|media_content|><|media_pad|><|media_end|>"
-    )
+    image_placeholder = "<|media_begin|>image<|media_content|><|media_pad|><|media_end|>"
     video_placeholder = "<|kimi_k25_video_placeholder|>"
     expected_conversation = [
         {
             "role": "user",
-            "content": (
-                f"{image_placeholder}\n{video_placeholder}\n"
-                "Analyze this image and video."
-            ),
+            "content": (f"{image_placeholder}\n{video_placeholder}\nAnalyze this image and video."),
         }
     ]
 
     assert conversation == expected_conversation
     _assert_mm_data_is_vision_chunk_input(mm_data, 2)
-    _assert_mm_uuids(
-        mm_uuids, 2, expected_uuids=[image_uuid, video_uuid], modality="vision_chunk"
-    )
+    _assert_mm_uuids(mm_uuids, 2, expected_uuids=[image_uuid, video_uuid], modality="vision_chunk")
 
 
 @pytest.mark.asyncio

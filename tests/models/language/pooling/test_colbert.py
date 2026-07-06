@@ -11,9 +11,9 @@ from contextlib import contextmanager
 import pytest
 import torch
 
-from tests.utils import wait_for_rocm_memory_to_settle
 from aphrodite.distributed import cleanup_dist_env_and_memory
 from aphrodite.entrypoints.pooling.scoring.utils import compute_maxsim_score
+from tests.utils import wait_for_rocm_memory_to_settle
 
 # -----------------------------------------------------------------------
 # Model definitions: (model_name, colbert_dim, extra aphrodite_runner kwargs)

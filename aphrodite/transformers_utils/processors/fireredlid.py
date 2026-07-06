@@ -153,8 +153,7 @@ class FireRedLIDFeatureExtractor(SequenceFeatureExtractor):
     ) -> BatchFeature:
         if sampling_rate is not None and sampling_rate != self.sampling_rate:
             raise ValueError(
-                f"FireRedLIDFeatureExtractor expects sampling_rate="
-                f"{self.sampling_rate}, got {sampling_rate}."
+                f"FireRedLIDFeatureExtractor expects sampling_rate={self.sampling_rate}, got {sampling_rate}."
             )
 
         # Initialize helpers
@@ -251,9 +250,7 @@ class FireRedLIDProcessor(ProcessorMixin):
             args = args[1:]
 
         if audio is not None:
-            inputs = self.feature_extractor(
-                audio, *args, sampling_rate=sampling_rate, **kwargs
-            )
+            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
         else:
             inputs = BatchFeature()
 

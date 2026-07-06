@@ -1,6 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+from aphrodite.config.aphrodite import (
+    AphroditeConfig,
+    get_cached_compilation_config,
+    get_current_aphrodite_config,
+    get_current_aphrodite_config_or_none,
+    get_layers_from_aphrodite_config,
+    set_current_aphrodite_config,
+)
 from aphrodite.config.attention import AttentionConfig
 from aphrodite.config.cache import CacheConfig
 from aphrodite.config.compilation import (
@@ -48,14 +56,6 @@ from aphrodite.config.utils import (
     is_init_field,
     replace,
     update_config,
-)
-from aphrodite.config.aphrodite import (
-    AphroditeConfig,
-    get_cached_compilation_config,
-    get_current_aphrodite_config,
-    get_current_aphrodite_config_or_none,
-    get_layers_from_aphrodite_config,
-    set_current_aphrodite_config,
 )
 from aphrodite.config.weight_transfer import WeightTransferConfig
 

@@ -67,16 +67,10 @@ def scaled_mm_kernel(
     # NOTE: BLOCK_SIZE_SCALE_A could be 1 or BLOCK_SIZE_M, so need to create
     # appropriate offsets and masks for each case. Same goes for
     # BLOCK_SIZE_SCALE_B.
-    offsets_scale_am = (
-        tl.arange(0, BLOCK_SIZE_SCALE_A)
-        + (BLOCK_SIZE_SCALE_A > 1) * pid_m * BLOCK_SIZE_M
-    )
+    offsets_scale_am = tl.arange(0, BLOCK_SIZE_SCALE_A) + (BLOCK_SIZE_SCALE_A > 1) * pid_m * BLOCK_SIZE_M
     masks_scale_am = offsets_scale_am < M
 
-    offsets_scale_bn = (
-        tl.arange(0, BLOCK_SIZE_SCALE_B)
-        + (BLOCK_SIZE_SCALE_B > 1) * pid_n * BLOCK_SIZE_N
-    )
+    offsets_scale_bn = tl.arange(0, BLOCK_SIZE_SCALE_B) + (BLOCK_SIZE_SCALE_B > 1) * pid_n * BLOCK_SIZE_N
     masks_scale_bn = offsets_scale_bn < N
 
     a_ptrs = a_ptr + offsets_a
@@ -168,9 +162,7 @@ def triton_scaled_mm(
     assert is_weak_contiguous(input)
     assert is_weak_contiguous(weight)
 
-    grid = lambda META: (
-        triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),
-    )
+    grid = lambda META: (triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),)
 
     result = torch.empty((M, N), dtype=out_dtype, device=input.device)
 

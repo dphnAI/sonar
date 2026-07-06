@@ -37,9 +37,7 @@ def yarn_find_correction_dim(
     base: float = 10000,
     max_position_embeddings: int = 2048,
 ) -> float:
-    return (dim * math.log(max_position_embeddings / (num_rotations * 2 * math.pi))) / (
-        2 * math.log(base)
-    )
+    return (dim * math.log(max_position_embeddings / (num_rotations * 2 * math.pi))) / (2 * math.log(base))
 
 
 # Find dim range bounds based on rotations
@@ -59,9 +57,7 @@ def yarn_find_correction_range(
     return max(low, 0), min(high, dim - 1)  # Clamp values just in case
 
 
-def yarn_linear_ramp_mask(
-    low: float, high: float, dim: int, dtype: torch.dtype
-) -> torch.Tensor:
+def yarn_linear_ramp_mask(low: float, high: float, dim: int, dtype: torch.dtype) -> torch.Tensor:
     if low == high:
         high += 0.001  # Prevent singularity
 
@@ -138,9 +134,7 @@ class ApplyRotaryEmb(CustomOp):
         self.apply_rotary_emb_flash_attn = None
         if not current_platform.is_cpu():
             with suppress(ModuleNotFoundError):
-                self.apply_rotary_emb_flash_attn = import_module(
-                    "flash_attn.ops.triton.rotary"
-                ).apply_rotary
+                self.apply_rotary_emb_flash_attn = import_module("flash_attn.ops.triton.rotary").apply_rotary
 
     @staticmethod
     def forward_static(
@@ -221,9 +215,7 @@ class ApplyRotaryEmb(CustomOp):
         cos: torch.Tensor,
         sin: torch.Tensor,
     ) -> torch.Tensor:
-        output = self.forward_static(
-            x, cos, sin, self.is_neox_style, self.enable_fp32_compute
-        )
+        output = self.forward_static(x, cos, sin, self.is_neox_style, self.enable_fp32_compute)
         return output
 
     def forward_cuda(
@@ -276,9 +268,7 @@ class ApplyRotaryEmb(CustomOp):
             block_m = 8 if rotary_dim <= 128 else 4
             grid_y = (seq_len + block_m - 1) // block_m
             if grid_y > _HIP_MAX_GRID_DIM or batch > _HIP_MAX_GRID_DIM:
-                output = self.forward_static(
-                    x, cos, sin, self.is_neox_style, self.enable_fp32_compute
-                )
+                output = self.forward_static(x, cos, sin, self.is_neox_style, self.enable_fp32_compute)
                 return self._post_process(output, origin_shape, origin_dtype)
 
             """
@@ -289,9 +279,7 @@ class ApplyRotaryEmb(CustomOp):
                 ...
             """
             interleaved = not self.is_neox_style
-            output = self.apply_rotary_emb_flash_attn(
-                x, cos, sin, interleaved=interleaved
-            ).type_as(x)
+            output = self.apply_rotary_emb_flash_attn(x, cos, sin, interleaved=interleaved).type_as(x)
 
             output = self._post_process(output, origin_shape, origin_dtype)
         else:

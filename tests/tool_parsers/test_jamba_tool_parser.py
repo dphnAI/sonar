@@ -26,14 +26,10 @@ def jamba_tool_parser(jamba_tokenizer):
     return JambaToolParser(jamba_tokenizer)
 
 
-def assert_tool_calls(
-    actual_tool_calls: list[ToolCall], expected_tool_calls: list[ToolCall]
-):
+def assert_tool_calls(actual_tool_calls: list[ToolCall], expected_tool_calls: list[ToolCall]):
     assert len(actual_tool_calls) == len(expected_tool_calls)
 
-    for actual_tool_call, expected_tool_call in zip(
-        actual_tool_calls, expected_tool_calls
-    ):
+    for actual_tool_call, expected_tool_call in zip(actual_tool_calls, expected_tool_calls):
         assert isinstance(actual_tool_call.id, str)
         assert len(actual_tool_call.id) > 16
 
@@ -57,16 +53,14 @@ def stream_delta_message_generator(
         previous_token_ids = all_token_ids[:i]
         current_token_ids = all_token_ids[: i + 1]
 
-        (new_tokens, delta_text, new_prefix_offset, new_read_offset) = (
-            detokenize_incrementally(
-                tokenizer=jamba_tokenizer,
-                all_input_ids=current_token_ids,
-                prev_tokens=previous_tokens,
-                prefix_offset=prefix_offset,
-                read_offset=read_offset,
-                skip_special_tokens=False,
-                spaces_between_special_tokens=True,
-            )
+        (new_tokens, delta_text, new_prefix_offset, new_read_offset) = detokenize_incrementally(
+            tokenizer=jamba_tokenizer,
+            all_input_ids=current_token_ids,
+            prev_tokens=previous_tokens,
+            prefix_offset=prefix_offset,
+            read_offset=read_offset,
+            skip_special_tokens=False,
+            spaces_between_special_tokens=True,
         )
 
         current_text = previous_text + delta_text
@@ -84,18 +78,14 @@ def stream_delta_message_generator(
             yield delta_message
 
         previous_text = current_text
-        previous_tokens = (
-            previous_tokens + new_tokens if previous_tokens else new_tokens
-        )
+        previous_tokens = previous_tokens + new_tokens if previous_tokens else new_tokens
         prefix_offset = new_prefix_offset
         read_offset = new_read_offset
 
 
 def test_extract_tool_calls_no_tools(jamba_tool_parser):
     model_output = "This is a test"
-    extracted_tool_calls = jamba_tool_parser.extract_tool_calls(
-        model_output, request=None
-    )  # type: ignore[arg-type]
+    extracted_tool_calls = jamba_tool_parser.extract_tool_calls(model_output, request=None)  # type: ignore[arg-type]
     assert not extracted_tool_calls.tools_called
     assert extracted_tool_calls.tool_calls == []
     assert extracted_tool_calls.content == model_output
@@ -115,9 +105,7 @@ def test_extract_tool_calls_no_tools(jamba_tool_parser):
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Dallas", "state": "TX", "unit": "fahrenheit"}),
                     )
                 )
             ],
@@ -129,9 +117,7 @@ def test_extract_tool_calls_no_tools(jamba_tool_parser):
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Dallas", "state": "TX", "unit": "fahrenheit"}),
                     )
                 )
             ],
@@ -143,17 +129,13 @@ def test_extract_tool_calls_no_tools(jamba_tool_parser):
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Dallas", "state": "TX", "unit": "fahrenheit"}),
                     )
                 ),
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Orlando", "state": "FL", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Orlando", "state": "FL", "unit": "fahrenheit"}),
                     )
                 ),
             ],
@@ -161,12 +143,8 @@ def test_extract_tool_calls_no_tools(jamba_tool_parser):
         ),
     ],
 )
-def test_extract_tool_calls(
-    jamba_tool_parser, model_output, expected_tool_calls, expected_content
-):
-    extracted_tool_calls = jamba_tool_parser.extract_tool_calls(
-        model_output, request=None
-    )  # type: ignore[arg-type]
+def test_extract_tool_calls(jamba_tool_parser, model_output, expected_tool_calls, expected_content):
+    extracted_tool_calls = jamba_tool_parser.extract_tool_calls(model_output, request=None)  # type: ignore[arg-type]
     assert extracted_tool_calls.tools_called
 
     assert_tool_calls(extracted_tool_calls.tool_calls, expected_tool_calls)
@@ -190,9 +168,7 @@ def test_extract_tool_calls(
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Dallas", "state": "TX", "unit": "fahrenheit"}),
                     )
                 )
             ],
@@ -204,9 +180,7 @@ def test_extract_tool_calls(
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Dallas", "state": "TX", "unit": "fahrenheit"}),
                     )
                 )
             ],
@@ -218,17 +192,13 @@ def test_extract_tool_calls(
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Dallas", "state": "TX", "unit": "fahrenheit"}),
                     )
                 ),
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Orlando", "state": "FL", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Orlando", "state": "FL", "unit": "fahrenheit"}),
                     )
                 ),
             ],
@@ -249,9 +219,7 @@ def test_extract_tool_calls_streaming(
     tool_call_idx: int = -1
     tool_call_ids: list[str | None] = []
 
-    for delta_message in stream_delta_message_generator(
-        jamba_tool_parser, jamba_tokenizer, model_output
-    ):
+    for delta_message in stream_delta_message_generator(jamba_tool_parser, jamba_tokenizer, model_output):
         # role should never be streamed from tool parser
         assert not delta_message.role
 
@@ -296,13 +264,9 @@ def test_extract_tool_calls_streaming(
             id=tool_call_id,
             function=FunctionCall(
                 name=function_name,
-                arguments=partial_json_parser.ensure_json(
-                    function_args_str, Allow.OBJ | Allow.STR
-                ),
+                arguments=partial_json_parser.ensure_json(function_args_str, Allow.OBJ | Allow.STR),
             ),
         )
-        for tool_call_id, function_name, function_args_str in zip(
-            tool_call_ids, function_names, function_args_strs
-        )
+        for tool_call_id, function_name, function_args_str in zip(tool_call_ids, function_names, function_args_strs)
     ]
     assert_tool_calls(actual_tool_calls, expected_tool_calls)

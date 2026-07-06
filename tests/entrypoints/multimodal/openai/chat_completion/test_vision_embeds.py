@@ -9,8 +9,8 @@ import pytest
 import requests
 import torch
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.utils.serial_utils import tensor2base64
+from tests.utils import RemoteOpenAIServer
 
 # Prithvi requires terratorch, which is temporarily unavailable while PyPI has
 # `lightning` quarantined (#41376). Skip just the Prithvi case; leave the
@@ -22,9 +22,7 @@ _TERRATORCH_AVAILABLE = importlib.util.find_spec("terratorch") is not None
     not _TERRATORCH_AVAILABLE,
     reason="terratorch unavailable while PyPI has `lightning` quarantined; see #41376",
 )
-@pytest.mark.parametrize(
-    "model_name", ["ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL-Sen1Floods11"]
-)
+@pytest.mark.parametrize("model_name", ["ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL-Sen1Floods11"])
 def test_single_content(model_name: str):
     args = [
         "--runner",
@@ -54,12 +52,8 @@ def test_single_content(model_name: str):
                             {
                                 "type": "image_embeds",
                                 "image_embeds": {
-                                    "pixel_values": tensor2base64(
-                                        torch.ones((6, 512, 512), dtype=torch.float16)
-                                    ),
-                                    "location_coords": tensor2base64(
-                                        torch.ones((1, 2), dtype=torch.float16)
-                                    ),
+                                    "pixel_values": tensor2base64(torch.ones((6, 512, 512), dtype=torch.float16)),
+                                    "location_coords": tensor2base64(torch.ones((1, 2), dtype=torch.float16)),
                                 },
                             },
                         ],
@@ -101,18 +95,14 @@ def test_multi_content(model_name: str):
                             "type": "image_embeds",
                             "image_embeds": {
                                 "image_embeds": tensor2base64(torch.zeros(220, 8192)),
-                                "image_grid_thw": tensor2base64(
-                                    torch.tensor([1, 22, 40])
-                                ),
+                                "image_grid_thw": tensor2base64(torch.tensor([1, 22, 40])),
                             },
                         },
                         {
                             "type": "image_embeds",
                             "image_embeds": {
                                 "image_embeds": tensor2base64(torch.zeros(220, 8192)),
-                                "image_grid_thw": tensor2base64(
-                                    torch.tensor([1, 22, 40])
-                                ),
+                                "image_grid_thw": tensor2base64(torch.tensor([1, 22, 40])),
                             },
                         },
                     ],
@@ -135,9 +125,7 @@ def test_multi_content(model_name: str):
                             "type": "image_embeds",
                             "image_embeds": {
                                 "image_embeds": tensor2base64(torch.zeros(220, 8192)),
-                                "image_grid_thw": tensor2base64(
-                                    torch.tensor([1, 22, 40])
-                                ),
+                                "image_grid_thw": tensor2base64(torch.tensor([1, 22, 40])),
                             },
                         },
                         {"type": "text", "text": "OCR:"},
@@ -145,9 +133,7 @@ def test_multi_content(model_name: str):
                             "type": "image_embeds",
                             "image_embeds": {
                                 "image_embeds": tensor2base64(torch.zeros(220, 8192)),
-                                "image_grid_thw": tensor2base64(
-                                    torch.tensor([1, 22, 40])
-                                ),
+                                "image_grid_thw": tensor2base64(torch.tensor([1, 22, 40])),
                             },
                         },
                     ],

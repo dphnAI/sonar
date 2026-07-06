@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from collections.abc import Mapping
 
-from aphrodite.config import ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig
 from aphrodite.logger import init_logger
 from aphrodite.multimodal.processing import BaseMultiModalProcessor
 from aphrodite.multimodal.registry import MultiModalRegistry
@@ -70,16 +70,10 @@ class MultiModalBudget:
             self.mm_limits = mm_limits = processor.info.allowed_mm_limits
 
             # Modalities that pass through the MM encoder tower
-            tower_modalities = {
-                modality
-                for modality in supported_mm_limits
-                if mm_limits.get(modality, 0) > 0
-            }
+            tower_modalities = {modality for modality in supported_mm_limits if mm_limits.get(modality, 0) > 0}
             # Modalities that bypass the tower (pre-computed embeddings only)
             embed_only_modalities = {
-                modality
-                for modality in supported_mm_limits
-                if enable_mm_embeds and mm_limits.get(modality, 0) == 0
+                modality for modality in supported_mm_limits if enable_mm_embeds and mm_limits.get(modality, 0) == 0
             }
 
             active_modalities = tower_modalities | embed_only_modalities

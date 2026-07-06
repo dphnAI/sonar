@@ -142,9 +142,7 @@ class CPUAttentionMetadataBuilder(AttentionMetadataBuilder[CPUAttentionMetadata]
 
         parallel_config = aphrodite_config.parallel_config
         self.num_kv_heads = kv_cache_spec.num_kv_heads
-        self.num_heads = aphrodite_config.model_config.get_num_attention_heads(
-            parallel_config
-        )
+        self.num_heads = aphrodite_config.model_config.get_num_attention_heads(parallel_config)
         self.head_dim = kv_cache_spec.head_size
         self.dtype = aphrodite_config.model_config.dtype
         self.window_size = getattr(kv_cache_spec, "sliding_window", -1)
@@ -159,9 +157,7 @@ class CPUAttentionMetadataBuilder(AttentionMetadataBuilder[CPUAttentionMetadata]
             kv_cache_dtype_str,
         )
         self.is_cross_attention = isinstance(kv_cache_spec, CrossAttentionSpec)
-        self.is_encoder_only_attention = isinstance(
-            kv_cache_spec, EncoderOnlyAttentionSpec
-        )
+        self.is_encoder_only_attention = isinstance(kv_cache_spec, EncoderOnlyAttentionSpec)
 
     def build(
         self,
@@ -182,11 +178,7 @@ class CPUAttentionMetadataBuilder(AttentionMetadataBuilder[CPUAttentionMetadata]
         if is_dynamic_casual:
             dynamic_casual = common_attn_metadata.causal
 
-        causal = (
-            False
-            if self.is_cross_attention or is_dynamic_casual
-            else common_attn_metadata.causal
-        )
+        causal = False if self.is_cross_attention or is_dynamic_casual else common_attn_metadata.causal
 
         encoder_cache_tensor = None
         if self.is_encoder_only_attention:
@@ -195,9 +187,7 @@ class CPUAttentionMetadataBuilder(AttentionMetadataBuilder[CPUAttentionMetadata]
             torch.cumsum(block_nums[:-1], 0, out=start_block_ids[1:])
             total_block_num: int = block_nums.sum().item()
             max_block_num = block_nums.max().item()
-            block_offsets = torch.arange(
-                0, max_block_num, dtype=block_table_tensor.dtype
-            )
+            block_offsets = torch.arange(0, max_block_num, dtype=block_table_tensor.dtype)
             encoder_block_table = start_block_ids[:, None] + block_offsets[None, :]
             torch.ops._C.compute_slot_mapping_kernel_impl(
                 query_start_loc,
@@ -273,8 +263,7 @@ class CPUAttentionBackendImpl(AttentionImpl):
             AttentionType.ENCODER_ONLY,
         ):
             logger.warning_once(
-                "CPU_ATTN does not support logits softcap for"
-                " ENCODER and ENCODER_ONLY, outputs may be slightly off"
+                "CPU_ATTN does not support logits softcap for ENCODER and ENCODER_ONLY, outputs may be slightly off"
             )
         if logits_soft_cap is None:
             logits_soft_cap = 0
@@ -297,8 +286,7 @@ class CPUAttentionBackendImpl(AttentionImpl):
         self.sinks = sinks
         if self.sinks is not None:
             assert self.sinks.shape[0] == num_heads, (
-                "Sinks must have the same number of heads as the number of "
-                "heads in the layer"
+                "Sinks must have the same number of heads as the number of heads in the layer"
             )
 
         aphrodite_config = get_current_aphrodite_config()
@@ -334,10 +322,7 @@ class CPUAttentionBackendImpl(AttentionImpl):
             shape = [num_tokens, num_heads * head_size]
         """
         if output_scale is not None or output_block_scale is not None:
-            raise NotImplementedError(
-                "fused output quantization is not yet supported"
-                " for CPUAttentionBackendImpl"
-            )
+            raise NotImplementedError("fused output quantization is not yet supported for CPUAttentionBackendImpl")
 
         # For warming-up
         if attn_metadata is None:
@@ -360,11 +345,7 @@ class CPUAttentionBackendImpl(AttentionImpl):
         # key and value may be None in the case of cross attention. They are
         # calculated once based on the output from the encoder and then cached
         # in KV cache.
-        if (
-            self.kv_sharing_target_layer_name is None
-            and key is not None
-            and value is not None
-        ):
+        if self.kv_sharing_target_layer_name is None and key is not None and value is not None:
             ops.cpu_attn_reshape_and_cache(
                 key,
                 value,
@@ -469,9 +450,7 @@ def _get_attn_isa(
     fp8_kv = is_quantized_kv_cache(kv_cache_dtype) if kv_cache_dtype else False
     if head_size is not None and head_size % 32 != 0 and head_size % 16 == 0:
         if fp8_kv:
-            raise NotImplementedError(
-                "FP8 KV cache requires head_size divisible by 32 on CPU."
-            )
+            raise NotImplementedError("FP8 KV cache requires head_size divisible by 32 on CPU.")
         return "vec16"
     supports_amx = torch.cpu._is_amx_tile_supported()
     arch = current_platform.get_cpu_architecture()
@@ -481,9 +460,7 @@ def _get_attn_isa(
     supports_vsx = arch == CpuArchEnum.POWERPC
     supports_avx512 = torch.cpu._is_avx512_supported()
     if fp8_kv and not supports_amx and not supports_avx512:
-        raise NotImplementedError(
-            "FP8 KV cache on CPU requires x86 with AVX-512 or AMX."
-        )
+        raise NotImplementedError("FP8 KV cache on CPU requires x86 with AVX-512 or AMX.")
     if supports_amx and dtype in (torch.bfloat16,) and block_size % 32 == 0:
         return "amx"
     elif block_size % 32 == 0:

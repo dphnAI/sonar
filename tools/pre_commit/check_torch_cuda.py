@@ -20,6 +20,7 @@ ALLOWED_FILES = {
     "examples/",
     "tests/",
     "aphrodite/model_executor/layers/quantization/exl3.py",
+    "aphrodite/distributed/weight_transfer/ipc_engine.py",
 }
 
 

@@ -46,9 +46,7 @@ class DummyRouter(BaseRouter):
     def routing_method_type(self) -> RoutingMethodType:
         return RoutingMethodType.FUSED_TOPK
 
-    def _compute_routing(
-        self, hidden_states, router_logits, indices_type, *, input_ids=None
-    ):
+    def _compute_routing(self, hidden_states, router_logits, indices_type, *, input_ids=None):
         topk_ids = torch.tensor([[1, 2], [3, 4]], dtype=torch.int64)
         topk_weights = torch.ones_like(topk_ids, dtype=torch.float32)
         return topk_weights, topk_ids
@@ -138,9 +136,7 @@ def test_gpu_model_runner_binds_router_capture(monkeypatch):
     monkeypatch.setattr(fused_moe_layer, "MoERunner", DummyFusedMoE)
 
     dummy_self = types.SimpleNamespace(
-        compilation_config=types.SimpleNamespace(
-            static_forward_context={"dummy": dummy_module}
-        )
+        compilation_config=types.SimpleNamespace(static_forward_context={"dummy": dummy_module})
     )
 
     capturer = DummyCapturer()
@@ -177,9 +173,7 @@ def test_gpu_model_runner_binding_stage(monkeypatch):
     monkeypatch.setattr(fused_moe_layer, "MoERunner", DummyFusedMoE)
 
     dummy_self = types.SimpleNamespace(
-        compilation_config=types.SimpleNamespace(
-            static_forward_context={"dummy": dummy_module}
-        )
+        compilation_config=types.SimpleNamespace(static_forward_context={"dummy": dummy_module})
     )
 
     # Before binding, no capture hook.
@@ -209,13 +203,9 @@ def test_routed_experts_capturer_dp_naive_concatenated_all_ranks():
     """n == sum(num_tokens_dp): slice this rank's segment from concatenated topk."""
     capturer = _capturer_with_buffer(dp_rank=1)
     num_tokens_dp = torch.tensor([2, 3], dtype=torch.int32)
-    ctx = SimpleNamespace(
-        dp_metadata=SimpleNamespace(num_tokens_across_dp_cpu=num_tokens_dp)
-    )
+    ctx = SimpleNamespace(dp_metadata=SimpleNamespace(num_tokens_across_dp_cpu=num_tokens_dp))
     # Concatenated order: rank0 rows then rank1 rows.
-    topk = torch.tensor(
-        [[0, 1], [2, 3], [10, 11], [12, 13], [14, 15]], dtype=torch.int32
-    )
+    topk = torch.tensor([[0, 1], [2, 3], [10, 11], [12, 13], [14, 15]], dtype=torch.int32)
     with patch(f"{_REC_MODULE}.get_forward_context", return_value=ctx):
         capturer.capture(layer_id=0, topk_ids=topk)
     want = topk[2:5]
@@ -226,9 +216,7 @@ def test_routed_experts_capturer_dp_modular_local_tokens():
     """n == token_num_per_dp: topk is already local to this DP rank."""
     capturer = _capturer_with_buffer(dp_rank=1)
     num_tokens_dp = torch.tensor([2, 3], dtype=torch.int32)
-    ctx = SimpleNamespace(
-        dp_metadata=SimpleNamespace(num_tokens_across_dp_cpu=num_tokens_dp)
-    )
+    ctx = SimpleNamespace(dp_metadata=SimpleNamespace(num_tokens_across_dp_cpu=num_tokens_dp))
     topk = torch.tensor([[10, 11], [12, 13], [14, 15]], dtype=torch.int32)
     with patch(f"{_REC_MODULE}.get_forward_context", return_value=ctx):
         capturer.capture(layer_id=0, topk_ids=topk)
@@ -239,9 +227,7 @@ def test_routed_experts_capturer_dp_unexpected_batch_raises():
     """Mismatch between topk batch dim and DP layout: fail fast."""
     capturer = _capturer_with_buffer(dp_rank=0)
     num_tokens_dp = torch.tensor([2, 3], dtype=torch.int32)
-    ctx = SimpleNamespace(
-        dp_metadata=SimpleNamespace(num_tokens_across_dp_cpu=num_tokens_dp)
-    )
+    ctx = SimpleNamespace(dp_metadata=SimpleNamespace(num_tokens_across_dp_cpu=num_tokens_dp))
     # total=5, local=2: n=1 matches neither naive (5) nor modular (2).
     topk = torch.tensor([[1, 2]], dtype=torch.int32)
     with (

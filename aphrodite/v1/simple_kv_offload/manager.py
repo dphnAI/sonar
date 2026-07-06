@@ -79,8 +79,7 @@ class SimpleCPUOffloadScheduler:
         self.aphrodite_config = aphrodite_config
         self.kv_cache_config = kv_cache_config
         self.enable_kv_cache_events = (
-            aphrodite_config.kv_events_config is not None
-            and aphrodite_config.kv_events_config.enable_kv_cache_events
+            aphrodite_config.kv_events_config is not None and aphrodite_config.kv_events_config.enable_kv_cache_events
         )
         dcp_world_size = aphrodite_config.parallel_config.decode_context_parallel_size
         pcp_world_size = aphrodite_config.parallel_config.prefill_context_parallel_size
@@ -90,9 +89,7 @@ class SimpleCPUOffloadScheduler:
         assert self.block_size % self.hash_block_size == 0
         # Derive a CPU KVCacheConfig from the GPU config and build a coordinator
         assert kv_cache_config is not None
-        self.cpu_kv_cache_config = self._derive_cpu_config(
-            kv_cache_config, cpu_capacity_bytes
-        )
+        self.cpu_kv_cache_config = self._derive_cpu_config(kv_cache_config, cpu_capacity_bytes)
         self.num_cpu_blocks = self.cpu_kv_cache_config.num_blocks
         # Find the full attention kv group for prefix cache matching.
         self.fa_gidx = -1
@@ -104,10 +101,7 @@ class SimpleCPUOffloadScheduler:
         # FA group's own block_size; divides scheduler_block_size (the LCM)
         # but is NOT assumed to equal it.
         self.fa_block_size: int = (
-            self.cpu_kv_cache_config.kv_cache_groups[
-                self.fa_gidx
-            ].kv_cache_spec.block_size
-            * self.cp_world_size
+            self.cpu_kv_cache_config.kv_cache_groups[self.fa_gidx].kv_cache_spec.block_size * self.cp_world_size
         )
         assert self.block_size % self.fa_block_size == 0
 
@@ -122,9 +116,7 @@ class SimpleCPUOffloadScheduler:
         self.cpu_coordinator: KVCacheCoordinator = get_kv_cache_coordinator(
             kv_cache_config=self.cpu_kv_cache_config,
             max_model_len=aphrodite_config.model_config.max_model_len,
-            max_num_batched_tokens=(
-                aphrodite_config.scheduler_config.max_num_batched_tokens
-            ),
+            max_num_batched_tokens=(aphrodite_config.scheduler_config.max_num_batched_tokens),
             use_eagle=False,
             enable_caching=True,
             enable_kv_cache_events=self.enable_kv_cache_events,
@@ -146,9 +138,7 @@ class SimpleCPUOffloadScheduler:
 
         # Pending (cpu_hit_blocks, hit_length) tuples from find_longest_cache_hit,
         # kept pinned via touch() while awaiting update_state_after_alloc().
-        self._pending_cpu_hits: dict[
-            str, tuple[tuple[list[KVCacheBlock], ...], int]
-        ] = {}
+        self._pending_cpu_hits: dict[str, tuple[tuple[list[KVCacheBlock], ...], int]] = {}
 
         # Store metadata
         self._lazy_mode = lazy_offload
@@ -180,9 +170,7 @@ class SimpleCPUOffloadScheduler:
         self._store_event_pending_counts: dict[int, int] = {}
 
     @staticmethod
-    def _derive_cpu_config(
-        gpu_config: "KVCacheConfig", cpu_capacity_bytes: int
-    ) -> "KVCacheConfig":
+    def _derive_cpu_config(gpu_config: "KVCacheConfig", cpu_capacity_bytes: int) -> "KVCacheConfig":
         """Derive a CPU KVCacheConfig from the GPU config.
         Same kv_cache_groups, num_blocks scaled by CPU/GPU memory ratio."""
         # Import here to avoid potential circular imports
@@ -194,9 +182,7 @@ class SimpleCPUOffloadScheduler:
         is_packed = any(t.block_stride for t in gpu_config.kv_cache_tensors)
         assert not is_packed or all(t.block_stride for t in gpu_config.kv_cache_tensors)
         gpu_total_bytes = (
-            gpu_config.kv_cache_tensors[0].size
-            if is_packed
-            else sum(t.size for t in gpu_config.kv_cache_tensors)
+            gpu_config.kv_cache_tensors[0].size if is_packed else sum(t.size for t in gpu_config.kv_cache_tensors)
         )
         num_gpu_blocks = gpu_config.num_blocks
         num_cpu_blocks = max(1, num_gpu_blocks * cpu_capacity_bytes // gpu_total_bytes)
@@ -242,9 +228,7 @@ class SimpleCPUOffloadScheduler:
         Called by Scheduler after kv_cache_manager is ready."""
         self._gpu_block_pool = gpu_block_pool
 
-    def get_num_new_matched_tokens(
-        self, request: "Request", num_computed_tokens: int
-    ) -> tuple[int | None, bool]:
+    def get_num_new_matched_tokens(self, request: "Request", num_computed_tokens: int) -> tuple[int | None, bool]:
         """Return (num_new_tokens, is_async) from consecutive CPU cache hits."""
 
         # Pins found CPU blocks so they survive LRU eviction until
@@ -264,14 +248,10 @@ class SimpleCPUOffloadScheduler:
         max_hit_len = request.num_tokens - 1 - num_computed_tokens
         if max_hit_len <= 0:
             return 0, False
-        cpu_hit_blocks, hit_length = self.cpu_coordinator.find_longest_cache_hit(
-            remaining_hashes, max_hit_len
-        )
+        cpu_hit_blocks, hit_length = self.cpu_coordinator.find_longest_cache_hit(remaining_hashes, max_hit_len)
 
         if hit_length > 0:
-            pin_blocks = [
-                blk for grp in cpu_hit_blocks for blk in grp if not blk.is_null
-            ]
+            pin_blocks = [blk for grp in cpu_hit_blocks for blk in grp if not blk.is_null]
             self.cpu_block_pool.touch(pin_blocks)
             self._pending_cpu_hits[request.request_id] = (
                 cpu_hit_blocks,
@@ -335,9 +315,7 @@ class SimpleCPUOffloadScheduler:
         # so this counts whole scheduler-aligned chunks of incoming tokens.
         num_blocks_to_load = num_external_tokens // self.block_size
         assert num_blocks_to_load > 0
-        num_cached_fa_blocks = sum(
-            blk.block_hash is not None for blk in blocks.blocks[self.fa_gidx]
-        )
+        num_cached_fa_blocks = sum(blk.block_hash is not None for blk in blocks.blocks[self.fa_gidx])
         num_computed_tokens = num_cached_fa_blocks * self.fa_block_size
 
         # Build transfer pairs across all groups.
@@ -351,9 +329,7 @@ class SimpleCPUOffloadScheduler:
         # the rest will be released along with the temp pin below.
         cpu_hit_blocks: list[list[KVCacheBlock]] = []
         for g in range(num_groups):
-            g_block_size = (
-                kv_cache_groups[g].kv_cache_spec.block_size * self.cp_world_size
-            )
+            g_block_size = kv_cache_groups[g].kv_cache_spec.block_size * self.cp_world_size
             assert num_external_tokens % g_block_size == 0, (
                 f"num_external_tokens={num_external_tokens} not aligned to "
                 f"group {g} effective block_size={g_block_size}"
@@ -372,9 +348,7 @@ class SimpleCPUOffloadScheduler:
                 continue
 
             # Number of blocks in the computed range for this group.
-            g_block_size = (
-                kv_cache_groups[g].kv_cache_spec.block_size * self.cp_world_size
-            )
+            g_block_size = kv_cache_groups[g].kv_cache_spec.block_size * self.cp_world_size
             n_computed_g = cdiv(total_computed_tokens, g_block_size)
 
             # Back-trace: ext blocks sit at the tail of the computed range.
@@ -396,9 +370,7 @@ class SimpleCPUOffloadScheduler:
 
         # Touch GPU blocks to prevent freeing during async load
         assert self._gpu_block_pool is not None
-        self._gpu_block_pool.touch(
-            [self._gpu_block_pool.blocks[bid] for bid in gpu_block_ids]
-        )
+        self._gpu_block_pool.touch([self._gpu_block_pool.blocks[bid] for bid in gpu_block_ids])
 
         assert self._reqs_to_load.get(req_id) is None
         self._reqs_to_load[req_id] = LoadRequestState(
@@ -415,9 +387,7 @@ class SimpleCPUOffloadScheduler:
         if store_gpu:
             store_event = self._store_event_counter
             self._store_event_counter += 1
-            self._store_event_to_blocks[store_event] = TransferMeta(
-                store_gpu, store_cpu
-            )
+            self._store_event_to_blocks[store_event] = TransferMeta(store_gpu, store_cpu)
             if store_req_ids:  # For eager mode only, track req->blocks mapping
                 self._store_event_to_reqs[store_event] = store_req_ids
                 for req_id in store_req_ids:
@@ -448,10 +418,7 @@ class SimpleCPUOffloadScheduler:
             load_event=load_event,
             load_gpu_blocks=load_gpu,
             load_cpu_blocks=load_cpu,
-            load_event_to_reqs={
-                event_idx: list(req_ids)
-                for event_idx, req_ids in self._load_event_to_reqs.items()
-            },
+            load_event_to_reqs={event_idx: list(req_ids) for event_idx, req_ids in self._load_event_to_reqs.items()},
             store_event=store_event,
             store_gpu_blocks=store_gpu,
             store_cpu_blocks=store_cpu,
@@ -459,9 +426,7 @@ class SimpleCPUOffloadScheduler:
         )
         return result
 
-    def prepare_store_specs(
-        self, scheduler_output: SchedulerOutput
-    ) -> tuple[list[int], list[int], list[str]]:
+    def prepare_store_specs(self, scheduler_output: SchedulerOutput) -> tuple[list[int], list[int], list[str]]:
         """Prepare store specs for the store event."""
         if self._lazy_mode:
             return self._prepare_lazy_store_specs()
@@ -501,12 +466,7 @@ class SimpleCPUOffloadScheduler:
         covered = 0
         last_visited = self._cursor
 
-        while (
-            node is not None
-            and node is not tail
-            and covered < self._target_free
-            and len(gpu_ids) < num_cpu_free
-        ):
+        while node is not None and node is not tail and covered < self._target_free and len(gpu_ids) < num_cpu_free:
             last_visited = node
             bhash = node.block_hash
 
@@ -536,9 +496,7 @@ class SimpleCPUOffloadScheduler:
 
         return gpu_ids, cpu_ids, []
 
-    def _prepare_eager_store_specs(
-        self, scheduler_output: SchedulerOutput
-    ) -> tuple[list[int], list[int], list[str]]:
+    def _prepare_eager_store_specs(self, scheduler_output: SchedulerOutput) -> tuple[list[int], list[int], list[str]]:
         """Identify newly computed blocks to offload from scheduler requests.
 
         Only considers blocks whose KV data has been **confirmed computed** by
@@ -604,9 +562,7 @@ class SimpleCPUOffloadScheduler:
                 already_stored_g = state.num_stored_blocks[g]
                 group_gpu_ids = block_ids_by_group[g]
 
-                g_block_size = (
-                    kv_cache_groups[g].kv_cache_spec.block_size * self.cp_world_size
-                )
+                g_block_size = kv_cache_groups[g].kv_cache_spec.block_size * self.cp_world_size
                 ready_blocks_g = aligned_tokens // g_block_size
                 scannable = group_gpu_ids[already_stored_g:ready_blocks_g]
 
@@ -626,10 +582,7 @@ class SimpleCPUOffloadScheduler:
                     # Skip if already scheduled for store or already cached in CPU.
                     if (
                         gpu_block_id in in_flight
-                        or cpu_block_pool.cached_block_hash_to_block.get_one_block(
-                            bhash_with_group
-                        )
-                        is not None
+                        or cpu_block_pool.cached_block_hash_to_block.get_one_block(bhash_with_group) is not None
                     ):
                         advanced_per_group[g] += 1
                         continue
@@ -663,9 +616,7 @@ class SimpleCPUOffloadScheduler:
                 in_flight.update(gpu_block_ids)
 
                 # Touch GPU blocks to prevent freeing during async copy
-                gpu_block_pool.touch(
-                    [gpu_block_pool.blocks[bid] for bid in gpu_block_ids]
-                )
+                gpu_block_pool.touch([gpu_block_pool.blocks[bid] for bid in gpu_block_ids])
 
                 logger.debug(
                     "Request %s: Scheduling store of %d blocks to CPU (%d groups)",
@@ -734,9 +685,7 @@ class SimpleCPUOffloadScheduler:
                 if state.finished and not state.store_events:
                     self._cleanup_store_request(req_id)
 
-    def _process_store_completion(
-        self, gpu_block_ids: list[int], cpu_block_ids: list[int]
-    ) -> None:
+    def _process_store_completion(self, gpu_block_ids: list[int], cpu_block_ids: list[int]) -> None:
         """Cache CPU blocks per-group and release GPU refs.
 
         Block hashes were stamped on CPU blocks at allocation time (in
@@ -755,9 +704,7 @@ class SimpleCPUOffloadScheduler:
         # Free CPU and GPU blocks' ref counts to turn them into prefix cache
         self.cpu_block_pool.free_blocks(cpu_blocks)
         assert self._gpu_block_pool is not None
-        self._gpu_block_pool.free_blocks(
-            self._gpu_block_pool.blocks[bid] for bid in gpu_block_ids
-        )
+        self._gpu_block_pool.free_blocks(self._gpu_block_pool.blocks[bid] for bid in gpu_block_ids)
 
     def _release_transfer_refs(self, transfer: TransferMeta) -> None:
         """Release transfer refs without making copied data cacheable."""
@@ -766,15 +713,11 @@ class SimpleCPUOffloadScheduler:
             cpu_block.reset_hash()
         self.cpu_block_pool.free_blocks(cpu_blocks)
         assert self._gpu_block_pool is not None
-        self._gpu_block_pool.free_blocks(
-            self._gpu_block_pool.blocks[bid] for bid in transfer.gpu_block_ids
-        )
+        self._gpu_block_pool.free_blocks(self._gpu_block_pool.blocks[bid] for bid in transfer.gpu_block_ids)
 
     def has_pending_stores(self) -> bool:
         """Return True if there are in-flight store transfers."""
-        return bool(
-            self._store_event_to_blocks or self._abandoned_store_event_to_blocks
-        )
+        return bool(self._store_event_to_blocks or self._abandoned_store_event_to_blocks)
 
     def request_finished(
         self,
@@ -820,9 +763,7 @@ class SimpleCPUOffloadScheduler:
     def _free_pending_cpu_hit(self, pending: tuple) -> None:
         """Release the temporary CPU block pin taken in get_num_new_matched_tokens()."""
         cpu_hit_blocks, _ = pending
-        blocks_to_free = [
-            blk for grp in cpu_hit_blocks for blk in grp if not blk.is_null
-        ]
+        blocks_to_free = [blk for grp in cpu_hit_blocks for blk in grp if not blk.is_null]
         if blocks_to_free:
             self.cpu_block_pool.free_blocks(blocks_to_free)
 
@@ -850,14 +791,12 @@ class SimpleCPUOffloadScheduler:
         if state.transfer_meta is not None:
             # Free CPU touch refs
             self.cpu_block_pool.free_blocks(
-                self.cpu_block_pool.blocks[bid]
-                for bid in state.transfer_meta.cpu_block_ids
+                self.cpu_block_pool.blocks[bid] for bid in state.transfer_meta.cpu_block_ids
             )
             # Free GPU touch refs
             assert self._gpu_block_pool is not None
             self._gpu_block_pool.free_blocks(
-                self._gpu_block_pool.blocks[bid]
-                for bid in state.transfer_meta.gpu_block_ids
+                self._gpu_block_pool.blocks[bid] for bid in state.transfer_meta.gpu_block_ids
             )
 
     def _cleanup_store_request(self, req_id: str) -> None:

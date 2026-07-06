@@ -26,9 +26,7 @@ class CPUOffloadingSpec(OffloadingSpec):
     BLOCK_SIZE_ALIGNMENT = 1
 
     @classmethod
-    def build_metric_definitions(
-        cls, extra_config: dict[str, Any]
-    ) -> dict[str, OffloadingMetricMetadata]:
+    def build_metric_definitions(cls, extra_config: dict[str, Any]) -> dict[str, OffloadingMetricMetadata]:
         definitions: dict[str, OffloadingMetricMetadata] = {
             CPUOffloadingMetrics.CPU_CACHE_USAGE_PERC: OffloadingGaugeMetadata(
                 documentation=(
@@ -41,13 +39,8 @@ class CPUOffloadingSpec(OffloadingSpec):
         }
         store_threshold = int(extra_config.get("store_threshold", 0))
         if store_threshold >= 2:
-            definitions[CPUOffloadingMetrics.STORES_SKIPPED] = (
-                OffloadingCounterMetadata(
-                    documentation=(
-                        "Number of KV offload stores skipped because the reuse "
-                        "threshold was not reached."
-                    ),
-                )
+            definitions[CPUOffloadingMetrics.STORES_SKIPPED] = OffloadingCounterMetadata(
+                documentation=("Number of KV offload stores skipped because the reuse threshold was not reached."),
             )
         return definitions
 
@@ -56,9 +49,7 @@ class CPUOffloadingSpec(OffloadingSpec):
 
         cpu_bytes_to_use = self.extra_config.get("cpu_bytes_to_use")
         if not cpu_bytes_to_use:
-            raise Exception(
-                "cpu_bytes_to_use must be specified in kv_connector_extra_config"
-            )
+            raise Exception("cpu_bytes_to_use must be specified in kv_connector_extra_config")
 
         world_size = aphrodite_config.parallel_config.world_size
         self.num_blocks = 0
@@ -67,29 +58,21 @@ class CPUOffloadingSpec(OffloadingSpec):
         assert kv_cache_config is not None
         if kv_cache_config.num_blocks > 0 and world_size > 0:
             is_packed = any(t.block_stride for t in kv_cache_config.kv_cache_tensors)
-            assert not is_packed or all(
-                t.block_stride for t in kv_cache_config.kv_cache_tensors
-            )
+            assert not is_packed or all(t.block_stride for t in kv_cache_config.kv_cache_tensors)
             total_gpu_kv_bytes = (
                 kv_cache_config.kv_cache_tensors[0].size
                 if is_packed
                 else sum(t.size for t in kv_cache_config.kv_cache_tensors)
             )
-            kv_bytes_per_block = (
-                total_gpu_kv_bytes // kv_cache_config.num_blocks
-            ) * world_size
+            kv_bytes_per_block = (total_gpu_kv_bytes // kv_cache_config.num_blocks) * world_size
             kv_bytes_per_offloaded_block = kv_bytes_per_block * self.block_size_factor
 
             # calculate cpu_page_size_per_worker
             self.cpu_page_size_per_worker = kv_bytes_per_offloaded_block // world_size
 
             # calculate num_blocks
-            aligned_kv_bytes_per_offloaded_block = round_up(
-                kv_bytes_per_offloaded_block, self.BLOCK_SIZE_ALIGNMENT
-            )
-            self.num_blocks = (
-                int(cpu_bytes_to_use) // aligned_kv_bytes_per_offloaded_block
-            )
+            aligned_kv_bytes_per_offloaded_block = round_up(kv_bytes_per_offloaded_block, self.BLOCK_SIZE_ALIGNMENT)
+            self.num_blocks = int(cpu_bytes_to_use) // aligned_kv_bytes_per_offloaded_block
 
             # Expose aligned_kv_bytes_per_offloaded_block as
             # kv_bytes_per_offloaded_block. Note that this might contain
@@ -136,10 +119,7 @@ class CPUOffloadingSpec(OffloadingSpec):
     def get_worker(self, kv_caches: CanonicalKVCaches) -> OffloadingWorker:
         if not self._worker:
             if not (current_platform.is_cuda_alike() or current_platform.is_xpu()):
-                raise Exception(
-                    "CPU Offloading is currently only supported on CUDA-alike "
-                    "and XPU GPUs"
-                )
+                raise Exception("CPU Offloading is currently only supported on CUDA-alike and XPU GPUs")
             self._worker = self.create_worker(kv_caches)
 
         assert self._worker is not None

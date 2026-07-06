@@ -171,9 +171,7 @@ class MLAAttnFp8StaticQuantPattern(AphroditePatternReplacement[..., torch.Tensor
         return inputs
 
 
-class MLAAttnNvfp4QuantPattern(
-    AphroditePatternReplacement[..., tuple[torch.Tensor, torch.Tensor]]
-):
+class MLAAttnNvfp4QuantPattern(AphroditePatternReplacement[..., tuple[torch.Tensor, torch.Tensor]]):
     """
     Fusion for MLA Attention+Nvfp4Quant.
 
@@ -359,9 +357,7 @@ class MLAAttnNvfp4QuantPattern(
         return inputs
 
 
-class MLAAttnFp8GroupQuantPattern(
-    AphroditePatternReplacement[..., tuple[torch.Tensor, torch.Tensor]]
-):
+class MLAAttnFp8GroupQuantPattern(AphroditePatternReplacement[..., tuple[torch.Tensor, torch.Tensor]]):
     """
     Fusion for MLA Attention+Fp8GroupQuant (per-group dynamic FP8).
 
@@ -429,9 +425,7 @@ class MLAAttnFp8GroupQuantPattern(
                     kv_cache_dummy_dep=kv_cache_dummy_dep,
                 )
                 attn_out = at1[1]
-                result = torch.empty(
-                    attn_out.shape, device=attn_out.device, dtype=FP8_DTYPE
-                )
+                result = torch.empty(attn_out.shape, device=attn_out.device, dtype=FP8_DTYPE)
                 finfo = torch.finfo(FP8_DTYPE)
                 _, result, scale = auto_functionalized(
                     self._quant_matcher.QUANT_OP,
@@ -470,9 +464,7 @@ class MLAAttnFp8GroupQuantPattern(
                 kv_cache_dummy_dep=kv_cache_dummy_dep,
             )
             attn_out = at1[1]
-            result = torch.empty(
-                attn_out.shape, device=attn_out.device, dtype=FP8_DTYPE
-            )
+            result = torch.empty(attn_out.shape, device=attn_out.device, dtype=FP8_DTYPE)
             finfo = torch.finfo(FP8_DTYPE)
             _, result, scale = auto_functionalized(
                 self._quant_matcher.QUANT_OP,

@@ -65,8 +65,7 @@ class TraceStructuredCapture:
         return [
             c
             for c in self.calls
-            if c["event_type"] == event_type
-            and regex.fullmatch(c.get("metadata", {}).get("name", ""))
+            if c["event_type"] == event_type and regex.fullmatch(c.get("metadata", {}).get("name", ""))
         ]
 
 
@@ -102,13 +101,10 @@ def test_aphrodite_structured_logging_artifacts(use_fresh_inductor_cache):
             model(torch.randn(8, MLP_SIZE))
 
     config_artifacts = capture.get("artifact", "aphrodite_compilation_config")
-    assert len(config_artifacts) == 1, (
-        f"Expected 1 aphrodite_compilation_config, got {len(config_artifacts)}"
-    )
+    assert len(config_artifacts) == 1, f"Expected 1 aphrodite_compilation_config, got {len(config_artifacts)}"
     aphrodite_piecewise_split_graph = capture.get("graph_dump", "aphrodite_piecewise_split_graph")
     assert len(aphrodite_piecewise_split_graph) == 1, (
-        "Expected 1 toplevel piecewise split graph, "
-        f"got {len(aphrodite_piecewise_split_graph)}"
+        f"Expected 1 toplevel piecewise split graph, got {len(aphrodite_piecewise_split_graph)}"
     )
     compile_start_artifacts = capture.get("artifact", "aphrodite_piecewise_compile_start")
     assert len(compile_start_artifacts) == 4, (
@@ -118,6 +114,5 @@ def test_aphrodite_structured_logging_artifacts(use_fresh_inductor_cache):
     )
     submod_dumps = capture.get("graph_dump", r"aphrodite_submod_.*")
     assert len(submod_dumps) == 2, (
-        "Expected 2 submods (one before attention, one after attention), "
-        f"got {len(submod_dumps)}"
+        f"Expected 2 submods (one before attention, one after attention), got {len(submod_dumps)}"
     )

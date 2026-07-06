@@ -248,9 +248,7 @@ _VIDEO_PATCHES_PER_FRAME = 280
 def test_encoder_chunk_tight_budget_fits_in_free():
     free = 3 * GiB_bytes  # L4 22 GiB after 26B AWQ load.
     total = 22 * GiB_bytes
-    chunk = _encoder_chunk(
-        _VIDEO_PATCHES_PER_FRAME, free, total, _POSITION_EMBEDDING_SIZE
-    )
+    chunk = _encoder_chunk(_VIDEO_PATCHES_PER_FRAME, free, total, _POSITION_EMBEDDING_SIZE)
     one_hot_bytes = chunk * _VIDEO_PATCHES_PER_FRAME * 2 * _POSITION_EMBEDDING_SIZE * 8
     assert one_hot_bytes <= free // 2
 
@@ -266,22 +264,13 @@ def test_encoder_chunk_roomy_gpu_keeps_batching():
 
 
 def test_encoder_chunk_zero_patches_is_safe():
-    assert (
-        _encoder_chunk(0, 60 * GiB_bytes, 80 * GiB_bytes, _POSITION_EMBEDDING_SIZE) == 1
-    )
+    assert _encoder_chunk(0, 60 * GiB_bytes, 80 * GiB_bytes, _POSITION_EMBEDDING_SIZE) == 1
 
 
 def test_encoder_chunk_zero_position_embedding_size_is_safe():
     # Degenerate config: must not raise ZeroDivisionError.
-    assert (
-        _encoder_chunk(_VIDEO_PATCHES_PER_FRAME, 60 * GiB_bytes, 80 * GiB_bytes, 0) == 1
-    )
+    assert _encoder_chunk(_VIDEO_PATCHES_PER_FRAME, 60 * GiB_bytes, 80 * GiB_bytes, 0) == 1
 
 
 def test_encoder_chunk_no_free_memory_falls_back_to_one():
-    assert (
-        _encoder_chunk(
-            _VIDEO_PATCHES_PER_FRAME, 0, 22 * GiB_bytes, _POSITION_EMBEDDING_SIZE
-        )
-        == 1
-    )
+    assert _encoder_chunk(_VIDEO_PATCHES_PER_FRAME, 0, 22 * GiB_bytes, _POSITION_EMBEDDING_SIZE) == 1

@@ -18,11 +18,7 @@ def set_active_mm_loras(
     lora_state: LoraState,
     scheduled_encoder_inputs: dict[str, list[int]],
 ) -> None:
-    if (
-        not scheduled_encoder_inputs
-        or encoder_cache is None
-        or not lora_manager.supports_tower_connector_lora()
-    ):
+    if not scheduled_encoder_inputs or encoder_cache is None or not lora_manager.supports_tower_connector_lora():
         return
 
     prompt_lora_mapping: list[int] = []
@@ -66,20 +62,13 @@ def set_active_mm_loras(
     )
 
     mm_mapping = model.get_mm_mapping() if hasattr(model, "get_mm_mapping") else None
-    if (
-        mm_mapping is None
-        or not mm_mapping.connector
-        or not hasattr(model, "get_num_mm_connector_tokens")
-    ):
+    if mm_mapping is None or not mm_mapping.connector or not hasattr(model, "get_num_mm_connector_tokens"):
         return
 
     connector_token_mapping = np.repeat(
         np.array(prompt_lora_mapping, dtype=np.int32),
         np.array(
-            [
-                model.get_num_mm_connector_tokens(num_tokens)
-                for num_tokens in encoder_token_counts
-            ],
+            [model.get_num_mm_connector_tokens(num_tokens) for num_tokens in encoder_token_counts],
             dtype=np.int32,
         ),
     )

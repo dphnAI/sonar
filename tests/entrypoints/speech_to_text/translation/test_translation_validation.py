@@ -13,10 +13,10 @@ import pytest
 import pytest_asyncio
 import soundfile as sf
 
-from tests.entrypoints.speech_to_text.conftest import add_attention_backend
-from tests.utils import RemoteOpenAIServer
 from aphrodite.logger import init_logger
 from aphrodite.multimodal.media.audio import load_audio
+from tests.entrypoints.speech_to_text.conftest import add_attention_backend
+from tests.utils import RemoteOpenAIServer
 
 logger = init_logger(__name__)
 
@@ -42,10 +42,7 @@ def _get_rocm_attention_config(model_name):
             if _ON_MI3XX:
                 return {"backend": "ROCM_AITER_UNIFIED_ATTN"}
         except ImportError:
-            logger.warning(
-                "Could not import _ON_MI3XX from rocm platform, "
-                "falling back to TRITON_ATTN for Whisper."
-            )
+            logger.warning("Could not import _ON_MI3XX from rocm platform, falling back to TRITON_ATTN for Whisper.")
         return {"backend": "TRITON_ATTN"}
 
     return {"backend": "ROCM_AITER_FA"}
@@ -58,15 +55,11 @@ def _get_server_args(attention_config):
     return args
 
 
-@pytest.fixture(
-    scope="module", params=["openai/whisper-small", "google/gemma-3n-E2B-it"]
-)
+@pytest.fixture(scope="module", params=["openai/whisper-small", "google/gemma-3n-E2B-it"])
 def server(request):
     # Parametrize over model name
     attention_config = _get_rocm_attention_config(request.param)
-    with RemoteOpenAIServer(
-        request.param, _get_server_args(attention_config)
-    ) as remote_server:
+    with RemoteOpenAIServer(request.param, _get_server_args(attention_config)) as remote_server:
         yield remote_server, request.param
 
 
@@ -82,15 +75,11 @@ async def test_non_asr_model(foscolo):
     # text to text model
     model_name = "JackFram/llama-68m"
     attention_config = _get_rocm_attention_config(model_name)
-    with RemoteOpenAIServer(
-        model_name, _get_server_args(attention_config)
-    ) as remote_server:
+    with RemoteOpenAIServer(model_name, _get_server_args(attention_config)) as remote_server:
         client = remote_server.get_async_client()
 
         with pytest.raises(openai.NotFoundError):
-            await client.audio.translations.create(
-                model=model_name, file=foscolo, temperature=0.0
-            )
+            await client.audio.translations.create(model=model_name, file=foscolo, temperature=0.0)
 
 
 @pytest.mark.asyncio
@@ -195,9 +184,7 @@ async def test_streaming_response(foscolo, client_and_model, server):
     foscolo.seek(0)
     async with httpx.AsyncClient() as http_client:
         files = {"file": foscolo}
-        async with http_client.stream(
-            "POST", url, headers=headers, data=data, files=files
-        ) as response:
+        async with http_client.stream("POST", url, headers=headers, data=data, files=files) as response:
             async for line in response.aiter_lines():
                 if not line:
                     continue
@@ -213,10 +200,7 @@ async def test_streaming_response(foscolo, client_and_model, server):
     # NOTE There's a small non-deterministic issue here, likely in the attn
     # computation, which will cause a few tokens to be different, while still
     # being very close semantically.
-    assert (
-        sum([x == y for x, y in zip(res_stream, res_no_stream.text.split())])
-        >= len(res_stream) * 0.87
-    )
+    assert sum([x == y for x, y in zip(res_stream, res_no_stream.text.split())]) >= len(res_stream) * 0.87
 
 
 @pytest.mark.asyncio
@@ -238,9 +222,7 @@ async def test_stream_options(foscolo, server):
     continuous = True
     async with httpx.AsyncClient() as http_client:
         files = {"file": foscolo}
-        async with http_client.stream(
-            "POST", url, headers=headers, data=data, files=files
-        ) as response:
+        async with http_client.stream("POST", url, headers=headers, data=data, files=files) as response:
             async for line in response.aiter_lines():
                 if not line:
                     continue

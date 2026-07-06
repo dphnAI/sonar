@@ -507,7 +507,8 @@ __global__ void gemm_q4_wmma_kernel_16x16_1w(
   #ifdef APHRODITE_WMMA_LAYOUT_DEBUG
     // Diagnostic: skip WMMA, force c_acc to encode (lane, slot) so the
     // store pattern reveals the C-output lane→matrix mapping. Compile with
-    // -DAPHRODITE_WMMA_LAYOUT_DEBUG to enable. Output: c[m][n] = lane + slot/16.
+    // -DAPHRODITE_WMMA_LAYOUT_DEBUG to enable. Output: c[m][n] = lane +
+    // slot/16.
     (void)a_frag;
     (void)b_frag;
     #pragma unroll
@@ -2156,9 +2157,9 @@ torch::Tensor gptq_gemm_rdna3_wmma(torch::Tensor a, torch::Tensor b_q_weight,
         (const aphrodite::gptq_rdna3_wmma::bf16_t*)a.data_ptr(),
         (const uint32_t*)b_q_weight.data_ptr(),
         (const uint32_t*)b_qzeros.data_ptr(),
-        (const aphrodite::gptq_rdna3_wmma::bf16_t*)b_scales.data_ptr(), g_idx_ptr,
-        (aphrodite::gptq_rdna3_wmma::bf16_t*)c.data_ptr(), size_m, size_n, size_k,
-        groups, zero_offset, stream);
+        (const aphrodite::gptq_rdna3_wmma::bf16_t*)b_scales.data_ptr(),
+        g_idx_ptr, (aphrodite::gptq_rdna3_wmma::bf16_t*)c.data_ptr(), size_m,
+        size_n, size_k, groups, zero_offset, stream);
   }
 
   return c;

@@ -74,9 +74,7 @@ class Granite4ToolParser(ToolParser):
     def _collect_results(
         self, text_segments: list[str], tc_segments: list[str], cls: type[FuncT]
     ) -> tuple[str, list[FuncT]]:
-        tool_calls_json: list[dict[str, Any]] = [
-            json.loads(tc_text) for tc_text in tc_segments
-        ]
+        tool_calls_json: list[dict[str, Any]] = [json.loads(tc_text) for tc_text in tc_segments]
         tool_calls = []
         for tc in tool_calls_json:
             assert isinstance(tc, dict)
@@ -94,9 +92,7 @@ class Granite4ToolParser(ToolParser):
         model_output: str,
         request: ChatCompletionRequest,
     ) -> ExtractedToolCallInformation:
-        msg = ExtractedToolCallInformation(
-            tools_called=False, tool_calls=[], content=model_output
-        )
+        msg = ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
         try:
             delimiters = [("TC_START", self.tc_start), ("TC_END", self.tc_end)]
             pattern = "|".join(f"(?P<{name}>{pattern})" for name, pattern in delimiters)
@@ -114,13 +110,9 @@ class Granite4ToolParser(ToolParser):
                         text_segments.append(preceding_text)
                     self.in_tc = True
                 elif match_type == "TC_END":
-                    assert self.in_tc, (
-                        "Tool call end token found without corresponding start token"
-                    )
+                    assert self.in_tc, "Tool call end token found without corresponding start token"
                     tool_text = model_output[last_cut_loc : match.start()]
-                    assert tool_text, (
-                        "Expected the model to generate text between tool call tokens"
-                    )
+                    assert tool_text, "Expected the model to generate text between tool call tokens"
                     tc_segments.append(tool_text)
                     self.in_tc = False
                 else:
@@ -130,9 +122,7 @@ class Granite4ToolParser(ToolParser):
             if final_text := model_output[last_cut_loc:]:
                 text_segments.append(final_text)
 
-            content, tool_call_funcs = self._collect_results(
-                text_segments, tc_segments, FunctionCall
-            )
+            content, tool_call_funcs = self._collect_results(text_segments, tc_segments, FunctionCall)
             tool_calls = [
                 ToolCall(
                     type="function",
@@ -227,9 +217,7 @@ class Granite4ToolParser(ToolParser):
                     tc_segments.append(tc_text)
                 delta_text = ""
 
-            content, tool_call_funcs = self._collect_results(
-                text_segments, tc_segments, DeltaFunctionCall
-            )
+            content, tool_call_funcs = self._collect_results(text_segments, tc_segments, DeltaFunctionCall)
 
             delta_tool_calls = list[DeltaToolCall]()
             for function in tool_call_funcs:

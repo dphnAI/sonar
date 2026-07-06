@@ -8,7 +8,6 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from tests.kernels.moe.utils import make_test_quant_config
 from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.distributed.eplb.eplb_communicator import create_eplb_communicator
 from aphrodite.distributed.eplb.eplb_state import EplbLayerState
@@ -24,6 +23,7 @@ from aphrodite.model_executor.layers.quantization.modelopt import (
     ModelOptNvFp4Config,
     ModelOptNvFp4FusedMoE,
 )
+from tests.kernels.moe.utils import make_test_quant_config
 
 from .eplb_utils import distributed_run, set_env_vars_and_device
 
@@ -95,12 +95,12 @@ def make_fused_moe_layer(
     re.w13_input_scale.data = torch.randn_like(re.w13_input_scale.data) / 5
     re.w2_weight_scale_2.data = torch.randn_like(re.w2_weight_scale_2.data) / 5
     re.w13_weight_scale_2.data = torch.randn_like(re.w13_weight_scale_2.data) / 5
-    re.w2_weight_scale.data = (
-        torch.randn(re.w2_weight_scale.data.shape, device=device) / 5
-    ).to(re.w2_weight_scale.data.dtype)
-    re.w13_weight_scale.data = (
-        torch.randn(re.w13_weight_scale.data.shape, device=device) / 5
-    ).to(re.w13_weight_scale.data.dtype)
+    re.w2_weight_scale.data = (torch.randn(re.w2_weight_scale.data.shape, device=device) / 5).to(
+        re.w2_weight_scale.data.dtype
+    )
+    re.w13_weight_scale.data = (torch.randn(re.w13_weight_scale.data.shape, device=device) / 5).to(
+        re.w13_weight_scale.data.dtype
+    )
 
     nvfp4_fused_moe.process_weights_after_loading(re)
 
@@ -118,9 +118,7 @@ def _test_eplb_fml(env, world_size: int, test_config: TestConfig):
     aphrodite_config.kernel_config.moe_backend = test_config.moe_backend
 
     with set_current_aphrodite_config(aphrodite_config):
-        ensure_model_parallel_initialized(
-            tensor_model_parallel_size=1, pipeline_model_parallel_size=1
-        )
+        ensure_model_parallel_initialized(tensor_model_parallel_size=1, pipeline_model_parallel_size=1)
 
         ep_group = get_dp_group().cpu_group
         ep_rank = torch.distributed.get_rank()
@@ -155,19 +153,13 @@ def _test_eplb_fml(env, world_size: int, test_config: TestConfig):
         with set_forward_context(
             {},
             num_tokens=test_config.num_tokens,
-            num_tokens_across_dp=torch.tensor(
-                [test_config.num_tokens] * world_size, device="cpu", dtype=torch.int
-            ),
+            num_tokens_across_dp=torch.tensor([test_config.num_tokens] * world_size, device="cpu", dtype=torch.int),
             aphrodite_config=aphrodite_config,
         ):
             for lidx, fml in enumerate(fml_layers):
-                out_before_shuffle.append(
-                    fml(hidden_states[lidx].clone(), router_logits[lidx].clone())
-                )
+                out_before_shuffle.append(fml(hidden_states[lidx].clone(), router_logits[lidx].clone()))
 
-        indices = torch.zeros(
-            test_config.num_layers, test_config.num_experts, dtype=torch.long
-        )
+        indices = torch.zeros(test_config.num_layers, test_config.num_experts, dtype=torch.long)
         for lidx in range(test_config.num_layers):
             indices[lidx] = torch.Tensor(range(test_config.num_experts))
 
@@ -196,15 +188,11 @@ def _test_eplb_fml(env, world_size: int, test_config: TestConfig):
         logical_to_physical_map_list = []
         for lidx, fml in enumerate(fml_layers):
             physical_to_logical_map = shuffled_indices[lidx].to(device)
-            logical_to_physical_map = torch.empty(
-                (num_global_experts,), dtype=torch.int32, device=device
-            )
+            logical_to_physical_map = torch.empty((num_global_experts,), dtype=torch.int32, device=device)
             logical_to_physical_map[physical_to_logical_map] = torch.arange(
                 0, num_global_experts, dtype=torch.int32, device=device
             )
-            logical_to_physical_map_list.append(
-                logical_to_physical_map.reshape(num_global_experts, 1)
-            )
+            logical_to_physical_map_list.append(logical_to_physical_map.reshape(num_global_experts, 1))
 
         logical_to_physical_map = torch.stack(logical_to_physical_map_list)
 
@@ -225,31 +213,21 @@ def _test_eplb_fml(env, world_size: int, test_config: TestConfig):
                 logical_to_physical_map,
                 logical_replica_count,
             )
-            fml.router.eplb_state.should_record_tensor = torch.ones(
-                (), dtype=torch.bool, device=device
-            )
-            fml.router.eplb_state.num_unpadded_tokens_tensors = [
-                torch.tensor(0, dtype=torch.int32, device=device)
-            ]
+            fml.router.eplb_state.should_record_tensor = torch.ones((), dtype=torch.bool, device=device)
+            fml.router.eplb_state.num_unpadded_tokens_tensors = [torch.tensor(0, dtype=torch.int32, device=device)]
 
         out_after_shuffle = []
         with set_forward_context(
             {},
             num_tokens=test_config.num_tokens,
-            num_tokens_across_dp=torch.tensor(
-                [test_config.num_tokens] * world_size, device="cpu", dtype=torch.int
-            ),
+            num_tokens_across_dp=torch.tensor([test_config.num_tokens] * world_size, device="cpu", dtype=torch.int),
             aphrodite_config=aphrodite_config,
         ):
             for lidx, fml in enumerate(fml_layers):
-                out_after_shuffle.append(
-                    fml(hidden_states[lidx].clone(), router_logits[lidx].clone())
-                )
+                out_after_shuffle.append(fml(hidden_states[lidx].clone(), router_logits[lidx].clone()))
 
         for lidx in range(test_config.num_layers):
-            torch.testing.assert_close(
-                out_before_shuffle[lidx], out_after_shuffle[lidx], atol=1e-1, rtol=1e-1
-            )
+            torch.testing.assert_close(out_before_shuffle[lidx], out_after_shuffle[lidx], atol=1e-1, rtol=1e-1)
 
 
 @pytest.mark.parametrize("world_size", [2, 4])

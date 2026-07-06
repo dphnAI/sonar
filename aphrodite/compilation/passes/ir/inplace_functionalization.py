@@ -10,8 +10,8 @@ from torch._inductor.pattern_matcher import (
 from aphrodite.config import AphroditeConfig
 from aphrodite.logger import init_logger
 
-from ..inductor_pass import get_pass_context
 from ..aphrodite_inductor_pass import AphroditeInductorPass
+from ..inductor_pass import get_pass_context
 from .lowering_pass import get_ir_op
 from .utils import overload_or_default
 
@@ -56,8 +56,7 @@ class AphroditeIRInplaceFunctionalizationPass(AphroditeInductorPass):
             overload_name = op_overload._overloadname
             if overload_name != "maybe_inplace":
                 assert overload_name == "default", (
-                    f"Found overload {overload_name} for op {ir_op.name}, "
-                    f"expected maybe_inplace or default"
+                    f"Found overload {overload_name} for op {ir_op.name}, expected maybe_inplace or default"
                 )
                 continue
 

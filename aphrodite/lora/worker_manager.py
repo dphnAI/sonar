@@ -42,9 +42,7 @@ class WorkerLoRAManager:
         self.embedding_modules = embedding_modules
         self._cached_dummy_lora: None | Literal[False] | LoRAModel = False
         self.max_num_seqs = aphrodite_config.scheduler_config.max_num_seqs
-        self.max_num_batched_tokens = (
-            aphrodite_config.scheduler_config.max_num_batched_tokens
-        )
+        self.max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
         self.vocab_size = aphrodite_config.model_config.get_vocab_size()
         lora_config = aphrodite_config.lora_config
         if lora_config is None:
@@ -59,13 +57,9 @@ class WorkerLoRAManager:
         # TODO: Generalize max_position_embeddings handling for
         # out-of-tree (OOT) encoder-decoder models
         if aphrodite_config.model_config.is_encoder_decoder:
-            self.max_position_embeddings = getattr(
-                text_config, "max_target_positions", None
-            )
+            self.max_position_embeddings = getattr(text_config, "max_target_positions", None)
         else:
-            self.max_position_embeddings = getattr(
-                text_config, "max_position_embeddings", None
-            )
+            self.max_position_embeddings = getattr(text_config, "max_position_embeddings", None)
         self.device = device
         # Lazily initialized by create_lora_manager.
         self._adapter_manager: LoRAModelManager
@@ -163,9 +157,7 @@ class WorkerLoRAManager:
             #       offline mode)
             # - No local adapter files found at `lora_request.lora_path`
             # For NotFoundError
-            raise LoRAAdapterNotFoundError(
-                lora_request.lora_name, lora_request.lora_path
-            ) from e
+            raise LoRAAdapterNotFoundError(lora_request.lora_name, lora_request.lora_path) from e
         except Exception as e:
             raise e
 
@@ -177,9 +169,7 @@ class WorkerLoRAManager:
         if isinstance(self._cached_dummy_lora, LoRAModel):
             dummy_lora = self._cached_dummy_lora.clone(lora_request.lora_int_id)
         else:
-            dummy_lora = self._adapter_manager.create_dummy_lora(
-                lora_request.lora_int_id, rank, self.embedding_modules
-            )
+            dummy_lora = self._adapter_manager.create_dummy_lora(lora_request.lora_int_id, rank, self.embedding_modules)
             if self._cached_dummy_lora is None:
                 self._cached_dummy_lora = dummy_lora
         return self._adapter_manager.add_adapter(dummy_lora)
@@ -196,17 +186,12 @@ class WorkerLoRAManager:
             self._adapter_manager.set_adapter_mapping(mapping)
 
     def supports_tower_connector_lora(self) -> bool:
-        return (
-            self._adapter_manager.supports_mm
-            and self._adapter_manager.supports_tower_connector_lora
-        )
+        return self._adapter_manager.supports_mm and self._adapter_manager.supports_tower_connector_lora
 
     def _apply_adapters(self, adapter_requests: set[Any]) -> None:
         existing_adapters = self.list_adapters()
         models_map = {
-            adapter_request.adapter_id: adapter_request
-            for adapter_request in adapter_requests
-            if adapter_request
+            adapter_request.adapter_id: adapter_request for adapter_request in adapter_requests if adapter_request
         }
         if len(models_map) > self._adapter_manager.adapter_slots:
             raise RuntimeError(
@@ -268,11 +253,7 @@ class LRUCacheWorkerLoRAManager(WorkerLoRAManager):
         return lora_manager.model
 
     def _apply_adapters(self, lora_requests: set[LoRARequest]) -> None:
-        loras_map = {
-            lora_request.lora_int_id: lora_request
-            for lora_request in lora_requests
-            if lora_request
-        }
+        loras_map = {lora_request.lora_int_id: lora_request for lora_request in lora_requests if lora_request}
         if len(loras_map) > self._adapter_manager.lora_slots:
             raise RuntimeError(
                 f"Number of requested LoRAs ({len(loras_map)}) is greater "
@@ -288,10 +269,7 @@ class LRUCacheWorkerLoRAManager(WorkerLoRAManager):
         # This is ok because it's currently only called from
         # the single-threaded core engine loop.
 
-        if (
-            lora_request.lora_int_id not in self.list_adapters()
-            or lora_request.load_inplace
-        ):
+        if lora_request.lora_int_id not in self.list_adapters() or lora_request.load_inplace:
             # Load the new adapter first to ensure it is actually valid, before
             # evicting any existing adapters.
             # This may cause the # of loaded lora adapters to very temporarily
@@ -312,8 +290,6 @@ class LRUCacheWorkerLoRAManager(WorkerLoRAManager):
         else:
             # If the lora is already loaded, just touch it to
             # update its position in the caches
-            loaded = (
-                self._adapter_manager.get_adapter(lora_request.lora_int_id) is not None
-            )
+            loaded = self._adapter_manager.get_adapter(lora_request.lora_int_id) is not None
         self._adapter_manager.activate_adapter(lora_request.lora_int_id)
         return loaded

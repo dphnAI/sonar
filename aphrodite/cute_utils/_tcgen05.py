@@ -63,9 +63,7 @@ def make_bf16_idesc(
     transpose_A: bool = False,
     transpose_B: bool = False,
 ):
-    idesc = Uint32(
-        (1 << 4) | (1 << 7) | (1 << 10) | ((MMA_N >> 3) << 17) | ((MMA_M >> 4) << 24)
-    )
+    idesc = Uint32((1 << 4) | (1 << 7) | (1 << 10) | ((MMA_N >> 3) << 17) | ((MMA_M >> 4) << 24))
     idesc |= Uint32(negate_A) << 13
     idesc |= Uint32(negate_B) << 14
     idesc |= Uint32(transpose_A) << 15

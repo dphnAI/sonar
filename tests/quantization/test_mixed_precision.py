@@ -69,7 +69,6 @@ def test_mixed_precision_model_accuracies(model_name: str, accuracy_numbers: dic
 
     for task, expect_accuracy in accuracy_numbers.items():
         measured_accuracy = results["results"][task]["acc,none"]
-        assert (
-            measured_accuracy - rtol < expect_accuracy
-            and measured_accuracy + rtol > expect_accuracy
-        ), f"Expected: {expect_accuracy} |  Measured: {measured_accuracy}"
+        assert measured_accuracy - rtol < expect_accuracy and measured_accuracy + rtol > expect_accuracy, (
+            f"Expected: {expect_accuracy} |  Measured: {measured_accuracy}"
+        )

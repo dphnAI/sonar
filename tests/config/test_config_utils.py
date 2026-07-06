@@ -198,6 +198,5 @@ print(hash_factors(envs.compile_factors()))
     hash2 = get_hash_in_subprocess()
 
     assert hash1 == hash2, (
-        "compile_factors hash differs between fresh initializations - "
-        "dynamic env vars may not be properly ignored"
+        "compile_factors hash differs between fresh initializations - dynamic env vars may not be properly ignored"
     )

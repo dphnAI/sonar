@@ -9,14 +9,14 @@ import pytest
 import pytest_asyncio
 import torch.cuda
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.engine.arg_utils import EngineArgs
 from aphrodite.model_executor.model_loader.tensorizer import (
     TensorizerConfig,
-    tensorize_lora_adapter,
     tensorize_aphrodite_model,
+    tensorize_lora_adapter,
 )
 from aphrodite.platforms import current_platform
+from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "unsloth/llama-3.2-1b-Instruct"
 LORA_PATH = "davzoku/finqa_adapter_1b"
@@ -102,6 +102,4 @@ async def test_single_completion(client: openai.AsyncOpenAI, model_name: str):
     assert len(completion.choices) == 1
     assert len(completion.choices[0].text) >= 5
     assert completion.choices[0].finish_reason == "length"
-    assert completion.usage == openai.types.CompletionUsage(
-        completion_tokens=5, prompt_tokens=6, total_tokens=11
-    )
+    assert completion.usage == openai.types.CompletionUsage(completion_tokens=5, prompt_tokens=6, total_tokens=11)

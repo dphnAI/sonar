@@ -131,7 +131,8 @@ template <typename scalar_t>
 class MarlinScalarType2 {};
 
 template <>
-class MarlinScalarType2<half> : public MarlinScalarType<aphrodite::kFloat16.id()> {};
+class MarlinScalarType2<half>
+    : public MarlinScalarType<aphrodite::kFloat16.id()> {};
 
 template <>
 class MarlinScalarType2<nv_bfloat16>
@@ -142,7 +143,8 @@ class MarlinScalarType2<__nv_fp8_e4m3>
     : public MarlinScalarType<aphrodite::kFE4M3fn.id()> {};
 
 template <>
-class MarlinScalarType2<int8_t> : public MarlinScalarType<aphrodite::kS8.id()> {};
+class MarlinScalarType2<int8_t> : public MarlinScalarType<aphrodite::kS8.id()> {
+};
 
 }  // namespace MARLIN_NAMESPACE_NAME
 

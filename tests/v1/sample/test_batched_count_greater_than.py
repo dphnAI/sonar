@@ -58,32 +58,23 @@ def test_gather_logprobs_no_recompile():
 
         # Call 1: batch_size=1
         logprobs1 = torch.randn(1, vocab_size, device=DEVICE)
-        token_ids1 = torch.randint(
-            0, vocab_size, (1,), device=DEVICE, dtype=torch.int64
-        )
+        token_ids1 = torch.randint(0, vocab_size, (1,), device=DEVICE, dtype=torch.int64)
         Sampler.gather_logprobs(logprobs1, num_logprobs, token_ids1)
         assert compile_count == 1, f"Expected 1 compile, got {compile_count}"
 
         # Call 2: batch_size=2 — should NOT recompile
         logprobs2 = torch.randn(2, vocab_size, device=DEVICE)
-        token_ids2 = torch.randint(
-            0, vocab_size, (2,), device=DEVICE, dtype=torch.int64
-        )
+        token_ids2 = torch.randint(0, vocab_size, (2,), device=DEVICE, dtype=torch.int64)
         Sampler.gather_logprobs(logprobs2, num_logprobs, token_ids2)
         assert compile_count == 1, (
-            f"Recompiled on batch_size 1->2 (0/1 specialization). "
-            f"Expected 1 compile, got {compile_count}"
+            f"Recompiled on batch_size 1->2 (0/1 specialization). Expected 1 compile, got {compile_count}"
         )
 
         # Call 3: batch_size=8 — should NOT recompile
         logprobs3 = torch.randn(8, vocab_size, device=DEVICE)
-        token_ids3 = torch.randint(
-            0, vocab_size, (8,), device=DEVICE, dtype=torch.int64
-        )
+        token_ids3 = torch.randint(0, vocab_size, (8,), device=DEVICE, dtype=torch.int64)
         Sampler.gather_logprobs(logprobs3, num_logprobs, token_ids3)
-        assert compile_count == 1, (
-            f"Recompiled on batch_size change. Expected 1 compile, got {compile_count}"
-        )
+        assert compile_count == 1, f"Recompiled on batch_size change. Expected 1 compile, got {compile_count}"
     finally:
         # Restore original function
         logprobs_module.batched_count_greater_than = orig_fn

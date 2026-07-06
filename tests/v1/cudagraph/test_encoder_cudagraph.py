@@ -252,9 +252,7 @@ def _count_input_patches(grid_thw_list: list[list[int]]) -> int:
     return sum(t * h * w for t, h, w in grid_thw_list)
 
 
-def _count_output_tokens(
-    grid_thw_list: list[list[int]], spatial_merge_size: int
-) -> int:
+def _count_output_tokens(grid_thw_list: list[list[int]], spatial_merge_size: int) -> int:
     m = spatial_merge_size
     return sum(t * (h // m) * (w // m) for t, h, w in grid_thw_list)
 
@@ -325,9 +323,7 @@ class SimpleMockViTModel(torch.nn.Module, SupportsEncoderCudaGraph):
         for p in patches_per_item:
             cum_patches.append(cum_patches[-1] + p)
 
-        selected_pv = torch.cat(
-            [pixel_values[cum_patches[i] : cum_patches[i + 1]] for i in indices]
-        )
+        selected_pv = torch.cat([pixel_values[cum_patches[i] : cum_patches[i + 1]] for i in indices])
         selected_grid = [grid_thw[i] for i in indices]
         return {
             "pixel_values": selected_pv,
@@ -344,14 +340,9 @@ class SimpleMockViTModel(torch.nn.Module, SupportsEncoderCudaGraph):
         path: str = "default",
     ) -> EncoderCudaGraphCaptureInputs:
         per_image_output = token_budget // max_batch_size
-        grid_config = [
-            [1, _SPATIAL_MERGE, per_image_output * _SPATIAL_MERGE]
-            for _ in range(max_batch_size)
-        ]
+        grid_config = [[1, _SPATIAL_MERGE, per_image_output * _SPATIAL_MERGE] for _ in range(max_batch_size)]
         total_patches = _count_input_patches(grid_config)
-        dummy_pixel_values = torch.randn(
-            total_patches, _FLAT, device=device, dtype=dtype
-        )
+        dummy_pixel_values = torch.randn(total_patches, _FLAT, device=device, dtype=dtype)
         n_out = _count_output_tokens(grid_config, _SPATIAL_MERGE)
         dummy_buf = torch.zeros(n_out, _HIDDEN, device=device, dtype=dtype)
         return EncoderCudaGraphCaptureInputs(
@@ -413,9 +404,7 @@ def _make_manager_for_gpu(
     mgr = object.__new__(EncoderCudaGraphManager)
     mgr.token_budgets = sorted(token_budgets)
     mgr.max_batch_size = max_batch_size
-    mgr.max_frames_per_batch = (
-        max_frames_per_batch if max_frames_per_batch is not None else max_batch_size * 2
-    )
+    mgr.max_frames_per_batch = max_frames_per_batch if max_frames_per_batch is not None else max_batch_size * 2
     mgr.use_dp = False
     mgr.budget_graphs = {"default": {}}
     mgr.graph_pool = None
@@ -474,9 +463,7 @@ class TestEncoderCudaGraphCaptureReplay:
         self.device = torch.device("cuda:0")
         self.dtype = torch.float16
         self.model = SimpleMockViTModel().to(self.device).half()
-        self.mgr = _make_manager_for_gpu(
-            self.model, _BUDGETS, _MAX_BATCH, self.device, self.dtype
-        )
+        self.mgr = _make_manager_for_gpu(self.model, _BUDGETS, _MAX_BATCH, self.device, self.dtype)
         self.graph_pool = current_platform.graph_pool_handle()
         self.mgr.capture(graph_pool=self.graph_pool)
 
@@ -584,19 +571,11 @@ class SimpleMockViTVideoModel(SimpleMockViTModel):
     # ------------------------------------------------------------------
 
     def _get_grid_thw(self, mm_kwargs: dict[str, Any]) -> list[list[int]]:
-        key = (
-            "video_grid_thw"
-            if self.get_input_modality(mm_kwargs) == "video"
-            else "image_grid_thw"
-        )
+        key = "video_grid_thw" if self.get_input_modality(mm_kwargs) == "video" else "image_grid_thw"
         return mm_kwargs[key]
 
     def _get_pixel_values(self, mm_kwargs: dict[str, Any]) -> torch.Tensor:
-        key = (
-            "pixel_values_videos"
-            if self.get_input_modality(mm_kwargs) == "video"
-            else "pixel_values"
-        )
+        key = "pixel_values_videos" if self.get_input_modality(mm_kwargs) == "video" else "pixel_values"
         return mm_kwargs[key]
 
     # ------------------------------------------------------------------
@@ -616,9 +595,7 @@ class SimpleMockViTVideoModel(SimpleMockViTModel):
             for t, h, w in self._get_grid_thw(mm_kwargs)
         ]
 
-    def select_encoder_cudagraph_items(
-        self, mm_kwargs: dict[str, Any], indices: list[int]
-    ) -> dict[str, Any]:
+    def select_encoder_cudagraph_items(self, mm_kwargs: dict[str, Any], indices: list[int]) -> dict[str, Any]:
         modality = self.get_input_modality(mm_kwargs)
         pv_key = "pixel_values_videos" if modality == "video" else "pixel_values"
         grid_key = "video_grid_thw" if modality == "video" else "image_grid_thw"
@@ -634,9 +611,7 @@ class SimpleMockViTVideoModel(SimpleMockViTModel):
         for p in patches_per_item:
             cum_patches.append(cum_patches[-1] + p)
 
-        selected_pv = torch.cat(
-            [pixel_values[cum_patches[i] : cum_patches[i + 1]] for i in indices]
-        )
+        selected_pv = torch.cat([pixel_values[cum_patches[i] : cum_patches[i + 1]] for i in indices])
         return {pv_key: selected_pv, grid_key: [grid_thw[i] for i in indices]}
 
     def prepare_encoder_cudagraph_capture_inputs(
@@ -652,23 +627,15 @@ class SimpleMockViTVideoModel(SimpleMockViTModel):
         frames_per_item = max_frames_per_batch // max_batch_size
         if frames_per_item > 1:
             # Video-format capture: size cu_seqlens for T frames per item.
-            tokens_per_frame = (
-                per_item_output + frames_per_item - 1
-            ) // frames_per_item
+            tokens_per_frame = (per_item_output + frames_per_item - 1) // frames_per_item
             grid_config = [
-                [frames_per_item, _SPATIAL_MERGE, tokens_per_frame * _SPATIAL_MERGE]
-                for _ in range(max_batch_size)
+                [frames_per_item, _SPATIAL_MERGE, tokens_per_frame * _SPATIAL_MERGE] for _ in range(max_batch_size)
             ]
         else:
-            grid_config = [
-                [1, _SPATIAL_MERGE, per_item_output * _SPATIAL_MERGE]
-                for _ in range(max_batch_size)
-            ]
+            grid_config = [[1, _SPATIAL_MERGE, per_item_output * _SPATIAL_MERGE] for _ in range(max_batch_size)]
         total_patches = _count_input_patches(grid_config)
         # Use pixel_values (image key) for capture — same patch shape as video.
-        dummy_pixel_values = torch.randn(
-            total_patches, _FLAT, device=device, dtype=dtype
-        )
+        dummy_pixel_values = torch.randn(total_patches, _FLAT, device=device, dtype=dtype)
         n_out = _count_output_tokens(grid_config, _SPATIAL_MERGE)
         dummy_buf = torch.zeros(n_out, _HIDDEN, device=device, dtype=dtype)
         return EncoderCudaGraphCaptureInputs(
@@ -824,14 +791,10 @@ class TestEncoderCudaGraphVideoReplay:
     def test_image_and_video_share_manager(self):
         """Image and video inputs can both be executed through the same manager."""
         img_grid = [[1, 4, 4], [1, 4, 4]]
-        img_result = self.mgr.execute(
-            _make_mm_kwargs(img_grid, self.device, self.dtype)
-        )
+        img_result = self.mgr.execute(_make_mm_kwargs(img_grid, self.device, self.dtype))
 
         vid_grid = [[2, 4, 4]]
-        vid_result = self.mgr.execute(
-            _make_video_mm_kwargs(vid_grid, self.device, self.dtype)
-        )
+        vid_result = self.mgr.execute(_make_video_mm_kwargs(vid_grid, self.device, self.dtype))
 
         assert len(img_result) == 2
         assert len(vid_result) == 1

@@ -47,9 +47,7 @@ class FourierRotaryEmbedding(RotaryEmbedding):
 
         # setup buffers and parameters
         self.inv_freq: torch.Tensor
-        self.register_buffer(
-            "inv_freq", self._compute_inv_freq(self.base), persistent=False
-        )
+        self.register_buffer("inv_freq", self._compute_inv_freq(self.base), persistent=False)
 
         self.input_dim = self.inv_freq.shape[-1]
         self.output_dim = self.inv_freq.shape[-1]
@@ -73,20 +71,13 @@ class FourierRotaryEmbedding(RotaryEmbedding):
 
     def _compute_inv_freq(self, base: float) -> torch.Tensor:
         """Compute the inverse frequency."""
-        inv_freq = 1.0 / (
-            base
-            ** (
-                torch.arange(0, self.rotary_dim, 2, dtype=torch.float) / self.rotary_dim
-            )
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, self.rotary_dim, 2, dtype=torch.float) / self.rotary_dim))
 
         inv_freq_idx_selected = torch.ones_like(inv_freq, dtype=torch.bool)
         if self.num_inv_freq is not None:
             inv_freq_idx_selected[self.num_inv_freq :] = False
         else:
-            inv_freq_idx_selected = inv_freq > (
-                2.0 * torch.pi / self.max_position_embeddings
-            )
+            inv_freq_idx_selected = inv_freq > (2.0 * torch.pi / self.max_position_embeddings)
 
         inv_freq = inv_freq[inv_freq_idx_selected]
         return inv_freq
@@ -155,9 +146,7 @@ class FourierRotaryEmbedding(RotaryEmbedding):
         assert key is not None, "Key tensor is required for FoPE."
         key = key.unflatten(-1, (-1, self.head_size))
 
-        assert query.dim() == key.dim() == 3, (
-            "Expected query key (seq_len, heads, head_dim)"
-        )
+        assert query.dim() == key.dim() == 3, "Expected query key (seq_len, heads, head_dim)"
         assert cos.dim() <= 3 and sin.dim() <= 3
 
         need_reshape = False

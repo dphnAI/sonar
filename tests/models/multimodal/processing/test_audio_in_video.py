@@ -66,16 +66,12 @@ def test_audio_in_video_cache_correctness(model_id: str, num_videos: int) -> Non
     )
 
     # Baseline: no cache, always processes from scratch.
-    baseline_processor = MULTIMODAL_REGISTRY.create_processor(
-        ctx.model_config, cache=None
-    )
+    baseline_processor = MULTIMODAL_REGISTRY.create_processor(ctx.model_config, cache=None)
     # Sender cache: on a cache hit returns (None, prompt_updates) for each
     # item, setting mm_kwargs["video"] = [None] – the exact condition that
     # triggered the original bug.
     sender_cache = MultiModalProcessorSenderCache(ctx.model_config)
-    cached_processor = MULTIMODAL_REGISTRY.create_processor(
-        ctx.model_config, cache=sender_cache
-    )
+    cached_processor = MULTIMODAL_REGISTRY.create_processor(ctx.model_config, cache=sender_cache)
 
     video_token_id = baseline_processor.info.get_hf_config().video_token_id
 

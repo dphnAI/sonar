@@ -59,15 +59,10 @@ class CPUWorker(Worker):
 
         memory_status = get_memory_node_info(cpu_core.numa_node)
         memory_fraction = aphrodite_config.cache_config.gpu_memory_utilization
-        self.requested_cpu_memory = math.ceil(
-            memory_status.total_memory * memory_fraction
-        )
+        self.requested_cpu_memory = math.ceil(memory_status.total_memory * memory_fraction)
         available_memory = memory_status.available_memory
 
-        if (
-            aphrodite_config.cache_config.kv_cache_memory_bytes is None
-            and self.requested_cpu_memory > available_memory
-        ):
+        if aphrodite_config.cache_config.kv_cache_memory_bytes is None and self.requested_cpu_memory > available_memory:
             raise ValueError(
                 f"Available memory on node {cpu_core.numa_node} "
                 f"({format_gib(available_memory)}/"
@@ -138,8 +133,7 @@ class CPUWorker(Worker):
 
         def skip_set_num_threads(x: int):
             logger.warning(
-                "CPU backend doesn't allow to use "
-                "`torch.set_num_threads` after the thread binding, skip it."
+                "CPU backend doesn't allow to use `torch.set_num_threads` after the thread binding, skip it."
             )
 
         torch.set_num_threads = skip_set_num_threads
@@ -209,10 +203,7 @@ class CPUWorker(Worker):
         else:
             consumed_memory = psutil.Process(os.getpid()).memory_info().rss
             requested_memory_for_kv = int(self.requested_cpu_memory - consumed_memory)
-            if (
-                requested_memory_for_kv <= 0
-                or requested_memory_for_kv > available_memory
-            ):
+            if requested_memory_for_kv <= 0 or requested_memory_for_kv > available_memory:
                 raise ValueError(
                     f"Available memory on node {cpu_core.numa_node} "
                     f"({format_gib(available_memory)}/"

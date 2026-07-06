@@ -11,7 +11,6 @@ import pytest
 import regex as re
 import torch
 
-from tests.quantization.utils import is_quant_method_supported
 from aphrodite import _custom_ops as ops
 from aphrodite.config.model import ModelConfig
 from aphrodite.model_executor.kernels.linear.scaled_mm import (
@@ -29,6 +28,7 @@ from aphrodite.model_executor.layers.quantization.online.fp8 import (
 )
 from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 from aphrodite.platforms import current_platform
+from tests.quantization.utils import is_quant_method_supported
 
 DEVICE_TYPE = current_platform.device_type
 
@@ -48,12 +48,8 @@ MODELS = [
     reason="FP8 is not supported on this GPU type.",
 )
 @pytest.mark.parametrize("model_id", MODELS)
-@pytest.mark.parametrize(
-    "force_marlin", [True, False] if current_platform.is_cuda() else [False]
-)
-@pytest.mark.parametrize(
-    "use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False]
-)
+@pytest.mark.parametrize("force_marlin", [True, False] if current_platform.is_cuda() else [False])
+@pytest.mark.parametrize("use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False])
 def test_model_load_and_run(
     aphrodite_runner, model_id: str, force_marlin: bool, use_rocm_aiter: bool, monkeypatch
 ) -> None:
@@ -75,12 +71,8 @@ def test_model_load_and_run(
     reason="FP8 is not supported on this GPU type.",
 )
 @pytest.mark.parametrize("kv_cache_dtype", ["auto", "fp8"])
-@pytest.mark.parametrize(
-    "force_marlin", [True, False] if current_platform.is_cuda() else [False]
-)
-@pytest.mark.parametrize(
-    "use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False]
-)
+@pytest.mark.parametrize("force_marlin", [True, False] if current_platform.is_cuda() else [False])
+@pytest.mark.parametrize("use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False])
 def test_online_quantization(
     aphrodite_runner,
     kv_cache_dtype: str,
@@ -117,16 +109,12 @@ def test_online_quantization(
                 if current_platform.supports_fp8() and not force_marlin:
                     # For GPUs with hardware support, we keep weights in fp8
                     assert fc1.weight.dtype == torch.float8_e4m3fn
-                    assert not isinstance(
-                        fc1.quant_method.fp8_linear, MarlinFP8ScaledMMLinearKernel
-                    )
+                    assert not isinstance(fc1.quant_method.fp8_linear, MarlinFP8ScaledMMLinearKernel)
                 else:
                     # For GPUs without hardware support, we pack the fp8 weights
                     # for weight-only quantization using Marlin kernels
                     assert fc1.weight.dtype == torch.int32
-                    assert isinstance(
-                        fc1.quant_method.fp8_linear, MarlinFP8ScaledMMLinearKernel
-                    )
+                    assert isinstance(fc1.quant_method.fp8_linear, MarlinFP8ScaledMMLinearKernel)
             elif current_platform.is_rocm():
                 if current_platform.supports_fp8() and not force_marlin:
                     # For GPUs with hardware support, we keep weights in fp8
@@ -138,10 +126,7 @@ def test_online_quantization(
                         " e.g. MI300X and above."
                     )
             else:  # unsupported platform
-                pytest.skip(
-                    "Skip `test_load_fp16_model`. "
-                    "It only runs on CUDA and ROCm platform."
-                )
+                pytest.skip("Skip `test_load_fp16_model`. It only runs on CUDA and ROCm platform.")
 
         llm.apply_model(check_model)
 
@@ -194,9 +179,7 @@ def test_online_quant_peak_mem(
             if match:
                 model_memory_gib = float(match.group(1))
         if peak_memory_gib is None:
-            match = re.search(
-                r"Peak GPU memory after loading weights: ([\d.]+) GiB", line
-            )
+            match = re.search(r"Peak GPU memory after loading weights: ([\d.]+) GiB", line)
             if match:
                 peak_memory_gib = float(match.group(1))
 
@@ -215,12 +198,8 @@ def test_online_quant_peak_mem(
     # need to have individual weights in bf16 + fp8 alive at the same time.
     expected_peak_memory_gib = expected_model_memory_gib * 1.4
 
-    assert model_memory_gib < expected_model_memory_gib, (
-        f"{model_memory_gib=} higher than {expected_model_memory_gib}"
-    )
-    assert peak_memory_gib < expected_peak_memory_gib, (
-        f"{peak_memory_gib=} higher than {expected_peak_memory_gib}"
-    )
+    assert model_memory_gib < expected_model_memory_gib, f"{model_memory_gib=} higher than {expected_model_memory_gib}"
+    assert peak_memory_gib < expected_peak_memory_gib, f"{peak_memory_gib=} higher than {expected_peak_memory_gib}"
 
 
 @pytest.mark.skipif(
@@ -288,9 +267,7 @@ def test_scaled_fp8_quant(dtype) -> None:
 
     # non-contiguous input with padding
     m, n, padded_stride = 975, 512, 576
-    padded_tensor = (torch.randn(size=(m, padded_stride), device=DEVICE_TYPE) * 13).to(
-        dtype
-    )
+    padded_tensor = (torch.randn(size=(m, padded_stride), device=DEVICE_TYPE) * 13).to(dtype)
     x_nc = padded_tensor[:, :n]  # shape (m, n) with stride (padded_stride, 1)
 
     assert not x_nc.is_contiguous()
@@ -302,24 +279,18 @@ def test_scaled_fp8_quant(dtype) -> None:
 
     # reference dynamic quantization
     y_nc = quantize_ref(x_nc, inv_scale_nc)
-    torch.testing.assert_close(
-        ref_y_nc, per_tensor_dequantize(y_nc, inv_scale_nc, dtype)
-    )
+    torch.testing.assert_close(ref_y_nc, per_tensor_dequantize(y_nc, inv_scale_nc, dtype))
 
     # static quantization
     y_nc, _ = ops.scaled_fp8_quant(x_nc, inv_scale_nc)
-    torch.testing.assert_close(
-        ref_y_nc, per_tensor_dequantize(y_nc, inv_scale_nc, dtype)
-    )
+    torch.testing.assert_close(ref_y_nc, per_tensor_dequantize(y_nc, inv_scale_nc, dtype))
 
     # padding after non-contiguous input quantization
     y_nc_pad, _ = ops.scaled_fp8_quant(x_nc, inv_scale_nc, num_token_padding=m + 10)
     assert y_nc_pad.shape[0] == m + 10
     torch.testing.assert_close(
         ref_y_nc,
-        per_tensor_dequantize(
-            torch.narrow(y_nc_pad, 0, 0, x_nc.shape[0]), inv_scale_nc, dtype
-        ),
+        per_tensor_dequantize(torch.narrow(y_nc_pad, 0, 0, x_nc.shape[0]), inv_scale_nc, dtype),
     )
 
 

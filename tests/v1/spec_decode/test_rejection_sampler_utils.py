@@ -31,32 +31,20 @@ def _build_rejection_sample_inputs(
     num_logits = num_trials * (K + 1)
 
     target_logits = target_logits_1d.unsqueeze(0).expand(num_logits, -1).contiguous()
-    draft_logits = (
-        draft_logits_1d.view(1, 1, vocab_size).expand(num_trials, K, -1).contiguous()
-    )
+    draft_logits = draft_logits_1d.view(1, 1, vocab_size).expand(num_trials, K, -1).contiguous()
 
     draft_probs = torch.softmax(draft_logits_1d, dim=0)
-    draft_tokens = torch.multinomial(
-        draft_probs.expand(num_trials, -1), K, replacement=True
-    )
+    draft_tokens = torch.multinomial(draft_probs.expand(num_trials, -1), K, replacement=True)
     draft_sampled_2d = torch.zeros(num_trials, K + 1, dtype=torch.int64, device=device)
     draft_sampled_2d[:, 1:] = draft_tokens
     draft_sampled = draft_sampled_2d.reshape(-1)
 
-    cu_num_logits = torch.arange(num_trials + 1, dtype=torch.int32, device=device) * (
-        K + 1
-    )
+    cu_num_logits = torch.arange(num_trials + 1, dtype=torch.int32, device=device) * (K + 1)
     pos = torch.arange(num_logits, dtype=torch.int32, device=device)
     idx_mapping = torch.arange(num_trials, dtype=torch.int32, device=device)
-    expanded_idx_mapping = torch.arange(
-        num_trials, dtype=torch.int32, device=device
-    ).repeat_interleave(K + 1)
-    expanded_local_pos = torch.arange(K + 1, dtype=torch.int32, device=device).repeat(
-        num_trials
-    )
-    temp_tensor = torch.full(
-        (num_trials,), temperature, dtype=torch.float32, device=device
-    )
+    expanded_idx_mapping = torch.arange(num_trials, dtype=torch.int32, device=device).repeat_interleave(K + 1)
+    expanded_local_pos = torch.arange(K + 1, dtype=torch.int32, device=device).repeat(num_trials)
+    temp_tensor = torch.full((num_trials,), temperature, dtype=torch.float32, device=device)
     seed = torch.arange(num_trials, dtype=torch.int64, device=device)
 
     return dict(
@@ -167,16 +155,12 @@ def test_stochastic_rejection_sample(num_speculative_steps: int, temperature: fl
         num_trials=num_trials,
     )
 
-    sampled, num_sampled = rejection_sample(
-        **inputs, num_speculative_steps=num_speculative_steps
-    )
+    sampled, num_sampled = rejection_sample(**inputs, num_speculative_steps=num_speculative_steps)
 
     target_probs = torch.softmax(target_logits_1d, dim=0)
     for pos in range(num_speculative_steps + 1):
         accepted_mask = num_sampled >= pos + 1
-        _assert_distribution_match(
-            sampled[accepted_mask, pos], target_probs, device, label=f"position {pos}"
-        )
+        _assert_distribution_match(sampled[accepted_mask, pos], target_probs, device, label=f"position {pos}")
 
 
 @pytest.mark.parametrize("num_speculative_steps", [1, 3])
@@ -201,9 +185,7 @@ def test_greedy_rejection_sample(num_speculative_steps: int):
         num_trials=num_trials,
     )
 
-    sampled, num_sampled = rejection_sample(
-        **inputs, num_speculative_steps=num_speculative_steps
-    )
+    sampled, num_sampled = rejection_sample(**inputs, num_speculative_steps=num_speculative_steps)
 
     target_argmax = target_logits_1d.argmax().item()
 
@@ -262,9 +244,7 @@ def test_synthetic_rejection_sample(
     )
 
     conditional_rates = unconditional_to_conditional_rates(unconditional_rates)
-    synthetic_conditional_rates = torch.tensor(
-        conditional_rates, dtype=torch.float32, device=device
-    )
+    synthetic_conditional_rates = torch.tensor(conditional_rates, dtype=torch.float32, device=device)
 
     _, num_sampled = rejection_sample(
         **inputs,
@@ -322,9 +302,7 @@ def test_placeholder_draft_token_rejected():
     ],
 )
 @pytest.mark.parametrize("has_draft_logits", [True, False])
-def test_block_verification_rejection_sample(
-    num_speculative_steps: int, temperature: float, has_draft_logits: bool
-):
+def test_block_verification_rejection_sample(num_speculative_steps: int, temperature: float, has_draft_logits: bool):
     """
     Verify that block verification (Sun et al.) preserves the target
     distribution at every accepted position, for both the full draft-logits
@@ -363,9 +341,7 @@ def test_block_verification_rejection_sample(
     target_probs = torch.softmax(target_logits_1d, dim=0)
     for pos in range(num_speculative_steps + 1):
         accepted_mask = num_sampled >= pos + 1
-        _assert_distribution_match(
-            sampled[accepted_mask, pos], target_probs, device, label=f"position {pos}"
-        )
+        _assert_distribution_match(sampled[accepted_mask, pos], target_probs, device, label=f"position {pos}")
 
 
 @pytest.mark.parametrize("num_speculative_steps", [3, 5])
@@ -384,9 +360,7 @@ def test_block_verification_accepts_at_least_as_many(num_speculative_steps: int)
     target_logits_1d = torch.randn(VOCAB_SIZE, device=device, dtype=torch.float32)
     # A draft close to the target gives block verification room to recover
     # prefixes that token verification would have truncated.
-    draft_logits_1d = target_logits_1d + 0.5 * torch.randn(
-        VOCAB_SIZE, device=device, dtype=torch.float32
-    )
+    draft_logits_1d = target_logits_1d + 0.5 * torch.randn(VOCAB_SIZE, device=device, dtype=torch.float32)
 
     inputs = _build_rejection_sample_inputs(
         target_logits_1d,
@@ -396,9 +370,7 @@ def test_block_verification_accepts_at_least_as_many(num_speculative_steps: int)
         num_trials=num_trials,
     )
 
-    _, num_sampled_standard = rejection_sample(
-        **inputs, num_speculative_steps=num_speculative_steps
-    )
+    _, num_sampled_standard = rejection_sample(**inputs, num_speculative_steps=num_speculative_steps)
     _, num_sampled_block = rejection_sample(
         **inputs,
         num_speculative_steps=num_speculative_steps,
@@ -409,6 +381,5 @@ def test_block_verification_accepts_at_least_as_many(num_speculative_steps: int)
     mean_block = (num_sampled_block - 1).float().mean().item()
     # Allow a small slack for sampling noise.
     assert mean_block >= mean_standard - 1e-2, (
-        f"Block verification mean accepted length {mean_block:.4f} is worse "
-        f"than standard {mean_standard:.4f}."
+        f"Block verification mean accepted length {mean_block:.4f} is worse than standard {mean_standard:.4f}."
     )

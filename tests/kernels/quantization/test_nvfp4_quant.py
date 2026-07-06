@@ -187,27 +187,15 @@ def test_python_util_matches_cpp_allocation(
     input_scale = torch.tensor([1.0], dtype=torch.float32, device="cuda:0")
 
     # C++ functional variant allocates internally
-    cpp_out, cpp_scale = torch.ops._C.scaled_fp4_quant(
-        input_tensor, input_scale, is_sf_swizzled_layout
-    )
+    cpp_out, cpp_scale = torch.ops._C.scaled_fp4_quant(input_tensor, input_scale, is_sf_swizzled_layout)
 
     # Python utility
-    py_out, py_scale = create_fp4_output_tensors(
-        m, n, torch.device("cuda:0"), is_sf_swizzled_layout
-    )
+    py_out, py_scale = create_fp4_output_tensors(m, n, torch.device("cuda:0"), is_sf_swizzled_layout)
 
-    assert py_out.shape == cpp_out.shape, (
-        f"Output shape mismatch: Python {py_out.shape} vs C++ {cpp_out.shape}"
-    )
-    assert py_out.dtype == cpp_out.dtype, (
-        f"Output dtype mismatch: Python {py_out.dtype} vs C++ {cpp_out.dtype}"
-    )
-    assert py_scale.shape == cpp_scale.shape, (
-        f"Scale shape mismatch: Python {py_scale.shape} vs C++ {cpp_scale.shape}"
-    )
-    assert py_scale.dtype == cpp_scale.dtype, (
-        f"Scale dtype mismatch: Python {py_scale.dtype} vs C++ {cpp_scale.dtype}"
-    )
+    assert py_out.shape == cpp_out.shape, f"Output shape mismatch: Python {py_out.shape} vs C++ {cpp_out.shape}"
+    assert py_out.dtype == cpp_out.dtype, f"Output dtype mismatch: Python {py_out.dtype} vs C++ {cpp_out.dtype}"
+    assert py_scale.shape == cpp_scale.shape, f"Scale shape mismatch: Python {py_scale.shape} vs C++ {cpp_scale.shape}"
+    assert py_scale.dtype == cpp_scale.dtype, f"Scale dtype mismatch: Python {py_scale.dtype} vs C++ {cpp_scale.dtype}"
 
 
 @pytest.mark.parametrize("shape", PADDED_OUTPUT_SHAPES)

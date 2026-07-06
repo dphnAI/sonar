@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from tests.parser.engine.conftest import make_mock_tokenizer
 from aphrodite.parser.engine.events import EventType, SemanticEvent
 from aphrodite.parser.engine.incremental_lexer import (
     LexerShape,
@@ -19,6 +18,7 @@ from aphrodite.parser.engine.parser_engine_config import (
     Transition,
 )
 from aphrodite.parser.engine.streaming_parser_engine import StreamingParserEngine
+from tests.parser.engine.conftest import make_mock_tokenizer
 
 
 def _hermes_config() -> ParserEngineConfig:
@@ -81,11 +81,7 @@ class TestNonStreaming:
 
     def test_single_tool_call(self):
         engine = StreamingParserEngine(_hermes_config(), tokenizer=None)
-        text = (
-            '<tool_call>{"name": "get_weather",'
-            ' "arguments": {"city": "SF"}}'
-            "</tool_call>"
-        )
+        text = '<tool_call>{"name": "get_weather", "arguments": {"city": "SF"}}</tool_call>'
         events = engine.parse_complete(text)
 
         types = [e.type for e in events]
@@ -93,9 +89,7 @@ class TestNonStreaming:
         assert EventType.TOOL_CALL_END in types
         assert EventType.ARG_VALUE_CHUNK in types
 
-        arg_text = "".join(
-            e.value for e in events if e.type == EventType.ARG_VALUE_CHUNK
-        )
+        arg_text = "".join(e.value for e in events if e.type == EventType.ARG_VALUE_CHUNK)
         assert '"name": "get_weather"' in arg_text
         assert '"city": "SF"' in arg_text
 
@@ -112,9 +106,7 @@ class TestNonStreaming:
 
     def test_multiple_tool_calls(self):
         engine = StreamingParserEngine(_hermes_config(), tokenizer=None)
-        text = (
-            '<tool_call>{"name": "a"}</tool_call><tool_call>{"name": "b"}</tool_call>'
-        )
+        text = '<tool_call>{"name": "a"}</tool_call><tool_call>{"name": "b"}</tool_call>'
         events = engine.parse_complete(text)
 
         starts = [e for e in events if e.type == EventType.TOOL_CALL_START]
@@ -135,9 +127,7 @@ class TestNonStreaming:
         assert EventType.REASONING_END in types
         assert EventType.TEXT_CHUNK in types
 
-        reasoning = "".join(
-            e.value for e in events if e.type == EventType.REASONING_CHUNK
-        )
+        reasoning = "".join(e.value for e in events if e.type == EventType.REASONING_CHUNK)
         assert "Let me think..." in reasoning
 
         content = "".join(e.value for e in events if e.type == EventType.TEXT_CHUNK)
@@ -181,18 +171,14 @@ class TestStreaming:
         assert EventType.TOOL_CALL_END in types
         assert EventType.ARG_VALUE_CHUNK in types
 
-        arg_text = "".join(
-            e.value for e in events if e.type == EventType.ARG_VALUE_CHUNK
-        )
+        arg_text = "".join(e.value for e in events if e.type == EventType.ARG_VALUE_CHUNK)
         assert '"name": "add"' in arg_text
 
     @pytest.mark.parametrize(
         "text",
         [
             '<tool_call>{"name": "get", "arguments": {"x": "hello"}}</tool_call>',
-            '<tool_call>{"name": "f", "arguments": '
-            '{"items": [1, [2, 3]], "obj": {"k": "v"}}}'
-            "</tool_call>",
+            '<tool_call>{"name": "f", "arguments": {"items": [1, [2, 3]], "obj": {"k": "v"}}}</tool_call>',
         ],
         ids=["flat_args", "nested_arrays"],
     )
@@ -202,9 +188,7 @@ class TestStreaming:
         for chunk_size in [1, 2, 3, 5, 7, len(text)]:
             engine = StreamingParserEngine(_hermes_config(), tokenizer=None)
             events = self._feed_chunks(engine, text, chunk_size)
-            arg_text = "".join(
-                e.value for e in events if e.type == EventType.ARG_VALUE_CHUNK
-            )
+            arg_text = "".join(e.value for e in events if e.type == EventType.ARG_VALUE_CHUNK)
             results[chunk_size] = arg_text
 
         values = list(results.values())
@@ -239,19 +223,14 @@ class TestStreaming:
         engine = StreamingParserEngine(_think_config(), tokenizer=None)
         events = self._feed_chars(engine, "<think>hmm</think>answer")
 
-        reasoning = "".join(
-            e.value for e in events if e.type == EventType.REASONING_CHUNK
-        )
+        reasoning = "".join(e.value for e in events if e.type == EventType.REASONING_CHUNK)
         content = "".join(e.value for e in events if e.type == EventType.TEXT_CHUNK)
         assert "hmm" in reasoning
         assert "answer" in content
 
     def test_text_between_tool_calls(self):
         engine = StreamingParserEngine(_hermes_config(), tokenizer=None)
-        text = (
-            'Hi<tool_call>{"name":"a"}</tool_call>'
-            'mid<tool_call>{"name":"b"}</tool_call>end'
-        )
+        text = 'Hi<tool_call>{"name":"a"}</tool_call>mid<tool_call>{"name":"b"}</tool_call>end'
         events = self._feed_chunks(engine, text, 3)
 
         texts = "".join(e.value for e in events if e.type == EventType.TEXT_CHUNK)
@@ -272,9 +251,7 @@ class TestStreaming:
         events = self._feed_chars(engine, malformed + "</tool_call>")
 
         arg_chunks = [e.value for e in events if e.type == EventType.ARG_VALUE_CHUNK]
-        assert len(arg_chunks) > 1, (
-            "Content after stray } should still stream incrementally"
-        )
+        assert len(arg_chunks) > 1, "Content after stray } should still stream incrementally"
         arg_text = "".join(arg_chunks)
         assert '"a": 1' in arg_text
 
@@ -286,15 +263,11 @@ class TestStreaming:
         engine.feed("<tool_call>", [])
         events = engine.feed('{"name": "f"}', [])
 
-        arg_text = "".join(
-            e.value for e in events if e.type == EventType.ARG_VALUE_CHUNK
-        )
+        arg_text = "".join(e.value for e in events if e.type == EventType.ARG_VALUE_CHUNK)
         assert "}" not in arg_text, "Top-level } should be held back"
 
         events2 = engine.feed("</tool_call>", [])
-        arg_text2 = "".join(
-            e.value for e in events2 if e.type == EventType.ARG_VALUE_CHUNK
-        )
+        arg_text2 = "".join(e.value for e in events2 if e.type == EventType.ARG_VALUE_CHUNK)
         assert "}" in arg_text2, "} should flush on end tag"
 
 
@@ -324,9 +297,7 @@ def _make_hermes_tokenizer():
         "<tool_call>": _TOOL_START_ID,
         "</tool_call>": _TOOL_END_ID,
     }
-    tok.decode.side_effect = lambda ids: "".join(
-        _special.get(i, chr(i) if i < 128 else f"<{i}>") for i in ids
-    )
+    tok.decode.side_effect = lambda ids: "".join(_special.get(i, chr(i) if i < 128 else f"<{i}>") for i in ids)
     return tok
 
 
@@ -342,9 +313,7 @@ class TestLexerBufferFlush:
         assert any(e.type == EventType.REASONING_START for e in events)
 
         events = engine.feed("reasoning text<", [])
-        reasoning_text = "".join(
-            e.value for e in events if e.type == EventType.REASONING_CHUNK
-        )
+        reasoning_text = "".join(e.value for e in events if e.type == EventType.REASONING_CHUNK)
         assert "reasoning text" in reasoning_text
 
         events = engine.feed("</think>", [_END_ID])
@@ -352,9 +321,7 @@ class TestLexerBufferFlush:
         if EventType.REASONING_CHUNK in event_types:
             rc_idx = event_types.index(EventType.REASONING_CHUNK)
             re_idx = event_types.index(EventType.REASONING_END)
-            assert rc_idx < re_idx, (
-                "'<' must be emitted as REASONING_CHUNK before REASONING_END"
-            )
+            assert rc_idx < re_idx, "'<' must be emitted as REASONING_CHUNK before REASONING_END"
             flushed = events[rc_idx].value
             assert "<" in flushed
 
@@ -384,9 +351,7 @@ class TestTokenIdFiltering:
         engine.feed("prefix ", [1])
 
         # Now feed text containing <tool_call> as literal text
-        events = engine.feed(
-            "Use <tool_call> to invoke tools.</tool_call>", [2, 3, 4, 5]
-        )
+        events = engine.feed("Use <tool_call> to invoke tools.</tool_call>", [2, 3, 4, 5])
         events.extend(engine.finish())
 
         types = [e.type for e in events]
@@ -517,9 +482,7 @@ class TestTextOnlyFallbackFiltering:
     def test_func_prefix_in_prose_demoted_in_strict_mode(self):
         """<function=get_time> in prose should NOT trigger a tool call
         when strict mode is active."""
-        engine = StreamingParserEngine(
-            _func_prefix_config(), _make_func_prefix_tokenizer()
-        )
+        engine = StreamingParserEngine(_func_prefix_config(), _make_func_prefix_tokenizer())
         engine.feed("prefix ", [1])
 
         events = engine.feed("Use <function=get_time> to check.", [2, 3, 4, 5])
@@ -534,9 +497,7 @@ class TestTextOnlyFallbackFiltering:
     def test_normal_flow_after_tool_start_still_works(self):
         """TOOL_START (special token) -> FUNC_PREFIX (text) should
         still parse a tool call normally in strict mode."""
-        engine = StreamingParserEngine(
-            _func_prefix_config(), _make_func_prefix_tokenizer()
-        )
+        engine = StreamingParserEngine(_func_prefix_config(), _make_func_prefix_tokenizer())
 
         events1 = engine.feed("<tool_call>", [_TOOL_START_ID])
         assert any(e.type == EventType.TOOL_CALL_START for e in events1)
@@ -554,9 +515,7 @@ class TestTextOnlyFallbackFiltering:
     def test_fallback_fires_without_token_ids(self):
         """When no token IDs are provided, fallback transitions should
         still fire normally."""
-        engine = StreamingParserEngine(
-            _func_prefix_config(), _make_func_prefix_tokenizer()
-        )
+        engine = StreamingParserEngine(_func_prefix_config(), _make_func_prefix_tokenizer())
 
         events = engine.feed("<function=get_time>args</function>", [])
         events.extend(engine.finish())
@@ -568,9 +527,7 @@ class TestTextOnlyFallbackFiltering:
     def test_tool_between_fallback_blocked_in_strict_mode(self):
         """The (TOOL_BETWEEN, FUNC_PREFIX) fallback should also be
         blocked in strict mode."""
-        engine = StreamingParserEngine(
-            _func_prefix_config(), _make_func_prefix_tokenizer()
-        )
+        engine = StreamingParserEngine(_func_prefix_config(), _make_func_prefix_tokenizer())
 
         engine.feed("<tool_call>", [_TOOL_START_ID])
         engine.feed("<function=a>", [2, 3])
@@ -632,9 +589,7 @@ class TestArgsResetOnReentry:
         engine = StreamingParserEngine(self._multi_tool_config(), tokenizer=None)
 
         events = engine.feed(
-            '<tool_call>{"city": "SF"}</tool_call>'
-            "<tool_sep>"
-            '{"name": "bar"}</tool_call>',
+            '<tool_call>{"city": "SF"}</tool_call><tool_sep>{"name": "bar"}</tool_call>',
             [],
         )
 
@@ -788,21 +743,15 @@ class TestMultiCharTerminalInArgs:
         text = '<tool_call>{"name": "f",\n"arguments": {"a": 1}}</tool_call>'
         events = engine.parse_complete(text)
 
-        arg_text = "".join(
-            e.value for e in events if e.type == EventType.ARG_VALUE_CHUNK
-        )
+        arg_text = "".join(e.value for e in events if e.type == EventType.ARG_VALUE_CHUNK)
         assert '"name": "f"' in arg_text
         assert '"arguments"' in arg_text
 
     def test_newline_in_args_streaming(self):
         engine = StreamingParserEngine(self._newline_config(), tokenizer=None)
-        all_events = TestStreaming._feed_chars(
-            engine, '<tool_call>{"name": "f",\n"a": 1}</tool_call>'
-        )
+        all_events = TestStreaming._feed_chars(engine, '<tool_call>{"name": "f",\n"a": 1}</tool_call>')
 
-        arg_text = "".join(
-            e.value for e in all_events if e.type == EventType.ARG_VALUE_CHUNK
-        )
+        arg_text = "".join(e.value for e in all_events if e.type == EventType.ARG_VALUE_CHUNK)
         assert '"name": "f"' in arg_text
         assert '"a": 1' in arg_text
 
@@ -829,9 +778,7 @@ class TestSkipToolParsing:
         engine = StreamingParserEngine(_hermes_config(), tokenizer=None)
         engine.skip_tool_parsing = True
 
-        all_events = TestStreaming._feed_chars(
-            engine, '<tool_call>{"name": "f"}</tool_call>'
-        )
+        all_events = TestStreaming._feed_chars(engine, '<tool_call>{"name": "f"}</tool_call>')
 
         types = [e.type for e in all_events]
         assert EventType.TOOL_CALL_START not in types

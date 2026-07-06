@@ -5,7 +5,7 @@
 
 import pytest
 
-from aphrodite.config import DeviceConfig, KVTransferConfig, SchedulerConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, DeviceConfig, KVTransferConfig, SchedulerConfig
 from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
 from aphrodite.distributed.kv_transfer.kv_connector.v1 import KVConnectorRole
 from aphrodite.platforms import current_platform
@@ -80,9 +80,7 @@ def test_hma_auto_config(kv_transfer_config, expect_disabled):
         device_config=DeviceConfig("cpu"),
         kv_transfer_config=kv_transfer_config,
     )
-    assert (
-        aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager is expect_disabled
-    )
+    assert aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager is expect_disabled
 
 
 def test_explicit_hma_with_non_hma_connector_errors_at_factory():
@@ -98,10 +96,6 @@ def test_explicit_hma_with_non_hma_connector_errors_at_factory():
             kv_role="kv_both",
         ),
     )
-    kv_cache_config = KVCacheConfig(
-        num_blocks=0, kv_cache_tensors=[], kv_cache_groups=[]
-    )
+    kv_cache_config = KVCacheConfig(num_blocks=0, kv_cache_tensors=[], kv_cache_groups=[])
     with pytest.raises(ValueError, match="does not support HMA but HMA is enabled"):
-        KVConnectorFactory.create_connector(
-            aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config
-        )
+        KVConnectorFactory.create_connector(aphrodite_config, KVConnectorRole.SCHEDULER, kv_cache_config)

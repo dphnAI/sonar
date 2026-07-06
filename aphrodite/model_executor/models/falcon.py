@@ -31,7 +31,7 @@ from torch.nn import LayerNorm
 from transformers import FalconConfig as HF_FalconConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
@@ -70,22 +70,14 @@ FalconConfig: TypeAlias = HF_FalconConfig | RWConfig
 
 def _get_alibi_slopes(total_num_heads: int) -> torch.Tensor:
     closest_power_of_2 = 2 ** math.floor(math.log2(total_num_heads))
-    base = torch.tensor(
-        2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), dtype=torch.float32
-    )
+    base = torch.tensor(2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), dtype=torch.float32)
     powers = torch.arange(1, 1 + closest_power_of_2, dtype=torch.int32)
     slopes = torch.pow(base, powers)
 
     if closest_power_of_2 != total_num_heads:
-        extra_base = torch.tensor(
-            2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))), dtype=torch.float32
-        )
-        num_remaining_heads = min(
-            closest_power_of_2, total_num_heads - closest_power_of_2
-        )
-        extra_powers = torch.arange(
-            1, 1 + 2 * num_remaining_heads, 2, dtype=torch.int32
-        )
+        extra_base = torch.tensor(2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))), dtype=torch.float32)
+        num_remaining_heads = min(closest_power_of_2, total_num_heads - closest_power_of_2)
+        extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, dtype=torch.int32)
         slopes = torch.cat([slopes, torch.pow(extra_base, extra_powers)], dim=0)
 
     return slopes
@@ -144,9 +136,7 @@ class FalconAttention(nn.Module):
 
         # Layer-wise attention scaling
         self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
-        self.reduce_row_parallel_results = not (
-            config.new_decoder_architecture or config.parallel_attn
-        )
+        self.reduce_row_parallel_results = not (config.new_decoder_architecture or config.parallel_attn)
         self.dense = RowParallelLinear(
             self.hidden_size,
             self.hidden_size,
@@ -159,9 +149,7 @@ class FalconAttention(nn.Module):
 
         self.use_rotary = config.rotary
         self.use_alibi = config.alibi
-        assert not (self.use_rotary and self.use_alibi), (
-            "Rotary and alibi are mutually exclusive."
-        )
+        assert not (self.use_rotary and self.use_alibi), "Rotary and alibi are mutually exclusive."
 
         if self.use_rotary:
             max_position_embeddings = getattr(config, "max_position_embeddings", 8192)
@@ -182,9 +170,7 @@ class FalconAttention(nn.Module):
             tp_rank = get_tensor_model_parallel_rank()
             head_start = tp_rank * self.num_heads
             head_end = (tp_rank + 1) * self.num_heads
-            alibi_slopes = (
-                _get_alibi_slopes(self.total_num_heads) * self.inv_norm_factor
-            )
+            alibi_slopes = _get_alibi_slopes(self.total_num_heads) * self.inv_norm_factor
             alibi_slopes = alibi_slopes[head_start:head_end].tolist()
             self.attn = Attention(
                 self.num_heads,
@@ -241,9 +227,7 @@ class FalconMLP(nn.Module):
             prefix=f"{prefix}.dense_h_to_4h",
         )
         self.act = get_act_fn("gelu")
-        self.reduce_row_parallel_results = not (
-            config.new_decoder_architecture or config.parallel_attn
-        )
+        self.reduce_row_parallel_results = not (config.new_decoder_architecture or config.parallel_attn)
         self.dense_4h_to_h = RowParallelLinear(
             4 * hidden_size,
             hidden_size,
@@ -275,9 +259,7 @@ class FalconDecoderLayer(nn.Module):
         super().__init__()
         hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.self_attention = FalconAttention(
-            config, cache_config, quant_config, prefix=f"{prefix}.self_attention"
-        )
+        self.self_attention = FalconAttention(config, cache_config, quant_config, prefix=f"{prefix}.self_attention")
         self.mlp = FalconMLP(config, quant_config, prefix=f"{prefix}.mlp")
         self.config = config
 
@@ -288,9 +270,7 @@ class FalconDecoderLayer(nn.Module):
             config.num_ln_in_parallel_attn = 2
 
         if not config.parallel_attn:
-            self.post_attention_layernorm = LayerNorm(
-                hidden_size, eps=config.layer_norm_epsilon
-            )
+            self.post_attention_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
             self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         else:
             if config.num_ln_in_parallel_attn == 2:
@@ -299,13 +279,9 @@ class FalconDecoderLayer(nn.Module):
                 # The layer norm before the MLP
                 self.ln_mlp = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
             else:
-                self.input_layernorm = LayerNorm(
-                    hidden_size, eps=config.layer_norm_epsilon
-                )
+                self.input_layernorm = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
-        self.reduce_row_parallel_results = not (
-            config.new_decoder_architecture or config.parallel_attn
-        )
+        self.reduce_row_parallel_results = not (config.new_decoder_architecture or config.parallel_attn)
 
     def forward(
         self,
@@ -385,9 +361,7 @@ class FalconModel(nn.Module):
         # Transformer blocks
         self.start_layer, self.end_layer, self.h = make_layers(
             config.num_hidden_layers,
-            lambda prefix: FalconDecoderLayer(
-                config, cache_config, quant_config, prefix=prefix
-            ),
+            lambda prefix: FalconDecoderLayer(config, cache_config, quant_config, prefix=prefix),
             prefix=f"{prefix}.h",
         )
 
@@ -448,23 +422,17 @@ class FalconModel(nn.Module):
                         + (total_num_kv_heads, num_query_heads_per_kv_head + 2, -1)
                         + loaded_weight_shape[output_dim + 1 :]
                     )
-                    wq = loaded_weight.narrow(
-                        output_dim + 1, 0, num_query_heads_per_kv_head
-                    ).reshape(
+                    wq = loaded_weight.narrow(output_dim + 1, 0, num_query_heads_per_kv_head).reshape(
                         *loaded_weight_shape[:output_dim],
                         -1,
                         *loaded_weight_shape[output_dim + 1 :],
                     )
-                    wk = loaded_weight.narrow(
-                        output_dim + 1, num_query_heads_per_kv_head, 1
-                    ).reshape(
+                    wk = loaded_weight.narrow(output_dim + 1, num_query_heads_per_kv_head, 1).reshape(
                         *loaded_weight_shape[:output_dim],
                         -1,
                         *loaded_weight_shape[output_dim + 1 :],
                     )
-                    wv = loaded_weight.narrow(
-                        output_dim + 1, num_query_heads_per_kv_head + 1, 1
-                    ).reshape(
+                    wv = loaded_weight.narrow(output_dim + 1, num_query_heads_per_kv_head + 1, 1).reshape(
                         *loaded_weight_shape[:output_dim],
                         -1,
                         *loaded_weight_shape[output_dim + 1 :],
@@ -488,17 +456,11 @@ class FalconForCausalLM(nn.Module, SupportsPP):
         quant_config = aphrodite_config.quant_config
         self.config = config
         self.quant_config = quant_config
-        self.transformer = FalconModel(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "transformer")
-        )
+        self.transformer = FalconModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "transformer"))
         # only Falcon-11B doesn't share lm_head weight with word embeddings
         # and previous Falcon model doesn't have tie_word_embeddings config
         # so we set tie_word_embeddings to True by default
-        self.tie_word_embeddings = (
-            config.tie_word_embeddings
-            if config.tie_word_embeddings is not None
-            else True
-        )
+        self.tie_word_embeddings = config.tie_word_embeddings if config.tie_word_embeddings is not None else True
         if self.tie_word_embeddings:
             self.lm_head = self.transformer.word_embeddings
         else:
@@ -509,9 +471,7 @@ class FalconForCausalLM(nn.Module, SupportsPP):
                 prefix=maybe_prefix(prefix, "lm_head"),
             )
         self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.make_empty_intermediate_tensors = (
-            self.transformer.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.transformer.make_empty_intermediate_tensors
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.transformer.embed_input_ids(input_ids)
@@ -523,9 +483,7 @@ class FalconForCausalLM(nn.Module, SupportsPP):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        hidden_states = self.transformer(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.transformer(input_ids, positions, intermediate_tensors, inputs_embeds)
         return hidden_states
 
     def compute_logits(

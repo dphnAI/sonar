@@ -99,9 +99,7 @@ class DraftModelSpeculator(BaseSpeculator):
         self.vocab_size = self.draft_model_config.get_vocab_size()
         self.dtype = aphrodite_config.model_config.dtype
         self.use_fp64_gumbel = aphrodite_config.model_config.use_fp64_gumbel
-        self.use_local_argmax_reduction = (
-            self.speculative_config.use_local_argmax_reduction
-        )
+        self.use_local_argmax_reduction = self.speculative_config.use_local_argmax_reduction
 
         # DP configuration
         self.dp_size = aphrodite_config.parallel_config.data_parallel_size
@@ -114,12 +112,8 @@ class DraftModelSpeculator(BaseSpeculator):
             max_num_tokens=self.max_num_tokens,
             device=device,
         )
-        self.idx_mapping = torch.zeros(
-            self.max_num_reqs, dtype=torch.int32, device=device
-        )
-        self.temperature = torch.zeros(
-            self.max_num_reqs, dtype=torch.float32, device=device
-        )
+        self.idx_mapping = torch.zeros(self.max_num_reqs, dtype=torch.int32, device=device)
+        self.temperature = torch.zeros(self.max_num_reqs, dtype=torch.float32, device=device)
         self.seeds = torch.zeros(self.max_num_reqs, dtype=torch.int64, device=device)
         self.draft_tokens = torch.zeros(
             self.max_num_reqs,
@@ -127,9 +121,7 @@ class DraftModelSpeculator(BaseSpeculator):
             dtype=torch.int64,
             device=device,
         )
-        self.arange = torch.arange(
-            self.max_num_reqs + 1, dtype=torch.int32, device="cpu"
-        )
+        self.arange = torch.arange(self.max_num_reqs + 1, dtype=torch.int32, device="cpu")
 
         self.draft_logits: torch.Tensor | None = None
         if self.speculative_config.draft_sample_method == "probabilistic":
@@ -207,21 +199,14 @@ class DraftModelSpeculator(BaseSpeculator):
         # Uniform query: query_start_loc[i] = min(i, num_reqs) * num_query_per_req.
         # Clamp keeps the series non-decreasing past num_reqs, which some
         # attention backends require.
-        query_start_loc_cpu = (
-            torch.clamp(self.arange[: num_reqs_padded + 1], max=num_reqs)
-            * num_query_per_req
-        )
-        block_tables = [
-            x[:num_reqs_padded] for x in self.block_tables.input_block_tables
-        ]
+        query_start_loc_cpu = torch.clamp(self.arange[: num_reqs_padded + 1], max=num_reqs) * num_query_per_req
+        block_tables = [x[:num_reqs_padded] for x in self.block_tables.input_block_tables]
         slot_mappings = self.block_tables.slot_mappings[:, :num_tokens_padded]
         attn_metadata = build_attn_metadata(
             attn_groups=self.attn_groups,
             num_reqs=num_reqs_padded,
             num_tokens=num_tokens_padded,
-            query_start_loc_gpu=self.input_buffers.query_start_loc[
-                : num_reqs_padded + 1
-            ],
+            query_start_loc_gpu=self.input_buffers.query_start_loc[: num_reqs_padded + 1],
             query_start_loc_cpu=query_start_loc_cpu,
             max_query_len=num_query_per_req,
             seq_lens=self.input_buffers.seq_lens[:num_reqs_padded],
@@ -237,10 +222,7 @@ class DraftModelSpeculator(BaseSpeculator):
         if not self.use_local_argmax_reduction:
             return
         if self.speculative_config.draft_sample_method == "probabilistic":
-            raise ValueError(
-                "use_local_argmax_reduction is not compatible with "
-                "draft_sample_method='probabilistic'."
-            )
+            raise ValueError("use_local_argmax_reduction is not compatible with draft_sample_method='probabilistic'.")
         if not hasattr(self.model, "get_top_tokens"):
             raise ValueError(
                 "use_local_argmax_reduction is enabled but draft model "
@@ -248,8 +230,7 @@ class DraftModelSpeculator(BaseSpeculator):
                 "get_top_tokens()."
             )
         logger.info(
-            "Using local argmax reduction for draft token generation "
-            "(communication: O(2*tp_size) vs O(vocab_size))."
+            "Using local argmax reduction for draft token generation (communication: O(2*tp_size) vs O(vocab_size))."
         )
 
     def _greedy_sample_draft(self, hidden_states: torch.Tensor) -> torch.Tensor:

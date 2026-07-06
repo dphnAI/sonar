@@ -132,12 +132,8 @@ class MooncakeStoreConfig:
             protocol=config.get("protocol", "rdma"),
             device_name=config.get("device_name", ""),
             mode=config.get("mode", "embedded"),
-            global_segment_size=_parse_size(
-                config.get("global_segment_size", DEFAULT_GLOBAL_SEGMENT_SIZE)
-            ),
-            local_buffer_size=_parse_size(
-                config.get("local_buffer_size", DEFAULT_LOCAL_BUFFER_SIZE)
-            ),
+            global_segment_size=_parse_size(config.get("global_segment_size", DEFAULT_GLOBAL_SEGMENT_SIZE)),
+            local_buffer_size=_parse_size(config.get("local_buffer_size", DEFAULT_LOCAL_BUFFER_SIZE)),
             enable_offload=bool(config.get("enable_offload", False)),
         )
 
@@ -145,9 +141,7 @@ class MooncakeStoreConfig:
     def load_from_config() -> "MooncakeStoreConfig":
         config_path = os.getenv("MOONCAKE_CONFIG_PATH")
         if not config_path:
-            raise ValueError(
-                "The environment variable 'MOONCAKE_CONFIG_PATH' is not set."
-            )
+            raise ValueError("The environment variable 'MOONCAKE_CONFIG_PATH' is not set.")
         return MooncakeStoreConfig.from_file(config_path)
 
 
@@ -271,9 +265,9 @@ def _classify_replica_tier(replica_descs: Any) -> str:
 
     if _call_replica_predicate(replica_desc, "is_memory_replica"):
         return "memory"
-    if _call_replica_predicate(
-        replica_desc, "is_disk_replica"
-    ) or _call_replica_predicate(replica_desc, "is_local_disk_replica"):
+    if _call_replica_predicate(replica_desc, "is_disk_replica") or _call_replica_predicate(
+        replica_desc, "is_local_disk_replica"
+    ):
         return "disk"
     return "unknown"
 
@@ -543,8 +537,7 @@ class KVCacheStoreSendingThread(KVTransferThread):
 
             if self._should_skip_request(req_id):
                 logger.debug(
-                    "Skipping Mooncake store for request %s while CPU/disk "
-                    "offloading is under pressure",
+                    "Skipping Mooncake store for request %s while CPU/disk offloading is under pressure",
                     req_id,
                 )
                 return
@@ -605,9 +598,7 @@ class KVCacheStoreSendingThread(KVTransferThread):
                 save_exists_start,
                 len(keys),
             )
-            missing_indices = [
-                i for i, exists in enumerate(exists_states) if exists != 1
-            ]
+            missing_indices = [i for i, exists in enumerate(exists_states) if exists != 1]
 
             if not missing_indices:
                 self._record_saved(req_id, token_len)
@@ -618,9 +609,7 @@ class KVCacheStoreSendingThread(KVTransferThread):
                 ends = [ends[i] for i in missing_indices]
                 keys = [keys[i] for i in missing_indices]
                 if self.enable_kv_event:
-                    kv_event_block_hashes = [
-                        kv_event_block_hashes[i] for i in missing_indices
-                    ]
+                    kv_event_block_hashes = [kv_event_block_hashes[i] for i in missing_indices]
                 group_indices = [group_indices[i] for i in missing_indices]
 
             logger.debug(
@@ -636,24 +625,16 @@ class KVCacheStoreSendingThread(KVTransferThread):
             # parent_block_hash chains live within a group, not across.
             if self.enable_kv_event:
                 prev_key_per_group: dict[int, Any] = {}
-                new_block_hashes = [
-                    maybe_convert_block_hash(bh) for bh in kv_event_block_hashes
-                ]
+                new_block_hashes = [maybe_convert_block_hash(bh) for bh in kv_event_block_hashes]
 
-            for idx, (s, e, g_idx) in enumerate(
-                zip(starts, ends, group_indices, strict=True)
-            ):
+            for idx, (s, e, g_idx) in enumerate(zip(starts, ends, group_indices, strict=True)):
                 db = self.token_databases[g_idx]
                 addr, size, _ = db.prepare_value(s, e, block_ids_per_group[g_idx])
                 addrs.append(addr)
                 sizes.append(size)
 
                 if self.enable_kv_event:
-                    token_ids = (
-                        req_meta.token_ids[s:e]
-                        if req_meta.token_ids is not None
-                        else None
-                    )
+                    token_ids = req_meta.token_ids[s:e] if req_meta.token_ids is not None else None
                     stored_event = BlockStored(
                         block_hashes=[new_block_hashes[idx]],
                         parent_block_hash=prev_key_per_group.get(g_idx),
@@ -691,9 +672,7 @@ class KVCacheStoreSendingThread(KVTransferThread):
                 if failed:
                     failed_codes = set(res[i] for i in failed)
                     logger.warning(
-                        "batch_put failed: %d/%d keys failed "
-                        "(codes=%s, batch_bytes=%d, num_keys=%d), "
-                        "first_key=%s",
+                        "batch_put failed: %d/%d keys failed (codes=%s, batch_bytes=%d, num_keys=%d), first_key=%s",
                         len(failed),
                         len(keys),
                         failed_codes,
@@ -701,9 +680,8 @@ class KVCacheStoreSendingThread(KVTransferThread):
                         len(keys),
                         keys[0] if keys else "N/A",
                     )
-                    if (
-                        MOONCAKE_NO_AVAILABLE_HANDLE in failed_codes
-                        and not self._mark_request_skipped_for_pressure(req_id)
+                    if MOONCAKE_NO_AVAILABLE_HANDLE in failed_codes and not self._mark_request_skipped_for_pressure(
+                        req_id
                     ):
                         logger.warning(
                             "Detected Mooncake CPU/disk offloading pressure "
@@ -715,10 +693,7 @@ class KVCacheStoreSendingThread(KVTransferThread):
                 else:
                     self._record_saved(req_id, token_len)
                     if self._clear_store_pressure():
-                        logger.info(
-                            "Mooncake CPU/disk offloading pressure cleared "
-                            "after a successful store batch"
-                        )
+                        logger.info("Mooncake CPU/disk offloading pressure cleared after a successful store batch")
             except Exception as e:
                 self._record_operation(
                     "save_put",
@@ -769,9 +744,7 @@ class KVCacheStoreRecvingThread(KVTransferThread):
         self.usable_disk_offload_buffer_budget_bytes = (
             None
             if disk_offload_buffer_budget_bytes is None
-            else _get_usable_disk_offload_buffer_budget_bytes(
-                disk_offload_buffer_budget_bytes
-            )
+            else _get_usable_disk_offload_buffer_budget_bytes(disk_offload_buffer_budget_bytes)
         )
         self.coord = coord
 
@@ -804,15 +777,11 @@ class KVCacheStoreRecvingThread(KVTransferThread):
         block_id_list: list[int] = []
         for g_idx, db in enumerate(self.token_databases):
             mask = load_mask_per_group[g_idx]
-            for start, end, block_hash in db.process_tokens(
-                token_len, req_meta.block_hashes, mask_num
-            ):
+            for start, end, block_hash in db.process_tokens(token_len, req_meta.block_hashes, mask_num):
                 chunk_idx = start // db.block_size
                 if chunk_idx >= len(mask) or not mask[chunk_idx]:
                     continue
-                addr, size, block_id = db.prepare_value(
-                    start, end, req_meta.block_ids[g_idx]
-                )
+                addr, size, block_id = db.prepare_value(start, end, req_meta.block_ids[g_idx])
                 key_list.append(db.key_for(block_hash))
                 addr_list.append(addr)
                 size_list.append(size)
@@ -827,9 +796,7 @@ class KVCacheStoreRecvingThread(KVTransferThread):
 
         load_batches = [(key_list_c, addr_list_c, size_list_c, block_id_list_c)]
         if self.usable_disk_offload_buffer_budget_bytes is not None:
-            total_staging_bytes = sum(
-                _estimate_disk_offload_staging_bytes(size) for size in size_list_c
-            )
+            total_staging_bytes = sum(_estimate_disk_offload_staging_bytes(size) for size in size_list_c)
             if total_staging_bytes > self.usable_disk_offload_buffer_budget_bytes:
                 assert self.disk_offload_buffer_budget_bytes is not None
                 split_batches, oversized_key = _split_disk_offload_load_batches(
@@ -845,9 +812,7 @@ class KVCacheStoreRecvingThread(KVTransferThread):
                     # tp_rank rotation means oversized_key isn't necessarily
                     # the first block in the request's original order.
                     self._add_load_error_block_ids(block_id_list_c)
-                    oversized_key_bytes = _estimate_disk_offload_staging_bytes(
-                        size_list_c[oversized_key_index]
-                    )
+                    oversized_key_bytes = _estimate_disk_offload_staging_bytes(size_list_c[oversized_key_index])
                     logger.warning(
                         "Skipping Mooncake load for request %s because key %s "
                         "requires %d staging bytes, exceeding budget %d",
@@ -863,12 +828,8 @@ class KVCacheStoreRecvingThread(KVTransferThread):
                 block_id_offset = 0
                 for batch_keys, batch_addrs, batch_sizes in split_batches:
                     next_block_id_offset = block_id_offset + len(batch_keys)
-                    batch_block_ids = block_id_list_c[
-                        block_id_offset:next_block_id_offset
-                    ]
-                    load_batches.append(
-                        (batch_keys, batch_addrs, batch_sizes, batch_block_ids)
-                    )
+                    batch_block_ids = block_id_list_c[block_id_offset:next_block_id_offset]
+                    load_batches.append((batch_keys, batch_addrs, batch_sizes, batch_block_ids))
                     block_id_offset = next_block_id_offset
 
         current_batch_keys: list[str] = key_list_c
@@ -884,18 +845,12 @@ class KVCacheStoreRecvingThread(KVTransferThread):
                     tiers_by_key = _get_replica_tiers_by_key(self.store, batch_keys)
                 # Reset so the recorded RPC duration excludes tier lookup.
                 load_get_start = time.perf_counter()
-                res = self.store.batch_get_into_multi_buffers(
-                    batch_keys, batch_addrs, batch_sizes
-                )
+                res = self.store.batch_get_into_multi_buffers(batch_keys, batch_addrs, batch_sizes)
                 if tiers_by_key is not None:
-                    _log_mooncake_load_tier_summary(
-                        req_id, batch_keys, res, tiers_by_key
-                    )
+                    _log_mooncake_load_tier_summary(req_id, batch_keys, res, tiers_by_key)
                 failed = [
                     (key, value, block_id)
-                    for key, value, block_id in zip(
-                        batch_keys, res, batch_block_ids, strict=True
-                    )
+                    for key, value, block_id in zip(batch_keys, res, batch_block_ids, strict=True)
                     if value < 0
                 ]
                 self._record_operation(
@@ -907,12 +862,9 @@ class KVCacheStoreRecvingThread(KVTransferThread):
                     num_failed_keys=len(failed),
                 )
                 if failed:
-                    self._add_load_error_block_ids(
-                        [block_id for _, _, block_id in failed]
-                    )
+                    self._add_load_error_block_ids([block_id for _, _, block_id in failed])
                     logger.warning(
-                        "Failed to get %d Mooncake keys from sub-batch "
-                        "(batch_keys=%d, first_failures=%s)",
+                        "Failed to get %d Mooncake keys from sub-batch (batch_keys=%d, first_failures=%s)",
                         len(failed),
                         len(batch_keys),
                         [(key, value) for key, value, _ in failed[:3]],
@@ -979,21 +931,13 @@ class MooncakeStoreWorker:
 
         assert aphrodite_config.kv_transfer_config is not None
         self.kv_role = aphrodite_config.kv_transfer_config.kv_role
-        self.load_async = aphrodite_config.kv_transfer_config.kv_connector_extra_config.get(
-            "load_async", True
-        )
+        self.load_async = aphrodite_config.kv_transfer_config.kv_connector_extra_config.get("load_async", True)
         self.cache_config = aphrodite_config.cache_config
-        self.block_size, self.hash_block_size = resolve_kv_cache_block_sizes(
-            kv_cache_config, aphrodite_config
-        )
+        self.block_size, self.hash_block_size = resolve_kv_cache_block_sizes(kv_cache_config, aphrodite_config)
         self.num_layers = model_config.get_num_layers(parallel_config)
 
         self.use_mla = False
-        if (
-            hasattr(model_config, "use_mla")
-            and isinstance(model_config.use_mla, bool)
-            and model_config.use_mla
-        ):
+        if hasattr(model_config, "use_mla") and isinstance(model_config.use_mla, bool) and model_config.use_mla:
             self.use_mla = True
 
         if self.use_mla:
@@ -1020,19 +964,13 @@ class MooncakeStoreWorker:
             pcp_rank=self.pcp_rank,
             dcp_rank=self.dcp_rank,
             pp_rank=self.pp_rank,
-            cache_prefix=str(
-                aphrodite_config.kv_transfer_config.kv_connector_extra_config.get(
-                    "cache_prefix", ""
-                )
-            ),
+            cache_prefix=str(aphrodite_config.kv_transfer_config.kv_connector_extra_config.get("cache_prefix", "")),
         )
 
         # Initialize MooncakeDistributedStore with its own TransferEngine
         store_config = MooncakeStoreConfig.load_from_config()
         extra_config = (
-            aphrodite_config.kv_transfer_config.kv_connector_extra_config
-            if aphrodite_config.kv_transfer_config
-            else {}
+            aphrodite_config.kv_transfer_config.kv_connector_extra_config if aphrodite_config.kv_transfer_config else {}
         )
         self.store = MooncakeDistributedStore()
         local_ip = get_ip()
@@ -1058,8 +996,7 @@ class MooncakeStoreWorker:
             self.store_replicate_config.preferred_segment = preferred_segment
 
         logger.info(
-            "Mooncake mode=%s (global_segment_size=%d, local_buffer_size=%d, "
-            "preferred_segment=%s, enable_offload=%s)",
+            "Mooncake mode=%s (global_segment_size=%d, local_buffer_size=%d, preferred_segment=%s, enable_offload=%s)",
             store_config.mode,
             store_config.global_segment_size,
             store_config.local_buffer_size,
@@ -1075,22 +1012,16 @@ class MooncakeStoreWorker:
                 )
             if preferred_segment is not None:
                 logger.warning(
-                    "preferred_segment=%s with mode=embedded: rank-"
-                    "contributed segments will be idle.",
+                    "preferred_segment=%s with mode=embedded: rank-contributed segments will be idle.",
                     preferred_segment,
                 )
-        elif (
-            store_config.mode == "standalone-store" and not store_config.enable_offload
-        ):
+        elif store_config.mode == "standalone-store" and not store_config.enable_offload:
             logger.warning(
-                "standalone-store mode without enable_offload: large prefills "
-                "may exceed the owner DirectIO budget."
+                "standalone-store mode without enable_offload: large prefills may exceed the owner DirectIO budget."
             )
 
         self.disk_offload_buffer_budget_bytes = (
-            DEFAULT_MOONCAKE_DISK_STAGING_BUFFER_BYTES
-            if store_config.enable_offload
-            else None
+            DEFAULT_MOONCAKE_DISK_STAGING_BUFFER_BYTES if store_config.enable_offload else None
         )
 
         # Start lookup server on rank 0 for scheduler-side prefix queries
@@ -1122,17 +1053,13 @@ class MooncakeStoreWorker:
             groups = [
                 dataclasses.replace(
                     g,
-                    kv_cache_spec=dataclasses.replace(
-                        g.kv_cache_spec, block_size=self.block_size
-                    ),
+                    kv_cache_spec=dataclasses.replace(g.kv_cache_spec, block_size=self.block_size),
                 )
             ]
         self._kv_cache_groups: list[KVCacheGroupSpec] = groups
         spec_cfg = getattr(aphrodite_config, "speculative_config", None)
         use_eagle = bool(
-            spec_cfg.use_eagle()
-            if spec_cfg is not None and callable(getattr(spec_cfg, "use_eagle", None))
-            else False
+            spec_cfg.use_eagle() if spec_cfg is not None and callable(getattr(spec_cfg, "use_eagle", None)) else False
         )
         self.coord = MooncakeStoreCoordinator(
             self._kv_cache_groups,
@@ -1249,9 +1176,7 @@ class MooncakeStoreWorker:
             # outermost layout has no such dim and yields a single segment.
             el = cache.element_size()
             page_size_bytes = region_len // self.num_blocks
-            outer_dims = [
-                d for d in range(cache.ndim) if cache.stride(d) * el > page_size_bytes
-            ]
+            outer_dims = [d for d in range(cache.ndim) if cache.stride(d) * el > page_size_bytes]
             if not outer_dims:
                 # Blocks-first layout (FlashInfer / MLA): one segment.
                 addrs.append(base_addr)
@@ -1313,9 +1238,7 @@ class MooncakeStoreWorker:
             ready_events_recving.append(ready_event_recving)
         for ready_event_recving in ready_events_recving:
             ready_event_recving.wait()
-        logger.info(
-            "Started %d Mooncake KV-load receive thread(s)", self.num_recv_threads
-        )
+        logger.info("Started %d Mooncake KV-load receive thread(s)", self.num_recv_threads)
 
     def start_load_kv(
         self,
@@ -1435,10 +1358,7 @@ class MooncakeStoreWorker:
             self.kv_send_thread.delete_finished_stored_request(req_id)
 
         for req_id in self.kv_send_thread.stored_requests.copy():
-            if (
-                self.kv_send_thread.stored_requests[req_id] == 0
-                and req_id in self.finished_store_req
-            ):
+            if self.kv_send_thread.stored_requests[req_id] == 0 and req_id in self.finished_store_req:
                 self.finished_store_req.remove(req_id)
                 finished_sending.add(req_id)
                 self.kv_send_thread.delete_finished_stored_request(req_id)
@@ -1470,22 +1390,16 @@ class MooncakeStoreWorker:
             spec_block_size = db.block_size
             lookup_mask = lookup_masks[g_idx]
             key_prefixes = self._lookup_key_prefixes[g_idx]
-            group_hashes = self.coord.block_hashes_for_spec(
-                block_hashes, self._kv_cache_groups[g_idx].kv_cache_spec
-            )
+            group_hashes = self.coord.block_hashes_for_spec(block_hashes, self._kv_cache_groups[g_idx].kv_cache_spec)
             for chunk_id, h in enumerate(group_hashes):
                 start_idx = chunk_id * spec_block_size
                 if start_idx >= token_len:
                     break
-                if lookup_mask is not None and (
-                    chunk_id >= len(lookup_mask) or not lookup_mask[chunk_id]
-                ):
+                if lookup_mask is not None and (chunk_id >= len(lookup_mask) or not lookup_mask[chunk_id]):
                     continue
                 hash_hex = h.hex()
                 for key_prefix in key_prefixes:
-                    candidate_keys.append(
-                        PoolKey.build_key_string(key_prefix, hash_hex)
-                    )
+                    candidate_keys.append(PoolKey.build_key_string(key_prefix, hash_hex))
                 candidate_meta.append((g_idx, bytes(h)))
 
         if not candidate_keys:
@@ -1515,10 +1429,7 @@ class MooncakeStoreWorker:
         exists_set = {
             (g_idx, hash_bytes)
             for i, (g_idx, hash_bytes) in enumerate(candidate_meta)
-            if all(
-                res[i * ranks_per_candidate + j] == 1
-                for j in range(ranks_per_candidate)
-            )
+            if all(res[i * ranks_per_candidate + j] == 1 for j in range(ranks_per_candidate))
         }
 
         _masks, hit_length = self.coord.find_longest_cache_hit(
@@ -1651,9 +1562,7 @@ class LookupKeyClient:
         )
 
         # Async lookup support
-        self.executor = ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="MooncakeLookupClient"
-        )
+        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="MooncakeLookupClient")
         self.futures: dict[str, Future[int]] = {}
 
     def _lookup(self, token_len: int, block_hashes: list[BlockHash]) -> int:
@@ -1728,6 +1637,4 @@ def get_zmq_rpc_path_lookup(aphrodite_config: AphroditeConfig) -> str:
     if "lookup_rpc_port" in extra_config:
         rpc_port = extra_config["lookup_rpc_port"]
     logger.debug("Base URL: %s, RPC Port: %s", base_url, rpc_port)
-    return (
-        f"ipc://{base_url}/lookup_rpc_port_{rpc_port}_host_{hostname}_dp_rank{dp_rank}"
-    )
+    return f"ipc://{base_url}/lookup_rpc_port_{rpc_port}_host_{hostname}_dp_rank{dp_rank}"

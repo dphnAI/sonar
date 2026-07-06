@@ -85,8 +85,7 @@ def register_quantization_config(quantization: str):
     def _wrapper(quant_config_cls):
         if quantization in QUANTIZATION_METHODS:
             logger.debug(
-                "The quantization method '%s' already exists and will be "
-                "overwritten by the quantization config %s.",
+                "The quantization method '%s' already exists and will be overwritten by the quantization config %s.",
                 quantization,
                 quant_config_cls,
             )
@@ -97,9 +96,7 @@ def register_quantization_config(quantization: str):
                 sq.append(quantization)
 
         if not issubclass(quant_config_cls, QuantizationConfig):
-            raise ValueError(
-                "The quantization config must be a subclass of `QuantizationConfig`."
-            )
+            raise ValueError("The quantization config must be a subclass of `QuantizationConfig`.")
         _CUSTOMIZED_METHOD_TO_QUANT_CONFIG[quantization] = quant_config_cls
         return quant_config_cls
 

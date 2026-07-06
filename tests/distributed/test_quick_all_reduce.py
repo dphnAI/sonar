@@ -41,9 +41,7 @@ def on_gfx942() -> bool:
 set_random_seed(42)
 _test_size_rng = random.Random(44)
 # Size over 8MB is sufficient for custom quick allreduce.
-test_sizes = [
-    _test_size_rng.randint(8 * 1024 * 1024, 10 * 1024 * 1024) for _ in range(8)
-]
+test_sizes = [_test_size_rng.randint(8 * 1024 * 1024, 10 * 1024 * 1024) for _ in range(8)]
 for i, v in enumerate(test_sizes):
     test_sizes[i] -= v % 8
 
@@ -304,16 +302,12 @@ def eager_quickreduce(
         # Size over 8MB is sufficient for custom quick allreduce.
         sz = 16 * 1024 * 1024
         fa = get_tp_group().device_communicator.qr_comm
-        inp = torch.tensor(
-            [1.0 * ((i) % 23) for i in range(sz)], dtype=torch.float16, device=device
-        )
+        inp = torch.tensor([1.0 * ((i) % 23) for i in range(sz)], dtype=torch.float16, device=device)
         _assert_quickreduce(fa, inp)
         out = fa.quick_all_reduce(inp)
         torch.testing.assert_close(out, inp * tp_size, atol=2.5, rtol=0.1)
 
-        inp = torch.tensor(
-            [1.0 * ((i) % 23) for i in range(sz)], dtype=torch.bfloat16, device=device
-        )
+        inp = torch.tensor([1.0 * ((i) % 23) for i in range(sz)], dtype=torch.bfloat16, device=device)
         _assert_quickreduce(fa, inp)
         out = fa.quick_all_reduce(inp)
         torch.testing.assert_close(out, inp * tp_size, atol=2.5, rtol=0.1)
@@ -338,18 +332,14 @@ def bf16_cast_quickreduce(
 
         sz = 16 * 1024 * 1024
         fa = get_tp_group().device_communicator.qr_comm
-        inp = torch.tensor(
-            [1.0 * (i % 23) for i in range(sz)], dtype=torch.bfloat16, device=device
-        )
+        inp = torch.tensor([1.0 * (i % 23) for i in range(sz)], dtype=torch.bfloat16, device=device)
         _assert_quickreduce(fa, inp)
         assert fa.use_fp16_kernels
         out = fa.quick_all_reduce(inp)
         torch.testing.assert_close(out, inp * tp_size, atol=2.5, rtol=0.1)
 
 
-@pytest.mark.skipif(
-    not current_platform.is_rocm(), reason="only test quick allreduce for rocm"
-)
+@pytest.mark.skipif(not current_platform.is_rocm(), reason="only test quick allreduce for rocm")
 @pytest.mark.parametrize("quant_mode", ["FP", "INT8", "INT6", "INT4", "INT3"])
 @pytest.mark.parametrize("tp_size", [2])
 @pytest.mark.parametrize("pipeline_parallel_size", [1, 2])
@@ -365,19 +355,14 @@ def test_custom_quick_allreduce(
     if world_size > torch.accelerator.device_count():
         pytest.skip("Not enough GPUs to run the test.")
     if test_target is graph_quickreduce and on_gfx942():
-        pytest.xfail(
-            "CUDA graph capture with quick reduce hits "
-            "hipErrorStreamCaptureInvalidated on gfx942"
-        )
+        pytest.xfail("CUDA graph capture with quick reduce hits hipErrorStreamCaptureInvalidated on gfx942")
 
     monkeypatch.setenv("APHRODITE_ROCM_QUICK_REDUCE_QUANTIZATION", quant_mode)
 
     multi_process_parallel(monkeypatch, tp_size, pipeline_parallel_size, test_target)
 
 
-@pytest.mark.skipif(
-    not current_platform.is_rocm(), reason="only test quick allreduce for rocm"
-)
+@pytest.mark.skipif(not current_platform.is_rocm(), reason="only test quick allreduce for rocm")
 def test_custom_quick_allreduce_bf16_cast(monkeypatch: pytest.MonkeyPatch):
     if torch.accelerator.device_count() < 2:
         pytest.skip("Not enough GPUs to run the test.")
@@ -414,9 +399,7 @@ def qr_variable_input(rank, world_size):
             world_size=world_size,
         )
     if envs.APHRODITE_DISTRIBUTED_USE_SPLIT_GROUP:
-        cpu_group = torch.distributed.split_group(
-            split_ranks=[ranks], backend="cpu:gloo,cuda:nccl"
-        )
+        cpu_group = torch.distributed.split_group(split_ranks=[ranks], backend="cpu:gloo,cuda:nccl")
     else:
         cpu_group = torch.distributed.new_group(ranks, backend="nccl")
 
@@ -451,9 +434,7 @@ def qr_variable_input(rank, world_size):
         num += 1
 
 
-@pytest.mark.skipif(
-    not current_platform.is_rocm(), reason="only test quick allreduce for rocm"
-)
+@pytest.mark.skipif(not current_platform.is_rocm(), reason="only test quick allreduce for rocm")
 @pytest.mark.parametrize("tp_size", [4, 8])
 @pytest.mark.parametrize("pipeline_parallel_size", [1])
 def test_custom_quick_allreduce_variable_input(tp_size, pipeline_parallel_size):

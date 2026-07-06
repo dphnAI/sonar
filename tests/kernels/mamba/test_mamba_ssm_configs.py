@@ -36,9 +36,7 @@ def _clear_caches() -> None:
 def _write_config(tmp_path, dstate: int, payload: dict) -> None:
     """Write payload as the bundled config for (headdim, dstate, cache_dtype)."""
     device_name = get_ssm_device_name()
-    config_path = tmp_path / get_ssm_config_file_name(
-        _HEADDIM, dstate, _CACHE_DTYPE, device_name
-    )
+    config_path = tmp_path / get_ssm_config_file_name(_HEADDIM, dstate, _CACHE_DTYPE, device_name)
     with open(config_path, "w") as f:
         json.dump(payload, f)
 
@@ -49,12 +47,8 @@ def _write_config(tmp_path, dstate: int, payload: dict) -> None:
 
 
 def test_config_file_name_format():
-    name = get_ssm_config_file_name(
-        headdim=64, dstate=128, cache_dtype="float32", device_name="NVIDIA_B200"
-    )
-    assert name == (
-        "headdim=64,dstate=128,device_name=NVIDIA_B200,cache_dtype=float32.json"
-    )
+    name = get_ssm_config_file_name(headdim=64, dstate=128, cache_dtype="float32", device_name="NVIDIA_B200")
+    assert name == ("headdim=64,dstate=128,device_name=NVIDIA_B200,cache_dtype=float32.json")
 
 
 # ---------------------------------------------------------------------------
@@ -109,9 +103,7 @@ def test_fallback_when_no_config(monkeypatch, tmp_path):
                 cache_dtype=_CACHE_DTYPE,
                 is_blackwell=is_blackwell,
             )
-            assert (block_m, warps) == _get_default_ssm_launch_config(
-                dstate, is_blackwell=is_blackwell
-            )
+            assert (block_m, warps) == _get_default_ssm_launch_config(dstate, is_blackwell=is_blackwell)
 
     _clear_caches()
 
@@ -170,9 +162,7 @@ def test_non_dict_json_returns_none(monkeypatch, tmp_path):
     """A valid JSON file that is not a dict (e.g. a list) must be ignored
     and return None rather than raising AttributeError."""
     device_name = get_ssm_device_name()
-    config_path = tmp_path / get_ssm_config_file_name(
-        _HEADDIM, 16, _CACHE_DTYPE, device_name
-    )
+    config_path = tmp_path / get_ssm_config_file_name(_HEADDIM, 16, _CACHE_DTYPE, device_name)
     with open(config_path, "w") as f:
         json.dump([1, 2, 3], f)
 
@@ -205,8 +195,6 @@ def test_empty_config_falls_back_to_heuristic(monkeypatch, tmp_path):
         cache_dtype=_CACHE_DTYPE,
         is_blackwell=False,
     )
-    assert (block_m, warps) == _get_default_ssm_launch_config(
-        dstate=dstate, is_blackwell=False
-    )
+    assert (block_m, warps) == _get_default_ssm_launch_config(dstate=dstate, is_blackwell=False)
 
     _clear_caches()

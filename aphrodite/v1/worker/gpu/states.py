@@ -48,22 +48,16 @@ class RequestState:
         self.prompt_len = UvaBackedTensor(self.max_num_reqs, dtype=torch.int32)
         self.prefill_len = UvaBackedTensor(self.max_num_reqs, dtype=torch.int32)
         # total_len = prompt_len + output_len. It grows as the request progresses.
-        self.total_len = StagedWriteTensor(
-            self.max_num_reqs, dtype=torch.int32, device=device
-        )
+        self.total_len = StagedWriteTensor(self.max_num_reqs, dtype=torch.int32, device=device)
 
         # Number of computed tokens.
         self.num_computed_prefill_tokens = np.zeros(self.max_num_reqs, dtype=np.int32)
-        self.num_computed_tokens = StagedWriteTensor(
-            self.max_num_reqs, dtype=torch.int32, device=device
-        )
+        self.num_computed_tokens = StagedWriteTensor(self.max_num_reqs, dtype=torch.int32, device=device)
         # Optimistic CPU mirror of num_computed_tokens (upper bound on GPU value).
         self.num_computed_tokens_np = np.zeros(self.max_num_reqs, dtype=np.int32)
 
         # Last sampled tokens.
-        self.last_sampled_tokens = torch.zeros(
-            self.max_num_reqs, 1, dtype=torch.int64, device=device
-        )
+        self.last_sampled_tokens = torch.zeros(self.max_num_reqs, 1, dtype=torch.int64, device=device)
 
         # Max total seq length (prompt_len + max_tokens).
         self.max_seq_len = np.zeros(self.max_num_reqs, dtype=np.int32)
@@ -76,9 +70,7 @@ class RequestState:
             device=device,
         )
 
-        self.next_prefill_tokens = torch.zeros(
-            self.max_num_reqs, dtype=torch.int32, device=device
-        )
+        self.next_prefill_tokens = torch.zeros(self.max_num_reqs, dtype=torch.int32, device=device)
 
     @property
     def num_reqs(self) -> int:
@@ -100,9 +92,7 @@ class RequestState:
         self.max_seq_len[req_idx] = prompt_len + max_tokens
         self.prompt_len.np[req_idx] = prompt_len
         prefill_len = len(all_token_ids)
-        assert prefill_len >= prompt_len, (
-            f"prefill_len {prefill_len} < prompt_len {prompt_len}"
-        )
+        assert prefill_len >= prompt_len, f"prefill_len {prefill_len} < prompt_len {prompt_len}"
         self.prefill_len.np[req_idx] = prefill_len
         self.total_len.stage_write_elem(req_idx, prefill_len)
         self.all_token_ids.stage_write(req_idx, 0, all_token_ids)
@@ -117,9 +107,7 @@ class RequestState:
             # is not read by combine_sampled_and_draft_tokens so we skip the
             # write. Use a slice assignment rather than scalar indexing so the
             # write is dispatched through fill_ without a host/device sync.
-            self.last_sampled_tokens[req_idx : req_idx + 1] = all_token_ids[
-                num_computed_tokens - 1
-            ]
+            self.last_sampled_tokens[req_idx : req_idx + 1] = all_token_ids[num_computed_tokens - 1]
         self.draft_tokens[req_idx].zero_()
 
     def apply_staged_writes(self) -> None:

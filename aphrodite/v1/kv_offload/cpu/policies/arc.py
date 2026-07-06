@@ -88,9 +88,7 @@ class ARCCachePolicy(CachePolicy):
 
             elif key in self.b1:
                 delta = max(1, len(self.b2) / len(self.b1))
-                self.target_t1_size = min(
-                    self.target_t1_size + delta, self.cache_capacity
-                )
+                self.target_t1_size = min(self.target_t1_size + delta, self.cache_capacity)
                 # move to MRU position (end) to keep it fresh in the ghost list
                 self.b1.move_to_end(key)
 
@@ -109,17 +107,13 @@ class ARCCachePolicy(CachePolicy):
         self.target_t1_size = 0.0
 
     @override
-    def evict(
-        self, n: int, protected: set[OffloadKey]
-    ) -> list[tuple[OffloadKey, BlockStatus]] | None:
+    def evict(self, n: int, protected: set[OffloadKey]) -> list[tuple[OffloadKey, BlockStatus]] | None:
         if n == 0:
             return []
 
         # Collect candidates atomically: simulate T1 size changes as we select,
         # but do not modify actual data structures until all n are found.
-        candidates: list[
-            tuple[OffloadKey, BlockStatus, bool]
-        ] = []  # (key, block, from_t1)
+        candidates: list[tuple[OffloadKey, BlockStatus, bool]] = []  # (key, block, from_t1)
         already_selected: set[OffloadKey] = set()
         virtual_t1_size = len(self.t1)
 
@@ -128,22 +122,14 @@ class ARCCachePolicy(CachePolicy):
 
             if virtual_t1_size >= int(self.target_t1_size):
                 for key, block in self.t1.items():
-                    if (
-                        block.ref_cnt == 0
-                        and key not in protected
-                        and key not in already_selected
-                    ):
+                    if block.ref_cnt == 0 and key not in protected and key not in already_selected:
                         candidate = (key, block, True)
                         virtual_t1_size -= 1
                         break
 
             if candidate is None:
                 for key, block in self.t2.items():
-                    if (
-                        block.ref_cnt == 0
-                        and key not in protected
-                        and key not in already_selected
-                    ):
+                    if block.ref_cnt == 0 and key not in protected and key not in already_selected:
                         candidate = (key, block, False)
                         break
                 if candidate is None:

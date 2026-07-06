@@ -51,8 +51,7 @@ def get_h2ovl_target_ratios(
         target_ratios = [
             ratio
             for ratio in target_ratios
-            if prior_aspect_ratio[0] % ratio[0] != 0
-            and prior_aspect_ratio[1] % ratio[1] != 0
+            if prior_aspect_ratio[0] % ratio[0] != 0 and prior_aspect_ratio[1] % ratio[1] != 0
         ]
 
     return target_ratios
@@ -196,9 +195,7 @@ def image_to_pixel_values_h2ovl(
             prior_aspect_ratio=aspect_ratio1,
         )
         # combine pixel values
-        pixel_values = torch.cat(
-            [pixel_values2[:-1], pixel_values1[:-1], pixel_values2[-1:]], 0
-        )
+        pixel_values = torch.cat([pixel_values2[:-1], pixel_values1[:-1], pixel_values2[-1:]], 0)
 
     else:
         pixel_values, _ = _preprocess_image(

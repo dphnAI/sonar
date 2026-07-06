@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 from functools import partial
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -47,15 +48,11 @@ MINIMAL_MODEL_ARCH_LIST = [
 # This list is the complement of the minimal list above. The intention is that
 # this list of models is only tested in a "special case" i.e. most PRs should
 # not test these models
-OTHER_MODEL_ARCH_LIST = set(HF_EXAMPLE_MODELS.get_supported_archs()) - set(
-    MINIMAL_MODEL_ARCH_LIST
-)
+OTHER_MODEL_ARCH_LIST = set(HF_EXAMPLE_MODELS.get_supported_archs()) - set(MINIMAL_MODEL_ARCH_LIST)
 
 
 @create_new_process_for_each_test()
-def can_initialize(
-    model_arch: str, monkeypatch: pytest.MonkeyPatch, EXAMPLE_MODELS: HfExampleModels
-):
+def can_initialize(model_arch: str, monkeypatch: pytest.MonkeyPatch, EXAMPLE_MODELS: HfExampleModels):
     """The reason for using create_new_process_for_each_test is to avoid
     the WARNING:
         "We must use the 'spawn' multiprocessing start method. Overriding
@@ -91,27 +88,20 @@ def can_initialize(
         aphrodite_config.cache_config.num_gpu_blocks = scheduler_kv_cache_config.num_blocks
         kv_cache_groups = scheduler_kv_cache_config.kv_cache_groups
         if kv_cache_groups:
-            aphrodite_config.cache_config.block_size = min(
-                g.kv_cache_spec.block_size for g in kv_cache_groups
-            )
+            aphrodite_config.cache_config.block_size = min(g.kv_cache_spec.block_size for g in kv_cache_groups)
 
         aphrodite_config.validate_block_size()
         return scheduler_kv_cache_config
 
     if model_arch == "MoonshotKimiaForCausalLM":
-        pytest.skip(
-            "Kimi-Audio requires SpeechToTextConfig "
-            "which is not configured in test environment"
-        )
+        pytest.skip("Kimi-Audio requires SpeechToTextConfig which is not configured in test environment")
 
     if model_arch in ("PrithviGeoSpatialMAE", "Terratorch"):
         import importlib.util
 
         if importlib.util.find_spec("terratorch") is None:
             pytest.skip(
-                "terratorch is not installed; "
-                "temporarily skipped while PyPI has `lightning` quarantined "
-                "(see #41376)"
+                "terratorch is not installed; temporarily skipped while PyPI has `lightning` quarantined (see #41376)"
             )
 
     use_sm89_dsa = False
@@ -142,14 +132,12 @@ def can_initialize(
         # L4 supports FA3.
         # Step1ForCausalLM requires TRITON_ATTN for use_alibi_sqrt support.
         attention_config = (
-            {"backend": "TRITON_ATTN"}
-            if model_arch in ("GptOssForCausalLM", "Step1ForCausalLM")
-            else None
+            {"backend": "TRITON_ATTN"} if model_arch in ("GptOssForCausalLM", "Step1ForCausalLM") else None
         )
         if model_arch == "WhisperForConditionalGeneration":
             m.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
 
-        kwargs = {}
+        kwargs: dict[str, Any] = {}
         if not model_info.enable_prefix_caching:
             kwargs["enable_prefix_caching"] = False
         if use_sm89_dsa:
@@ -178,9 +166,7 @@ def can_initialize(
             # these tests seem to produce leftover memory
             gpu_memory_utilization=0.80,
             load_format="dummy",
-            model_impl="transformers"
-            if model_arch in _TRANSFORMERS_BACKEND_MODELS
-            else "aphrodite",
+            model_impl="transformers" if model_arch in _TRANSFORMERS_BACKEND_MODELS else "aphrodite",
             hf_overrides=hf_overrides_fn,
             max_num_seqs=model_info.max_num_seqs,
             attention_config=attention_config,

@@ -8,9 +8,7 @@ import torch
 try:
     from aphrodite import _custom_ops as ops
 except ImportError:
-    pytest.skip(
-        "Could not import aphrodite._custom_ops. (pip install -e .)", allow_module_level=True
-    )
+    pytest.skip("Could not import aphrodite._custom_ops. (pip install -e .)", allow_module_level=True)
 
 
 @pytest.mark.skipif(torch.accelerator.device_count() < 1, reason="Need CUDA device")
@@ -37,9 +35,7 @@ def test_gather_cache_oob():
 
     # src_cache: [num_blocks, block_size, entry_size]
     num_blocks = 5
-    src_cache = torch.randn(
-        (num_blocks, block_size, entry_size), dtype=torch.float16, device="cuda"
-    )
+    src_cache = torch.randn((num_blocks, block_size, entry_size), dtype=torch.float16, device="cuda")
 
     dst = torch.empty((seq_len, entry_size), dtype=torch.float16, device="cuda")
 

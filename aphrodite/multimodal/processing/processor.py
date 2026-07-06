@@ -467,9 +467,7 @@ class PromptReplacement(PromptUpdate):
         modality="image",
         target=[image_token_id],
         replacement=PromptUpdateDetails(
-            full=(
-                [image_bos_id] + [image_token_id] * image_feature_size + [image_eos_id]
-            ),
+            full=([image_bos_id] + [image_token_id] * image_feature_size + [image_eos_id]),
             features=[image_token_id] * image_feature_size,
         ),
     )
@@ -756,10 +754,7 @@ def _all_items_found(
     mm_item_counts: dict[str, int],
     mm_found_counts: dict[str, int],
 ) -> bool:
-    return all(
-        item_idx >= mm_item_counts[modality]
-        for modality, item_idx in mm_found_counts.items()
-    )
+    return all(item_idx >= mm_item_counts[modality] for modality, item_idx in mm_found_counts.items())
 
 
 def _apply_matches(
@@ -770,14 +765,10 @@ def _apply_matches(
     mm_item_counts = {m: len(items) for m, items in mm_prompt_updates.items()}
 
     out_seqs = list[str | list[int]]()
-    out_result: MultiModalPromptUpdatesApplyResult = {
-        m: [None] * len(items) for m, items in mm_prompt_updates.items()
-    }
+    out_result: MultiModalPromptUpdatesApplyResult = {m: [None] * len(items) for m, items in mm_prompt_updates.items()}
 
     # Early exit if no items to find
-    mm_found_counts = {
-        m: sum(r is not None for r in res) for m, res in out_result.items()
-    }
+    mm_found_counts = {m: sum(r is not None for r in res) for m, res in out_result.items()}
     if _all_items_found(mm_item_counts, mm_found_counts):
         return [prompt], out_result
 
@@ -817,9 +808,7 @@ def _apply_matches(
             prev_end_idx = match.end_idx
 
         # Early exit if all items found
-        mm_found_counts = {
-            m: sum(r is not None for r in res) for m, res in out_result.items()
-        }
+        mm_found_counts = {m: sum(r is not None for r in res) for m, res in out_result.items()}
         if _all_items_found(mm_item_counts, mm_found_counts):
             break
 
@@ -1046,8 +1035,7 @@ class BaseMultiModalProcessor(ABC, Generic[_I]):
     ) -> MultiModalPromptUpdates:
         return {
             modality: [
-                [update.resolve(item_idx) for update in updates]
-                for item_idx in range(mm_item_counts.get(modality, 0))
+                [update.resolve(item_idx) for update in updates] for item_idx in range(mm_item_counts.get(modality, 0))
             ]
             for modality, updates in full_groupby_modality(prompt_updates)
         }
@@ -1127,10 +1115,7 @@ class BaseMultiModalProcessor(ABC, Generic[_I]):
         data items are passed, but `False` when multi-modal embeddings
         are passed.
         """
-        return not any(
-            isinstance(items, (EmbeddingItems, DictEmbeddingItems))
-            for items in mm_items.values()
-        )
+        return not any(isinstance(items, (EmbeddingItems, DictEmbeddingItems)) for items in mm_items.values())
 
     def _apply_hf_processor_text_mm(
         self,
@@ -1145,9 +1130,7 @@ class BaseMultiModalProcessor(ABC, Generic[_I]):
 
         In addition, return whether prompt updates have been applied.
         """
-        valid_mm_items = mm_items.select(
-            {k for k, c in mm_items.get_all_counts().items() if c > 0}
-        )
+        valid_mm_items = mm_items.select({k for k, c in mm_items.get_all_counts().items() if c > 0})
         processor_data, passthrough_data = self._get_hf_mm_data(valid_mm_items)
 
         processed_data = self._call_hf_processor(
@@ -1238,9 +1221,7 @@ class BaseMultiModalProcessor(ABC, Generic[_I]):
 
             return mm_processed_data
 
-        valid_mm_items = mm_items.select(
-            {k for k, c in mm_items.get_all_counts().items() if c > 0}
-        )
+        valid_mm_items = mm_items.select({k for k, c in mm_items.get_all_counts().items() if c > 0})
         processor_data, passthrough_data = self._get_hf_mm_data(valid_mm_items)
 
         processed_data = self.info.ctx.call_hf_processor(
@@ -1302,16 +1283,10 @@ class BaseMultiModalProcessor(ABC, Generic[_I]):
         mm_data_items: MultiModalDataItems,
         mm_hashes: MultiModalHashes,
     ) -> tuple[MultiModalIsCached, MultiModalDataItems]:
-        mm_is_cached = {
-            modality: cache.is_cached(hashes) for modality, hashes in mm_hashes.items()
-        }
+        mm_is_cached = {modality: cache.is_cached(hashes) for modality, hashes in mm_hashes.items()}
 
         mm_missing_idxs = {
-            modality: [
-                idx
-                for idx, item_is_cached in enumerate(items_is_cached)
-                if not item_is_cached
-            ]
+            modality: [idx for idx, item_is_cached in enumerate(items_is_cached) if not item_is_cached]
             for modality, items_is_cached in mm_is_cached.items()
         }
 
@@ -1321,10 +1296,7 @@ class BaseMultiModalProcessor(ABC, Generic[_I]):
             for idx in idxs:
                 data = mm_data_items[modality][idx]
                 if data is None:
-                    raise ValueError(
-                        f"Cache miss for {modality} at index {idx} "
-                        f"but data is not provided."
-                    )
+                    raise ValueError(f"Cache miss for {modality} at index {idx} but data is not provided.")
                 else:
                     missing_modality_data.append(data)
             mm_missing_data[modality] = missing_modality_data
@@ -1361,9 +1333,7 @@ class BaseMultiModalProcessor(ABC, Generic[_I]):
         mm_missing_next_idx = defaultdict[str, int](lambda: 0)
 
         merged_kwargs = defaultdict[str, list[MultiModalKwargsItem | None]](list)
-        merged_prompt_updates = defaultdict[str, list[Sequence[ResolvedPromptUpdate]]](
-            list
-        )
+        merged_prompt_updates = defaultdict[str, list[Sequence[ResolvedPromptUpdate]]](list)
         for modality, hashes in mm_hashes.items():
             missing_kwargs = mm_missing_kwargs.get(modality, [])
             missing_prompt_updates = mm_missing_prompt_updates.get(modality, [])
@@ -1384,10 +1354,7 @@ class BaseMultiModalProcessor(ABC, Generic[_I]):
 
                 merged_kwargs[modality].append(kwargs)
                 merged_prompt_updates[modality].append(
-                    [
-                        self._recompute_cached_prompt_update(update, item_idx)
-                        for update in updates
-                    ]
+                    [self._recompute_cached_prompt_update(update, item_idx) for update in updates]
                 )
 
         mm_kwargs = MultiModalKwargsItems(merged_kwargs)
@@ -1415,9 +1382,7 @@ class BaseMultiModalProcessor(ABC, Generic[_I]):
 
         mm_kwargs = MultiModalKwargsItems.from_hf_inputs(
             mm_processed_data,
-            self._get_mm_fields_config(
-                mm_processed_data, inputs.hf_processor_mm_kwargs
-            ),
+            self._get_mm_fields_config(mm_processed_data, inputs.hf_processor_mm_kwargs),
         )
 
         # Use overrides if provided; fallback to data-dependent hashing.
@@ -1481,9 +1446,7 @@ class BaseMultiModalProcessor(ABC, Generic[_I]):
 
         mm_missing_kwargs = MultiModalKwargsItems.from_hf_inputs(
             mm_missing_processed_data,
-            self._get_mm_fields_config(
-                mm_missing_processed_data, inputs.hf_processor_mm_kwargs
-            ),
+            self._get_mm_fields_config(mm_missing_processed_data, inputs.hf_processor_mm_kwargs),
         )
 
         mm_missing_prompt_updates = self._get_mm_prompt_updates(
@@ -1548,10 +1511,7 @@ class BaseMultiModalProcessor(ABC, Generic[_I]):
         # Since it is inefficient to search for all possible tokenizations
         # of the search text in the prompt, we instead perform string-based
         # updates on the decoded token IDs, then encode them back.
-        if not all(
-            all(update_idx is not None for update_idx in update_idxs)
-            for update_idxs in match_result.values()
-        ):
+        if not all(all(update_idx is not None for update_idx in update_idxs) for update_idxs in match_result.values()):
             new_text, match_result = self._apply_text_matches(
                 _seq2text(tokenizer, token_ids, use_cache=False),
                 mm_prompt_updates,
@@ -1563,13 +1523,10 @@ class BaseMultiModalProcessor(ABC, Generic[_I]):
         for modality, update_idxs in match_result.items():
             for item_idx, update_idx in enumerate(update_idxs):
                 assert update_idx is not None, (
-                    "Failed to apply prompt replacement for "
-                    f"mm_items[{modality!r}][{item_idx}]"
+                    f"Failed to apply prompt replacement for mm_items[{modality!r}][{item_idx}]"
                 )
 
-                matched_updates[modality].append(
-                    [mm_prompt_updates[modality][item_idx][update_idx]]
-                )
+                matched_updates[modality].append([mm_prompt_updates[modality][item_idx][update_idx]])
 
         placeholders = self._find_mm_placeholders(
             new_token_ids,
@@ -1695,8 +1652,7 @@ class BaseMultiModalProcessor(ABC, Generic[_I]):
             )
 
         mm_placeholder_ranges = {
-            modality: [item.to_range() for item in placeholders]
-            for modality, placeholders in mm_placeholders.items()
+            modality: [item.to_range() for item in placeholders] for modality, placeholders in mm_placeholders.items()
         }
 
         return mm_input(
@@ -1740,9 +1696,7 @@ class EncDecMultiModalProcessor(BaseMultiModalProcessor[_I]):
         decoder_prompt_raw = self.create_decoder_prompt(prompt, mm_items)
         if isinstance(decoder_prompt_raw, str):
             decoder_prompt_text = decoder_prompt_raw
-            decoder_prompt_ids = tokenizer.encode(
-                decoder_prompt_raw, add_special_tokens=False
-            )
+            decoder_prompt_ids = tokenizer.encode(decoder_prompt_raw, add_special_tokens=False)
         else:
             decoder_prompt_text = None
             decoder_prompt_ids = decoder_prompt_raw

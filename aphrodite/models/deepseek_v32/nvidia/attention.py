@@ -5,7 +5,7 @@ import torch.nn as nn
 from transformers import DeepseekV2Config, DeepseekV3Config
 
 from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed import get_tensor_model_parallel_world_size
 from aphrodite.forward_context import get_forward_context
 from aphrodite.model_executor.layers.attention import MLAAttention
@@ -117,18 +117,14 @@ class DeepseekV32Indexer(nn.Module):
         q, _ = self.wq_b(qr)
         q = q.view(-1, self.n_head, self.head_dim)
 
-        q_pe, q_nope = torch.split(
-            q, [self.rope_dim, self.head_dim - self.rope_dim], dim=-1
-        )
+        q_pe, q_nope = torch.split(q, [self.rope_dim, self.head_dim - self.rope_dim], dim=-1)
         # Fused wk + weights_proj: one GEMM, then split.
         kw, _ = self.wk_weights_proj(hidden_states)
         k = kw[:, : self.head_dim]
         weights = kw[:, self.head_dim :]
 
         k = self.k_norm(k)
-        k_pe, k_nope = torch.split(
-            k, [self.rope_dim, self.head_dim - self.rope_dim], dim=-1
-        )
+        k_pe, k_nope = torch.split(k, [self.rope_dim, self.head_dim - self.rope_dim], dim=-1)
 
         q_pe, k_pe = rotary_emb(positions, q_pe, k_pe.unsqueeze(1))
         # RoPE (NeoX) can introduce extra leading dims; reshape back to flat.
@@ -149,9 +145,7 @@ class DeepseekV32Indexer(nn.Module):
         q_fp8 = q_fp8.view(-1, self.n_head, self.head_dim)
         q_scale = q_scale.view(-1, self.n_head, 1)
 
-        weights = (
-            weights.unsqueeze(-1) * q_scale * self.softmax_scale * self.n_head**-0.5
-        )
+        weights = weights.unsqueeze(-1) * q_scale * self.softmax_scale * self.n_head**-0.5
         weights = weights.squeeze(-1)
 
         return self.indexer_op(hidden_states, q_fp8, k, weights)
@@ -190,9 +184,7 @@ class DeepseekV32Attention(MLAAttention):
         # DSA checkpoints may use plain ("default") or yarn-scaled RoPE.
         if config.rope_parameters["rope_type"] != "default":
             config.rope_parameters["rope_type"] = (
-                "deepseek_yarn"
-                if config.rope_parameters.get("apply_yarn_scaling", True)
-                else "deepseek_llama_scaling"
+                "deepseek_yarn" if config.rope_parameters.get("apply_yarn_scaling", True) else "deepseek_llama_scaling"
             )
         if config.rope_parameters["rope_type"] == "deepseek_yarn":
             mscale_all_dim = config.rope_parameters.get("mscale_all_dim", False)
@@ -210,9 +202,7 @@ class DeepseekV32Attention(MLAAttention):
         index_topk_pattern = getattr(config, "index_topk_pattern", None)
         index_skip_topk_offset = getattr(config, "index_skip_topk_offset", 2)
         if index_topk_pattern is None:
-            skip_topk = (
-                max(layer_id - index_skip_topk_offset + 1, 0) % index_topk_freq != 0
-            )
+            skip_topk = max(layer_id - index_skip_topk_offset + 1, 0) % index_topk_freq != 0
         elif 0 <= layer_id < len(index_topk_pattern):
             skip_topk = index_topk_pattern[layer_id] == "S"
         else:
@@ -346,9 +336,7 @@ class DeepseekV32Attention(MLAAttention):
     ) -> torch.Tensor:
         # Captured: A-projections (+ indexer A-GEMM on indexer layers).
         qkv_lora = self.fused_qkv_a_proj(hidden_states)[0]
-        q_c, kv_c, k_pe = qkv_lora.split(
-            [self.q_lora_rank, self.kv_lora_rank, self.qk_rope_head_dim], dim=-1
-        )
+        q_c, kv_c, k_pe = qkv_lora.split([self.q_lora_rank, self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
 
         if self.indexer is not None and not self.skip_topk:
             kw = self.indexer.wk_weights_proj(hidden_states)[0]
@@ -364,9 +352,7 @@ class DeepseekV32Attention(MLAAttention):
             dtype=hidden_states.dtype,
             device=hidden_states.device,
         )
-        self._fused_attention(
-            positions, q_c, kv_c, k_pe, index_k, index_weights, output
-        )
+        self._fused_attention(positions, q_c, kv_c, k_pe, index_k, index_weights, output)
         return self.o_proj(output)[0]
 
     @eager_break_during_capture
@@ -510,9 +496,7 @@ class DeepseekV32Attention(MLAAttention):
             kv_cache = kv_cache.view(torch.float8_e4m3fn)
         if self._fp8_query:
             # FlashInfer sparse: single packed fp8 query.
-            mqa_q_arg: torch.Tensor | tuple[torch.Tensor, torch.Tensor] = mqa_q[
-                :num_actual
-            ]
+            mqa_q_arg: torch.Tensor | tuple[torch.Tensor, torch.Tensor] = mqa_q[:num_actual]
         else:
             # FlashMLA sparse: bf16 (ql_nope, q_pe) tuple. mqa_q is the RoPE'd
             # q_pe; ql_nope is consumed directly.
@@ -520,12 +504,6 @@ class DeepseekV32Attention(MLAAttention):
         attn_out, _ = self.impl.forward_mqa(  # type: ignore[attr-defined]
             mqa_q_arg, kv_cache, attn_metadata, self
         )
-        x = attn_out.view(
-            num_actual, self.num_local_heads, self.kv_lora_rank
-        ).transpose(0, 1)
-        out = (
-            output[:num_actual]
-            .view(num_actual, self.num_local_heads, self.v_head_dim)
-            .transpose(0, 1)
-        )
+        x = attn_out.view(num_actual, self.num_local_heads, self.kv_lora_rank).transpose(0, 1)
+        out = output[:num_actual].view(num_actual, self.num_local_heads, self.v_head_dim).transpose(0, 1)
         torch.bmm(x, self.W_UV, out=out)

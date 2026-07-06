@@ -34,8 +34,7 @@ elif current_platform.is_xpu():
 #   After page-size unification the mamba and attention groups have
 #   different block sizes.
 MODEL_PARAMS: list[tuple[str, str | None, int | None, bool]] = [
-    ("meta-llama/Llama-3.2-1B-Instruct", backend, CPU_BLOCK_SIZES, False)
-    for backend in _ATTN_BACKENDS
+    ("meta-llama/Llama-3.2-1B-Instruct", backend, CPU_BLOCK_SIZES, False) for backend in _ATTN_BACKENDS
 ]
 # HMA / Mamba models are only tested on CUDA (not ROCm).
 if current_platform.is_cuda():
@@ -125,8 +124,7 @@ def _wait_for_prefix_cache_reset(llm: LLM) -> None:
     while not llm.reset_prefix_cache():
         if time.monotonic() > deadline:
             raise TimeoutError(
-                "reset_prefix_cache did not succeed within "
-                f"{_RESET_CACHE_TIMEOUT}s - async offload may be stuck"
+                f"reset_prefix_cache did not succeed within {_RESET_CACHE_TIMEOUT}s - async offload may be stuck"
             )
         # Force an engine step so the scheduler polls get_finished()
         # and releases GPU blocks held by in-flight async stores.
@@ -177,8 +175,7 @@ def _latency_test(llm: LLM, subscriber: MockSubscriber | None):
         # attempt to load from CPU).
         if subscriber is not None:
             assert subscriber.get_new_cpu_stored_events(), (
-                f"No CPU stored events received on iteration {i}; "
-                "async offload may not have completed in time"
+                f"No CPU stored events received on iteration {i}; async offload may not have completed in time"
             )
 
         # run generation again - this should trigger loading from CPU
@@ -200,9 +197,7 @@ def _latency_test(llm: LLM, subscriber: MockSubscriber | None):
 
 def _accuracy_test(llm: LLM, subscriber: MockSubscriber | None):
     sampling_params = SamplingParams(max_tokens=1)
-    extra_config = (
-        llm.llm_engine.aphrodite_config.kv_transfer_config.kv_connector_extra_config
-    )
+    extra_config = llm.llm_engine.aphrodite_config.kv_transfer_config.kv_connector_extra_config
     cpu_block_size = extra_config.get("block_size")
     if cpu_block_size is None:
         # No custom offloaded block_size: offloaded blocks match GPU blocks.
@@ -355,34 +350,26 @@ def test_cpu_offloading_metrics() -> None:
         # Metric helpers.
         registry = prometheus_client.REGISTRY
 
-        def _get_counter_value(
-            name: str, labels: dict[str, str] | None = None
-        ) -> float:
+        def _get_counter_value(name: str, labels: dict[str, str] | None = None) -> float:
             total = 0.0
             for metric in registry.collect():
                 if metric.name == name:
                     for sample in metric.samples:
                         if sample.name != name + "_total":
                             continue
-                        if labels and not all(
-                            sample.labels.get(k) == v for k, v in labels.items()
-                        ):
+                        if labels and not all(sample.labels.get(k) == v for k, v in labels.items()):
                             continue
                         total += sample.value
             return total
 
-        def _get_histogram_count(
-            name: str, labels: dict[str, str] | None = None
-        ) -> float:
+        def _get_histogram_count(name: str, labels: dict[str, str] | None = None) -> float:
             total = 0.0
             for metric in registry.collect():
                 if metric.name == name:
                     for sample in metric.samples:
                         if sample.name != name + "_count":
                             continue
-                        if labels and not all(
-                            sample.labels.get(k) == v for k, v in labels.items()
-                        ):
+                        if labels and not all(sample.labels.get(k) == v for k, v in labels.items()):
                             continue
                         total += sample.value
             return total
@@ -399,42 +386,26 @@ def test_cpu_offloading_metrics() -> None:
 
         # New flat histogram metrics
         store_size_count = _get_histogram_count("aphrodite:kv_offload_store_size")
-        assert store_size_count > 0, (
-            f"Expected store_size histogram observations > 0, got {store_size_count}"
-        )
+        assert store_size_count > 0, f"Expected store_size histogram observations > 0, got {store_size_count}"
         load_size_count = _get_histogram_count("aphrodite:kv_offload_load_size")
-        assert load_size_count > 0, (
-            f"Expected load_size histogram observations > 0, got {load_size_count}"
-        )
+        assert load_size_count > 0, f"Expected load_size histogram observations > 0, got {load_size_count}"
 
         # Deprecated labeled metrics — verify per transfer_type label.
         load_label = {"transfer_type": "CPU_to_GPU"}
         store_label = {"transfer_type": "GPU_to_CPU"}
 
         dep_load_bytes = _get_counter_value("aphrodite:kv_offload_total_bytes", load_label)
-        assert dep_load_bytes > 0, (
-            f"Expected deprecated load bytes > 0, got {dep_load_bytes}"
-        )
+        assert dep_load_bytes > 0, f"Expected deprecated load bytes > 0, got {dep_load_bytes}"
         dep_store_bytes = _get_counter_value("aphrodite:kv_offload_total_bytes", store_label)
-        assert dep_store_bytes > 0, (
-            f"Expected deprecated store bytes > 0, got {dep_store_bytes}"
-        )
+        assert dep_store_bytes > 0, f"Expected deprecated store bytes > 0, got {dep_store_bytes}"
         dep_load_time = _get_counter_value("aphrodite:kv_offload_total_time", load_label)
-        assert dep_load_time > 0, (
-            f"Expected deprecated load time > 0, got {dep_load_time}"
-        )
+        assert dep_load_time > 0, f"Expected deprecated load time > 0, got {dep_load_time}"
         dep_store_time = _get_counter_value("aphrodite:kv_offload_total_time", store_label)
-        assert dep_store_time > 0, (
-            f"Expected deprecated store time > 0, got {dep_store_time}"
-        )
+        assert dep_store_time > 0, f"Expected deprecated store time > 0, got {dep_store_time}"
         dep_load_size = _get_histogram_count("aphrodite:kv_offload_size", load_label)
-        assert dep_load_size > 0, (
-            f"Expected deprecated load size observations > 0, got {dep_load_size}"
-        )
+        assert dep_load_size > 0, f"Expected deprecated load size observations > 0, got {dep_load_size}"
         dep_store_size = _get_histogram_count("aphrodite:kv_offload_size", store_label)
-        assert dep_store_size > 0, (
-            f"Expected deprecated store size observations > 0, got {dep_store_size}"
-        )
+        assert dep_store_size > 0, f"Expected deprecated store size observations > 0, got {dep_store_size}"
 
         # Flat and deprecated metrics must be consistent (dual-write).
         assert store_bytes == dep_store_bytes
@@ -599,9 +570,7 @@ def test_mamba_align_cpu_offload(model: str, block_size: int, tp_size: int):
         print(f"{label} : cpu outputs\n{cpu_text}")
 
         if cold_text != cpu_text:
-            failures.append(
-                f"{label}: mismatch\n  cold: {cold_text!r}\n  cpu:  {cpu_text!r}"
-            )
+            failures.append(f"{label}: mismatch\n  cold: {cold_text!r}\n  cpu:  {cpu_text!r}")
 
     try:
         # Mamba has only a single state. The CPU cache stores are triggered

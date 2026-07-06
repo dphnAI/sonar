@@ -98,9 +98,7 @@ class EncoderCudaGraphManager:
                 )
         else:
             # Auto-infer missing values from model.
-            min_budget, max_budget = model.get_encoder_cudagraph_budget_range(
-                aphrodite_config
-            )
+            min_budget, max_budget = model.get_encoder_cudagraph_budget_range(aphrodite_config)
             if min_budget <= 0 or max_budget <= 0:
                 raise ValueError(
                     f"Invalid encoder cudagraph budget range: "
@@ -109,8 +107,7 @@ class EncoderCudaGraphManager:
                 )
             if min_budget > max_budget:
                 raise ValueError(
-                    f"Invalid encoder cudagraph budget range: "
-                    f"min_budget={min_budget} > max_budget={max_budget}."
+                    f"Invalid encoder cudagraph budget range: min_budget={min_budget} > max_budget={max_budget}."
                 )
 
             if user_max_vision_items > 0:
@@ -172,8 +169,7 @@ class EncoderCudaGraphManager:
             # will only contain global image, without generating local patches.
             self.local_token_budgets.insert(0, 0)
             logger.info(
-                "EncoderCudaGraphManager dual-path mode: "
-                "global_budgets=%s, local_budgets=%s",
+                "EncoderCudaGraphManager dual-path mode: global_budgets=%s, local_budgets=%s",
                 self.global_token_budgets,
                 self.local_token_budgets,
             )
@@ -222,8 +218,7 @@ class EncoderCudaGraphManager:
                     continue
                 self._capture_budget_graph(token_budget, path="local")
             logger.info(
-                "Encoder CUDA graph capture complete. "
-                "Captured %d global + %d local budget graphs.",
+                "Encoder CUDA graph capture complete. Captured %d global + %d local budget graphs.",
                 len(self.budget_graphs["global"]),
                 len(self.budget_graphs["local"]),
             )
@@ -252,8 +247,7 @@ class EncoderCudaGraphManager:
     def _capture_budget_graph(self, token_budget: int, path: str = "default"):
         """Capture CUDA graph for a single token budget."""
         logger.debug(
-            "Capturing encoder cudagraph for budget=%d, max_batch_size=%d, "
-            "max_frames_per_batch=%d",
+            "Capturing encoder cudagraph for budget=%d, max_batch_size=%d, max_frames_per_batch=%d",
             token_budget,
             self.max_batch_size,
             self.max_frames_per_batch,
@@ -361,9 +355,7 @@ class EncoderCudaGraphManager:
             if src.ndim == 0:
                 buf.copy_(src)
             else:
-                padding_logic = self.config.padding_logics.get(
-                    key, self._copy_padded_buffer
-                )
+                padding_logic = self.config.padding_logics.get(key, self._copy_padded_buffer)
                 padding_logic(buf, src)
 
         graph_meta.graph.replay()
@@ -426,10 +418,7 @@ class EncoderCudaGraphManager:
 
         for orig_idx in sorted_indices:
             item_tokens = per_item_out_tokens[orig_idx]
-            if (
-                current_batch_tokens + item_tokens <= max_budget
-                and len(current_batch) < self.max_batch_size
-            ):
+            if current_batch_tokens + item_tokens <= max_budget and len(current_batch) < self.max_batch_size:
                 current_batch.append(orig_idx)
                 current_batch_tokens += item_tokens
             else:
@@ -437,9 +426,7 @@ class EncoderCudaGraphManager:
                     batches.append(
                         (
                             current_batch,
-                            self._find_smallest_fitting_budget_given_tokens(
-                                current_batch_tokens
-                            ),
+                            self._find_smallest_fitting_budget_given_tokens(current_batch_tokens),
                         )
                     )
                 current_batch = [orig_idx]
@@ -449,9 +436,7 @@ class EncoderCudaGraphManager:
             batches.append(
                 (
                     current_batch,
-                    self._find_smallest_fitting_budget_given_tokens(
-                        current_batch_tokens
-                    ),
+                    self._find_smallest_fitting_budget_given_tokens(current_batch_tokens),
                 )
             )
 
@@ -461,17 +446,14 @@ class EncoderCudaGraphManager:
         outputs_by_orig_idx: dict[int, torch.Tensor] = {}
 
         for batch_orig_indices, token_budget in batches:
-            batch_mm_kwargs = self.model.select_encoder_cudagraph_items(
-                mm_kwargs, batch_orig_indices
-            )
+            batch_mm_kwargs = self.model.select_encoder_cudagraph_items(mm_kwargs, batch_orig_indices)
             batch_out_tokens = sum(per_item_out_tokens[i] for i in batch_orig_indices)
 
             if token_budget is None:
                 # Single oversized image: item_tokens > max_budget.
                 # graph_misses counted here for this eager fallback.
                 logger.debug(
-                    "Encoder CUDA graph fallback to eager: no budget for "
-                    "%d tokens from %d images",
+                    "Encoder CUDA graph fallback to eager: no budget for %d tokens from %d images",
                     batch_out_tokens,
                     len(batch_orig_indices),
                 )
@@ -486,8 +468,7 @@ class EncoderCudaGraphManager:
                 )
             else:
                 logger.debug(
-                    "Encoder CUDA graph: batch_size=%d, tokens=%d, "
-                    "budget=%d, waste=%.1f%%",
+                    "Encoder CUDA graph: batch_size=%d, tokens=%d, budget=%d, waste=%.1f%%",
                     len(batch_orig_indices),
                     batch_out_tokens,
                     token_budget,
@@ -531,9 +512,7 @@ class EncoderCudaGraphManager:
         per_item_total_tokens = [spec.output_tokens for spec in item_specs]
 
         # Sort ascending by total output tokens
-        sorted_indices = sorted(
-            range(num_items), key=lambda i: per_item_total_tokens[i]
-        )
+        sorted_indices = sorted(range(num_items), key=lambda i: per_item_total_tokens[i])
 
         # Each batch is a tuple of (indices, global_budget, local_budget).
         batches: list[tuple[list[int], int | None, int | None]] = []
@@ -573,34 +552,23 @@ class EncoderCudaGraphManager:
             batches.append(
                 (
                     current_batch,
-                    self._find_smallest_fitting_budget_given_tokens(
-                        current_global_tokens, self.global_token_budgets
-                    ),
-                    self._find_smallest_fitting_budget_given_tokens(
-                        current_local_tokens, self.local_token_budgets
-                    ),
+                    self._find_smallest_fitting_budget_given_tokens(current_global_tokens, self.global_token_budgets),
+                    self._find_smallest_fitting_budget_given_tokens(current_local_tokens, self.local_token_budgets),
                 )
             )
 
         outputs_by_orig_idx: dict[int, torch.Tensor] = {}
 
         for batch_orig_indices, global_budget, local_budget in batches:
-            batch_mm_kwargs = self.model.select_encoder_cudagraph_items(
-                mm_kwargs, batch_orig_indices
-            )
-            batch_global_tokens = sum(
-                per_item_global_tokens[i] for i in batch_orig_indices
-            )
-            batch_local_tokens = sum(
-                per_item_local_tokens[i] for i in batch_orig_indices
-            )
+            batch_mm_kwargs = self.model.select_encoder_cudagraph_items(mm_kwargs, batch_orig_indices)
+            batch_global_tokens = sum(per_item_global_tokens[i] for i in batch_orig_indices)
+            batch_local_tokens = sum(per_item_local_tokens[i] for i in batch_orig_indices)
 
             both_eager = global_budget is None and local_budget is None
 
             if both_eager:
                 logger.debug(
-                    "Encoder CUDA graph dual-path full eager fallback: "
-                    "%d global + %d local tokens from %d images",
+                    "Encoder CUDA graph dual-path full eager fallback: %d global + %d local tokens from %d images",
                     batch_global_tokens,
                     batch_local_tokens,
                     len(batch_orig_indices),
@@ -608,18 +576,12 @@ class EncoderCudaGraphManager:
                 self.graph_misses += len(batch_orig_indices)
                 with torch.inference_mode():
                     raw = self.model.encoder_eager_forward(batch_mm_kwargs)
-                per_item_total = [
-                    per_item_global_tokens[i] + per_item_local_tokens[i] + 1
-                    for i in batch_orig_indices
-                ]
-                scatter_output_slices(
-                    raw, batch_orig_indices, per_item_total, outputs_by_orig_idx
-                )
+                per_item_total = [per_item_global_tokens[i] + per_item_local_tokens[i] + 1 for i in batch_orig_indices]
+                scatter_output_slices(raw, batch_orig_indices, per_item_total, outputs_by_orig_idx)
                 continue
 
             logger.debug(
-                "Encoder CUDA graph dual-path: batch_size=%d, "
-                "global=%d (budget=%s), local=%d (budget=%s)",
+                "Encoder CUDA graph dual-path: batch_size=%d, global=%d (budget=%s), local=%d (budget=%s)",
                 len(batch_orig_indices),
                 batch_global_tokens,
                 global_budget,
@@ -637,9 +599,7 @@ class EncoderCudaGraphManager:
                 assert global_output is not None
             else:
                 with torch.inference_mode():
-                    global_output = self.model.encoder_eager_forward(
-                        batch_mm_kwargs, path="global"
-                    )
+                    global_output = self.model.encoder_eager_forward(batch_mm_kwargs, path="global")
 
             # Execute local path: graph or eager fallback
             if local_budget is not None and batch_local_tokens > 0:
@@ -651,9 +611,7 @@ class EncoderCudaGraphManager:
                 assert local_output is not None
             elif batch_local_tokens > 0:
                 with torch.inference_mode():
-                    local_output = self.model.encoder_eager_forward(
-                        batch_mm_kwargs, path="local"
-                    )
+                    local_output = self.model.encoder_eager_forward(batch_mm_kwargs, path="local")
             else:
                 local_output = None
 
@@ -692,8 +650,8 @@ class EncoderCudaGraphManager:
         item_specs = self._get_item_specs(mm_kwargs)
         per_item_input_sizes = [spec.input_size for spec in item_specs]
 
-        (image_rank_assignment, images_per_rank, input_patches_per_rank) = (
-            get_load_balance_assignment(per_item_input_sizes, tp_size)
+        (image_rank_assignment, images_per_rank, input_patches_per_rank) = get_load_balance_assignment(
+            per_item_input_sizes, tp_size
         )
 
         # Extract local indices for this rank
@@ -701,14 +659,10 @@ class EncoderCudaGraphManager:
         for count in images_per_rank:
             cum_images_per_rank.append(cum_images_per_rank[-1] + count)
 
-        local_indices = image_rank_assignment[
-            cum_images_per_rank[current_rank] : cum_images_per_rank[current_rank + 1]
-        ]
+        local_indices = image_rank_assignment[cum_images_per_rank[current_rank] : cum_images_per_rank[current_rank + 1]]
 
         if len(local_indices) > 0:
-            local_mm_kwargs = self.model.select_encoder_cudagraph_items(
-                mm_kwargs, local_indices
-            )
+            local_mm_kwargs = self.model.select_encoder_cudagraph_items(mm_kwargs, local_indices)
         else:
             local_mm_kwargs = self.model.select_encoder_cudagraph_items(mm_kwargs, [])
 
@@ -716,9 +670,7 @@ class EncoderCudaGraphManager:
             max(
                 sum(
                     per_item_out_tokens[i]
-                    for i in image_rank_assignment[
-                        cum_images_per_rank[r] : cum_images_per_rank[r + 1]
-                    ]
+                    for i in image_rank_assignment[cum_images_per_rank[r] : cum_images_per_rank[r + 1]]
                 )
                 for r in range(tp_size)
             )
@@ -753,9 +705,7 @@ class EncoderCudaGraphManager:
         if len(local_outputs) > 0:
             local_concat = torch.cat(local_outputs, dim=0)
         else:
-            local_concat = torch.empty(
-                (0, hidden_size), device=self.device, dtype=self.dtype
-            )
+            local_concat = torch.empty((0, hidden_size), device=self.device, dtype=self.dtype)
 
         # Pad to max_output_tokens_per_rank for all_gather
         current_len = local_concat.shape[0]
@@ -840,8 +790,7 @@ class EncoderCudaGraphManager:
         total_requests = self.graph_hits + self.graph_misses
         if total_requests > 0 and total_requests % self.log_stats_interval == 0:
             logger.debug(
-                "Encoder CUDA graph cumulative stats: "
-                "hits=%d, misses=%d, hit_rate=%.1f%%",
+                "Encoder CUDA graph cumulative stats: hits=%d, misses=%d, hit_rate=%.1f%%",
                 stats["graph_hits"],
                 stats["graph_misses"],
                 stats["hit_rate"] * 100,

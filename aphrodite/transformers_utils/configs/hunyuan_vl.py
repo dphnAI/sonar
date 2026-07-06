@@ -223,28 +223,16 @@ class HunYuanVLTextConfig(PretrainedConfig):
         rope_scaling_alpha = self.rope_scaling.get("alpha", None)
         if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic"]:
             raise ValueError(
-                "`rope_scaling`'s type field must be one of ['linear', 'dynamic'], "
-                f"got {rope_scaling_type}"
+                f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
             )
         if rope_scaling_factor is None and rope_scaling_alpha is None:
-            raise ValueError(
-                "`rope_scaling`'s factor or alpha field must be have one, "
-                "got both of none"
-            )
+            raise ValueError("`rope_scaling`'s factor or alpha field must be have one, got both of none")
         if rope_scaling_factor is not None and (
             not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0
         ):
-            raise ValueError(
-                "`rope_scaling`'s factor field must be a float > 1.0, "
-                f"got {rope_scaling_factor}"
-            )
-        if rope_scaling_alpha is not None and (
-            not isinstance(rope_scaling_alpha, float) or rope_scaling_alpha <= 1.0
-        ):
-            raise ValueError(
-                "`rope_scaling`'s alpha field must be a float > 1.0, "
-                f"got {rope_scaling_alpha}"
-            )
+            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1.0, got {rope_scaling_factor}")
+        if rope_scaling_alpha is not None and (not isinstance(rope_scaling_alpha, float) or rope_scaling_alpha <= 1.0):
+            raise ValueError(f"`rope_scaling`'s alpha field must be a float > 1.0, got {rope_scaling_alpha}")
 
 
 class HunYuanVLConfig(PretrainedConfig):
@@ -299,8 +287,7 @@ class HunYuanVLConfig(PretrainedConfig):
 
     def __setattr__(self, key, value):
         if (
-            (text_config := super().__getattribute__("__dict__").get("text_config"))
-            is not None
+            (text_config := super().__getattribute__("__dict__").get("text_config")) is not None
             and key not in ["dtype", "_attn_implementation_internal"]
             and key in text_config.__dict__
         ):

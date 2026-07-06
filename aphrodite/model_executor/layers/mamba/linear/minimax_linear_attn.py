@@ -37,9 +37,7 @@ def clear_linear_attention_cache_for_new_sequences(
         q_start = attn_metadata.query_start_loc[num_decode_tokens + prefill_idx]
         q_end = attn_metadata.query_start_loc[num_decode_tokens + prefill_idx + 1]
         query_len = q_end - q_start
-        context_len = (
-            attn_metadata.seq_lens[num_decode_tokens + prefill_idx] - query_len
-        )
+        context_len = attn_metadata.seq_lens[num_decode_tokens + prefill_idx] - query_len
         if context_len == 0:
             block_to_clear = state_indices_tensor[num_decode_tokens + prefill_idx]
             kv_cache[block_to_clear, ...] = 0
@@ -62,9 +60,7 @@ def linear_attention_decode(
     k = k[q_start:q_end].unsqueeze(2).contiguous()
     v = v[q_start:q_end].unsqueeze(2).contiguous()
     slot_id = state_indices_tensor[slot_start:slot_end]
-    return linear_decode_forward_triton(
-        q, k, v, kv_cache, slope_rate, slot_id, block_size
-    )
+    return linear_decode_forward_triton(q, k, v, kv_cache, slope_rate, slot_id, block_size)
 
 
 def linear_attention_prefill_and_mix(
@@ -106,9 +102,7 @@ def linear_attention_prefill_and_mix(
         hidden.append(out_slice.contiguous())
 
     if attn_metadata.num_decode_tokens > 0:
-        hidden_decode = decode_fn(
-            q, k, v, kv_cache, state_indices_tensor, attn_metadata
-        )
+        hidden_decode = decode_fn(q, k, v, kv_cache, state_indices_tensor, attn_metadata)
         hidden.insert(0, hidden_decode)
 
     if not hidden:
@@ -139,9 +133,7 @@ class MiniMaxText01LinearKernel:
         b, h, n, d = q.shape
         e = d
         kv_history = kv_caches.reshape(1, h, d, e).contiguous()
-        output, kv_history = lightning_attention(
-            q, k, v, slope_rate, block_size=block_size, kv_history=kv_history
-        )
+        output, kv_history = lightning_attention(q, k, v, slope_rate, block_size=block_size, kv_history=kv_history)
         kv_caches.copy_(kv_history[:, :, -1, :, :].reshape(h, d, e))
         assert output.shape[0] == 1, "batch size must be 1"
         return rearrange(output.squeeze(0), "h n d -> n (h d)")
@@ -191,12 +183,8 @@ class MiniMaxText01LinearAttention(LinearAttention):
         if self.num_hidden_layers <= 1:
             self.slope_rate = slope_rate * (1 + 1e-5)
         else:
-            self.slope_rate = slope_rate * (
-                1 - self.layer_idx / (self.num_hidden_layers - 1) + 1e-5
-            )
-        self.tp_slope = self.slope_rate[
-            self.tp_rank * self.tp_heads : (self.tp_rank + 1) * self.tp_heads
-        ].contiguous()
+            self.slope_rate = slope_rate * (1 - self.layer_idx / (self.num_hidden_layers - 1) + 1e-5)
+        self.tp_slope = self.slope_rate[self.tp_rank * self.tp_heads : (self.tp_rank + 1) * self.tp_heads].contiguous()
 
         compilation_config = get_current_aphrodite_config().compilation_config
         if prefix in compilation_config.static_forward_context:
@@ -226,14 +214,10 @@ class MiniMaxText01LinearAttention(LinearAttention):
                     + get_slopes(2 * closest_power_of_2)[0::2][: n - closest_power_of_2]
                 )
 
-        slopes = torch.tensor(
-            get_slopes(n_attention_heads), dtype=torch.float32
-        ).reshape(n_attention_heads, 1, 1)
+        slopes = torch.tensor(get_slopes(n_attention_heads), dtype=torch.float32).reshape(n_attention_heads, 1, 1)
         return slopes
 
-    def _prefill_and_mix_infer(
-        self, q, k, v, kv_cache, state_indices_tensor, attn_metadata
-    ):
+    def _prefill_and_mix_infer(self, q, k, v, kv_cache, state_indices_tensor, attn_metadata):
         return linear_attention_prefill_and_mix(
             q=q,
             k=k,
@@ -264,9 +248,7 @@ class MiniMaxText01LinearAttention(LinearAttention):
         )
         return hidden
 
-    def forward(
-        self, hidden_states: torch.Tensor, output: torch.Tensor, positions: torch.Tensor
-    ) -> None:
+    def forward(self, hidden_states: torch.Tensor, output: torch.Tensor, positions: torch.Tensor) -> None:
         torch.ops.aphrodite.linear_attention(
             hidden_states,
             output,
@@ -274,9 +256,7 @@ class MiniMaxText01LinearAttention(LinearAttention):
             self.prefix,
         )
 
-    def _forward(
-        self, hidden_states: torch.Tensor, output: torch.Tensor, positions: torch.Tensor
-    ) -> None:
+    def _forward(self, hidden_states: torch.Tensor, output: torch.Tensor, positions: torch.Tensor) -> None:
         forward_context = get_forward_context()
         attn_metadata_raw = forward_context.attn_metadata
         attn_metadata: AttentionMetadata | None = None
@@ -284,9 +264,7 @@ class MiniMaxText01LinearAttention(LinearAttention):
             assert isinstance(attn_metadata_raw, dict)
             attn_metadata = attn_metadata_raw[self.prefix]
             assert isinstance(attn_metadata, LinearAttentionMetadata)
-            num_actual_tokens = (
-                attn_metadata.num_prefill_tokens + attn_metadata.num_decode_tokens
-            )
+            num_actual_tokens = attn_metadata.num_prefill_tokens + attn_metadata.num_decode_tokens
         else:
             num_actual_tokens = hidden_states.shape[0]
 
@@ -298,24 +276,16 @@ class MiniMaxText01LinearAttention(LinearAttention):
         if attn_metadata is not None:
             kv_cache = self.kv_cache[0]
             state_indices_tensor = attn_metadata.state_indices_tensor
-            clear_linear_attention_cache_for_new_sequences(
-                kv_cache, state_indices_tensor, attn_metadata
-            )
+            clear_linear_attention_cache_for_new_sequences(kv_cache, state_indices_tensor, attn_metadata)
 
         decode_only = getattr(attn_metadata, "num_prefills", 0) == 0
         if attn_metadata is None:
-            hidden = torch.empty(
-                (q.shape[0], q.shape[1] * q.shape[2]), device=q.device, dtype=q.dtype
-            )
+            hidden = torch.empty((q.shape[0], q.shape[1] * q.shape[2]), device=q.device, dtype=q.dtype)
         else:
             if not decode_only:
-                hidden = self._prefill_and_mix_infer(
-                    q, k, v, kv_cache, state_indices_tensor, attn_metadata
-                )
+                hidden = self._prefill_and_mix_infer(q, k, v, kv_cache, state_indices_tensor, attn_metadata)
             else:
-                hidden = self._decode_infer(
-                    q, k, v, kv_cache, state_indices_tensor, attn_metadata
-                )
+                hidden = self._decode_infer(q, k, v, kv_cache, state_indices_tensor, attn_metadata)
         hidden = self.norm._forward(hidden)
         gate, _ = self.output_gate(hidden_states[:num_actual_tokens])
         hidden = F.sigmoid(gate) * hidden

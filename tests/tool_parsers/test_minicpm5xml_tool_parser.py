@@ -8,7 +8,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from tests.tool_parsers.utils import run_tool_extraction_streaming
 from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionToolsParam,
@@ -16,6 +15,7 @@ from aphrodite.entrypoints.openai.chat_completion.protocol import (
 from aphrodite.entrypoints.openai.engine.protocol import FunctionCall, ToolCall
 from aphrodite.tool_parsers import ToolParser, ToolParserManager
 from aphrodite.tool_parsers.minicpm5xml_tool_parser import MiniCPM5XMLToolParser
+from tests.tool_parsers.utils import run_tool_extraction_streaming
 
 
 def _tool(name: str, parameters: dict) -> ChatCompletionToolsParam:
@@ -206,12 +206,7 @@ def test_tokenizer_space_marker(parser: ToolParser) -> None:
 
 def test_collapsed_function_and_param_tags(parser: ToolParser) -> None:
     request = make_request(make_tools_weather())
-    text = (
-        '<functionname="get_weather">'
-        '<paramname="city">上海</param>'
-        '<paramname="date">2024-06-27</param>'
-        "</function>\n"
-    )
+    text = '<functionname="get_weather"><paramname="city">上海</param><paramname="date">2024-06-27</param></function>\n'
     out = parser.extract_tool_calls(text, request)
     assert out.tools_called
     assert_tool_calls(
@@ -301,12 +296,7 @@ def test_extract_tool_calls_streaming_collapsed_tags_weather(
     parser: ToolParser,
 ) -> None:
     request = make_request(make_tools_weather())
-    text = (
-        '<functionname="get_weather">'
-        '<paramname="city">上海</param>'
-        '<paramname="date">2024-06-27</param>'
-        "</function>\n"
-    )
+    text = '<functionname="get_weather"><paramname="city">上海</param><paramname="date">2024-06-27</param></function>\n'
     random.seed(2)
     reconstructor = run_tool_extraction_streaming(
         parser,
@@ -417,10 +407,7 @@ def test_unknown_tool_block_preserved(parser: ToolParser) -> None:
 def test_non_string_types(parser: ToolParser) -> None:
     request = make_request(make_tools_sum())
     text = (
-        '<function name="sum_values">'
-        '<param name="nums">[1, 2, 3]</param>'
-        '<param name="exact">true</param>'
-        "</function>\n"
+        '<function name="sum_values"><param name="nums">[1, 2, 3]</param><param name="exact">true</param></function>\n'
     )
     out = parser.extract_tool_calls(text, request)
     assert len(out.tool_calls) == 1
@@ -460,12 +447,7 @@ def test_incomplete_missing_function_end(parser: ToolParser) -> None:
 
 def test_param_missing_name_invalid(parser: ToolParser) -> None:
     request = make_request(make_tools_weather())
-    text = (
-        '<function name="get_weather">'
-        "<param>北京</param>"
-        '<param name="date">2024-06-27</param>'
-        "</function>\n"
-    )
+    text = '<function name="get_weather"><param>北京</param><param name="date">2024-06-27</param></function>\n'
     out = parser.extract_tool_calls(text, request)
     assert not out.tools_called
     assert "<param>北京</param>" in (out.content or "")
@@ -473,12 +455,7 @@ def test_param_missing_name_invalid(parser: ToolParser) -> None:
 
 def test_duplicate_param_names_invalid(parser: ToolParser) -> None:
     request = make_request(make_tools_weather())
-    text = (
-        '<function name="get_weather">'
-        '<param name="city">北京</param>'
-        '<param name="city">上海</param>'
-        "</function>\n"
-    )
+    text = '<function name="get_weather"><param name="city">北京</param><param name="city">上海</param></function>\n'
     out = parser.extract_tool_calls(text, request)
     assert not out.tools_called
 
@@ -539,9 +516,7 @@ def test_properties_wrapped_arguments(parser: ToolParser) -> None:
 def test_arguments_wrapped_arguments(parser: ToolParser) -> None:
     request = make_request(make_tools_weather())
     text = (
-        '<function name="get_weather">'
-        '<param name="arguments">{"city": "上海", "date": "2024-06-27"}</param>'
-        "</function>"
+        '<function name="get_weather"><param name="arguments">{"city": "上海", "date": "2024-06-27"}</param></function>'
     )
     out = parser.extract_tool_calls(text, request)
     assert len(out.tool_calls) == 1
@@ -551,11 +526,7 @@ def test_arguments_wrapped_arguments(parser: ToolParser) -> None:
 
 def test_wrapped_arguments_still_validate_schema(parser: ToolParser) -> None:
     request = make_request(make_tools_weather())
-    text = (
-        '<function name="get_weather">'
-        '<param name="properties">{"unknown": "x"}</param>'
-        "</function>"
-    )
+    text = '<function name="get_weather"><param name="properties">{"unknown": "x"}</param></function>'
     out = parser.extract_tool_calls(text, request)
     assert not out.tools_called
 
@@ -563,10 +534,7 @@ def test_wrapped_arguments_still_validate_schema(parser: ToolParser) -> None:
 def test_extra_arguments_ignored_when_required_present(parser: ToolParser) -> None:
     request = make_request(make_tools_weather())
     text = (
-        '<function name="get_weather">'
-        '<param name="city">上海</param>'
-        '<param name="unknown">ignored</param>'
-        "</function>"
+        '<function name="get_weather"><param name="city">上海</param><param name="unknown">ignored</param></function>'
     )
     out = parser.extract_tool_calls(text, request)
     assert len(out.tool_calls) == 1
@@ -576,21 +544,14 @@ def test_extra_arguments_ignored_when_required_present(parser: ToolParser) -> No
 
 def test_extra_arguments_do_not_satisfy_required(parser: ToolParser) -> None:
     request = make_request(make_tools_weather())
-    text = (
-        '<function name="get_weather"><param name="unknown">ignored</param></function>'
-    )
+    text = '<function name="get_weather"><param name="unknown">ignored</param></function>'
     out = parser.extract_tool_calls(text, request)
     assert not out.tools_called
 
 
 def test_zero_arg_tool_ignores_extra_arguments(parser: ToolParser) -> None:
     request = make_request(make_tools_no_required())
-    text = (
-        '<function name="noop">'
-        '<param name="note">ignored</param>'
-        '<param name="extra">ignored</param>'
-        "</function>"
-    )
+    text = '<function name="noop"><param name="note">ignored</param><param name="extra">ignored</param></function>'
     out = parser.extract_tool_calls(text, request)
     assert len(out.tool_calls) == 1
     args = json.loads(out.tool_calls[0].function.arguments)
@@ -609,11 +570,7 @@ def test_alias_get_details_by_phone(parser: ToolParser) -> None:
         )
     ]
     request = make_request(tools)
-    text = (
-        '<function name="get_details_by_phone">'
-        '<param name="phone_number">555-123-2002</param>'
-        "</function>"
-    )
+    text = '<function name="get_details_by_phone"><param name="phone_number">555-123-2002</param></function>'
     out = parser.extract_tool_calls(text, request)
     assert len(out.tool_calls) == 1
     assert out.tool_calls[0].function.name == "get_customer_by_phone"
@@ -661,9 +618,7 @@ def test_alias_enable_roaming(parser: ToolParser) -> None:
         )
     ]
     request = make_request(tools)
-    text = (
-        '<function name="enable_roaming"><param name="line_id">L1001</param></function>'
-    )
+    text = '<function name="enable_roaming"><param name="line_id">L1001</param></function>'
     out = parser.extract_tool_calls(text, request)
     assert len(out.tool_calls) == 1
     assert out.tool_calls[0].function.name == "toggle_roaming"

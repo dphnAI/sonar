@@ -5,7 +5,6 @@
 import json
 from typing import Any, TypedDict
 
-from tests.parser.engine.replay_harness import MockTokenizer
 from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionToolsParam,
@@ -13,6 +12,7 @@ from aphrodite.entrypoints.openai.chat_completion.protocol import (
 )
 from aphrodite.tool_parsers import ToolParserManager
 from aphrodite.tool_parsers.glm47_moe_tool_parser import Glm47MoeModelToolParser
+from tests.parser.engine.replay_harness import MockTokenizer
 
 MODEL = "zai-org/GLM-4.5"
 
@@ -154,9 +154,7 @@ def test_extract_multiple_tool_calls_with_glm45_newline_format():
         "get_current_weather",
         "get_current_weather",
     ]
-    assert [
-        json.loads(tc.function.arguments)["city"] for tc in extracted.tool_calls
-    ] == ["Dallas", "Orlando"]
+    assert [json.loads(tc.function.arguments)["city"] for tc in extracted.tool_calls] == ["Dallas", "Orlando"]
 
 
 def test_extract_tool_calls_coerces_schema_types():

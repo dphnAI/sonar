@@ -4,10 +4,10 @@
 
 import pytest
 
-from tests.v1.core.utils import create_requests, create_scheduler
 from aphrodite.v1.core.sched.scheduler import Scheduler
 from aphrodite.v1.spec_decode.dynamic.utils import build_dynamic_sd_schedule_lookup
 from aphrodite.v1.structured_output import StructuredOutputManager
+from tests.v1.core.utils import create_requests, create_scheduler
 
 
 def _make_lookup(
@@ -49,9 +49,7 @@ def _make_scheduler_with_dynamic_sd(
     )
 
 
-def _add_requests_and_schedule(
-    scheduler: Scheduler, num_requests: int, *, num_tokens: int = 10
-):
+def _add_requests_and_schedule(scheduler: Scheduler, num_requests: int, *, num_tokens: int = 10):
     requests = create_requests(num_requests=num_requests, num_tokens=num_tokens)
     for request in requests:
         scheduler.add_request(request)
@@ -114,9 +112,7 @@ def test_dynamic_sd_rejects_empty_schedule():
 
 
 def test_dynamic_sd_requires_schedule_config():
-    with pytest.raises(
-        ValueError, match="num_speculative_tokens_per_batch_size is required"
-    ):
+    with pytest.raises(ValueError, match="num_speculative_tokens_per_batch_size is required"):
         build_dynamic_sd_schedule_lookup(
             None,
             aphrodite_max_batch_size=256,

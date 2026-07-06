@@ -44,10 +44,7 @@ logger = logging.getLogger(__name__)
 # Only print the following warnings when triton version < 3.2.0.
 # The issue won't affect performance or accuracy.
 if version.parse(triton.__version__) < version.parse("3.2.0"):
-    logger.warning(
-        "The following error message 'operation scheduled before its operands' "
-        "can be ignored."
-    )
+    logger.warning("The following error message 'operation scheduled before its operands' can be ignored.")
 
 
 @triton.jit
@@ -128,17 +125,13 @@ def _fwd_kernel_stage1(
         for start_n in range(split_kv_start, split_kv_end, BLOCK_N):
             offs_n = start_n + tl.arange(0, BLOCK_N)
             kv_page_number = tl.load(
-                Req_to_tokens
-                + stride_req_to_tokens_b * cur_batch_req_idx
-                + offs_n // PAGE_SIZE,
+                Req_to_tokens + stride_req_to_tokens_b * cur_batch_req_idx + offs_n // PAGE_SIZE,
                 mask=offs_n < split_kv_end,
                 other=0,
             )
             kv_in_page = offs_n % PAGE_SIZE
             offs_buf_k = (
-                (kv_page_number * stride_buf_kpbs + kv_in_page * stride_buf_kbs)[
-                    :, None
-                ]
+                (kv_page_number * stride_buf_kpbs + kv_in_page * stride_buf_kbs)[:, None]
                 + cur_kv_head * stride_buf_kh
                 + offs_d[None, :]
             )
@@ -158,9 +151,7 @@ def _fwd_kernel_stage1(
             qk = tl.where(offs_n < split_kv_end, qk, float("-inf"))
 
             offs_buf_v = (
-                (kv_page_number * stride_buf_vpbs + kv_in_page * stride_buf_vbs)[
-                    :, None
-                ]
+                (kv_page_number * stride_buf_vpbs + kv_in_page * stride_buf_vbs)[:, None]
                 + cur_kv_head * stride_buf_vh
                 + offs_dv[None, :]
             )
@@ -181,12 +172,7 @@ def _fwd_kernel_stage1(
             e_sum = e_sum * re_scale + tl.sum(p, 0)
             e_max = n_e_max
 
-        offs_mid_o = (
-            cur_batch * stride_mid_ob
-            + cur_head * stride_mid_oh
-            + split_kv_id * stride_mid_os
-            + offs_dv
-        )
+        offs_mid_o = cur_batch * stride_mid_ob + cur_head * stride_mid_oh + split_kv_id * stride_mid_os + offs_dv
 
         tl.store(
             Att_Out + offs_mid_o,
@@ -194,12 +180,7 @@ def _fwd_kernel_stage1(
             mask=(mask_dv),
         )
 
-        offs_mid_o_1 = (
-            cur_batch * stride_mid_ob
-            + cur_head * stride_mid_oh
-            + split_kv_id * stride_mid_os
-            + Lv
-        )
+        offs_mid_o_1 = cur_batch * stride_mid_ob + cur_head * stride_mid_oh + split_kv_id * stride_mid_os + Lv
 
         tl.store(
             Att_Out + offs_mid_o_1,
@@ -340,9 +321,7 @@ def _fwd_grouped_kernel_stage1(
     if BLOCK_DPE > 0:
         offs_dpe = BLOCK_DMODEL + tl.arange(0, BLOCK_DPE)
         mask_dpe = offs_dpe < Lk
-        off_qpe = (
-            cur_batch * stride_qbs + cur_head[:, None] * stride_qh + offs_dpe[None, :]
-        )
+        off_qpe = cur_batch * stride_qbs + cur_head[:, None] * stride_qh + offs_dpe[None, :]
         qpe = tl.load(
             Q + off_qpe,
             mask=(mask_h[:, None]) & (mask_dpe[None, :]),
@@ -369,16 +348,12 @@ def _fwd_grouped_kernel_stage1(
         for start_n in tl.range(split_kv_start, split_kv_end, BLOCK_N):
             offs_n = start_n + tl.arange(0, BLOCK_N)
             kv_page_number = tl.load(
-                Req_to_tokens
-                + stride_req_to_tokens_b * cur_batch_req_idx
-                + offs_n // PAGE_SIZE,
+                Req_to_tokens + stride_req_to_tokens_b * cur_batch_req_idx + offs_n // PAGE_SIZE,
                 mask=offs_n < split_kv_end,
                 other=0,
                 cache_modifier=".ca",
             )
-            kv_off_k = (
-                kv_page_number * stride_buf_kpbs + (offs_n % PAGE_SIZE) * stride_buf_kbs
-            )
+            kv_off_k = kv_page_number * stride_buf_kpbs + (offs_n % PAGE_SIZE) * stride_buf_kbs
 
             # explicitly facilitate overlapping load/compute
             offs_buf_k = kv_off_k[None, :] + base_offs_k
@@ -408,15 +383,10 @@ def _fwd_grouped_kernel_stage1(
             if logit_cap > 0:
                 qk = logit_cap * tanh(qk / logit_cap)
 
-            qk = tl.where(
-                mask_h[:, None] & (offs_n[None, :] < split_kv_end), qk, float("-inf")
-            )
+            qk = tl.where(mask_h[:, None] & (offs_n[None, :] < split_kv_end), qk, float("-inf"))
 
             if not IS_MLA:
-                kv_off_v = (
-                    kv_page_number * stride_buf_vpbs
-                    + (offs_n % PAGE_SIZE) * stride_buf_vbs
-                )
+                kv_off_v = kv_page_number * stride_buf_vpbs + (offs_n % PAGE_SIZE) * stride_buf_vbs
                 offs_buf_v = kv_off_v[:, None] + base_offs_v
                 v = tl.load(
                     V_Buffer + offs_buf_v,
@@ -453,12 +423,7 @@ def _fwd_grouped_kernel_stage1(
             mask=(mask_h[:, None]) & (mask_dv[None, :]),
         )
 
-        offs_mid_o_1 = (
-            cur_batch * stride_mid_ob
-            + cur_head * stride_mid_oh
-            + split_kv_id * stride_mid_os
-            + Lv
-        )
+        offs_mid_o_1 = cur_batch * stride_mid_ob + cur_head * stride_mid_oh + split_kv_id * stride_mid_os + Lv
 
         tl.store(
             Att_Out + offs_mid_o_1,
@@ -610,9 +575,7 @@ def _fwd_kernel_stage2(
         split_kv_end = tl.minimum(split_kv_start + kv_len_per_split, cur_batch_seq_len)
 
         if split_kv_end > split_kv_start:
-            tv = tl.load(
-                Mid_O + offs_v + split_kv_id * stride_mid_os, mask=mask_d, other=0.0
-            )
+            tv = tl.load(Mid_O + offs_v + split_kv_id * stride_mid_os, mask=mask_d, other=0.0)
             tlogic = tl.load(Mid_O + offs_logic + split_kv_id * stride_mid_os)
             n_e_max = tl.maximum(tlogic, e_max)
 
@@ -711,9 +674,7 @@ def decode_attention_fwd_normal(
         k_scale,
         v_scale,
     )
-    _decode_softmax_reducev_fwd(
-        attn_logits, q, o, lse, v_buffer, b_seq_len, num_kv_splits
-    )
+    _decode_softmax_reducev_fwd(attn_logits, q, o, lse, v_buffer, b_seq_len, num_kv_splits)
 
 
 def decode_attention_fwd_grouped(
@@ -748,9 +709,7 @@ def decode_attention_fwd_grouped(
         v_scale,
         is_mla=is_mla,
     )
-    _decode_softmax_reducev_fwd(
-        attn_logits, q, o, lse, v_buffer, b_seq_len, num_kv_splits
-    )
+    _decode_softmax_reducev_fwd(attn_logits, q, o, lse, v_buffer, b_seq_len, num_kv_splits)
 
 
 def decode_attention_fwd(

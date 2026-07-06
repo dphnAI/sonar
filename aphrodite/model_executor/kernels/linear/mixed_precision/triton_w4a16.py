@@ -191,16 +191,10 @@ def triton_w4a16_gemm(
     M, K = a.shape
     N = b_q.shape[1] * 8
 
-    assert b_q.shape == (K, N // 8), (
-        f"b_q shape mismatch: {b_q.shape} vs ({K}, {N // 8})"
-    )
-    assert scales.shape == (K // group_size, N), (
-        f"scales shape mismatch: {scales.shape} vs ({K // group_size}, {N})"
-    )
+    assert b_q.shape == (K, N // 8), f"b_q shape mismatch: {b_q.shape} vs ({K}, {N // 8})"
+    assert scales.shape == (K // group_size, N), f"scales shape mismatch: {scales.shape} vs ({K // group_size}, {N})"
     if qzeros is not None:
-        assert qzeros.shape == (K // group_size, N // 8), (
-            f"qzeros shape mismatch: {qzeros.shape}"
-        )
+        assert qzeros.shape == (K // group_size, N // 8), f"qzeros shape mismatch: {qzeros.shape}"
 
     c = torch.empty((M, N), dtype=a.dtype, device=a.device)
 
@@ -294,8 +288,7 @@ class TritonW4A16LinearKernel(MPLinearKernel):
         if c.weight_type not in cls.SUPPORTED_QUANT_TYPES:
             return (
                 False,
-                f"Quant type {c.weight_type} not supported; "
-                f"supported: {cls.SUPPORTED_QUANT_TYPES}",
+                f"Quant type {c.weight_type} not supported; supported: {cls.SUPPORTED_QUANT_TYPES}",
             )
 
         if c.act_type not in (torch.float16, torch.bfloat16):
@@ -305,22 +298,17 @@ class TritonW4A16LinearKernel(MPLinearKernel):
         if N % 8 != 0:
             return (
                 False,
-                f"Output features ({N}) must be divisible by 8 "
-                "(8 int4 values packed per int32)",
+                f"Output features ({N}) must be divisible by 8 (8 int4 values packed per int32)",
             )
 
         if c.has_g_idx:
             return (
                 False,
-                "Activation reordering (g_idx) is not supported by "
-                "TritonW4A16LinearKernel",
+                "Activation reordering (g_idx) is not supported by TritonW4A16LinearKernel",
             )
 
         gs = c.group_size
-        if (
-            gs not in TRITON_W4A16_SUPPORTED_GROUP_SIZES
-            and gs != c.full_weight_shape[0]
-        ):
+        if gs not in TRITON_W4A16_SUPPORTED_GROUP_SIZES and gs != c.full_weight_shape[0]:
             return (
                 False,
                 f"Group size {gs} not supported; "
@@ -408,9 +396,7 @@ class TritonW4A16LinearKernel(MPLinearKernel):
                     torch.nn.Parameter(zp.data.t().contiguous(), requires_grad=False),
                 )
 
-    def apply_weights(
-        self, layer: torch.nn.Module, x: torch.Tensor, bias: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def apply_weights(self, layer: torch.nn.Module, x: torch.Tensor, bias: torch.Tensor | None = None) -> torch.Tensor:
         c = self.config
         w_q, w_s, w_zp, _ = self._get_weight_params(layer)
 

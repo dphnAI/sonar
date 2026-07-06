@@ -147,9 +147,7 @@ class NixlPushConnectorWorker(NixlBaseConnectorWorker):
         """Pre-process metadata; defer NIXL ops to the writer thread."""
         # D-side: track reqs waiting for P to push.
         for req_id, meta in metadata.reqs_to_recv.items():
-            meta.local_physical_block_ids = self._logical_to_kernel_block_ids(
-                meta.local_block_ids
-            )
+            meta.local_physical_block_ids = self._logical_to_kernel_block_ids(meta.local_block_ids)
             assert meta.remote is not None
             remote_engine_id = meta.remote.engine_id
             logger.debug(
@@ -293,9 +291,7 @@ class NixlPushConnectorWorker(NixlBaseConnectorWorker):
             try:
                 f.result()
             except Exception as e:
-                self._log_failure(
-                    failure_type="push_reg_handshake_failed", req_id=rid, error=e
-                )
+                self._log_failure(failure_type="push_reg_handshake_failed", req_id=rid, error=e)
                 self._handle_failed_transfer(rid, None)
                 return
             # Re-queue for the writer to send now that the handshake is done.
@@ -328,9 +324,7 @@ class NixlPushConnectorWorker(NixlBaseConnectorWorker):
                     error=e,
                     remote_rank=rank,
                 )
-        logger.debug(
-            "Sent PUSH_REG for %s to engine %s (%dB)", req_id, engine_id, len(notif_msg)
-        )
+        logger.debug("Sent PUSH_REG for %s to engine %s (%dB)", req_id, engine_id, len(notif_msg))
 
     # --- Matching helpers --------------------------------------------- #
 
@@ -349,9 +343,7 @@ class NixlPushConnectorWorker(NixlBaseConnectorWorker):
                 return self._pending_d_registrations.pop(reg_id)
         return None
 
-    def _pop_matching_finished_blocks(
-        self, request_id: str
-    ) -> tuple[str, BlockIds] | None:
+    def _pop_matching_finished_blocks(self, request_id: str) -> tuple[str, BlockIds] | None:
         """Pop the P-side finished blocks matching *request_id*.
 
         Same lookup as ``_pop_matching_registration``: exact key, then a
@@ -504,15 +496,11 @@ class NixlPushConnectorWorker(NixlBaseConnectorWorker):
             ReadSpec(
                 remote_rank=rank,
                 local_block_ids=[
-                    list(local_block_ids[g])
-                    if rank in plan.source_ranks_per_group[g]
-                    else []
+                    list(local_block_ids[g]) if rank in plan.source_ranks_per_group[g] else []
                     for g in range(num_groups)
                 ],
                 remote_block_ids=[
-                    list(remote_block_ids[g])
-                    if rank in plan.source_ranks_per_group[g]
-                    else []
+                    list(remote_block_ids[g]) if rank in plan.source_ranks_per_group[g] else []
                     for g in range(num_groups)
                 ],
             )
@@ -536,13 +524,9 @@ class NixlPushConnectorWorker(NixlBaseConnectorWorker):
                 assert remote_block_size == self.block_size
                 local_xfer_side_handle = self.src_xfer_handles_by_tp_ratio[tp_ratio][i]
             else:
-                local_xfer_side_handle = self.src_xfer_handles_by_block_size[
-                    remote_block_size
-                ]
+                local_xfer_side_handle = self.src_xfer_handles_by_block_size[remote_block_size]
 
-            remote_xfer_side_handle = self.dst_xfer_side_handles[meta.remote.engine_id][
-                spec.remote_rank
-            ]
+            remote_xfer_side_handle = self.dst_xfer_side_handles[meta.remote.engine_id][spec.remote_rank]
 
             self._xfer_blocks(
                 read_spec=spec,
@@ -576,20 +560,14 @@ class NixlPushConnectorWorker(NixlBaseConnectorWorker):
         remote_block_ids = read_spec.remote_block_ids
 
         remote_info = self.transfer_topo.get_engine_info(dst_engine_id)
-        block_size_ratio = self.transfer_topo.block_size_ratio(
-            remote_info.remote_block_size
-        )
+        block_size_ratio = self.transfer_topo.block_size_ratio(remote_info.remote_block_size)
         if block_size_ratio > 1:
             assert not self._is_hma_required
             local_block_ids0 = local_block_ids[0] if local_block_ids else []
             remote_block_ids0 = remote_block_ids[0]
-            local_block_ids_mapped = self.get_mapped_blocks(
-                np.asarray(local_block_ids0), block_size_ratio
-            ).tolist()
+            local_block_ids_mapped = self.get_mapped_blocks(np.asarray(local_block_ids0), block_size_ratio).tolist()
             if len(local_block_ids_mapped) > len(remote_block_ids0):
-                local_block_ids_mapped = local_block_ids_mapped[
-                    : len(remote_block_ids0)
-                ]
+                local_block_ids_mapped = local_block_ids_mapped[: len(remote_block_ids0)]
             local_block_ids = [local_block_ids_mapped] if local_block_ids_mapped else []
             remote_block_ids = [remote_block_ids0]
 
@@ -703,10 +681,7 @@ class NixlPushConnectorWorker(NixlBaseConnectorWorker):
             tp_ratio = self.transfer_topo.tp_ratio(n_consumers)
             consumers_per_producer = -tp_ratio if n_consumers > self.world_size else 1
             self.consumer_notification_counts_by_req[req_id] += 1
-            if (
-                self.consumer_notification_counts_by_req[req_id]
-                == consumers_per_producer
-            ):
+            if self.consumer_notification_counts_by_req[req_id] == consumers_per_producer:
                 notified_req_ids.add(req_id)
                 del self.consumer_notification_counts_by_req[req_id]
                 self._reqs_to_process.remove(req_id)

@@ -63,9 +63,7 @@ if TYPE_CHECKING:
 else:
     PretrainedConfig = Any
 
-    me_quant = LazyLoader(
-        "model_executor", globals(), "aphrodite.model_executor.layers.quantization"
-    )
+    me_quant = LazyLoader("model_executor", globals(), "aphrodite.model_executor.layers.quantization")
     me_models = LazyLoader("model_executor", globals(), "aphrodite.model_executor.models")
     LoadConfig = Any
     ParallelConfig = Any
@@ -79,9 +77,7 @@ ConvertType = Literal["none", "embed", "classify"]
 ConvertOption = Literal["auto", ConvertType]
 TokenizerMode = Literal["auto", "hf", "slow", "mistral", "deepseek_v32", "deepseek_v4"]
 ModelDType = Literal["auto", "half", "float16", "bfloat16", "float", "float32"]
-LogprobsMode = Literal[
-    "raw_logits", "raw_logprobs", "processed_logits", "processed_logprobs"
-]
+LogprobsMode = Literal["raw_logits", "raw_logprobs", "processed_logits", "processed_logprobs"]
 HfOverrides = dict[str, Any] | Callable[[PretrainedConfig], PretrainedConfig]
 ModelImpl = Literal["auto", "aphrodite", "transformers", "terratorch"]
 LayerBlockType = Literal["attention", "linear_attention", "mamba"]
@@ -92,9 +88,7 @@ _RUNNER_CONVERTS: dict[RunnerType, list[ConvertType]] = {
     "draft": [],
 }
 
-AttnTypeStr = Literal[
-    "decoder", "encoder", "encoder_only", "encoder_decoder", "attention_free", "hybrid"
-]
+AttnTypeStr = Literal["decoder", "encoder", "encoder_only", "encoder_decoder", "attention_free", "hybrid"]
 
 
 @config(config=ConfigDict(arbitrary_types_allowed=True))
@@ -433,8 +427,7 @@ class ModelConfig:
 
                 # If nested target exists and can be updated recursively
                 if nested_target is not None and (
-                    isinstance(nested_target, dict)
-                    or hasattr(nested_target, "__dict__")
+                    isinstance(nested_target, dict) or hasattr(nested_target, "__dict__")
                 ):
                     self._update_nested(nested_target, value)
                     continue
@@ -487,9 +480,7 @@ class ModelConfig:
         mm_ipc_gpu_memory_gb: float | None,
     ) -> None:
         # Keep set served_model_name before maybe_model_redirect(self.model)
-        self.served_model_name = get_served_model_name(
-            self.model, self.served_model_name
-        )
+        self.served_model_name = get_served_model_name(self.model, self.served_model_name)
         self.model = maybe_model_redirect(self.model)
         # The tokenizer is consistent with the model by default.
         if self.tokenizer is None:
@@ -529,14 +520,9 @@ class ModelConfig:
             if not current_platform.is_sleep_mode_available():
                 raise ValueError("Sleep mode is not supported on current platform.")
             if current_platform.is_cuda_alike() and not self.enable_cumem_allocator:
-                logger.info_once(
-                    "Enabling cumem allocator because sleep mode requires it."
-                )
+                logger.info_once("Enabling cumem allocator because sleep mode requires it.")
                 self.enable_cumem_allocator = True
-        if (
-            self.enable_cumem_allocator
-            and not current_platform.is_cumem_allocator_available()
-        ):
+        if self.enable_cumem_allocator and not current_platform.is_cumem_allocator_available():
             raise ValueError("cumem allocator is not supported on current platform.")
 
         hf_config = get_config(
@@ -554,9 +540,7 @@ class ModelConfig:
             self._apply_dict_overrides(hf_config, dict_overrides)
         self.hf_text_config = get_hf_text_config(self.hf_config)
         self.model_arch_config = self.get_model_arch_config()
-        self.attention_chunk_size = getattr(
-            self.hf_text_config, "attention_chunk_size", None
-        )
+        self.attention_chunk_size = getattr(self.hf_text_config, "attention_chunk_size", None)
         self.encoder_config = self._get_encoder_config()
         self.hf_image_processor_config = get_hf_image_processor_config(
             self.model, hf_token=self.hf_token, revision=self.revision
@@ -567,18 +551,10 @@ class ModelConfig:
         is_generative_model = registry.is_text_generation_model(architectures, self)
         is_pooling_model = registry.is_pooling_model(architectures, self)
 
-        self.runner_type = self._get_runner_type(
-            architectures, self.runner, self.convert
-        )
-        self.convert_type = self._get_convert_type(
-            architectures, self.runner_type, self.convert
-        )
+        self.runner_type = self._get_runner_type(architectures, self.runner, self.convert)
+        self.convert_type = self._get_convert_type(architectures, self.runner_type, self.convert)
 
-        if (
-            is_pooling_model
-            and not is_generative_model
-            and self.runner_type in ("draft", "generate")
-        ):
+        if is_pooling_model and not is_generative_model and self.runner_type in ("draft", "generate"):
             raise ValueError(
                 f"Embedding models do not support `--runner {self.runner_type}`. "
                 "Use `--runner pooling` or `--runner auto` for embedding models."
@@ -668,10 +644,7 @@ class ModelConfig:
 
         # Init multimodal config if needed
         if self._model_info.supports_multimodal:
-            if (
-                mm_encoder_tp_mode == "data"
-                and not self._model_info.supports_multimodal_encoder_tp_data
-            ):
+            if mm_encoder_tp_mode == "data" and not self._model_info.supports_multimodal_encoder_tp_data:
                 logger.warning_once(
                     "This model does not support `--mm-encoder-tp-mode data`. "
                     "Falling back to `--mm-encoder-tp-mode weights`."
@@ -701,16 +674,11 @@ class ModelConfig:
                 mm_ipc_gpu_memory_gb=mm_ipc_gpu_memory_gb,
             )
 
-            mm_config_kwargs = {
-                k: v for k, v in mm_config_kwargs.items() if v is not None
-            }
+            mm_config_kwargs = {k: v for k, v in mm_config_kwargs.items() if v is not None}
 
             self.multimodal_config = MultiModalConfig(**mm_config_kwargs)  # type: ignore[arg-type]
 
-            if (
-                self.renderer_num_workers > 1
-                and self.multimodal_config.mm_processor_cache_gb > 0
-            ):
+            if self.renderer_num_workers > 1 and self.multimodal_config.mm_processor_cache_gb > 0:
                 raise ValueError(
                     "Cannot use --renderer-num-workers > 1 with the "
                     "multimodal processor cache enabled. The cache is "
@@ -735,9 +703,7 @@ class ModelConfig:
     def get_model_arch_config(
         self,
     ) -> ModelArchitectureConfig:
-        convertor_cls = MODEL_ARCH_CONFIG_CONVERTORS.get(
-            self.hf_config.model_type, ModelArchConfigConvertorBase
-        )
+        convertor_cls = MODEL_ARCH_CONFIG_CONVERTORS.get(self.hf_config.model_type, ModelArchConfigConvertorBase)
         convertor = convertor_cls(self.hf_config, self.hf_text_config)
         return convertor.convert()
 
@@ -841,9 +807,7 @@ class ModelConfig:
 
         if is_runai_obj_uri(model):
             object_storage_model = ObjectStorageModel(url=model)
-            object_storage_model.pull_files(
-                model, allow_pattern=["*.model", "*.py", "*.json"]
-            )
+            object_storage_model.pull_files(model, allow_pattern=["*.model", "*.py", "*.json"])
             self.model_weights = model
             self.model = object_storage_model.dir
 
@@ -915,8 +879,7 @@ class ModelConfig:
         # Don't log the most common case
         if runner_type != "generate":
             logger.info(
-                "Resolved `--runner auto` to `--runner %s`. "
-                "Pass the value explicitly to silence this message.",
+                "Resolved `--runner auto` to `--runner %s`. Pass the value explicitly to silence this message.",
                 runner_type,
             )
 
@@ -931,13 +894,9 @@ class ModelConfig:
 
         for arch in architectures:
             if arch in registry.get_supported_archs():
-                if runner_type == "generate" and registry.is_text_generation_model(
-                    architectures, self
-                ):
+                if runner_type == "generate" and registry.is_text_generation_model(architectures, self):
                     return "none"
-                if runner_type == "pooling" and registry.is_pooling_model(
-                    architectures, self
-                ):
+                if runner_type == "pooling" and registry.is_pooling_model(architectures, self):
                     return "none"
 
             match = try_match_architecture_defaults(arch, runner_type=runner_type)
@@ -967,8 +926,7 @@ class ModelConfig:
         # Don't log the most common case
         if convert_type != "none":
             logger.info(
-                "Resolved `--convert auto` to `--convert %s`. "
-                "Pass the value explicitly to silence this message.",
+                "Resolved `--convert auto` to `--convert %s`. Pass the value explicitly to silence this message.",
                 convert_type,
             )
 
@@ -1010,9 +968,7 @@ class ModelConfig:
             # if the user specifies humming, we should always use humming
             if self.quantization == "humming":
                 overrides = ["humming"] + overrides
-            quantization_methods = [
-                q for q in supported_quantization if q not in overrides
-            ]
+            quantization_methods = [q for q in supported_quantization if q not in overrides]
             # Any custom overrides will be in quantization_methods so we place
             # them at the start of the list so custom overrides have preference
             # over the built-in ones.
@@ -1028,10 +984,7 @@ class ModelConfig:
                     # Raise error if the override is not custom (custom would
                     # be in QUANTIZATION_METHODS but not QuantizationMethods)
                     # and hasn't been added to the overrides list.
-                    if (
-                        name in get_args(me_quant.QuantizationMethods)
-                        and name not in overrides
-                    ):
+                    if name in get_args(me_quant.QuantizationMethods) and name not in overrides:
                         raise ValueError(
                             f"Quantization method {name} is an override but "
                             "is has not been added to the `overrides` list "
@@ -1057,16 +1010,14 @@ class ModelConfig:
         if self.quantization is not None:
             if self.quantization not in supported_quantization:
                 raise ValueError(
-                    f"Unknown quantization method: {self.quantization}. Must "
-                    f"be one of {supported_quantization}."
+                    f"Unknown quantization method: {self.quantization}. Must be one of {supported_quantization}."
                 )
             current_platform.verify_quantization(self.quantization)
 
         if self.quantization in me_quant.DEPRECATED_QUANTIZATION_METHODS:
             if self.allow_deprecated_quantization:
                 logger.warning(
-                    "The quantization method %s is deprecated "
-                    "and will be removed in future versions of Aphrodite.",
+                    "The quantization method %s is deprecated and will be removed in future versions of Aphrodite.",
                     self.quantization,
                 )
             else:
@@ -1082,8 +1033,7 @@ class ModelConfig:
         unsupported_rocm = self.is_encoder_decoder
         if unsupported_rocm and not self.enforce_eager and current_platform.is_rocm():
             logger.warning(
-                "CUDA graph is not supported for %s on ROCm yet, fallback "
-                "to eager mode.",
+                "CUDA graph is not supported for %s on ROCm yet, fallback to eager mode.",
                 self.model_arch_config.model_type,
             )
             self.enforce_eager = True
@@ -1109,18 +1059,14 @@ class ModelConfig:
                 not self.enforce_eager,
             ]
         ):
-            logger.warning(
-                "CUDA graph is not supported on BitsAndBytes 8bit yet, "
-                "fallback to the eager mode."
-            )
+            logger.warning("CUDA graph is not supported on BitsAndBytes 8bit yet, fallback to the eager mode.")
 
             self.enforce_eager = True
 
     def _verify_with_expert_parallelism(self) -> None:
         if not self.is_moe:
             raise ValueError(
-                "Number of experts in the model must be greater than 0 "
-                "when expert parallelism is enabled."
+                "Number of experts in the model must be greater than 0 when expert parallelism is enabled."
             )
 
     def _try_verify_and_update_model_config(self):
@@ -1152,16 +1098,9 @@ class ModelConfig:
 
             sparse_attn_config = get_sparse_attention_config(self, load_config)
             if sparse_attn_config:
-                self.hf_config.dual_chunk_attention_config[
-                    "sparse_attention_config"
-                ] = sparse_attn_config
-                if (
-                    "sparse_attention_enabled"
-                    not in self.hf_config.dual_chunk_attention_config
-                ):
-                    self.hf_config.dual_chunk_attention_config[
-                        "sparse_attention_enabled"
-                    ] = True
+                self.hf_config.dual_chunk_attention_config["sparse_attention_config"] = sparse_attn_config
+                if "sparse_attention_enabled" not in self.hf_config.dual_chunk_attention_config:
+                    self.hf_config.dual_chunk_attention_config["sparse_attention_enabled"] = True
 
     def verify_with_parallel_config(
         self,
@@ -1180,9 +1119,7 @@ class ModelConfig:
             self._verify_with_expert_parallelism()
 
         pipeline_parallel_size = parallel_config.pipeline_parallel_size
-        if pipeline_parallel_size > 1 and not self.registry.is_pp_supported_model(
-            self.architectures, self
-        ):
+        if pipeline_parallel_size > 1 and not self.registry.is_pp_supported_model(self.architectures, self):
             raise NotImplementedError(
                 "Pipeline parallelism is not supported for this model. "
                 "Supported models implement the `SupportsPP` interface."
@@ -1244,9 +1181,7 @@ class ModelConfig:
         # of the hidden states, however there are exceptions, such as
         # embedding models like CLIP and SigLIP
         names = ("projection_dim", "projection_size")
-        return getattr_iter(
-            self.hf_text_config, names, default_factory=self.get_hidden_size
-        )
+        return getattr_iter(self.hf_text_config, names, default_factory=self.get_hidden_size)
 
     @property
     def is_deepseek_mla(self) -> bool:
@@ -1290,9 +1225,7 @@ class ModelConfig:
     def get_total_num_hidden_layers(self) -> int:
         return self.model_arch_config.total_num_hidden_layers
 
-    def get_layers_start_end_indices(
-        self, parallel_config: ParallelConfig
-    ) -> tuple[int, int]:
+    def get_layers_start_end_indices(self, parallel_config: ParallelConfig) -> tuple[int, int]:
         from aphrodite.distributed.utils import get_pp_indices
 
         total_num_hidden_layers = self.get_total_num_hidden_layers()
@@ -1317,9 +1250,7 @@ class ModelConfig:
         # This function relies on 'layers_block_type' in hf_config,
         # for w/o this attribute, we will need to have workarounds like so
         attn_block_type = block_type == "attention"
-        is_transformer = (
-            not self.is_hybrid and not self.has_noops and not self.is_attention_free
-        )
+        is_transformer = not self.is_hybrid and not self.has_noops and not self.is_attention_free
         start, end = self.get_layers_start_end_indices(parallel_config)
 
         if is_transformer:
@@ -1335,15 +1266,11 @@ class ModelConfig:
             return sum(not bc.attention.no_op for bc in block_configs[start:end])
         else:
             # Hybrid model Jamba
-            layers_block_type_value = getattr(
-                self.hf_text_config, "layers_block_type", None
-            )
+            layers_block_type_value = getattr(self.hf_text_config, "layers_block_type", None)
             if layers_block_type_value is not None:
                 if self.model_arch_config.text_model_type == "zamba2":
                     if attn_block_type:
-                        return sum(
-                            t == "hybrid" for t in layers_block_type_value[start:end]
-                        )
+                        return sum(t == "hybrid" for t in layers_block_type_value[start:end])
                     else:
                         return self.get_num_layers(parallel_config)
                 return sum(t == block_type for t in layers_block_type_value[start:end])
@@ -1357,21 +1284,13 @@ class ModelConfig:
             layer_types_value = getattr(self.hf_text_config, "layer_types", None)
             if layer_types_value is not None:
                 if block_type == "attention":
-                    return sum(
-                        t == "full_attention" for t in layer_types_value[start:end]
-                    )
+                    return sum(t == "full_attention" for t in layer_types_value[start:end])
                 elif block_type == "linear_attention":
-                    return sum(
-                        t == "linear_attention" for t in layer_types_value[start:end]
-                    )
+                    return sum(t == "linear_attention" for t in layer_types_value[start:end])
                 else:
                     return sum(t == block_type for t in layer_types_value[start:end])
 
-            if (
-                layers_block_type_value is None
-                and attn_type_list is None
-                and layer_types_value is None
-            ):
+            if layers_block_type_value is None and attn_type_list is None and layer_types_value is None:
                 raise ValueError(
                     "The model is an hybrid without a layers_block_type or an "
                     "attn_type_list, or a layer_types in the hf_config, "
@@ -1472,15 +1391,11 @@ class ModelConfig:
             "max_new_tokens",
         ]
         if any(p in config for p in available_params):
-            diff_sampling_param = {
-                p: config.get(p) for p in available_params if config.get(p) is not None
-            }
+            diff_sampling_param = {p: config.get(p) for p in available_params if config.get(p) is not None}
             # Huggingface definition of max_new_tokens is equivalent
             # to Aphrodite's max_tokens
             if "max_new_tokens" in diff_sampling_param:
-                diff_sampling_param["max_tokens"] = diff_sampling_param.pop(
-                    "max_new_tokens"
-                )
+                diff_sampling_param["max_tokens"] = diff_sampling_param.pop("max_new_tokens")
         else:
             diff_sampling_param = {}
 
@@ -1496,9 +1411,7 @@ class ModelConfig:
 
         return diff_sampling_param
 
-    def get_pooling_task(
-        self, supported_tasks: tuple[SupportedTask, ...]
-    ) -> PoolingTask | None:
+    def get_pooling_task(self, supported_tasks: tuple[SupportedTask, ...]) -> PoolingTask | None:
         if self.pooler_config is None:
             return None
 
@@ -1508,10 +1421,7 @@ class ModelConfig:
             if self.pooler_config.task in supported_tasks:
                 return self.pooler_config.task
             else:
-                raise RuntimeError(
-                    f"Unsupported task: {pooling_task!r} "
-                    f"Supported tasks: {supported_tasks}"
-                )
+                raise RuntimeError(f"Unsupported task: {pooling_task!r} Supported tasks: {supported_tasks}")
 
         if "token_classify" in supported_tasks:
             for architecture in self.architectures:
@@ -1552,14 +1462,8 @@ class ModelConfig:
             or (
                 hasattr(cfg, "attn_config")  # MPT
                 and (
-                    (
-                        isinstance(cfg.attn_config, dict)
-                        and cfg.attn_config.get("alibi", False)
-                    )
-                    or (
-                        not isinstance(cfg.attn_config, dict)
-                        and getattr(cfg.attn_config, "alibi", False)
-                    )
+                    (isinstance(cfg.attn_config, dict) and cfg.attn_config.get("alibi", False))
+                    or (not isinstance(cfg.attn_config, dict) and getattr(cfg.attn_config, "alibi", False))
                 )
             )
         )
@@ -1597,11 +1501,7 @@ class ModelConfig:
         #  as_seq_cls_model, which is "bi-encoder", rather than the
         #  score type after as_seq_cls_model, which is "cross-encoder".
         #  Therefore, the following logic is required.
-        return (
-            "cross-encoder"
-            if self.convert_type == "classify"
-            else self._model_info.score_type
-        )
+        return "cross-encoder" if self.convert_type == "classify" else self._model_info.score_type
 
     @property
     def is_pp_supported(self) -> bool:
@@ -1618,9 +1518,7 @@ class ModelConfig:
         # Handle granite-4.0-micro case which uses hybrid config but does not
         # actually contain any non-attention layers.
         layer_types = getattr(self.hf_config, "layer_types", None)
-        return layer_types is None or not all(
-            layer == "attention" for layer in layer_types
-        )
+        return layer_types is None or not all(layer == "attention" for layer in layer_types)
 
     @property
     def has_noops(self) -> bool:
@@ -1655,9 +1553,7 @@ class ModelConfig:
 
         use_pad_token = getattr(self.hf_config, "use_pad_token", None)
         if use_pad_token is not None:
-            logger.warning_once(
-                "use_pad_token has been deprecated; please use use_sep_token instead."
-            )
+            logger.warning_once("use_pad_token has been deprecated; please use use_sep_token instead.")
             return use_pad_token
 
         return getattr(self.hf_config, "use_sep_token", True)
@@ -1675,22 +1571,18 @@ class ModelConfig:
           --hf-overrides '{"head_dtype": "model"}' to disable it.
         """
 
-        head_dtype = _get_head_dtype(
-            config=self.hf_config, dtype=self.dtype, runner_type=self.runner_type
-        )
+        head_dtype = _get_head_dtype(config=self.hf_config, dtype=self.dtype, runner_type=self.runner_type)
 
         if self.runner_type != "pooling" and head_dtype != self.dtype:
             logger.warning_once(
-                "`head_dtype` currently only supports pooling models, "
-                "fallback to model dtype [%s].",
+                "`head_dtype` currently only supports pooling models, fallback to model dtype [%s].",
                 self.dtype,
             )
             return self.dtype
 
         if head_dtype not in current_platform.supported_dtypes:
             logger.warning_once(
-                "The current platform does not support [%s] head dtype, "
-                "fallback to model dtype [%s].",
+                "The current platform does not support [%s] head dtype, fallback to model dtype [%s].",
                 head_dtype,
                 self.dtype,
             )
@@ -1714,10 +1606,7 @@ class ModelConfig:
         # Consider max_model_len in tokenizer_config only when
         # pooling models use absolute position_embedding.
         tokenizer_config = None
-        if (
-            self.runner_type == "pooling"
-            and getattr(self.hf_config, "position_embedding_type", "") == "absolute"
-        ):
+        if self.runner_type == "pooling" and getattr(self.hf_config, "position_embedding_type", "") == "absolute":
             tokenizer_config = try_get_tokenizer_config(
                 self.tokenizer,
                 trust_remote_code=self.trust_remote_code,
@@ -1762,28 +1651,20 @@ class ModelConfig:
         if pooler_config := self.pooler_config:
             # for pooling models
             if attn_type == "encoder_only":
-                logger.debug(
-                    "Pooling models with bidirectional attn "
-                    "do not support chunked prefill."
-                )
+                logger.debug("Pooling models with bidirectional attn do not support chunked prefill.")
                 return False
 
             if attn_type == "decoder":
-                if (
-                    pooler_config.seq_pooling_type in ("MEAN", "CLS")
-                    or pooler_config.tok_pooling_type == "STEP"
-                ):
+                if pooler_config.seq_pooling_type in ("MEAN", "CLS") or pooler_config.tok_pooling_type == "STEP":
                     logger.debug(
-                        "Pooling models with causal attn and %s/%s pooling "
-                        "do not support chunked prefill.",
+                        "Pooling models with causal attn and %s/%s pooling do not support chunked prefill.",
                         pooler_config.seq_pooling_type,
                         pooler_config.tok_pooling_type,
                     )
                     return False
                 else:
                     logger.debug(
-                        "Pooling models with causal attn and %s/%s pooling "
-                        "support chunked prefill.",
+                        "Pooling models with causal attn and %s/%s pooling support chunked prefill.",
                         pooler_config.seq_pooling_type,
                         pooler_config.tok_pooling_type,
                     )
@@ -1808,28 +1689,20 @@ class ModelConfig:
         if pooler_config := self.pooler_config:
             # for pooling models
             if attn_type == "encoder_only":
-                logger.debug(
-                    "Pooling models with bidirectional attn "
-                    "do not support prefix caching."
-                )
+                logger.debug("Pooling models with bidirectional attn do not support prefix caching.")
                 return False
 
             if attn_type == "decoder":
-                if (
-                    pooler_config.seq_pooling_type in ("MEAN", "CLS")
-                    or pooler_config.tok_pooling_type == "STEP"
-                ):
+                if pooler_config.seq_pooling_type in ("MEAN", "CLS") or pooler_config.tok_pooling_type == "STEP":
                     logger.debug(
-                        "Pooling models with causal attn and %s/%s pooling "
-                        "do not support prefix caching.",
+                        "Pooling models with causal attn and %s/%s pooling do not support prefix caching.",
                         pooler_config.seq_pooling_type,
                         pooler_config.tok_pooling_type,
                     )
                     return False
                 else:
                     logger.debug(
-                        "Pooling models with causal attn and %s/%s pooling "
-                        "support prefix caching.",
+                        "Pooling models with causal attn and %s/%s pooling support prefix caching.",
                         pooler_config.seq_pooling_type,
                         pooler_config.tok_pooling_type,
                     )
@@ -1841,15 +1714,11 @@ class ModelConfig:
         else:
             # for generative models
             if attn_type == "hybrid":
-                logger.debug(
-                    "Hybrid models do not support prefix caching since the feature "
-                    "is still experimental."
-                )
+                logger.debug("Hybrid models do not support prefix caching since the feature is still experimental.")
                 return False
             elif attn_type == "attention_free":
                 logger.debug(
-                    "Attention free models do not support prefix caching since the "
-                    "feature is still experimental."
+                    "Attention free models do not support prefix caching since the feature is still experimental."
                 )
                 return False
             elif attn_type == "encoder_decoder":
@@ -1977,9 +1846,7 @@ def _is_valid_dtype(model_type: str, dtype: torch.dtype):
 def _check_valid_dtype(model_type: str, dtype: torch.dtype):
     if model_type in _FLOAT16_NOT_SUPPORTED_MODELS and dtype == torch.float16:
         reason = _FLOAT16_NOT_SUPPORTED_MODELS[model_type]
-        raise ValueError(
-            f"The model type {model_type!r} does not support float16. Reason: {reason}"
-        )
+        raise ValueError(f"The model type {model_type!r} does not support float16. Reason: {reason}")
 
     return True
 
@@ -1990,11 +1857,7 @@ def _resolve_auto_dtype(
     *,
     is_pooling_model: bool,
 ):
-    supported_dtypes = [
-        dtype
-        for dtype in current_platform.supported_dtypes
-        if _is_valid_dtype(model_type, dtype)
-    ]
+    supported_dtypes = [dtype for dtype in current_platform.supported_dtypes if _is_valid_dtype(model_type, dtype)]
 
     if is_pooling_model and torch.float16 in supported_dtypes:
         preferred_dtype = torch.float16
@@ -2076,9 +1939,7 @@ def _get_and_verify_dtype(
     return torch_dtype
 
 
-def _get_head_dtype(
-    config: PretrainedConfig, dtype: torch.dtype, runner_type: str
-) -> torch.dtype:
+def _get_head_dtype(config: PretrainedConfig, dtype: torch.dtype, runner_type: str) -> torch.dtype:
     head_dtype: str | torch.dtype | None = getattr(config, "head_dtype", None)
 
     if head_dtype == "model":
@@ -2111,25 +1972,17 @@ def _get_and_verify_max_len(
     encoder_config: dict[str, Any] | None = None,
 ) -> int:
     """Get and verify the model's maximum length."""
-    (derived_max_model_len, max_len_key) = (
-        model_arch_config.derived_max_model_len_and_key
-    )
+    (derived_max_model_len, max_len_key) = model_arch_config.derived_max_model_len_and_key
 
     # If sliding window is manually disabled, max_length should be less
     # than the sliding window length in the model config.
-    if (
-        disable_sliding_window
-        and sliding_window is not None
-        and sliding_window < derived_max_model_len
-    ):
+    if disable_sliding_window and sliding_window is not None and sliding_window < derived_max_model_len:
         max_len_key = "sliding_window"
         derived_max_model_len = sliding_window
 
     # Consider model_max_length in tokenizer_config
     if tokenizer_config:
-        tokenizer_model_max_length = tokenizer_config.get(
-            "model_max_length", derived_max_model_len
-        )
+        tokenizer_model_max_length = tokenizer_config.get("model_max_length", derived_max_model_len)
         derived_max_model_len = min(derived_max_model_len, tokenizer_model_max_length)
 
     # If none of the keys were found in the config, use a default and
@@ -2196,14 +2049,8 @@ def _get_and_verify_max_len(
     if max_model_len is None or max_model_len == -1:
         # For LongRoPE, default to original_max_position_embeddings to avoid
         # performance degradation for shorter sequences
-        if rope_parameters is not None and any(
-            rp["rope_type"] == "longrope" for rp in rope_parameters.values()
-        ):
-            max_model_len = int(
-                getattr(
-                    hf_config, "original_max_position_embeddings", derived_max_model_len
-                )
-            )
+        if rope_parameters is not None and any(rp["rope_type"] == "longrope" for rp in rope_parameters.values()):
+            max_model_len = int(getattr(hf_config, "original_max_position_embeddings", derived_max_model_len))
         else:
             max_model_len = int(derived_max_model_len)
         max_model_len = current_platform.check_max_model_len(max_model_len)

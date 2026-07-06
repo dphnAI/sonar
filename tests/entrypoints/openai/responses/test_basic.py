@@ -86,8 +86,5 @@ async def test_streaming(client: openai.AsyncOpenAI):
     )
     events = [event async for event in stream]
     assert isinstance(events[0], openai_responses_types.ResponseCreatedEvent)
-    assert any(
-        isinstance(event, openai_responses_types.ResponseTextDeltaEvent)
-        for event in events
-    )
+    assert any(isinstance(event, openai_responses_types.ResponseTextDeltaEvent) for event in events)
     assert isinstance(events[-1], openai_responses_types.ResponseCompletedEvent)

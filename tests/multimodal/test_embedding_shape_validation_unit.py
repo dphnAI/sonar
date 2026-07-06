@@ -70,9 +70,7 @@ class TestImageEmbedBasicValidation:
         valid_tensor = torch.randn(10, expected_hidden_size, dtype=torch.float32)
 
         # Should not raise
-        items = ImageEmbeddingItems(
-            valid_tensor, expected_hidden_size=expected_hidden_size
-        )
+        items = ImageEmbeddingItems(valid_tensor, expected_hidden_size=expected_hidden_size)
         assert items.get_count() == 10
 
     def test_hidden_size_validation_wrong_size_rejected(self):
@@ -82,9 +80,7 @@ class TestImageEmbedBasicValidation:
         invalid_tensor = torch.randn(10, wrong_hidden_size, dtype=torch.float32)
 
         with pytest.raises(ValueError) as exc_info:
-            ImageEmbeddingItems(
-                invalid_tensor, expected_hidden_size=expected_hidden_size
-            )
+            ImageEmbeddingItems(invalid_tensor, expected_hidden_size=expected_hidden_size)
 
         error_msg = str(exc_info.value)
         assert "hidden dimension mismatch" in error_msg.lower()
@@ -144,9 +140,7 @@ class TestAudioEmbedBasicValidation:
         valid_tensor = torch.randn(10, expected_hidden_size, dtype=torch.float32)
 
         # Should not raise
-        items = AudioEmbeddingItems(
-            valid_tensor, expected_hidden_size=expected_hidden_size
-        )
+        items = AudioEmbeddingItems(valid_tensor, expected_hidden_size=expected_hidden_size)
         assert items.get_count() == 10
 
     def test_hidden_size_validation_wrong_size_rejected(self):
@@ -156,9 +150,7 @@ class TestAudioEmbedBasicValidation:
         invalid_tensor = torch.randn(10, wrong_hidden_size, dtype=torch.float32)
 
         with pytest.raises(ValueError) as exc_info:
-            AudioEmbeddingItems(
-                invalid_tensor, expected_hidden_size=expected_hidden_size
-            )
+            AudioEmbeddingItems(invalid_tensor, expected_hidden_size=expected_hidden_size)
 
         error_msg = str(exc_info.value)
         assert "hidden dimension mismatch" in error_msg.lower()
@@ -188,9 +180,7 @@ class TestShapeValidationDoSPrevention:
 
         # Should be rejected at instantiation time, not during inference
         with pytest.raises(ValueError) as exc_info:
-            ImageEmbeddingItems(
-                wrong_embedding, expected_hidden_size=expected_hidden_size
-            )
+            ImageEmbeddingItems(wrong_embedding, expected_hidden_size=expected_hidden_size)
 
         error_msg = str(exc_info.value)
         assert "hidden dimension mismatch" in error_msg.lower()
@@ -207,9 +197,7 @@ class TestShapeValidationDoSPrevention:
         wrong_embedding = torch.randn(100, wrong_hidden_size, dtype=torch.float32)
 
         with pytest.raises(ValueError) as exc_info:
-            AudioEmbeddingItems(
-                wrong_embedding, expected_hidden_size=expected_hidden_size
-            )
+            AudioEmbeddingItems(wrong_embedding, expected_hidden_size=expected_hidden_size)
 
         error_msg = str(exc_info.value)
         assert "hidden dimension mismatch" in error_msg.lower()
@@ -222,9 +210,7 @@ class TestShapeValidationDoSPrevention:
         invalid_tensor = torch.randn(10, huge_hidden_size, dtype=torch.float32)
 
         with pytest.raises(ValueError) as exc_info:
-            ImageEmbeddingItems(
-                invalid_tensor, expected_hidden_size=expected_hidden_size
-            )
+            ImageEmbeddingItems(invalid_tensor, expected_hidden_size=expected_hidden_size)
 
         assert "hidden dimension mismatch" in str(exc_info.value).lower()
 

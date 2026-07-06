@@ -50,9 +50,7 @@ async def client(server):
     "model_name",
     [MODEL_NAME],
 )
-async def test_single_completion(
-    client: openai.AsyncOpenAI, server: RemoteOpenAIServer, model_name: str
-) -> None:
+async def test_single_completion(client: openai.AsyncOpenAI, server: RemoteOpenAIServer, model_name: str) -> None:
     async def make_request():
         completion = await client.completions.create(
             model=model_name, prompt="Hello, my name is", max_tokens=10, temperature=1.0
@@ -105,9 +103,7 @@ async def test_single_completion(
     "model_name",
     [MODEL_NAME],
 )
-async def test_completion_streaming(
-    client: openai.AsyncOpenAI, server: RemoteOpenAIServer, model_name: str
-) -> None:
+async def test_completion_streaming(client: openai.AsyncOpenAI, server: RemoteOpenAIServer, model_name: str) -> None:
     prompt = "What is an LLM?"
 
     async def make_streaming_request():
@@ -136,13 +132,9 @@ async def test_completion_streaming(
         # finish reason should only return in the last block for OpenAI API
         assert finish_reason_count == 1, "Finish reason should appear exactly once."
         assert last_chunk is not None, "Stream should have yielded at least one chunk."
-        assert last_chunk.choices[0].finish_reason == "length", (
-            "Finish reason should be 'length'."
-        )
+        assert last_chunk.choices[0].finish_reason == "length", "Finish reason should be 'length'."
         # Check that the combined text matches the non-streamed version.
-        assert "".join(chunks) == single_output, (
-            "Streamed output should match non-streamed output."
-        )
+        assert "".join(chunks) == single_output, "Streamed output should match non-streamed output."
         return True  # Indicate success for this request
 
     # Test single request
@@ -156,9 +148,7 @@ async def test_completion_streaming(
     tasks = [make_streaming_request() for _ in range(num_requests)]
     results = await asyncio.gather(*tasks)
 
-    assert len(results) == num_requests, (
-        f"Expected {num_requests} results, got {len(results)}"
-    )
+    assert len(results) == num_requests, f"Expected {num_requests} results, got {len(results)}"
     assert all(results), "Not all streaming requests completed successfully."
 
     await asyncio.sleep(0.5)
@@ -166,9 +156,7 @@ async def test_completion_streaming(
     tasks = [make_streaming_request() for _ in range(num_requests)]
     results = await asyncio.gather(*tasks)
 
-    assert len(results) == num_requests, (
-        f"Expected {num_requests} results, got {len(results)}"
-    )
+    assert len(results) == num_requests, f"Expected {num_requests} results, got {len(results)}"
     assert all(results), "Not all streaming requests completed successfully."
 
     # Check request balancing via Prometheus metrics if DP_SIZE > 1

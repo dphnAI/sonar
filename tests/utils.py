@@ -39,7 +39,6 @@ from openai.types.completion import Completion
 from typing_extensions import ParamSpec
 
 import aphrodite.envs as envs
-from tests.models.utils import TextTextLogprobs
 from aphrodite.distributed import (
     ensure_model_parallel_initialized,
     init_distributed_environment,
@@ -63,6 +62,7 @@ from aphrodite.utils.network_utils import get_open_port
 from aphrodite.utils.torch_utils import (
     set_random_seed,  # noqa: F401 - re-exported for use in test files
 )
+from tests.models.utils import TextTextLogprobs
 
 logger = init_logger(__name__)
 
@@ -133,25 +133,13 @@ APHRODITE_PATH = Path(__file__).parent.parent
 # ROCm: disable skinny GEMM to avoid non-deterministic results from
 # atomic reductions in wvSplitKrc kernel.
 # See: https://github.com/vllm-project/vllm/pull/33493#issuecomment-3906083975
-ROCM_ENV_OVERRIDES = (
-    {"APHRODITE_ROCM_USE_SKINNY_GEMM": "0"} if current_platform.is_rocm() else {}
-)
+ROCM_ENV_OVERRIDES = {"APHRODITE_ROCM_USE_SKINNY_GEMM": "0"} if current_platform.is_rocm() else {}
 # ROCm: disable prefix caching and eliminate batch variance to reduce
 # test flakiness.
-ROCM_EXTRA_ARGS = (
-    ["--no-enable-prefix-caching", "--max-num-seqs", "1"]
-    if current_platform.is_rocm()
-    else []
-)
+ROCM_EXTRA_ARGS = ["--no-enable-prefix-caching", "--max-num-seqs", "1"] if current_platform.is_rocm() else []
 # Python-API equivalent of ROCM_EXTRA_ARGS for use with EngineArgs kwargs.
-ROCM_ENGINE_KWARGS: dict = (
-    {"enable_prefix_caching": False, "max_num_seqs": 1}
-    if current_platform.is_rocm()
-    else {}
-)
-_TILELANG_TVM_PYTHONPATH_FRAGMENT = os.path.join(
-    "tilelang", "3rdparty", "tvm", "python"
-)
+ROCM_ENGINE_KWARGS: dict = {"enable_prefix_caching": False, "max_num_seqs": 1} if current_platform.is_rocm() else {}
+_TILELANG_TVM_PYTHONPATH_FRAGMENT = os.path.join("tilelang", "3rdparty", "tvm", "python")
 
 
 def _sanitize_pythonpath_value(pythonpath: str | None) -> str:
@@ -225,9 +213,7 @@ class RemoteAPHRODITEServer:
         """Return a CLISubcommand instance used to parse CLI args."""
         raise NotImplementedError
 
-    def _start_server(
-        self, model: str, aphrodite_serve_args: list[str], env_dict: dict[str, str] | None
-    ) -> None:
+    def _start_server(self, model: str, aphrodite_serve_args: list[str], env_dict: dict[str, str] | None) -> None:
         """Subclasses override this method to customize server process launch"""
         raise NotImplementedError
 
@@ -255,9 +241,7 @@ class RemoteAPHRODITEServer:
     ) -> None:
         if auto_port:
             if "-p" in aphrodite_serve_args or "--port" in aphrodite_serve_args:
-                raise ValueError(
-                    "You have manually specified the port when `auto_port=True`."
-                )
+                raise ValueError("You have manually specified the port when `auto_port=True`.")
 
             # No need for a port if using unix sockets
             if "--uds" not in aphrodite_serve_args:
@@ -265,9 +249,7 @@ class RemoteAPHRODITEServer:
                 aphrodite_serve_args = aphrodite_serve_args + ["--port", str(get_open_port())]
         if seed is not None:
             if "--seed" in aphrodite_serve_args:
-                raise ValueError(
-                    f"You have manually specified the seed when `seed={seed}`."
-                )
+                raise ValueError(f"You have manually specified the seed when `seed={seed}`.")
 
             aphrodite_serve_args = aphrodite_serve_args + ["--seed", str(seed)]
 
@@ -289,9 +271,7 @@ class RemoteAPHRODITEServer:
             self.host = str(args.host or "127.0.0.1")
             self.port = int(args.port)
 
-        self.show_hidden_metrics = (
-            getattr(args, "show_hidden_metrics_for_version", None) is not None
-        )
+        self.show_hidden_metrics = getattr(args, "show_hidden_metrics_for_version", None) is not None
 
         with _temporarily_sanitized_pythonpath_env():
             self._pre_download_model(model, args)
@@ -302,10 +282,7 @@ class RemoteAPHRODITEServer:
         self._pre_server_gpu_memory = self._get_gpu_memory_used()
         if self._pre_server_gpu_memory is not None:
             pre_gb = self._pre_server_gpu_memory / 1e9
-            print(
-                f"[{type(self).__name__}] GPU memory before server start: "
-                f"{pre_gb:.2f} GB"
-            )
+            print(f"[{type(self).__name__}] GPU memory before server start: {pre_gb:.2f} GB")
 
         self._start_server(model, aphrodite_serve_args, env_dict)
         self._register_active_server()
@@ -353,14 +330,9 @@ class RemoteAPHRODITEServer:
                 atexit.register(root_cls._shutdown_active_servers)
                 root_cls._cleanup_hooks_registered = True
 
-            if (
-                threading.current_thread() is threading.main_thread()
-                and not root_cls._signal_hooks_registered
-            ):
+            if threading.current_thread() is threading.main_thread() and not root_cls._signal_hooks_registered:
                 for signum in (signal.SIGTERM, signal.SIGINT):
-                    root_cls._previous_signal_handlers[signum] = signal.getsignal(
-                        signum
-                    )
+                    root_cls._previous_signal_handlers[signum] = signal.getsignal(signum)
                     signal.signal(signum, root_cls._handle_parent_signal)
                 root_cls._signal_hooks_registered = True
 
@@ -425,10 +397,7 @@ class RemoteAPHRODITEServer:
             print(f"[RemoteOpenAIServer] Server {pid} terminated gracefully")
         except subprocess.TimeoutExpired:
             # Phase 2: SIGKILL the entire process group
-            print(
-                f"[RemoteOpenAIServer] Server {pid} did not respond "
-                "to SIGTERM, sending SIGKILL to process group"
-            )
+            print(f"[RemoteOpenAIServer] Server {pid} did not respond to SIGTERM, sending SIGKILL to process group")
             if pgid is not None:
                 with contextlib.suppress(ProcessLookupError, OSError):
                     os.killpg(pgid, signal.SIGKILL)
@@ -486,11 +455,7 @@ class RemoteAPHRODITEServer:
         # earlier siblings had already allocated.
         earliest = min(
             servers,
-            key=lambda s: (
-                float("inf")
-                if s._pre_server_gpu_memory is None
-                else s._pre_server_gpu_memory
-            ),
+            key=lambda s: (float("inf") if s._pre_server_gpu_memory is None else s._pre_server_gpu_memory),
         )
         try:
             earliest._wait_for_gpu_memory_release()
@@ -498,9 +463,7 @@ class RemoteAPHRODITEServer:
             for server in servers:
                 server._unregister_active_server()
 
-    def _kill_process_group_survivors(
-        self, pgid: int | None, timeout: float = 15.0
-    ) -> None:
+    def _kill_process_group_survivors(self, pgid: int | None, timeout: float = 15.0) -> None:
         """SIGKILL any processes still in the server's process group
         and wait for them to exit.
 
@@ -530,8 +493,7 @@ class RemoteAPHRODITEServer:
             return
 
         print(
-            f"[RemoteOpenAIServer] {len(survivor_pids)} process(es) still "
-            f"in pgid {pgid} after SIGKILL: {survivor_pids}"
+            f"[RemoteOpenAIServer] {len(survivor_pids)} process(es) still in pgid {pgid} after SIGKILL: {survivor_pids}"
         )
 
         # Wait for each survivor to actually exit so the GPU driver
@@ -579,9 +541,7 @@ class RemoteAPHRODITEServer:
             if current_platform.is_rocm():
                 with _nvml():
                     handles = amdsmi_get_processor_handles()
-                    devices = get_physical_device_indices(
-                        list(range(current_platform.device_count()))
-                    )
+                    devices = get_physical_device_indices(list(range(current_platform.device_count())))
                     total_used_mib = 0
                     for device in devices:
                         handle = handles[device]
@@ -616,9 +576,7 @@ class RemoteAPHRODITEServer:
             return None
         return None
 
-    def _wait_for_gpu_memory_release(
-        self, timeout: float = 120.0, log_interval: float = 10.0
-    ):
+    def _wait_for_gpu_memory_release(self, timeout: float = 120.0, log_interval: float = 10.0):
         """Wait for GPU memory to drop back toward pre-server levels.
 
         Waits the full timeout for memory to return close to the
@@ -688,11 +646,7 @@ class RemoteAPHRODITEServer:
     def _wait_for_server(self, *, url: str, timeout: float):
         # run health check
         start = time.time()
-        client = (
-            httpx.Client(transport=httpx.HTTPTransport(uds=self.uds))
-            if self.uds
-            else requests
-        )
+        client = httpx.Client(transport=httpx.HTTPTransport(uds=self.uds)) if self.uds else requests
         while True:
             try:
                 if client.get(url).status_code == 200:
@@ -712,11 +666,7 @@ class RemoteAPHRODITEServer:
 
     @property
     def url_root(self) -> str:
-        return (
-            f"http://{self.uds.split('/')[-1]}"
-            if self.uds
-            else f"http://{self.host}:{self.port}"
-        )
+        return f"http://{self.uds.split('/')[-1]}" if self.uds else f"http://{self.host}:{self.port}"
 
     def url_for(self, *parts: str) -> str:
         path = "/".join(part.strip("/") for part in parts if part)
@@ -755,9 +705,7 @@ class RemoteAPHRODITEServer:
     def get_async_client_anthropic(self, **kwargs):
         if "timeout" not in kwargs:
             kwargs["timeout"] = 600
-        return anthropic.AsyncAnthropic(
-            base_url=self.url_for(), api_key=self.DUMMY_API_KEY, max_retries=0, **kwargs
-        )
+        return anthropic.AsyncAnthropic(base_url=self.url_for(), api_key=self.DUMMY_API_KEY, max_retries=0, **kwargs)
 
 
 class RemoteOpenAIServer(RemoteAPHRODITEServer):
@@ -766,9 +714,7 @@ class RemoteOpenAIServer(RemoteAPHRODITEServer):
     def _create_cli_subcommand(self):
         return ServeSubcommand()
 
-    def _start_server(
-        self, model: str, aphrodite_serve_args: list[str], env_dict: dict[str, str] | None
-    ) -> None:
+    def _start_server(self, model: str, aphrodite_serve_args: list[str], env_dict: dict[str, str] | None) -> None:
         env = os.environ.copy()
         # the current process might initialize cuda,
         # to be safe, we should use spawn method
@@ -796,9 +742,7 @@ class RemoteLaunchRenderServer(RemoteAPHRODITEServer):
     def _create_cli_subcommand(self):
         return ServeSubcommand()
 
-    def _start_server(
-        self, model: str, aphrodite_serve_args: list[str], env_dict: dict[str, str] | None
-    ) -> None:
+    def _start_server(self, model: str, aphrodite_serve_args: list[str], env_dict: dict[str, str] | None) -> None:
         env = os.environ.copy()
         env["APHRODITE_WORKER_MULTIPROC_METHOD"] = "spawn"
         if env_dict is not None:
@@ -827,18 +771,14 @@ class RemoteLaunchRenderServer(RemoteAPHRODITEServer):
                 revision=model_config.tokenizer_revision,
             )
 
-    def _wait_for_gpu_memory_release(
-        self, timeout: float = 30.0, log_interval: float = 10.0
-    ):
+    def _wait_for_gpu_memory_release(self, timeout: float = 30.0, log_interval: float = 10.0):
         pass  # No GPU used
 
 
 class RemoteOpenAIServerCustom(RemoteOpenAIServer):
     """Launch test server with custom child process"""
 
-    def _start_server(
-        self, model: str, aphrodite_serve_args: list[str], env_dict: dict[str, str] | None
-    ) -> None:
+    def _start_server(self, model: str, aphrodite_serve_args: list[str], env_dict: dict[str, str] | None) -> None:
         method = "spawn" if requires_spawn_multiprocessing() else "fork"
         ctx = get_context(method)
         self.proc: Process = cast(Any, ctx).Process(
@@ -897,8 +837,7 @@ class RemoteOpenAIServerCustom(RemoteOpenAIServer):
         self.proc.join(15)
         if self.proc.is_alive():
             print(
-                f"[RemoteOpenAIServerCustom] Server {pid} did not respond "
-                "to SIGTERM, sending SIGKILL to process group"
+                f"[RemoteOpenAIServerCustom] Server {pid} did not respond to SIGTERM, sending SIGKILL to process group"
             )
             if pgid is not None:
                 with contextlib.suppress(ProcessLookupError, OSError):
@@ -920,9 +859,7 @@ def _test_completion(
     results = []
 
     # test with text prompt
-    completion = client.completions.create(
-        model=model, prompt=prompt, max_tokens=5, temperature=0.0
-    )
+    completion = client.completions.create(model=model, prompt=prompt, max_tokens=5, temperature=0.0)
 
     results.append(
         {
@@ -952,9 +889,7 @@ def _test_completion(
 
     if include_seeded_sampling:
         # test seeded random sampling
-        completion = client.completions.create(
-            model=model, prompt=prompt, max_tokens=5, seed=33, temperature=1.0
-        )
+        completion = client.completions.create(model=model, prompt=prompt, max_tokens=5, seed=33, temperature=1.0)
 
         results.append(
             {
@@ -978,9 +913,7 @@ def _test_completion(
             {
                 "test": "seeded_sampling",
                 "text": [choice.text for choice in completion.choices],
-                "finish_reason": [
-                    choice.finish_reason for choice in completion.choices
-                ],
+                "finish_reason": [choice.finish_reason for choice in completion.choices],
                 "usage": completion.usage,
             }
         )
@@ -1034,9 +967,7 @@ def _test_completion_close(
     results = []
 
     # test with text prompt
-    completion = client.completions.create(
-        model=model, prompt=prompt, max_tokens=1, logprobs=5, temperature=0.0
-    )
+    completion = client.completions.create(model=model, prompt=prompt, max_tokens=1, logprobs=5, temperature=0.0)
 
     logprobs = completion.choices[0].logprobs.top_logprobs[0]
     logprobs = {k: round(v, 2) for k, v in logprobs.items()}
@@ -1061,9 +992,7 @@ def _test_chat(
     messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
 
     # test with text prompt
-    chat_response = client.chat.completions.create(
-        model=model, messages=messages, max_tokens=5, temperature=0.0
-    )
+    chat_response = client.chat.completions.create(model=model, messages=messages, max_tokens=5, temperature=0.0)
 
     results.append(
         {
@@ -1234,9 +1163,7 @@ def compare_all_settings(
     """
 
     if force_v1_runner:
-        all_envs = [
-            {"APHRODITE_USE_V2_MODEL_RUNNER": "0", **(env or {})} for env in all_envs
-        ]
+        all_envs = [{"APHRODITE_USE_V2_MODEL_RUNNER": "0", **(env or {})} for env in all_envs]
 
     trust_remote_code = False
     for args in all_args:
@@ -1278,9 +1205,7 @@ def compare_all_settings(
             args = args + ["--load-format", envs.APHRODITE_TEST_FORCE_LOAD_FORMAT]
         compare_results: list = []
         results = ref_results if i == 0 else compare_results
-        with RemoteOpenAIServer(
-            model, args, env_dict=env, max_wait_seconds=max_wait_seconds
-        ) as server:
+        with RemoteOpenAIServer(model, args, env_dict=env, max_wait_seconds=max_wait_seconds) as server:
             client = server.get_client()
 
             # test models list
@@ -1333,10 +1258,7 @@ def compare_all_settings(
                             torch.tensor(compare_result["embedding"]),
                             dim=0,
                         )
-                        assert sim >= 0.999, (
-                            f"Embedding for {model=} are not the same.\n"
-                            f"cosine_similarity={sim}\n"
-                        )
+                        assert sim >= 0.999, f"Embedding for {model=} are not the same.\ncosine_similarity={sim}\n"
                         del ref_result["embedding"]
                         del compare_result["embedding"]
                     assert ref_result == compare_result, (
@@ -1430,9 +1352,7 @@ def multi_process_parallel(
     # PYTHONPATH is enough and avoids uploading the full source tree, which
     # exceeds Ray's working_dir package size limit on CI.
     env_vars = {
-        "PYTHONPATH": os.pathsep.join(
-            filter(None, [str(APHRODITE_PATH), os.environ.get("PYTHONPATH")])
-        ),
+        "PYTHONPATH": os.pathsep.join(filter(None, [str(APHRODITE_PATH), os.environ.get("PYTHONPATH")])),
         **{env_var: "1" for env_var in current_platform.ray_noset_device_env_vars},
     }
     ray.init(
@@ -1531,9 +1451,7 @@ def wait_for_gpu_memory_to_clear(
         if threshold_bytes is None:
             threshold_bytes = {}
         for device, ratio in threshold_ratio.items():
-            threshold_bytes[device] = max(
-                threshold_bytes.get(device, 0), min_threshold_b if ratio < 0.05 else 0
-            )
+            threshold_bytes[device] = max(threshold_bytes.get(device, 0), min_threshold_b if ratio < 0.05 else 0)
 
     # Use nvml instead of pytorch to reduce measurement error from torch cuda
     # context.
@@ -1542,61 +1460,35 @@ def wait_for_gpu_memory_to_clear(
     stable_used_bytes: dict[int, int] | None = None
     while True:
         output_raw = record_gpu_memory_usage_stats(devices=devices)
-        used_bytes_by_device = {
-            device: int(gb_used * 2**30) for device, (gb_used, _) in output_raw.items()
-        }
-        output = {
-            device: f"{gb_used:.02f}/{gb_total:.02f}"
-            for device, (gb_used, gb_total) in output_raw.items()
-        }
+        used_bytes_by_device = {device: int(gb_used * 2**30) for device, (gb_used, _) in output_raw.items()}
+        output = {device: f"{gb_used:.02f}/{gb_total:.02f}" for device, (gb_used, gb_total) in output_raw.items()}
         print("gpu memory used/total (GiB): ", end="")
         for k, v in output.items():
             print(f"{k}={v}; ", end="")
         print("")
 
         if threshold_bytes is not None and threshold_ratio is not None:
-            threshold_gib = {
-                device: threshold_b / 2**30
-                for device, threshold_b in threshold_bytes.items()
-            }
+            threshold_gib = {device: threshold_b / 2**30 for device, threshold_b in threshold_bytes.items()}
             threshold = "; ".join(
-                f"{device=}: max({threshold_gib[device]:.2f} GiB, "
-                f"{threshold_ratio[device]:.3f})"
-                for device in devices
+                f"{device=}: max({threshold_gib[device]:.2f} GiB, {threshold_ratio[device]:.3f})" for device in devices
             )
             all_free = all(
                 used <= max(threshold_gib[device], total * threshold_ratio[device])
                 for device, (used, total) in output_raw.items()
             )
         elif threshold_bytes is not None:
-            threshold_gib = {
-                device: threshold_b / 2**30
-                for device, threshold_b in threshold_bytes.items()
-            }
-            threshold = "; ".join(
-                f"{device=}: {threshold_gib[device]:.2f} GiB" for device in devices
-            )
-            all_free = all(
-                used <= threshold_gib[device]
-                for device, (used, _) in output_raw.items()
-            )
+            threshold_gib = {device: threshold_b / 2**30 for device, threshold_b in threshold_bytes.items()}
+            threshold = "; ".join(f"{device=}: {threshold_gib[device]:.2f} GiB" for device in devices)
+            all_free = all(used <= threshold_gib[device] for device, (used, _) in output_raw.items())
         else:
             assert threshold_ratio is not None
-            threshold = "; ".join(
-                f"{device=}: {threshold_ratio[device]:.3f}" for device in devices
-            )
-            all_free = all(
-                used / total <= threshold_ratio[device]
-                for device, (used, total) in output_raw.items()
-            )
+            threshold = "; ".join(f"{device=}: {threshold_ratio[device]:.3f}" for device in devices)
+            all_free = all(used / total <= threshold_ratio[device] for device, (used, total) in output_raw.items())
 
         dur_s = time.time() - start_time
         if all_free:
             if stable_duration_s <= 0:
-                print(
-                    f"Done waiting for free GPU memory on devices {devices=} "
-                    f"({threshold=}) {dur_s=:.02f}"
-                )
+                print(f"Done waiting for free GPU memory on devices {devices=} ({threshold=}) {dur_s=:.02f}")
                 break
 
             now = time.time()
@@ -1605,30 +1497,21 @@ def wait_for_gpu_memory_to_clear(
                 stable_used_bytes = used_bytes_by_device
             else:
                 memory_changed = any(
-                    abs(used_bytes_by_device[device] - stable_used_bytes[device])
-                    > stable_tolerance_bytes
+                    abs(used_bytes_by_device[device] - stable_used_bytes[device]) > stable_tolerance_bytes
                     for device in devices
                 )
                 if memory_changed:
                     stable_since = now
                     stable_used_bytes = used_bytes_by_device
-                elif (
-                    stable_since is not None and now - stable_since >= stable_duration_s
-                ):
-                    print(
-                        f"Done waiting for stable free GPU memory on devices "
-                        f"{devices=} ({threshold=}) {dur_s=:.02f}"
-                    )
+                elif stable_since is not None and now - stable_since >= stable_duration_s:
+                    print(f"Done waiting for stable free GPU memory on devices {devices=} ({threshold=}) {dur_s=:.02f}")
                     break
         else:
             stable_since = None
             stable_used_bytes = None
 
         if dur_s >= timeout_s:
-            raise ValueError(
-                f"Memory of devices {devices=} not free after "
-                f"{dur_s=:.02f} ({threshold=})"
-            )
+            raise ValueError(f"Memory of devices {devices=} not free after {dur_s=:.02f} ({threshold=})")
 
         time.sleep(poll_interval_s)
 
@@ -1750,9 +1633,7 @@ def fork_new_process_for_each_test(func: Callable[_P, None]) -> Callable[_P, Non
                         ):
                             exc_info = cloudpickle.load(f)
 
-                    if (
-                        original_exception := exc_info.get("pickled_exception")
-                    ) is not None:
+                    if (original_exception := exc_info.get("pickled_exception")) is not None:
                         # Re-raise the actual exception object if it was
                         # successfully pickled.
                         assert isinstance(original_exception, Exception)
@@ -1874,8 +1755,7 @@ def spawn_new_process_for_each_test(f: Callable[_P, None]) -> Callable[_P, None]
                 if not tb:
                     tb = "<no Python traceback; see subprocess output above>"
                 raise RuntimeError(
-                    f"Test subprocess '{f.__name__}' failed "
-                    f"({_format_subprocess_exit(result.returncode)}):\n{tb}"
+                    f"Test subprocess '{f.__name__}' failed ({_format_subprocess_exit(result.returncode)}):\n{tb}"
                 )
         finally:
             with contextlib.suppress(OSError):
@@ -1936,8 +1816,7 @@ def large_gpu_mark(min_gb: int) -> pytest.MarkDecorator:
 
 requires_fp8 = pytest.mark.skipif(
     not current_platform.supports_fp8(),
-    reason="FP8 is not supported on this GPU (requires Hopper or "
-    "Ada architecture, compute capability 8.9+)",
+    reason="FP8 is not supported on this GPU (requires Hopper or Ada architecture, compute capability 8.9+)",
 )
 
 
@@ -2066,9 +1945,7 @@ async def completions_with_server_args(
     assert len(max_tokens) == len(prompts)
 
     outputs = None
-    with RemoteOpenAIServer(
-        model_name, server_cli_args, max_wait_seconds=max_wait_seconds
-    ) as server:
+    with RemoteOpenAIServer(model_name, server_cli_args, max_wait_seconds=max_wait_seconds) as server:
         client = server.get_async_client()
         outputs = [
             client.completions.create(
@@ -2176,14 +2053,8 @@ def disable_aiter_plain_rmsnorm(monkeypatch) -> None:
 
     _orig = _ln_mod.dispatch_rocm_rmsnorm_func
 
-    def _native_plain(
-        with_fused_add: bool, dtype: torch.dtype, use_aiter: bool = False
-    ):
-        if (
-            use_aiter
-            and not with_fused_add
-            and dtype in (torch.float16, torch.bfloat16)
-        ):
+    def _native_plain(with_fused_add: bool, dtype: torch.dtype, use_aiter: bool = False):
+        if use_aiter and not with_fused_add and dtype in (torch.float16, torch.bfloat16):
             return _native
         return _orig(with_fused_add, dtype, use_aiter)
 
@@ -2207,10 +2078,7 @@ def prep_prompts(batch_size: int, ln_range: tuple[int, int] = (800, 1100)):
     for _ in range(batch_size):
         idx = random.randint(30, 90)
         indices.append(idx)
-        prompt = (
-            "```python\n# We set a number of variables, "
-            f"x{idx} will be important later\n"
-        )
+        prompt = f"```python\n# We set a number of variables, x{idx} will be important later\n"
         ln = random.randint(*ln_range)
         for k in range(30, ln):
             v = random.randint(10, 99)
@@ -2223,9 +2091,7 @@ def prep_prompts(batch_size: int, ln_range: tuple[int, int] = (800, 1100)):
     return prompts, answer, indices
 
 
-def check_answers(
-    indices: list[int], answer: list[int], outputs: list[str], accept_rate: float = 0.7
-):
+def check_answers(indices: list[int], answer: list[int], outputs: list[str], accept_rate: float = 0.7):
     answer2 = [int(text[0:2].strip()) for text in outputs]
     print(list(zip(indices, zip(answer, answer2))))
     numok = 0
@@ -2288,9 +2154,7 @@ class TestFP8Layer(torch.nn.Module):
         if is_block_wise:
             block_size = weight_scale_desc.group_shape.col
             weight_scale_shape = weight_shape[0] // block_size
-            self.weight_scale_inv = torch.rand(
-                (weight_scale_shape, weight_scale_shape), dtype=torch.float32
-            )
+            self.weight_scale_inv = torch.rand((weight_scale_shape, weight_scale_shape), dtype=torch.float32)
             self.weight = torch.rand(weight_shape).to(dtype=FP8_DTYPE)
             self.input_scale = None
             self.weight_scale = None
@@ -2302,17 +2166,9 @@ class TestFP8Layer(torch.nn.Module):
             is_static_activation_scale = act_scale_desc.static
             weight_scale_shape = (1,) if per_tensor_weights else (weight_shape[0], 1)
             self.weight_scale_inv = None
-            self.weight_scale = torch.rand(
-                weight_scale_shape, dtype=torch.float32, device=device
-            )
-            self.input_scale = (
-                torch.rand(1, dtype=torch.float32, device=device)
-                if is_static_activation_scale
-                else None
-            )
-            self.weight = (
-                torch.rand(weight_shape, device=device).to(dtype=FP8_DTYPE).t()
-            )
+            self.weight_scale = torch.rand(weight_scale_shape, dtype=torch.float32, device=device)
+            self.input_scale = torch.rand(1, dtype=torch.float32, device=device) if is_static_activation_scale else None
+            self.weight = torch.rand(weight_shape, device=device).to(dtype=FP8_DTYPE).t()
             self.input_scale_ub = None
 
         out_dtype = torch.get_default_dtype() if out_dtype is None else out_dtype
@@ -2330,7 +2186,5 @@ class TestFP8Layer(torch.nn.Module):
     def is_quant_fp8_enabled(self) -> bool:
         return self.kernel.quant_fp8.enabled()
 
-    def forward(
-        self, y: torch.Tensor, bias: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def forward(self, y: torch.Tensor, bias: torch.Tensor | None = None) -> torch.Tensor:
         return self.kernel.apply_weights(self, y, bias)

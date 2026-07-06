@@ -72,9 +72,7 @@ class MockAphroditeConfig:
 
 
 class MockLoRAResolver(LoRAResolver):
-    async def resolve_lora(
-        self, base_model_name: str, lora_name: str
-    ) -> LoRARequest | None:
+    async def resolve_lora(self, base_model_name: str, lora_name: str) -> LoRARequest | None:
         if lora_name == "test-lora":
             return LoRARequest(
                 lora_name="test-lora",
@@ -209,9 +207,7 @@ async def test_serving_completion_resolver_not_found(mock_serving_setup, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_serving_completion_resolver_add_lora_fails(
-    mock_serving_setup, monkeypatch
-):
+async def test_serving_completion_resolver_add_lora_fails(mock_serving_setup, monkeypatch):
     monkeypatch.setenv("APHRODITE_ALLOW_RUNTIME_LORA_UPDATING", "true")
 
     mock_engine, serving_completion = mock_serving_setup

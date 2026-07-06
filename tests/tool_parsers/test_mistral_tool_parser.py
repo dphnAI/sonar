@@ -80,9 +80,7 @@ def assert_tool_calls(
 ):
     assert len(actual_tool_calls) == len(expected_tool_calls)
 
-    for actual_tool_call, expected_tool_call in zip(
-        actual_tool_calls, expected_tool_calls
-    ):
+    for actual_tool_call, expected_tool_call in zip(actual_tool_calls, expected_tool_calls):
         assert isinstance(actual_tool_call.id, str)
         assert len(actual_tool_call.id) == 9
 
@@ -96,9 +94,9 @@ def assert_tool_calls(
         assert actual_tool_call.function.name == expected_tool_call.function.name, (
             f"got wrong function name:${actual_tool_call.function.name}"
         )
-        assert (
-            actual_tool_call.function.arguments == expected_tool_call.function.arguments
-        ), f"got wrong function argument:${actual_tool_call.function.arguments}"
+        assert actual_tool_call.function.arguments == expected_tool_call.function.arguments, (
+            f"got wrong function argument:${actual_tool_call.function.arguments}"
+        )
 
 
 def fix_tool_call_tokenization(
@@ -145,10 +143,7 @@ def stream_delta_message_generator(
     model_output: str | None,
     tools: list[tuple[str, str]] | None,
 ) -> Generator[DeltaMessage, None, None]:
-    if (
-        isinstance(mistral_tokenizer, MistralTokenizer)
-        and mistral_tokenizer.version >= 11
-    ):
+    if isinstance(mistral_tokenizer, MistralTokenizer) and mistral_tokenizer.version >= 11:
         # With the newer versions of the tokenizer,
         # we cannot tokenize free text
         # so we need to create a list of messages to get tokenized
@@ -174,9 +169,7 @@ def stream_delta_message_generator(
         assert model_output is not None
         all_token_ids = mistral_tokenizer.encode(model_output, add_special_tokens=False)
 
-    all_token_ids = fix_tool_call_tokenization(
-        all_token_ids, mistral_tool_parser, mistral_tokenizer
-    )
+    all_token_ids = fix_tool_call_tokenization(all_token_ids, mistral_tool_parser, mistral_tokenizer)
 
     previous_text = ""
     previous_tokens = None
@@ -187,16 +180,14 @@ def stream_delta_message_generator(
         previous_token_ids = all_token_ids[:i]
         current_token_ids = all_token_ids[: i + 1]
 
-        (new_tokens, delta_text, new_prefix_offset, new_read_offset) = (
-            detokenize_incrementally(
-                tokenizer=mistral_tokenizer,
-                all_input_ids=current_token_ids,
-                prev_tokens=previous_tokens,
-                prefix_offset=prefix_offset,
-                read_offset=read_offset,
-                skip_special_tokens=isinstance(mistral_tokenizer, MistralTokenizer),
-                spaces_between_special_tokens=True,
-            )
+        (new_tokens, delta_text, new_prefix_offset, new_read_offset) = detokenize_incrementally(
+            tokenizer=mistral_tokenizer,
+            all_input_ids=current_token_ids,
+            prev_tokens=previous_tokens,
+            prefix_offset=prefix_offset,
+            read_offset=read_offset,
+            skip_special_tokens=isinstance(mistral_tokenizer, MistralTokenizer),
+            spaces_between_special_tokens=True,
         )
 
         current_text = previous_text + delta_text
@@ -214,9 +205,7 @@ def stream_delta_message_generator(
             yield delta_message
 
         previous_text = current_text
-        previous_tokens = (
-            previous_tokens + new_tokens if previous_tokens else new_tokens
-        )
+        previous_tokens = previous_tokens + new_tokens if previous_tokens else new_tokens
         prefix_offset = new_prefix_offset
         read_offset = new_read_offset
 
@@ -230,9 +219,7 @@ def test_extract_tool_calls_no_tools(parser_fixture, request):
     parser = request.getfixturevalue(parser_fixture)
     model_output = "This is a test"
     result = parser.extract_tool_calls(model_output, request=_DUMMY_REQUEST)
-    assert result == ExtractedToolCallInformation(
-        tools_called=False, tool_calls=[], content=model_output
-    )
+    assert result == ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
 
 
 @pytest.mark.parametrize(
@@ -249,13 +236,7 @@ def test_extract_tool_calls_no_tools(parser_fixture, request):
     argvalues=[
         (
             """[TOOL_CALLS][{"name": "add", "arguments":{"a": 3.5, "b": 4}}]""",  # noqa: E501
-            [
-                ToolCall(
-                    function=FunctionCall(
-                        name="add", arguments=json.dumps({"a": 3.5, "b": 4})
-                    )
-                )
-            ],
+            [ToolCall(function=FunctionCall(name="add", arguments=json.dumps({"a": 3.5, "b": 4})))],
             None,
         ),
         (
@@ -264,9 +245,7 @@ def test_extract_tool_calls_no_tools(parser_fixture, request):
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "San Francisco", "state": "CA", "unit": "celsius"}
-                        ),
+                        arguments=json.dumps({"city": "San Francisco", "state": "CA", "unit": "celsius"}),
                     )
                 )
             ],
@@ -278,9 +257,7 @@ def test_extract_tool_calls_no_tools(parser_fixture, request):
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "San Francisco", "state": "CA", "unit": "celsius"}
-                        ),
+                        arguments=json.dumps({"city": "San Francisco", "state": "CA", "unit": "celsius"}),
                     )
                 )
             ],
@@ -305,17 +282,11 @@ def test_extract_tool_calls_no_tools(parser_fixture, request):
         (
             """[TOOL_CALLS] [{"name": "add", "arguments": {"a": 3.5, "b": 4}}, {"name": "get_current_weather", "arguments":{"city": "San Francisco", "state": "CA", "unit": "celsius"}}]""",  # noqa: E501
             [
-                ToolCall(
-                    function=FunctionCall(
-                        name="add", arguments=json.dumps({"a": 3.5, "b": 4})
-                    )
-                ),
+                ToolCall(function=FunctionCall(name="add", arguments=json.dumps({"a": 3.5, "b": 4}))),
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "San Francisco", "state": "CA", "unit": "celsius"}
-                        ),
+                        arguments=json.dumps({"city": "San Francisco", "state": "CA", "unit": "celsius"}),
                     )
                 ),
             ],
@@ -323,13 +294,7 @@ def test_extract_tool_calls_no_tools(parser_fixture, request):
         ),
         (
             """Hello[TOOL_CALLS] [{"name": "add", "arguments":{"a": 1, "b": 2}}]""",  # noqa: E501
-            [
-                ToolCall(
-                    function=FunctionCall(
-                        name="add", arguments=json.dumps({"a": 1, "b": 2})
-                    )
-                )
-            ],
+            [ToolCall(function=FunctionCall(name="add", arguments=json.dumps({"a": 1, "b": 2})))],
             "Hello",
         ),
         (
@@ -355,9 +320,7 @@ def test_extract_tool_calls_no_tools(parser_fixture, request):
 def test_extract_tool_calls_pre_v11_tokenizer(
     mistral_pre_v11_tool_parser, model_output, expected_tool_calls, expected_content
 ):
-    extracted_tool_calls = mistral_pre_v11_tool_parser.extract_tool_calls(
-        model_output, request=_DUMMY_REQUEST
-    )
+    extracted_tool_calls = mistral_pre_v11_tool_parser.extract_tool_calls(model_output, request=_DUMMY_REQUEST)
     assert extracted_tool_calls.tools_called
 
     assert_tool_calls(extracted_tool_calls.tool_calls, expected_tool_calls)
@@ -369,13 +332,10 @@ def test_extract_tool_calls_pre_v11_multiple_bot_tokens_raises(
     mistral_pre_v11_tool_parser,
 ):
     model_output = (
-        '[TOOL_CALLS] [{"name": "add", "arguments":{"a": 1}}]'
-        '[TOOL_CALLS] [{"name": "sub", "arguments":{"b": 2}}]'
+        '[TOOL_CALLS] [{"name": "add", "arguments":{"a": 1}}][TOOL_CALLS] [{"name": "sub", "arguments":{"b": 2}}]'
     )
     with pytest.raises(ValueError, match="Only one BOT token"):
-        mistral_pre_v11_tool_parser.extract_tool_calls(
-            model_output, request=_DUMMY_REQUEST
-        )
+        mistral_pre_v11_tool_parser.extract_tool_calls(model_output, request=_DUMMY_REQUEST)
 
 
 def test_extract_tool_calls_pre_v11_regex_fallback(
@@ -384,12 +344,8 @@ def test_extract_tool_calls_pre_v11_regex_fallback(
     """The regex fallback path finds valid JSON via regex when the primary
     raw_decode fails on leading junk. It should re-serialize arguments
     and return a valid tool call."""
-    model_output = (
-        '[TOOL_CALLS]  junk [{"name": "add", "arguments":{"a": 1, "b": 2}}] trail'
-    )
-    result = mistral_pre_v11_tool_parser.extract_tool_calls(
-        model_output, request=_DUMMY_REQUEST
-    )
+    model_output = '[TOOL_CALLS]  junk [{"name": "add", "arguments":{"a": 1, "b": 2}}] trail'
+    result = mistral_pre_v11_tool_parser.extract_tool_calls(model_output, request=_DUMMY_REQUEST)
     assert result.tools_called
     assert len(result.tool_calls) == 1
     assert result.tool_calls[0].function.name == "add"
@@ -400,12 +356,8 @@ def test_extract_tool_calls_pre_v11_regex_fallback_fails(
     mistral_pre_v11_tool_parser,
 ):
     model_output = "[TOOL_CALLS] not json at all"
-    result = mistral_pre_v11_tool_parser.extract_tool_calls(
-        model_output, request=_DUMMY_REQUEST
-    )
-    assert result == ExtractedToolCallInformation(
-        tools_called=False, tool_calls=[], content="not json at all"
-    )
+    result = mistral_pre_v11_tool_parser.extract_tool_calls(model_output, request=_DUMMY_REQUEST)
+    assert result == ExtractedToolCallInformation(tools_called=False, tool_calls=[], content="not json at all")
 
 
 @pytest.mark.parametrize(
@@ -436,9 +388,7 @@ def test_extract_tool_calls_pre_v11_regex_fallback_fails(
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "San Francisco", "state": "CA", "unit": "celsius"}
-                        ),
+                        arguments=json.dumps({"city": "San Francisco", "state": "CA", "unit": "celsius"}),
                     )
                 )
             ],
@@ -447,16 +397,8 @@ def test_extract_tool_calls_pre_v11_regex_fallback_fails(
         (
             """[TOOL_CALLS]add{"a": 3.5, "b": 4}[TOOL_CALLS]multiply{"a": 3, "b": 6}""",  # noqa: E501
             [
-                ToolCall(
-                    function=FunctionCall(
-                        name="add", arguments=json.dumps({"a": 3.5, "b": 4})
-                    )
-                ),
-                ToolCall(
-                    function=FunctionCall(
-                        name="multiply", arguments=json.dumps({"a": 3, "b": 6})
-                    )
-                ),
+                ToolCall(function=FunctionCall(name="add", arguments=json.dumps({"a": 3.5, "b": 4}))),
+                ToolCall(function=FunctionCall(name="multiply", arguments=json.dumps({"a": 3, "b": 6}))),
             ],
             None,
         ),
@@ -467,9 +409,7 @@ def test_extract_tool_calls_pre_v11_regex_fallback_fails(
                 ToolCall(
                     function=FunctionCall(
                         name="bash",
-                        arguments=json.dumps(
-                            {"command": "print(\"hello world!\")\nre.compile(r'{}')"}
-                        )[:-2],
+                        arguments=json.dumps({"command": "print(\"hello world!\")\nre.compile(r'{}')"})[:-2],
                     )
                 )
             ],
@@ -482,9 +422,7 @@ def test_extract_tool_calls_pre_v11_regex_fallback_fails(
                 ToolCall(
                     function=FunctionCall(
                         name="bash",
-                        arguments=json.dumps(
-                            {"command": "print(\"hello world!\")\nre.compile(r'{}')"}
-                        ),
+                        arguments=json.dumps({"command": "print(\"hello world!\")\nre.compile(r'{}')"}),
                     )
                 )
             ],
@@ -492,12 +430,8 @@ def test_extract_tool_calls_pre_v11_regex_fallback_fails(
         ),
     ],
 )
-def test_extract_tool_calls(
-    mistral_tool_parser, model_output, expected_tool_calls, expected_content
-):
-    extracted_tool_calls = mistral_tool_parser.extract_tool_calls(
-        model_output, request=_DUMMY_REQUEST
-    )
+def test_extract_tool_calls(mistral_tool_parser, model_output, expected_tool_calls, expected_content):
+    extracted_tool_calls = mistral_tool_parser.extract_tool_calls(model_output, request=_DUMMY_REQUEST)
     assert extracted_tool_calls.tools_called
 
     assert_tool_calls(extracted_tool_calls.tool_calls, expected_tool_calls)
@@ -507,12 +441,8 @@ def test_extract_tool_calls(
 
 def test_extract_tool_calls_v11_without_args_skipped(mistral_tool_parser):
     model_output = "[TOOL_CALLS]toolname_no_args"
-    result = mistral_tool_parser.extract_tool_calls(
-        model_output, request=_DUMMY_REQUEST
-    )
-    assert result == ExtractedToolCallInformation(
-        tools_called=True, tool_calls=[], content=None
-    )
+    result = mistral_tool_parser.extract_tool_calls(model_output, request=_DUMMY_REQUEST)
+    assert result == ExtractedToolCallInformation(tools_called=True, tool_calls=[], content=None)
 
 
 def _test_extract_tool_calls_streaming(
@@ -524,9 +454,7 @@ def _test_extract_tool_calls_streaming(
     tool_call_idx: int = -1
     tool_call_ids: list[str | None] = []
 
-    for delta_message in stream_delta_message_generator(
-        tool_parser, tokenizer, model_output, tools
-    ):
+    for delta_message in stream_delta_message_generator(tool_parser, tokenizer, model_output, tools):
         # role should never be streamed from tool parser
         assert not delta_message.role
 
@@ -573,14 +501,10 @@ def _test_extract_tool_calls_streaming(
             id=tool_call_id,
             function=FunctionCall(
                 name=function_name,
-                arguments=partial_json_parser.ensure_json(
-                    function_args_str, Allow.OBJ | Allow.STR
-                ),
+                arguments=partial_json_parser.ensure_json(function_args_str, Allow.OBJ | Allow.STR),
             ),
         )
-        for tool_call_id, function_name, function_args_str in zip(
-            tool_call_ids, function_names, function_args_strs
-        )
+        for tool_call_id, function_name, function_args_str in zip(tool_call_ids, function_names, function_args_strs)
     ]
     assert_tool_calls(actual_tool_calls, expected_tool_calls)
 
@@ -588,22 +512,14 @@ def _test_extract_tool_calls_streaming(
         assert len(tool_parser.streamed_args_for_tool) == len(expected_tool_calls)
         assert len(tool_parser.prev_tool_call_arr) == len(expected_tool_calls)
         for i in range(len(expected_tool_calls)):
-            assert (
-                tool_parser.prev_tool_call_arr[i]["arguments"]
-                == tool_parser.streamed_args_for_tool[i]
-            )
+            assert tool_parser.prev_tool_call_arr[i]["arguments"] == tool_parser.streamed_args_for_tool[i]
             assert tool_parser.streamed_args_for_tool[i] == function_args_strs[i]
-            assert (
-                tool_parser.prev_tool_call_arr[i]["name"]
-                == expected_tool_calls[i].function.name
-            )
+            assert tool_parser.prev_tool_call_arr[i]["name"] == expected_tool_calls[i].function.name
 
         # Simulate the serving layer's unstreamed-args check
         index = len(tool_parser.prev_tool_call_arr) - 1
         args = tool_parser.prev_tool_call_arr[index].get("arguments", {})
-        expected_call = (
-            args if isinstance(args, str) else json.dumps(args, ensure_ascii=False)
-        )
+        expected_call = args if isinstance(args, str) else json.dumps(args, ensure_ascii=False)
         actual_call = tool_parser.streamed_args_for_tool[index]
         remaining_call = expected_call.replace(actual_call, "", 1)
         assert remaining_call == ""
@@ -628,24 +544,12 @@ def _test_extract_tool_calls_streaming(
         ("""This is a test""", [], """This is a test"""),
         (
             """[TOOL_CALLS]  [ {"name":"add" , "arguments" : {"a": 3, "b": 4} } ]""",  # noqa: E501
-            [
-                ToolCall(
-                    function=FunctionCall(
-                        name="add", arguments=json.dumps({"a": 3, "b": 4})
-                    )
-                )
-            ],
+            [ToolCall(function=FunctionCall(name="add", arguments=json.dumps({"a": 3, "b": 4})))],
             "",
         ),
         (
             """[TOOL_CALLS] [{"name": "add", "arguments":{"a": "3", "b": "4"}}]""",  # noqa: E501
-            [
-                ToolCall(
-                    function=FunctionCall(
-                        name="add", arguments=json.dumps({"a": "3", "b": "4"})
-                    )
-                )
-            ],
+            [ToolCall(function=FunctionCall(name="add", arguments=json.dumps({"a": "3", "b": "4"})))],
             "",
         ),
         (
@@ -654,9 +558,7 @@ def _test_extract_tool_calls_streaming(
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "San Francisco", "state": "CA", "unit": "celsius"}
-                        ),
+                        arguments=json.dumps({"city": "San Francisco", "state": "CA", "unit": "celsius"}),
                     )
                 )
             ],
@@ -668,9 +570,7 @@ def _test_extract_tool_calls_streaming(
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "San Francisco", "state": "CA", "unit": "celsius"}
-                        ),
+                        arguments=json.dumps({"city": "San Francisco", "state": "CA", "unit": "celsius"}),
                     )
                 )
             ],
@@ -695,17 +595,11 @@ def _test_extract_tool_calls_streaming(
         (
             """[TOOL_CALLS] [{"name": "add", "arguments": {"a": 3.5, "b": 4}}, {"name": "get_current_weather", "arguments":{"city": "San Francisco", "state": "CA", "unit": "celsius"}}]""",  # noqa: E501
             [
-                ToolCall(
-                    function=FunctionCall(
-                        name="add", arguments=json.dumps({"a": 3.5, "b": 4})
-                    )
-                ),
+                ToolCall(function=FunctionCall(name="add", arguments=json.dumps({"a": 3.5, "b": 4}))),
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "San Francisco", "state": "CA", "unit": "celsius"}
-                        ),
+                        arguments=json.dumps({"city": "San Francisco", "state": "CA", "unit": "celsius"}),
                     )
                 ),
             ],
@@ -759,13 +653,7 @@ def test_extract_tool_calls_streaming_pre_v11_tokenizer(
         (
             [("add", '{"a": 3, "b": 4}')],
             # [TOOL_CALLS]add{"a": 3, "b": 4}
-            [
-                ToolCall(
-                    function=FunctionCall(
-                        name="add", arguments=json.dumps({"a": 3, "b": 4})
-                    )
-                )
-            ],
+            [ToolCall(function=FunctionCall(name="add", arguments=json.dumps({"a": 3, "b": 4})))],
             "",
         ),
         (
@@ -791,17 +679,11 @@ def test_extract_tool_calls_streaming_pre_v11_tokenizer(
             ],
             # [TOOL_CALLS]add{"a": 3.5, "b": 4}[TOOL_CALLS]get_current_weather{"city": "San Francisco", "state": "CA", "unit": "celsius"}  # noqa: E501
             [
-                ToolCall(
-                    function=FunctionCall(
-                        name="add", arguments=json.dumps({"a": 3.5, "b": 4})
-                    )
-                ),
+                ToolCall(function=FunctionCall(name="add", arguments=json.dumps({"a": 3.5, "b": 4}))),
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "San Francisco", "state": "CA", "unit": "celsius"}
-                        ),
+                        arguments=json.dumps({"city": "San Francisco", "state": "CA", "unit": "celsius"}),
                     )
                 ),
             ],
@@ -826,9 +708,7 @@ def test_extract_tool_calls_streaming(
     )
 
 
-def test_extract_tool_calls_streaming_v11_no_tools(
-    mistral_tool_parser, mistral_tokenizer
-):
+def test_extract_tool_calls_streaming_v11_no_tools(mistral_tool_parser, mistral_tokenizer):
     model_output = "This is a test"
     if isinstance(mistral_tokenizer, MistralTokenizer):
         all_token_ids = mistral_tokenizer.encode(model_output)
@@ -855,9 +735,7 @@ def test_extract_tool_calls_streaming_v11_no_tools(
             spaces_between_special_tokens=True,
         )
         current_text = previous_text + delta_text
-        previous_tokens = (
-            previous_tokens + new_tokens if previous_tokens else new_tokens
-        )
+        previous_tokens = previous_tokens + new_tokens if previous_tokens else new_tokens
 
         delta_message = mistral_tool_parser.extract_tool_calls_streaming(
             previous_text=previous_text,
@@ -881,8 +759,7 @@ def test_extract_tool_calls_streaming_v11_no_tools(
 
 
 @pytest.mark.parametrize(
-    "parser_fixture, tokenizer_fixture, model_output,"
-    " expected_tool_calls, expected_content",
+    "parser_fixture, tokenizer_fixture, model_output, expected_tool_calls, expected_content",
     [
         pytest.param(
             "mistral_tool_parser",
@@ -907,9 +784,7 @@ def test_extract_tool_calls_streaming_v11_no_tools(
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "San Francisco", "state": "CA", "unit": "celsius"}
-                        ),
+                        arguments=json.dumps({"city": "San Francisco", "state": "CA", "unit": "celsius"}),
                     )
                 )
             ],
@@ -921,16 +796,8 @@ def test_extract_tool_calls_streaming_v11_no_tools(
             "mistral_tokenizer",
             """[TOOL_CALLS]add{"a": 3.5, "b": 4}[TOOL_CALLS]multiply{"a": 3, "b": 6}""",  # noqa: E501
             [
-                ToolCall(
-                    function=FunctionCall(
-                        name="add", arguments=json.dumps({"a": 3.5, "b": 4})
-                    )
-                ),
-                ToolCall(
-                    function=FunctionCall(
-                        name="multiply", arguments=json.dumps({"a": 3, "b": 6})
-                    )
-                ),
+                ToolCall(function=FunctionCall(name="add", arguments=json.dumps({"a": 3.5, "b": 4}))),
+                ToolCall(function=FunctionCall(name="multiply", arguments=json.dumps({"a": 3, "b": 6}))),
             ],
             "",
             id="v11-multiple_tool_calls",
@@ -958,9 +825,7 @@ def test_extract_tool_calls_streaming_v11_no_tools(
                 ToolCall(
                     function=FunctionCall(
                         name="bash",
-                        arguments=json.dumps(
-                            {"command": "print(\"hello world!\")\nre.compile(r'{}')"}
-                        ),
+                        arguments=json.dumps({"command": "print(\"hello world!\")\nre.compile(r'{}')"}),
                     )
                 )
             ],
@@ -979,13 +844,7 @@ def test_extract_tool_calls_streaming_v11_no_tools(
             "mistral_pre_v11_tool_parser",
             "mistral_pre_v11_tokenizer",
             """[TOOL_CALLS]  [ {"name":"add" , "arguments" : {"a": 3, "b": 4} } ]""",  # noqa: E501
-            [
-                ToolCall(
-                    function=FunctionCall(
-                        name="add", arguments=json.dumps({"a": 3, "b": 4})
-                    )
-                )
-            ],
+            [ToolCall(function=FunctionCall(name="add", arguments=json.dumps({"a": 3, "b": 4})))],
             "",
             id="pre_v11-single_tool_add",
         ),
@@ -993,13 +852,7 @@ def test_extract_tool_calls_streaming_v11_no_tools(
             "mistral_pre_v11_tool_parser",
             "mistral_pre_v11_tokenizer",
             """[TOOL_CALLS] [{"name": "add", "arguments":{"a": "3", "b": "4"}}]""",  # noqa: E501
-            [
-                ToolCall(
-                    function=FunctionCall(
-                        name="add", arguments=json.dumps({"a": "3", "b": "4"})
-                    )
-                )
-            ],
+            [ToolCall(function=FunctionCall(name="add", arguments=json.dumps({"a": "3", "b": "4"})))],
             "",
             id="pre_v11-single_tool_add_strings",
         ),
@@ -1011,9 +864,7 @@ def test_extract_tool_calls_streaming_v11_no_tools(
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "San Francisco", "state": "CA", "unit": "celsius"}
-                        ),
+                        arguments=json.dumps({"city": "San Francisco", "state": "CA", "unit": "celsius"}),
                     )
                 )
             ],
@@ -1028,9 +879,7 @@ def test_extract_tool_calls_streaming_v11_no_tools(
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "San Francisco", "state": "CA", "unit": "celsius"}
-                        ),
+                        arguments=json.dumps({"city": "San Francisco", "state": "CA", "unit": "celsius"}),
                     )
                 )
             ],
@@ -1061,17 +910,11 @@ def test_extract_tool_calls_streaming_v11_no_tools(
             "mistral_pre_v11_tokenizer",
             """[TOOL_CALLS] [{"arguments": {"a": 3.5, "b": 4}, "name": "add"}, {"arguments":{"city": "San Francisco", "state": "CA", "unit": "celsius"}, "name": "get_current_weather"}]""",  # noqa: E501
             [
-                ToolCall(
-                    function=FunctionCall(
-                        name="add", arguments=json.dumps({"a": 3.5, "b": 4})
-                    )
-                ),
+                ToolCall(function=FunctionCall(name="add", arguments=json.dumps({"a": 3.5, "b": 4}))),
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "San Francisco", "state": "CA", "unit": "celsius"}
-                        ),
+                        arguments=json.dumps({"city": "San Francisco", "state": "CA", "unit": "celsius"}),
                     )
                 ),
             ],
@@ -1082,13 +925,7 @@ def test_extract_tool_calls_streaming_v11_no_tools(
             "mistral_pre_v11_tool_parser",
             "mistral_pre_v11_tokenizer",
             """Some text[TOOL_CALLS] [{"name": "add", "arguments":{"a": 1, "b": 2}}]""",  # noqa: E501
-            [
-                ToolCall(
-                    function=FunctionCall(
-                        name="add", arguments=json.dumps({"a": 1, "b": 2})
-                    )
-                )
-            ],
+            [ToolCall(function=FunctionCall(name="add", arguments=json.dumps({"a": 1, "b": 2})))],
             "Some text",
             id="pre_v11-content_before_tool",
         ),
@@ -1150,9 +987,7 @@ def test_extract_tool_calls_streaming_one_chunk(
         ),
     ],
 )
-def test_fast_detokenization_text_detection(
-    parser_fixture, model_output, fake_count, two_phase, request
-):
+def test_fast_detokenization_text_detection(parser_fixture, model_output, fake_count, two_phase, request):
     """Regression: bot_token in text but not token_ids (PR #37209)."""
     parser = request.getfixturevalue(parser_fixture)
     # Token IDs that do NOT contain bot_token_id.
@@ -1215,9 +1050,7 @@ def test_fast_detokenization_text_detection(
     ],
     ids=["v11", "pre_v11"],
 )
-def test_extract_tool_calls_streaming_exception_returns_none(
-    parser_fixture, patched_method, current_text, request
-):
+def test_extract_tool_calls_streaming_exception_returns_none(parser_fixture, patched_method, current_text, request):
     parser = request.getfixturevalue(parser_fixture)
     with patch.object(parser, patched_method, side_effect=RuntimeError("boom")):
         result = parser.extract_tool_calls_streaming(
@@ -1288,9 +1121,7 @@ def _make_request(**kwargs) -> ChatCompletionRequest:
                     "function": {"name": "get_weather"},
                 }
             },
-            MistralNamedToolChoice.model_validate(
-                {"type": "function", "function": {"name": "get_weather"}}
-            ),
+            MistralNamedToolChoice.model_validate({"type": "function", "function": {"name": "get_weather"}}),
             True,
         ),
         (

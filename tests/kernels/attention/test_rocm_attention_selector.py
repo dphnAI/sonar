@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from aphrodite.config import AttentionConfig, AphroditeConfig, set_current_aphrodite_config
+from aphrodite.config import AphroditeConfig, AttentionConfig, set_current_aphrodite_config
 from aphrodite.platforms.rocm import RocmPlatform
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 from aphrodite.v1.attention.selector import _cached_get_attn_backend, get_attn_backend
@@ -67,7 +67,5 @@ def test_selector(monkeypatch: pytest.MonkeyPatch):
         aphrodite_config = AphroditeConfig(attention_config=attention_config)
 
         with set_current_aphrodite_config(aphrodite_config):
-            backend = get_attn_backend(
-                576, torch.bfloat16, "auto", 1, False, use_mla=True
-            )
+            backend = get_attn_backend(576, torch.bfloat16, "auto", 1, False, use_mla=True)
             assert backend.get_name() == "ROCM_AITER_MLA"

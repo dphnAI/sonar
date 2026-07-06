@@ -50,10 +50,7 @@ async def wait_for_counts(
 ) -> None:
     deadline = asyncio.get_running_loop().time() + timeout
     while True:
-        if (
-            ssl_context.load_cert_chain_count >= cert_chain_count
-            and ssl_context.load_ca_count >= ca_count
-        ):
+        if ssl_context.load_cert_chain_count >= cert_chain_count and ssl_context.load_ca_count >= ca_count:
             return
 
         if asyncio.get_running_loop().time() >= deadline:

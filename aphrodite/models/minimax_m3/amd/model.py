@@ -28,8 +28,8 @@ from aphrodite import envs
 from aphrodite._aiter_ops import rocm_aiter_ops
 from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
 from aphrodite.config import (
-    CacheConfig,
     AphroditeConfig,
+    CacheConfig,
     get_current_aphrodite_config,
 )
 from aphrodite.distributed import get_pp_group, get_tensor_model_parallel_world_size
@@ -137,10 +137,7 @@ def _sparse_attention_layer_ids(config: PretrainedConfig) -> set[int]:
 
 def _sparse_attention_layer_ordinals(config: PretrainedConfig) -> dict[int, int]:
     """Map each sparse-attention layer id to its ordinal among sparse layers."""
-    return {
-        lid: ordinal
-        for ordinal, lid in enumerate(sorted(_sparse_attention_layer_ids(config)))
-    }
+    return {lid: ordinal for ordinal, lid in enumerate(sorted(_sparse_attention_layer_ids(config)))}
 
 
 def _should_skip_index_topk(config: PretrainedConfig, layer_id: int) -> bool:
@@ -201,9 +198,7 @@ def _build_rotary_emb(config: PretrainedConfig, head_dim: int):
         # HF uses "rope_type" (older configs: "type"); get_rope reads "rope_type".
         if "rope_type" not in rope_parameters and "type" in rope_scaling:
             rope_parameters["rope_type"] = rope_scaling["type"]
-        rope_parameters.setdefault(
-            "original_max_position_embeddings", config.max_position_embeddings
-        )
+        rope_parameters.setdefault("original_max_position_embeddings", config.max_position_embeddings)
         factor = float(rope_scaling.get("factor", 1.0))
         # Cover the extended range (informational for get_rope's default branch;
         # the YaRN embedding sizes its own cache from original * factor).
@@ -275,10 +270,7 @@ class MiniMaxM3MLP(nn.Module):
             prefix=f"{prefix}.down_proj",
         )
         if config.hidden_act != "swigluoai":
-            raise ValueError(
-                f"Unsupported activation: {config.hidden_act}. "
-                "Only swigluoai is supported."
-            )
+            raise ValueError(f"Unsupported activation: {config.hidden_act}. Only swigluoai is supported.")
         # gate * sigmoid(alpha * gate) * (up + beta), with both halves clamped.
         # Kept as our fp32 Triton kernel (not the #22 SWIGLUOAI_UNINTERLEAVE op
         # ``silu_and_mul_with_clamp``): that op IS built on ROCm but rounds
@@ -333,8 +325,7 @@ class MiniMaxM3MoE(nn.Module):
         self.tp_size = get_tensor_model_parallel_world_size()
         if self.tp_size > config.num_local_experts:
             raise ValueError(
-                f"Tensor parallel size {self.tp_size} is greater than "
-                f"the number of experts {config.num_local_experts}."
+                f"Tensor parallel size {self.tp_size} is greater than the number of experts {config.num_local_experts}."
             )
 
         self.routed_scaling_factor = getattr(config, "routed_scaling_factor", 1.0)
@@ -343,12 +334,8 @@ class MiniMaxM3MoE(nn.Module):
         # Sigmoid routing uses a per-expert score-correction bias for selection.
         self.use_routing_bias = getattr(config, "use_routing_bias", False)
         if self.use_routing_bias:
-            self.e_score_correction_bias = nn.Parameter(
-                torch.empty(config.num_local_experts, dtype=torch.float32)
-            )
-            self.e_score_correction_bias.weight_loader = (
-                MiniMaxM3MoE.ebias_weight_loader
-            )
+            self.e_score_correction_bias = nn.Parameter(torch.empty(config.num_local_experts, dtype=torch.float32))
+            self.e_score_correction_bias.weight_loader = MiniMaxM3MoE.ebias_weight_loader
         else:
             self.e_score_correction_bias = None
 
@@ -408,9 +395,7 @@ class MiniMaxM3MoE(nn.Module):
             apply_routed_scale_to_output=not self.use_aiter_moe_fse,
             router_logits_dtype=self.gate.out_dtype,
             shared_experts=self.shared_experts,
-            n_shared_experts=(
-                self.n_shared_experts if self.fuse_shared_experts else None
-            ),
+            n_shared_experts=(self.n_shared_experts if self.fuse_shared_experts else None),
             quant_config=quant_config,
             prefix=f"{prefix}.experts",
         )
@@ -426,9 +411,7 @@ class MiniMaxM3MoE(nn.Module):
 
         # router_logits: (num_tokens, n_experts); GateLinear casts to fp32.
         router_logits, _ = self.gate(hidden_states)
-        final_hidden_states = self.experts(
-            hidden_states=hidden_states, router_logits=router_logits
-        )
+        final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=router_logits)
 
         return final_hidden_states.view(num_tokens, hidden_dim)
 
@@ -619,23 +602,15 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
         # config.rope_scaling (e.g. YaRN) so long-context positions are covered.
         self.rotary_emb = _build_rotary_emb(config, self.head_dim)
 
-        self.index_q_norm = MiniMAXGemmaRMSNorm(
-            self.idx_head_dim, eps=config.rms_norm_eps
-        )
-        self.index_k_norm = MiniMAXGemmaRMSNorm(
-            self.idx_head_dim, eps=config.rms_norm_eps
-        )
+        self.index_q_norm = MiniMAXGemmaRMSNorm(self.idx_head_dim, eps=config.rms_norm_eps)
+        self.index_k_norm = MiniMAXGemmaRMSNorm(self.idx_head_dim, eps=config.rms_norm_eps)
         self.index_rotary_emb = self.rotary_emb
 
         # Attention-backend wiring.
         aphrodite_config = get_current_aphrodite_config()
         self.layer_name = f"{prefix}.attn"
-        self.kv_cache_dtype = (
-            cache_config.cache_dtype if cache_config is not None else "auto"
-        )
-        self.kv_cache_torch_dtype = kv_cache_dtype_str_to_dtype(
-            self.kv_cache_dtype, aphrodite_config.model_config
-        )
+        self.kv_cache_dtype = cache_config.cache_dtype if cache_config is not None else "auto"
+        self.kv_cache_torch_dtype = kv_cache_dtype_str_to_dtype(self.kv_cache_dtype, aphrodite_config.model_config)
 
         # Shared top-k buffer: the indexer writes the selected blocks into it and
         # the attend impl reads them back (no Python value crosses the break).
@@ -716,10 +691,7 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
         num_tokens = qkv.shape[0]
 
         fwd_slot_mapping = get_forward_context().slot_mapping
-        if (
-            not isinstance(fwd_slot_mapping, dict)
-            or self.layer_name not in fwd_slot_mapping
-        ):
+        if not isinstance(fwd_slot_mapping, dict) or self.layer_name not in fwd_slot_mapping:
             # Memory-profiling run: caches not yet bound, slot_mapping is empty.
             return qkv.new_zeros((num_tokens, self.hidden_size))
 
@@ -790,9 +762,7 @@ class MiniMaxM3DecoderLayer(nn.Module):
         layer_id = int(prefix.split(sep=".")[-1])
         self.layer_id = layer_id
 
-        is_sparse_attention_layer = (
-            force_sparse_attn or layer_id in _sparse_attention_layer_ids(config)
-        )
+        is_sparse_attention_layer = force_sparse_attn or layer_id in _sparse_attention_layer_ids(config)
 
         if is_sparse_attention_layer:
             self.self_attn = MiniMaxM3SparseAttention(
@@ -831,12 +801,8 @@ class MiniMaxM3DecoderLayer(nn.Module):
             )
 
         # config.use_gemma_norm is True for M3 -> Gemma-style RMSNorm.
-        self.input_layernorm = MiniMAXGemmaRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
-        self.post_attention_layernorm = MiniMAXGemmaRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.input_layernorm = MiniMAXGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MiniMAXGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -855,9 +821,7 @@ class MiniMaxM3DecoderLayer(nn.Module):
             hidden_states=hidden_states,
         )
 
-        hidden_states, residual = fused_allreduce_gemma_rms_norm(
-            hidden_states, residual, self.post_attention_layernorm
-        )
+        hidden_states, residual = fused_allreduce_gemma_rms_norm(hidden_states, residual, self.post_attention_layernorm)
         ffn = self.block_sparse_moe if self.is_moe_layer else self.mlp
         hidden_states = ffn(hidden_states)
         return hidden_states, residual
@@ -947,14 +911,10 @@ class MiniMaxM3Model(nn.Module, EagleModelMixin):
         aux_hidden_states = self._maybe_add_hidden_state([], 0, hidden_states, residual)
         for idx, layer in enumerate(self.layers[self.start_layer : self.end_layer]):
             hidden_states, residual = layer(positions, hidden_states, residual)
-            self._maybe_add_hidden_state(
-                aux_hidden_states, idx + 1, hidden_states, residual
-            )
+            self._maybe_add_hidden_state(aux_hidden_states, idx + 1, hidden_states, residual)
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
 
         hidden_states, _ = self.norm(hidden_states, residual)
 
@@ -966,9 +926,7 @@ class MiniMaxM3Model(nn.Module, EagleModelMixin):
         # Checkpoint experts use w1=gate, w2=down, w3=up. When fusing the shared
         # expert, include the appended slot (id == num_local_experts).
         n_shared = getattr(self.config, "n_shared_experts", 0) or 0
-        num_experts = self.config.num_local_experts + (
-            n_shared if _fuse_shared_experts_enabled(self.config) else 0
-        )
+        num_experts = self.config.num_local_experts + (n_shared if _fuse_shared_experts_enabled(self.config) else 0)
         return fused_moe_make_expert_params_mapping(
             self,
             ckpt_gate_proj_name="w1",
@@ -1080,9 +1038,7 @@ class MiniMaxM3Model(nn.Module, EagleModelMixin):
                     if name not in params_dict:
                         continue
                     param = params_dict[name]
-                    weight_loader = getattr(
-                        param, "weight_loader", default_weight_loader
-                    )
+                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
                     weight_loader(param, loaded_weight)
             loaded_params.add(name)
         return loaded_params
@@ -1102,9 +1058,7 @@ class MiniMaxM3SparseForCausalLM(nn.Module, SupportsPP, SupportsEagle3):
         quant_config = aphrodite_config.quant_config
         self.config = config
         self.quant_config = quant_config
-        self.model = MiniMaxM3Model(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = MiniMaxM3Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
@@ -1152,9 +1106,7 @@ class MiniMaxM3SparseForCausalLM(nn.Module, SupportsPP, SupportsEagle3):
     info=MiniMaxM3VLProcessingInfo,
     dummy_inputs=MiniMaxM3VLDummyInputsBuilder,
 )
-class MiniMaxM3SparseForConditionalGeneration(
-    nn.Module, SupportsMultiModal, SupportsPP, SupportsEagle3
-):
+class MiniMaxM3SparseForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, SupportsEagle3):
     """Top-level (VL) entry point for MiniMax M3.
 
     Owns the shared MiniMax-M3 vision tower on ROCm and delegates text
@@ -1241,9 +1193,7 @@ class MiniMaxM3SparseForConditionalGeneration(
         }
 
     def _process_image_input(self, image_input: dict) -> tuple[torch.Tensor, ...]:
-        pixel_values: torch.Tensor = image_input["pixel_values"].type(
-            self.vision_tower.dtype
-        )
+        pixel_values: torch.Tensor = image_input["pixel_values"].type(self.vision_tower.dtype)
         grid_thw: torch.Tensor = image_input["image_grid_thw"]
         assert grid_thw.ndim == 2
 
@@ -1267,9 +1217,7 @@ class MiniMaxM3SparseForConditionalGeneration(
         return image_embeds.split(sizes)
 
     def _process_video_input(self, video_input: dict) -> tuple[torch.Tensor, ...]:
-        pixel_values: torch.Tensor = video_input["pixel_values_videos"].type(
-            self.vision_tower.dtype
-        )
+        pixel_values: torch.Tensor = video_input["pixel_values_videos"].type(self.vision_tower.dtype)
         grid_thw: torch.Tensor = video_input["video_grid_thw"]
         assert grid_thw.ndim == 2
 
@@ -1292,19 +1240,14 @@ class MiniMaxM3SparseForConditionalGeneration(
         sizes = (grid_thw.prod(-1) // (merge_size * merge_size)).tolist()
         return video_embeds.split(sizes)
 
-    def _parse_and_validate_multimodal_inputs(
-        self, **kwargs: object
-    ) -> dict[str, dict]:
+    def _parse_and_validate_multimodal_inputs(self, **kwargs: object) -> dict[str, dict]:
         mm_input_by_modality: dict[str, dict] = {}
         for input_key in kwargs:
             if input_key == "pixel_values" and "image" not in mm_input_by_modality:
                 image_input = self._parse_and_validate_image_input(**kwargs)
                 if image_input is not None:
                     mm_input_by_modality["image"] = image_input
-            if (
-                input_key == "pixel_values_videos"
-                and "video" not in mm_input_by_modality
-            ):
+            if input_key == "pixel_values_videos" and "video" not in mm_input_by_modality:
                 video_input = self._parse_and_validate_video_input(**kwargs)
                 if video_input is not None:
                     mm_input_by_modality["video"] = video_input
@@ -1335,9 +1278,7 @@ class MiniMaxM3SparseForConditionalGeneration(
         inputs_embeds: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        return self.language_model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        return self.language_model(input_ids, positions, intermediate_tensors, inputs_embeds)
 
     def compute_logits(self, hidden_states: torch.Tensor) -> torch.Tensor | None:
         return self.language_model.compute_logits(hidden_states)

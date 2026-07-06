@@ -27,14 +27,10 @@ def test_decode_attention(B, L, H_Q, H_KV, D_QK, D_V, CACHE_SIZE, PAGE_SIZE):
     num_kv_splits = 8
 
     num_pages_per_batch = cdiv(seq_len, PAGE_SIZE)
-    req_to_page = torch.randint(
-        0, CACHE_SIZE // PAGE_SIZE, (B, num_pages_per_batch, 1), device=DEVICE_TYPE
-    )
+    req_to_page = torch.randint(0, CACHE_SIZE // PAGE_SIZE, (B, num_pages_per_batch, 1), device=DEVICE_TYPE)
     req_to_token = req_to_page * PAGE_SIZE
     req_to_token = req_to_token.expand(B, num_pages_per_batch, PAGE_SIZE)
-    req_to_token = req_to_token + torch.arange(PAGE_SIZE, device=DEVICE_TYPE).view(
-        1, 1, -1
-    )
+    req_to_token = req_to_token + torch.arange(PAGE_SIZE, device=DEVICE_TYPE).view(1, 1, -1)
     req_to_token = req_to_token.view(B, -1)
     req_to_token = req_to_token[:, :seq_len].contiguous()
 
@@ -107,9 +103,7 @@ def _quantize_to_fp8(tensor: torch.Tensor):
     amax = tensor.abs().amax()
     # float8_e4m3fn max representable value is 448.0
     scale = (amax / 448.0).clamp(min=1e-12).to(torch.float32)
-    fp8_tensor = (
-        (tensor.to(torch.float32) / scale).clamp(-448.0, 448.0).to(torch.float8_e4m3fn)
-    )
+    fp8_tensor = (tensor.to(torch.float32) / scale).clamp(-448.0, 448.0).to(torch.float8_e4m3fn)
     return fp8_tensor, scale
 
 
@@ -131,14 +125,10 @@ def test_decode_attention_fp8(B, L, H_Q, H_KV, D_QK, D_V, CACHE_SIZE, PAGE_SIZE)
     num_kv_splits = 8
 
     num_pages_per_batch = cdiv(seq_len, PAGE_SIZE)
-    req_to_page = torch.randint(
-        0, CACHE_SIZE // PAGE_SIZE, (B, num_pages_per_batch, 1), device=DEVICE_TYPE
-    )
+    req_to_page = torch.randint(0, CACHE_SIZE // PAGE_SIZE, (B, num_pages_per_batch, 1), device=DEVICE_TYPE)
     req_to_token = req_to_page * PAGE_SIZE
     req_to_token = req_to_token.expand(B, num_pages_per_batch, PAGE_SIZE)
-    req_to_token = req_to_token + torch.arange(PAGE_SIZE, device=DEVICE_TYPE).view(
-        1, 1, -1
-    )
+    req_to_token = req_to_token + torch.arange(PAGE_SIZE, device=DEVICE_TYPE).view(1, 1, -1)
     req_to_token = req_to_token.view(B, -1)
     req_to_token = req_to_token[:, :seq_len].contiguous()
 
@@ -151,9 +141,7 @@ def test_decode_attention_fp8(B, L, H_Q, H_KV, D_QK, D_V, CACHE_SIZE, PAGE_SIZE)
     # --- BF16 reference ---
     o_ref = torch.zeros(B, H_Q, D_V, dtype=dtype, device=DEVICE_TYPE)
     lse_ref = torch.zeros(B, H_Q, dtype=dtype, device=DEVICE_TYPE)
-    attn_logits = torch.empty(
-        (B, H_Q, num_kv_splits, D_V + 1), dtype=torch.float32, device=DEVICE_TYPE
-    )
+    attn_logits = torch.empty((B, H_Q, num_kv_splits, D_V + 1), dtype=torch.float32, device=DEVICE_TYPE)
 
     if PAGE_SIZE == 1:
         decode_attention_fwd(
@@ -191,9 +179,7 @@ def test_decode_attention_fp8(B, L, H_Q, H_KV, D_QK, D_V, CACHE_SIZE, PAGE_SIZE)
 
     o_fp8 = torch.zeros(B, H_Q, D_V, dtype=dtype, device=DEVICE_TYPE)
     lse_fp8 = torch.zeros(B, H_Q, dtype=dtype, device=DEVICE_TYPE)
-    attn_logits_fp8 = torch.empty(
-        (B, H_Q, num_kv_splits, D_V + 1), dtype=torch.float32, device=DEVICE_TYPE
-    )
+    attn_logits_fp8 = torch.empty((B, H_Q, num_kv_splits, D_V + 1), dtype=torch.float32, device=DEVICE_TYPE)
 
     if PAGE_SIZE == 1:
         decode_attention_fwd(
@@ -258,49 +244,37 @@ def test_decode_attention_cross_layer_view(H_Q, H_KV, D_QK, D_V, is_mla, PAGE_SI
     num_pages = CACHE_SIZE // PAGE_SIZE
 
     num_pages_per_batch = cdiv(seq_len, PAGE_SIZE)
-    req_to_page = torch.randint(
-        0, num_pages, (B, num_pages_per_batch), device=DEVICE_TYPE
-    )
+    req_to_page = torch.randint(0, num_pages, (B, num_pages_per_batch), device=DEVICE_TYPE)
 
     q = torch.randn(B, H_Q, D_QK, dtype=dtype, device=DEVICE_TYPE)
     b_seq_len = torch.full((B,), seq_len, device=DEVICE_TYPE)
 
     # Reference: contiguous paged cache.
-    k_ref = torch.randn(
-        num_pages, PAGE_SIZE, H_KV, D_QK, dtype=dtype, device=DEVICE_TYPE
-    )
+    k_ref = torch.randn(num_pages, PAGE_SIZE, H_KV, D_QK, dtype=dtype, device=DEVICE_TYPE)
     if is_mla:
         v_ref = k_ref[..., :D_V]
     else:
-        v_ref = torch.randn(
-            num_pages, PAGE_SIZE, H_KV, D_V, dtype=dtype, device=DEVICE_TYPE
-        )
+        v_ref = torch.randn(num_pages, PAGE_SIZE, H_KV, D_V, dtype=dtype, device=DEVICE_TYPE)
 
     # Cross-layer cache: all layers' pages for a block are adjacent. The
     # per-layer view has the same shape as the contiguous cache but
     # stride(0) is NUM_LAYERS x larger. Neighbor layers hold random data so
     # any packed-pages addressing reads garbage rather than zeros.
-    k_xl = torch.randn(
-        num_pages, NUM_LAYERS, PAGE_SIZE, H_KV, D_QK, dtype=dtype, device=DEVICE_TYPE
-    )
+    k_xl = torch.randn(num_pages, NUM_LAYERS, PAGE_SIZE, H_KV, D_QK, dtype=dtype, device=DEVICE_TYPE)
     k_view = k_xl[:, LAYER_IDX]
     k_view.copy_(k_ref)
     assert k_view.stride(0) == NUM_LAYERS * PAGE_SIZE * H_KV * D_QK
     if is_mla:
         v_view = k_view[..., :D_V]
     else:
-        v_xl = torch.randn(
-            num_pages, NUM_LAYERS, PAGE_SIZE, H_KV, D_V, dtype=dtype, device=DEVICE_TYPE
-        )
+        v_xl = torch.randn(num_pages, NUM_LAYERS, PAGE_SIZE, H_KV, D_V, dtype=dtype, device=DEVICE_TYPE)
         v_view = v_xl[:, LAYER_IDX]
         v_view.copy_(v_ref)
 
     def run(k_buffer, v_buffer):
         o = torch.zeros(B, H_Q, D_V, dtype=dtype, device=DEVICE_TYPE)
         lse = torch.zeros(B, H_Q, dtype=dtype, device=DEVICE_TYPE)
-        attn_logits = torch.empty(
-            (B, H_Q, num_kv_splits, D_V + 1), dtype=torch.float32, device=DEVICE_TYPE
-        )
+        attn_logits = torch.empty((B, H_Q, num_kv_splits, D_V + 1), dtype=torch.float32, device=DEVICE_TYPE)
         decode_attention_fwd(
             q,
             k_buffer,

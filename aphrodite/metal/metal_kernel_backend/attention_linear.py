@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Linear attention (Gated DeltaNet) with C++ Metal kernel for paged state.
 
 Decomposes the mlx_lm GDN module's forward pass and replaces the recurrent
@@ -108,11 +109,7 @@ class GDNPagedAttentionWrapper(nn.Module):
 
         # === Step 2: Conv1d (per-request, needs conv_state) ===
         # Use stable slot mapping for state pool access.
-        slot_ids = (
-            ctx.gdn_slot_mapping
-            if ctx.gdn_slot_mapping is not None
-            else list(range(num_requests))
-        )
+        slot_ids = ctx.gdn_slot_mapping if ctx.gdn_slot_mapping is not None else list(range(num_requests))
         conv_outputs = []
         for req_idx in range(num_requests):
             slot = slot_ids[req_idx]

@@ -68,9 +68,7 @@ def create_txt_slices_jsonl(
     """Read *input_path*, slice it into prompts, and write JSONL to
     *output_path*."""
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        tokenizer_name, trust_remote_code=trust_remote_code
-    )
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, trust_remote_code=trust_remote_code)
 
     text = load_text(input_path)
     if not text:
@@ -101,10 +99,7 @@ def create_txt_slices_jsonl(
 
         # Randomly select a start position and slice with cycling
         start_pos = rng_py.randint(0, num_available_tokens - 1)
-        prompt_token_ids = [
-            token_ids[(start_pos + j) % num_available_tokens]
-            for j in range(req_input_len)
-        ]
+        prompt_token_ids = [token_ids[(start_pos + j) % num_available_tokens] for j in range(req_input_len)]
         prompt = tokenizer.decode(prompt_token_ids, skip_special_tokens=False)
 
         records.append({"prompt": prompt, "output_tokens": req_output_len})
@@ -122,8 +117,7 @@ def create_txt_slices_jsonl(
 
 def main(argv: list[str] | None = None) -> None:
     parser = FlexibleArgumentParser(
-        description="Convert a plain-text file into a JSONL dataset "
-        "for CustomDataset (--dataset-name custom).",
+        description="Convert a plain-text file into a JSONL dataset for CustomDataset (--dataset-name custom).",
     )
     parser.add_argument(
         "--input",

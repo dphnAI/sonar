@@ -136,15 +136,9 @@ def test_triton_mixed_causal(
     num_blocks = max_num_blocks * num_seqs + 10
 
     scale = head_size**-0.5
-    query = torch.randn(
-        num_query_tokens, num_query_heads, head_size, dtype=dtype, device=device
-    )
-    key_cache = torch.randn(
-        num_blocks, block_size, num_kv_heads, head_size, dtype=dtype, device=device
-    )
-    value_cache = torch.randn(
-        num_blocks, block_size, num_kv_heads, head_size, dtype=dtype, device=device
-    )
+    query = torch.randn(num_query_tokens, num_query_heads, head_size, dtype=dtype, device=device)
+    key_cache = torch.randn(num_blocks, block_size, num_kv_heads, head_size, dtype=dtype, device=device)
+    value_cache = torch.randn(num_blocks, block_size, num_kv_heads, head_size, dtype=dtype, device=device)
 
     block_tables_list = []
     for i in range(num_seqs):
@@ -258,15 +252,9 @@ def test_flash_attn4_mixed_causal(
     num_blocks = max_num_blocks * num_seqs + 10
 
     scale = head_size**-0.5
-    query = torch.randn(
-        num_query_tokens, num_query_heads, head_size, dtype=dtype, device=device
-    )
-    key_cache = torch.randn(
-        num_blocks, block_size, num_kv_heads, head_size, dtype=dtype, device=device
-    )
-    value_cache = torch.randn(
-        num_blocks, block_size, num_kv_heads, head_size, dtype=dtype, device=device
-    )
+    query = torch.randn(num_query_tokens, num_query_heads, head_size, dtype=dtype, device=device)
+    key_cache = torch.randn(num_blocks, block_size, num_kv_heads, head_size, dtype=dtype, device=device)
+    value_cache = torch.randn(num_blocks, block_size, num_kv_heads, head_size, dtype=dtype, device=device)
 
     block_tables_list = []
     for i in range(num_seqs):
@@ -281,9 +269,7 @@ def test_flash_attn4_mixed_causal(
         cu_seqlens_q[i + 1] = cu_seqlens_q[i] + ql
 
     seqused_k = torch.tensor(kv_lens, dtype=torch.int32, device=device)
-    per_seq_causal_tensor = torch.tensor(
-        per_seq_causal, dtype=torch.int32, device=device
-    )
+    per_seq_causal_tensor = torch.tensor(per_seq_causal, dtype=torch.int32, device=device)
 
     ref_output = ref_paged_attn(
         query,

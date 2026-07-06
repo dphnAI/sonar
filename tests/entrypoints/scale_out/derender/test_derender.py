@@ -7,8 +7,8 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from tests.utils import RemoteLaunchRenderServer
 from aphrodite.tokenizers import get_tokenizer
+from tests.utils import RemoteLaunchRenderServer
 
 MODEL_NAME = "hmellor/tiny-random-LlamaForCausalLM"
 
@@ -21,9 +21,7 @@ def server():
 
 @pytest_asyncio.fixture
 async def client(server):
-    async with httpx.AsyncClient(
-        base_url=server.url_for(""), timeout=30.0
-    ) as http_client:
+    async with httpx.AsyncClient(base_url=server.url_for(""), timeout=30.0) as http_client:
         yield http_client
 
 
@@ -72,9 +70,7 @@ def _make_logprobs_with_placeholders(token_id: int = 1234) -> dict:
         "token": f"token_id:{token_id}",
         "logprob": -1.0,
         "bytes": None,
-        "top_logprobs": [
-            {"token": f"token_id:{token_id + 1}", "logprob": -2.0, "bytes": None}
-        ],
+        "top_logprobs": [{"token": f"token_id:{token_id + 1}", "logprob": -2.0, "bytes": None}],
     }
     return {"content": [entry]}
 
@@ -169,9 +165,7 @@ async def test_derender_chat_logprobs(client):
     content = logprobs["content"]
     assert content is not None and len(content) == 1
     token_str = content[0]["token"]
-    assert not token_str.startswith("token_id:"), (
-        f"Placeholder was not resolved: {token_str!r}"
-    )
+    assert not token_str.startswith("token_id:"), f"Placeholder was not resolved: {token_str!r}"
 
 
 @pytest.mark.asyncio
@@ -220,9 +214,7 @@ async def test_derender_chat_top_logprobs(client):
     content = response.json()["choices"][0]["logprobs"]["content"]
     top = content[0]["top_logprobs"]
     assert len(top) == 1
-    assert not top[0]["token"].startswith("token_id:"), (
-        f"top_logprobs placeholder not resolved: {top[0]['token']!r}"
-    )
+    assert not top[0]["token"].startswith("token_id:"), f"top_logprobs placeholder not resolved: {top[0]['token']!r}"
 
 
 @pytest.mark.asyncio
@@ -237,9 +229,7 @@ async def test_derender_chat_prompt_logprobs_passthrough(client):
         "/v1/chat/completions/derender",
         json={
             "model": MODEL_NAME,
-            "generate_response": _make_generate_response(
-                synthetic_ids, prompt_logprobs=prompt_logprobs
-            ),
+            "generate_response": _make_generate_response(synthetic_ids, prompt_logprobs=prompt_logprobs),
         },
     )
     assert response.status_code == 200
@@ -257,9 +247,7 @@ async def test_derender_chat_kv_transfer_params_passthrough(client):
         "/v1/chat/completions/derender",
         json={
             "model": MODEL_NAME,
-            "generate_response": _make_generate_response(
-                synthetic_ids, kv_transfer_params=kv
-            ),
+            "generate_response": _make_generate_response(synthetic_ids, kv_transfer_params=kv),
         },
     )
     assert response.status_code == 200
@@ -458,9 +446,7 @@ async def test_derender_completion_logprobs(client):
     assert logprobs is not None
     tokens = logprobs["tokens"]
     assert len(tokens) == 1
-    assert not tokens[0].startswith("token_id:"), (
-        f"Placeholder was not resolved: {tokens[0]!r}"
-    )
+    assert not tokens[0].startswith("token_id:"), f"Placeholder was not resolved: {tokens[0]!r}"
     assert len(logprobs["token_logprobs"]) == 1
     assert isinstance(logprobs["token_logprobs"][0], float)
     assert len(logprobs["text_offset"]) == 1
@@ -479,9 +465,7 @@ async def test_derender_completion_kv_transfer_params_passthrough(client):
         json={
             "model": MODEL_NAME,
             "generate_responses": [
-                _make_completion_generate_response(
-                    ids1, gr1["request_id"], kv_transfer_params=kv
-                ),
+                _make_completion_generate_response(ids1, gr1["request_id"], kv_transfer_params=kv),
             ],
         },
     )
@@ -525,9 +509,7 @@ def parser_server():
 
 @pytest_asyncio.fixture
 async def parser_client(parser_server):
-    async with httpx.AsyncClient(
-        base_url=parser_server.url_for(""), timeout=60.0
-    ) as http_client:
+    async with httpx.AsyncClient(base_url=parser_server.url_for(""), timeout=60.0) as http_client:
         yield http_client
 
 
@@ -729,14 +711,9 @@ async def test_e2e_parsed_reasoning_and_tool_call(parser_client, parser_tokenize
     gen_req = await _e2e_render_chat(parser_client, PARSER_MODEL, messages)
 
     reasoning_text = "I should look up the weather."
-    tool_text = (
-        '<tool_call>\n{"name": "get_weather", '
-        '"arguments": {"city": "Paris"}}\n</tool_call>'
-    )
+    tool_text = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>'
     output_text = f"<think>{reasoning_text}</think>{tool_text}"
-    output_ids = _require_markers_survive(
-        parser_tokenizer, output_text, "</think>", "<tool_call>"
-    )
+    output_ids = _require_markers_survive(parser_tokenizer, output_text, "</think>", "<tool_call>")
 
     resp = await parser_client.post(
         "/v1/chat/completions/derender",
@@ -827,9 +804,7 @@ def harmony_server():
 
 @pytest_asyncio.fixture
 async def harmony_client(harmony_server):
-    async with httpx.AsyncClient(
-        base_url=harmony_server.url_for(""), timeout=60.0
-    ) as http_client:
+    async with httpx.AsyncClient(base_url=harmony_server.url_for(""), timeout=60.0) as http_client:
         yield http_client
 
 
@@ -838,18 +813,12 @@ def harmony_tokenizer():
     return get_tokenizer(HARMONY_MODEL, trust_remote_code=True)
 
 
-def _harmony_extract_assistant_ids(
-    tokenizer, assistant_msg: dict, user_content: str = "test"
-) -> list[int]:
+def _harmony_extract_assistant_ids(tokenizer, assistant_msg: dict, user_content: str = "test") -> list[int]:
     """Extract assistant token IDs via apply_chat_template diff."""
     prompt = [{"role": "user", "content": user_content}]
     full = prompt + [assistant_msg]
-    text_prompt = tokenizer.apply_chat_template(
-        prompt, add_generation_prompt=True, tokenize=False
-    )
-    text_full = tokenizer.apply_chat_template(
-        full, add_generation_prompt=False, tokenize=False
-    )
+    text_prompt = tokenizer.apply_chat_template(prompt, add_generation_prompt=True, tokenize=False)
+    text_full = tokenizer.apply_chat_template(full, add_generation_prompt=False, tokenize=False)
     prompt_ids = tokenizer.encode(text_prompt)
     full_ids = tokenizer.encode(text_full)
     assistant_ids = list(full_ids[len(prompt_ids) :])

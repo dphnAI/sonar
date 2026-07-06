@@ -37,14 +37,8 @@ class ParserManager:
         logger.info_once('"auto" tool choice has been enabled.')
 
         try:
-            if (
-                tool_parser_name == "pythonic"
-                and model_name
-                and model_name.startswith("meta-llama/Llama-3.2")
-            ):
-                logger.warning(
-                    "Llama3.2 models may struggle to emit valid pythonic tool calls"
-                )
+            if tool_parser_name == "pythonic" and model_name and model_name.startswith("meta-llama/Llama-3.2"):
+                logger.warning("Llama3.2 models may struggle to emit valid pythonic tool calls")
             parser = ToolParserManager.get_tool_parser(tool_parser_name)
         except Exception as e:
             raise TypeError(
@@ -102,9 +96,7 @@ class ParserManager:
             return None
 
         reasoning_parser_cls = cls.get_reasoning_parser(reasoning_parser_name)
-        tool_parser_cls = cls.get_tool_parser(
-            tool_parser_name, enable_auto_tools, model_name
-        )
+        tool_parser_cls = cls.get_tool_parser(tool_parser_name, enable_auto_tools, model_name)
 
         if reasoning_parser_cls is None and tool_parser_cls is None:
             return None

@@ -107,9 +107,7 @@ AITER_MODEL_LIST = [
 )
 @pytest.mark.parametrize("max_tokens", [32])
 @pytest.mark.parametrize("num_logprobs", [5])
-@pytest.mark.parametrize(
-    "use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False]
-)
+@pytest.mark.parametrize("use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False])
 @pytest.mark.parametrize("use_prompt_embeds", [True, False])
 def test_models(
     hf_runner,
@@ -148,31 +146,23 @@ def test_models(
         # starcoder2-3b is a code model, so NL prompts give near-uniform
         # digit logits where HF<->Aphrodite bf16 drift can reorder top-K.
         example_prompts = list(example_prompts)
-        example_prompts[1] = (
-            "def add(a, b):\n    return a + b\n\ndef sub(a, b):\n    return a - "
-        )
+        example_prompts[1] = "def add(a, b):\n    return a + b\n\ndef sub(a, b):\n    return a - "
 
     with hf_runner(
         model,
         revision=model_info.revision,
         trust_remote_code=model_info.trust_remote_code,
     ) as hf_model:
-        hf_outputs = hf_model.generate_greedy_logprobs_limit(
-            example_prompts, max_tokens, num_logprobs
-        )
+        hf_outputs = hf_model.generate_greedy_logprobs_limit(example_prompts, max_tokens, num_logprobs)
 
         prompt_embeds: list[torch.Tensor] | None = [] if use_prompt_embeds else None
 
         for prompt in example_prompts:
-            token_ids = hf_model.tokenizer(prompt, return_tensors="pt").input_ids.to(
-                hf_model.model.device
-            )
+            token_ids = hf_model.tokenizer(prompt, return_tensors="pt").input_ids.to(hf_model.model.device)
             if prompt_embeds is not None:
                 embed = hf_model.model.get_input_embeddings()(token_ids)
 
-                if "gemma" in model.lower() and (
-                    Version(TRANSFORMERS_VERSION) < Version("5.3.0.dev0")
-                ):
+                if "gemma" in model.lower() and (Version(TRANSFORMERS_VERSION) < Version("5.3.0.dev0")):
                     # For Gemma 1/2 models with Transformers 5.4.0+, the prompt
                     # embeddings are normalised in `get_prompt_embeddings`,
                     # like Gemma 3. For older versions, we need to manually normalise.
@@ -201,9 +191,7 @@ def test_models(
         enable_prompt_embeds=use_prompt_embeds,
         compilation_config={"cudagraph_capture_sizes": [1, 2]},
     ) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
-            example_prompts, max_tokens, num_logprobs
-        )
+        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
         if prompt_embeds is not None:
             aphrodite_outputs_from_embeds = aphrodite_model.generate_greedy_logprobs(
                 prompt_embeds, max_tokens, num_logprobs

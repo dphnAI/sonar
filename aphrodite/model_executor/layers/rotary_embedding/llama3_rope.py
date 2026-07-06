@@ -26,9 +26,7 @@ class Llama3RotaryEmbedding(RotaryEmbedding):
         self.low_freq_factor = low_freq_factor
         self.high_freq_factor = high_freq_factor
         self.orig_max_position = orig_max_position
-        super().__init__(
-            head_size, rotary_dim, max_position_embeddings, base, is_neox_style, dtype
-        )
+        super().__init__(head_size, rotary_dim, max_position_embeddings, base, is_neox_style, dtype)
 
     def _compute_inv_freq(self, base: float) -> torch.Tensor:
         inv_freqs = super()._compute_inv_freq(base)

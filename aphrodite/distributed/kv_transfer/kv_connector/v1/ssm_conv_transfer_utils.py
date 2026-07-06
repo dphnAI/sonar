@@ -68,9 +68,7 @@ class MambaConvSplitInfo:
             offset += size
         return offsets
 
-    def remote_conv_offsets(
-        self, local_rank_offset: int, tp_ratio: int
-    ) -> list[tuple[int, int]]:
+    def remote_conv_offsets(self, local_rank_offset: int, tp_ratio: int) -> list[tuple[int, int]]:
         """(byte_offset, byte_size) of this D rank's sub-projection slices
         within one P page.
 
@@ -129,8 +127,7 @@ def derive_mamba_conv_split(
     )
     if mamba_spec.mamba_type not in _supported:
         raise NotImplementedError(
-            f"Conv transfer only supports Mamba1, Mamba2 and GDN models, "
-            f"got mamba_type={mamba_spec.mamba_type!r}."
+            f"Conv transfer only supports Mamba1, Mamba2 and GDN models, got mamba_type={mamba_spec.mamba_type!r}."
         )
 
     conv_shape = mamba_spec.shapes[0]
@@ -205,9 +202,7 @@ def derive_mamba_conv_split(
         key_dim_local = remainder // 2
         local_proj_dims = (key_dim_local, key_dim_local, value_dim_local)
     else:
-        raise NotImplementedError(
-            f"Conv split not supported for mamba_type={mamba_spec.mamba_type!r}"
-        )
+        raise NotImplementedError(f"Conv split not supported for mamba_type={mamba_spec.mamba_type!r}")
 
     return MambaConvSplitInfo(
         conv_rows=conv_rows,
@@ -217,9 +212,7 @@ def derive_mamba_conv_split(
     )
 
 
-def compute_physical_blocks_per_logical(
-    ssm_sizes: tuple[int, ...], block_len: int
-) -> int:
+def compute_physical_blocks_per_logical(ssm_sizes: tuple[int, ...], block_len: int) -> int:
     """Derive _physical_blocks_per_logical_kv_block from remote metadata.
 
     The remote engine's ratio is not sent directly in the handshake, so we

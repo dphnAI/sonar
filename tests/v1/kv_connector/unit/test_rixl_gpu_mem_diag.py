@@ -139,11 +139,7 @@ def test_gpu_memory_rixl_hma(model_name, sw_size):
         f"  PyTorch:  baseline={baseline:.0f}  peak={peak:.0f}  "
         f"final={final:.0f}  "
         f"leaked={final - baseline:.0f} MB"
-        + (
-            f" ({(final - baseline) / total_alloc * 100:.1f}%)"
-            if total_alloc > 0
-            else ""
-        )
+        + (f" ({(final - baseline) / total_alloc * 100:.1f}%)" if total_alloc > 0 else "")
     )
 
     drv_base = snap0["drv_used_mb"]

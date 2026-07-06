@@ -56,9 +56,7 @@ class PostGradRangeChecker(InductorPass):
 
     def __call__(self, graph: fx.Graph):
         compile_range = get_pass_context().compile_range
-        assert compile_range in self.ranges, (
-            f"Compile range {compile_range} not in {self.ranges}"
-        )
+        assert compile_range in self.ranges, f"Compile range {compile_range} not in {self.ranges}"
         self.num_calls += 1
 
     def uuid(self) -> str:
@@ -149,9 +147,7 @@ class PostGradStaticShapeChecker(InductorPass):
                 has_symbolic = any(is_symbolic(d) for d in val.shape)
                 if is_single:
                     assert not has_symbolic, (
-                        f"compile_sizes entry {compile_range}: "
-                        f"node '{node.name}' has symbolic shape "
-                        f"{val.shape}"
+                        f"compile_sizes entry {compile_range}: node '{node.name}' has symbolic shape {val.shape}"
                     )
                 else:
                     # compile_ranges should have at least some
@@ -200,13 +196,9 @@ def test_compile_sizes_produce_static_shapes(use_fresh_inductor_cache):
             run_model(aphrodite_config, model, [1, 16, 64])
 
     # compile_sizes=16 should produce static shapes
-    assert checker.num_static_calls == 1, (
-        f"Expected 1 static compilation, got {checker.num_static_calls}"
-    )
+    assert checker.num_static_calls == 1, f"Expected 1 static compilation, got {checker.num_static_calls}"
     # compile_ranges should produce dynamic shapes
-    assert checker.num_dynamic_calls == 2, (
-        f"Expected 2 dynamic compilations, got {checker.num_dynamic_calls}"
-    )
+    assert checker.num_dynamic_calls == 2, f"Expected 2 dynamic compilations, got {checker.num_dynamic_calls}"
 
 
 def test_inductor_cache_compile_ranges(monkeypatch, use_fresh_inductor_cache):

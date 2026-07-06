@@ -58,10 +58,7 @@ class CPUOffloadingManager(OffloadingManager):
         self.events: list[OffloadingEvent] | None = [] if enable_events else None
         policy_cls = _CACHE_POLICIES.get(cache_policy)
         if policy_cls is None:
-            raise ValueError(
-                f"Unknown cache policy: {cache_policy!r}. "
-                f"Supported: {list(_CACHE_POLICIES)}"
-            )
+            raise ValueError(f"Unknown cache policy: {cache_policy!r}. Supported: {list(_CACHE_POLICIES)}")
         self._policy: CachePolicy = policy_cls(cache_capacity=num_blocks)
         # Track the number of blocks in the cache that are evictable. i.e. ref_cnt 0.
         self._num_evictable_cache_blocks: int = 0
@@ -71,9 +68,7 @@ class CPUOffloadingManager(OffloadingManager):
         self.stores_skipped_in_current_batch: int = 0
 
         # Number of block references. It is ordered so can evict the LRU entry in O(1).
-        self.counts: OrderedDict[OffloadKey, int] | None = (
-            OrderedDict() if store_threshold >= 2 else None
-        )
+        self.counts: OrderedDict[OffloadKey, int] | None = OrderedDict() if store_threshold >= 2 else None
 
     # --- block pool ---
 
@@ -153,9 +148,7 @@ class CPUOffloadingManager(OffloadingManager):
         self._policy.touch(keys)
 
     @override
-    def complete_load(
-        self, keys: Collection[OffloadKey], req_context: ReqContext
-    ) -> None:
+    def complete_load(self, keys: Collection[OffloadKey], req_context: ReqContext) -> None:
         for key in keys:
             block = self._policy.get(key)
             assert block is not None, f"Block {key!r} not found"
@@ -220,9 +213,7 @@ class CPUOffloadingManager(OffloadingManager):
             )
 
         blocks = self._allocate_blocks(keys_to_store)
-        assert len(blocks) == len(keys_to_store), (
-            "Block pool did not allocate the expected number of blocks"
-        )
+        assert len(blocks) == len(keys_to_store), "Block pool did not allocate the expected number of blocks"
 
         for key, block in zip(keys_to_store, blocks):
             self._policy.insert(key, block)
@@ -292,11 +283,7 @@ class CPUOffloadingManager(OffloadingManager):
         stats = OffloadingConnectorStats()
 
         # Compute cache usage.
-        num_used = (
-            self._num_allocated_blocks
-            - len(self._free_list)
-            - self._num_evictable_cache_blocks
-        )
+        num_used = self._num_allocated_blocks - len(self._free_list) - self._num_evictable_cache_blocks
         usage = num_used / self._num_blocks if self._num_blocks > 0 else 0.0
         stats.set_gauge(CPUOffloadingMetrics.CPU_CACHE_USAGE_PERC, usage)
 

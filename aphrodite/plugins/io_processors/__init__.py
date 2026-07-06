@@ -56,9 +56,7 @@ def get_io_processor(
     logger.debug("IOProcessor plugin to be loaded %s", model_plugin)
 
     # Load all installed plugin in the group
-    multimodal_data_processor_plugins = load_plugins_by_group(
-        IO_PROCESSOR_PLUGINS_GROUP
-    )
+    multimodal_data_processor_plugins = load_plugins_by_group(IO_PROCESSOR_PLUGINS_GROUP)
 
     loadable_plugins = {}
     for name, func in multimodal_data_processor_plugins.items():
@@ -72,9 +70,7 @@ def get_io_processor(
 
     num_available_plugins = len(loadable_plugins.keys())
     if num_available_plugins == 0:
-        raise ValueError(
-            f"No IOProcessor plugins installed but one is required ({model_plugin})."
-        )
+        raise ValueError(f"No IOProcessor plugins installed but one is required ({model_plugin}).")
 
     if model_plugin not in loadable_plugins:
         raise ValueError(

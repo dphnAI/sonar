@@ -94,14 +94,10 @@ class PrismaticVisionBackbone(nn.Module):
     ) -> None:
         super().__init__()
         if not use_fused_vision_backbone:
-            raise ValueError(
-                "OpenVLA currently supports only the fused DINOv2 + SigLIP "
-                "vision backbone."
-            )
+            raise ValueError("OpenVLA currently supports only the fused DINOv2 + SigLIP vision backbone.")
         if tuple(image_sizes) != _OPENVLA_IMAGE_SIZES:
             raise ValueError(
-                "OpenVLA currently supports only 224x224 image inputs, "
-                f"got image_sizes={list(image_sizes)}."
+                f"OpenVLA currently supports only 224x224 image inputs, got image_sizes={list(image_sizes)}."
             )
         if tuple(timm_model_ids) != _OPENVLA_TIMM_MODEL_IDS:
             raise ValueError(
@@ -124,10 +120,7 @@ class PrismaticVisionBackbone(nn.Module):
         try:
             import timm
         except ImportError as e:
-            raise ImportError(
-                "Please install timm to use OpenVLA. OpenVLA verification "
-                "used timm==0.9.10."
-            ) from e
+            raise ImportError("Please install timm to use OpenVLA. OpenVLA verification used timm==0.9.10.") from e
 
         self.dinov2_featurizer = timm.create_model(
             timm_model_ids[0],
@@ -163,16 +156,14 @@ class PrismaticVisionBackbone(nn.Module):
         dinov2_pixels = pixel_values[:, :3]
 
         num_dinov2_blocks = len(self.dinov2_featurizer.blocks)
-        dinov2_features = self.dinov2_featurizer.get_intermediate_layers(
-            dinov2_pixels, n={num_dinov2_blocks - 2}
-        )[0]
+        dinov2_features = self.dinov2_featurizer.get_intermediate_layers(dinov2_pixels, n={num_dinov2_blocks - 2})[0]
 
         if self.siglip_featurizer is not None:
             siglip_pixels = pixel_values[:, 3:]
             num_siglip_blocks = len(self.siglip_featurizer.blocks)
-            siglip_features = self.siglip_featurizer.get_intermediate_layers(
-                siglip_pixels, n={num_siglip_blocks - 2}
-            )[0]
+            siglip_features = self.siglip_featurizer.get_intermediate_layers(siglip_pixels, n={num_siglip_blocks - 2})[
+                0
+            ]
             return torch.cat([dinov2_features, siglip_features], dim=-1)
 
         return dinov2_features
@@ -349,9 +340,7 @@ class OpenVLAMultiModalProcessor(BaseMultiModalProcessor[OpenVLAProcessingInfo])
         bos_token_id = tokenizer.bos_token_id
 
         def get_insertion(item_idx: int) -> PromptUpdateDetails[list[int]]:
-            images = mm_items.get_items(
-                "image", (ImageEmbeddingItems, ImageProcessorItems)
-            )
+            images = mm_items.get_items("image", (ImageEmbeddingItems, ImageProcessorItems))
             if isinstance(images, ImageEmbeddingItems):
                 num_image_tokens = images.get_feature_size(item_idx)
             else:
@@ -370,9 +359,7 @@ class OpenVLAMultiModalProcessor(BaseMultiModalProcessor[OpenVLAProcessingInfo])
         return [
             PromptInsertion(
                 modality="image",
-                target=PromptIndexTargets.prefix(
-                    [bos_token_id] if bos_token_id is not None else []
-                ),
+                target=PromptIndexTargets.prefix([bos_token_id] if bos_token_id is not None else []),
                 insertion=get_insertion,
             )
         ]
@@ -424,9 +411,7 @@ class OpenVLAForActionPrediction(nn.Module, SupportsMultiModal, SupportsPP):
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
     def get_language_model(self) -> nn.Module:
         return self.language_model

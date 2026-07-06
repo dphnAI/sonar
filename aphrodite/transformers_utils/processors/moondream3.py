@@ -37,9 +37,7 @@ class Moondream3ProcessorKwargs(ProcessingKwargs, total=False):  # type: ignore[
     }
 
 
-def select_tiling(
-    height: int, width: int, crop_size: int, max_crops: int
-) -> tuple[int, int]:
+def select_tiling(height: int, width: int, crop_size: int, max_crops: int) -> tuple[int, int]:
     """Determine the optimal number of tiles to cover an image."""
     if height <= crop_size or width <= crop_size:
         return (1, 1)
@@ -288,10 +286,7 @@ class Moondream3Processor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: TextInput
-        | PreTokenizedInput
-        | list[TextInput]
-        | list[PreTokenizedInput] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Moondream3ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -319,9 +314,7 @@ class Moondream3Processor(ProcessorMixin):
 
             images_list = images if isinstance(images, list) else [images]
             for image in images_list:
-                pixel_values, tiling = self.preprocess_image(
-                    image, **output_kwargs["images_kwargs"]
-                )
+                pixel_values, tiling = self.preprocess_image(image, **output_kwargs["images_kwargs"])
                 processed_images.append(pixel_values)
                 tilings.append(tiling)
 
@@ -389,8 +382,7 @@ class Moondream3Processor(ProcessorMixin):
             image_array = image
         else:
             raise TypeError(
-                "Moondream3 images must be PIL images, numpy arrays, "
-                f"or torch tensors, got {type(image)!r}."
+                f"Moondream3 images must be PIL images, numpy arrays, or torch tensors, got {type(image)!r}."
             )
 
         if image_array.ndim == 2:
@@ -398,10 +390,7 @@ class Moondream3Processor(ProcessorMixin):
             return Image.fromarray(image_array)
 
         if image_array.ndim != 3:
-            raise ValueError(
-                "Moondream3 image arrays must have 2 or 3 dimensions, "
-                f"got shape {image_array.shape}."
-            )
+            raise ValueError(f"Moondream3 image arrays must have 2 or 3 dimensions, got shape {image_array.shape}.")
 
         channel_dims = (1, 3, 4)
         if image_array.shape[-1] not in channel_dims:
@@ -482,9 +471,7 @@ class Moondream3Processor(ProcessorMixin):
         resized_array = np.asarray(resized)
 
         # Create global crop
-        global_pil = pil_img.resize(
-            (crop_size, crop_size), resample=Image.Resampling.LANCZOS
-        )
+        global_pil = pil_img.resize((crop_size, crop_size), resample=Image.Resampling.LANCZOS)
         crops[0] = np.asarray(global_pil)
 
         # Create local crops
@@ -507,13 +494,7 @@ class Moondream3Processor(ProcessorMixin):
         if return_tensors == "pt":
             # Match HF reference preprocessing exactly: convert uint8 crops to
             # bfloat16 before in-place normalization.
-            pixel_values = (
-                torch.from_numpy(pixel_values)
-                .to(dtype=torch.bfloat16)
-                .div_(255.0)
-                .sub_(0.5)
-                .div_(0.5)
-            )
+            pixel_values = torch.from_numpy(pixel_values).to(dtype=torch.bfloat16).div_(255.0).sub_(0.5).div_(0.5)
         else:
             pixel_values = pixel_values.astype(np.float32) / 255.0
             pixel_values = (pixel_values - 0.5) / 0.5

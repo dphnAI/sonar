@@ -50,13 +50,9 @@ def test_engine_log_metrics_ray(
     @ray.remote(num_gpus=1)
     class EngineTestActor:
         async def run(self):
-            engine_args = AsyncEngineArgs(
-                model=model, dtype=dtype, disable_log_stats=False, enforce_eager=True
-            )
+            engine_args = AsyncEngineArgs(model=model, dtype=dtype, disable_log_stats=False, enforce_eager=True)
 
-            engine = AsyncLLM.from_engine_args(
-                engine_args, stat_loggers=[RayPrometheusStatLogger]
-            )
+            engine = AsyncLLM.from_engine_args(engine_args, stat_loggers=[RayPrometheusStatLogger])
 
             for i, prompt in enumerate(example_prompts):
                 results = engine.generate(
@@ -78,40 +74,27 @@ def test_sanitized_opentelemetry_name():
 
     # Only a-z, A-Z, 0-9, _, test valid characters are preserved
     valid_name = "valid_metric_123_abcDEF"
-    assert (
-        RayPrometheusMetric._get_sanitized_opentelemetry_name(valid_name) == valid_name
-    )
+    assert RayPrometheusMetric._get_sanitized_opentelemetry_name(valid_name) == valid_name
 
     # Test dash, dot, are replaced
     name_with_dash_dot = "metric-name.test"
     expected = "metric_name_test"
-    assert (
-        RayPrometheusMetric._get_sanitized_opentelemetry_name(name_with_dash_dot)
-        == expected
-    )
+    assert RayPrometheusMetric._get_sanitized_opentelemetry_name(name_with_dash_dot) == expected
 
     # Test colon is replaced with underscore
     name_with_colon = "metric:name"
     expected = "metric_name"
-    assert (
-        RayPrometheusMetric._get_sanitized_opentelemetry_name(name_with_colon)
-        == expected
-    )
+    assert RayPrometheusMetric._get_sanitized_opentelemetry_name(name_with_colon) == expected
 
     # Test multiple invalid characters are replaced
     name_with_invalid = "metric:name@with#special%chars"
     expected = "metric_name_with_special_chars"
-    assert (
-        RayPrometheusMetric._get_sanitized_opentelemetry_name(name_with_invalid)
-        == expected
-    )
+    assert RayPrometheusMetric._get_sanitized_opentelemetry_name(name_with_invalid) == expected
 
     # Test mixed valid and invalid characters
     complex_name = "aphrodite:engine_stats/time.latency_ms-99p"
     expected = "aphrodite_engine_stats_time_latency_ms_99p"
-    assert (
-        RayPrometheusMetric._get_sanitized_opentelemetry_name(complex_name) == expected
-    )
+    assert RayPrometheusMetric._get_sanitized_opentelemetry_name(complex_name) == expected
 
     # Test empty string
     assert RayPrometheusMetric._get_sanitized_opentelemetry_name("") == ""

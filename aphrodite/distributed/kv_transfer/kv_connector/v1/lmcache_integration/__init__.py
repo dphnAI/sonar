@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 
-from . import multi_process_adapter, aphrodite_v1_adapter
+from . import aphrodite_v1_adapter, multi_process_adapter
 from .multi_process_adapter import (
     LMCacheMPSchedulerAdapter,
     LMCacheMPWorkerAdapter,

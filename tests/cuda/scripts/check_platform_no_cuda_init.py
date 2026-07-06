@@ -14,7 +14,5 @@ assert not torch.cuda.is_initialized(), "CUDA initialized before import"
 
 from aphrodite.platforms import current_platform  # noqa: E402
 
-assert not torch.cuda.is_initialized(), (
-    f"CUDA was initialized during aphrodite.platforms import on {current_platform}"
-)
+assert not torch.cuda.is_initialized(), f"CUDA was initialized during aphrodite.platforms import on {current_platform}"
 print("OK")

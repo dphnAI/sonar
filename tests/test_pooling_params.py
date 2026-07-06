@@ -4,9 +4,9 @@ from dataclasses import dataclass
 
 import pytest
 
-from tests.models.utils import EmbedModelInfo
 from aphrodite import PoolingParams
 from aphrodite.config import ModelConfig, PoolerConfig
+from tests.models.utils import EmbedModelInfo
 
 EMBEDDING_MODELS = [
     EmbedModelInfo("intfloat/multilingual-e5-small", is_matryoshka=False),
@@ -68,9 +68,7 @@ def test_embed_dimensions(model_info: EmbedModelInfo):
 
     if model_info.is_matryoshka:
         assert model_info.matryoshka_dimensions is not None
-        pooling_params = PoolingParams(
-            task=task, dimensions=model_info.matryoshka_dimensions[0]
-        )
+        pooling_params = PoolingParams(task=task, dimensions=model_info.matryoshka_dimensions[0])
         pooling_params.verify(model_config)
 
 
@@ -120,9 +118,7 @@ def test_classify(task):
 @pytest.mark.parametrize("pooling_type", ["ALL", "STEP"])
 def test_token_embed(pooling_type: str):
     task = "token_embed"
-    model_config = MockModelConfig(
-        pooler_config=PoolerConfig(tok_pooling_type=pooling_type)
-    )
+    model_config = MockModelConfig(pooler_config=PoolerConfig(tok_pooling_type=pooling_type))
 
     pooling_params = PoolingParams(task=task, use_activation=None)
     pooling_params.verify(model_config)
@@ -146,9 +142,7 @@ def test_token_embed(pooling_type: str):
 @pytest.mark.parametrize("pooling_type", ["ALL", "STEP"])
 def test_token_classify(pooling_type: str):
     task = "token_classify"
-    model_config = MockModelConfig(
-        pooler_config=PoolerConfig(tok_pooling_type=pooling_type)
-    )
+    model_config = MockModelConfig(pooler_config=PoolerConfig(tok_pooling_type=pooling_type))
 
     pooling_params = PoolingParams(task=task, use_activation=None)
     pooling_params.verify(model_config)

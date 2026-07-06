@@ -63,9 +63,7 @@ def _backup_buggy(
 ) -> list[int]:
     """Old logic: uses seq_lens_cpu directly (may be inflated)."""
     n = batch.num_reqs
-    return [
-        requests[batch.req_ids[i]].get_token_id(int(seq_lens_cpu[i])) for i in range(n)
-    ]
+    return [requests[batch.req_ids[i]].get_token_id(int(seq_lens_cpu[i])) for i in range(n)]
 
 
 def _backup_fixed(

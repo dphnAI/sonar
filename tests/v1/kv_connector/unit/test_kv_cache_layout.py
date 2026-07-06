@@ -14,14 +14,10 @@ def test_mla_common_backend_rejects_cross_layer_kv_cache():
         MLACommonBackend,
     )
 
-    stride_order = MLACommonBackend.get_kv_cache_stride_order(
-        include_num_layers_dimension=True
-    )
+    stride_order = MLACommonBackend.get_kv_cache_stride_order(include_num_layers_dimension=True)
     assert stride_order == (0, 1, 2, 3)
     assert stride_order[0] == 0  # layers dim first => no cross-layer
-    assert MLACommonBackend.get_kv_cache_stride_order(
-        include_num_layers_dimension=False
-    ) == (0, 1, 2)
+    assert MLACommonBackend.get_kv_cache_stride_order(include_num_layers_dimension=False) == (0, 1, 2)
 
 
 @pytest.mark.parametrize(
@@ -44,9 +40,7 @@ def test_verified_mla_backends_support_cross_layer_kv_cache(backend_path):
     in to the cross-layer layout with a non-identity permutation placing
     num_blocks first in physical layout."""
     module_path, name = backend_path.rsplit(".", 1)
-    backend = getattr(
-        pytest.importorskip(module_path, reason="backend deps unavailable"), name
-    )
+    backend = getattr(pytest.importorskip(module_path, reason="backend deps unavailable"), name)
 
     stride_order = backend.get_kv_cache_stride_order(include_num_layers_dimension=True)
     assert stride_order == (1, 0, 2, 3)
@@ -65,11 +59,7 @@ def test_deepseek_v32_indexer_rejects_cross_layer_kv_cache():
         DeepseekV32IndexerBackend,
     )
 
-    stride_order = DeepseekV32IndexerBackend.get_kv_cache_stride_order(
-        include_num_layers_dimension=True
-    )
+    stride_order = DeepseekV32IndexerBackend.get_kv_cache_stride_order(include_num_layers_dimension=True)
     assert stride_order == (0, 1, 2, 3)
     assert stride_order[0] == 0  # layers dim first => no cross-layer
-    assert DeepseekV32IndexerBackend.get_kv_cache_stride_order(
-        include_num_layers_dimension=False
-    ) == (0, 1, 2)
+    assert DeepseekV32IndexerBackend.get_kv_cache_stride_order(include_num_layers_dimension=False) == (0, 1, 2)

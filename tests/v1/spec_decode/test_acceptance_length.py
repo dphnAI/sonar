@@ -15,8 +15,6 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from tests.conftest import AphroditeRunner
-from tests.utils import large_gpu_mark
 from aphrodite import SamplingParams
 from aphrodite.benchmarks.datasets import get_samples
 from aphrodite.inputs import TokensPrompt
@@ -24,6 +22,8 @@ from aphrodite.platforms import current_platform
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 from aphrodite.v1.attention.selector import AttentionSelectorConfig
 from aphrodite.v1.metrics.reader import Counter, Vector
+from tests.conftest import AphroditeRunner
+from tests.utils import large_gpu_mark
 
 
 @dataclass
@@ -131,11 +131,7 @@ def get_available_attention_backends() -> list[str]:
         attn_selector_config=attn_selector_config,
     )
 
-    return [
-        candidate.backend.name
-        for candidate in valid_backends
-        if candidate.backend not in EXCLUDED_BACKENDS
-    ]
+    return [candidate.backend.name for candidate in valid_backends if candidate.backend not in EXCLUDED_BACKENDS]
 
 
 def get_attention_backend_params() -> list[str]:
@@ -147,9 +143,7 @@ def get_tp_size_params() -> list[pytest.param]:
     return [pytest.param(tp, id=f"tp{tp}") for tp in TP_SIZES if tp <= num_gpus]
 
 
-def get_mt_bench_prompts(
-    tokenizer, num_prompts: int = DEFAULT_NUM_PROMPTS
-) -> list[list[int]]:
+def get_mt_bench_prompts(tokenizer, num_prompts: int = DEFAULT_NUM_PROMPTS) -> list[list[int]]:
     args = SimpleNamespace(
         dataset_name="hf",
         dataset_path="philschmid/mt-bench",
@@ -172,9 +166,7 @@ def get_mt_bench_prompts(
         request_id_prefix="",
     )
     samples = get_samples(args, tokenizer)
-    prompt_ids = [
-        tokenizer.encode(sample.prompt, add_special_tokens=False) for sample in samples
-    ]
+    prompt_ids = [tokenizer.encode(sample.prompt, add_special_tokens=False) for sample in samples]
     return prompt_ids
 
 
@@ -201,9 +193,7 @@ def extract_acceptance_metrics(metrics, num_spec_tokens: int) -> dict:
 
     # Calculate per-position acceptance lengths (contribution to total)
     # Each position contributes: accepted_at_pos / num_drafts
-    acceptance_lengths_per_pos = [
-        count / num_drafts if num_drafts > 0 else 0.0 for count in acceptance_counts
-    ]
+    acceptance_lengths_per_pos = [count / num_drafts if num_drafts > 0 else 0.0 for count in acceptance_counts]
 
     return {
         "acceptance_length": acceptance_length,
@@ -220,10 +210,7 @@ def extract_acceptance_metrics(metrics, num_spec_tokens: int) -> dict:
 )
 @pytest.mark.parametrize(
     "model_config",
-    [
-        pytest.param(config, id=config.id, marks=config.marks)
-        for config in EAGLE3_MODEL_CONFIGS
-    ],
+    [pytest.param(config, id=config.id, marks=config.marks) for config in EAGLE3_MODEL_CONFIGS],
 )
 @pytest.mark.parametrize("num_spec_tokens", [DEFAULT_NUM_SPEC_TOKENS])
 @pytest.mark.parametrize("tp_size", get_tp_size_params())
@@ -260,9 +247,7 @@ def test_eagle3_acceptance_length(
             max_model_len=DEFAULT_MAX_MODEL_LEN,
             # Qwen/Qwen3-30B-A3B-FP8 with TP=4 needs EP
             # https://github.com/vllm-project/vllm/issues/25292
-            enable_expert_parallel=(
-                tp_size == 4 and "Qwen3-VL" in model_config.verifier
-            ),
+            enable_expert_parallel=(tp_size == 4 and "Qwen3-VL" in model_config.verifier),
         ) as aphrodite_runner:
             tokenizer = aphrodite_runner.llm.get_tokenizer()
             prompt_ids = get_mt_bench_prompts(tokenizer, DEFAULT_NUM_PROMPTS)
@@ -283,10 +268,7 @@ def test_eagle3_acceptance_length(
             expected = model_config.expected_acceptance_length
             actual_per_pos = results["acceptance_lengths_per_pos"]
             expected_per_pos = model_config.expected_acceptance_lengths_per_pos
-            if (
-                current_platform.is_rocm()
-                and model_config.rocm_expected_acceptance_lengths_per_pos
-            ):
+            if current_platform.is_rocm() and model_config.rocm_expected_acceptance_lengths_per_pos:
                 expected_per_pos = model_config.rocm_expected_acceptance_lengths_per_pos
 
             rel_error = abs(actual_acceptance_length - expected) / expected
@@ -303,12 +285,8 @@ def test_eagle3_acceptance_length(
 
             if expected_per_pos and len(expected_per_pos) == len(actual_per_pos):
                 # Per-position checks use model-specific rtol if provided
-                rtol = (
-                    model_config.rtol if model_config.rtol is not None else DEFAULT_RTOL
-                )
-                for pos, (actual, exp) in enumerate(
-                    zip(actual_per_pos, expected_per_pos)
-                ):
+                rtol = model_config.rtol if model_config.rtol is not None else DEFAULT_RTOL
+                for pos, (actual, exp) in enumerate(zip(actual_per_pos, expected_per_pos)):
                     if exp > 0:
                         min_expected = exp * (1 - rtol)
                         assert actual >= min_expected, (

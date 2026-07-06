@@ -14,7 +14,7 @@ from mistral_common.protocol.transcription.request import (
 from mistral_common.tokens.tokenizers.audio import Audio, AudioConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import ModelConfig, SpeechToTextConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
 from aphrodite.config.speech_to_text import SpeechToTextParams
 from aphrodite.engine.protocol import StreamingInput
 from aphrodite.envs import APHRODITE_ENGINE_ITERATION_TIMEOUT_S
@@ -71,9 +71,7 @@ class VoxtralRealtimeMultiModalProcessor(VoxtralMultiModalProcessor):
 
         # in realtime there is always only one audio input
         audios = mm_kwargs.get("audio", [])
-        assert len(audios) == 1, (
-            f"Expected only one audio input for realtime, got {mm_kwargs=}"
-        )
+        assert len(audios) == 1, f"Expected only one audio input for realtime, got {mm_kwargs=}"
         tokenizer = self.info.get_tokenizer()
         audio_config = tokenizer.instruct.audio_encoder.audio_config
 
@@ -84,8 +82,7 @@ class VoxtralRealtimeMultiModalProcessor(VoxtralMultiModalProcessor):
             modality="audio",
             item_idx=0,
             start_idx=0,
-            tokens=length
-            * [0],  # only used for length computation, so we can take dummy inputs
+            tokens=length * [0],  # only used for length computation, so we can take dummy inputs
             is_embed=None,
         )
         return prompt_ids, {"audio": [features_info]}
@@ -98,19 +95,13 @@ class TimeEmbedding(torch.nn.Module):
         super().__init__()
         self.dim = dim
         self.theta = theta
-        inv_freq = torch.exp(
-            -math.log(self.theta)
-            * torch.arange(self.dim // 2).float()
-            / (self.dim // 2)
-        )
+        inv_freq = torch.exp(-math.log(self.theta) * torch.arange(self.dim // 2).float() / (self.dim // 2))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
         t = t[..., None]  # (B,) -> (B, 1) or (B, T) -> (B, T, 1)
         inv_freq = self.inv_freq.to(device=t.device, dtype=t.dtype)
-        emb = (
-            t * inv_freq
-        )  # (B, 1) x (D/2,) -> (B, D/2) or (B, T, 1) x (D/2,) -> (B, T, D/2)
+        emb = t * inv_freq  # (B, 1) x (D/2,) -> (B, D/2) or (B, T, 1) x (D/2,) -> (B, T, D/2)
         return torch.cat((emb.cos(), emb.sin()), dim=-1)  # (B, D) or (B, T, D)
 
 
@@ -174,9 +165,7 @@ class VoxtralRealtimeBuffer:
         for frame_size, num_tokens in self._generate_frame_size_and_num_tokens():
             next_tokens = [await self._token_queue.get() for _ in range(num_tokens)]
 
-            audio_arrays: list[np.ndarray] = (
-                [self._leftover] if self._leftover is not None else []
-            )
+            audio_arrays: list[np.ndarray] = [self._leftover] if self._leftover is not None else []
             while sum(len(arr) for arr in audio_arrays) < frame_size:
                 arr = await self._audio_queue.get()
                 if arr is None:
@@ -189,9 +178,7 @@ class VoxtralRealtimeBuffer:
             # The current stride took look_ahead_in_samples audio of the next sample
             # In addition the next sample will take look_back_in_samples audio of
             # the current sample => So let's put both of this into the leftover
-            stride = (
-                frame_size - self._look_ahead_in_samples - self._look_back_in_samples
-            )
+            stride = frame_size - self._look_ahead_in_samples - self._look_back_in_samples
             assert stride > 0, f"{stride=} must be positive"
 
             self._leftover = audio_array[stride:]
@@ -219,13 +206,11 @@ class VoxtralRealtimeGeneration(VoxtralForConditionalGeneration, SupportsRealtim
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
 
-        assert (
-            not aphrodite_config.compilation_config.cudagraph_mode.has_full_cudagraphs()
-        ), "Voxtral realtime doesn't support full cudagraphs yet. Please use PIECEWISE."
-
-        self.time_embedding: TimeEmbedding = TimeEmbedding(
-            dim=self.config.text_config.hidden_size
+        assert not aphrodite_config.compilation_config.cudagraph_mode.has_full_cudagraphs(), (
+            "Voxtral realtime doesn't support full cudagraphs yet. Please use PIECEWISE."
         )
+
+        self.time_embedding: TimeEmbedding = TimeEmbedding(dim=self.config.text_config.hidden_size)
 
         audio_config = self.tokenizer.instruct.audio_encoder.audio_config
         self.n_delay_tokens = audio_config.get_num_delay_tokens()
@@ -243,9 +228,7 @@ class VoxtralRealtimeGeneration(VoxtralForConditionalGeneration, SupportsRealtim
         config = audio_encoder.audio_config
 
         # Get prompt tokens (streaming prefix tokens) without encoding audio
-        prompt_tokens = (
-            tokenizer.instruct.start() + audio_encoder.encode_streaming_tokens()
-        )
+        prompt_tokens = tokenizer.instruct.start() + audio_encoder.encode_streaming_tokens()
 
         # Get left/right padding audio
         left_pad, right_pad = audio_encoder.get_padding_audio()
@@ -335,9 +318,7 @@ class VoxtralRealtimeGeneration(VoxtralForConditionalGeneration, SupportsRealtim
 
         pool_size = self.config.audio_config.block_pool_size
         if is_torch_equal_or_newer("2.11"):
-            inputs_embeds = inputs_embeds.view(
-                inputs_embeds.shape[0] * pool_size, inputs_embeds.shape[1] // pool_size
-            )
+            inputs_embeds = inputs_embeds.view(inputs_embeds.shape[0] * pool_size, inputs_embeds.shape[1] // pool_size)
         else:
             # TODO Use reshape + clone to break the view chain and avoid output
             # aliasing input bug in torch.compile's AOT autograd cache.
@@ -351,9 +332,7 @@ class VoxtralRealtimeGeneration(VoxtralForConditionalGeneration, SupportsRealtim
             ).clone()
 
         whisper_positions = _expand_tensor(positions, pool_size)
-        audio_hidden_states = self.whisper_encoder.whisper_encoder(
-            inputs_embeds, whisper_positions
-        )
+        audio_hidden_states = self.whisper_encoder.whisper_encoder(inputs_embeds, whisper_positions)
 
         num_tokens, audio_hidden_size = audio_hidden_states.shape
         assert num_tokens % self.downsample_factor == 0
@@ -386,36 +365,24 @@ class VoxtralRealtimeGeneration(VoxtralForConditionalGeneration, SupportsRealtim
 
         return hidden_states
 
-    def embed_multimodal(
-        self, **kwargs
-    ) -> list[torch.Tensor] | torch.Tensor | tuple[torch.Tensor, ...] | None:
+    def embed_multimodal(self, **kwargs) -> list[torch.Tensor] | torch.Tensor | tuple[torch.Tensor, ...] | None:
         """Transform audio waveforms -> initial whisper post-conv embeddings"""
         audio_inputs = self._parse_and_validate_audio_arrays(**kwargs)
 
         if audio_inputs is None:
-            logger.warning(
-                "Realtime model received no audio inputs in "
-                "embed_multimodal. Returning empty embeddings."
-            )
+            logger.warning("Realtime model received no audio inputs in embed_multimodal. Returning empty embeddings.")
             return []
 
-        def _truncate_left(
-            sample: torch.Tensor, mult_of: int, pos: int
-        ) -> torch.Tensor:
+        def _truncate_left(sample: torch.Tensor, mult_of: int, pos: int) -> torch.Tensor:
             assert pos in [0, 1], pos
             if (ctx := sample.shape[pos] % mult_of) != 0:
                 sample = sample[ctx:] if pos == 0 else sample[:, ctx:]
-                assert sample.shape[pos] > 0, (
-                    f"Sample is empty after truncation with ctx {ctx}"
-                )
+                assert sample.shape[pos] > 0, f"Sample is empty after truncation with ctx {ctx}"
 
             return sample
 
         mel_features = [
-            self.whisper_encoder.compute_whisper_melspec(audio).to(
-                self.whisper_encoder.dtype
-            )
-            for audio in audio_inputs
+            self.whisper_encoder.compute_whisper_melspec(audio).to(self.whisper_encoder.dtype) for audio in audio_inputs
         ]
 
         # we truncate the left most mel feature
@@ -424,32 +391,22 @@ class VoxtralRealtimeGeneration(VoxtralForConditionalGeneration, SupportsRealtim
 
         seq_lens = [mel.shape[1] for mel in mel_features]
         # [total_num_20ms_frames, hidden_size]
-        audio_embeddings = self.whisper_encoder.whisper_encoder.forward_conv(
-            mel_features
-        )
+        audio_embeddings = self.whisper_encoder.whisper_encoder.forward_conv(mel_features)
         conv_stride = self.whisper_encoder.whisper_encoder.total_stride
-        audio_embeddings_per_sample = audio_embeddings.split(
-            [s // conv_stride for s in seq_lens], dim=0
-        )
+        audio_embeddings_per_sample = audio_embeddings.split([s // conv_stride for s in seq_lens], dim=0)
 
         # audio_embeddings per sample need to be divisible by 4
         pool_size = self.config.audio_config.block_pool_size
 
-        audio_embeddings_per_sample = [
-            _truncate_left(sample, pool_size, 0)
-            for sample in audio_embeddings_per_sample
-        ]
+        audio_embeddings_per_sample = [_truncate_left(sample, pool_size, 0) for sample in audio_embeddings_per_sample]
 
         audio_embeddings_per_sample = [
-            e.view(e.shape[0] // pool_size, e.shape[1] * pool_size)
-            for e in audio_embeddings_per_sample
+            e.view(e.shape[0] // pool_size, e.shape[1] * pool_size) for e in audio_embeddings_per_sample
         ]
         return audio_embeddings_per_sample
 
     @classmethod
-    def get_speech_to_text_config(
-        cls, model_config: ModelConfig, task_type: str
-    ) -> SpeechToTextConfig:
+    def get_speech_to_text_config(cls, model_config: ModelConfig, task_type: str) -> SpeechToTextConfig:
         tokenizer = cached_tokenizer_from_config(model_config)
         audio_config = tokenizer.instruct.audio_encoder.audio_config
         sample_rate = audio_config.sampling_rate
@@ -484,7 +441,5 @@ class VoxtralRealtimeGeneration(VoxtralForConditionalGeneration, SupportsRealtim
 
         return TokensPrompt(
             prompt_token_ids=tokenized.tokens,
-            multi_modal_data={
-                "audio": (tokenized.audios[0].audio_array, stt_config.sample_rate)
-            },
+            multi_modal_data={"audio": (tokenized.audios[0].audio_array, stt_config.sample_rate)},
         )

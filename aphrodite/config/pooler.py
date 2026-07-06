@@ -112,13 +112,9 @@ class PoolerConfig:
 
         if pooling_type := self.pooling_type:
             if self.seq_pooling_type is not None:
-                raise ValueError(
-                    "Cannot set both `pooling_type` and `seq_pooling_type`"
-                )
+                raise ValueError("Cannot set both `pooling_type` and `seq_pooling_type`")
             if self.tok_pooling_type is not None:
-                raise ValueError(
-                    "Cannot set both `pooling_type` and `tok_pooling_type`"
-                )
+                raise ValueError("Cannot set both `pooling_type` and `tok_pooling_type`")
 
             if pooling_type in SEQ_POOLING_TYPES:
                 logger.debug(

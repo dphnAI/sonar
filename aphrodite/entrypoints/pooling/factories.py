@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 
-from aphrodite.config import ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig
 from aphrodite.entrypoints.chat_utils import ChatTemplateConfig
 from aphrodite.logger import init_logger
 from aphrodite.plugins.io_processors import has_io_processor
@@ -202,9 +202,7 @@ def init_pooling_state(
             supported_tasks=supported_tasks,
             request_logger=request_logger,
             chat_template_config=chat_template_config,
-            enable_flash_late_interaction=getattr(
-                args, "enable_flash_late_interaction", True
-            ),
+            enable_flash_late_interaction=getattr(args, "enable_flash_late_interaction", True),
         )
         if enable_scoring_api(supported_tasks, model_config)
         else None

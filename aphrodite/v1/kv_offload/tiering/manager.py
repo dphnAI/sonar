@@ -167,9 +167,7 @@ class TieringOffloadingManager(OffloadingManager):
         # as one batched submit_load() per (tier, request) in on_schedule_end().
         # Outer key: tier. Inner key: req_context.req_id — the same ReqContext
         # object is reused for all block lookups of a given request per engine step.
-        self._pending_load_submissions: dict[
-            SecondaryTierManager, dict[str, PendingPromotion]
-        ] = {}
+        self._pending_load_submissions: dict[SecondaryTierManager, dict[str, PendingPromotion]] = {}
 
         # Gate for once-per-step execution of _maybe_process_finished_jobs().
         # Reset at the end of each step in on_schedule_end().
@@ -215,8 +213,7 @@ class TieringOffloadingManager(OffloadingManager):
                 job_id = completed_job.job_id
                 job_metadata = self._transfer_jobs.pop(job_id, None)
                 assert job_metadata is not None, (
-                    f"Finished job_id {job_id} from tier #{i}"
-                    f" ({tier.tier_type}) not in _transfer_jobs"
+                    f"Finished job_id {job_id} from tier #{i} ({tier.tier_type}) not in _transfer_jobs"
                 )
 
                 if job_metadata.is_promotion:
@@ -230,9 +227,7 @@ class TieringOffloadingManager(OffloadingManager):
                 else:
                     # primary→secondary transfer completed.
                     # Decrement ref_cnt on primary blocks.
-                    self.primary_tier.complete_read(
-                        job_metadata.keys, job_metadata.req_context
-                    )
+                    self.primary_tier.complete_read(job_metadata.keys, job_metadata.req_context)
 
     @override
     def lookup(self, key: OffloadKey, req_context: ReqContext) -> LookupResult:
@@ -320,9 +315,7 @@ class TieringOffloadingManager(OffloadingManager):
         tier_pending = self._pending_load_submissions.setdefault(tier, {})
         ctx_id = req_context.req_id
         if ctx_id not in tier_pending:
-            tier_pending[ctx_id] = PendingPromotion(
-                keys=[], block_ids=[], req_context=req_context
-            )
+            tier_pending[ctx_id] = PendingPromotion(keys=[], block_ids=[], req_context=req_context)
         entry = tier_pending[ctx_id]
         entry.keys.extend(primary_write_result.keys_to_store)
         entry.block_ids.extend(store_spec.block_ids)
@@ -353,9 +346,7 @@ class TieringOffloadingManager(OffloadingManager):
         self._pending_load_submissions.clear()
 
     @override
-    def prepare_load(
-        self, keys: Collection[OffloadKey], req_context: ReqContext
-    ) -> LoadStoreSpec:
+    def prepare_load(self, keys: Collection[OffloadKey], req_context: ReqContext) -> LoadStoreSpec:
         """
         Prepare blocks to be loaded from primary tier to GPU.
 
@@ -405,9 +396,7 @@ class TieringOffloadingManager(OffloadingManager):
         self.primary_tier.complete_load(keys, req_context)
 
     @override
-    def prepare_store(
-        self, keys: Collection[OffloadKey], req_context: ReqContext
-    ) -> PrepareStoreOutput | None:
+    def prepare_store(self, keys: Collection[OffloadKey], req_context: ReqContext) -> PrepareStoreOutput | None:
         """
         Prepare blocks to be stored from GPU to primary tier.
 
@@ -448,9 +437,7 @@ class TieringOffloadingManager(OffloadingManager):
         request_level_tiers = self._req_state[req_context.req_id].request_level_tiers
         if request_level_tiers:
             keys_to_store_set = set(primary_result.keys_to_store)
-            keys_already_in_primary = tuple(
-                k for k in keys if k not in keys_to_store_set
-            )
+            keys_already_in_primary = tuple(k for k in keys if k not in keys_to_store_set)
             if keys_already_in_primary:
                 self._cascade_existing_blocks_to_request_level_tiers(
                     keys_already_in_primary, req_context, request_level_tiers
@@ -469,18 +456,12 @@ class TieringOffloadingManager(OffloadingManager):
         blocks that are already present in the primary tier.
         """
         # Filter out keys that are not ready in primary (e.g. in-flight)
-        ready_keys = tuple(
-            k
-            for k in keys
-            if self.primary_tier.lookup(k, req_context) is LookupResult.HIT
-        )
+        ready_keys = tuple(k for k in keys if self.primary_tier.lookup(k, req_context) is LookupResult.HIT)
         if not ready_keys:
             return
 
         for tier in request_level_tiers:
-            primary_blocks_spec = self.primary_tier.prepare_read(
-                ready_keys, req_context
-            )
+            primary_blocks_spec = self.primary_tier.prepare_read(ready_keys, req_context)
 
             job_id = self._next_job_id()
             assert isinstance(primary_blocks_spec, CPULoadStoreSpec)
@@ -572,11 +553,7 @@ class TieringOffloadingManager(OffloadingManager):
                 state.request_level_tiers.add(tier)
         self._req_state[req_context.req_id] = state
 
-        policy = (
-            OffloadPolicy.REQUEST_LEVEL
-            if state.request_level_tiers
-            else OffloadPolicy.BLOCK_LEVEL
-        )
+        policy = OffloadPolicy.REQUEST_LEVEL if state.request_level_tiers else OffloadPolicy.BLOCK_LEVEL
         return RequestOffloadingContext(policy=policy)
 
     @override
@@ -622,9 +599,7 @@ class TieringOffloadingManager(OffloadingManager):
         # In-flight primary<->secondary transfers (pending promotions are
         # translated to transfer jobs in on_schedule_end), plus any work the
         # secondary tiers themselves still have outstanding.
-        return bool(self._transfer_jobs) or any(
-            tier.has_pending_work() for tier in self.secondary_tiers
-        )
+        return bool(self._transfer_jobs) or any(tier.has_pending_work() for tier in self.secondary_tiers)
 
     @override
     def take_events(self) -> Iterable[OffloadingEvent]:

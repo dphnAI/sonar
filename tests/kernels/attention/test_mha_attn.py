@@ -127,11 +127,7 @@ NUM_HEADS = [1, 16]
 NUM_KV_HEADS = [1]
 HEAD_SIZES = [64, 80]
 # flshattF and tritonflashattF supported: {torch.float16, torch.bfloat16}
-DTYPES = (
-    [torch.half, torch.bfloat16, torch.float]
-    if not current_platform.is_rocm()
-    else [torch.half, torch.bfloat16]
-)
+DTYPES = [torch.half, torch.bfloat16, torch.float] if not current_platform.is_rocm() else [torch.half, torch.bfloat16]
 CUDA_DEVICES = ["cuda"]
 
 
@@ -160,9 +156,7 @@ def test_mha_attn_forward(
     k = torch.randn(batch_size, seq_len, num_kv_heads * head_size)
     v = torch.randn(batch_size, seq_len, num_kv_heads * head_size)
     scale = 1.0 / head_size**0.5
-    attn = MMEncoderAttention(
-        num_heads, head_size, scale=scale, num_kv_heads=num_kv_heads
-    )
+    attn = MMEncoderAttention(num_heads, head_size, scale=scale, num_kv_heads=num_kv_heads)
     output = attn(q, k, v)
 
     assert num_heads % num_kv_heads == 0
@@ -180,11 +174,7 @@ def test_mha_attn_forward(
         v,
         scale=scale,
     ).reshape(batch_size, seq_len, num_heads * head_size)
-    tol_kwargs = (
-        dict(rtol=1e-3, atol=1e-3)
-        if attn.attn_backend == AttentionBackendEnum.TRITON_ATTN
-        else {}
-    )
+    tol_kwargs = dict(rtol=1e-3, atol=1e-3) if attn.attn_backend == AttentionBackendEnum.TRITON_ATTN else {}
     torch.testing.assert_close(output, ref_output, **tol_kwargs)
 
 
@@ -210,16 +200,10 @@ def test_mha_attn_varlen_forward(
     q = torch.randn(1, sum(var_seq_len), num_heads, head_size)
     k = torch.randn(1, sum(var_seq_len), num_kv_heads, head_size)
     v = torch.randn(1, sum(var_seq_len), num_kv_heads, head_size)
-    cu_seqlens = torch.tensor(
-        [0] + list(itertools.accumulate(var_seq_len)), dtype=torch.int32
-    )
+    cu_seqlens = torch.tensor([0] + list(itertools.accumulate(var_seq_len)), dtype=torch.int32)
     scale = 1.0 / head_size**0.5
-    attn = MMEncoderAttention(
-        num_heads, head_size, scale=scale, num_kv_heads=num_kv_heads
-    )
-    output = attn(
-        q, k, v, cu_seqlens=cu_seqlens, max_seqlen=torch.tensor(max(var_seq_len))
-    )
+    attn = MMEncoderAttention(num_heads, head_size, scale=scale, num_kv_heads=num_kv_heads)
+    output = attn(q, k, v, cu_seqlens=cu_seqlens, max_seqlen=torch.tensor(max(var_seq_len)))
 
     assert num_heads % num_kv_heads == 0
     num_queries_per_kv = num_heads // num_kv_heads
@@ -278,9 +262,7 @@ def test_mha_attn_varlen_forward_flashinfer(
         "MinimalModelConfig",
         (),
         {
-            "multimodal_config": MultiModalConfig(
-                mm_encoder_attn_backend=AttentionBackendEnum.FLASHINFER
-            ),
+            "multimodal_config": MultiModalConfig(mm_encoder_attn_backend=AttentionBackendEnum.FLASHINFER),
         },
     )()
     aphrodite_config.model_config = minimal_model_config
@@ -291,9 +273,7 @@ def test_mha_attn_varlen_forward_flashinfer(
         qkv = torch.randn(1, total_len, 3, num_heads, head_size)
         q, k, v = qkv.unbind(dim=2)
 
-        cu_seqlens_np = np.array(
-            [0] + list(itertools.accumulate(var_seq_len)), dtype=np.int32
-        )
+        cu_seqlens_np = np.array([0] + list(itertools.accumulate(var_seq_len)), dtype=np.int32)
         hidden_size = num_heads * head_size
         tp_size = 1
 
@@ -303,9 +283,7 @@ def test_mha_attn_varlen_forward_flashinfer(
             device,
         )
 
-        max_seqlen_val = MMEncoderAttention.compute_max_seqlen(
-            AttentionBackendEnum.FLASHINFER, cu_seqlens_np
-        )
+        max_seqlen_val = MMEncoderAttention.compute_max_seqlen(AttentionBackendEnum.FLASHINFER, cu_seqlens_np)
         max_seqlen = torch.tensor(max_seqlen_val, device=device, dtype=torch.int32)
 
         cu_seqlens = MMEncoderAttention.maybe_recompute_cu_seqlens(

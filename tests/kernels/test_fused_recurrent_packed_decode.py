@@ -13,9 +13,7 @@ from aphrodite.model_executor.layers.fla.ops import (
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="Need CUDA device")
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.float32])
 @pytest.mark.parametrize("strided_mixed_qkv", [False, True])
-def test_fused_recurrent_packed_decode_matches_reference(
-    dtype: torch.dtype, strided_mixed_qkv: bool
-):
+def test_fused_recurrent_packed_decode_matches_reference(dtype: torch.dtype, strided_mixed_qkv: bool):
     torch.manual_seed(0)
 
     # Small but representative GDN config (Qwen3Next defaults are K=128, V=128).
@@ -58,9 +56,7 @@ def test_fused_recurrent_packed_decode_matches_reference(
     v = v.view(B, HV, V).unsqueeze(1).contiguous()
 
     x = a.float() + dt_bias.float()
-    softplus_x = torch.where(
-        x <= 20.0, torch.log1p(torch.exp(torch.clamp(x, max=20.0))), x
-    )
+    softplus_x = torch.where(x <= 20.0, torch.log1p(torch.exp(torch.clamp(x, max=20.0))), x)
     g = (-torch.exp(A_log.float()) * softplus_x).unsqueeze(1)
     beta = torch.sigmoid(b.float()).to(dtype).unsqueeze(1)
 

@@ -14,9 +14,7 @@ def test_cuda_empty_vs_unset_configs(monkeypatch: pytest.MonkeyPatch):
     """
 
     def create_config():
-        engine_args = EngineArgs(
-            model="deepseek-ai/DeepSeek-V2-Lite", trust_remote_code=True
-        )
+        engine_args = EngineArgs(model="deepseek-ai/DeepSeek-V2-Lite", trust_remote_code=True)
         return engine_args.create_engine_config()
 
     # Create config with CUDA_VISIBLE_DEVICES set normally
@@ -35,8 +33,7 @@ def test_cuda_empty_vs_unset_configs(monkeypatch: pytest.MonkeyPatch):
     empty_config_dict.pop("instance_id", None)
 
     assert deep_compare(normal_config_dict, empty_config_dict), (
-        'Configs with normal CUDA_VISIBLE_DEVICES and CUDA_VISIBLE_DEVICES=""'
-        " should be equivalent"
+        'Configs with normal CUDA_VISIBLE_DEVICES and CUDA_VISIBLE_DEVICES="" should be equivalent'
     )
 
 
@@ -44,9 +41,7 @@ def test_ray_runtime_env(monkeypatch: pytest.MonkeyPatch):
     # In testing, this method needs to be nested inside as ray does not
     # see the test module.
     def create_config():
-        engine_args = EngineArgs(
-            model="deepseek-ai/DeepSeek-V2-Lite", trust_remote_code=True
-        )
+        engine_args = EngineArgs(model="deepseek-ai/DeepSeek-V2-Lite", trust_remote_code=True)
         return engine_args.create_engine_config()
 
     config = create_config()
@@ -73,9 +68,7 @@ def test_ray_runtime_env(monkeypatch: pytest.MonkeyPatch):
     config = ray.get(config_ref)
     parallel_config = config.parallel_config
     assert parallel_config.ray_runtime_env is not None
-    assert (
-        parallel_config.ray_runtime_env.env_vars().get("TEST_ENV_VAR") == "test_value"
-    )
+    assert parallel_config.ray_runtime_env.env_vars().get("TEST_ENV_VAR") == "test_value"
 
     ray.shutdown()
 

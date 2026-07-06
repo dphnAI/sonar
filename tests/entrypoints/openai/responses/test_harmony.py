@@ -95,9 +95,7 @@ def call_function(name, args):
 
 @pytest.fixture(scope="module")
 def server():
-    assert importlib.util.find_spec("gpt_oss") is not None, (
-        "Harmony tests require gpt_oss package to be installed"
-    )
+    assert importlib.util.find_spec("gpt_oss") is not None, "Harmony tests require gpt_oss package to be installed"
     args = [
         "--enforce-eager",
         "--tool-server",
@@ -109,9 +107,7 @@ def server():
         **BASE_TEST_ENV,
         "APHRODITE_ENABLE_RESPONSES_API_STORE": "1",
         "PYTHON_EXECUTION_BACKEND": "dangerously_use_uv",
-        "APHRODITE_GPT_OSS_SYSTEM_TOOL_MCP_LABELS": (
-            "code_interpreter,container,web_search_preview"
-        ),
+        "APHRODITE_GPT_OSS_SYSTEM_TOOL_MCP_LABELS": ("code_interpreter,container,web_search_preview"),
         "APHRODITE_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS": "1",
     }
     with RemoteOpenAIServer(MODEL_NAME, args, env_dict=env_dict) as remote_server:
@@ -281,9 +277,7 @@ async def test_store(client: OpenAI, model_name: str):
         except NotFoundError:
             is_not_found = True
 
-        assert is_not_found == (not store), (
-            f"store={store}: expected not_found={not store}, got {is_not_found}"
-        )
+        assert is_not_found == (not store), f"store={store}: expected not_found={not store}, got {is_not_found}"
 
 
 @pytest.mark.asyncio
@@ -326,9 +320,7 @@ async def test_background_cancel(client: OpenAI, model_name: str):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
 async def test_stateful_multi_turn(client: OpenAI, model_name: str):
-    response1 = await client.responses.create(
-        model=model_name, input="What is 123 * 456?"
-    )
+    response1 = await client.responses.create(model=model_name, input="What is 123 * 456?")
     assert response1.status == "completed"
 
     response2 = await client.responses.create(
@@ -348,9 +340,7 @@ async def test_stateful_multi_turn(client: OpenAI, model_name: str):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-async def test_streaming_types(
-    pairs_of_event_types: dict[str, str], client: OpenAI, model_name: str
-):
+async def test_streaming_types(pairs_of_event_types: dict[str, str], client: OpenAI, model_name: str):
     stream = await client.responses.create(
         model=model_name,
         input="tell me a story about a cat in 20 words",
@@ -529,9 +519,7 @@ async def test_code_interpreter(client: OpenAI, model_name: str):
     for item in response.output:
         if item.type == "message":
             output_string = item.content[0].text
-            assert "5846" in output_string, (
-                f"Expected '5846' in output, got: {output_string}"
-            )
+            assert "5846" in output_string, f"Expected '5846' in output, got: {output_string}"
 
 
 @pytest.mark.asyncio
@@ -544,9 +532,7 @@ async def test_reasoning_item(client: OpenAI, model_name: str):
             {
                 "type": "reasoning",
                 "id": "lol",
-                "content": [
-                    {"type": "reasoning_text", "text": "We need to respond: greeting."}
-                ],
+                "content": [{"type": "reasoning_text", "text": "We need to respond: greeting."}],
                 "summary": [],
             },
         ],
@@ -572,8 +558,7 @@ async def test_function_calling(client: OpenAI, model_name: str):
     )
     assert response.status == "completed"
     assert has_output_type(response, "function_call"), (
-        f"Expected function_call in output, got: "
-        f"{[getattr(o, 'type', None) for o in response.output]}"
+        f"Expected function_call in output, got: {[getattr(o, 'type', None) for o in response.output]}"
     )
 
     tool_call = next(o for o in response.output if o.type == "function_call")
@@ -639,8 +624,7 @@ async def test_function_calling_multi_turn(client: OpenAI, model_name: str):
     )
     assert response.status == "completed"
     assert has_output_type(response, "function_call"), (
-        f"Turn 1: expected function_call, got: "
-        f"{[getattr(o, 'type', None) for o in response.output]}"
+        f"Turn 1: expected function_call, got: {[getattr(o, 'type', None) for o in response.output]}"
     )
 
     tool_call = next(o for o in response.output if o.type == "function_call")
@@ -719,9 +703,7 @@ async def test_system_message_with_tools(client: OpenAI, model_name: str):
     for with_tools in (True, False):
         sys_msg = get_system_message(with_custom_tools=with_tools)
         valid_channels = sys_msg.content[0].channel_config.valid_channels
-        assert "commentary" in valid_channels, (
-            f"commentary channel missing when with_custom_tools={with_tools}"
-        )
+        assert "commentary" in valid_channels, f"commentary channel missing when with_custom_tools={with_tools}"
 
 
 @pytest.mark.asyncio
@@ -729,9 +711,7 @@ async def test_system_message_with_tools(client: OpenAI, model_name: str):
 async def test_function_calling_full_history(client: OpenAI, model_name: str):
     tools = [GET_WEATHER_SCHEMA]
 
-    input_messages = [
-        {"role": "user", "content": "What's the weather like in Paris today?"}
-    ]
+    input_messages = [{"role": "user", "content": "What's the weather like in Paris today?"}]
 
     response = await retry_for_tool_call(
         client,
@@ -745,8 +725,7 @@ async def test_function_calling_full_history(client: OpenAI, model_name: str):
 
     tool_call = next((o for o in response.output if o.type == "function_call"), None)
     assert tool_call is not None, (
-        f"Expected function_call in output, got: "
-        f"{[getattr(o, 'type', None) for o in response.output]}"
+        f"Expected function_call in output, got: {[getattr(o, 'type', None) for o in response.output]}"
     )
 
     result = call_function(tool_call.name, json.loads(tool_call.arguments))
@@ -853,9 +832,7 @@ async def test_function_calling_with_stream(client: OpenAI, model_name: str):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-async def test_function_calling_no_code_interpreter_events(
-    client: OpenAI, model_name: str
-):
+async def test_function_calling_no_code_interpreter_events(client: OpenAI, model_name: str):
     """Verify that function calls don't trigger code_interpreter events.
 
     Uses retry_streaming_for to handle non-determinism: the model might not
@@ -887,8 +864,7 @@ async def test_function_calling_no_code_interpreter_events(
     function_call_found = _has_function_call(events)
 
     assert function_call_found, (
-        f"Expected to see a function_call after retries. "
-        f"Event types: {sorted(event_types_seen)}"
+        f"Expected to see a function_call after retries. Event types: {sorted(event_types_seen)}"
     )
 
     # The actual invariant under test
@@ -918,9 +894,7 @@ async def test_code_interpreter_streaming(
 ):
     tools = [{"type": "code_interpreter", "container": {"type": "auto"}}]
     input_text = (
-        "Calculate 123 * 456 using python. "
-        "The python interpreter is not stateful and you must "
-        "print to see the output."
+        "Calculate 123 * 456 using python. The python interpreter is not stateful and you must print to see the output."
     )
 
     def _has_code_interpreter(evts: list) -> bool:
@@ -933,9 +907,7 @@ async def test_code_interpreter_streaming(
         input=input_text,
         tools=tools,
         temperature=0.0,
-        instructions=(
-            "You must use the Python tool to execute code. Never simulate execution."
-        ),
+        instructions=("You must use the Python tool to execute code. Never simulate execution."),
     )
 
     event_types = [e.type for e in events]
@@ -978,9 +950,7 @@ async def test_code_interpreter_streaming(
 async def test_mcp_tool_multi_turn(client: OpenAI, model_name: str, server):
     """MCP tools work across multiple turns via previous_response_id."""
     tools = [{"type": "mcp", "server_label": "code_interpreter"}]
-    instructions = (
-        "You must use the Python tool to execute code. Never simulate execution."
-    )
+    instructions = "You must use the Python tool to execute code. Never simulate execution."
 
     # First turn
     response1 = await retry_for_tool_call(
@@ -996,25 +966,17 @@ async def test_mcp_tool_multi_turn(client: OpenAI, model_name: str, server):
     assert response1.status == "completed"
 
     # Verify MCP call in output_messages
-    tool_call_found = any(
-        (msg.get("recipient") or "").startswith("python")
-        for msg in response1.output_messages
-    )
-    parsed_output_messages = [
-        Message.from_dict(msg) for msg in response1.output_messages
-    ]
+    tool_call_found = any((msg.get("recipient") or "").startswith("python") for msg in response1.output_messages)
+    parsed_output_messages = [Message.from_dict(msg) for msg in response1.output_messages]
     tool_response_found = any(
-        (msg.author.role == "tool" and (msg.author.name or "").startswith("python"))
-        for msg in parsed_output_messages
+        (msg.author.role == "tool" and (msg.author.name or "").startswith("python")) for msg in parsed_output_messages
     )
     assert tool_call_found, "MCP tool call not found in output_messages"
     assert tool_response_found, "MCP tool response not found in output_messages"
 
     # No developer messages expected for elevated tools
     developer_msgs = [
-        msg
-        for msg in (Message.from_dict(raw) for raw in response1.input_messages)
-        if msg.author.role == "developer"
+        msg for msg in (Message.from_dict(raw) for raw in response1.input_messages) if msg.author.role == "developer"
     ]
     assert len(developer_msgs) == 0, "No developer message expected for elevated tools"
 
@@ -1048,9 +1010,7 @@ async def test_output_messages_enabled(client: OpenAI, model_name: str, server):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-async def test_function_call_with_previous_input_messages(
-    client: OpenAI, model_name: str
-):
+async def test_function_call_with_previous_input_messages(client: OpenAI, model_name: str):
     """Multi-turn function calling using previous_input_messages."""
     tools = [
         {
@@ -1085,8 +1045,7 @@ async def test_function_call_with_previous_input_messages(
         None,
     )
     assert function_call is not None, (
-        f"Expected function_call, got: "
-        f"{[getattr(o, 'type', None) for o in response.output]}"
+        f"Expected function_call, got: {[getattr(o, 'type', None) for o in response.output]}"
     )
     assert function_call.name == "get_horoscope"
 
@@ -1124,9 +1083,7 @@ async def test_function_call_with_previous_input_messages(
     num_system = 0
     num_developer = 0
     num_tool = 0
-    for message in (
-        Message.from_dict(msg_dict) for msg_dict in response_2.input_messages
-    ):
+    for message in (Message.from_dict(msg_dict) for msg_dict in response_2.input_messages):
         role = message.author.role
         if role == "system":
             num_system += 1
@@ -1152,19 +1109,14 @@ async def test_chat_truncation_content_not_null(client: OpenAI, model_name: str)
         messages=[
             {
                 "role": "user",
-                "content": (
-                    "What is the role of AI in medicine? "
-                    "The response must exceed 350 words."
-                ),
+                "content": ("What is the role of AI in medicine? The response must exceed 350 words."),
             }
         ],
         temperature=0.0,
         max_tokens=350,
     )
     choice = response.choices[0]
-    assert choice.finish_reason == "length", (
-        f"Expected finish_reason='length', got {choice.finish_reason}"
-    )
+    assert choice.finish_reason == "length", f"Expected finish_reason='length', got {choice.finish_reason}"
     assert choice.message.content is not None, "Content should not be None"
     assert len(choice.message.content) > 0, "Content should not be empty"
 
@@ -1196,13 +1148,9 @@ async def test_system_prompt_override_no_duplication(client: OpenAI, model_name:
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
 @pytest.mark.xfail(
     strict=False,
-    reason=(
-        "Pirate language detection depends on model weights and is non-deterministic"
-    ),
+    reason=("Pirate language detection depends on model weights and is non-deterministic"),
 )
-async def test_system_prompt_override_follows_personality(
-    client: OpenAI, model_name: str
-):
+async def test_system_prompt_override_follows_personality(client: OpenAI, model_name: str):
     """Soft check: model should adopt the personality from system prompt."""
     response = await client.responses.create(
         model=model_name,
@@ -1221,9 +1169,7 @@ async def test_system_prompt_override_follows_personality(
     assert response.status == "completed"
     output_text = response.output_text.lower()
     pirate_indicators = ["arrr", "matey", "ahoy", "ye", "sea", "aye", "sail"]
-    assert any(kw in output_text for kw in pirate_indicators), (
-        f"Expected pirate language, got: {response.output_text}"
-    )
+    assert any(kw in output_text for kw in pirate_indicators), f"Expected pirate language, got: {response.output_text}"
 
 
 @pytest.mark.asyncio
@@ -1235,9 +1181,7 @@ async def test_system_prompt_structured_content(client: OpenAI, model_name: str)
         input=[
             {
                 "role": "system",
-                "content": [
-                    {"type": "input_text", "text": "You are a helpful assistant."}
-                ],
+                "content": [{"type": "input_text", "text": "You are a helpful assistant."}],
             },
             {"role": "user", "content": "What is 2 + 2?"},
         ],

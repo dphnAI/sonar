@@ -83,10 +83,7 @@ try:
                 # if the driver worker also execute methods,
                 # exceptions in the rest worker may cause deadlock in rpc
                 # see https://github.com/vllm-project/vllm/issues/3455
-                msg = (
-                    f"Error executing method {method!r}. "
-                    "This might cause deadlock in distributed execution."
-                )
+                msg = f"Error executing method {method!r}. This might cause deadlock in distributed execution."
                 logger.exception(msg)
                 raise e
 
@@ -101,9 +98,7 @@ try:
                     "current platform %s does not support ray.",
                     aphrodite.platforms.current_platform.device_name,
                 )
-            physical_gpu_ids = ray.get_runtime_context().get_accelerator_ids()[
-                device_key
-            ]
+            physical_gpu_ids = ray.get_runtime_context().get_accelerator_ids()[device_key]
             return node_id, physical_gpu_ids
 
         def setup_device_if_necessary(self):
@@ -135,21 +130,14 @@ try:
             self.setup_device_if_necessary()
             assert self.worker is not None, "Worker is not initialized"
             if len(execute_model_input) == 3:
-                scheduler_output, grammar_output, intermediate_tensors = (
-                    execute_model_input
-                )
+                scheduler_output, grammar_output, intermediate_tensors = execute_model_input
             else:
                 scheduler_output, grammar_output = execute_model_input
                 intermediate_tensors = None
             assert self.worker.model_runner is not None
-            output = self.worker.model_runner.execute_model(
-                scheduler_output, intermediate_tensors
-            )
+            output = self.worker.model_runner.execute_model(scheduler_output, intermediate_tensors)
             if self._is_intermediate_tensors(output):
-                if (
-                    self.worker.model_runner.supports_mm_inputs
-                    and get_pp_group().is_first_rank
-                ):
+                if self.worker.model_runner.supports_mm_inputs and get_pp_group().is_first_rank:
                     # Strip mm_features before Ray forwards it to the next PP Stage.
                     # PP Stage>0 only needs the intermediate tensors,
                     # not preprocessed multimodal data.
@@ -232,9 +220,7 @@ def detach_zero_copy_from_model_runner_output(output: "ModelRunnerOutput") -> No
     if token_ids_c is token_ids and logprobs_c is logprobs and ranks_c is ranks:
         return
 
-    output.logprobs = type(output.logprobs)(
-        token_ids_c, logprobs_c, ranks_c, cu_num_generated_tokens
-    )
+    output.logprobs = type(output.logprobs)(token_ids_c, logprobs_c, ranks_c, cu_num_generated_tokens)
 
 
 class FutureWrapper(Future):
@@ -270,10 +256,7 @@ def ray_is_available() -> bool:
 def assert_ray_available():
     """Raise an exception if Ray is not available."""
     if ray is None:
-        raise ValueError(
-            f"Failed to import Ray: {ray_import_err}."
-            "Please install Ray with `pip install ray`."
-        )
+        raise ValueError(f"Failed to import Ray: {ray_import_err}.Please install Ray with `pip install ray`.")
 
 
 def _verify_bundles(
@@ -289,9 +272,7 @@ def _verify_bundles(
     - Fail if driver node is not included in a placement group
       (only when require_gpu_on_driver is True).
     """
-    assert ray.is_initialized(), (
-        "Ray is not initialized although distributed-executor-backend is ray."
-    )
+    assert ray.is_initialized(), "Ray is not initialized although distributed-executor-backend is ray."
     pg_data = placement_group_table(placement_group)
     # bundle_idx -> node_id
     bundle_to_node_ids = pg_data["bundles_to_node_id"]
@@ -366,19 +347,13 @@ def get_bundles_for_indices(
         f"and {world_size=}"
     )
     assert len(set(bundle_indices)) == len(bundle_indices), (
-        "APHRODITE_RAY_BUNDLE_INDICES cannot have duplicate values,"
-        f" but got {bundle_indices=}"
+        f"APHRODITE_RAY_BUNDLE_INDICES cannot have duplicate values, but got {bundle_indices=}"
     )
 
     pg_data = placement_group_table(placement_group)
     pg_bundle_to_node = pg_data["bundles_to_node_id"]
-    node_id_to_ip = {
-        n["NodeID"]: n["NodeManagerAddress"] for n in ray.nodes() if n["Alive"]
-    }
-    return [
-        (bid, pg_bundle_to_node[bid], node_id_to_ip[pg_bundle_to_node[bid]])
-        for bid in bundle_indices
-    ]
+    node_id_to_ip = {n["NodeID"]: n["NodeManagerAddress"] for n in ray.nodes() if n["Alive"]}
+    return [(bid, pg_bundle_to_node[bid], node_id_to_ip[pg_bundle_to_node[bid]]) for bid in bundle_indices]
 
 
 def get_bundles_sorted_by_node(
@@ -415,13 +390,9 @@ def get_bundles_sorted_by_node(
 
     ray_device_key = current_platform.ray_device_key
     if not ray_device_key:
-        raise ValueError(
-            f"current platform {current_platform.device_name} does not support ray."
-        )
+        raise ValueError(f"current platform {current_platform.device_name} does not support ray.")
 
-    node_id_to_ip = {
-        n["NodeID"]: n["NodeManagerAddress"] for n in ray.nodes() if n["Alive"]
-    }
+    node_id_to_ip = {n["NodeID"]: n["NodeManagerAddress"] for n in ray.nodes() if n["Alive"]}
 
     bundle_specs = placement_group.bundle_specs
     assert bundle_specs is not None
@@ -575,8 +546,7 @@ def initialize_ray_cluster(
             ray.init("auto")
         except ConnectionError:
             logger.warning(
-                "No existing RAY instance detected. "
-                "A new instance will be launched with current node resources."
+                "No existing RAY instance detected. A new instance will be launched with current node resources."
             )
             ray.init(
                 address=ray_address,
@@ -588,9 +558,7 @@ def initialize_ray_cluster(
 
     device_str = current_platform.ray_device_key
     if not device_str:
-        raise ValueError(
-            f"current platform {current_platform.device_name} does not support ray."
-        )
+        raise ValueError(f"current platform {current_platform.device_name} does not support ray.")
 
     # Create or get the placement group for worker processes
     if parallel_config.placement_group:
@@ -608,9 +576,7 @@ def initialize_ray_cluster(
         for bundle in bundles:
             bundle_devices = bundle.get(device_str, 0)
             if bundle_devices > 1:
-                raise ValueError(
-                    f"Placement group bundle cannot have more than 1 {device_str}."
-                )
+                raise ValueError(f"Placement group bundle cannot have more than 1 {device_str}.")
             if bundle_devices:
                 device_bundles += 1
         if parallel_config.world_size > device_bundles:
@@ -628,15 +594,12 @@ def initialize_ray_cluster(
         # created and wait cluster to be ready
         if parallel_config.world_size > num_devices_in_cluster:
             logger.warning(
-                "The number of required %ss exceeds the total "
-                "number of available %ss in the placement group.",
+                "The number of required %ss exceeds the total number of available %ss in the placement group.",
                 device_str,
                 device_str,
             )
         # Create a new placement group
-        placement_group_specs: list[dict[str, float]] = [
-            {device_str: 1.0} for _ in range(parallel_config.world_size)
-        ]
+        placement_group_specs: list[dict[str, float]] = [{device_str: 1.0} for _ in range(parallel_config.world_size)]
 
         # Aphrodite engine is also a worker to execute model with an accelerator,
         # so it requires to have the device in a current node. Check if
@@ -660,15 +623,11 @@ def initialize_ray_cluster(
             placement_group_specs[0][f"node:{current_ip}"] = 0.001
 
         # By default, Ray packs resources as much as possible.
-        current_placement_group = ray.util.placement_group(
-            placement_group_specs, strategy="PACK"
-        )
+        current_placement_group = ray.util.placement_group(placement_group_specs, strategy="PACK")
         _wait_until_pg_ready(current_placement_group)
 
     assert current_placement_group is not None
-    _verify_bundles(
-        current_placement_group, parallel_config, device_str, require_gpu_on_driver
-    )
+    _verify_bundles(current_placement_group, parallel_config, device_str, require_gpu_on_driver)
     # Set the placement group in the parallel config
     parallel_config.placement_group = current_placement_group
 

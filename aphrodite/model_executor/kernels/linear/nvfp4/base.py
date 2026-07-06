@@ -43,9 +43,7 @@ class NvFp4LinearKernel(ABC):
 
     @classmethod
     @abstractmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         """Return whether this kernel can run on the current platform."""
         raise NotImplementedError
 

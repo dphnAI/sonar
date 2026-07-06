@@ -11,12 +11,8 @@ from aphrodite.v1.engine.parallel_sampling import ParentRequest
 def test_parent_request_to_output_stream() -> None:
     parent_request = ParentRequest(make_request(SamplingParams(n=2)))
     parent_request.child_requests = {"child_id_0", "child_id_1"}
-    output_0 = CompletionOutput(
-        index=0, text="child 0", token_ids=[], cumulative_logprob=None, logprobs=None
-    )
-    output_1 = CompletionOutput(
-        index=1, text="child 1", token_ids=[], cumulative_logprob=None, logprobs=None
-    )
+    output_0 = CompletionOutput(index=0, text="child 0", token_ids=[], cumulative_logprob=None, logprobs=None)
+    output_1 = CompletionOutput(index=1, text="child 1", token_ids=[], cumulative_logprob=None, logprobs=None)
     # Request not finished
     assert ([output_0], False) == parent_request.get_outputs("child_id_0", output_0)
     assert ([output_1], False) == parent_request.get_outputs("child_id_1", output_1)
@@ -41,16 +37,10 @@ def test_parent_request_to_output_stream() -> None:
 
 
 def test_parent_request_to_output_final_only() -> None:
-    parent_request = ParentRequest(
-        make_request(SamplingParams(n=2, output_kind=RequestOutputKind.FINAL_ONLY))
-    )
+    parent_request = ParentRequest(make_request(SamplingParams(n=2, output_kind=RequestOutputKind.FINAL_ONLY)))
     parent_request.child_requests = {"child_id_0", "child_id_1"}
-    output_0 = CompletionOutput(
-        index=0, text="child 0", token_ids=[], cumulative_logprob=None, logprobs=None
-    )
-    output_1 = CompletionOutput(
-        index=1, text="child 1", token_ids=[], cumulative_logprob=None, logprobs=None
-    )
+    output_0 = CompletionOutput(index=0, text="child 0", token_ids=[], cumulative_logprob=None, logprobs=None)
+    output_1 = CompletionOutput(index=1, text="child 1", token_ids=[], cumulative_logprob=None, logprobs=None)
     # Request not finished, return nothing
     assert parent_request.get_outputs("child_id_0", output_0) == ([], False)
     assert parent_request.get_outputs("child_id_1", output_1) == ([], False)
@@ -60,12 +50,8 @@ def test_parent_request_to_output_final_only() -> None:
     assert parent_request.get_outputs("child_id_1", output_1) == ([], False)
     # output_0 finished, as all child requests finished, the output would be returned
     output_0.finish_reason = "ended"
-    assert ([output_0, output_1], True) == parent_request.get_outputs(
-        "child_id_0", output_0
-    )
-    assert ([output_0, output_1], True) == parent_request.get_outputs(
-        "child_id_1", output_1
-    )
+    assert ([output_0, output_1], True) == parent_request.get_outputs("child_id_0", output_0)
+    assert ([output_0, output_1], True) == parent_request.get_outputs("child_id_1", output_1)
 
 
 def make_request(sampling_params: SamplingParams) -> EngineCoreRequest:

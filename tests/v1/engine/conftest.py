@@ -5,6 +5,7 @@ import pytest
 import torch
 from transformers import AutoTokenizer
 
+from aphrodite.engine.arg_utils import EngineArgs
 from tests.v1.engine.utils import (
     FULL_STRINGS,
     NUM_PROMPT_LOGPROBS_UNDER_TEST,
@@ -15,7 +16,6 @@ from tests.v1.engine.utils import (
     generate_dummy_prompt_logprobs_tensors,
     generate_dummy_sample_logprobs,
 )
-from aphrodite.engine.arg_utils import EngineArgs
 
 from ...distributed.conftest import publisher_config, random_port  # noqa: F401
 
@@ -34,14 +34,9 @@ def _build_test_vectors_no_logprobs() -> DummyOutputProcessorTestVectors:
     aphrodite_config = EngineArgs(model=TOKENIZER_NAME).create_engine_config()
     # Tokenize prompts under test & create dummy generated tokens
     prompt_tokens = [tokenizer(text).input_ids[:PROMPT_LEN] for text in FULL_STRINGS]
-    generation_tokens = [
-        tokenizer(text).input_ids[PROMPT_LEN:] for text in FULL_STRINGS
-    ]
+    generation_tokens = [tokenizer(text).input_ids[PROMPT_LEN:] for text in FULL_STRINGS]
     # Generate prompt strings
-    prompt_strings = [
-        tokenizer.decode(prompt_tokens, skip_special_tokens=True)
-        for prompt_tokens in prompt_tokens
-    ]
+    prompt_strings = [tokenizer.decode(prompt_tokens, skip_special_tokens=True) for prompt_tokens in prompt_tokens]
     prompt_strings_len = [len(prompt_string) for prompt_string in prompt_strings]
     return DummyOutputProcessorTestVectors(
         tokenizer=tokenizer,
@@ -51,10 +46,7 @@ def _build_test_vectors_no_logprobs() -> DummyOutputProcessorTestVectors:
         generation_tokens=generation_tokens,
         prompt_strings=prompt_strings,
         prompt_strings_len=prompt_strings_len,
-        generation_strings=[
-            text[prompt_len:]
-            for text, prompt_len in zip(FULL_STRINGS, prompt_strings_len)
-        ],
+        generation_strings=[text[prompt_len:] for text, prompt_len in zip(FULL_STRINGS, prompt_strings_len)],
         prompt_logprobs=[],
         generation_logprobs=[],
     )

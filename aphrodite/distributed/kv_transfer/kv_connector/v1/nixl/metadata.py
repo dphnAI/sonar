@@ -127,8 +127,7 @@ def compute_nixl_compatibility_hash(
 
     compat_hash = hash_factors(factors)
     logger.debug(
-        "NIXL compatibility hash: %s (model=%s, dtype=%s, num_kv_heads=%d, "
-        "cache_dtype=%s, attn_backend=%s)",
+        "NIXL compatibility hash: %s (model=%s, dtype=%s, num_kv_heads=%d, cache_dtype=%s, attn_backend=%s)",
         compat_hash,
         factors["model"],
         factors["dtype"],
@@ -204,9 +203,7 @@ class NixlConnectorMetadata(KVConnectorMetadata):
         local_block_ids: BlockIds,
         kv_transfer_params: dict[str, Any],
     ):
-        self.reqs_to_save[request_id] = self._add_new_req(
-            local_block_ids, kv_transfer_params
-        )
+        self.reqs_to_save[request_id] = self._add_new_req(local_block_ids, kv_transfer_params)
 
     def add_new_req_to_recv(
         self,

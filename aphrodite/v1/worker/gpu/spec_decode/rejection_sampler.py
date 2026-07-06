@@ -55,9 +55,7 @@ class RejectionSampler:
         if rejection_sample_method == "synthetic":
             assert spec_config.synthetic_acceptance_rates is not None
             self.synthetic_conditional_rates = torch.tensor(
-                unconditional_to_conditional_rates(
-                    spec_config.synthetic_acceptance_rates
-                ),
+                unconditional_to_conditional_rates(spec_config.synthetic_acceptance_rates),
                 dtype=torch.float32,
                 device=device,
             )
@@ -71,17 +69,13 @@ class RejectionSampler:
         num_sampled: torch.Tensor,
         logits: torch.Tensor,
     ) -> LogprobsTensors | None:
-        max_num_logprobs = self.sampler.sampling_states.max_num_logprobs(
-            input_batch.idx_mapping_np
-        )
+        max_num_logprobs = self.sampler.sampling_states.max_num_logprobs(input_batch.idx_mapping_np)
         if max_num_logprobs == NO_LOGPROBS:
             return None
 
         num_reqs = input_batch.cu_num_logits.shape[0] - 1
         num_logits = logits.shape[0]
-        flat_sampled = torch.zeros(
-            num_logits, dtype=sampled.dtype, device=sampled.device
-        )
+        flat_sampled = torch.zeros(num_logits, dtype=sampled.dtype, device=sampled.device)
         _flatten_sampled_kernel[(num_reqs,)](
             flat_sampled,
             sampled,
@@ -138,9 +132,7 @@ class RejectionSampler:
             input_batch,
             sampled,
             num_sampled,
-            processed_logits
-            if self.sampler.logprobs_mode == "processed_logprobs"
-            else logits,
+            processed_logits if self.sampler.logprobs_mode == "processed_logprobs" else logits,
         )
 
         num_sampled, num_rejected = get_num_sampled_and_rejected(

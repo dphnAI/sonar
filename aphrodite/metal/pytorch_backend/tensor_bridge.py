@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Tensor bridge between MLX and PyTorch.
 
 Provides zero-copy conversion when possible using Apple Silicon's unified memory.
@@ -31,9 +32,7 @@ MLX_TO_TORCH_DTYPE: dict[mx.Dtype, torch.dtype] = {
 }
 
 # PyTorch to MLX dtype mapping
-TORCH_TO_MLX_DTYPE: dict[torch.dtype, mx.Dtype] = {
-    v: k for k, v in MLX_TO_TORCH_DTYPE.items()
-}
+TORCH_TO_MLX_DTYPE: dict[torch.dtype, mx.Dtype] = {v: k for k, v in MLX_TO_TORCH_DTYPE.items()}
 
 
 def get_torch_device() -> torch.device:
@@ -119,6 +118,7 @@ def mlx_to_torch(
         device = get_torch_device()
     elif isinstance(device, str):
         device = torch.device(device)
+    assert isinstance(device, torch.device)
 
     # Use memoryview for zero-copy conversion (bypasses numpy for bfloat16)
     # reference: https://github.com/ml-explore/mlx/issues/403

@@ -20,10 +20,7 @@ from aphrodite.platforms import current_platform
 from aphrodite.utils.import_utils import has_helion
 
 if not has_helion():
-    raise ImportError(
-        "Helion kernel requires helion to be installed. "
-        "Install it with: pip install helion"
-    )
+    raise ImportError("Helion kernel requires helion to be installed. Install it with: pip install helion")
 
 import helion
 import helion.language as hl
@@ -101,9 +98,7 @@ def pick_config(args: tuple[Any, ...], config_keys: list[CaseKey]) -> CaseKey | 
 
     best_hidden_size = min(configs, key=lambda s: abs(s - hidden_size))
     available_num_tokens = sorted(configs[best_hidden_size])
-    best_num_tokens = next(
-        (n for n in available_num_tokens if n >= num_tokens), available_num_tokens[-1]
-    )
+    best_num_tokens = next((n for n in available_num_tokens if n >= num_tokens), available_num_tokens[-1])
 
     result = CaseKey({"hidden_size": best_hidden_size, "num_tokens": best_num_tokens})
     _pick_cache[cache_key] = result
@@ -131,9 +126,7 @@ def baseline(
     scale_ub: torch.Tensor | None = None,  # []
     residual: torch.Tensor | None = None,  # [num_tokens, hidden_size]
 ) -> None:
-    torch.ops._C.rms_norm_dynamic_per_token_quant(
-        result, input, weight, scale, epsilon, scale_ub, residual
-    )
+    torch.ops._C.rms_norm_dynamic_per_token_quant(result, input, weight, scale, epsilon, scale_ub, residual)
 
 
 # Overwrite autotune_baseline_atol and autotune_baseline_rtol
@@ -228,6 +221,4 @@ def rms_norm_dynamic_per_token_quant(
             else:
                 y_blk = x_blk / s_blk[:, None]
 
-            result[tile_m, tile_n] = y_blk.clamp(qtype_traits_min, qtype_traits_max).to(
-                result.dtype
-            )
+            result[tile_m, tile_n] = y_blk.clamp(qtype_traits_min, qtype_traits_max).to(result.dtype)

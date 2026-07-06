@@ -177,9 +177,7 @@ class TestImageContentBlocks:
 
 
 class TestToolResultContent:
-    def _make_tool_result_request(
-        self, tool_result_content
-    ) -> AnthropicMessagesRequest:
+    def _make_tool_result_request(self, tool_result_content) -> AnthropicMessagesRequest:
         """Build a request with assistant tool_use followed by user
         tool_result."""
         return _make_request(
@@ -251,11 +249,7 @@ class TestToolResultContent:
         assert tool_msg[0]["content"] == ""
 
         # The image should be injected as a follow-up user message
-        follow_up = [
-            m
-            for m in result.messages
-            if m["role"] == "user" and isinstance(m.get("content"), list)
-        ]
+        follow_up = [m for m in result.messages if m["role"] == "user" and isinstance(m.get("content"), list)]
         assert len(follow_up) == 1
         img_parts = follow_up[0]["content"]
         assert len(img_parts) == 1
@@ -286,15 +280,9 @@ class TestToolResultContent:
         assert len(tool_msg) == 1
         assert tool_msg[0]["content"] == "Here is the screenshot"
 
-        follow_up = [
-            m
-            for m in result.messages
-            if m["role"] == "user" and isinstance(m.get("content"), list)
-        ]
+        follow_up = [m for m in result.messages if m["role"] == "user" and isinstance(m.get("content"), list)]
         assert len(follow_up) == 1
-        assert follow_up[0]["content"][0]["image_url"]["url"] == (
-            "data:image/jpeg;base64,QUFB"
-        )
+        assert follow_up[0]["content"][0]["image_url"]["url"] == ("data:image/jpeg;base64,QUFB")
 
     def test_tool_result_with_multiple_images(self):
         request = self._make_tool_result_request(
@@ -318,11 +306,7 @@ class TestToolResultContent:
         )
         result = _convert(request)
 
-        follow_up = [
-            m
-            for m in result.messages
-            if m["role"] == "user" and isinstance(m.get("content"), list)
-        ]
+        follow_up = [m for m in result.messages if m["role"] == "user" and isinstance(m.get("content"), list)]
         assert len(follow_up) == 1
         urls = [p["image_url"]["url"] for p in follow_up[0]["content"]]
         assert urls == [
@@ -347,11 +331,7 @@ class TestToolResultContent:
         )
         result = _convert(request)
 
-        user_follow_ups = [
-            m
-            for m in result.messages
-            if m["role"] == "user" and isinstance(m.get("content"), list)
-        ]
+        user_follow_ups = [m for m in result.messages if m["role"] == "user" and isinstance(m.get("content"), list)]
         assert len(user_follow_ups) == 0
 
 
@@ -370,8 +350,7 @@ class TestAttributionHeaderStripping:
                 {"type": "text", "text": "You are a helpful assistant."},
                 {
                     "type": "text",
-                    "text": "x-anthropic-billing-header: "
-                    "cc_version=2.1.37.abc; cc_entrypoint=cli;",
+                    "text": "x-anthropic-billing-header: cc_version=2.1.37.abc; cc_entrypoint=cli;",
                 },
             ],
         )
@@ -800,8 +779,7 @@ class TestInlineSystemMessageInMessagesArray:
             system=[
                 {
                     "type": "text",
-                    "text": "x-anthropic-billing-header: "
-                    "cc_version=2.1.160.bca; cc_entrypoint=cli; cch=d1d48;",
+                    "text": "x-anthropic-billing-header: cc_version=2.1.160.bca; cc_entrypoint=cli; cch=d1d48;",
                 },
                 {
                     "type": "text",
@@ -821,11 +799,7 @@ class TestInlineSystemMessageInMessagesArray:
 
         # First message: top-level system prompt (billing header stripped).
         assert result.messages[0]["role"] == "system"
-        assert (
-            result.messages[0]["content"]
-            == "You are Claude Code, Anthropic's official CLI for Claude."
-            "...."
-        )
+        assert result.messages[0]["content"] == "You are Claude Code, Anthropic's official CLI for Claude....."
 
         # Second message: user message, content preserved at original position.
         assert result.messages[1]["role"] == "user"
@@ -951,8 +925,7 @@ class TestInlineSystemMessageInMessagesArray:
                     "content": [
                         {
                             "type": "text",
-                            "text": "x-anthropic-billing-header: "
-                            "cc_version=2.1.160.bca; cch=d1d48;",
+                            "text": "x-anthropic-billing-header: cc_version=2.1.160.bca; cch=d1d48;",
                         },
                         {"type": "text", "text": "Real system content."},
                     ],
@@ -981,18 +954,14 @@ def _make_stream_converter():
         "length": "max_tokens",
         "tool_calls": "tool_use",
     }
-    obj.message_stream_converter = (
-        AnthropicServingMessages.message_stream_converter.__get__(obj)
-    )
+    obj.message_stream_converter = AnthropicServingMessages.message_stream_converter.__get__(obj)
     return obj
 
 
 def _parse_sse_events(raw_events: list[str]) -> list[tuple[str, dict]]:
     results = []
     for raw in raw_events:
-        headers = dict(
-            line.split(": ", 1) for line in raw.strip().split("\n") if ": " in line
-        )
+        headers = dict(line.split(": ", 1) for line in raw.strip().split("\n") if ": " in line)
         if "event" in headers and "data" in headers:
             results.append((headers["event"], json.loads(headers["data"])))
     return results
@@ -1099,11 +1068,7 @@ class TestMessageStreamConverterToolUseContentBuffering:
         full_args = "".join(arg_fragments)
         assert full_args == '{"path":"/tmp/f"}'
 
-        text_deltas = [
-            data["delta"]["text"]
-            for _, data in events
-            if data.get("delta", {}).get("type") == "text_delta"
-        ]
+        text_deltas = [data["delta"]["text"] for _, data in events if data.get("delta", {}).get("type") == "text_delta"]
         assert text_deltas == ["\nOkay"]
 
         block_starts = [
@@ -1156,18 +1121,10 @@ class TestMessageStreamConverterToolUseContentBuffering:
 
         events = _parse_sse_events(output)
 
-        text_deltas = [
-            data["delta"]["text"]
-            for _, data in events
-            if data.get("delta", {}).get("type") == "text_delta"
-        ]
+        text_deltas = [data["delta"]["text"] for _, data in events if data.get("delta", {}).get("type") == "text_delta"]
         assert text_deltas == ["\nDone"]
 
-        block_starts = [
-            data["content_block"]["type"]
-            for ev_type, data in events
-            if ev_type == "content_block_start"
-        ]
+        block_starts = [data["content_block"]["type"] for ev_type, data in events if ev_type == "content_block_start"]
         assert "tool_use" in block_starts
         assert "text" in block_starts
 
@@ -1260,9 +1217,7 @@ class TestStreamingCacheUsageSemantics:
         assert "cache_creation_input_tokens" not in start_usage
 
         # message_delta: authoritative usage with cache fields populated.
-        delta_usage = next(
-            data["usage"] for ev, data in events if ev == "message_delta"
-        )
+        delta_usage = next(data["usage"] for ev, data in events if ev == "message_delta")
         assert delta_usage["input_tokens"] == 20  # 100 - 80
         assert delta_usage["cache_read_input_tokens"] == 80
         assert delta_usage["cache_creation_input_tokens"] == 0
@@ -1296,9 +1251,7 @@ class TestStreamingCacheUsageSemantics:
         events = _parse_sse_events(output)
 
         start_usage = events[0][1]["message"]["usage"]
-        delta_usage = next(
-            data["usage"] for ev, data in events if ev == "message_delta"
-        )
+        delta_usage = next(data["usage"] for ev, data in events if ev == "message_delta")
         assert start_usage["input_tokens"] == 50
         assert "cache_read_input_tokens" not in start_usage
         assert "cache_creation_input_tokens" not in start_usage
@@ -1330,9 +1283,7 @@ class TestStreamingCacheUsageSemantics:
         events = _parse_sse_events(output)
 
         start_usage = events[0][1]["message"]["usage"]
-        delta_usage = next(
-            data["usage"] for ev, data in events if ev == "message_delta"
-        )
+        delta_usage = next(data["usage"] for ev, data in events if ev == "message_delta")
         assert "cache_read_input_tokens" not in start_usage
         assert "cache_creation_input_tokens" not in start_usage
         assert "cache_read_input_tokens" not in delta_usage
@@ -1366,17 +1317,13 @@ class TestDetectMergeInlineSystem:
 
     def test_qwen_template_requires_merge(self):
         """Template with loop.first guard rejects mid-conversation system."""
-        assert (
-            AnthropicServingMessages._detect_merge_inline_system(Q35_TEMPLATE) is True
-        )
+        assert AnthropicServingMessages._detect_merge_inline_system(Q35_TEMPLATE) is True
 
     def test_no_restriction_no_merge(self):
         """Template without restriction accepts mid-conversation system."""
         assert (
             AnthropicServingMessages._detect_merge_inline_system(
-                "{%- for message in messages %}"
-                "{{- message.role }}: {{ message.content }}\n"
-                "{%- endfor %}"
+                "{%- for message in messages %}{{- message.role }}: {{ message.content }}\n{%- endfor %}"
             )
             is False
         )
@@ -1393,9 +1340,7 @@ class TestDetectMergeInlineSystem:
 
 def _make_full_converter():
     obj = MagicMock(spec=AnthropicServingMessages)
-    obj.messages_full_converter = (
-        AnthropicServingMessages.messages_full_converter.__get__(obj)
-    )
+    obj.messages_full_converter = AnthropicServingMessages.messages_full_converter.__get__(obj)
     return obj
 
 

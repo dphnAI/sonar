@@ -5,10 +5,10 @@ import pytest
 import torch
 from transformers import AutoModelForTokenClassification
 
-from tests.models.registry import HF_EXAMPLE_MODELS
-from tests.models.utils import softmax
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.models.registry import HF_EXAMPLE_MODELS
+from tests.models.utils import softmax
 
 
 @pytest.fixture(autouse=True)
@@ -180,9 +180,7 @@ def test_auto_conversion(
     with aphrodite_runner(model, max_model_len=1024, dtype=dtype) as aphrodite_model:
         aphrodite_outputs = aphrodite_model.token_classify(example_prompts)
 
-    with hf_runner(
-        model, dtype=dtype, auto_cls=AutoModelForTokenClassification
-    ) as hf_model:
+    with hf_runner(model, dtype=dtype, auto_cls=AutoModelForTokenClassification) as hf_model:
         tokenizer = hf_model.tokenizer
         hf_outputs = []
         for prompt in example_prompts:

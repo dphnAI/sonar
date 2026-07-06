@@ -28,9 +28,7 @@ def transcription_server_with_force_include_usage():
 async def transcription_client_with_force_include_usage(
     transcription_server_with_force_include_usage,
 ):
-    async with (
-        transcription_server_with_force_include_usage.get_async_client() as async_client
-    ):
+    async with transcription_server_with_force_include_usage.get_async_client() as async_client:
         yield async_client
 
 
@@ -38,15 +36,13 @@ async def transcription_client_with_force_include_usage(
 async def test_transcription_with_enable_force_include_usage(
     transcription_client_with_force_include_usage, winning_call
 ):
-    res = (
-        await transcription_client_with_force_include_usage.audio.transcriptions.create(
-            model="openai/whisper-large-v3-turbo",
-            file=winning_call,
-            language="en",
-            temperature=0.0,
-            stream=True,
-            timeout=30,
-        )
+    res = await transcription_client_with_force_include_usage.audio.transcriptions.create(
+        model="openai/whisper-large-v3-turbo",
+        file=winning_call,
+        language="en",
+        temperature=0.0,
+        stream=True,
+        timeout=30,
     )
 
     async for chunk in res:

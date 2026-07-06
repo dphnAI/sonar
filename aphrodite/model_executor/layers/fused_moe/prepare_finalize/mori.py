@@ -70,9 +70,7 @@ class MoriPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
         - Optional dispatched expert topk IDs
         - Optional dispatched expert topk weight
         """
-        assert not apply_router_weight_on_input, (
-            "mori does not support apply_router_weight_on_input=True now."
-        )
+        assert not apply_router_weight_on_input, "mori does not support apply_router_weight_on_input=True now."
         scale = None
         # When defer_input_quant is True, the expert kernel handles
         # quantization internally, so skip FP8 dispatch quantization.

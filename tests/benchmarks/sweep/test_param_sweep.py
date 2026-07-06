@@ -59,9 +59,7 @@ class TestParameterSweepItem:
     )
     def test_nested_dict_value(self, compilation_config):
         """Test that nested dict values are serialized as JSON."""
-        item = ParameterSweepItem.from_record(
-            {"compilation_config": compilation_config}
-        )
+        item = ParameterSweepItem.from_record({"compilation_config": compilation_config})
         cmd = item.apply_to_cmd(["aphrodite", "serve", "model"])
         assert "--compilation-config" in cmd
         # The dict should be JSON serialized
@@ -103,9 +101,7 @@ class TestParameterSweepItem:
             assert "100" not in cmd
         else:
             # Boolean flag
-            cmd = item.apply_to_cmd(
-                ["aphrodite", "serve", "--enable-prefix-caching", "model"]
-            )
+            cmd = item.apply_to_cmd(["aphrodite", "serve", "--enable-prefix-caching", "model"])
             assert expected_key in cmd
             assert "--enable-prefix-caching" not in cmd
 
@@ -240,9 +236,7 @@ class TestParameterSweepItemKeyNormalization:
     def test_nested_key_preserves_suffix(self):
         """Test that nested keys preserve the suffix format."""
         # The suffix after the dot should preserve underscores
-        item = ParameterSweepItem.from_record(
-            {"compilation_config.some_nested_param": "value"}
-        )
+        item = ParameterSweepItem.from_record({"compilation_config.some_nested_param": "value"})
         cmd = item.apply_to_cmd(["aphrodite", "serve"])
         # The prefix (compilation_config) gets converted to hyphens,
         # but the suffix (some_nested_param) is preserved

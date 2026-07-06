@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Embedding splice helpers for multimodal placeholders."""
 
 from __future__ import annotations
@@ -27,8 +28,7 @@ def merge_multimodal_embeddings(
     mask = _normalize_mask(inputs_embeds, is_multimodal)
     if mask.shape != inputs_embeds.shape[:-1]:
         raise ValueError(
-            f"Multimodal mask shape {mask.shape} must match inputs_embeds "
-            f"leading shape {inputs_embeds.shape[:-1]}."
+            f"Multimodal mask shape {mask.shape} must match inputs_embeds leading shape {inputs_embeds.shape[:-1]}."
         )
     mask_flat = mx.flatten(mask)
     num_actual_tokens = int(mm_embeds_flat.shape[0])
@@ -36,8 +36,7 @@ def merge_multimodal_embeddings(
 
     if num_actual_tokens != num_expected_tokens:
         raise ValueError(
-            f"Attempted to assign {num_actual_tokens} multimodal tokens to "
-            f"{num_expected_tokens} placeholders"
+            f"Attempted to assign {num_actual_tokens} multimodal tokens to {num_expected_tokens} placeholders"
         )
 
     input_dtype = inputs_embeds.dtype

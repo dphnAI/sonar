@@ -57,17 +57,11 @@ def _state_passing_fwd_kernel(
 
     # Derive this sequence's chunk range from last_chunk_indices
     chunk_end = tl.load(last_chunk_indices_ptr + pid_b) + 1
-    chunk_start = (
-        tl.load(last_chunk_indices_ptr + pid_b - 1, mask=pid_b > 0, other=-1) + 1
-    )
+    chunk_start = tl.load(last_chunk_indices_ptr + pid_b - 1, mask=pid_b > 0, other=-1) + 1
 
     # Offset pointers to this sequence's first chunk
     states_ptr += chunk_start * stride_states_chunk + pid_h * stride_states_head
-    dA_cs_ptr += (
-        pid_h * stride_dA_cs_head
-        + chunk_start * stride_dA_cs_chunk
-        + (chunk_size - 1) * stride_dA_cs_csize
-    )
+    dA_cs_ptr += pid_h * stride_dA_cs_head + chunk_start * stride_dA_cs_chunk + (chunk_size - 1) * stride_dA_cs_csize
     out_ptr += chunk_start * stride_out_chunk + pid_h * stride_out_head
 
     offs_m = pid_m * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)

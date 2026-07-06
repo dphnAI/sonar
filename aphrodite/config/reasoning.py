@@ -26,14 +26,10 @@ class ReasoningConfig:
     reasoning_end_str: str = ""
     """String that indicates the end of reasoning content."""
 
-    _reasoning_start_token_ids: list[int] | None = field(
-        default=None, init=False, repr=False
-    )
+    _reasoning_start_token_ids: list[int] | None = field(default=None, init=False, repr=False)
     """Private backing field for `reasoning_start_token_ids`. Set by
     `initialize_token_ids`. Not intended to be configured directly."""
-    _reasoning_end_token_ids: list[int] | None = field(
-        default=None, init=False, repr=False
-    )
+    _reasoning_end_token_ids: list[int] | None = field(default=None, init=False, repr=False)
     """Private backing field for `reasoning_end_token_ids`. Set by
     `initialize_token_ids`. Not intended to be configured directly."""
 
@@ -61,22 +57,15 @@ class ReasoningConfig:
 
     def initialize_token_ids(self, model_config: ModelConfig) -> None:
         """Initialize reasoning token IDs from strings using the tokenizer."""
-        if (
-            self._reasoning_start_token_ids is not None
-            and self._reasoning_end_token_ids is not None
-        ):
+        if self._reasoning_start_token_ids is not None and self._reasoning_end_token_ids is not None:
             self._enabled = True
             return  # Already initialized
 
         tokenizer = cached_tokenizer_from_config(model_config=model_config)
         reasoning_start_str = self.reasoning_start_str
         reasoning_end_str = self.reasoning_end_str
-        if self.reasoning_parser is not None and (
-            not reasoning_start_str or not reasoning_end_str
-        ):
-            parser_cls = ReasoningParserManager.get_reasoning_parser(
-                self.reasoning_parser
-            )
+        if self.reasoning_parser is not None and (not reasoning_start_str or not reasoning_end_str):
+            parser_cls = ReasoningParserManager.get_reasoning_parser(self.reasoning_parser)
             reasoning_parser = parser_cls(tokenizer)
             start_token = reasoning_parser.reasoning_start_str
             if start_token and not reasoning_start_str:
@@ -90,12 +79,8 @@ class ReasoningConfig:
             # If we don't have valid strings to tokenize,
             # we can't initialize the token IDs.
             return
-        self._reasoning_start_token_ids = tokenizer.encode(
-            reasoning_start_str, add_special_tokens=False
-        )
-        self._reasoning_end_token_ids = tokenizer.encode(
-            reasoning_end_str, add_special_tokens=False
-        )
+        self._reasoning_start_token_ids = tokenizer.encode(reasoning_start_str, add_special_tokens=False)
+        self._reasoning_end_token_ids = tokenizer.encode(reasoning_end_str, add_special_tokens=False)
 
         if not self._reasoning_start_token_ids or not self._reasoning_end_token_ids:
             raise ValueError(

@@ -195,9 +195,7 @@ def get_linear_transform_schemes(
     layer_name: str,
     transform_config: TransformConfig | None,
     packed_modules_mapping: dict[str, list[str]],
-) -> tuple[
-    dict[int, TransformTuple], dict[int, TransformTuple]
-]:  # [input_transform, [output_transform, ...]]
+) -> tuple[dict[int, TransformTuple], dict[int, TransformTuple]]:  # [input_transform, [output_transform, ...]]
     # there can only be one transform input scheme per (fused) module
     input_tfms = {}
     output_tfms = {}
@@ -206,10 +204,7 @@ def get_linear_transform_schemes(
 
     for scheme_name, scheme, args in get_schemes_args(transform_config):
         for part_index, part_name in enumerate(partition_names):
-            if (
-                is_match(part_name, layer, args.targets, args.ignore)
-                and args.is_online()
-            ):
+            if is_match(part_name, layer, args.targets, args.ignore) and args.is_online():
                 if args.location == TransformLocation.INPUT:
                     input_tfms[part_index] = TransformTuple(scheme_name, scheme, args)
 
@@ -217,9 +212,7 @@ def get_linear_transform_schemes(
                     output_tfms[part_index] = TransformTuple(scheme_name, scheme, args)
 
                 else:
-                    raise ValueError(
-                        f"Cannot apply `{args.location}` transform to `{layer_name}`"
-                    )
+                    raise ValueError(f"Cannot apply `{args.location}` transform to `{layer_name}`")
 
     return (input_tfms, output_tfms)
 
@@ -235,9 +228,7 @@ def get_schemes_args(
             yield (scheme_name, scheme, args)
 
 
-def get_layer_partition_names(
-    layer_name: str, packed_modules_mapping: dict[str, list[str]]
-) -> list[str]:
+def get_layer_partition_names(layer_name: str, packed_modules_mapping: dict[str, list[str]]) -> list[str]:
     """
     Get all partition names associated with this layer.
     Names are returned in order of their partition indices.
@@ -252,9 +243,6 @@ def get_layer_partition_names(
     assert get_layer_partition_names("mlp.down_proj", mapping) == ["down_proj"]"""
     for fused_suffix, part_suffixes in packed_modules_mapping.items():
         if layer_name.endswith(fused_suffix):
-            return [
-                layer_name.removesuffix(fused_suffix) + part_suffix
-                for part_suffix in part_suffixes
-            ]
+            return [layer_name.removesuffix(fused_suffix) + part_suffix for part_suffix in part_suffixes]
 
     return [layer_name]

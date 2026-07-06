@@ -11,8 +11,8 @@ from dataclasses import dataclass
 import pytest
 import requests
 
-from tests.utils import APHRODITE_PATH, RemoteOpenAIServer
 from aphrodite.entrypoints.pooling.scoring.protocol import RerankResponse
+from tests.utils import APHRODITE_PATH, RemoteOpenAIServer
 
 os.environ["APHRODITE_LOGGING_LEVEL"] = "WARNING"
 

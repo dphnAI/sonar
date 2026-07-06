@@ -49,19 +49,11 @@ def _is_chat_message(value: Any) -> bool:
 
 
 def _is_chat_messages(value: Any) -> bool:
-    return (
-        isinstance(value, list)
-        and bool(value)
-        and all(_is_chat_message(item) for item in value)
-    )
+    return isinstance(value, list) and bool(value) and all(_is_chat_message(item) for item in value)
 
 
 def _is_batched_chat_messages(value: Any) -> bool:
-    return (
-        isinstance(value, list)
-        and bool(value)
-        and all(_is_chat_messages(item) for item in value)
-    )
+    return isinstance(value, list) and bool(value) and all(_is_chat_messages(item) for item in value)
 
 
 class EmbeddingChatRequest(
@@ -92,9 +84,7 @@ class EmbeddingBatchChatRequest(
     ``messages`` instead of introducing a separate batch-specific field.
     """
 
-    messages: list[Annotated[list[ChatCompletionMessageParam], Field(min_length=1)]] = (
-        Field(..., min_length=1)
-    )
+    messages: list[Annotated[list[ChatCompletionMessageParam], Field(min_length=1)]] = Field(..., min_length=1)
 
     def to_pooling_params(self):
         return PoolingParams(
@@ -132,9 +122,7 @@ class EmbeddingChatInputRequest(
 class EmbeddingBatchChatInputRequest(EmbeddingBatchChatRequest):
     """OpenAI embeddings request with batched chat conversations in ``input``."""
 
-    input: list[Annotated[list[ChatCompletionMessageParam], Field(min_length=1)]] = (
-        Field(..., min_length=1)
-    )
+    input: list[Annotated[list[ChatCompletionMessageParam], Field(min_length=1)]] = Field(..., min_length=1)
 
     @model_validator(mode="before")
     @classmethod
@@ -213,9 +201,7 @@ class CohereEmbedContent(BaseModel):
             if self.text is None:
                 raise ValueError("CohereEmbedContent with type='text' requires text")
         elif not self.image_url or not self.image_url.get("url"):
-            raise ValueError(
-                "CohereEmbedContent with type='image_url' requires image_url.url"
-            )
+            raise ValueError("CohereEmbedContent with type='image_url' requires image_url.url")
         return self
 
 
@@ -240,10 +226,7 @@ class CohereEmbedRequest(BaseModel):
         input_fields = (self.texts, self.images, self.inputs)
         provided_fields = [field for field in input_fields if field is not None]
         if len(provided_fields) != 1 or not provided_fields[0]:
-            raise ValueError(
-                "Exactly one of texts, images, or inputs must be provided, "
-                "and it must be non-empty"
-            )
+            raise ValueError("Exactly one of texts, images, or inputs must be provided, and it must be non-empty")
         return self
 
 
@@ -303,10 +286,7 @@ def _pack_binary_embeddings(
     for embedding in float_embeddings:
         dim = len(embedding)
         if dim % 8 != 0:
-            raise ValueError(
-                "Embedding dimension must be a multiple of 8 for binary "
-                f"embedding types, but got {dim}."
-            )
+            raise ValueError(f"Embedding dimension must be a multiple of 8 for binary embedding types, but got {dim}.")
         packed_len = dim // 8
         packed: list[int] = []
         byte_val = 0

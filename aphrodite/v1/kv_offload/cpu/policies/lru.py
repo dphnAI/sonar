@@ -52,9 +52,7 @@ class LRUCachePolicy(CachePolicy):
         self.blocks.clear()
 
     @override
-    def evict(
-        self, n: int, protected: set[OffloadKey]
-    ) -> list[tuple[OffloadKey, BlockStatus]] | None:
+    def evict(self, n: int, protected: set[OffloadKey]) -> list[tuple[OffloadKey, BlockStatus]] | None:
         if n == 0:
             return []
 

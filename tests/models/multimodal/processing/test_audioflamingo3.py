@@ -75,9 +75,7 @@ def mock_ctx():
     ctx = MagicMock()
     ctx.get_hf_config.return_value = config
     ctx.get_hf_processor.return_value = MockAudioFlamingo3Processor()
-    ctx.call_hf_processor.side_effect = lambda processor, data, kwargs: processor(
-        **data, **kwargs
-    )
+    ctx.call_hf_processor.side_effect = lambda processor, data, kwargs: processor(**data, **kwargs)
     ctx.model_config.hf_config = config
     return ctx
 
@@ -96,9 +94,7 @@ def test_audio_chunk_counting(mock_ctx):
     )
 
     info = AudioFlamingo3ProcessingInfo(mock_ctx)
-    processor = AudioFlamingo3MultiModalProcessor(
-        info, AudioFlamingo3DummyInputsBuilder(info)
-    )
+    processor = AudioFlamingo3MultiModalProcessor(info, AudioFlamingo3DummyInputsBuilder(info))
 
     sr = 16000
     audio_1 = np.zeros(30 * sr)
@@ -147,7 +143,5 @@ def test_audio_token_count_matches_hf_processor_math():
     feature_attention_mask[2, :1500] = 1
     chunk_counts = torch.tensor([2, 1], dtype=torch.long)
 
-    assert (
-        _count_audio_tokens_from_mask(feature_attention_mask, chunk_counts, 0) == 1499
-    )
+    assert _count_audio_tokens_from_mask(feature_attention_mask, chunk_counts, 0) == 1499
     assert _count_audio_tokens_from_mask(feature_attention_mask, chunk_counts, 1) == 375

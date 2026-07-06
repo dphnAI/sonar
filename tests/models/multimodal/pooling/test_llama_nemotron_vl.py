@@ -24,7 +24,7 @@ from aphrodite.entrypoints.chat_utils import (
 from aphrodite.entrypoints.pooling.scoring.typing import ScoreMultiModalParam
 from aphrodite.platforms import current_platform
 
-from ....conftest import IMAGE_ASSETS, HfRunner, PromptImageInput, AphroditeRunner
+from ....conftest import IMAGE_ASSETS, AphroditeRunner, HfRunner, PromptImageInput
 from ....utils import ROCM_ENGINE_KWARGS
 from ...utils import check_embeddings_close
 
@@ -96,13 +96,9 @@ def _run_test(
                         )
                     else:
                         # Text-only document
-                        embedding = hf_model.model.encode_documents(
-                            texts=[passage_text]
-                        )
+                        embedding = hf_model.model.encode_documents(texts=[passage_text])
                 else:
-                    raise ValueError(
-                        f"Text must start with '{QUERY_PREFIX}' or '{PASSAGE_PREFIX}'"
-                    )
+                    raise ValueError(f"Text must start with '{QUERY_PREFIX}' or '{PASSAGE_PREFIX}'")
 
                 hf_outputs.append(embedding[0].tolist())
 
@@ -148,9 +144,7 @@ def test_models_image(
     dtype: str,
 ) -> None:
     """Test image embedding."""
-    input_texts_images = [
-        (text, asset.pil_image) for text, asset in zip(HF_IMAGE_PROMPTS, image_assets)
-    ]
+    input_texts_images = [(text, asset.pil_image) for text, asset in zip(HF_IMAGE_PROMPTS, image_assets)]
     input_texts = [text for text, _ in input_texts_images]
     input_images = [image for _, image in input_texts_images]
 
@@ -173,17 +167,13 @@ RERANKER_MODELS = ["nvidia/llama-nemotron-rerank-vl-1b-v2"]
 # The tokenizer's built-in chat template is not suitable for the Score/Rerank
 # APIs (it's inherited from the base LLM).  We must use the provided override.
 _RERANKER_SCORE_TEMPLATE = (
-    Path(__file__).parents[4]
-    / "examples/pooling/score/template/nemotron-vl-rerank.jinja"
+    Path(__file__).parents[4] / "examples/pooling/score/template/nemotron-vl-rerank.jinja"
 ).read_text()
 
 RERANKER_TEXT_QUERY = "How is AI improving the intelligence and capabilities of robots?"
 RERANKER_TEXT_DOCS = [
     "AI enables robots to perceive, plan, and act autonomously.",
-    (
-        "A biological foundation model designed to analyze DNA, RNA, "
-        "and protein sequences."
-    ),
+    ("A biological foundation model designed to analyze DNA, RNA, and protein sequences."),
 ]
 
 RERANKER_IMAGE_QUERY = "photo of a red stop sign on a street"
@@ -227,8 +217,7 @@ def _run_hf_reranker(
         ]
         batch_dict = processor.process_queries_documents_crossencoder(examples)
         batch_dict = {
-            k: v.to(hf_model.model.device) if isinstance(v, torch.Tensor) else v
-            for k, v in batch_dict.items()
+            k: v.to(hf_model.model.device) if isinstance(v, torch.Tensor) else v for k, v in batch_dict.items()
         }
         with torch.inference_mode():
             logits = hf_model.model(**batch_dict, return_dict=True).logits

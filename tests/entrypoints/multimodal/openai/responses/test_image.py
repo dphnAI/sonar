@@ -7,9 +7,9 @@ import openai
 import pytest
 import pytest_asyncio
 
+from aphrodite.multimodal.utils import encode_image_url
 from tests.entrypoints.multimodal.conftest import TEST_IMAGE_ASSETS
 from tests.utils import RemoteOpenAIServer
-from aphrodite.multimodal.utils import encode_image_url
 
 # Use a small vision model for testing
 MODEL_NAME = "Qwen/Qwen2.5-VL-3B-Instruct"
@@ -48,17 +48,14 @@ async def client(image_server):
 @pytest.fixture(scope="session")
 def url_encoded_image(local_asset_server) -> dict[str, str]:
     return {
-        image_url: encode_image_url(local_asset_server.get_image_asset(image_url))
-        for image_url in TEST_IMAGE_ASSETS
+        image_url: encode_image_url(local_asset_server.get_image_asset(image_url)) for image_url in TEST_IMAGE_ASSETS
     }
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
 @pytest.mark.parametrize("image_url", TEST_IMAGE_ASSETS, indirect=True)
-async def test_single_chat_session_image(
-    client: openai.AsyncOpenAI, model_name: str, image_url: str
-):
+async def test_single_chat_session_image(client: openai.AsyncOpenAI, model_name: str, image_url: str):
     content_text = "What's in this image?"
     messages = [
         {
@@ -120,9 +117,7 @@ async def test_single_chat_session_image_base64encoded(
     [TEST_IMAGE_ASSETS[:i] for i in range(2, len(TEST_IMAGE_ASSETS))],
     indirect=True,
 )
-async def test_multi_image_input(
-    client: openai.AsyncOpenAI, model_name: str, image_urls: list[str]
-):
+async def test_multi_image_input(client: openai.AsyncOpenAI, model_name: str, image_urls: list[str]):
     messages = [
         {
             "role": "user",

@@ -38,8 +38,7 @@ class TokenPoolerHead(nn.Module, ABC):
         pooling_params = pooling_metadata.pooling_params
         if len(pooled_data) != len(pooling_params):
             raise ValueError(
-                f"pooled_data length ({len(pooled_data)}) does not match "
-                f"pooling_params length ({len(pooling_params)})"
+                f"pooled_data length ({len(pooled_data)}) does not match pooling_params length ({len(pooling_params)})"
             )
 
         return [self.forward_chunk(d, p) for d, p in zip(pooled_data, pooling_params)]

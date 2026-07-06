@@ -36,10 +36,7 @@ def flashinfer_sampler_supported() -> bool:
     if not current_platform.is_cuda():
         return False
     if not envs.APHRODITE_USE_FLASHINFER_SAMPLER:
-        logger.info_once(
-            "FlashInfer top-p/top-k sampling disabled via "
-            "APHRODITE_USE_FLASHINFER_SAMPLER=0."
-        )
+        logger.info_once("FlashInfer top-p/top-k sampling disabled via APHRODITE_USE_FLASHINFER_SAMPLER=0.")
         return False
     from aphrodite.v1.attention.backends.flashinfer import FlashInferBackend
 
@@ -47,9 +44,7 @@ def flashinfer_sampler_supported() -> bool:
     assert capability is not None
     unsupported_reason: str | None = None
     if not FlashInferBackend.supports_compute_capability(capability):
-        unsupported_reason = (
-            f"unsupported compute capability {capability.as_version_str()}"
-        )
+        unsupported_reason = f"unsupported compute capability {capability.as_version_str()}"
 
     if unsupported_reason is None:
         logger.info_once("Using FlashInfer for top-p & top-k sampling.", scope="global")
@@ -87,12 +82,9 @@ class TopKTopPSampler(nn.Module):
             # FlashInfer doesn't expose post-top-k/top-p logits/logprobs,
             # so it can't be used when the configured mode requires them.
             can_use_flashinfer = (
-                logprobs_mode not in ("processed_logits", "processed_logprobs")
-                and flashinfer_sampler_supported()
+                logprobs_mode not in ("processed_logits", "processed_logprobs") and flashinfer_sampler_supported()
             )
-            self.forward = (
-                self.forward_cuda if can_use_flashinfer else self.forward_native
-            )
+            self.forward = self.forward_cuda if can_use_flashinfer else self.forward_native
         elif current_platform.is_cpu():
             arch = current_platform.get_cpu_architecture()
             # Fall back to native implementation for POWERPC and RISCV.
@@ -107,15 +99,10 @@ class TopKTopPSampler(nn.Module):
                 self.forward = self.forward_xpu
             else:
                 self.forward = self.forward_native
-        elif (
-            logprobs_mode not in ("processed_logits", "processed_logprobs")
-            and rocm_aiter_ops.is_enabled()
-        ):
+        elif logprobs_mode not in ("processed_logits", "processed_logprobs") and rocm_aiter_ops.is_enabled():
             self.aiter_ops = None
             self._aiter_ops_import_failed = False
-            logger.info_once(
-                "Using aiter sampler on ROCm (lazy import, sampling-only)."
-            )
+            logger.info_once("Using aiter sampler on ROCm (lazy import, sampling-only).")
             self.forward = self.forward_hip
         else:
             self.forward = self.forward_native
@@ -263,8 +250,7 @@ class TopKTopPSampler(nn.Module):
             self._aiter_ops_import_failed = True
             self.forward = self.forward_native
             logger.warning_once(
-                "aiter.ops.sampling is not available on ROCm. "
-                "Falling back to PyTorch-native implementation."
+                "aiter.ops.sampling is not available on ROCm. Falling back to PyTorch-native implementation."
             )
             return False
         self.aiter_ops = torch.ops.aiter
@@ -281,8 +267,7 @@ class TopKTopPSampler(nn.Module):
         if (k is None and p is None) or generators:
             if generators:
                 logger.warning_once(
-                    "aiter sampler does not support per-request generators; "
-                    "falling back to PyTorch-native."
+                    "aiter sampler does not support per-request generators; falling back to PyTorch-native."
                 )
             return self.forward_native(logits, generators, k, p)
         if self.use_fp64_gumbel:
@@ -327,9 +312,7 @@ class TopKTopPSampler(nn.Module):
         # Top-k only path
         elif use_top_k:
             probs = logits.softmax(dim=-1, dtype=torch.float32).contiguous()
-            renorm_probs = self.aiter_ops.top_k_renorm_probs(
-                probs, *_to_tensor_scalar_tuple(k)
-            )
+            renorm_probs = self.aiter_ops.top_k_renorm_probs(probs, *_to_tensor_scalar_tuple(k))
             return torch.multinomial(renorm_probs, num_samples=1).view(-1)
         raise RuntimeError("aiter_sample was called with no active top-k or top-p.")
 
@@ -347,14 +330,9 @@ class TopKTopPSampler(nn.Module):
                 "PyTorch-native implementation."
             )
             return self.forward_native(logits, generators, k, p)
-        random_sampled = torch.empty(
-            logits.shape[0], dtype=torch.int64, device=logits.device
-        )
+        random_sampled = torch.empty(logits.shape[0], dtype=torch.int64, device=logits.device)
         logits_to_return = None
-        if (
-            self.logprobs_mode == "processed_logits"
-            or self.logprobs_mode == "processed_logprobs"
-        ):
+        if self.logprobs_mode == "processed_logits" or self.logprobs_mode == "processed_logprobs":
             logits_to_return = torch.empty_like(logits)
 
         assert len(generators) != logits.shape[0], (
@@ -364,9 +342,7 @@ class TopKTopPSampler(nn.Module):
 
         state = generator.get_state()
         seed, offset = state.view(torch.int64)
-        seeds = torch.tensor(
-            [seed, offset], dtype=torch.int64, device=torch.device("cpu")
-        )
+        seeds = torch.tensor([seed, offset], dtype=torch.int64, device=torch.device("cpu"))
         # The XPU kernel expects k as int64 (Long), but the input batch
         # stores top_k as int32. Cast here to avoid dtype mismatch.
         if k is not None:
@@ -393,9 +369,7 @@ def compiled_random_sample(logits: torch.Tensor) -> torch.Tensor:
     return probs.div(q).argmax(dim=-1).view(-1)
 
 
-def apply_top_k_top_p(
-    logits: torch.Tensor, k: torch.Tensor | None, p: torch.Tensor | None
-) -> torch.Tensor:
+def apply_top_k_top_p(logits: torch.Tensor, k: torch.Tensor | None, p: torch.Tensor | None) -> torch.Tensor:
     if p is None and k is None:
         return logits
 
@@ -478,9 +452,7 @@ def apply_top_k_only(logits: torch.Tensor, k: torch.Tensor) -> torch.Tensor:
     return logits.masked_fill_(logits < top_k_mask, -float("inf"))
 
 
-def empty_exponential_noise_like(
-    probs: torch.Tensor, use_fp64_gumbel: bool
-) -> torch.Tensor:
+def empty_exponential_noise_like(probs: torch.Tensor, use_fp64_gumbel: bool) -> torch.Tensor:
     dtype = torch.float64 if use_fp64_gumbel else probs.dtype
     return torch.empty(probs.shape, dtype=dtype, device=probs.device)
 
@@ -541,20 +513,14 @@ def flashinfer_sample(
     if k is None:
         # Top-p only.
         probs = logits.softmax(dim=-1, dtype=torch.float32)
-        next_token_ids = flashinfer.sampling.top_p_sampling_from_probs(
-            probs, p, deterministic=True
-        )
+        next_token_ids = flashinfer.sampling.top_p_sampling_from_probs(probs, p, deterministic=True)
     elif p is None:
         # Top-k only.
         probs = logits.softmax(dim=-1, dtype=torch.float32)
-        next_token_ids = flashinfer.sampling.top_k_sampling_from_probs(
-            probs, k, deterministic=True
-        )
+        next_token_ids = flashinfer.sampling.top_k_sampling_from_probs(probs, k, deterministic=True)
     else:
         # Both top-k and top-p.
-        next_token_ids = flashinfer.sampling.top_k_top_p_sampling_from_logits(
-            logits, k, p, deterministic=True
-        )
+        next_token_ids = flashinfer.sampling.top_k_top_p_sampling_from_logits(logits, k, p, deterministic=True)
 
     return next_token_ids.view(-1)
 

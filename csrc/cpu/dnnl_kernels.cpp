@@ -339,14 +339,14 @@ int64_t create_onednn_scaled_mm_handler(
     args.use_a_zero_point = use_azp;
   }
 
-  APHRODITE_DISPATCH_FLOATING_TYPES(output_type, "create_onednn_scaled_mm_handler",
-                               [&] {
-                                 if (dynamic_act_quant) {
-                                   args.c_type = get_dnnl_type<float>();
-                                 } else {
-                                   args.c_type = get_dnnl_type<scalar_t>();
-                                 }
-                               });
+  APHRODITE_DISPATCH_FLOATING_TYPES(output_type,
+                                    "create_onednn_scaled_mm_handler", [&] {
+                                      if (dynamic_act_quant) {
+                                        args.c_type = get_dnnl_type<float>();
+                                      } else {
+                                        args.c_type = get_dnnl_type<scalar_t>();
+                                      }
+                                    });
 
   return reinterpret_cast<int64_t>(new W8A8MatMulPrimitiveHandler(args));
 }
@@ -508,10 +508,10 @@ int64_t create_onednn_mm_handler(const torch::Tensor& b,
   args.b_ptr = b.data_ptr();
 
   APHRODITE_DISPATCH_FLOATING_TYPES(b.scalar_type(), "create_onednn_mm_handler",
-                               [&] {
-                                 args.c_type = get_dnnl_type<scalar_t>();
-                                 args.ab_type = get_dnnl_type<scalar_t>();
-                               });
+                                    [&] {
+                                      args.c_type = get_dnnl_type<scalar_t>();
+                                      args.ab_type = get_dnnl_type<scalar_t>();
+                                    });
 
   return reinterpret_cast<int64_t>(new MatMulPrimitiveHandler(args));
 }

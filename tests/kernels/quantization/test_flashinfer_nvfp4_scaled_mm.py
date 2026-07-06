@@ -102,12 +102,8 @@ def test_flashinfer_nvfp4_gemm(
     a_dtype = torch.randn((m, k), dtype=dtype, device=device)
     b_dtype = torch.randn((n, k), dtype=dtype, device=device)
 
-    a_global_scale = (
-        (FLOAT8_E4M3_MAX * FLOAT4_E2M1_MAX) / torch.amax(a_dtype.flatten(), dim=-1)
-    ).to(torch.float32)
-    b_global_scale = (
-        (FLOAT8_E4M3_MAX * FLOAT4_E2M1_MAX) / torch.amax(b_dtype.flatten(), dim=-1)
-    ).to(torch.float32)
+    a_global_scale = ((FLOAT8_E4M3_MAX * FLOAT4_E2M1_MAX) / torch.amax(a_dtype.flatten(), dim=-1)).to(torch.float32)
+    b_global_scale = ((FLOAT8_E4M3_MAX * FLOAT4_E2M1_MAX) / torch.amax(b_dtype.flatten(), dim=-1)).to(torch.float32)
     alpha = 1.0 / (a_global_scale * b_global_scale)
 
     # ops.scaled_fp4_quant returns swizzled scales, while weights
@@ -118,9 +114,7 @@ def test_flashinfer_nvfp4_gemm(
     )
     is_sf_128x4_layout = not (backend == "trtllm" and m <= 32)
 
-    b_fp4, b_scale_interleaved = ops.scaled_fp4_quant(
-        b_dtype, b_global_scale, is_sf_swizzled_layout=True
-    )
+    b_fp4, b_scale_interleaved = ops.scaled_fp4_quant(b_dtype, b_global_scale, is_sf_swizzled_layout=True)
 
     # get_ref_results unswizzles the scales internally.
     expected_out = get_ref_results(
@@ -143,13 +137,9 @@ def test_flashinfer_nvfp4_gemm(
     if "trtllm" in backend:
         epilogue_tile_m = 128
         b_fp4 = flashinfer.shuffle_matrix_a(b_fp4.view(torch.uint8), epilogue_tile_m)
-        b_scale_interleaved = convert_swizzled_to_linear(
-            b_scale_interleaved, n, k, block_size
-        )
+        b_scale_interleaved = convert_swizzled_to_linear(b_scale_interleaved, n, k, block_size)
         b_scale_interleaved = (
-            flashinfer.shuffle_matrix_sf_a(
-                b_scale_interleaved.view(torch.uint8), epilogue_tile_m
-            )
+            flashinfer.shuffle_matrix_sf_a(b_scale_interleaved.view(torch.uint8), epilogue_tile_m)
             .reshape(b_scale_interleaved.shape)
             .view(torch.float8_e4m3fn)
         )

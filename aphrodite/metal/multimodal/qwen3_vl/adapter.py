@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Qwen3-VL multimodal adapter for Aphrodite Metal."""
 
 from __future__ import annotations
@@ -8,9 +9,9 @@ from types import SimpleNamespace
 from typing import Any
 
 import mlx.core as mx
-from aphrodite.multimodal.inputs import MultiModalKwargsItem
 
 from aphrodite.metal.multimodal.feature_spec import MultiModalFeatureSpec
+from aphrodite.multimodal.inputs import MultiModalKwargsItem
 
 
 class Qwen3VLMultimodalAdapter:
@@ -18,9 +19,7 @@ class Qwen3VLMultimodalAdapter:
 
     def __init__(self, *, spatial_merge_size: int) -> None:
         if spatial_merge_size <= 0:
-            raise ValueError(
-                f"spatial_merge_size must be positive, got {spatial_merge_size}"
-            )
+            raise ValueError(f"spatial_merge_size must be positive, got {spatial_merge_size}")
         self._spatial_merge_size = spatial_merge_size
 
     def get_mrope_input_positions(
@@ -40,12 +39,10 @@ class Qwen3VLMultimodalAdapter:
 
         self._validate_image_features(mm_features)
 
-        torch_positions, mrope_position_delta = (
-            self._qwen3_vl_cls()._get_mrope_input_positions(
-                input_tokens=input_tokens,
-                mm_features=mm_features,
-                config=self._image_config(),
-            )
+        torch_positions, mrope_position_delta = self._qwen3_vl_cls()._get_mrope_input_positions(
+            input_tokens=input_tokens,
+            mm_features=mm_features,
+            config=self._image_config(),
         )
         llm_positions = torch_positions.cpu().numpy()
         return mx.array(llm_positions, dtype=mx.int32), int(mrope_position_delta)
@@ -59,21 +56,17 @@ class Qwen3VLMultimodalAdapter:
             modality = feature.modality
             if modality == "video":
                 raise NotImplementedError(
-                    "Video multimodal features are out of scope for the initial "
-                    "Qwen3.5-4B multimodal PR series."
+                    "Video multimodal features are out of scope for the initial Qwen3.5-4B multimodal PR series."
                 )
             if modality != "image":
                 raise ValueError(f"Unsupported modality: {modality}")
             if feature.data is None:
-                raise ValueError(
-                    "Image feature data is required to read image_grid_thw."
-                )
+                raise ValueError("Image feature data is required to read image_grid_thw.")
 
             t, h, w = self._grid_thw(feature.data, "image_grid_thw")
             if t != 1:
                 raise ValueError(
-                    "Multi-frame images are out of scope for the initial "
-                    f"Qwen3.5-4B multimodal PR series, got t={t}"
+                    f"Multi-frame images are out of scope for the initial Qwen3.5-4B multimodal PR series, got t={t}"
                 )
 
             llm_grid_h = h // self._spatial_merge_size

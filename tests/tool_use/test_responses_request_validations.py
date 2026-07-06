@@ -29,23 +29,17 @@ def test_responses_request_with_no_tools():
     assert request.tool_choice == "none"
 
     # tools key present but empty
-    request = ResponsesRequest.model_validate(
-        {"input": "Hello", "model": "test-model", "tools": []}
-    )
+    request = ResponsesRequest.model_validate({"input": "Hello", "model": "test-model", "tools": []})
     assert request.tool_choice == "none"
 
 
 def test_responses_request_no_tools_tool_choice_none():
-    request = ResponsesRequest.model_validate(
-        {"input": "Hello", "model": "test-model", "tool_choice": "none"}
-    )
+    request = ResponsesRequest.model_validate({"input": "Hello", "model": "test-model", "tool_choice": "none"})
     assert request.tool_choice == "none"
 
 
 def test_responses_request_no_tools_tool_choice_auto():
-    request = ResponsesRequest.model_validate(
-        {"input": "Hello", "model": "test-model", "tool_choice": "auto"}
-    )
+    request = ResponsesRequest.model_validate({"input": "Hello", "model": "test-model", "tool_choice": "auto"})
     assert request.tool_choice == "none"
 
 
@@ -54,9 +48,7 @@ def test_responses_request_required_without_tools(tools):
     kwargs = {"input": "Hello", "model": "test-model", "tool_choice": "required"}
     if tools is not None:
         kwargs["tools"] = tools
-    with pytest.raises(
-        ValidationError, match="Tool choice 'required' must be specified"
-    ):
+    with pytest.raises(ValidationError, match="Tool choice 'required' must be specified"):
         ResponsesRequest.model_validate(kwargs)
 
 
@@ -72,9 +64,7 @@ def test_responses_request_named_tool_choice_without_tools():
 
 
 def test_responses_request_with_tools_default_tool_choice():
-    request = ResponsesRequest.model_validate(
-        {"input": "Hello", "model": "test-model", "tools": [SAMPLE_TOOL]}
-    )
+    request = ResponsesRequest.model_validate({"input": "Hello", "model": "test-model", "tools": [SAMPLE_TOOL]})
     assert request.tool_choice == "auto"
 
 

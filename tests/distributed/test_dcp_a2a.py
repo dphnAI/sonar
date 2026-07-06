@@ -47,12 +47,7 @@ def _packed_a2a_reference(
     from aphrodite.v1.attention.ops.dcp_alltoall import _lse_weighted_combine
 
     B, _H, D = cp_attn_out.shape
-    outputs = (
-        cp_attn_out.view(B, world_size, h_per_rank, D)
-        .permute(1, 0, 2, 3)
-        .contiguous()
-        .float()
-    )
+    outputs = cp_attn_out.view(B, world_size, h_per_rank, D).permute(1, 0, 2, 3).contiguous().float()
     lses = cp_attn_lse.view(B, world_size, h_per_rank).permute(1, 0, 2).contiguous()
     return _lse_weighted_combine(
         outputs,
@@ -70,9 +65,7 @@ def _assert_packed_a2a_close(
     if dtype == torch.float32:
         torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-5)
     else:
-        torch.testing.assert_close(
-            actual.float(), expected.float(), rtol=3e-2, atol=3e-2
-        )
+        torch.testing.assert_close(actual.float(), expected.float(), rtol=3e-2, atol=3e-2)
 
 
 def _distributed_run(fn, world_size: int, extra_env: dict[str, str]) -> None:
@@ -112,9 +105,7 @@ class TestDCPCommBackendConfig:
 
     def test_a2a_requires_dcp_greater_than_1(self):
         """A2A backend requires decode_context_parallel_size > 1."""
-        with pytest.raises(
-            ValueError, match="requires decode_context_parallel_size > 1"
-        ):
+        with pytest.raises(ValueError, match="requires decode_context_parallel_size > 1"):
             ParallelConfig(
                 dcp_comm_backend="a2a",
                 decode_context_parallel_size=1,
@@ -320,9 +311,7 @@ class TestLSEWeightedCombine:
 
 
 class TestPackedA2AKernels:
-    @pytest.mark.skipif(
-        torch.accelerator.device_count() < 1, reason="CUDA is required."
-    )
+    @pytest.mark.skipif(torch.accelerator.device_count() < 1, reason="CUDA is required.")
     @pytest.mark.parametrize("dtype_name", ["float16", "bfloat16", "float32"])
     @pytest.mark.parametrize("return_lse", [False, True])
     @pytest.mark.parametrize("is_lse_base_on_e", [False, True])
@@ -361,9 +350,7 @@ class TestPackedA2AKernels:
             D,
             lse_pack_dim,
         )
-        actual = _dcp_a2a_unpack_combine(
-            send_buffer, D, lse_pack_dim, return_lse, is_lse_base_on_e
-        )
+        actual = _dcp_a2a_unpack_combine(send_buffer, D, lse_pack_dim, return_lse, is_lse_base_on_e)
         expected_out, expected_lse = _packed_a2a_reference(
             cp_attn_out, cp_attn_lse, world_size, h_per_rank, is_lse_base_on_e
         )
@@ -433,10 +420,7 @@ def _distributed_packed_a2a_worker(env: dict[str, str]) -> None:
         dist.all_gather(gathered_out, cp_attn_out)
         dist.all_gather(gathered_lse, cp_attn_lse)
         outputs = torch.stack(
-            [
-                t[:, rank * h_per_rank : (rank + 1) * h_per_rank, :]
-                for t in gathered_out
-            ],
+            [t[:, rank * h_per_rank : (rank + 1) * h_per_rank, :] for t in gathered_out],
             dim=0,
         ).float()
         lses = torch.stack(
@@ -466,9 +450,7 @@ def _distributed_packed_a2a_worker(env: dict[str, str]) -> None:
         dist.destroy_process_group()
 
 
-@pytest.mark.skipif(
-    torch.accelerator.device_count() < 4, reason="Need at least 4 GPUs."
-)
+@pytest.mark.skipif(torch.accelerator.device_count() < 4, reason="Need at least 4 GPUs.")
 @pytest.mark.parametrize("dtype_name", ["float16", "bfloat16", "float32"])
 def test_distributed_packed_a2a_matches_reference(dtype_name: str):
     _distributed_run(
@@ -482,9 +464,7 @@ def test_distributed_packed_a2a_matches_reference(dtype_name: str):
     )
 
 
-@pytest.mark.skipif(
-    torch.accelerator.device_count() < 4, reason="Need at least 4 GPUs."
-)
+@pytest.mark.skipif(torch.accelerator.device_count() < 4, reason="Need at least 4 GPUs.")
 def test_distributed_packed_a2a_with_workspace_matches_reference():
     _distributed_run(
         _distributed_packed_a2a_worker,

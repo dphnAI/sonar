@@ -42,9 +42,7 @@ CUTLASS_FP8_SUPPORTED = cutlass_fp8_supported()
 CUTLASS_BLOCK_FP8_SUPPORTED = cutlass_block_fp8_supported()
 
 
-def per_tensor_dequantize(
-    tensor: torch.Tensor, inv_scale: float | torch.Tensor
-) -> torch.Tensor:
+def per_tensor_dequantize(tensor: torch.Tensor, inv_scale: float | torch.Tensor) -> torch.Tensor:
     fake_qweight = tensor.to(torch.float16)
     dq_weight = fake_qweight * inv_scale
     return dq_weight
@@ -55,13 +53,9 @@ def all_close_1d(x: torch.Tensor) -> bool:
     return all(torch.allclose(x[0], x[i]) for i in range(x.shape[0]))
 
 
-def convert_to_channelwise(
-    weight_scale: torch.Tensor, logical_widths: list[int]
-) -> tuple[torch.Tensor, torch.Tensor]:
+def convert_to_channelwise(weight_scale: torch.Tensor, logical_widths: list[int]) -> tuple[torch.Tensor, torch.Tensor]:
     # Create channelwise buffer
-    weight_scale_channel = torch.empty(
-        (sum(logical_widths), 1), dtype=torch.float32, device=weight_scale.device
-    )
+    weight_scale_channel = torch.empty((sum(logical_widths), 1), dtype=torch.float32, device=weight_scale.device)
 
     # Expand each scale to match the size of each logical matrix.
     start = 0
@@ -87,10 +81,7 @@ def requantize_with_max_scale(
     # * Sample Model: nm-testing/Phi-3-mini-128k-instruct-FP8
     #
     # Extra note: upon weight reloading weight_scale.ndim == 0
-    unfused_module_in_checkpoint = (
-        weight_scale.ndim != 0
-        and weight_scale[-1] > torch.finfo(torch.float8_e4m3fn).min
-    )
+    unfused_module_in_checkpoint = weight_scale.ndim != 0 and weight_scale[-1] > torch.finfo(torch.float8_e4m3fn).min
 
     # If unfused checkpoint, need requanize with the single scale.
     if unfused_module_in_checkpoint:

@@ -18,6 +18,15 @@ from typing import NamedTuple
 import pytest
 from pydantic import TypeAdapter
 
+from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    ChatCompletionToolsParam,
+)
+from aphrodite.parser.abstract_parser import DelegatingParser, Parser
+from aphrodite.parser.engine import registered_adapters as _adapters_mod
+from aphrodite.parser.engine.adapters import (
+    ParserEngineReasoningAdapter,
+    ParserEngineToolAdapter,
+)
 from tests.parser.engine.replay_harness import (
     CHUNK_SIZES,
     DUMMY_TOOLS,
@@ -31,15 +40,6 @@ from tests.parser.engine.replay_harness import (
     replay_streaming,
 )
 from tests.parser.engine.trace_builder import _BUILDERS, build_samples
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
-    ChatCompletionToolsParam,
-)
-from aphrodite.parser.abstract_parser import DelegatingParser, Parser
-from aphrodite.parser.engine import registered_adapters as _adapters_mod
-from aphrodite.parser.engine.adapters import (
-    ParserEngineReasoningAdapter,
-    ParserEngineToolAdapter,
-)
 
 _TOOLS_VALIDATOR = TypeAdapter(list[ChatCompletionToolsParam])
 
@@ -64,20 +64,12 @@ def _discover_pairings() -> list[_PairingInfo]:
     for obj in vars(_adapters_mod).values():
         if not isinstance(obj, type):
             continue
-        if (
-            issubclass(obj, ParserEngineToolAdapter)
-            and obj is not ParserEngineToolAdapter
-        ):
+        if issubclass(obj, ParserEngineToolAdapter) and obj is not ParserEngineToolAdapter:
             tool_adapter: type[ParserEngineToolAdapter] = obj
             engines.setdefault(tool_adapter._parser_engine_cls, {})["tool"] = obj
-        elif (
-            issubclass(obj, ParserEngineReasoningAdapter)
-            and obj is not ParserEngineReasoningAdapter
-        ):
+        elif issubclass(obj, ParserEngineReasoningAdapter) and obj is not ParserEngineReasoningAdapter:
             reasoning_adapter: type[ParserEngineReasoningAdapter] = obj
-            engines.setdefault(reasoning_adapter._parser_engine_cls, {})[
-                "reasoning"
-            ] = obj
+            engines.setdefault(reasoning_adapter._parser_engine_cls, {})["reasoning"] = obj
 
     found: list[_PairingInfo] = []
     missing_builders: list[str] = []
@@ -127,9 +119,7 @@ _ALL_SAMPLES = [(p.parser_cls, s) for p in _PAIRINGS for s in p.samples]
 )
 def test_delegating_replay(parser_cls, sample, chunk_size):
     tokenizer = make_mock_tokenizer(sample)
-    validated_tools = (
-        _TOOLS_VALIDATOR.validate_python(sample.tools) if sample.tools else None
-    )
+    validated_tools = _TOOLS_VALIDATOR.validate_python(sample.tools) if sample.tools else None
     parser = parser_cls(
         tokenizer,
         validated_tools,
@@ -148,12 +138,7 @@ def test_delegating_replay(parser_cls, sample, chunk_size):
     assert_parse_output(output, sample)
 
 
-_TOOL_CALL_SAMPLES = [
-    (p.parser_cls, p.name, s)
-    for p in _PAIRINGS
-    for s in p.samples
-    if s.expected_tool_calls
-]
+_TOOL_CALL_SAMPLES = [(p.parser_cls, p.name, s) for p in _PAIRINGS for s in p.samples if s.expected_tool_calls]
 
 
 @pytest.mark.parametrize(
@@ -165,9 +150,7 @@ def test_delegating_parse_tool_choice_none(parser_cls, parser_name, sample):
     """Non-streaming parse() with tool_choice='none' via DelegatingParser
     must not leak special tokens into content."""
     tokenizer = make_mock_tokenizer(sample)
-    validated_tools = (
-        _TOOLS_VALIDATOR.validate_python(sample.tools) if sample.tools else None
-    )
+    validated_tools = _TOOLS_VALIDATOR.validate_python(sample.tools) if sample.tools else None
     parser = parser_cls(
         tokenizer,
         validated_tools,
@@ -179,16 +162,10 @@ def test_delegating_parse_tool_choice_none(parser_cls, parser_name, sample):
 
     output = parse_non_streaming(parser, sample, request)
 
-    assert output.tool_calls == [], (
-        f"Expected no tool calls but got {output.tool_calls}"
-    )
+    assert output.tool_calls == [], f"Expected no tool calls but got {output.tool_calls}"
 
     cfg = parser._tool_parser._parser_engine.parser_engine_config
-    terminals = sorted(
-        v
-        for v in set(cfg.terminals.values()) | set(cfg.token_id_terminals.values())
-        if len(v) > 1
-    )
+    terminals = sorted(v for v in set(cfg.terminals.values()) | set(cfg.token_id_terminals.values()) if len(v) > 1)
     assert_no_terminal_leakage(
         output,
         terminals,

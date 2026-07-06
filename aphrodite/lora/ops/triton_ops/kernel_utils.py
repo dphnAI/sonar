@@ -169,9 +169,7 @@ def do_expand_kernel(
         cur_lora_ptr = lora_ptr
     else:
         cur_input_ptr = input_ptr + slice_id * input_d0_stride
-        cur_lora_ptr = tl.load(lora_ptr + slice_id).to(
-            tl.pointer_type(out_ptr.dtype.element_ty)
-        )
+        cur_lora_ptr = tl.load(lora_ptr + slice_id).to(tl.pointer_type(out_ptr.dtype.element_ty))
 
     # Identify the column indices of B to process.
     offset_n = tl.arange(0, BLOCK_N) + pid_n * BLOCK_N
@@ -179,11 +177,7 @@ def do_expand_kernel(
 
     # Identify A and B block pointers
     offset_k = tl.arange(0, BLOCK_K)
-    a_ptr = (
-        cur_input_ptr
-        + ram[:, None] * input_d1_stride
-        + offset_k[None, :] * input_d2_stride
-    )
+    a_ptr = cur_input_ptr + ram[:, None] * input_d1_stride + offset_k[None, :] * input_d2_stride
     b_ptr = (
         cur_lora_ptr
         + cur_lora_d0_stride * lora_index
@@ -221,11 +215,7 @@ def do_expand_kernel(
     # Identify the C output pointers to store the results of the accumulator.
     offset_cn = tl.arange(0, BLOCK_N) + pid_n * BLOCK_N + cur_slice_start
     offset_cm = tl.arange(0, BLOCK_M)
-    c_ptr = (
-        out_ptr
-        + ram[:, None] * output_d0_stride
-        + offset_cn[None, :] * output_d1_stride
-    )
+    c_ptr = out_ptr + ram[:, None] * output_d0_stride + offset_cn[None, :] * output_d1_stride
     c_mask = (offset_cm[:, None] < M_LEN) & (offset_cn[None, :] < (cur_slice_start + N))
 
     if ADD_INPUTS:
@@ -280,9 +270,7 @@ def do_shrink_kernel(
         cur_lora_ptr = lora_ptr
     else:
         # current lora ptr
-        cur_lora_ptr = tl.load(lora_ptr + slice_id).to(
-            tl.pointer_type(input_ptr.dtype.element_ty)
-        )
+        cur_lora_ptr = tl.load(lora_ptr + slice_id).to(tl.pointer_type(input_ptr.dtype.element_ty))
 
     # Identify the column indices of B to process.
     offset_n = tl.arange(0, BLOCK_N) + pid_n * BLOCK_N
@@ -290,14 +278,9 @@ def do_shrink_kernel(
 
     # Identify A and B block pointers
     offset_k = pid_sk * BLOCK_K + tl.arange(0, BLOCK_K)
-    a_ptr = (
-        input_ptr + ram[:, None] * input_d0_stride + offset_k[None, :] * input_d1_stride
-    )
+    a_ptr = input_ptr + ram[:, None] * input_d0_stride + offset_k[None, :] * input_d1_stride
     b_ptr = (
-        cur_lora_ptr
-        + lora_d0_stride * lora_index
-        + rbn[None, :] * lora_d1_stride
-        + offset_k[:, None] * lora_d2_stride
+        cur_lora_ptr + lora_d0_stride * lora_index + rbn[None, :] * lora_d1_stride + offset_k[:, None] * lora_d2_stride
     )
 
     # Compute partial/complete block matrix product.
@@ -325,11 +308,7 @@ def do_shrink_kernel(
     offset_cn = tl.arange(0, BLOCK_N) + pid_n * BLOCK_N
     offset_cm = tl.arange(0, BLOCK_M)
     cur_out_ptr = out_ptr if SLICE_NUM == 1 else out_ptr + slice_id * output_d0_stride
-    c_ptr = (
-        cur_out_ptr
-        + ram[:, None] * output_d1_stride
-        + offset_cn[None, :] * output_d2_stride
-    )
+    c_ptr = cur_out_ptr + ram[:, None] * output_d1_stride + offset_cn[None, :] * output_d2_stride
     c_mask = (offset_cm[:, None] < M_LEN) & (offset_cn[None, :] < N)
     accumulator *= scaling
 

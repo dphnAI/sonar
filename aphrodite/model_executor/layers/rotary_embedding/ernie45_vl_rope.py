@@ -35,9 +35,7 @@ class Ernie4_5_VLRotaryEmbedding(MRotaryEmbedding):
             section_cos_w = cos[..., 1 : section_h + section_w : 2]
 
             cos_t, cos_h, cos_w = section_cos_t[0], section_cos_h[1], section_cos_w[2]
-            cos_hw = torch.stack([cos_h, cos_w], dim=-1).reshape(
-                cos_h.shape[:-1] + (cos_h.shape[-1] * 2,)
-            )
+            cos_hw = torch.stack([cos_h, cos_w], dim=-1).reshape(cos_h.shape[:-1] + (cos_h.shape[-1] * 2,))
             cos = torch.cat([cos_hw, cos_t], dim=-1)
 
             section_sin_t = sin[..., -section_t:]
@@ -45,9 +43,7 @@ class Ernie4_5_VLRotaryEmbedding(MRotaryEmbedding):
             section_sin_w = sin[..., 1 : section_h + section_w : 2]
 
             sin_t, sin_h, sin_w = section_sin_t[0], section_sin_h[1], section_sin_w[2]
-            sin_hw = torch.stack([sin_h, sin_w], dim=-1).reshape(
-                sin_h.shape[:-1] + (sin_h.shape[-1] * 2,)
-            )
+            sin_hw = torch.stack([sin_h, sin_w], dim=-1).reshape(sin_h.shape[:-1] + (sin_h.shape[-1] * 2,))
             sin = torch.cat([sin_hw, sin_t], dim=-1)
 
         query_shape = query.shape

@@ -32,6 +32,4 @@ def test_context_length_too_short(aphrodite_runner, image_assets, model):
         )
 
         with aphrodite_model:
-            aphrodite_model.generate_greedy(
-                [HF_IMAGE_PROMPTS[0]], max_tokens=1, images=[images[0]]
-            )
+            aphrodite_model.generate_greedy([HF_IMAGE_PROMPTS[0]], max_tokens=1, images=[images[0]])

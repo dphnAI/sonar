@@ -8,11 +8,7 @@ from pathlib import Path
 import jinja2.sandbox
 import pytest
 
-TEMPLATE_PATH = (
-    Path(__file__).resolve().parent.parent.parent
-    / "examples"
-    / "tool_chat_template_gemma4.jinja"
-)
+TEMPLATE_PATH = Path(__file__).resolve().parent.parent.parent / "examples" / "tool_chat_template_gemma4.jinja"
 
 
 @pytest.fixture(scope="module")

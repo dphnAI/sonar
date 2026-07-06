@@ -82,8 +82,7 @@ class SharedExperts(torch.nn.Module):
         #   - we are using flashinfer with DP, since there nothing to gain
         parallel_config = self._moe_config.moe_parallel_config
         return (
-            parallel_config.enable_eplb
-            and parallel_config.all2all_backend != "allgather_reducescatter"
+            parallel_config.enable_eplb and parallel_config.all2all_backend != "allgather_reducescatter"
         ) or parallel_config.use_fi_nvl_two_sided_kernels
 
     def _determine_shared_experts_order(
@@ -99,8 +98,7 @@ class SharedExperts(torch.nn.Module):
         should_run_shared_in_aux_stream = (
             current_platform.is_cuda()
             and self._stream is not None
-            and hidden_states.shape[0]
-            <= envs.APHRODITE_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD
+            and hidden_states.shape[0] <= envs.APHRODITE_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD
         )
 
         if should_run_shared_in_aux_stream:
@@ -165,9 +163,7 @@ class SharedExperts(torch.nn.Module):
         assert self._output[self._output_idx] is None
 
         if order == SharedExpertsOrder.MULTI_STREAM_OVERLAPPED:
-            self._output[self._output_idx] = self._run_in_aux_stream(
-                shared_experts_input
-            )
+            self._output[self._output_idx] = self._run_in_aux_stream(shared_experts_input)
         else:
             self._output[self._output_idx] = self._layer(shared_experts_input)
 

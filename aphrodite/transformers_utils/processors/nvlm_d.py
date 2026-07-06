@@ -48,10 +48,7 @@ class NVLMProcessor(InternVLProcessor):
             tile_pos_identifiers += ["<tile_global_thumbnail>"]
 
         context_size = num_features // num_patches
-        features = "".join(
-            (identifier + self.ctx_image_token * context_size)
-            for identifier in tile_pos_identifiers
-        )
+        features = "".join((identifier + self.ctx_image_token * context_size) for identifier in tile_pos_identifiers)
 
         # We include the start and end as well because "<Image><tile" is
         # tokenized as ["<Image", "><", "tile"], resulting in assertion error

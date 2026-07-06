@@ -198,12 +198,8 @@ class FireRedASR2FeatureExtractor(SequenceFeatureExtractor):
             feats.append(fbank)
             speech_lengths.append(length)
             padded_input2 = fbank
-            padded_input2 = F.pad(
-                padded_input2, (0, 0, 0, self.context - 1), "constant", 0.0
-            )
-            src_mask = padding_position_is_0(
-                padded_input2[None, :, :], torch.tensor([length], dtype=torch.int32)
-            )
+            padded_input2 = F.pad(padded_input2, (0, 0, 0, self.context - 1), "constant", 0.0)
+            src_mask = padding_position_is_0(padded_input2[None, :, :], torch.tensor([length], dtype=torch.int32))
             x_mask = src_mask
             mask = x_mask[:, :, :-2:2][:, :, :-2:2]
             input_lengths = mask[:, -1, :].sum(dim=-1)
@@ -260,15 +256,11 @@ class FireRedASR2Processor(ProcessorMixin):
         super().__init__(feature_extractor, tokenizer)
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
-        self.audio_token = (
-            tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
-        )
+        self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
-        return self.tokenizer.get_decoder_prompt_ids(
-            task=task, language=language, no_timestamps=no_timestamps
-        )
+        return self.tokenizer.get_decoder_prompt_ids(task=task, language=language, no_timestamps=no_timestamps)
 
     def __call__(self, *args, **kwargs):
         """
@@ -292,9 +284,7 @@ class FireRedASR2Processor(ProcessorMixin):
         elif isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError(
-                "Invalid input text. Please provide a string, or a list of strings"
-            )
+            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
         if audio is not None:
             # ensure we have as much audios as audio tokens
@@ -304,9 +294,7 @@ class FireRedASR2Processor(ProcessorMixin):
                 raise ValueError(
                     f"Found {num_audio_tokens} {self.audio_token} token{'s' if num_audio_tokens > 1 else ''} in provided text but received {num_audios} audio{'s' if num_audios > 1 else ''}"  # noqa: E501
                 )
-            inputs = self.feature_extractor(
-                audio, *args, sampling_rate=sampling_rate, **kwargs
-            )
+            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
 
             expanded_text = []
             for sample in text:
@@ -341,6 +329,4 @@ class FireRedASR2Processor(ProcessorMixin):
         return self.tokenizer.get_prompt_ids(text, return_tensors=return_tensors)
 
 
-AutoFeatureExtractor.register(
-    "FireRedASR2FeatureExtractor", FireRedASR2FeatureExtractor
-)
+AutoFeatureExtractor.register("FireRedASR2FeatureExtractor", FireRedASR2FeatureExtractor)

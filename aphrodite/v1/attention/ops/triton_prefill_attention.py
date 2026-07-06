@@ -74,11 +74,7 @@ def _fwd_kernel(
     offs_n = tl.arange(0, BLOCK_N)
     offs_d = tl.arange(0, BLOCK_DMODEL)
     offs_m = start_m * BLOCK_M + tl.arange(0, BLOCK_M)
-    off_q = (
-        (cur_batch_in_all_start_index + offs_m[:, None]) * stride_qbs
-        + cur_head * stride_qh
-        + offs_d[None, :]
-    )
+    off_q = (cur_batch_in_all_start_index + offs_m[:, None]) * stride_qbs + cur_head * stride_qh + offs_d[None, :]
     off_k = offs_n[None, :] * stride_kbs + cur_kv_head * stride_kh + offs_d[:, None]
     off_v = offs_n[:, None] * stride_vbs + cur_kv_head * stride_vh + offs_d[None, :]
 
@@ -123,12 +119,8 @@ def _fwd_kernel(
             mask &= pos_q >= pos_k
 
         # Bidirectional sliding window masks
-        sliding_mask_q = (
-            pos_q - pos_k <= SLIDING_WINDOW_Q if SLIDING_WINDOW_Q > 0 else None
-        )
-        sliding_mask_k = (
-            pos_k - pos_q <= SLIDING_WINDOW_K if SLIDING_WINDOW_K > 0 else None
-        )
+        sliding_mask_q = pos_q - pos_k <= SLIDING_WINDOW_Q if SLIDING_WINDOW_Q > 0 else None
+        sliding_mask_k = pos_k - pos_q <= SLIDING_WINDOW_K if SLIDING_WINDOW_K > 0 else None
         if sliding_mask_q is not None:
             mask &= sliding_mask_q
         if sliding_mask_k is not None:
@@ -166,23 +158,15 @@ def _fwd_kernel(
         m_i = m_ij
 
     acc = acc / l_i[:, None]
-    off_o = (
-        (cur_batch_in_all_start_index + offs_m[:, None]) * stride_obs
-        + cur_head * stride_oh
-        + offs_d[None, :]
-    )
+    off_o = (cur_batch_in_all_start_index + offs_m[:, None]) * stride_obs + cur_head * stride_oh + offs_d[None, :]
     out_ptrs = Out + off_o
-    tl.store(
-        out_ptrs, acc, mask=(offs_m[:, None] < cur_batch_seq_len) & (mask_d[None, :])
-    )
+    tl.store(out_ptrs, acc, mask=(offs_m[:, None] < cur_batch_seq_len) & (mask_d[None, :]))
 
 
 def get_block_size(dtype: torch.dtype) -> int:
     if dtype == torch.float32:
         return 32
-    elif current_platform.is_cuda_alike() and current_platform.has_device_capability(
-        80
-    ):
+    elif current_platform.is_cuda_alike() and current_platform.has_device_capability(80):
         return 128
     else:
         return 64

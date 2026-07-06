@@ -47,9 +47,7 @@ def managed_llm(*args: Any, **kwargs: Any) -> Iterator[Any]:
     from aphrodite import LLM
 
     llm = LLM(*args, **kwargs)
-    gpu_memory_utilization = (
-        llm.llm_engine.aphrodite_config.cache_config.gpu_memory_utilization
-    )
+    gpu_memory_utilization = llm.llm_engine.aphrodite_config.cache_config.gpu_memory_utilization
     try:
         yield llm
     finally:
@@ -63,9 +61,7 @@ def _make_managed_llm_factory() -> Iterator[Callable[..., Any]]:
 
     def make_llm(*args: Any, **kwargs: Any) -> Any:
         llm = LLM(*args, **kwargs)
-        gpu_memory_utilization = (
-            llm.llm_engine.aphrodite_config.cache_config.gpu_memory_utilization
-        )
+        gpu_memory_utilization = llm.llm_engine.aphrodite_config.cache_config.gpu_memory_utilization
         llms.append((llm, gpu_memory_utilization))
         return llm
 

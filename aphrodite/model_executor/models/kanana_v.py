@@ -138,9 +138,7 @@ class DynamicCAbstractor(nn.Module):
         if num_input_tokens == -1:
             num_input_tokens = config.pos_emb_size
         self.num_input_tokens = num_input_tokens
-        self.pos_emb = build_pos_embeds(
-            config, num_input_tokens, config.encoder_hidden_size
-        )
+        self.pos_emb = build_pos_embeds(config, num_input_tokens, config.encoder_hidden_size)
         self.build_net()
 
     def _load_from_state_dict(self, state_dict, *args, **kwargs) -> None:
@@ -212,9 +210,7 @@ class DynamicCAbstractor(nn.Module):
         for _visual_embeds, _grid_thw in zip(split_visual_embeds, grid_thw):
             T, H, W = _grid_thw
             assert T == 1, "T must be 1. Video is not supported yet."
-            reshaped_visual_embeds = rearrange(
-                _visual_embeds, "(t h w) d -> 1 t h w d", t=T, h=H, w=W
-            )
+            reshaped_visual_embeds = rearrange(_visual_embeds, "(t h w) d -> 1 t h w d", t=T, h=H, w=W)
             # remove temporal dim
             reshaped_visual_embeds = reshaped_visual_embeds[:, 0]
 
@@ -386,9 +382,7 @@ class KananaVProcessingInfo(BaseProcessingInfo):
         do_resize: bool = True,
     ) -> tuple[ImageSize, int]:
         image_processor = self.ctx.get_hf_processor().image_processor
-        smart_resize = resolve_obj_by_qualname(
-            f"{type(image_processor).__module__}.smart_resize"
-        )
+        smart_resize = resolve_obj_by_qualname(f"{type(image_processor).__module__}.smart_resize")
 
         hf_config = self.get_hf_config()
         vision_config = hf_config.vision_config
@@ -448,9 +442,7 @@ class KananaVDummyInputsBuilder(BaseDummyInputsBuilder[KananaVProcessingInfo]):
     ) -> MultiModalDataDict:
         num_images = mm_counts.get("image", 0)
         return {
-            "image": self._get_dummy_images(
-                width=9999, height=9999, num_images=num_images
-            ),
+            "image": self._get_dummy_images(width=9999, height=9999, num_images=num_images),
         }
 
 
@@ -512,9 +504,7 @@ class KananaVMultiModalProcessor(BaseMultiModalProcessor[KananaVProcessingInfo])
             img_i = 0
             for tok in input_ids.tolist():
                 if tok == self.media_token_id and img_i < num_images:
-                    expanded.extend(
-                        [self.media_token_id] * int(per_image_token_counts[img_i])
-                    )
+                    expanded.extend([self.media_token_id] * int(per_image_token_counts[img_i]))
                     img_i += 1
                 else:
                     expanded.append(tok)
@@ -601,13 +591,9 @@ class KananaVForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP)
                 architectures=["LlamaForCausalLM"],
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> KananaVImageInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> KananaVImageInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         vision_grid_thw = kwargs.pop("vision_grid_thw", None)
 
@@ -615,9 +601,7 @@ class KananaVForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP)
             return None
 
         if vision_grid_thw is None:
-            raise ValueError(
-                "vision_grid_thw is required when pixel_values is provided"
-            )
+            raise ValueError("vision_grid_thw is required when pixel_values is provided")
 
         # Normalize pixel_values to 2D tensor (num_patches, channels*patch*patch)
         if isinstance(pixel_values, torch.Tensor):
@@ -677,9 +661,7 @@ class KananaVForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP)
         layer_index: int | Sequence[int],
     ) -> torch.Tensor:
         if isinstance(layer_index, (list, tuple)):
-            visual_features = torch.stack(v_output, dim=1)[
-                :, layer_index
-            ]  # [B, n_scales, L, dim]
+            visual_features = torch.stack(v_output, dim=1)[:, layer_index]  # [B, n_scales, L, dim]
         else:
             visual_features = v_output[layer_index]  # [B, L, dim]
         return visual_features
@@ -697,9 +679,7 @@ class KananaVForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP)
         }
         v_outputs = self.vision_model(**vision_model_args)
         layer_index = self.config.projector_config.feature_layer_index
-        visual_features = self._get_visual_feature_at(
-            v_outputs.hidden_states, layer_index
-        )
+        visual_features = self._get_visual_feature_at(v_outputs.hidden_states, layer_index)
         return visual_features
 
     def forward_projector(

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from __future__ import annotations
 
 import math
@@ -7,8 +8,8 @@ from typing import Any
 import mlx.core as mx
 import mlx.nn as nn
 from mlx_lm.models.base import scaled_dot_product_attention
-from aphrodite.logger import init_logger
 
+from aphrodite.logger import init_logger
 from aphrodite.metal.metal_kernel_backend.packed_prefill_compat import apply_packed_rope
 from aphrodite.metal.mlx_backend.mla_cache import MLAPagedLatentCache
 from aphrodite.metal.paged_attention_common import find_attn_attr, find_layers, get_context
@@ -49,13 +50,9 @@ class MLAPagedAttentionWrapper(nn.Module):
         object.__setattr__(self, "_mla_layer_idx", layer_idx)
         object.__setattr__(self, "_mla_latent_cache", latent_cache)
         if hasattr(inner, "embed_q") and hasattr(inner, "unembed_out"):
-            object.__setattr__(
-                self, "_apply_mla_attention", self._apply_absorbed_mla_attention
-            )
+            object.__setattr__(self, "_apply_mla_attention", self._apply_absorbed_mla_attention)
         else:
-            object.__setattr__(
-                self, "_apply_mla_attention", self._apply_kv_b_proj_attention
-            )
+            object.__setattr__(self, "_apply_mla_attention", self._apply_kv_b_proj_attention)
 
     def _attention_scale(self) -> float:
         inner = self._inner
@@ -103,9 +100,7 @@ class MLAPagedAttentionWrapper(nn.Module):
         rq_nope_proj = inner.embed_q(rq_nope)
         kv = all_kv_norm.reshape(1, 1, ctx_len, inner.kv_lora_rank)
 
-        out = scaled_dot_product_attention(
-            rq_nope_proj, kv, kv, cache=None, scale=scale, mask=pe_scores
-        )
+        out = scaled_dot_product_attention(rq_nope_proj, kv, kv, cache=None, scale=scale, mask=pe_scores)
         return inner.unembed_out(out)  # recover v_head_dim from kv_lora_rank
 
     def _apply_kv_b_proj_attention(
@@ -139,18 +134,14 @@ class MLAPagedAttentionWrapper(nn.Module):
             fill = mx.array(mx.finfo(queries.dtype).min, queries.dtype)
             attn_mask = mx.where(causal_mask, mx.array(0, queries.dtype), fill)
 
-        return scaled_dot_product_attention(
-            queries, keys, values, cache=None, scale=scale, mask=attn_mask
-        )
+        return scaled_dot_product_attention(queries, keys, values, cache=None, scale=scale, mask=attn_mask)
 
     def __call__(self, x: mx.array, mask: Any = None, cache: Any = None) -> mx.array:
         ctx = get_context()
         if ctx is None:
             return self._inner(x, mask=mask, cache=cache)
         if not ctx.block_tables:
-            raise RuntimeError(
-                "MLAPagedAttentionWrapper called with empty block_tables"
-            )
+            raise RuntimeError("MLAPagedAttentionWrapper called with empty block_tables")
 
         inner = self._inner
         layer_idx: int = self._mla_layer_idx
@@ -163,20 +154,17 @@ class MLAPagedAttentionWrapper(nn.Module):
             q = inner.q_proj(x)
         else:
             q = inner.q_b_proj(inner.q_a_layernorm(inner.q_a_proj(x)))
-        q = q.reshape(1, seq_len, inner.num_heads, inner.q_head_dim).transpose(
-            0, 2, 1, 3
-        )
+        q = q.reshape(1, seq_len, inner.num_heads, inner.q_head_dim).transpose(0, 2, 1, 3)
         q_nope, q_pe = mx.split(q, [inner.qk_nope_head_dim], axis=-1)
 
         # KV path — kv_a_proj produces both the lora latent and the rope key in one shot
         kv_out = inner.kv_a_proj_with_mqa(x)
         compressed_kv, k_pe_raw = mx.split(kv_out, [inner.kv_lora_rank], axis=-1)
         kv_norm = inner.kv_a_layernorm(compressed_kv)  # what ends up in the cache
-        k_pe = k_pe_raw.reshape(1, seq_len, 1, inner.qk_rope_head_dim).transpose(
-            0, 2, 1, 3
-        )
+        k_pe = k_pe_raw.reshape(1, seq_len, 1, inner.qk_rope_head_dim).transpose(0, 2, 1, 3)
 
         # RoPE is applied per request segment so each request starts at its own position
+        assert ctx.cu_seqlens is not None
         q_pe, k_pe = apply_packed_rope(
             inner,
             q_pe,
@@ -189,17 +177,11 @@ class MLAPagedAttentionWrapper(nn.Module):
         # then scatter-write it into the cache at the scheduler-assigned slots.
         # MLX arrays are functional, so the indexed update returns a new array
         # that we explicitly reassign back into the cache list.
-        k_pe_seq = k_pe.transpose(0, 2, 1, 3).reshape(
-            1, seq_len, inner.qk_rope_head_dim
-        )
+        k_pe_seq = k_pe.transpose(0, 2, 1, 3).reshape(1, seq_len, inner.qk_rope_head_dim)
         latent_new = mx.concatenate([kv_norm, k_pe_seq], axis=-1)
-        latent_flat = latent_new.reshape(seq_len, latent_cache.latent_dim).astype(
-            latent_cache.dtype
-        )
+        latent_flat = latent_new.reshape(seq_len, latent_cache.latent_dim).astype(latent_cache.dtype)
 
-        flat = latent_cache.latent_caches[layer_idx].reshape(
-            -1, latent_cache.latent_dim
-        )
+        flat = latent_cache.latent_caches[layer_idx].reshape(-1, latent_cache.latent_dim)
         flat[mx.array(ctx.slot_mapping, dtype=mx.int64)] = latent_flat
         latent_cache.latent_caches[layer_idx] = flat.reshape(
             latent_cache.num_blocks, latent_cache.block_size, latent_cache.latent_dim
@@ -219,9 +201,7 @@ class MLAPagedAttentionWrapper(nn.Module):
             # Block indexing: each block holds block_size contiguous token slots.
             n_blocks = math.ceil(ctx_len / latent_cache.block_size)
             blocks = block_tables_mx[req_idx][:n_blocks]
-            all_latent = latent_cache.latent_caches[layer_idx][blocks].reshape(
-                -1, latent_cache.latent_dim
-            )[:ctx_len]
+            all_latent = latent_cache.latent_caches[layer_idx][blocks].reshape(-1, latent_cache.latent_dim)[:ctx_len]
 
             all_kv_norm = all_latent[:, : inner.kv_lora_rank]
             all_k_pe = all_latent[:, inner.kv_lora_rank :]
@@ -230,9 +210,7 @@ class MLAPagedAttentionWrapper(nn.Module):
             rq_pe = q_pe[:, :, req_start:req_end, :]
 
             k_pe_r = all_k_pe.reshape(1, 1, ctx_len, inner.qk_rope_head_dim)
-            causal_mask = self._causal_valid_mask(
-                num_new=num_new, ctx_len=ctx_len, past_len=past_len
-            )
+            causal_mask = self._causal_valid_mask(num_new=num_new, ctx_len=ctx_len, past_len=past_len)
 
             out = self._apply_mla_attention(
                 rq_nope=rq_nope,

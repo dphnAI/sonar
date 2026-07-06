@@ -122,9 +122,7 @@ def make_fused_moe_layer(
 
     block_size = 16
 
-    def block_quant_scales_shape(
-        shape: tuple[int, ...], is_column_major: bool
-    ) -> tuple[int, ...]:
+    def block_quant_scales_shape(shape: tuple[int, ...], is_column_major: bool) -> tuple[int, ...]:
         assert len(shape) == 3
         if not is_column_major:
             return (shape[0], shape[1] // block_size, shape[2] // block_size)
@@ -172,12 +170,8 @@ def make_fused_moe_layer(
         assert not w2_weight_scale_inv.is_contiguous()
 
     # Add scales to the parameter list
-    re.w13_weight_scale_inv = torch.nn.Parameter(
-        w13_weight_scale_inv, requires_grad=False
-    )
-    re.w2_weight_scale_inv = torch.nn.Parameter(
-        w2_weight_scale_inv, requires_grad=False
-    )
+    re.w13_weight_scale_inv = torch.nn.Parameter(w13_weight_scale_inv, requires_grad=False)
+    re.w2_weight_scale_inv = torch.nn.Parameter(w2_weight_scale_inv, requires_grad=False)
 
     return fml
 
@@ -192,22 +186,17 @@ def _test_eplb_fml(env, world_size: int, test_config: TestConfig):
     aphrodite_config.parallel_config.enable_expert_parallel = True
 
     with set_current_aphrodite_config(aphrodite_config):
-        ensure_model_parallel_initialized(
-            tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1
-        )
+        ensure_model_parallel_initialized(tensor_model_parallel_size=world_size, pipeline_model_parallel_size=1)
 
         ep_group = get_tp_group().cpu_group
         ep_rank = torch.distributed.get_rank()
 
         fml_layers = [
-            make_fused_moe_layer(ep_rank, layer_idx, test_config)
-            for layer_idx in range(test_config.num_layers)
+            make_fused_moe_layer(ep_rank, layer_idx, test_config) for layer_idx in range(test_config.num_layers)
         ]
         rank_expert_weights = [fml.get_expert_weights() for fml in fml_layers]
 
-        indices = torch.zeros(
-            test_config.num_layers, test_config.num_experts, dtype=torch.long
-        )
+        indices = torch.zeros(test_config.num_layers, test_config.num_experts, dtype=torch.long)
         for lidx in range(test_config.num_layers):
             indices[lidx] = torch.Tensor(range(test_config.num_experts))
 
@@ -247,8 +236,7 @@ def _test_eplb_fml(env, world_size: int, test_config: TestConfig):
                         is_column_major=not w[e].is_contiguous(),
                     )
                     assert w[e].shape == ref.shape and w[e].stride() == ref.stride(), (
-                        f"w[{e}] {w[e].size()} {w[e].stride()} vs "
-                        f"ref {ref.size()} {ref.stride()}"
+                        f"w[{e}] {w[e].size()} {w[e].stride()} vs ref {ref.size()} {ref.stride()}"
                     )
                     torch.testing.assert_close(w[e], ref)
 

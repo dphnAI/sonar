@@ -107,9 +107,7 @@ class CompressedTensorsW4A16FlydslMoEMethod(CompressedTensorsMoEMethod):
         self.group_size = weight_quant.group_size
         # grouped actorder isn't supported by this kernel
         assert weight_quant.actorder != "group"
-        assert weight_quant.symmetric, (
-            "Only symmetric quantization is supported for MoE"
-        )
+        assert weight_quant.symmetric, "Only symmetric quantization is supported for MoE"
 
     def create_weights(
         self,
@@ -125,9 +123,7 @@ class CompressedTensorsW4A16FlydslMoEMethod(CompressedTensorsMoEMethod):
         # Will transpose the loaded weight along the
         # intermediate and hidden dim sizes. Will
         # shard for TP along the transposed dims
-        extra_weight_attrs.update(
-            {"is_transposed": True, "quant_method": self.strategy}
-        )
+        extra_weight_attrs.update({"is_transposed": True, "quant_method": self.strategy})
         w13_num_shards = 2 if self.moe.is_act_and_mul else 1
         w13_weight = torch.nn.Parameter(
             torch.empty(
@@ -182,14 +178,10 @@ class CompressedTensorsW4A16FlydslMoEMethod(CompressedTensorsMoEMethod):
         set_weight_attrs(w2_scale, extra_weight_attrs)
         set_weight_attrs(w2_scale, {"load_full_w2": False})
 
-        w2_weight_shape = torch.nn.Parameter(
-            torch.empty(num_experts, 2), requires_grad=False
-        )
+        w2_weight_shape = torch.nn.Parameter(torch.empty(num_experts, 2), requires_grad=False)
         layer.register_parameter("w2_weight_shape", w2_weight_shape)
         set_weight_attrs(w2_weight_shape, extra_weight_attrs)
-        w13_weight_shape = torch.nn.Parameter(
-            torch.empty(num_experts, 2), requires_grad=False
-        )
+        w13_weight_shape = torch.nn.Parameter(torch.empty(num_experts, 2), requires_grad=False)
 
         layer.register_parameter("w13_weight_shape", w13_weight_shape)
         set_weight_attrs(w13_weight_shape, extra_weight_attrs)
@@ -262,44 +254,26 @@ class CompressedTensorsW4A16FlydslMoEMethod(CompressedTensorsMoEMethod):
         w13_scale = layer.w13_weight_scale.data
         if self.group_size > 0 and w13_scale.dim() == 3 and w13_scale.shape[1] > 1:
             E, G, N = w13_scale.shape
-            w13_scale = (
-                w13_scale.view(E, G // 2, 2, N)
-                .permute(0, 1, 3, 2)
-                .contiguous()
-                .view(-1)
-                .contiguous()
-            )
+            w13_scale = w13_scale.view(E, G // 2, 2, N).permute(0, 1, 3, 2).contiguous().view(-1).contiguous()
         elif w13_scale.dim() == 3 and w13_scale.shape[1] == 1:
             # Per-row: squeeze [E, 1, N] -> [E, N]
             w13_scale = w13_scale.squeeze(1)
-        layer.w13_weight_scale = torch.nn.Parameter(
-            w13_scale.contiguous(), requires_grad=False
-        )
+        layer.w13_weight_scale = torch.nn.Parameter(w13_scale.contiguous(), requires_grad=False)
 
         w2_scale = layer.w2_weight_scale.data
         if self.group_size > 0 and w2_scale.dim() == 3 and w2_scale.shape[1] > 1:
             E, G, N = w2_scale.shape
-            w2_scale = (
-                w2_scale.view(E, G // 2, 2, N)
-                .permute(0, 1, 3, 2)
-                .contiguous()
-                .view(-1)
-                .contiguous()
-            )
+            w2_scale = w2_scale.view(E, G // 2, 2, N).permute(0, 1, 3, 2).contiguous().view(-1).contiguous()
         elif w2_scale.dim() == 3 and w2_scale.shape[1] == 1:
             # Per-row: squeeze [E, 1, N] -> [E, N]
             w2_scale = w2_scale.squeeze(1)
-        layer.w2_weight_scale = torch.nn.Parameter(
-            w2_scale.contiguous(), requires_grad=False
-        )
+        layer.w2_weight_scale = torch.nn.Parameter(w2_scale.contiguous(), requires_grad=False)
 
         layer.w13_weight_packed.is_shuffled = True
         layer.w2_weight_packed.is_shuffled = True
         layer.is_aiter_converted = True
 
-    def get_fused_moe_quant_config(
-        self, layer: torch.nn.Module
-    ) -> FusedMoEQuantConfig | None:
+    def get_fused_moe_quant_config(self, layer: torch.nn.Module) -> FusedMoEQuantConfig | None:
         assert self.num_bits == 4
         return int4_w4a16_moe_quant_config(
             w1_scale=layer.w13_weight_scale,

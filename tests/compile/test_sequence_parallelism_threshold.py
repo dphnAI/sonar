@@ -16,17 +16,13 @@ class TestGetSequenceParallelismThreshold:
     def test_non_cuda_returns_none(self, mock_cuda_platform):
         """Non-CUDA platforms should return None."""
         with mock_cuda_platform(is_cuda=False):
-            result = get_sequence_parallelism_threshold(
-                hidden_size=8192, tp_size=2, element_size=2
-            )
+            result = get_sequence_parallelism_threshold(hidden_size=8192, tp_size=2, element_size=2)
         assert result is None
 
     def test_unsupported_device_capability_returns_none(self, mock_cuda_platform):
         """Unsupported device capabilities (e.g., sm80) should return None."""
         with mock_cuda_platform(capability=(8, 0)):
-            result = get_sequence_parallelism_threshold(
-                hidden_size=8192, tp_size=2, element_size=2
-            )
+            result = get_sequence_parallelism_threshold(hidden_size=8192, tp_size=2, element_size=2)
         assert result is None
 
     def test_small_hidden_size_returns_none(self, mock_cuda_platform):
@@ -54,10 +50,7 @@ class TestGetSequenceParallelismThreshold:
 
             # Verify calculation: (8 * 2 * 1024 * 1024) // (8192 * 2) = 1024
             MiB = 1024 * 1024
-            expected = int(
-                (SP_MIN_PER_GPU_SIZE_MB[90] * tp_size * MiB)
-                // (hidden_size * element_size)
-            )
+            expected = int((SP_MIN_PER_GPU_SIZE_MB[90] * tp_size * MiB) // (hidden_size * element_size))
             assert result == expected
             assert result == 1024
 
@@ -78,9 +71,7 @@ class TestGetSequenceParallelismThreshold:
             (8192, 2, 4, 512),
         ],
     )
-    def test_threshold_calculation_variations(
-        self, mock_cuda_platform, hidden_size, tp_size, element_size, expected
-    ):
+    def test_threshold_calculation_variations(self, mock_cuda_platform, hidden_size, tp_size, element_size, expected):
         """Test threshold calculation with various parameter combinations."""
         with mock_cuda_platform(capability=(9, 0)):
             result = get_sequence_parallelism_threshold(
@@ -141,9 +132,7 @@ class TestGetSequenceParallelismThresholdXPU:
             )
         # (8 * 2 * 1024 * 1024) // (4096 * 2) = 2048
         MiB = 1024 * 1024
-        expected = int(
-            (_XPU_MIN_PER_GPU_SIZE_MB * tp_size * MiB) // (hidden_size * element_size)
-        )
+        expected = int((_XPU_MIN_PER_GPU_SIZE_MB * tp_size * MiB) // (hidden_size * element_size))
         assert result == expected
         assert result == 2048
 

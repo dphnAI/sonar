@@ -19,9 +19,7 @@ class FallbackExperts(mk.FusedMoEExpertsModular, ABC):
         experts: mk.FusedMoEExpertsModular,
         fallback_experts: mk.FusedMoEExpertsModular,
     ):
-        super().__init__(
-            moe_config=experts.moe_config, quant_config=experts.quant_config
-        )
+        super().__init__(moe_config=experts.moe_config, quant_config=experts.quant_config)
         self.fallback_experts = fallback_experts
         self.experts = experts
 
@@ -37,9 +35,7 @@ class FallbackExperts(mk.FusedMoEExpertsModular, ABC):
         we have a consistent way to call the _supports_*
         class methods below.
         """
-        raise NotImplementedError(
-            "Subclasses must return the cls for the experts and fallback experts."
-        )
+        raise NotImplementedError("Subclasses must return the cls for the experts and fallback experts.")
 
     @classmethod
     def activation_format(
@@ -52,18 +48,12 @@ class FallbackExperts(mk.FusedMoEExpertsModular, ABC):
     @classmethod
     def _supports_current_device(cls) -> bool:
         experts_cls, fallback_cls = cls.get_clses()
-        return (
-            experts_cls._supports_current_device()
-            and fallback_cls._supports_current_device()
-        )
+        return experts_cls._supports_current_device() and fallback_cls._supports_current_device()
 
     @classmethod
     def _supports_no_act_and_mul(cls) -> bool:
         experts_cls, fallback_cls = cls.get_clses()
-        return (
-            experts_cls._supports_no_act_and_mul()
-            and fallback_cls._supports_no_act_and_mul()
-        )
+        return experts_cls._supports_no_act_and_mul() and fallback_cls._supports_no_act_and_mul()
 
     @classmethod
     def _supports_quant_scheme(
@@ -72,25 +62,21 @@ class FallbackExperts(mk.FusedMoEExpertsModular, ABC):
         activation_key: QuantKey | None,
     ) -> bool:
         experts_cls, fallback_cls = cls.get_clses()
-        return experts_cls._supports_quant_scheme(
+        return experts_cls._supports_quant_scheme(weight_key, activation_key) and fallback_cls._supports_quant_scheme(
             weight_key, activation_key
-        ) and fallback_cls._supports_quant_scheme(weight_key, activation_key)
+        )
 
     @classmethod
     def _supports_activation(cls, activation: MoEActivation) -> bool:
         experts_cls, fallback_cls = cls.get_clses()
-        return experts_cls._supports_activation(
-            activation
-        ) and fallback_cls._supports_activation(activation)
+        return experts_cls._supports_activation(activation) and fallback_cls._supports_activation(activation)
 
     @classmethod
-    def _supports_parallel_config(
-        cls, moe_parallel_config: FusedMoEParallelConfig
-    ) -> bool:
+    def _supports_parallel_config(cls, moe_parallel_config: FusedMoEParallelConfig) -> bool:
         experts_cls, fallback_cls = cls.get_clses()
-        return experts_cls._supports_parallel_config(
+        return experts_cls._supports_parallel_config(moe_parallel_config) and fallback_cls._supports_parallel_config(
             moe_parallel_config
-        ) and fallback_cls._supports_parallel_config(moe_parallel_config)
+        )
 
     def finalize_weight_and_reduce_impl(self) -> mk.TopKWeightAndReduce:
         e_war = self.experts.finalize_weight_and_reduce_impl()

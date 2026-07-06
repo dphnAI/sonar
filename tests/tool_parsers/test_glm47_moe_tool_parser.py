@@ -150,14 +150,8 @@ class TestGlm47Streaming:
             )
             if delta:
                 deltas.append(delta)
-        tool_calls = [
-            tool_call for delta in deltas for tool_call in (delta.tool_calls or [])
-        ]
-        names = [
-            tool_call.function.name
-            for tool_call in tool_calls
-            if tool_call.function and tool_call.function.name
-        ]
+        tool_calls = [tool_call for delta in deltas for tool_call in (delta.tool_calls or [])]
+        names = [tool_call.function.name for tool_call in tool_calls if tool_call.function and tool_call.function.name]
         arguments = [
             tool_call.function.arguments
             for tool_call in tool_calls

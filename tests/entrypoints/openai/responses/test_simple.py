@@ -115,9 +115,7 @@ async def test_streaming_output_consistency(client: OpenAI, model_name: str):
     assert len(events) > 0
 
     # Concatenate all delta text from streaming events
-    streaming_text = "".join(
-        event.delta for event in events if event.type == "response.output_text.delta"
-    )
+    streaming_text = "".join(event.delta for event in events if event.type == "response.output_text.delta")
 
     # Get the final response from the last event
     response_completed_event = events[-1]
@@ -132,9 +130,7 @@ async def test_streaming_output_consistency(client: OpenAI, model_name: str):
 
     # Verify streaming text matches final output_text
     assert streaming_text == final_output_text, (
-        f"Streaming text does not match final output_text.\n"
-        f"Streaming: {streaming_text!r}\n"
-        f"Final: {final_output_text!r}"
+        f"Streaming text does not match final output_text.\nStreaming: {streaming_text!r}\nFinal: {final_output_text!r}"
     )
 
 
@@ -178,12 +174,8 @@ async def test_streaming_logprobs(client: OpenAI, model_name: str):
                 assert isinstance(tl.logprob, float)
 
     # Verify that top_logprobs are actually populated, not always empty
-    all_top_logprobs = [
-        tl for e in text_delta_events for lp in e.logprobs for tl in lp.top_logprobs
-    ]
-    assert len(all_top_logprobs) > 0, (
-        "Expected at least one top_logprobs entry across all delta events"
-    )
+    all_top_logprobs = [tl for e in text_delta_events for lp in e.logprobs for tl in lp.top_logprobs]
+    assert len(all_top_logprobs) > 0, "Expected at least one top_logprobs entry across all delta events"
 
     # Verify the completed event still has valid output
     completed = events[-1]
@@ -278,9 +270,7 @@ async def test_extra_sampling_params(client: OpenAI, model_name: str):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-async def test_streaming_types(
-    pairs_of_event_types: dict[str, str], client: OpenAI, model_name: str
-):
+async def test_streaming_types(pairs_of_event_types: dict[str, str], client: OpenAI, model_name: str):
     stream = await client.responses.create(
         model=model_name,
         input="tell me a story about a cat in 20 words",

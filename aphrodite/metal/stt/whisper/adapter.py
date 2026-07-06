@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Whisper runtime adapter for Aphrodite STT execution."""
 
 from __future__ import annotations
@@ -16,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 class WhisperRuntimeAdapter(STTRuntimeAdapter):
+    model: WhisperModel
+
     def __init__(self, model: WhisperModel, model_path: str) -> None:
         super().__init__(model, model_path)
         self._transcriber: WhisperTranscriber | None = None
@@ -23,9 +26,7 @@ class WhisperRuntimeAdapter(STTRuntimeAdapter):
     @property
     def transcriber(self) -> WhisperTranscriber:
         if self._transcriber is None:
-            self._transcriber = WhisperTranscriber(
-                self.model, model_path=self._model_path
-            )
+            self._transcriber = WhisperTranscriber(self.model, model_path=self._model_path)
         return self._transcriber
 
     @property
@@ -42,9 +43,7 @@ class WhisperRuntimeAdapter(STTRuntimeAdapter):
         elif mel.ndim == 3:
             mel = mel.transpose(0, 2, 1)  # (batch, time, n_mels)
         else:
-            raise ValueError(
-                f"Unexpected mel spectrogram rank {mel.ndim}; expected 2D or 3D"
-            )
+            raise ValueError(f"Unexpected mel spectrogram rank {mel.ndim}; expected 2D or 3D")
 
         features = self.model.encode(mel)
         mx.eval(features)

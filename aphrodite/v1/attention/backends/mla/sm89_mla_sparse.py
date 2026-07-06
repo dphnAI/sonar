@@ -308,8 +308,7 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
             )
         except Exception:
             logger.warning(
-                "sm89 DCP Triton kernel warmup failed; kernels will be "
-                "JIT-compiled on first use instead.",
+                "sm89 DCP Triton kernel warmup failed; kernels will be JIT-compiled on first use instead.",
                 exc_info=True,
             )
 
@@ -331,12 +330,10 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
             return 0, None
         # Must match the indexer builder's split exactly (same threshold and
         # require_uniform) so both sides agree on the decode/prefill boundary.
-        num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
-            split_decodes_and_prefills(
-                cm,
-                decode_threshold=self.reorder_batch_threshold or 1,
-                require_uniform=True,
-            )
+        num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = split_decodes_and_prefills(
+            cm,
+            decode_threshold=self.reorder_batch_threshold or 1,
+            require_uniform=True,
         )
         if num_prefills == 0:
             return num_decode_tokens, None
@@ -362,9 +359,7 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
         ws_req_ids = np.repeat(np.arange(num_prefills, dtype=np.int32), prefill_query_lens)
         workspace_starts = torch.empty(num_prefills, dtype=torch.int32, device=self.device)
         workspace_starts.copy_(np_to_pinned_tensor(ws_starts), non_blocking=True)
-        workspace_request_ids = torch.empty(
-            num_prefill_tokens, dtype=torch.int32, device=self.device
-        )
+        workspace_request_ids = torch.empty(num_prefill_tokens, dtype=torch.int32, device=self.device)
         workspace_request_ids.copy_(np_to_pinned_tensor(ws_req_ids), non_blocking=True)
         return num_decode_tokens, Sm89LocalPrefillMetadata(
             workspace_request_ids=workspace_request_ids,
@@ -402,9 +397,7 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
             req_id_per_token=self.req_id_per_token_buffer[:num_tokens],
             block_size=self.kv_cache_spec.block_size,
             topk_tokens=self.topk_tokens,
-            cp_kv_cache_interleave_size=(
-                self.aphrodite_config.parallel_config.cp_kv_cache_interleave_size
-            ),
+            cp_kv_cache_interleave_size=(self.aphrodite_config.parallel_config.cp_kv_cache_interleave_size),
             num_decode_tokens=num_decode_tokens,
             prefill_local=prefill_local,
         )
@@ -469,15 +462,11 @@ class Sm89MLASparseImpl(SparseMLAAttentionImpl[Sm89MLASparseMetadata]):
             # viewed with the paged shape concat_and_cache_mla expects; with
             # identity slots the paged view is exactly the flat row view.
             pool_rows = round_up(max_tokens, 64)
-            self.q_concat_buffer, self.prefill_local_pool = (
-                current_workspace_manager().get_simultaneous(
-                    ((max_tokens, num_heads, head_size), torch.bfloat16),
-                    ((pool_rows, 656), torch.uint8),
-                )
+            self.q_concat_buffer, self.prefill_local_pool = current_workspace_manager().get_simultaneous(
+                ((max_tokens, num_heads, head_size), torch.bfloat16),
+                ((pool_rows, 656), torch.uint8),
             )
-            self.prefill_local_pool_paged = self.prefill_local_pool.view(
-                pool_rows // 64, 64, 656
-            )
+            self.prefill_local_pool_paged = self.prefill_local_pool.view(pool_rows // 64, 64, 656)
         else:
             (self.q_concat_buffer,) = current_workspace_manager().get_simultaneous(
                 ((max_tokens, num_heads, head_size), torch.bfloat16),

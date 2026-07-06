@@ -3,10 +3,10 @@
 
 import pytest
 
-from tests.utils import create_new_process_for_each_test
 from aphrodite import LLM, SamplingParams
 from aphrodite.assets.image import ImageAsset
 from aphrodite.multimodal.image import convert_image_mode
+from tests.utils import create_new_process_for_each_test
 
 
 @create_new_process_for_each_test()
@@ -49,9 +49,7 @@ def test_oot_registration_embedding(
     with monkeypatch.context() as m:
         m.setenv("APHRODITE_PLUGINS", "register_dummy_model")
         prompts = ["Hello, my name is", "The text does not matter"]
-        llm = LLM(
-            model=dummy_gemma2_embedding_path, load_format="dummy", max_model_len=2048
-        )
+        llm = LLM(model=dummy_gemma2_embedding_path, load_format="dummy", max_model_len=2048)
         outputs = llm.embed(prompts)
 
         for output in outputs:

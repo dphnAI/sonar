@@ -30,8 +30,7 @@ def _get_num_experts_per_tok(hf_config) -> int:
         val = getattr(hf_config, "top_k_experts", None)
     if val is None:
         raise ValueError(
-            "Cannot determine num_experts_per_tok: HF config has neither "
-            "'num_experts_per_tok' nor 'top_k_experts'"
+            "Cannot determine num_experts_per_tok: HF config has neither 'num_experts_per_tok' nor 'top_k_experts'"
         )
     return val
 
@@ -183,11 +182,7 @@ class RoutedExpertsCapturer:
                 start_loc = 0
                 end_loc = token_num_per_dp
             else:
-                sp_expected = (
-                    (token_num_per_dp + self.tp_size - 1) // self.tp_size
-                    if self.tp_size > 0
-                    else -1
-                )
+                sp_expected = (token_num_per_dp + self.tp_size - 1) // self.tp_size if self.tp_size > 0 else -1
                 raise AssertionError(
                     "RoutedExpertsCapturer: unexpected topk_ids batch "
                     f"dim {n} (expected {total}, {token_num_per_dp}, "
@@ -200,9 +195,7 @@ class RoutedExpertsCapturer:
         if layer_id >= self.device_buffer.shape[1]:
             return
 
-        self.device_buffer[:token_num_per_dp, layer_id, :] = topk_ids[
-            start_loc:end_loc, :
-        ]
+        self.device_buffer[:token_num_per_dp, layer_id, :] = topk_ids[start_loc:end_loc, :]
 
     def clear_buffer(self) -> None:
         """Zero the device buffer. Called at the start of every step so
@@ -286,8 +279,7 @@ class RoutedExpertsManager:
             dtype=expert_id_dtype,
         )
         logger.info(
-            "RoutedExpertsManager CPU buffer: %.2f GB "
-            "(slots=%d, layers=%d, top_k=%d, dtype=%s)",
+            "RoutedExpertsManager CPU buffer: %.2f GB (slots=%d, layers=%d, top_k=%d, dtype=%s)",
             self.routed_experts_by_slot.nbytes / 1e9,
             max_num_slots,
             hf_config.num_hidden_layers,
@@ -342,8 +334,6 @@ class RoutedExpertsManager:
         # (num_blocks, block_size) grid and trim to num_tokens, then
         # skip the first token_start entries so only the requested
         # range is fetched in a single fancy-index read.
-        slot_mapping = (
-            block_ids_array.reshape(-1, 1) * bs + block_offsets.reshape(1, -1)
-        ).flatten()[:num_tokens]
+        slot_mapping = (block_ids_array.reshape(-1, 1) * bs + block_offsets.reshape(1, -1)).flatten()[:num_tokens]
         slot_mapping = slot_mapping[token_start:]
         return self.routed_experts_by_slot[slot_mapping]

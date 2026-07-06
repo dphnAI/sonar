@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """TurboQuant quantization helpers for Metal paged attention.
 
 Provides the Python-side encode/decode path for TurboQuant KV compression,
@@ -7,6 +8,7 @@ rotation/sign tables used by the Metal dequantization kernels.
 """
 
 import mlx.core as mx
+
 from aphrodite.logger import init_logger
 
 logger = init_logger(__name__)
@@ -123,9 +125,7 @@ def _compute_lloyd_max_normal(bits: int) -> tuple[mx.array, mx.array]:
     if bits < 1:
         raise ValueError(f"bits must be >= 1, got {bits}")
     n = 1 << bits
-    samples = mx.random.normal(shape=(200_000,), key=mx.random.key(0)).astype(
-        mx.float32
-    )
+    samples = mx.random.normal(shape=(200_000,), key=mx.random.key(0)).astype(mx.float32)
     # Uniform init over the observed range.
     lo = mx.min(samples)
     hi = mx.max(samples)
@@ -242,12 +242,7 @@ def packed_dim(head_dim: int, bits: int) -> int:
 def _pack_2bit(vals: mx.array) -> mx.array:
     shape = vals.shape
     g = vals.reshape(*shape[:-1], -1, 4).astype(mx.uint8)
-    packed = (
-        (g[..., 0] & 0x3)
-        | ((g[..., 1] & 0x3) << 2)
-        | ((g[..., 2] & 0x3) << 4)
-        | ((g[..., 3] & 0x3) << 6)
-    )
+    packed = (g[..., 0] & 0x3) | ((g[..., 1] & 0x3) << 2) | ((g[..., 2] & 0x3) << 4) | ((g[..., 3] & 0x3) << 6)
     return packed.reshape(*shape[:-1], -1)
 
 
@@ -267,12 +262,7 @@ def _pack_3bit(vals: mx.array) -> mx.array:
     g = vals.reshape(*shape[:-1], -1, 8).astype(mx.uint32)
     v = [g[..., i] for i in range(8)]
     b0 = (v[0] & 0x7) | ((v[1] & 0x7) << 3) | ((v[2] & 0x7) << 6)
-    b1 = (
-        ((v[2] & 0x7) >> 2)
-        | ((v[3] & 0x7) << 1)
-        | ((v[4] & 0x7) << 4)
-        | ((v[5] & 0x7) << 7)
-    )
+    b1 = ((v[2] & 0x7) >> 2) | ((v[3] & 0x7) << 1) | ((v[4] & 0x7) << 4) | ((v[5] & 0x7) << 7)
     b2 = ((v[5] & 0x7) >> 1) | ((v[6] & 0x7) << 2) | ((v[7] & 0x7) << 5)
     packed = mx.stack([b0, b1, b2], axis=-1).astype(mx.uint8)
     return packed.reshape(*shape[:-1], -1)
@@ -321,13 +311,7 @@ def _pack_5bit(vals: mx.array) -> mx.array:
 def _unpack_5bit(packed: mx.array, orig_dim: int) -> mx.array:
     shape = packed.shape
     g = packed.reshape(*shape[:-1], -1, 5).astype(mx.uint64)
-    combined = (
-        g[..., 0]
-        | (g[..., 1] << 8)
-        | (g[..., 2] << 16)
-        | (g[..., 3] << 24)
-        | (g[..., 4] << 32)
-    )
+    combined = g[..., 0] | (g[..., 1] << 8) | (g[..., 2] << 16) | (g[..., 3] << 24) | (g[..., 4] << 32)
     vals = []
     for i in range(8):
         vals.append((combined >> (i * 5)) & 0x1F)
@@ -365,9 +349,7 @@ def unpack_bits(packed: mx.array, bits: int, orig_dim: int) -> mx.array:
     return _UNPACK_FNS[bits](packed, orig_dim)
 
 
-def quantize(
-    x: mx.array, output_type: str = "int8"
-) -> tuple[mx.array, mx.array, mx.array]:
+def quantize(x: mx.array, output_type: str = "int8") -> tuple[mx.array, mx.array, mx.array]:
     """Asymmetric block-wise quantization.
 
     Handles both signed (int8) and unsigned (uint8 / sub-8-bit) types.
@@ -387,9 +369,7 @@ def quantize(
     """
     if output_type not in QUANT_PARAMS:
         available = ", ".join(sorted(QUANT_PARAMS.keys()))
-        raise ValueError(
-            f"Unsupported quantization type: {output_type}. Available: {available}"
-        )
+        raise ValueError(f"Unsupported quantization type: {output_type}. Available: {available}")
 
     params = QUANT_PARAMS[output_type]
     bits: int = params["bits"]
@@ -436,9 +416,7 @@ def quantize(
     )
 
 
-def dequantize(
-    indices: mx.array, scale: mx.array, zero_point: mx.array, block_size: int = 32
-) -> mx.array:
+def dequantize(indices: mx.array, scale: mx.array, zero_point: mx.array, block_size: int = 32) -> mx.array:
     """Asymmetric uniform dequantization: ``x = (indices + zero_point) * scale``.
 
     Args:
@@ -473,9 +451,7 @@ def turbo_quant_encode_value(x: mx.array, bits: int = 3) -> tuple[mx.array, mx.a
     return lm_quant(x, bits)
 
 
-def turbo_quant_encode_key(
-    x: mx.array, quant_type: str = "q8_0"
-) -> tuple[mx.array, mx.array, mx.array]:
+def turbo_quant_encode_key(x: mx.array, quant_type: str = "q8_0") -> tuple[mx.array, mx.array, mx.array]:
     """Key quantization — asymmetric uniform (no FWHT)."""
     return quantize(x, quant_type)
 
@@ -551,7 +527,5 @@ def turbo_quant_decode(
         v_indices = unpack_bits(v_indices, value_bits, orig_v_dim)
 
     k = turbo_quant_decode_key(k_indices, k_scale, k_zero, output_dtype, block_size)
-    v = turbo_quant_decode_value(
-        v_indices, v_scale, output_dtype, block_size, bits=value_bits
-    )
+    v = turbo_quant_decode_value(v_indices, v_scale, output_dtype, block_size, bits=value_bits)
     return k, v

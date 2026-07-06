@@ -54,9 +54,7 @@ class TransformersMultiModalForCausalLM(MultiModalMixin, CausalMixin, Base): ...
     info=MultiModalProcessingInfo,
     dummy_inputs=MultiModalDummyInputsBuilder,
 )
-class TransformersMultiModalMoEForCausalLM(
-    MoEMixin, MultiModalMixin, CausalMixin, Base
-): ...
+class TransformersMultiModalMoEForCausalLM(MoEMixin, MultiModalMixin, CausalMixin, Base): ...
 
 
 # Embedding models
@@ -75,14 +73,10 @@ class TransformersMultiModalEmbeddingModel(EmbeddingMixin, MultiModalMixin, Base
 
 
 # Sequence classification models
-class TransformersForSequenceClassification(
-    SequenceClassificationMixin, LegacyMixin, Base
-): ...
+class TransformersForSequenceClassification(SequenceClassificationMixin, LegacyMixin, Base): ...
 
 
-class TransformersMoEForSequenceClassification(
-    SequenceClassificationMixin, MoEMixin, Base
-): ...
+class TransformersMoEForSequenceClassification(SequenceClassificationMixin, MoEMixin, Base): ...
 
 
 @MULTIMODAL_REGISTRY.register_processor(
@@ -90,9 +84,7 @@ class TransformersMoEForSequenceClassification(
     info=MultiModalProcessingInfo,
     dummy_inputs=MultiModalDummyInputsBuilder,
 )
-class TransformersMultiModalForSequenceClassification(
-    SequenceClassificationMixin, MultiModalMixin, Base
-): ...
+class TransformersMultiModalForSequenceClassification(SequenceClassificationMixin, MultiModalMixin, Base): ...
 
 
 def __getattr__(name: str):

@@ -148,9 +148,7 @@ class MLARoPEKVCacheCatPattern(AphroditePatternReplacement):
                 layer_name: LayerNameType,
             ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
                 k_pe_unsqueezed = k_pe.unsqueeze(1)
-                q_pe, k_pe = self.rope_matcher(
-                    positions, q_pe, k_pe_unsqueezed, cos_sin_cache
-                )
+                q_pe, k_pe = self.rope_matcher(positions, q_pe, k_pe_unsqueezed, cos_sin_cache)
                 dummy = torch.ops.aphrodite.unified_mla_kv_cache_update(
                     kv_c_normed, k_pe, layer_name, self.kv_cache_dtype, k_scale
                 )
@@ -167,9 +165,7 @@ class MLARoPEKVCacheCatPattern(AphroditePatternReplacement):
             k_scale: torch.Tensor,
         ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
             k_pe_unsqueezed = k_pe.unsqueeze(1)
-            q_pe, k_pe = self.rope_matcher(
-                positions, q_pe, k_pe_unsqueezed, cos_sin_cache
-            )
+            q_pe, k_pe = self.rope_matcher(positions, q_pe, k_pe_unsqueezed, cos_sin_cache)
             dummy = torch.ops.aphrodite.unified_mla_kv_cache_update(
                 kv_c_normed, k_pe, _ln, self.kv_cache_dtype, k_scale
             )

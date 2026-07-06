@@ -23,16 +23,11 @@ def _maybe_set_ucx_rcache_limit() -> None:
 
     if "nixl" in sys.modules or "rixl" in sys.modules:
         logger.warning_once(
-            "NIXL was already imported, we can't reset "
-            "UCX_RCACHE_MAX_UNRELEASED. "
-            "Please set it to '1024' manually."
+            "NIXL was already imported, we can't reset UCX_RCACHE_MAX_UNRELEASED. Please set it to '1024' manually."
         )
         return
 
-    logger.info_once(
-        "Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare "
-        "memory leak in UCX when using NIXL."
-    )
+    logger.info_once("Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.")
     os.environ["UCX_RCACHE_MAX_UNRELEASED"] = "1024"
 
 

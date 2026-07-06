@@ -37,9 +37,7 @@ from aphrodite.scalar_type import scalar_types
 logger = init_logger(__name__)
 
 
-def _synthesize_qzeros(
-    groups: int, out_features: int, device: torch.device
-) -> torch.Tensor:
+def _synthesize_qzeros(groups: int, out_features: int, device: torch.device) -> torch.Tensor:
     """Create packed zero-point tensor for symmetric quant.
 
     GPTQv1 +1 quirk: kernel adds 1 to stored zeros, so encode
@@ -112,15 +110,9 @@ class CompressedTensorsWNA16RDNA3MoEMethod(CompressedTensorsWNA16MoEMethod):
         max_decode_tokens = 16
         top_k = 8  # conservative default
         buf_size = max_decode_tokens * top_k
-        layer.rdna3_w1_buf = torch.zeros(
-            buf_size, N_gate_up, dtype=act_dtype, device=device
-        )
-        layer.rdna3_act_buf = torch.empty(
-            buf_size, intermediate, dtype=act_dtype, device=device
-        )
-        layer.rdna3_out_buf = torch.zeros(
-            max_decode_tokens, hidden_size, dtype=act_dtype, device=device
-        )
+        layer.rdna3_w1_buf = torch.zeros(buf_size, N_gate_up, dtype=act_dtype, device=device)
+        layer.rdna3_act_buf = torch.empty(buf_size, intermediate, dtype=act_dtype, device=device)
+        layer.rdna3_out_buf = torch.zeros(max_decode_tokens, hidden_size, dtype=act_dtype, device=device)
         layer.rdna3_empty_tw = torch.empty(0, device=device)
 
     def apply(

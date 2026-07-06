@@ -45,10 +45,11 @@
 
 // compute the number of blocks per SM to request in __launch_bounds__
 #define APHRODITE_BLOCKS_DIV(VAL) (APHRODITE_MAX_THREADS_PER_SM / (VAL))
-#define APHRODITE_CLAMP_BLOCKS_PER_SM(VAL) \
-  (((VAL) <= 0)                       \
-       ? 1                            \
-       : (((VAL) < APHRODITE_LAUNCH_BLOCKS_CAP) ? (VAL) : APHRODITE_LAUNCH_BLOCKS_CAP))
+#define APHRODITE_CLAMP_BLOCKS_PER_SM(VAL)               \
+  (((VAL) <= 0) ? 1                                      \
+                : (((VAL) < APHRODITE_LAUNCH_BLOCKS_CAP) \
+                       ? (VAL)                           \
+                       : APHRODITE_LAUNCH_BLOCKS_CAP))
 #define APHRODITE_BLOCKS_PER_SM(BLOCK_THREADS) \
   APHRODITE_CLAMP_BLOCKS_PER_SM(APHRODITE_BLOCKS_DIV(BLOCK_THREADS))
 

@@ -49,9 +49,7 @@ def _get_feat_extract_output_lengths(input_lengths):
 
     input_lengths_leave = input_lengths % 100
     feat_lengths = (input_lengths_leave - 1) // 2 + 1
-    output_lengths = (
-        ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // 100) * 13
-    )
+    output_lengths = ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // 100) * 13
     return output_lengths
 
 
@@ -114,20 +112,14 @@ class Qwen3ASRProcessor(ProcessorMixin):
         if audio is not None:
             output_kwargs["audio_kwargs"]["padding"] = True
             output_kwargs["audio_kwargs"]["truncation"] = False
-            audio_inputs = self.feature_extractor(
-                audio, **output_kwargs["audio_kwargs"]
-            )
+            audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
             audio_inputs["feature_attention_mask"] = audio_inputs.pop(
                 "attention_mask"
             )  # rename feature_attention_mask to prevent conflicts later on
             audio_inputs["input_features"] = audio_inputs.pop(
                 "input_features"
             )  # rename input_features to prevent conflicts later on
-            audio_lengths = iter(
-                _get_feat_extract_output_lengths(
-                    audio_inputs["feature_attention_mask"].sum(-1)
-                )
-            )
+            audio_lengths = iter(_get_feat_extract_output_lengths(audio_inputs["feature_attention_mask"].sum(-1)))
         else:
             audio_inputs = {}
             audio_lengths = iter([])
@@ -157,12 +149,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
             positions = []
             special_tokens = [re.escape(tok) for tok in [self.audio_token]]
             pattern = "|".join(special_tokens)
-            positions = sorted(
-                [
-                    (match.start(), match.group())
-                    for match in re.finditer(pattern, sample)
-                ]
-            )
+            positions = sorted([(match.start(), match.group()) for match in re.finditer(pattern, sample)])
             positions.sort(key=lambda x: x[0])
 
             for _, special_token in positions:
@@ -177,9 +164,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
             processed_text.append(sample)
         return processed_text
 
-    def get_chunked_index(
-        self, token_indices: np.ndarray, tokens_per_chunk: int
-    ) -> list[tuple[int, int]]:
+    def get_chunked_index(self, token_indices: np.ndarray, tokens_per_chunk: int) -> list[tuple[int, int]]:
         """
         Splits token index list into chunks based on token value ranges.
 
@@ -220,10 +205,4 @@ class Qwen3ASRProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(
-            dict.fromkeys(
-                tokenizer_input_names
-                + feature_extractor_input_names
-                + ["feature_attention_mask"]
-            )
-        )
+        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["feature_attention_mask"]))

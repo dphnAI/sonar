@@ -280,9 +280,7 @@ def test_mamba_prefix_cache_hit():
 
     # Request 1: cold, primes the D-side cache
     print("\n--- Request 1 (cold) ---")
-    resp1 = proxy_client.completions.create(
-        model=MODEL, prompt=PROMPT, max_tokens=10, temperature=0, seed=42
-    )
+    resp1 = proxy_client.completions.create(model=MODEL, prompt=PROMPT, max_tokens=10, temperature=0, seed=42)
     output1 = resp1.choices[0].text
     print(f"  Output: {output1!r}")
     time.sleep(2)
@@ -291,20 +289,14 @@ def test_mamba_prefix_cache_hit():
     print_metrics("D-side after req1", m_after_req1)
 
     transfer_req1 = (
-        m_after_req1["aphrodite:nixl_bytes_transferred_sum"]
-        - m_baseline["aphrodite:nixl_bytes_transferred_sum"]
+        m_after_req1["aphrodite:nixl_bytes_transferred_sum"] - m_baseline["aphrodite:nixl_bytes_transferred_sum"]
     )
-    descs_req1 = (
-        m_after_req1["aphrodite:nixl_num_descriptors_sum"]
-        - m_baseline["aphrodite:nixl_num_descriptors_sum"]
-    )
+    descs_req1 = m_after_req1["aphrodite:nixl_num_descriptors_sum"] - m_baseline["aphrodite:nixl_num_descriptors_sum"]
     print(f"  Transfer: {transfer_req1 / 1e6:.2f} MB, {descs_req1:.0f} descs")
 
     # Request 2: same prompt, should hit D-side prefix cache
     print("\n--- Request 2 (warm, same prompt) ---")
-    resp2 = proxy_client.completions.create(
-        model=MODEL, prompt=PROMPT, max_tokens=10, temperature=0, seed=42
-    )
+    resp2 = proxy_client.completions.create(model=MODEL, prompt=PROMPT, max_tokens=10, temperature=0, seed=42)
     output2 = resp2.choices[0].text
     print(f"  Output: {output2!r}")
     time.sleep(2)
@@ -313,13 +305,9 @@ def test_mamba_prefix_cache_hit():
     print_metrics("D-side after req2", m_after_req2)
 
     transfer_req2 = (
-        m_after_req2["aphrodite:nixl_bytes_transferred_sum"]
-        - m_after_req1["aphrodite:nixl_bytes_transferred_sum"]
+        m_after_req2["aphrodite:nixl_bytes_transferred_sum"] - m_after_req1["aphrodite:nixl_bytes_transferred_sum"]
     )
-    descs_req2 = (
-        m_after_req2["aphrodite:nixl_num_descriptors_sum"]
-        - m_after_req1["aphrodite:nixl_num_descriptors_sum"]
-    )
+    descs_req2 = m_after_req2["aphrodite:nixl_num_descriptors_sum"] - m_after_req1["aphrodite:nixl_num_descriptors_sum"]
     print(f"  Transfer: {transfer_req2 / 1e6:.2f} MB, {descs_req2:.0f} descs")
 
     # P-side metrics (informational)
@@ -335,9 +323,7 @@ def test_mamba_prefix_cache_hit():
         print(f"  Reduction: {reduction_pct:.1f}%")
 
     # Assertions
-    assert transfer_req1 > 0, (
-        f"First request should transfer data, got {transfer_req1} bytes"
-    )
+    assert transfer_req1 > 0, f"First request should transfer data, got {transfer_req1} bytes"
     assert transfer_req2 < transfer_req1, (
         f"Second request should transfer fewer bytes due to D-side prefix "
         f"cache hits. Got req1={transfer_req1 / 1e6:.2f} MB, "

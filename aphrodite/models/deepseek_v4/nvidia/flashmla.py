@@ -72,12 +72,8 @@ class DeepseekV4FlashMLAAttention(DeepseekV4Attention):
         positions: torch.Tensor,
         output: torch.Tensor,
     ) -> None:
-        assert output.shape == q.shape, (
-            f"output buffer shape {output.shape} must match q shape {q.shape}"
-        )
-        assert output.dtype == q.dtype, (
-            f"output buffer dtype {output.dtype} must match q dtype {q.dtype}"
-        )
+        assert output.shape == q.shape, f"output buffer shape {output.shape} must match q shape {q.shape}"
+        assert output.dtype == q.dtype, f"output buffer dtype {output.dtype} must match q dtype {q.dtype}"
 
         # Get SWA and indexer metadata from forward context
         forward_context = get_forward_context()
@@ -88,12 +84,7 @@ class DeepseekV4FlashMLAAttention(DeepseekV4Attention):
             # gather workspace _forward_prefill would; the dequantize / topk
             # / sparse_fwd kernels are skipped this step.
             swa_only = self.compress_ratio <= 1
-            N = (
-                0
-                if swa_only
-                else (self.max_model_len + self.compress_ratio - 1)
-                // self.compress_ratio
-            )
+            N = 0 if swa_only else (self.max_model_len + self.compress_ratio - 1) // self.compress_ratio
             M = N + self.window_size + self.max_num_batched_tokens
             current_workspace_manager().get_simultaneous(
                 ((self.PREFILL_CHUNK_SIZE, M, q.shape[-1]), torch.bfloat16),
@@ -102,9 +93,7 @@ class DeepseekV4FlashMLAAttention(DeepseekV4Attention):
             return
 
         assert isinstance(attn_metadata, dict)
-        flashmla_metadata = cast(
-            DeepseekV4FlashMLAMetadata | None, attn_metadata.get(self.prefix)
-        )
+        flashmla_metadata = cast(DeepseekV4FlashMLAMetadata | None, attn_metadata.get(self.prefix))
         swa_metadata = cast(
             "DeepseekSparseSWAMetadata | None",
             attn_metadata.get(self.swa_cache_layer.prefix),
@@ -205,10 +194,7 @@ class DeepseekV4FlashMLAAttention(DeepseekV4Attention):
         elif self.compress_ratio == 128:
             tile_metadata = swa_metadata.tile_sched_c128a
         else:
-            raise ValueError(
-                f"Unsupported compress_ratio={self.compress_ratio}; "
-                "expected 1, 4, or 128."
-            )
+            raise ValueError(f"Unsupported compress_ratio={self.compress_ratio}; expected 1, 4, or 128.")
         assert tile_metadata is not None, (
             "swa_metadata missing tile_sched entry for "
             f"compress_ratio={self.compress_ratio}; "
@@ -316,18 +302,12 @@ class DeepseekV4FlashMLAAttention(DeepseekV4Attention):
             )
 
             # Combine the topk indices and SWA indices for gathered KV cache
-            query_start = (
-                query_start_loc_cpu[num_decodes + chunk_start] - prefill_token_base
-            )
-            query_end = (
-                query_start_loc_cpu[num_decodes + chunk_end] - prefill_token_base
-            )
+            query_start = query_start_loc_cpu[num_decodes + chunk_start] - prefill_token_base
+            query_end = query_start_loc_cpu[num_decodes + chunk_end] - prefill_token_base
 
             combined_indices, combined_lens = combine_topk_swa_indices(
                 topk_indices[query_start:query_end],
-                query_start_loc[
-                    num_decodes + chunk_start : num_decodes + chunk_end + 1
-                ],
+                query_start_loc[num_decodes + chunk_start : num_decodes + chunk_end + 1],
                 seq_lens[chunk_start:chunk_end],
                 gather_lens[chunk_start:chunk_end],
                 self.window_size,

@@ -9,8 +9,8 @@ import pytest_asyncio
 from openai import OpenAI
 from openai_harmony import Message, ToolDescription, ToolNamespaceConfig
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.entrypoints.mcp.tool_server import MCPToolServer
+from tests.utils import RemoteOpenAIServer
 
 from .conftest import (
     BASE_TEST_ENV,
@@ -31,9 +31,7 @@ _BASE_SERVER_ARGS = [
     "5000",
 ]
 
-_PYTHON_TOOL_INSTRUCTION = (
-    "You must use the Python tool to execute code. Never simulate execution."
-)
+_PYTHON_TOOL_INSTRUCTION = "You must use the Python tool to execute code. Never simulate execution."
 
 
 class TestMCPToolServerUnit:
@@ -49,15 +47,9 @@ class TestMCPToolServerUnit:
         pytest.importorskip("mcp")
 
         server = MCPToolServer()
-        tool1 = ToolDescription.new(
-            name="tool1", description="First", parameters={"type": "object"}
-        )
-        tool2 = ToolDescription.new(
-            name="tool2", description="Second", parameters={"type": "object"}
-        )
-        tool3 = ToolDescription.new(
-            name="tool3", description="Third", parameters={"type": "object"}
-        )
+        tool1 = ToolDescription.new(name="tool1", description="First", parameters={"type": "object"})
+        tool2 = ToolDescription.new(name="tool2", description="Second", parameters={"type": "object"})
+        tool3 = ToolDescription.new(name="tool3", description="Third", parameters={"type": "object"})
 
         server.harmony_tool_descriptions = {
             "test_server": ToolNamespaceConfig(
@@ -75,9 +67,7 @@ class TestMCPToolServerUnit:
         assert len(result.tools) == 3
 
         # Filter to specific tools
-        result = server.get_tool_description(
-            "test_server", allowed_tools=["tool1", "tool3"]
-        )
+        result = server.get_tool_description("test_server", allowed_tools=["tool1", "tool3"])
         assert len(result.tools) == 2
         assert result.tools[0].name == "tool1"
         assert result.tools[1].name == "tool3"
@@ -88,9 +78,7 @@ class TestMCPToolServerUnit:
         assert result.tools[0].name == "tool2"
 
         # No matching tools - returns None
-        result = server.get_tool_description(
-            "test_server", allowed_tools=["nonexistent"]
-        )
+        result = server.get_tool_description("test_server", allowed_tools=["nonexistent"])
         assert result is None
 
         # Empty list - returns None
@@ -122,9 +110,7 @@ class TestMCPEnabled:
             "APHRODITE_GPT_OSS_SYSTEM_TOOL_MCP_LABELS": ("code_interpreter,container"),
             "APHRODITE_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS": "1",
         }
-        with RemoteOpenAIServer(
-            MODEL_NAME, list(_BASE_SERVER_ARGS), env_dict=env_dict
-        ) as remote_server:
+        with RemoteOpenAIServer(MODEL_NAME, list(_BASE_SERVER_ARGS), env_dict=env_dict) as remote_server:
             yield remote_server
 
     @pytest_asyncio.fixture
@@ -174,16 +160,12 @@ class TestMCPEnabled:
                 tool_call_found = True
                 assert message.get("channel") == "commentary"
             parsed_message = Message.from_dict(message)
-            if parsed_message.author.role == "tool" and (
-                parsed_message.author.name or ""
-            ).startswith("python"):
+            if parsed_message.author.role == "tool" and (parsed_message.author.name or "").startswith("python"):
                 tool_response_found = True
                 assert message.get("channel") == "commentary"
 
         assert tool_call_found, (
-            f"No Python tool call found. "
-            f"Output types: "
-            f"{[getattr(o, 'type', None) for o in response.output]}"
+            f"No Python tool call found. Output types: {[getattr(o, 'type', None) for o in response.output]}"
         )
         assert tool_response_found, "No Python tool response found"
 
@@ -192,9 +174,7 @@ class TestMCPEnabled:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("model_name", [MODEL_NAME])
-    async def test_mcp_tool_with_allowed_tools_star(
-        self, client: OpenAI, model_name: str
-    ):
+    async def test_mcp_tool_with_allowed_tools_star(self, client: OpenAI, model_name: str):
         response = await retry_for_tool_call(
             client,
             model=model_name,
@@ -209,14 +189,9 @@ class TestMCPEnabled:
         assert response.status == "completed"
         log_response_diagnostics(response, label="MCP Allowed Tools *")
 
-        tool_call_found = any(
-            (msg.get("recipient") or "").startswith("python")
-            for msg in response.output_messages
-        )
+        tool_call_found = any((msg.get("recipient") or "").startswith("python") for msg in response.output_messages)
         assert tool_call_found, (
-            f"No Python tool call with '*'. "
-            f"Output types: "
-            f"{[getattr(o, 'type', None) for o in response.output]}"
+            f"No Python tool call with '*'. Output types: {[getattr(o, 'type', None) for o in response.output]}"
         )
 
     @pytest.mark.asyncio

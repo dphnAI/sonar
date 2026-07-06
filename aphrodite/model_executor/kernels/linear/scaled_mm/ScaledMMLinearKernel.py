@@ -59,9 +59,7 @@ _ConfigT = TypeVar("_ConfigT", bound=MMLinearLayerConfig)
 class ScaledMMLinearKernel(Generic[_ConfigT, _ParamsT], ABC):
     @classmethod
     @abstractmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         raise NotImplementedError
 
     @classmethod
@@ -105,12 +103,8 @@ class ScaledMMLinearKernel(Generic[_ConfigT, _ParamsT], ABC):
         raise NotImplementedError
 
 
-class FP8ScaledMMLinearKernel(
-    ScaledMMLinearKernel[FP8ScaledMMLinearLayerConfig, _FP8ParamsT], ABC
-):
-    def __init__(
-        self, c: FP8ScaledMMLinearLayerConfig, layer_param_names: Sequence[str]
-    ) -> None:
+class FP8ScaledMMLinearKernel(ScaledMMLinearKernel[FP8ScaledMMLinearLayerConfig, _FP8ParamsT], ABC):
+    def __init__(self, c: FP8ScaledMMLinearLayerConfig, layer_param_names: Sequence[str]) -> None:
         act_scale_descriptor = c.activation_quant_key.scale
         self.quant_fp8 = QuantFP8(
             static=act_scale_descriptor.static,
@@ -187,9 +181,7 @@ class FP8ScaledMMLinearKernel(
         return None
 
 
-class Int8ScaledMMLinearKernel(
-    ScaledMMLinearKernel[Int8ScaledMMLinearLayerConfig, _Int8ParamsT], ABC
-):
+class Int8ScaledMMLinearKernel(ScaledMMLinearKernel[Int8ScaledMMLinearLayerConfig, _Int8ParamsT], ABC):
     def _get_layer_params(self, layer) -> _Int8ParamsT:
         w_q, w_s, i_s, i_zp, azp_adj = self.layer_param_names
         return (

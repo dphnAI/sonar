@@ -56,19 +56,13 @@ def assert_dequant_close(
     S = scale_a.shape[-1]
     shape = fp8_a.shape
 
-    dq_a = fp8_a.float() * scale_a.unsqueeze(-1).expand(
-        *shape[:-1], S, QUANT_GROUP_SIZE
-    ).reshape(shape)
-    dq_b = fp8_b.float() * scale_b.unsqueeze(-1).expand(
-        *shape[:-1], S, QUANT_GROUP_SIZE
-    ).reshape(shape)
+    dq_a = fp8_a.float() * scale_a.unsqueeze(-1).expand(*shape[:-1], S, QUANT_GROUP_SIZE).reshape(shape)
+    dq_b = fp8_b.float() * scale_b.unsqueeze(-1).expand(*shape[:-1], S, QUANT_GROUP_SIZE).reshape(shape)
 
     # Cosine diff: 1 - cos_sim (0 = identical, higher = worse)
     dq_a_flat = dq_a.flatten().float()
     dq_b_flat = dq_b.flatten().float()
-    cos_sim = torch.nn.functional.cosine_similarity(
-        dq_a_flat.unsqueeze(0), dq_b_flat.unsqueeze(0)
-    ).item()
+    cos_sim = torch.nn.functional.cosine_similarity(dq_a_flat.unsqueeze(0), dq_b_flat.unsqueeze(0)).item()
     diff = 1.0 - cos_sim
 
     assert diff < 1e-4, f"Dequant diff too large: {diff:.8f} (expected < 1e-4). {msg}"
@@ -101,9 +95,7 @@ def make_cos_sin_cache(
     """
     half = rope_dim // 2
     # Use random but bounded frequencies so cos/sin are well-behaved
-    inv_freq = 1.0 / (
-        10000.0 ** (torch.arange(0, half, device=device, dtype=torch.float32) / half)
-    )
+    inv_freq = 1.0 / (10000.0 ** (torch.arange(0, half, device=device, dtype=torch.float32) / half))
     t = torch.arange(max_pos, device=device, dtype=torch.float32)
     freqs = torch.outer(t, inv_freq)  # [max_pos, half]
     cos = freqs.cos()
@@ -270,15 +262,9 @@ def test_correctness(num_tokens, num_heads, n_groups, seed):
     device = "cuda"
 
     # Create inputs
-    o = torch.randn(
-        num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16
-    )
-    positions = torch.randint(
-        0, max_pos, (num_tokens,), device=device, dtype=torch.long
-    )
-    cos_sin_cache = make_cos_sin_cache(
-        max_pos, ROPE_DIM, dtype=torch.float32, device=device
-    )
+    o = torch.randn(num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16)
+    positions = torch.randint(0, max_pos, (num_tokens,), device=device, dtype=torch.long)
+    cos_sin_cache = make_cos_sin_cache(max_pos, ROPE_DIM, dtype=torch.float32, device=device)
 
     # Reference
     ref_fp8, ref_scale = reference_inv_rope_fp8_quant(
@@ -312,8 +298,7 @@ def test_correctness(num_tokens, num_heads, n_groups, seed):
     # close to 1.
     scale_ratio = fused_scale / ref_scale.clamp(min=1e-30)
     assert scale_ratio.max() <= 2.0 and scale_ratio.min() >= 0.5, (
-        f"Scale ratio out of [0.5, 2]: min={scale_ratio.min():.4f} "
-        f"max={scale_ratio.max():.4f}"
+        f"Scale ratio out of [0.5, 2]: min={scale_ratio.min():.4f} max={scale_ratio.max():.4f}"
     )
 
     # Compare via dequant (Triton vs PyTorch fp32 may differ by ULPs)
@@ -337,12 +322,8 @@ def test_output_strides(num_tokens, num_heads, n_groups):
     max_pos = 4096
     device = "cuda"
 
-    o = torch.randn(
-        num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16
-    )
-    positions = torch.randint(
-        0, max_pos, (num_tokens,), device=device, dtype=torch.long
-    )
+    o = torch.randn(num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16)
+    positions = torch.randint(0, max_pos, (num_tokens,), device=device, dtype=torch.long)
     cos_sin_cache = make_cos_sin_cache(max_pos, device=device)
 
     fused_fp8, fused_scale = fused_inv_rope_fp8_quant(
@@ -381,12 +362,8 @@ def test_per_group_contiguity(num_tokens):
     max_pos = 4096
     device = "cuda"
 
-    o = torch.randn(
-        num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16
-    )
-    positions = torch.randint(
-        0, max_pos, (num_tokens,), device=device, dtype=torch.long
-    )
+    o = torch.randn(num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16)
+    positions = torch.randint(0, max_pos, (num_tokens,), device=device, dtype=torch.long)
     cos_sin_cache = make_cos_sin_cache(max_pos, device=device)
 
     fused_fp8, fused_scale = fused_inv_rope_fp8_quant(
@@ -400,8 +377,7 @@ def test_per_group_contiguity(num_tokens):
     for g in range(n_groups):
         fp8_slice = fused_fp8[:, g, :]
         assert fp8_slice.is_contiguous(), (
-            f"o_fp8[:, {g}, :] is not contiguous: "
-            f"shape={list(fp8_slice.shape)}, stride={list(fp8_slice.stride())}"
+            f"o_fp8[:, {g}, :] is not contiguous: shape={list(fp8_slice.shape)}, stride={list(fp8_slice.stride())}"
         )
 
 
@@ -413,12 +389,8 @@ def test_scales_are_power_of_two():
     max_pos = 4096
     device = "cuda"
 
-    o = torch.randn(
-        num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16
-    )
-    positions = torch.randint(
-        0, max_pos, (num_tokens,), device=device, dtype=torch.long
-    )
+    o = torch.randn(num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16)
+    positions = torch.randint(0, max_pos, (num_tokens,), device=device, dtype=torch.long)
     cos_sin_cache = make_cos_sin_cache(max_pos, device=device)
 
     _, fused_scale = fused_inv_rope_fp8_quant(
@@ -432,9 +404,7 @@ def test_scales_are_power_of_two():
     # log2 of a power-of-two is an exact integer
     log2_scales = torch.log2(fused_scale)
     residual = (log2_scales - log2_scales.round()).abs()
-    assert residual.max() < 1e-5, (
-        f"Not all scales are powers of 2: max log2 residual = {residual.max().item()}"
-    )
+    assert residual.max() < 1e-5, f"Not all scales are powers of 2: max log2 residual = {residual.max().item()}"
 
 
 @torch.inference_mode()
@@ -448,12 +418,8 @@ def test_nope_dims_unchanged():
     device = "cuda"
     torch.manual_seed(0)
 
-    o = torch.randn(
-        num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16
-    )
-    positions = torch.randint(
-        0, max_pos, (num_tokens,), device=device, dtype=torch.long
-    )
+    o = torch.randn(num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16)
+    positions = torch.randint(0, max_pos, (num_tokens,), device=device, dtype=torch.long)
     cos_sin_cache = make_cos_sin_cache(max_pos, device=device)
 
     # Fused kernel result
@@ -492,15 +458,12 @@ def test_nope_dims_unchanged():
             fused_nope = fused_fp8[:, :, start:end].view(torch.uint8)
             norope_nope = norope_fp8[:, :, start:end].view(torch.uint8)
             assert torch.equal(fused_nope, norope_nope), (
-                f"Nope block (head={h}, chunk={c}) differs between "
-                f"fused and no-rope reference"
+                f"Nope block (head={h}, chunk={c}) differs between fused and no-rope reference"
             )
 
             fused_s = fused_scale[:, :, qb]
             norope_s = norope_scale[:, :, qb]
-            assert torch.equal(fused_s, norope_s), (
-                f"Nope scale (head={h}, chunk={c}) differs"
-            )
+            assert torch.equal(fused_s, norope_s), f"Nope scale (head={h}, chunk={c}) differs"
 
 
 @torch.inference_mode()
@@ -511,9 +474,7 @@ def test_single_token():
     max_pos = 4096
     device = "cuda"
 
-    o = torch.randn(
-        num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16
-    )
+    o = torch.randn(num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16)
     positions = torch.tensor([42], device=device, dtype=torch.long)
     cos_sin_cache = make_cos_sin_cache(max_pos, device=device)
 
@@ -543,9 +504,7 @@ def test_zero_positions():
     max_pos = 4096
     device = "cuda"
 
-    o = torch.randn(
-        num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16
-    )
+    o = torch.randn(num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16)
     positions = torch.zeros(num_tokens, device=device, dtype=torch.long)
     cos_sin_cache = make_cos_sin_cache(max_pos, device=device)
 
@@ -576,13 +535,9 @@ def test_large_values():
     device = "cuda"
 
     # Create inputs with large values that will saturate FP8
-    o = torch.randn(
-        num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16
-    )
+    o = torch.randn(num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16)
     o = o * 1000.0  # scale up to force saturation
-    positions = torch.randint(
-        0, max_pos, (num_tokens,), device=device, dtype=torch.long
-    )
+    positions = torch.randint(0, max_pos, (num_tokens,), device=device, dtype=torch.long)
     cos_sin_cache = make_cos_sin_cache(max_pos, device=device)
 
     ref_fp8, ref_scale = reference_inv_rope_fp8_quant(
@@ -612,12 +567,8 @@ def test_dequant_numerical_accuracy():
     device = "cuda"
     torch.manual_seed(0)
 
-    o = torch.randn(
-        num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16
-    )
-    positions = torch.randint(
-        0, max_pos, (num_tokens,), device=device, dtype=torch.long
-    )
+    o = torch.randn(num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16)
+    positions = torch.randint(0, max_pos, (num_tokens,), device=device, dtype=torch.long)
     cos_sin_cache = make_cos_sin_cache(max_pos, device=device)
 
     # Get the post-inv-RoPE values (ground truth before quantization)
@@ -637,9 +588,7 @@ def test_dequant_numerical_accuracy():
     # Dequantize: broadcast scale [T, G, S] to [T, G, D] via repeat
     S = d // QUANT_GROUP_SIZE
     scale_expanded = (
-        fused_scale.unsqueeze(-1)
-        .expand(num_tokens, n_groups, S, QUANT_GROUP_SIZE)
-        .reshape(num_tokens, n_groups, d)
+        fused_scale.unsqueeze(-1).expand(num_tokens, n_groups, S, QUANT_GROUP_SIZE).reshape(num_tokens, n_groups, d)
     )
     dequant = fused_fp8.float() * scale_expanded
 
@@ -654,9 +603,7 @@ def test_dequant_numerical_accuracy():
     rel_err = abs_err / (o_gt.float().abs().clamp(min=1e-6))
     mean_rel_err = rel_err.mean().item()
 
-    assert mean_rel_err < 0.15, (
-        f"Mean relative error too high: {mean_rel_err:.4f} (expected < 0.15)"
-    )
+    assert mean_rel_err < 0.15, f"Mean relative error too high: {mean_rel_err:.4f} (expected < 0.15)"
 
 
 def _unfused_inv_rope_fp8_quant(
@@ -741,12 +688,8 @@ def test_einsum_end_to_end(num_tokens, num_heads, n_groups):
     device = "cuda"
     torch.manual_seed(0)
 
-    o = torch.randn(
-        num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16
-    )
-    positions = torch.randint(
-        0, max_pos, (num_tokens,), device=device, dtype=torch.long
-    )
+    o = torch.randn(num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16)
+    positions = torch.randint(0, max_pos, (num_tokens,), device=device, dtype=torch.long)
     cos_sin_cache = make_cos_sin_cache(max_pos, device=device)
 
     # -- Weight quantization (shared between both paths) --
@@ -780,12 +723,8 @@ def test_einsum_end_to_end(num_tokens, num_heads, n_groups):
         n_groups,
         heads_per_group,
     )
-    z_ref = torch.empty(
-        num_tokens, n_groups, o_lora_rank, device=device, dtype=torch.bfloat16
-    )
-    fp8_einsum(
-        "bhr,hdr->bhd", (ref_fp8, ref_scale), (w_fp8, w_scale_t), z_ref, recipe=recipe
-    )
+    z_ref = torch.empty(num_tokens, n_groups, o_lora_rank, device=device, dtype=torch.bfloat16)
+    fp8_einsum("bhr,hdr->bhd", (ref_fp8, ref_scale), (w_fp8, w_scale_t), z_ref, recipe=recipe)
 
     # -- FUSED path --
     fused_fp8, fused_scale = fused_inv_rope_fp8_quant(
@@ -795,9 +734,7 @@ def test_einsum_end_to_end(num_tokens, num_heads, n_groups):
         n_groups,
         heads_per_group,
     )
-    z_fused = torch.empty(
-        num_tokens, n_groups, o_lora_rank, device=device, dtype=torch.bfloat16
-    )
+    z_fused = torch.empty(num_tokens, n_groups, o_lora_rank, device=device, dtype=torch.bfloat16)
     fp8_einsum(
         "bhr,hdr->bhd",
         (fused_fp8, fused_scale),
@@ -813,9 +750,7 @@ def test_einsum_end_to_end(num_tokens, num_heads, n_groups):
     from deep_gemm.testing import calc_diff
 
     z_diff = calc_diff(z_fused, z_ref)
-    assert z_diff < 0.01, (
-        f"Einsum output diff too large: {z_diff:.6f} (expected < 0.01)"
-    )
+    assert z_diff < 0.01, f"Einsum output diff too large: {z_diff:.6f} (expected < 0.01)"
 
 
 @pytest.mark.parametrize("num_tokens", [1, 32, 256])
@@ -842,26 +777,18 @@ def test_with_real_deepseek_v4_rope(num_tokens, default_aphrodite_config):
     max_pos = 65536
     beta_fast, beta_slow = 32, 1
 
-    pos_freqs = base ** (
-        torch.arange(0, ROPE_DIM, 2, dtype=torch.float32, device=device) / ROPE_DIM
-    )
+    pos_freqs = base ** (torch.arange(0, ROPE_DIM, 2, dtype=torch.float32, device=device) / ROPE_DIM)
     inv_freq_extra = 1.0 / pos_freqs
     inv_freq_interp = 1.0 / (scaling_factor * pos_freqs)
-    low, high = yarn_find_correction_range(
-        beta_fast, beta_slow, ROPE_DIM, base, max_pos
-    )
-    mask = 1 - yarn_linear_ramp_mask(low, high, ROPE_DIM // 2, dtype=torch.float32).to(
-        device
-    )
+    low, high = yarn_find_correction_range(beta_fast, beta_slow, ROPE_DIM, base, max_pos)
+    mask = 1 - yarn_linear_ramp_mask(low, high, ROPE_DIM // 2, dtype=torch.float32).to(device)
     inv_freq = inv_freq_interp * (1 - mask) + inv_freq_extra * mask
     t = torch.arange(max_pos * scaling_factor, device=device, dtype=torch.float32)
     freqs = torch.outer(t, inv_freq)
     # mscale=0 → yarn_get_mscale returns 1.0
     cos_sin_cache = torch.cat([freqs.cos(), freqs.sin()], dim=-1)  # fp32
 
-    o = torch.randn(
-        num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16
-    )
+    o = torch.randn(num_tokens, num_heads, HEAD_DIM, device=device, dtype=torch.bfloat16)
     positions = torch.randint(0, 4096, (num_tokens,), device=device, dtype=torch.long)
 
     # UNFUSED: CUDA RoPE with is_neox=False (GPT-J)
@@ -904,6 +831,4 @@ def test_with_real_deepseek_v4_rope(num_tokens, default_aphrodite_config):
 
     # Scales must match exactly (same UE8M0 algorithm)
     # Compare via dequant (Triton bf16 rotation may differ from CUDA by 1 ULP)
-    assert_dequant_close(
-        ref_fp8, ref_scale, fused_fp8, fused_scale, msg="Real DeepSeek V4 rope"
-    )
+    assert_dequant_close(ref_fp8, ref_scale, fused_fp8, fused_scale, msg="Real DeepSeek V4 rope")

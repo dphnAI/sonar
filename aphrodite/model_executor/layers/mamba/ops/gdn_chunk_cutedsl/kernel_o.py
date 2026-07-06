@@ -117,9 +117,7 @@ class Sm100ChunkOKernel:
         tma_s2g = cpasync.CopyBulkTensorTileS2GOp()
         Q_tma = self._make_bf16_tma_args(q, self.K_dim, tma_g2s, self.num_stages)
         K_tma = self._make_bf16_tma_args(k, self.K_dim, tma_g2s, self.num_stages)
-        V_tma = self._make_bf16_tma_args(
-            v_new_chunks, self.V_dim, tma_g2s, self.num_stages
-        )
+        V_tma = self._make_bf16_tma_args(v_new_chunks, self.V_dim, tma_g2s, self.num_stages)
         H_tma = self._make_h_tma_args(h, tma_g2s, self.num_stages)
         O_tma = self._make_bf16_tma_args(o, self.V_dim, tma_s2g, 1)
         self.kernel(
@@ -167,9 +165,7 @@ class Sm100ChunkOKernel:
         num_global_chunks = total_chunks[0]
 
         def allocate_tensor(smem, dtype, layout):
-            return smem.allocate_tensor(
-                dtype, layout.outer, byte_alignment=128, swizzle=layout.inner
-            )
+            return smem.allocate_tensor(dtype, layout.outer, byte_alignment=128, swizzle=layout.inner)
 
         smem = cutlass.utils.SmemAllocator()
         sQ = allocate_tensor(smem, BFloat16, Q_tma.smem_layout)[None, 0, None, None]
@@ -223,16 +219,12 @@ class Sm100ChunkOKernel:
 
                 # copy Q and K
                 q_tile = cute.local_tile(
-                    cute.domain_offset(
-                        (bos, 0), Q_tma.tma_tensor[None, k_head_id, None]
-                    ),
+                    cute.domain_offset((bos, 0), Q_tma.tma_tensor[None, k_head_id, None]),
                     tiler=(BT, K_dim),
                     coord=(chunk_id, 0),
                 )
                 k_tile = cute.local_tile(
-                    cute.domain_offset(
-                        (bos, 0), K_tma.tma_tensor[None, k_head_id, None]
-                    ),
+                    cute.domain_offset((bos, 0), K_tma.tma_tensor[None, k_head_id, None]),
                     tiler=(BT, K_dim),
                     coord=(chunk_id, 0),
                 )
@@ -260,15 +252,9 @@ class Sm100ChunkOKernel:
                 with cute.arch.elect_one():
                     H_STAGE_SIZE = V_dim * K_dim * 2
                     V_STAGE_SIZE = BT * V_dim * 2
-                    cute.arch.mbarrier_arrive_and_expect_tx(
-                        mbar, H_STAGE_SIZE + V_STAGE_SIZE
-                    )
-                simple_tma_copy(
-                    H_tma.atom, gH, sH[None, None, stage_id], mbar, EVICT_FIRST
-                )
-                simple_tma_copy(
-                    V_tma.atom, gV, sV[None, None, stage_id], mbar, EVICT_FIRST
-                )
+                    cute.arch.mbarrier_arrive_and_expect_tx(mbar, H_STAGE_SIZE + V_STAGE_SIZE)
+                simple_tma_copy(H_tma.atom, gH, sH[None, None, stage_id], mbar, EVICT_FIRST)
+                simple_tma_copy(V_tma.atom, gV, sV[None, None, stage_id], mbar, EVICT_FIRST)
 
                 stage_id = (stage_id + 1) % num_stages
                 if stage_id == 0:
@@ -308,9 +294,7 @@ class Sm100ChunkOKernel:
                     for j in cutlass.range_constexpr(64 // 16):
                         qdesc = qdesc_base | ((i * BT * 128 + j * 32) >> 4)
                         kdesc = kdesc_base | ((i * BT * 128 + j * 32) >> 4)
-                        _tcgen05.mma_f16(
-                            qk_tmem, qdesc, kdesc, qk_idesc, (i > 0) or (j > 0)
-                        )
+                        _tcgen05.mma_f16(qk_tmem, qdesc, kdesc, qk_idesc, (i > 0) or (j > 0))
                 _tcgen05.commit(qk_mbar)
 
                 ##### 2nd MMA: Q @ H.T #####
@@ -320,9 +304,7 @@ class Sm100ChunkOKernel:
                     for j in cutlass.range_constexpr(64 // 16):
                         qdesc = qdesc_base | ((i * BT * 128 + j * 32) >> 4)
                         hdesc = hdesc_base | ((i * V_dim * 128 + j * 32) >> 4)
-                        _tcgen05.mma_f16(
-                            qh_tmem, qdesc, hdesc, qh_idesc, (i > 0) or (j > 0)
-                        )
+                        _tcgen05.mma_f16(qh_tmem, qdesc, hdesc, qh_idesc, (i > 0) or (j > 0))
                 _tcgen05.commit(qk_empty_mbar + stage_id)
 
                 ##### 3rd MMA: P @ V #####
@@ -331,9 +313,7 @@ class Sm100ChunkOKernel:
                 _tcgen05.fence_after_thread_sync()
                 for i in cutlass.range_constexpr(BT // 16):
                     vdesc = vdesc_base | ((i * 16 * 128) >> 4)
-                    _tcgen05.mma_ts_f16(
-                        out_tmem, p_tmem + i * 8, vdesc, pv_idesc, i > 0
-                    )
+                    _tcgen05.mma_ts_f16(out_tmem, p_tmem + i * 8, vdesc, pv_idesc, i > 0)
                 _tcgen05.commit(pv_mma_mbar + stage_id)
 
                 stage_id = (stage_id + 1) % num_stages
@@ -450,13 +430,9 @@ class Sm100ChunkOKernel:
 
                 # load g_cu
                 if chunk_start + row0 < eos:
-                    g_cu_rows[0] = cute.math.exp(
-                        g_cu[chunk_start + row0, v_head_id], fastmath=True
-                    )
+                    g_cu_rows[0] = cute.math.exp(g_cu[chunk_start + row0, v_head_id], fastmath=True)
                 if chunk_start + row1 < eos:
-                    g_cu_rows[1] = cute.math.exp(
-                        g_cu[chunk_start + row1, v_head_id], fastmath=True
-                    )
+                    g_cu_rows[1] = cute.math.exp(g_cu[chunk_start + row1, v_head_id], fastmath=True)
                 g_cu_rows = g_cu_rows.load().reshape((1, 2, 1))
 
                 if warp_id == 0:
@@ -469,12 +445,8 @@ class Sm100ChunkOKernel:
                 if full_chunk:
                     # use TMA store: tmem->rmem->smem->gmem
                     for i in cutlass.range_constexpr(V_dim // WIDTH):
-                        qh = _tcgen05.ld(
-                            warp_id * 32, qh_tmem + i * WIDTH, "16x256b", WIDTH // 8
-                        )
-                        pv = _tcgen05.ld(
-                            warp_id * 32, out_tmem + i * WIDTH, "16x256b", WIDTH // 8
-                        )
+                        qh = _tcgen05.ld(warp_id * 32, qh_tmem + i * WIDTH, "16x256b", WIDTH // 8)
+                        pv = _tcgen05.ld(warp_id * 32, out_tmem + i * WIDTH, "16x256b", WIDTH // 8)
                         _tcgen05.wait_ld()
                         if i == V_dim // WIDTH - 1:
                             _tcgen05.fence_before_thread_sync()
@@ -498,9 +470,7 @@ class Sm100ChunkOKernel:
                     fence_before_tma_store()
                     if warp_id == 3:
                         gO = cute.local_tile(
-                            cute.domain_offset(
-                                (bos, 0), O_tma.tma_tensor[None, v_head_id, None]
-                            ),
+                            cute.domain_offset((bos, 0), O_tma.tma_tensor[None, v_head_id, None]),
                             tiler=(BT, V_dim),
                             coord=(chunk_id, 0),
                         )
@@ -512,12 +482,8 @@ class Sm100ChunkOKernel:
                     # direct gmem store
                     # TODO: explore doing multiple 1D TMAs
                     for i in cutlass.range_constexpr(V_dim // WIDTH):
-                        qh = _tcgen05.ld(
-                            warp_id * 32, qh_tmem + i * WIDTH, "16x256b", WIDTH // 8
-                        )
-                        pv = _tcgen05.ld(
-                            warp_id * 32, out_tmem + i * WIDTH, "16x256b", WIDTH // 8
-                        )
+                        qh = _tcgen05.ld(warp_id * 32, qh_tmem + i * WIDTH, "16x256b", WIDTH // 8)
+                        pv = _tcgen05.ld(warp_id * 32, out_tmem + i * WIDTH, "16x256b", WIDTH // 8)
                         _tcgen05.wait_ld()
                         if i == V_dim // WIDTH - 1:
                             _tcgen05.fence_before_thread_sync()
@@ -565,9 +531,7 @@ class Sm100ChunkOKernel:
         q = make_fake_tensor(BFloat16, (total_t, H, K_dim), divisibility=16)
         k = make_fake_tensor(BFloat16, (total_t, H, K_dim), divisibility=16)
         v_new = make_fake_tensor(BFloat16, (pad_t, Hv, V_dim), divisibility=16)
-        h = make_fake_tensor(
-            BFloat16, (total_chunks_n, Hv, V_dim, K_dim), divisibility=16
-        )
+        h = make_fake_tensor(BFloat16, (total_chunks_n, Hv, V_dim, K_dim), divisibility=16)
         g_cu = make_fake_tensor(Float32, (total_t, Hv), divisibility=4)
         o = make_fake_tensor(BFloat16, (total_t, Hv, V_dim), divisibility=16)
         cu_seqlens = make_fake_tensor(Int32, (cu_entries,), divisibility=1)

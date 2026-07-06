@@ -9,9 +9,9 @@ from torch._ops import HigherOrderOperator, OpOverload
 from aphrodite.config import AphroditeConfig
 from aphrodite.logger import init_logger
 
+from ..aphrodite_inductor_pass import AphroditeInductorPass
 from ..fx_utils import is_func
 from ..inductor_pass import get_pass_context
-from ..aphrodite_inductor_pass import AphroditeInductorPass
 
 logger = init_logger(__name__)
 
@@ -30,10 +30,7 @@ def clone_preserves_layout(node: fx.Node, original_node: fx.Node) -> bool:
     except (AttributeError, RuntimeError):
         return True
 
-    return (
-        node_stride == original_stride
-        and node_storage_offset == original_storage_offset
-    )
+    return node_stride == original_stride and node_storage_offset == original_storage_offset
 
 
 def user_writes_to_node(user: fx.Node, node: fx.Node) -> bool:
@@ -51,9 +48,7 @@ def user_writes_to_node(user: fx.Node, node: fx.Node) -> bool:
         # (except functional HOPs)
         return not isinstance(user.target, TritonKernelWrapperFunctional)
 
-    assert isinstance(user.target, OpOverload), (
-        f"{node=} {user=} {user.op=} {user.target=}"
-    )
+    assert isinstance(user.target, OpOverload), f"{node=} {user=} {user.op=} {user.target=}"
     schema = user.target._schema
     assert len(user.args) <= len(schema.arguments)
     for i, arg in enumerate(user.args):
@@ -101,8 +96,7 @@ class UnsafeCloneEliminationPass(AphroditeInductorPass):
 
             if not clone_preserves_layout(node, original_node):
                 logger.debug(
-                    "Clone removal not possible, clone changes layout: "
-                    "original_node=%s node=%s",
+                    "Clone removal not possible, clone changes layout: original_node=%s node=%s",
                     original_node,
                     node,
                 )
@@ -113,30 +107,21 @@ class UnsafeCloneEliminationPass(AphroditeInductorPass):
             # This could only happen if an inplace implementation was lowered.
             # Then node (the clone) will have one write.
             # TODO(luka) hopefully this can be removed once we lower functional graphs.
-            write_idxs = [
-                node_to_idx[u] for u in node.users if user_writes_to_node(u, node)
-            ]
+            write_idxs = [node_to_idx[u] for u in node.users if user_writes_to_node(u, node)]
             assert len(write_idxs) in (0, 1)
             if write_idxs:
                 # Check if a user of original_node occurs after a write
                 write_idx = write_idxs[0]
-                if any(
-                    node_to_idx[orig_user] > write_idx
-                    for orig_user in original_node.users
-                ):
+                if any(node_to_idx[orig_user] > write_idx for orig_user in original_node.users):
                     logger.debug(
-                        "Clone removal not possible, "
-                        "original_node=%s used after mutation on node=%s",
+                        "Clone removal not possible, original_node=%s used after mutation on node=%s",
                         original_node,
                         node,
                     )
                     continue
 
                 # Check if a node is a (non-donated) graph input
-                if (
-                    original_node.op == "placeholder"
-                    and node_to_idx[original_node] not in donated_input_ids
-                ):
+                if original_node.op == "placeholder" and node_to_idx[original_node] not in donated_input_ids:
                     logger.debug(
                         "Graph input %s not donated, cannot eliminate its clone",
                         original_node,

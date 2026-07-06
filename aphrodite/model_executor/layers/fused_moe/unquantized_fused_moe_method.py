@@ -234,15 +234,11 @@ class UnquantizedFusedMoEMethod(FusedMoEMethodBase, CustomOp):
                     and check_cpu_sgl_kernel(n_w13, k_w13, dtype_w13)
                     and check_cpu_sgl_kernel(n_w2, k_w2, dtype_w2)
                 ):
-                    packed_w13_weight = torch.ops._C.convert_weight_packed(
-                        layer.w13_weight
-                    )
+                    packed_w13_weight = torch.ops._C.convert_weight_packed(layer.w13_weight)
                     assert packed_w13_weight.size() == layer.w13_weight.size()
                     layer.w13_weight.copy_(packed_w13_weight)
                     del packed_w13_weight
-                    packed_w2_weight = torch.ops._C.convert_weight_packed(
-                        layer.w2_weight
-                    )
+                    packed_w2_weight = torch.ops._C.convert_weight_packed(layer.w2_weight)
                     assert packed_w2_weight.size() == layer.w2_weight.size()
                     layer.w2_weight.copy_(packed_w2_weight)
                     self.cpu_fused_moe: Callable = cpu_fused_moe.SGLFusedMOE(layer)

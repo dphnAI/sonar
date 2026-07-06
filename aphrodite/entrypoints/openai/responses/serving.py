@@ -458,7 +458,7 @@ class OpenAIServingResponses(GenerateBaseServing):
                     )
                     and struct_out.all_non_structural_tag_constraints_none()
                 ):
-                    sampling_params.structured_outputs = replace(
+                    sampling_params.structured_outputs = replace(  # type: ignore[type-var]
                         struct_out,
                         structural_tag=(
                             context.response_parser.reasoning_parser.prepare_structured_tag(

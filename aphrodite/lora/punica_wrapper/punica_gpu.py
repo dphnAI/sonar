@@ -50,9 +50,7 @@ class PunicaWrapperGPU(PunicaWrapperBase):
         self.max_loras = self.lora_config.max_loras
 
         # Compute captured LoRA counts for cudagraph specialization.
-        captured_lora_counts = get_captured_lora_counts(
-            self.max_loras, self.lora_config.specialize_active_lora
-        )
+        captured_lora_counts = get_captured_lora_counts(self.max_loras, self.lora_config.specialize_active_lora)
 
         self.token_mapping_meta = LoRAKernelMeta.make(
             self.max_loras,
@@ -114,9 +112,7 @@ class PunicaWrapperGPU(PunicaWrapperBase):
             x,
             lora_a_stacked,
             y,
-            *self.token_mapping_meta.meta_args(
-                x.size(0), self.lora_config.specialize_active_lora
-            ),
+            *self.token_mapping_meta.meta_args(x.size(0), self.lora_config.specialize_active_lora),
             scale,
         )
 
@@ -159,9 +155,7 @@ class PunicaWrapperGPU(PunicaWrapperBase):
             x,
             lora_b_stacked,
             y,
-            *self.token_mapping_meta.meta_args(
-                num_tokens, self.lora_config.specialize_active_lora
-            ),
+            *self.token_mapping_meta.meta_args(num_tokens, self.lora_config.specialize_active_lora),
             offset_start=offset_start,
             add_inputs=add_inputs,
         )
@@ -193,9 +187,7 @@ class PunicaWrapperGPU(PunicaWrapperBase):
             x.unsqueeze(dim=0),
             (lora_b_stacked,),
             y,
-            *self.token_mapping_meta.meta_args(
-                x.size(0), self.lora_config.specialize_active_lora
-            ),
+            *self.token_mapping_meta.meta_args(x.size(0), self.lora_config.specialize_active_lora),
             offset_start=0,
             add_inputs=add_inputs,
         )
@@ -236,16 +228,13 @@ class PunicaWrapperGPU(PunicaWrapperBase):
         assert len(lora_a_stacked) == len(lora_b_stacked) == len(output_slices)
 
         assert buffer is None, (
-            "To minimize overhead, the buffer should be created by "
-            ".add_lora_linear() instead of being passed in."
+            "To minimize overhead, the buffer should be created by .add_lora_linear() instead of being passed in."
         )
         r = lora_b_stacked[0].size(-1)
         # We set the buffer to be float32 by default, refer to:
         # https://github.com/triton-lang/triton/issues/1387
         # Note: buffer is zeroed inside the shrink op
-        buffer = torch.empty(
-            (len(output_slices), x.size(0), r), dtype=torch.float32, device=x.device
-        )
+        buffer = torch.empty((len(output_slices), x.size(0), r), dtype=torch.float32, device=x.device)
         add_inputs = kwargs.pop("add_inputs", True)
         self.add_shrink(
             buffer,  # type: ignore
@@ -295,8 +284,7 @@ class PunicaWrapperGPU(PunicaWrapperBase):
         r = lora_b_stacked.size(-1)
 
         assert buffer is None, (
-            "To minimize overhead, the buffer should be created by "
-            ".add_lora_linear() instead of being passed in."
+            "To minimize overhead, the buffer should be created by .add_lora_linear() instead of being passed in."
         )
         # We set the buffer to be float32 by default, refer to:
         # https://github.com/triton-lang/triton/issues/1387
@@ -307,9 +295,7 @@ class PunicaWrapperGPU(PunicaWrapperBase):
             x,
             [lora_a_stacked],
             buffer.unsqueeze(dim=0),
-            *self.prompt_mapping_meta.meta_args(
-                x.size(0), self.lora_config.specialize_active_lora
-            ),
+            *self.prompt_mapping_meta.meta_args(x.size(0), self.lora_config.specialize_active_lora),
             scale,
         )
 
@@ -317,9 +303,7 @@ class PunicaWrapperGPU(PunicaWrapperBase):
             buffer.unsqueeze(dim=0),
             [lora_b_stacked],
             y,
-            *self.prompt_mapping_meta.meta_args(
-                buffer.size(0), self.lora_config.specialize_active_lora
-            ),
+            *self.prompt_mapping_meta.meta_args(buffer.size(0), self.lora_config.specialize_active_lora),
             add_inputs=True,
         )
         y = y.view_as(y_org)
@@ -353,9 +337,7 @@ class PunicaWrapperGPU(PunicaWrapperBase):
             lora_ids,
             _,
             _,
-        ) = self.token_mapping_meta.meta_args(
-            num_tokens, self.lora_config.specialize_active_lora
-        )
+        ) = self.token_mapping_meta.meta_args(num_tokens, self.lora_config.specialize_active_lora)
         if token_lora_mapping is None:
             token_lora_mapping = token_lora_mapping_meta
         # Under EP the caller passes local_num_experts but topk_ids carries
@@ -364,17 +346,13 @@ class PunicaWrapperGPU(PunicaWrapperBase):
         # so global topk_ids don't overflow. expert_map inside the kernel
         # then translates global→local so the output expert_ids are local
         # (mirrors the non-LoRA moe_align_block_size behavior).
-        kernel_num_experts = (
-            expert_map.numel() if expert_map is not None else num_experts
-        )
+        kernel_num_experts = expert_map.numel() if expert_map is not None else num_experts
         if naive_block_assignment:
             expert_ids = topk_ids.reshape(-1)
             sorted_ids = None
             num_tokens_post_pad = None
         else:
-            max_num_tokens_padded = topk_ids.numel() + kernel_num_experts * (
-                block_size - 1
-            )
+            max_num_tokens_padded = topk_ids.numel() + kernel_num_experts * (block_size - 1)
             if pad_sorted_ids:
                 max_num_tokens_padded = round_up(max_num_tokens_padded, block_size)
             if topk_ids.numel() < kernel_num_experts:
@@ -394,9 +372,7 @@ class PunicaWrapperGPU(PunicaWrapperBase):
                 dtype=torch.int32,
                 device=topk_ids.device,
             )
-            num_tokens_post_pad = torch.empty(
-                (max_loras), dtype=torch.int32, device=topk_ids.device
-            )
+            num_tokens_post_pad = torch.empty((max_loras), dtype=torch.int32, device=topk_ids.device)
 
             ops.moe_lora_align_block_size(
                 topk_ids,
@@ -448,9 +424,7 @@ class PunicaWrapperGPU(PunicaWrapperBase):
             lora_ids,
             no_lora_flag,
             num_active_loras,
-        ) = self.token_mapping_meta.meta_args(
-            x.size(0), self.lora_config.specialize_active_lora
-        )
+        ) = self.token_mapping_meta.meta_args(x.size(0), self.lora_config.specialize_active_lora)
 
         assert no_lora_flag.numel() == 1
         if no_lora_flag.item():

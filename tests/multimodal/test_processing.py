@@ -79,9 +79,7 @@ def test_iter_token_matches(token_ids, match_ids, expected, start_idx):
     result = list(iter_token_matches(token_ids, match_ids, start_idx=start_idx))
 
     # Manually constructed results
-    assert [item._asdict() for item in result] == [
-        item for item in expected if item["start_idx"] >= start_idx
-    ]
+    assert [item._asdict() for item in result] == [item for item in expected if item["start_idx"] >= start_idx]
 
     # Invariants
     match_lens = [end - start for start, end in result]
@@ -235,24 +233,15 @@ def test_find_token_matches(
     expected_by_key,
     update_type,
 ):
-    prompt_updates = {
-        key: update_type(key, target, []).resolve(0)
-        for key, target in target_by_key.items()
-    }
-    result = {
-        key: list(update.iter_token_matches(prompt, tokenizer=None))
-        for key, update in prompt_updates.items()
-    }
+    prompt_updates = {key: update_type(key, target, []).resolve(0) for key, target in target_by_key.items()}
+    result = {key: list(update.iter_token_matches(prompt, tokenizer=None)) for key, update in prompt_updates.items()}
 
     # Only displayed on error
     print("result:", result)
 
     # Manually constructed results
     assert {
-        key: [
-            dict(start_idx=item.start_idx, end_idx=item.end_idx)
-            for item in result.get(key, [])
-        ]
+        key: [dict(start_idx=item.start_idx, end_idx=item.end_idx) for item in result.get(key, [])]
         for key in expected_by_key
     } == expected_by_key
 
@@ -379,24 +368,15 @@ def test_find_text_matches(
     expected_by_key,
     update_type,
 ):
-    prompt_updates = {
-        key: update_type(key, target, []).resolve(0)
-        for key, target in target_by_key.items()
-    }
-    result = {
-        key: list(update.iter_text_matches(prompt, tokenizer=None))
-        for key, update in prompt_updates.items()
-    }
+    prompt_updates = {key: update_type(key, target, []).resolve(0) for key, target in target_by_key.items()}
+    result = {key: list(update.iter_text_matches(prompt, tokenizer=None)) for key, update in prompt_updates.items()}
 
     # Only displayed on error
     print("result:", result)
 
     # Manually constructed results
     assert {
-        key: [
-            dict(start_idx=item.start_idx, end_idx=item.end_idx)
-            for item in result.get(key, [])
-        ]
+        key: [dict(start_idx=item.start_idx, end_idx=item.end_idx) for item in result.get(key, [])]
         for key in expected_by_key
     } == expected_by_key
 
@@ -542,10 +522,7 @@ def test_find_update_text(
     ) in expected_by_update_type_mm_count.items():
         for mm_count, expected in expected_by_mm_count.items():
             mm_prompt_updates = {
-                key: [
-                    [update_type(key, target, repl_by_key[key]).resolve(i)]
-                    for i in range(mm_count)
-                ]
+                key: [[update_type(key, target, repl_by_key[key]).resolve(i)] for i in range(mm_count)]
                 for key, target in target_by_key.items()
             }
 
@@ -744,10 +721,7 @@ def test_find_update_tokens(
     ) in expected_by_update_type_mm_count.items():
         for mm_count, expected in expected_by_mm_count.items():
             mm_prompt_updates = {
-                key: [
-                    [update_type(key, target, repl_by_key[key]).resolve(i)]
-                    for i in range(mm_count)
-                ]
+                key: [[update_type(key, target, repl_by_key[key]).resolve(i)] for i in range(mm_count)]
                 for key, target in target_by_key.items()
             }
 
@@ -886,8 +860,7 @@ def test_find_mm_placeholders(
     update_type,
 ):
     mm_prompt_updates = {
-        key: [[update_type(key, [], repl).resolve(i)] for i in range(3)]
-        for key, repl in repl_by_key.items()
+        key: [[update_type(key, [], repl).resolve(i)] for i in range(3)] for key, repl in repl_by_key.items()
     }
 
     result = find_mm_placeholders(prompt, mm_prompt_updates, tokenizer=None)
@@ -957,9 +930,7 @@ def test_limit_mm_per_prompt_apply(model_id, num_images, limit, is_valid):
         (10, 0),  # large user limit, no model support → capped to 0
     ],
 )
-def test_budget_caps_prevent_dummy_input_validation_failure(
-    model_id, user_limit, supported_limit
-):
+def test_budget_caps_prevent_dummy_input_validation_failure(model_id, user_limit, supported_limit):
     limit_mm_per_prompt = {"image": user_limit}
 
     model_config = ModelConfig(
@@ -974,8 +945,7 @@ def test_budget_caps_prevent_dummy_input_validation_failure(
     allowed = processor.info.allowed_mm_limits
 
     assert allowed["image"] <= supported_limit, (
-        f"allowed_mm_limits['image']={allowed['image']} exceeds "
-        f"supported_limit={supported_limit}"
+        f"allowed_mm_limits['image']={allowed['image']} exceeds supported_limit={supported_limit}"
     )
 
     assert allowed["image"] <= user_limit, (
@@ -1077,9 +1047,7 @@ def test_apply_matches_no_match_exits_quickly():
     long_prompt = "x" * 10000
 
     # Create update looking for a placeholder that doesn't exist
-    mm_prompt_updates = {
-        "image": [[PromptReplacement("image", "<image>", "REPLACED").resolve(0)]]
-    }
+    mm_prompt_updates = {"image": [[PromptReplacement("image", "<image>", "REPLACED").resolve(0)]]}
 
     start = time.perf_counter()
     result, _ = _apply_matches(

@@ -61,15 +61,11 @@ class INCConfigParser:
             quantized=bits < 16,
         )
 
-    def get_layer_config(
-        self, layer: "torch.nn.Module", layer_name: str
-    ) -> tuple[int, int, bool]:
+    def get_layer_config(self, layer: "torch.nn.Module", layer_name: str) -> tuple[int, int, bool]:
         layer_config = self.resolve(layer, layer_name)
         return layer_config.bits, layer_config.group_size, layer_config.sym
 
-    def _resolve_raw(
-        self, layer: "torch.nn.Module", layer_name: str
-    ) -> tuple[int, int, bool]:
+    def _resolve_raw(self, layer: "torch.nn.Module", layer_name: str) -> tuple[int, int, bool]:
         REGEX_SPECIAL_CHARS = set(r"*+?^$()[]{}|\\")
 
         def is_explicitly_configured(name: str) -> bool:
@@ -80,9 +76,7 @@ class INCConfigParser:
             if name in self._config.extra_config:
                 return True
             for pattern in self._config.extra_config:
-                if not isinstance(pattern, str) or not any(
-                    c in REGEX_SPECIAL_CHARS for c in pattern
-                ):
+                if not isinstance(pattern, str) or not any(c in REGEX_SPECIAL_CHARS for c in pattern):
                     continue
                 try:
                     if re.search(re.compile(pattern), name) is not None:
@@ -112,9 +106,7 @@ class INCConfigParser:
 
             regex_special_chars = set(r"*+?^$()[]{}|\\")
             for pattern, cfg in self._config.extra_config.items():
-                if not isinstance(pattern, str) or not any(
-                    c in regex_special_chars for c in pattern
-                ):
+                if not isinstance(pattern, str) or not any(c in regex_special_chars for c in pattern):
                     continue
 
                 try:
@@ -144,31 +136,21 @@ class INCConfigParser:
 
         quantized = not isinstance(layer, ParallelLMHead)
         if self._config.block_name_to_quantize:
-            quantized = any(
-                layer_name.startswith(name)
-                for name in self._config.block_name_to_quantize
-            )
+            quantized = any(layer_name.startswith(name) for name in self._config.block_name_to_quantize)
 
         if self._config.extra_config and "fusedmoe" in layer.__class__.__name__.lower():
             moe_configs = [
-                get_config(name, quantized)
-                for name in self._config.extra_config
-                if name.startswith(layer_name)
+                get_config(name, quantized) for name in self._config.extra_config if name.startswith(layer_name)
             ]
             if moe_configs:
                 if len(set(moe_configs)) == 1:
                     return moe_configs[0]
-                raise ValueError(
-                    f"Fused MoE layer '{layer_name}' requires "
-                    f"consistent quant config for all sub-layers"
-                )
+                raise ValueError(f"Fused MoE layer '{layer_name}' requires consistent quant config for all sub-layers")
 
         if self._config.extra_config:
             for fusion_key, sub_keys in self._config.packed_modules_mapping.items():
                 if fusion_key in layer_name and layer_name.count(fusion_key) == 1:
-                    sub_names = [
-                        layer_name.replace(fusion_key, sub_key) for sub_key in sub_keys
-                    ]
+                    sub_names = [layer_name.replace(fusion_key, sub_key) for sub_key in sub_keys]
                     # Only trigger if at least one sub_name is explicitly
                     # configured in extra_config (via exact match or regex).
                     # This prevents false matches when a short fusion_key
@@ -180,9 +162,6 @@ class INCConfigParser:
                     sub_configs = [get_config(name, quantized) for name in sub_names]
                     if len(set(sub_configs)) == 1:
                         return sub_configs[0]
-                    raise ValueError(
-                        f"Fused module '{layer_name}' requires "
-                        f"consistent quant config for {sub_names}"
-                    )
+                    raise ValueError(f"Fused module '{layer_name}' requires consistent quant config for {sub_names}")
 
         return get_config(layer_name, quantized)

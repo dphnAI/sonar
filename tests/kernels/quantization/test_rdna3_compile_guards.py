@@ -68,9 +68,7 @@ REPO_ROOT = _find_repo_root()
 # from here so they verify the code that is actually imported at runtime — this
 # works even on CI images that ship the wheel instead of the python source tree
 # (where only csrc/ + CMakeLists.txt are checked out for building).
-APHRODITE_PKG_DIR: Path | None = (
-    Path(aphrodite.__file__).parent if getattr(aphrodite, "__file__", None) else None
-)
+APHRODITE_PKG_DIR: Path | None = Path(aphrodite.__file__).parent if getattr(aphrodite, "__file__", None) else None
 
 needs_source = pytest.mark.skipif(
     REPO_ROOT is None,
@@ -173,8 +171,7 @@ def test_rocm_moe_not_supported_on_non_gfx1100():
 
     wq = type("WQ", (), {"num_bits": 4})()
     assert rocm_moe_rdna.is_supported(wq) is False, (
-        "rocm_moe_rdna.is_supported() returned True on non-gfx1100 — "
-        "dispatch guard is broken"
+        "rocm_moe_rdna.is_supported() returned True on non-gfx1100 — dispatch guard is broken"
     )
 
 
@@ -280,11 +277,7 @@ class TestTorchBindingsGuards:
             elif line.strip() == "#endif" and inside_guard:
                 inside_guard = False
 
-            if (
-                "rdna3" in line.lower()
-                and not line.strip().startswith("//")
-                and not inside_guard
-            ):
+            if "rdna3" in line.lower() and not line.strip().startswith("//") and not inside_guard:
                 rdna3_lines_outside.append((i, line.strip()))
 
         assert not rdna3_lines_outside, (
@@ -306,9 +299,7 @@ class TestTorchBindingsGuards:
                 inside_guard = False
 
             if "#include" in line and "rdna3" in line.lower():
-                assert inside_guard, (
-                    f"L{i}: RDNA3 include outside gfx1100 guard: {line.strip()}"
-                )
+                assert inside_guard, f"L{i}: RDNA3 include outside gfx1100 guard: {line.strip()}"
 
 
 class TestCustomOpsGuards:
@@ -332,8 +323,7 @@ class TestCustomOpsGuards:
             preceding = src[: match.start()]
             last_hasattr = preceding.rfind(f'hasattr(torch.ops._rocm_C, "{op}")')
             assert last_hasattr != -1, (
-                f'register_fake("_rocm_C::{op}") is not preceded by a '
-                f"hasattr check — would crash on CDNA import"
+                f'register_fake("_rocm_C::{op}") is not preceded by a hasattr check — would crash on CDNA import'
             )
             gap = preceding[last_hasattr:].count("\n")
             assert gap <= 5, (
@@ -350,8 +340,7 @@ class TestCustomOpsGuards:
             if stripped.startswith("#") or stripped.startswith("//"):
                 continue
             assert "from aphrodite._rocm_C import" not in stripped, (
-                f"Top-level import of _rocm_C in _custom_ops.py would "
-                f"crash on CDNA: {stripped}"
+                f"Top-level import of _rocm_C in _custom_ops.py would crash on CDNA: {stripped}"
             )
 
 
@@ -469,8 +458,7 @@ class TestDenseKernelSelectionMocked:
         ):
             chosen = choose_mp_linear_kernel(config)
             assert chosen.__name__ != "RDNA3W4A16LinearKernel", (
-                "RDNA3 kernel was selected on simulated CDNA — "
-                "choose_mp_linear_kernel guard is broken"
+                "RDNA3 kernel was selected on simulated CDNA — choose_mp_linear_kernel guard is broken"
             )
 
 
@@ -497,7 +485,4 @@ class TestCompressedTensorsMoEDispatchGuard:
                     if "is_rocm()" in lines[j - 1]:
                         found_guard = True
                         break
-                assert found_guard, (
-                    f"L{i}: rocm_moe_rdna reference not protected by "
-                    f"is_rocm() guard: {stripped}"
-                )
+                assert found_guard, f"L{i}: rocm_moe_rdna reference not protected by is_rocm() guard: {stripped}"

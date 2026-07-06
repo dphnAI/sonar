@@ -178,16 +178,12 @@ class OffloadingConnectorStats(KVConnectorStats):
                         current_label_values[labelvalues].extend(value)
                 elif type_str == _MetricType.COUNTER:
                     assert isinstance(value, int | float)
-                    current_label_values[labelvalues] = (
-                        current_label_values.get(labelvalues, 0) + value
-                    )
+                    current_label_values[labelvalues] = current_label_values.get(labelvalues, 0) + value
                 elif type_str == _MetricType.GAUGE:
                     assert isinstance(value, int | float)
                     current_label_values[labelvalues] = value
                 else:
-                    raise AssertionError(
-                        f"Unknown metric type '{type_str}' for key: {key}"
-                    )
+                    raise AssertionError(f"Unknown metric type '{type_str}' for key: {key}")
         return self
 
     def reduce(self) -> dict[str, int | float]:
@@ -212,9 +208,7 @@ class OffloadingConnectorStats(KVConnectorStats):
                     assert isinstance(value, int | float)
                     return_dict[key_with_labels] = value
                 else:
-                    raise AssertionError(
-                        f"Unknown metric type '{type_str}' for key: {key}"
-                    )
+                    raise AssertionError(f"Unknown metric type '{type_str}' for key: {key}")
         return return_dict
 
     def is_empty(self) -> bool:
@@ -229,9 +223,7 @@ class OffloadingConnectorStats(KVConnectorStats):
         """Increase a counter on the stats payload."""
         self._types.setdefault(counter_name, _MetricType.COUNTER)
         counter_values = self._values.setdefault(counter_name, {})
-        counter_values[labelvalues] = (
-            counter_values.get(labelvalues, 0) + counter_increase_value
-        )
+        counter_values[labelvalues] = counter_values.get(labelvalues, 0) + counter_increase_value
 
     def set_gauge(
         self,
@@ -282,29 +274,21 @@ class OffloadPromMetrics(KVConnectorPromMetrics):
         self._observe_deprecated_metrics = issubclass(spec_cls, CPUOffloadingSpec)
         self._offloading_metric_defs: dict[str, PromMetricT] = {}
         # (engine_idx, metric_name, labelvalues) -> metric with bound labels
-        self.offloading_metrics: dict[
-            tuple[int, str, tuple[str, ...]], PromMetricT
-        ] = {}
+        self.offloading_metrics: dict[tuple[int, str, tuple[str, ...]], PromMetricT] = {}
 
         self._counter_kv_bytes = self._counter_cls(
             name=_DEPRECATED_TOTAL_BYTES,
-            documentation=_DEPRECATED_CONNECTOR_METRIC_DEFINITIONS[
-                _DEPRECATED_TOTAL_BYTES
-            ].documentation,
+            documentation=_DEPRECATED_CONNECTOR_METRIC_DEFINITIONS[_DEPRECATED_TOTAL_BYTES].documentation,
             labelnames=labelnames + ["transfer_type"],
         )
 
         self._counter_kv_transfer_time = self._counter_cls(
             name=_DEPRECATED_TOTAL_TIME,
-            documentation=_DEPRECATED_CONNECTOR_METRIC_DEFINITIONS[
-                _DEPRECATED_TOTAL_TIME
-            ].documentation,
+            documentation=_DEPRECATED_CONNECTOR_METRIC_DEFINITIONS[_DEPRECATED_TOTAL_TIME].documentation,
             labelnames=labelnames + ["transfer_type"],
         )
 
-        deprecated_size_metadata = _DEPRECATED_CONNECTOR_METRIC_DEFINITIONS[
-            _DEPRECATED_SIZE
-        ]
+        deprecated_size_metadata = _DEPRECATED_CONNECTOR_METRIC_DEFINITIONS[_DEPRECATED_SIZE]
         assert isinstance(deprecated_size_metadata, OffloadingHistogramMetadata)
         self._histogram_transfer_size = self._histogram_cls(
             name=_DEPRECATED_SIZE,
@@ -316,24 +300,18 @@ class OffloadPromMetrics(KVConnectorPromMetrics):
         for engine_idx, labelvalues in per_engine_labelvalues.items():
             for transfer_type in _TransferType.ALL:
                 bounded_labelvalues = labelvalues + [transfer_type]
-                self.histogram_transfer_size[(engine_idx, transfer_type)] = (
-                    self._histogram_transfer_size.labels(*bounded_labelvalues)
+                self.histogram_transfer_size[(engine_idx, transfer_type)] = self._histogram_transfer_size.labels(
+                    *bounded_labelvalues
                 )
-                self.counter_kv_bytes[(engine_idx, transfer_type)] = (
-                    self._counter_kv_bytes.labels(*bounded_labelvalues)
-                )
-                self.counter_kv_transfer_time[(engine_idx, transfer_type)] = (
-                    self._counter_kv_transfer_time.labels(*bounded_labelvalues)
+                self.counter_kv_bytes[(engine_idx, transfer_type)] = self._counter_kv_bytes.labels(*bounded_labelvalues)
+                self.counter_kv_transfer_time[(engine_idx, transfer_type)] = self._counter_kv_transfer_time.labels(
+                    *bounded_labelvalues
                 )
 
         for metric_name, metadata in self._offloading_metric_metadata.items():
-            self._offloading_metric_defs[metric_name] = self._create_metric(
-                metric_name, metadata
-            )
+            self._offloading_metric_defs[metric_name] = self._create_metric(metric_name, metadata)
 
-    def _create_metric(
-        self, metric_name: str, metadata: OffloadingMetricMetadata
-    ) -> Any:
+    def _create_metric(self, metric_name: str, metadata: OffloadingMetricMetadata) -> Any:
         kwargs: dict[str, Any] = {
             "name": metric_name,
             "documentation": metadata.documentation,
@@ -360,16 +338,13 @@ class OffloadPromMetrics(KVConnectorPromMetrics):
         metadata = self._offloading_metric_metadata[metric_name]
         if len(labelvalues) != len(metadata.labelnames):
             raise AssertionError(
-                f"Metric {metric_name} expects {len(metadata.labelnames)} labels, "
-                f"got {len(labelvalues)}"
+                f"Metric {metric_name} expects {len(metadata.labelnames)} labels, got {len(labelvalues)}"
             )
         key = (engine_idx, metric_name, labelvalues)
         prom_metric = self.offloading_metrics.get(key)
         if prom_metric is None:
             engine_labelvalues = self.per_engine_labelvalues[engine_idx]
-            prom_metric = self._offloading_metric_defs[metric_name].labels(
-                *(engine_labelvalues + list(labelvalues))
-            )
+            prom_metric = self._offloading_metric_defs[metric_name].labels(*(engine_labelvalues + list(labelvalues)))
             self.offloading_metrics[key] = prom_metric
         return prom_metric
 
@@ -418,13 +393,9 @@ class OffloadPromMetrics(KVConnectorPromMetrics):
             # Keep deprecated CPU offload transfer metrics updated during the
             # transition to flat metric names.
             if metric_name == _TransferMetricName.LOAD_SIZE:
-                self.histogram_transfer_size[(engine_idx, _TransferType.LOAD)].observe(
-                    observation
-                )
+                self.histogram_transfer_size[(engine_idx, _TransferType.LOAD)].observe(observation)
             elif metric_name == _TransferMetricName.STORE_SIZE:
-                self.histogram_transfer_size[(engine_idx, _TransferType.STORE)].observe(
-                    observation
-                )
+                self.histogram_transfer_size[(engine_idx, _TransferType.STORE)].observe(observation)
 
     def observe(self, transfer_stats_data: dict[str, Any], engine_idx: int = 0):
         """Observe transfer statistics."""
@@ -447,6 +418,4 @@ class OffloadPromMetrics(KVConnectorPromMetrics):
                     assert all(isinstance(v, int | float) for v in value)
                     self._observe_histogram(key, value, labelvalues, engine_idx)
                 else:
-                    raise AssertionError(
-                        f"Unknown metric type '{type_str}' for key: {key}"
-                    )
+                    raise AssertionError(f"Unknown metric type '{type_str}' for key: {key}")

@@ -116,9 +116,7 @@ def _format_module_tree(
 
             if len(indices) > 1:
                 range_str = _format_index_ranges(indices)
-                child_lines[0] = (
-                    f"{child_prefix}({range_str}): {len(indices)} x {first_line}"
-                )
+                child_lines[0] = f"{child_prefix}({range_str}): {len(indices)} x {first_line}"
             else:
                 child_lines[0] = f"{child_prefix}({indices[0]}): {first_line}"
             lines.extend(child_lines)

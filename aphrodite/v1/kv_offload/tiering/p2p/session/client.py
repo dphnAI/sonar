@@ -78,8 +78,7 @@ class ClientRole:
     ) -> None:
         """Register a load request and send the FetchMsg."""
         logger.debug(
-            "P2PSession %s: request_blocks job_id=%d kv_request_id=%s "
-            "blocks=%d ready=%s",
+            "P2PSession %s: request_blocks job_id=%d kv_request_id=%s blocks=%d ready=%s",
             self._peer_id,
             job_id,
             kv_request_id,

@@ -219,8 +219,7 @@ def test_custom_logging_config_causes_an_error_if_configure_logging_is_off(monke
             _configure_aphrodite_root_logger()
         assert ex_info.type is RuntimeError
         expected_message_snippet = (
-            "APHRODITE_CONFIGURE_LOGGING evaluated to false, but "
-            "APHRODITE_LOGGING_CONFIG_PATH was given."
+            "APHRODITE_CONFIGURE_LOGGING evaluated to false, but APHRODITE_LOGGING_CONFIG_PATH was given."
         )
         assert expected_message_snippet in str(ex_info)
 

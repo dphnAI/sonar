@@ -50,7 +50,4 @@ def test_multimodal_processor(model_id):
         hf_processor_mm_kwargs={},
     )
 
-    assert (
-        str_processed_inputs["prompt_token_ids"]
-        == ids_processed_inputs["prompt_token_ids"]
-    )
+    assert str_processed_inputs["prompt_token_ids"] == ids_processed_inputs["prompt_token_ids"]

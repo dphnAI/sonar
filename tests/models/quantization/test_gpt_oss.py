@@ -53,9 +53,7 @@ def has_huggingface_access(repo):
         return False
 
 
-HF_HUB_AMD_ORG_ACCESS = all(
-    [has_huggingface_access(model_name) for model_name in MODEL_ACCURACIES]
-)
+HF_HUB_AMD_ORG_ACCESS = all([has_huggingface_access(model_name) for model_name in MODEL_ACCURACIES])
 
 
 @dataclass
@@ -118,9 +116,7 @@ def test_gpt_oss_attention_quantization(
         batch_size="auto",
         **extra_run_kwargs,
     )
-    measured_accuracy = float(
-        lm_eval_out["results"]["gsm8k_platinum"]["exact_match,flexible-extract"]
-    )
+    measured_accuracy = float(lm_eval_out["results"]["gsm8k_platinum"]["exact_match,flexible-extract"])
 
     rtol = 0.02
     assert measured_accuracy >= expected_accuracy - rtol, (

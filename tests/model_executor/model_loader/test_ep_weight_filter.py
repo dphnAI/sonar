@@ -171,33 +171,21 @@ class TestShouldSkipWeight:
         assert not should_skip_weight("anything", None)
 
     def test_dense_not_skipped(self):
-        assert not should_skip_weight(
-            "model.layers.0.self_attn.q_proj.weight", self.local_ids
-        )
+        assert not should_skip_weight("model.layers.0.self_attn.q_proj.weight", self.local_ids)
 
     def test_local_expert_not_skipped(self):
-        assert not should_skip_weight(
-            "model.layers.0.mlp.experts.10.gate_proj.weight", self.local_ids
-        )
+        assert not should_skip_weight("model.layers.0.mlp.experts.10.gate_proj.weight", self.local_ids)
 
     def test_remote_expert_skipped(self):
-        assert should_skip_weight(
-            "model.layers.0.mlp.experts.200.gate_proj.weight", self.local_ids
-        )
+        assert should_skip_weight("model.layers.0.mlp.experts.200.gate_proj.weight", self.local_ids)
 
     def test_boundary_expert(self):
         # Expert 47 is local (last one), 48 is not
-        assert not should_skip_weight(
-            "model.layers.0.mlp.experts.47.gate_proj.weight", self.local_ids
-        )
-        assert should_skip_weight(
-            "model.layers.0.mlp.experts.48.gate_proj.weight", self.local_ids
-        )
+        assert not should_skip_weight("model.layers.0.mlp.experts.47.gate_proj.weight", self.local_ids)
+        assert should_skip_weight("model.layers.0.mlp.experts.48.gate_proj.weight", self.local_ids)
 
     def test_shared_expert_not_skipped(self):
-        assert not should_skip_weight(
-            "model.layers.0.mlp.shared_experts.gate_proj.weight", self.local_ids
-        )
+        assert not should_skip_weight("model.layers.0.mlp.shared_experts.gate_proj.weight", self.local_ids)
 
     def test_embedding_not_skipped(self):
         assert not should_skip_weight("model.embed_tokens.weight", self.local_ids)
@@ -205,9 +193,7 @@ class TestShouldSkipWeight:
     def test_fused_3d_expert_not_skipped(self):
         # 3D fused-expert tensors (gpt-oss style) have no numeric id.
         # Must not be skipped — weight_loader handles slicing later.
-        assert not should_skip_weight(
-            "model.layers.0.mlp.experts.gate_proj.weight", self.local_ids
-        )
+        assert not should_skip_weight("model.layers.0.mlp.experts.gate_proj.weight", self.local_ids)
 
 
 # ---------------------------------------------------------------------------
@@ -240,18 +226,14 @@ class TestSafetensorsWeightsIteratorWithEpFilter:
     def test_no_filter_returns_all(self, gpt2_files):
         """With local_expert_ids=None, all weights are returned (no MoE)."""
         all_weights = dict(safetensors_weights_iterator(gpt2_files, False))
-        filtered_weights = dict(
-            safetensors_weights_iterator(gpt2_files, False, local_expert_ids=None)
-        )
+        filtered_weights = dict(safetensors_weights_iterator(gpt2_files, False, local_expert_ids=None))
         assert set(all_weights.keys()) == set(filtered_weights.keys())
 
     def test_empty_filter_skips_experts_only(self, gpt2_files):
         """GPT-2 has no expert weights, so even an empty local_expert_ids
         set should return all weights (all are dense)."""
         all_weights = dict(safetensors_weights_iterator(gpt2_files, False))
-        filtered_weights = dict(
-            safetensors_weights_iterator(gpt2_files, False, local_expert_ids=set())
-        )
+        filtered_weights = dict(safetensors_weights_iterator(gpt2_files, False, local_expert_ids=set()))
         # GPT-2 has no experts, so nothing should be filtered
         assert set(all_weights.keys()) == set(filtered_weights.keys())
 
@@ -272,19 +254,11 @@ class TestEpFilterOnSyntheticMoeWeights:
         tensors["model.layers.0.input_layernorm.weight"] = torch.randn(64)
         # Expert weights: 8 experts
         for expert_id in range(8):
-            tensors[f"model.layers.0.mlp.experts.{expert_id}.gate_proj.weight"] = (
-                torch.randn(128, 64)
-            )
-            tensors[f"model.layers.0.mlp.experts.{expert_id}.up_proj.weight"] = (
-                torch.randn(128, 64)
-            )
-            tensors[f"model.layers.0.mlp.experts.{expert_id}.down_proj.weight"] = (
-                torch.randn(64, 128)
-            )
+            tensors[f"model.layers.0.mlp.experts.{expert_id}.gate_proj.weight"] = torch.randn(128, 64)
+            tensors[f"model.layers.0.mlp.experts.{expert_id}.up_proj.weight"] = torch.randn(128, 64)
+            tensors[f"model.layers.0.mlp.experts.{expert_id}.down_proj.weight"] = torch.randn(64, 128)
         # Shared expert (should never be filtered)
-        tensors["model.layers.0.mlp.shared_experts.gate_proj.weight"] = torch.randn(
-            128, 64
-        )
+        tensors["model.layers.0.mlp.shared_experts.gate_proj.weight"] = torch.randn(128, 64)
 
         filepath = str(tmp_path / "model-00001-of-00001.safetensors")
         save_file(tensors, filepath)
@@ -299,9 +273,7 @@ class TestEpFilterOnSyntheticMoeWeights:
         files, expected = synthetic_moe_files
         # EP=2, rank=0 → experts 0-3
         local_ids = compute_local_expert_ids(8, ep_size=2, ep_rank=0)
-        loaded = dict(
-            safetensors_weights_iterator(files, False, local_expert_ids=local_ids)
-        )
+        loaded = dict(safetensors_weights_iterator(files, False, local_expert_ids=local_ids))
 
         # Should have all dense + shared + experts 0-3 only
         for name in loaded:
@@ -322,9 +294,7 @@ class TestEpFilterOnSyntheticMoeWeights:
     def test_ep2_rank1_gets_other_half(self, synthetic_moe_files):
         files, expected = synthetic_moe_files
         local_ids = compute_local_expert_ids(8, ep_size=2, ep_rank=1)
-        loaded = dict(
-            safetensors_weights_iterator(files, False, local_expert_ids=local_ids)
-        )
+        loaded = dict(safetensors_weights_iterator(files, False, local_expert_ids=local_ids))
 
         expert_names = [n for n in loaded if parse_expert_id(n) is not None]
         assert len(expert_names) == 4 * 3
@@ -336,9 +306,7 @@ class TestEpFilterOnSyntheticMoeWeights:
         all_expert_names = set()
         for rank in range(8):
             local_ids = compute_local_expert_ids(8, ep_size=8, ep_rank=rank)
-            loaded = dict(
-                safetensors_weights_iterator(files, False, local_expert_ids=local_ids)
-            )
+            loaded = dict(safetensors_weights_iterator(files, False, local_expert_ids=local_ids))
             expert_names = {n for n in loaded if parse_expert_id(n) is not None}
             # 1 expert × 3 weights
             assert len(expert_names) == 3
@@ -353,9 +321,7 @@ class TestEpFilterOnSyntheticMoeWeights:
         all_weights = dict(safetensors_weights_iterator(files, False))
 
         local_ids = compute_local_expert_ids(8, ep_size=2, ep_rank=0)
-        filtered = dict(
-            safetensors_weights_iterator(files, False, local_expert_ids=local_ids)
-        )
+        filtered = dict(safetensors_weights_iterator(files, False, local_expert_ids=local_ids))
 
         for name, tensor in filtered.items():
             assert torch.equal(tensor, all_weights[name]), f"Tensor mismatch for {name}"

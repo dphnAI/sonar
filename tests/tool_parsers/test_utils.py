@@ -103,9 +103,7 @@ class TestCoerceToSchemaType:
         ``json.dumps`` renders as invalid JSON ``Infinity``.
         """
 
-        @pytest.mark.parametrize(
-            "value", ["inf", "-inf", "Infinity", "1e999", "nan", "-nan"]
-        )
+        @pytest.mark.parametrize("value", ["inf", "-inf", "Infinity", "1e999", "nan", "-nan"])
         def test_non_finite_number_does_not_crash(self, value):
             # Must not raise (previously OverflowError for inf/1e999/Infinity).
             result = coerce_to_schema_type(value, "number")
@@ -132,17 +130,13 @@ class TestCoerceToSchemaType:
         ``json.dumps`` later renders as invalid JSON (``Infinity``/``NaN``).
         """
 
-        @pytest.mark.parametrize(
-            "value", ["[1e999]", "[1, 2, 1e999]", "[NaN]", "[-Infinity]"]
-        )
+        @pytest.mark.parametrize("value", ["[1e999]", "[1, 2, 1e999]", "[NaN]", "[-Infinity]"])
         def test_array_with_non_finite_preserved_as_string(self, value):
             result = coerce_to_schema_type(value, "array")
             assert result == value
             assert json.loads(json.dumps(result)) == result
 
-        @pytest.mark.parametrize(
-            "value", ['{"x": 1e999}', '{"x": Infinity}', '{"a": [1e999, 2]}']
-        )
+        @pytest.mark.parametrize("value", ['{"x": 1e999}', '{"x": Infinity}', '{"a": [1e999, 2]}'])
         def test_object_with_non_finite_preserved_as_string(self, value):
             result = coerce_to_schema_type(value, "object")
             assert result == value

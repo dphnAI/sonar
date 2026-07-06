@@ -76,9 +76,7 @@ def _apply_rope_input_validation(x, freqs_cis):
     assert freqs_cis.dtype == torch.complex64, freqs_cis.dtype
 
 
-def apply_rope(
-    xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor
-) -> tuple[torch.Tensor, torch.Tensor]:
+def apply_rope(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Args: (The leading dimensions of all inputs should be the same)
         xq: query, tensor of shape (..., num_heads, head_dim)
@@ -100,9 +98,7 @@ def apply_rope(
 
 
 class Learnable2DInterpPosEmb(nn.Module):
-    def __init__(
-        self, height: int, width: int, dim: int, interpolation_mode: str = "bicubic"
-    ) -> None:
+    def __init__(self, height: int, width: int, dim: int, interpolation_mode: str = "bicubic") -> None:
         super().__init__()
         self.height = height
         self.width = width
@@ -162,23 +158,15 @@ class MoonVisionPatchEmbed(nn.Module):
         pos_emb_width: int = 14,
     ):
         super().__init__()
-        assert isinstance(patch_size, (int, Sequence)), (
-            f"Invalid patch_size type: {type(patch_size)}"
-        )
+        assert isinstance(patch_size, (int, Sequence)), f"Invalid patch_size type: {type(patch_size)}"
         if isinstance(patch_size, int):
             patch_size = (patch_size, patch_size)
-        assert len(patch_size) == 2, (
-            f"Expected patch_size to be a tuple of 2, got {patch_size}"
-        )
+        assert len(patch_size) == 2, f"Expected patch_size to be a tuple of 2, got {patch_size}"
         self.patch_size = patch_size
 
-        self.proj = Conv2dLayer(
-            in_dim, out_dim, kernel_size=patch_size, stride=patch_size
-        )
+        self.proj = Conv2dLayer(in_dim, out_dim, kernel_size=patch_size, stride=patch_size)
 
-        self.pos_emb = Learnable2DInterpPosEmb(
-            height=pos_emb_height, width=pos_emb_width, dim=out_dim
-        )
+        self.pos_emb = Learnable2DInterpPosEmb(height=pos_emb_height, width=pos_emb_width, dim=out_dim)
 
     def forward(
         self,
@@ -259,18 +247,14 @@ class Rope2DPosEmb(nn.Module):
         flat_pos = torch.arange(0, N).float().to(self.device)
         x_pos = flat_pos % self.max_width
         y_pos = flat_pos // self.max_width
-        dim_range = (
-            torch.arange(0, self.dim, 4)[: (self.dim // 4)].float().to(self.device)
-        )  # C/4
+        dim_range = torch.arange(0, self.dim, 4)[: (self.dim // 4)].float().to(self.device)  # C/4
         freqs = 1.0 / (self.theta_base ** (dim_range / self.dim))
         x_freqs = torch.outer(x_pos, freqs).float()  # N, C/4
         y_freqs = torch.outer(y_pos, freqs).float()  # N, C/4
         x_cis = torch.polar(torch.ones_like(x_freqs), x_freqs)  # N, C/4
         y_cis = torch.polar(torch.ones_like(y_freqs), y_freqs)  # N, C/4
         # N, C/4, 2
-        freqs_cis = torch.cat(
-            [x_cis.unsqueeze(dim=-1), y_cis.unsqueeze(dim=-1)], dim=-1
-        )
+        freqs_cis = torch.cat([x_cis.unsqueeze(dim=-1), y_cis.unsqueeze(dim=-1)], dim=-1)
         # max_height, max_width, C/2
         freqs_cis = freqs_cis.reshape(self.max_height, self.max_width, -1)
         return freqs_cis
@@ -285,10 +269,7 @@ class Rope2DPosEmb(nn.Module):
         operate outside the captured CUDA graph can avoid materializing a
         tensor + ``.tolist()`` round-trip.
         """
-        assert all(
-            1 <= h <= self.max_height and 1 <= w <= self.max_width
-            for h, w in grid_hws_list
-        ), (
+        assert all(1 <= h <= self.max_height and 1 <= w <= self.max_width for h, w in grid_hws_list), (
             grid_hws_list,
             self.max_height,
             self.max_width,
@@ -296,10 +277,7 @@ class Rope2DPosEmb(nn.Module):
         if not grid_hws_list:
             return self.precomputed_freqs_cis.new_zeros((0, self.dim // 2))
         freqs_cis = torch.cat(
-            [
-                self.precomputed_freqs_cis[:h, :w].reshape(-1, self.dim // 2)
-                for h, w in grid_hws_list
-            ],
+            [self.precomputed_freqs_cis[:h, :w].reshape(-1, self.dim // 2) for h, w in grid_hws_list],
             dim=0,
         )
         return freqs_cis
@@ -313,9 +291,7 @@ class Rope2DPosEmb(nn.Module):
         """
         return self.get_freqs_cis_by_seqlens_list(grid_hws.tolist())
 
-    def get_freqs_cis_by_idx(
-        self, pos_idx: torch.Tensor, pos_idx_mask: torch.Tensor
-    ) -> torch.Tensor:
+    def get_freqs_cis_by_idx(self, pos_idx: torch.Tensor, pos_idx_mask: torch.Tensor) -> torch.Tensor:
         """
         Args:
             pos_idx: tensor of shape (..., 2), It contains the (h, w) position indices of each 2D token.
@@ -332,9 +308,7 @@ class Rope2DPosEmb(nn.Module):
         assert pos_idx_mask.dtype == torch.bool, pos_idx_mask.dtype
 
         shp = pos_idx_mask.shape + (self.dim // 2,)  # ..., head_dim/2
-        freqs_cis = torch.ones(
-            shp, dtype=torch.complex64, device=self.device
-        )  # ..., head_dim/2
+        freqs_cis = torch.ones(shp, dtype=torch.complex64, device=self.device)  # ..., head_dim/2
         freqs_cis[pos_idx_mask] = self.precomputed_freqs_cis[
             pos_idx[..., 0][pos_idx_mask], pos_idx[..., 1][pos_idx_mask]
         ]
@@ -398,9 +372,7 @@ class MoonVitEncoderLayer(nn.Module):
         self.num_heads = num_heads
         self.hidden_dim = hidden_dim
         self.hidden_size_per_attention_head = self.hidden_dim // self.num_heads
-        self.tp_size = (
-            1 if self.use_data_parallel else get_tensor_model_parallel_world_size()
-        )
+        self.tp_size = 1 if self.use_data_parallel else get_tensor_model_parallel_world_size()
         self.num_attention_heads_per_partition = divide(num_heads, self.tp_size)
 
         self.norm0 = nn.LayerNorm(hidden_dim)
@@ -473,8 +445,7 @@ class MoonVitEncoderLayer(nn.Module):
         )
         attn_out = attn_out.reshape(
             seq_length,
-            self.num_attention_heads_per_partition
-            * self.hidden_size_per_attention_head,
+            self.num_attention_heads_per_partition * self.hidden_size_per_attention_head,
         )
         attn_out, _ = self.wo(attn_out)
         return attn_out
@@ -520,9 +491,7 @@ class MoonVitEncoder(nn.Module):
     ) -> None:
         super().__init__()
 
-        self.rope_2d = Rope2DPosEmb(
-            block_cfg["hidden_dim"] // block_cfg["num_heads"], 512, 512
-        )
+        self.rope_2d = Rope2DPosEmb(block_cfg["hidden_dim"] // block_cfg["num_heads"], 512, 512)
         self.blocks = nn.ModuleList(
             [
                 MoonVitEncoderLayer(
@@ -590,13 +559,9 @@ def patch_merger(
         # Reshape along self.merge_kernel_size and concat to the last dimension
         kernel_height, kernel_width = merge_kernel_size
         new_height, new_width = height // kernel_height, width // kernel_width
-        reshaped_seq = seq.view(
-            new_height, kernel_height, new_width, kernel_width, d_model
-        )
+        reshaped_seq = seq.view(new_height, kernel_height, new_width, kernel_width, d_model)
         reshaped_seq = reshaped_seq.permute(0, 2, 1, 3, 4).contiguous()
-        padded_seq = reshaped_seq.view(
-            new_height * new_width, kernel_height * kernel_width, -1
-        )
+        padded_seq = reshaped_seq.view(new_height * new_width, kernel_height * kernel_width, -1)
         outputs.append(padded_seq)
         pre_sum += height * width
 
@@ -796,9 +761,7 @@ class MoonVitPretrainedModel(PreTrainedModel):
                 per-image tensors.
         """
         if encoder_metadata is not None:
-            hidden_states = self.patch_embed(
-                pixel_values, pos_embeds=encoder_metadata["pos_embeds"]
-            )
+            hidden_states = self.patch_embed(pixel_values, pos_embeds=encoder_metadata["pos_embeds"])
             hidden_states = self.encoder(
                 hidden_states,
                 cu_seqlens=encoder_metadata["cu_seqlens"],
@@ -813,7 +776,5 @@ class MoonVitPretrainedModel(PreTrainedModel):
 
         hidden_states = self.patch_embed(pixel_values, grid_hw)
         hidden_states = self.encoder(hidden_states, grid_hw)
-        hidden_states = patch_merger(
-            hidden_states, grid_hw, merge_kernel_size=self.merge_kernel_size
-        )
+        hidden_states = patch_merger(hidden_states, grid_hw, merge_kernel_size=self.merge_kernel_size)
         return hidden_states

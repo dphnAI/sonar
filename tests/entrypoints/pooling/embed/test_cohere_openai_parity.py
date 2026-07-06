@@ -86,17 +86,12 @@ def test_batch_parity(server: RemoteOpenAIServer):
     v1 = _openai_embed(server, texts)
     assert len(v2) == len(v1) == 3
 
-    similarities = np.array(
-        [[_cosine_sim(v2_emb, v1_emb) for v1_emb in v1] for v2_emb in v2]
-    )
+    similarities = np.array([[_cosine_sim(v2_emb, v1_emb) for v1_emb in v1] for v2_emb in v2])
     for i in range(3):
         assert int(np.argmax(similarities[i])) == i, (
-            f"batch parity order mismatch at index {i}: "
-            f"similarities={similarities[i].tolist()}"
+            f"batch parity order mismatch at index {i}: similarities={similarities[i].tolist()}"
         )
-        assert similarities[i, i] > 0.9999, (
-            f"batch parity failed at index {i}, cosine={similarities[i, i]}"
-        )
+        assert similarities[i, i] > 0.9999, f"batch parity failed at index {i}, cosine={similarities[i, i]}"
 
 
 def test_token_count_parity(server: RemoteOpenAIServer):

@@ -66,9 +66,7 @@ class InternVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
 
-        self.position_embedding = nn.Parameter(
-            torch.randn(1, self.num_positions, self.embed_dim)
-        )
+        self.position_embedding = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
 
     def _get_pos_embed(self, pos_embed: torch.Tensor, H: int, W: int):
         target_dtype = pos_embed.dtype
@@ -82,9 +80,7 @@ class InternVisionEmbeddings(nn.Module):
             )
             .permute(0, 3, 1, 2)
         )
-        pos_embed = F.interpolate(
-            pos_embed, size=(H, W), mode="bicubic", align_corners=False
-        )
+        pos_embed = F.interpolate(pos_embed, size=(H, W), mode="bicubic", align_corners=False)
         return pos_embed.reshape(1, -1, H * W).permute(0, 2, 1).to(target_dtype)
 
     def _get_position_embedding(self, H: int, W: int) -> torch.Tensor:
@@ -102,9 +98,7 @@ class InternVisionEmbeddings(nn.Module):
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(
-            pixel_values.to(target_dtype)
-        )  # shape = [*, channel, width, height]
+        patch_embeds = self.patch_embedding(pixel_values.to(target_dtype))  # shape = [*, channel, width, height]
         batch_size, _, height, width = patch_embeds.shape
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
         class_embeds = self.class_embedding.expand(batch_size, 1, -1).to(target_dtype)
@@ -170,17 +164,13 @@ class InternParallelAttention(nn.Module):
         # if the number of heads is not divisible by tp_size,
         # we also disable Attention's TP
         tp_size = 1 if use_data_parallel else get_tensor_model_parallel_world_size()
-        use_data_parallel = (
-            use_data_parallel or (self.num_heads + num_dummy_heads) % tp_size != 0
-        )
+        use_data_parallel = use_data_parallel or (self.num_heads + num_dummy_heads) % tp_size != 0
         self.tp_size = 1 if use_data_parallel else tp_size
         self.tp_rank = 0 if use_data_parallel else get_tensor_model_parallel_rank()
 
         # Additional dummy heads are used to enable TP for common GPU counts.
         self.dummy_dim = (num_dummy_heads + self.num_heads) * self.head_dim
-        self.num_heads_per_partition = divide(
-            num_dummy_heads + self.num_heads, self.tp_size
-        )
+        self.num_heads_per_partition = divide(num_dummy_heads + self.num_heads, self.tp_size)
 
         self.scale = self.head_dim**-0.5
         self.qkv = QKVParallelLinear(

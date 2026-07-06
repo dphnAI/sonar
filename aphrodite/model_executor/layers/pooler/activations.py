@@ -37,10 +37,7 @@ def get_act_fn(
 
     # get cross_encoder act_fn
     function_name: str | None = None
-    if (
-        hasattr(config, "sentence_transformers")
-        and "activation_fn" in config.sentence_transformers
-    ):
+    if hasattr(config, "sentence_transformers") and "activation_fn" in config.sentence_transformers:
         function_name = config.sentence_transformers["activation_fn"]
     elif (
         hasattr(config, "sbert_ce_default_activation_function")
@@ -50,10 +47,7 @@ def get_act_fn(
 
     if function_name is not None:
         if not function_name.startswith("torch.nn.modules."):
-            raise ValueError(
-                "Loading of activation functions is restricted to "
-                "torch.nn.modules for security reasons"
-            )
+            raise ValueError("Loading of activation functions is restricted to torch.nn.modules for security reasons")
         fn = resolve_obj_by_qualname(function_name)()
         return PoolerActivation.wraps(fn)
 

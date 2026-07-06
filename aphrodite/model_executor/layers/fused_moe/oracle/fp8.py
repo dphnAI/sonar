@@ -246,8 +246,7 @@ def map_fp8_backend(runner_backend: MoEBackend) -> Fp8MoeBackend:
     if backend := mapping.get(runner_backend):
         return backend
     raise ValueError(
-        f"moe_backend='{runner_backend}' is not supported for FP8 MoE. "
-        f"Expected one of {list(mapping.keys())}."
+        f"moe_backend='{runner_backend}' is not supported for FP8 MoE. Expected one of {list(mapping.keys())}."
     )
 
 
@@ -276,22 +275,13 @@ def select_fp8_moe_backend(
 
     def _make_log_backend(backend: Fp8MoeBackend):
         available_backend_strs = [b.value for b in AVAILABLE_BACKENDS]
-        return (
-            f"Using {backend.value} Fp8 MoE backend out "
-            f"of potential backends: {available_backend_strs}."
-        )
+        return f"Using {backend.value} Fp8 MoE backend out of potential backends: {available_backend_strs}."
 
     def _make_log_unsupported(backend: Fp8MoeBackend, reason: str | None) -> str:
         if reason:
-            return (
-                f"FP8 MoE backend {backend.value} does not support the "
-                f"deployment configuration since {reason}."
-            )
+            return f"FP8 MoE backend {backend.value} does not support the deployment configuration since {reason}."
         else:
-            return (
-                f"FP8 MoE backend '{backend.value}' does not support the "
-                "deployment configuration."
-            )
+            return f"FP8 MoE backend '{backend.value}' does not support the deployment configuration."
 
     def _return_or_raise(
         backend: Fp8MoeBackend,
@@ -301,9 +291,7 @@ def select_fp8_moe_backend(
         activation_format: mk.FusedMoEActivationFormat,
     ) -> tuple[Fp8MoeBackend, type[mk.FusedMoEExperts]]:
         for k_cls in backend_to_kernel_cls(backend):
-            supported, reason = k_cls.is_supported_config(
-                k_cls, config, weight_key, activation_key, activation_format
-            )
+            supported, reason = k_cls.is_supported_config(k_cls, config, weight_key, activation_key, activation_format)
             if supported:
                 logger.info_once(_make_log_backend(backend))
                 return backend, k_cls
@@ -330,13 +318,9 @@ def select_fp8_moe_backend(
             ]
             and not allow_aphrodite_cutlass
         ):
-            raise ValueError(
-                "Aphrodite CUTLASS FP8 MoE backend is disabled for this configuration."
-            )
+            raise ValueError("Aphrodite CUTLASS FP8 MoE backend is disabled for this configuration.")
 
-        return _return_or_raise(
-            requested_backend, config, weight_key, activation_key, activation_format
-        )
+        return _return_or_raise(requested_backend, config, weight_key, activation_key, activation_format)
 
     # Handle explicit DeepGEMM FP8 configuration.
     if envs.is_set("APHRODITE_USE_DEEP_GEMM") or envs.is_set("APHRODITE_MOE_USE_DEEP_GEMM"):
@@ -349,16 +333,12 @@ def select_fp8_moe_backend(
                 if activation_format == mk.FusedMoEActivationFormat.Standard
                 else Fp8MoeBackend.BATCHED_DEEPGEMM
             )
-            return _return_or_raise(
-                backend, config, weight_key, activation_key, activation_format
-            )
+            return _return_or_raise(backend, config, weight_key, activation_key, activation_format)
 
     # Handle explicit MARLIN FP8 configuration.
     if envs.APHRODITE_TEST_FORCE_FP8_MARLIN:
         backend = Fp8MoeBackend.MARLIN
-        return _return_or_raise(
-            backend, config, weight_key, activation_key, activation_format
-        )
+        return _return_or_raise(backend, config, weight_key, activation_key, activation_format)
 
     # Handle explicit AITER FP8 configuration.
     if envs.is_set("APHRODITE_ROCM_USE_AITER") or envs.is_set("APHRODITE_ROCM_USE_AITER_MOE"):
@@ -366,9 +346,7 @@ def select_fp8_moe_backend(
             AVAILABLE_BACKENDS.remove(Fp8MoeBackend.AITER)
         else:
             backend = Fp8MoeBackend.AITER
-            return _return_or_raise(
-                backend, config, weight_key, activation_key, activation_format
-            )
+            return _return_or_raise(backend, config, weight_key, activation_key, activation_format)
 
     if not allow_aphrodite_cutlass:
         AVAILABLE_BACKENDS.remove(Fp8MoeBackend.APHRODITE_CUTLASS)
@@ -395,9 +373,7 @@ def select_fp8_moe_backend(
     # of AVAILABLE_BACKENDS. Enabling returning `Fp8MoeBackend.NONE` is
     # a temporary measure until these register APIs are complete.
     if current_platform.is_cuda() or current_platform.is_rocm():
-        raise NotImplementedError(
-            "No FP8 MoE backend supports the deployment configuration."
-        )
+        raise NotImplementedError("No FP8 MoE backend supports the deployment configuration.")
 
     return Fp8MoeBackend.NONE, None
 
@@ -426,9 +402,7 @@ def convert_to_fp8_moe_kernel_format(
     elif fp8_backend == Fp8MoeBackend.AITER:
         w13, w2 = rocm_aiter_ops.shuffle_weights(w13, w2)
     elif fp8_backend == Fp8MoeBackend.AITER_MXFP8:
-        w13, w2, w13_scale, w2_scale = rocm_aiter_ops.shuffle_mxfp8_moe_weights(
-            w13, w2, w13_scale, w2_scale
-        )
+        w13, w2, w13_scale, w2_scale = rocm_aiter_ops.shuffle_mxfp8_moe_weights(w13, w2, w13_scale, w2_scale)
     elif fp8_backend == Fp8MoeBackend.MARLIN:
         weight_block_size = getattr(layer, "weight_block_size", None)
         if weight_block_size == [1, 32]:
@@ -470,9 +444,7 @@ def convert_to_fp8_moe_kernel_format(
             prepare_fp8_moe_layer_for_xpu,
         )
 
-        w13, w13_scale, w2, w2_scale = prepare_fp8_moe_layer_for_xpu(
-            w13, w13_scale, w2, w2_scale
-        )
+        w13, w13_scale, w2, w2_scale = prepare_fp8_moe_layer_for_xpu(w13, w13_scale, w2, w2_scale)
     elif fp8_backend == Fp8MoeBackend.CPU:
         from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
             prepare_fp8_moe_layer_for_cpu,
@@ -540,10 +512,7 @@ def make_fp8_moe_quant_config(
 
     # Flashinfer CUTLASS or HPC per-tensor uses single dq scale
     # (alpha = w_scale * a_scale) and inverse a2 scale.
-    if (
-        fp8_backend in [Fp8MoeBackend.FLASHINFER_CUTLASS, Fp8MoeBackend.HPC]
-        and block_shape is None
-    ):
+    if fp8_backend in [Fp8MoeBackend.FLASHINFER_CUTLASS, Fp8MoeBackend.HPC] and block_shape is None:
         assert a1_scale is not None and a2_scale is not None
         return fp8_w8a8_moe_quant_config(
             w1_scale=w1_scale,

@@ -76,9 +76,7 @@ def _maybe_set_cuda_compatibility_path():
     if ld_paths and ld_paths[0] and os.path.normpath(ld_paths[0]) == norm_path:
         return  # Already at the front
 
-    new_paths = [norm_path] + [
-        p for p in ld_paths if not p or os.path.normpath(p) != norm_path
-    ]
+    new_paths = [norm_path] + [p for p in ld_paths if not p or os.path.normpath(p) != norm_path]
     os.environ["LD_LIBRARY_PATH"] = os.pathsep.join(new_paths)
 
 
@@ -157,16 +155,12 @@ def memory_plan_reuse_patched(self):
         isinstance(V.graph.wrapper_code, SubgraphPythonWrapperCodegen)
         and V.graph.wrapper_code.partition_signatures is not None
     ):
-        out_names = get_output_names(
-            V.graph.wrapper_code.partition_signatures.output_nodes
-        )
+        out_names = get_output_names(V.graph.wrapper_code.partition_signatures.output_nodes)
     else:
         out_names = V.graph.get_output_names()
 
     while (
-        self.lines
-        and isinstance(self.lines[-1], MemoryPlanningLine)
-        and self.lines[-1].node.name not in out_names  # type: ignore[attr-defined]
+        self.lines and isinstance(self.lines[-1], MemoryPlanningLine) and self.lines[-1].node.name not in out_names  # type: ignore[attr-defined]
     ):
         # these lines will be pointless
         self.lines.pop()
@@ -195,9 +189,7 @@ def memory_plan_reuse_patched(self):
 # For more context, see https://github.com/pytorch/pytorch/pull/165815.
 
 
-def get_graph_partition_signature_patched(
-    self, partitions, skip_cudagraphs: list[bool]
-):
+def get_graph_partition_signature_patched(self, partitions, skip_cudagraphs: list[bool]):
     """
     Gets signature for each graph partition, including input nodes, output nodes, and
     whether deallocating an input within graph partition.
@@ -223,18 +215,14 @@ def get_graph_partition_signature_patched(
             return False
 
         if isinstance(buf.node.layout, NoneLayout):
-            if isinstance(buf.node, MutationOutput) and (
-                real_name := self.mutation_real_name.get(buf_name, None)
-            ):
+            if isinstance(buf.node, MutationOutput) and (real_name := self.mutation_real_name.get(buf_name, None)):
                 return is_none_layout(real_name)
 
             return True
 
         return False
 
-    for partition, skip_cudagraph in zip(
-        reversed(partitions), reversed(skip_cudagraphs)
-    ):
+    for partition, skip_cudagraph in zip(reversed(partitions), reversed(skip_cudagraphs)):
         output_names: OrderedSet[str] = OrderedSet()
 
         for node in partition:
@@ -244,26 +232,16 @@ def get_graph_partition_signature_patched(
 
         # all reads/writes are partition inputs except those generated
         # within the partition and tensor constants
-        read_writes = dependencies.ReadWrites.merge_list(
-            [node.read_writes for node in partition]
-        )
+        read_writes = dependencies.ReadWrites.merge_list([node.read_writes for node in partition])
 
         # WeakDep is fake dependency on unused buffer. It should not appear
         # in partition_input_names for inputs that are actually read or written.
         partition_input_names = (
-            OrderedSet(
-                [
-                    x.name
-                    for x in read_writes.reads | read_writes.writes
-                    if not is_none_layout(x.name)
-                ]
-            )
+            OrderedSet([x.name for x in read_writes.reads | read_writes.writes if not is_none_layout(x.name)])
             - output_names
         )
 
-        partition_input_names = OrderedSet(
-            self.mutation_real_name.get(name, name) for name in partition_input_names
-        )
+        partition_input_names = OrderedSet(self.mutation_real_name.get(name, name) for name in partition_input_names)
 
         buffer_names_to_free: OrderedSet[str] = OrderedSet()
         for node in partition:
@@ -272,22 +250,12 @@ def get_graph_partition_signature_patched(
         # buffer_names_to_free may contain buffers allocated in previous
         # graph partitions. These buffers should also be a partition
         # input.
-        extra_input_names = [
-            name
-            for name in (buffer_names_to_free - output_names)
-            if name in name_to_node
-        ]
+        extra_input_names = [name for name in (buffer_names_to_free - output_names) if name in name_to_node]
         partition_input_names.update(extra_input_names)
 
-        input_nodes = {
-            name: name_to_node[name]
-            for name in partition_input_names
-            if name in name_to_node
-        }
+        input_nodes = {name: name_to_node[name] for name in partition_input_names if name in name_to_node}
         input_deallocation = {
-            name: name in buffer_names_to_free
-            for name in partition_input_names
-            if name in name_to_node
+            name: name in buffer_names_to_free for name in partition_input_names if name in name_to_node
         }
 
         # if an input tensor is not freed in the partition function, it should
@@ -295,26 +263,16 @@ def get_graph_partition_signature_patched(
         # since the returned output tensor is a cudagraph managed tensor with
         # a static tensor address.
         extra_output_names = [
-            name
-            for name in partition_input_names
-            if name in name_to_node and name not in buffer_names_to_free
+            name for name in partition_input_names if name in name_to_node and name not in buffer_names_to_free
         ]
 
         returned_output_names.update(extra_output_names)
 
-        returned_output_names = OrderedSet(
-            self.mutation_real_name.get(name, name) for name in returned_output_names
-        )
+        returned_output_names = OrderedSet(self.mutation_real_name.get(name, name) for name in returned_output_names)
 
-        output_nodes = [
-            name_to_node[name]
-            for name in returned_output_names
-            if not is_none_layout(name)
-        ]
+        output_nodes = [name_to_node[name] for name in returned_output_names if not is_none_layout(name)]
 
-        constant_names = [
-            name for name in partition_input_names if name in V.graph.constants
-        ]
+        constant_names = [name for name in partition_input_names if name in V.graph.constants]
 
         symbol_inputs = self.get_graph_partition_symbol_inputs(partition, input_nodes)
 
@@ -329,9 +287,7 @@ def get_graph_partition_signature_patched(
 
         signatures.append(partition_signature)
 
-        unmet_output_names = partition_input_names.union(
-            unmet_output_names - returned_output_names
-        )
+        unmet_output_names = partition_input_names.union(unmet_output_names - returned_output_names)
 
     return signatures[::-1]
 
@@ -378,9 +334,7 @@ def should_partition_patched(self, node, should_log: bool = False) -> bool:
     # Allow users to manually specify if a node should be partitioned
     # Can only do this for FallbackKernels
     ir_node = node.node
-    if isinstance(ir_node, torch._inductor.ir.FallbackKernel) and (
-        op := ir_node.op_overload
-    ):
+    if isinstance(ir_node, torch._inductor.ir.FallbackKernel) and (op := ir_node.op_overload):
         op_overload_packet_name = op.name()
         op_overload_name = (
             f"{op_overload_packet_name}.{op._overloadname}"
@@ -388,8 +342,7 @@ def should_partition_patched(self, node, should_log: bool = False) -> bool:
             else op_overload_packet_name
         )
         if (
-            op_overload_packet_name
-            in torch._inductor.config.custom_should_partition_ops
+            op_overload_packet_name in torch._inductor.config.custom_should_partition_ops
             or op_overload_name in torch._inductor.config.custom_should_partition_ops
         ):
             assert isinstance(op, torch._ops.OpOverload)
@@ -398,10 +351,7 @@ def should_partition_patched(self, node, should_log: bool = False) -> bool:
     # When not using cudagraphs, keep all kernels in the `call` function
     # instead of graph partition functions, since graph partition only brings
     # benefit to cudagraph
-    if (
-        not torch._inductor.config.triton.cudagraphs
-        and _unstable_customized_partition_wrapper.wrapper is None
-    ):
+    if not torch._inductor.config.triton.cudagraphs and _unstable_customized_partition_wrapper.wrapper is None:
         return True
 
     # avoid duplicating logs when should_partition is called multiple times
@@ -490,9 +440,7 @@ if is_torch_equal("2.9.0"):
 
     # `custom_should_partition_ops` is a new config after 2.9.0. So this would
     # not overwrite any user configs.
-    torch._inductor.config._config["custom_should_partition_ops"] = _ConfigEntry(
-        _Config(default=[])
-    )
+    torch._inductor.config._config["custom_should_partition_ops"] = _ConfigEntry(_Config(default=[]))
 
     PythonWrapperCodegen.memory_plan_reuse = memory_plan_reuse_patched
     GraphLowering._update_scheduler = _update_scheduler_patched
@@ -528,9 +476,7 @@ def _apply_constrain_to_fx_strides_patch():
         return
     _constrain_to_fx_strides_patched = True
 
-    if not is_torch_equal_or_newer("2.11.0.dev") or is_torch_equal_or_newer(
-        "2.12.0.dev"
-    ):
+    if not is_torch_equal_or_newer("2.11.0.dev") or is_torch_equal_or_newer("2.12.0.dev"):
         return
 
     import torch._inductor.ir as _ir
@@ -542,18 +488,14 @@ def _apply_constrain_to_fx_strides_patch():
             if isinstance(arg, _ir.IRNode):
                 meta_val = fx_arg.meta.get("val")
                 if isinstance(meta_val, torch.Tensor):
-                    stride_order = _ir.get_stride_order(
-                        meta_val.stride(), _V.graph.sizevars.shape_env
-                    )
+                    stride_order = _ir.get_stride_order(meta_val.stride(), _V.graph.sizevars.shape_env)
                     return _ir.ExternKernel.require_stride_order(arg, stride_order)
                 return arg
             if isinstance(arg, dict):
                 return {key: apply_constraint(arg[key], fx_arg[key]) for key in arg}
             return arg
 
-        args = tuple(
-            apply_constraint(arg, fx_arg) for arg, fx_arg in zip(args, fx_node.args)
-        )
+        args = tuple(apply_constraint(arg, fx_arg) for arg, fx_arg in zip(args, fx_node.args))
         kwargs = {k: apply_constraint(v, fx_node.kwargs[k]) for k, v in kwargs.items()}
         return args, kwargs
 
@@ -584,9 +526,7 @@ if is_torch_equal_or_newer("2.10.0") and not is_torch_equal_or_newer("2.12.0.dev
         for ref in runtime_env.external_refs:
             if ref not in runtime_env.used_globals:
                 if ref.startswith("__builtins_dict__") and ref in self.f_globals:
-                    runtime_env.used_globals[ref] = _safe_builtins_dict(
-                        self.f_globals[ref]
-                    )
+                    runtime_env.used_globals[ref] = _safe_builtins_dict(self.f_globals[ref])
                 elif hasattr(_builtins, ref):
                     runtime_env.used_globals[ref] = getattr(_builtins, ref)
         return runtime_env

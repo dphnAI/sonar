@@ -74,17 +74,11 @@ def determine_expert_map(
     # Create an expert map for the local experts
     if expert_placement_strategy == "linear":
         start_idx = ep_rank * base_experts + min(ep_rank, remainder)
-        expert_map[start_idx : start_idx + local_num_experts] = torch.arange(
-            0, local_num_experts, dtype=torch.int32
-        )
+        expert_map[start_idx : start_idx + local_num_experts] = torch.arange(0, local_num_experts, dtype=torch.int32)
     elif expert_placement_strategy == "round_robin":
-        local_log_experts = torch.arange(
-            ep_rank, global_num_experts, ep_size, dtype=torch.int32
-        )
+        local_log_experts = torch.arange(ep_rank, global_num_experts, ep_size, dtype=torch.int32)
 
-        expert_map[local_log_experts] = torch.arange(
-            0, local_num_experts, dtype=torch.int32
-        )
+        expert_map[local_log_experts] = torch.arange(0, local_num_experts, dtype=torch.int32)
     else:
         raise ValueError(
             "Unsupported expert placement strategy "
@@ -94,9 +88,7 @@ def determine_expert_map(
 
     expert_mask = None
     if return_expert_mask:
-        expert_mask = torch.ones(
-            (global_num_experts + num_fused_shared_experts + 1,), dtype=torch.int32
-        )
+        expert_mask = torch.ones((global_num_experts + num_fused_shared_experts + 1,), dtype=torch.int32)
         expert_mask[-1] = 0
         expert_mask[:global_num_experts] = expert_map > -1
         expert_map = torch.cat(
@@ -122,9 +114,7 @@ def determine_expert_placement_strategy(
 ) -> ExpertPlacementStrategy:
     if expert_placement_strategy == "round_robin":
         round_robin_supported = (
-            (num_expert_group is not None and num_expert_group > 1)
-            and num_redundant_experts == 0
-            and not enable_eplb
+            (num_expert_group is not None and num_expert_group > 1) and num_redundant_experts == 0 and not enable_eplb
         )
 
         if not round_robin_supported:
@@ -134,10 +124,7 @@ def determine_expert_placement_strategy(
                 "experts. Falling back to linear expert placement."
             )
             return "linear"
-        if (
-            moe_parallel_config.use_all2all_kernels
-            and not moe_parallel_config.needs_round_robin_routing_tables
-        ):
+        if moe_parallel_config.use_all2all_kernels and not moe_parallel_config.needs_round_robin_routing_tables:
             logger.warning(
                 "Round-robin expert placement currently only supports "
                 "the DeepEP low-latency or NIXL EP backend, but '%s' was configured. "
@@ -222,9 +209,7 @@ class ExpertMapManager:
             )
 
         # Determine effective placement strategy
-        self._placement_strategy = self._determine_placement_strategy(
-            placement_strategy
-        )
+        self._placement_strategy = self._determine_placement_strategy(placement_strategy)
 
         # Calculate expert mappings
         self._calculate_expert_maps()
@@ -236,9 +221,9 @@ class ExpertMapManager:
 
         if self.use_ep and self.rocm_aiter_enabled:
             expert_mask = self.expert_mask
-            assert expert_mask is None or torch.all(
-                (expert_mask == 0) | (expert_mask == 1)
-            ), "Aiter Fused MoE kernel only supports expert_map with 0 and 1s."
+            assert expert_mask is None or torch.all((expert_mask == 0) | (expert_mask == 1)), (
+                "Aiter Fused MoE kernel only supports expert_map with 0 and 1s."
+            )
 
         # Log EP configuration
         if self.use_ep:
@@ -414,9 +399,7 @@ class ExpertMapManager:
 
     # Private methods
 
-    def _determine_placement_strategy(
-        self, requested_strategy: ExpertPlacementStrategy
-    ) -> ExpertPlacementStrategy:
+    def _determine_placement_strategy(self, requested_strategy: ExpertPlacementStrategy) -> ExpertPlacementStrategy:
         """Determine effective placement strategy based on config."""
         if requested_strategy != "round_robin":
             return requested_strategy
@@ -429,10 +412,7 @@ class ExpertMapManager:
             self.moe_parallel_config.use_all2all_kernels
             and not self.moe_parallel_config.needs_round_robin_routing_tables
         ):
-            logger.warning(
-                "Round-robin placement requires DeepEP-ll or NIXL backend. "
-                "Falling back to linear."
-            )
+            logger.warning("Round-robin placement requires DeepEP-ll or NIXL backend. Falling back to linear.")
             return "linear"
 
         return "round_robin"
@@ -478,9 +458,7 @@ class ExpertMapManager:
         self,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Build routing tables for round-robin placement."""
-        assert self.num_fused_shared_experts == 0, (
-            "Round robin not supported for AITER."
-        )
+        assert self.num_fused_shared_experts == 0, "Round robin not supported for AITER."
 
         global_indices = torch.arange(
             self.global_num_experts,

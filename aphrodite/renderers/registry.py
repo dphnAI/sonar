@@ -37,8 +37,7 @@ class RendererRegistry:
     def register(self, renderer_mode: str, module: str, class_name: str) -> None:
         if renderer_mode in self.renderers:
             logger.warning(
-                "%s.%s is already registered for renderer_mode=%r. "
-                "It is overwritten by the new one.",
+                "%s.%s is already registered for renderer_mode=%r. It is overwritten by the new one.",
                 module,
                 class_name,
                 renderer_mode,

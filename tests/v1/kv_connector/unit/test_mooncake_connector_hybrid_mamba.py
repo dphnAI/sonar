@@ -34,7 +34,7 @@ from aphrodite.v1.kv_cache_interface import (
 )
 
 from .test_mooncake_connector import patch_worker_dependencies
-from .utils import create_request, create_aphrodite_config
+from .utils import create_aphrodite_config, create_request
 
 
 def noop_shutdown():
@@ -79,9 +79,7 @@ def make_hybrid_gdn_scheduler(kv_role: str) -> MooncakeConnectorScheduler:
     return MooncakeConnectorScheduler(
         aphrodite_config=aphrodite_config,
         engine_id="test-engine",
-        kv_cache_config=make_hybrid_gdn_kv_cache_config(
-            aphrodite_config.cache_config.block_size
-        ),
+        kv_cache_config=make_hybrid_gdn_kv_cache_config(aphrodite_config.cache_config.block_size),
     )
 
 
@@ -90,9 +88,7 @@ def test_hybrid_gdn_remote_prefill_uses_mamba_n_minus_one():
     scheduler = make_hybrid_gdn_scheduler(kv_role="kv_consumer")
     request = create_request(num_tokens=10, do_remote_prefill=True)
 
-    num_new_tokens, is_async = scheduler.get_num_new_matched_tokens(
-        request, num_computed_tokens=0
-    )
+    num_new_tokens, is_async = scheduler.get_num_new_matched_tokens(request, num_computed_tokens=0)
 
     assert num_new_tokens == request.num_prompt_tokens - 1
     assert is_async is True
@@ -104,9 +100,7 @@ def test_hybrid_gdn_remote_decode_truncates_prefill_once():
     request = create_request(num_tokens=10, do_remote_decode=True)
     original_tokens = list(request.prompt_token_ids)
 
-    num_new_tokens, is_async = scheduler.get_num_new_matched_tokens(
-        request, num_computed_tokens=0
-    )
+    num_new_tokens, is_async = scheduler.get_num_new_matched_tokens(request, num_computed_tokens=0)
 
     assert num_new_tokens == 0
     assert is_async is False
@@ -126,9 +120,7 @@ def test_register_kv_caches_emits_fa_and_gdn_regions(monkeypatch):
         kv_connector="MooncakeConnector",
         kv_role="kv_consumer",
     )
-    kv_cache_config = make_hybrid_gdn_kv_cache_config(
-        aphrodite_config.cache_config.block_size
-    )
+    kv_cache_config = make_hybrid_gdn_kv_cache_config(aphrodite_config.cache_config.block_size)
 
     with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
         connector = MooncakeConnector(
@@ -171,9 +163,7 @@ def test_register_kv_caches_deduplicates_shared_backing_memory(monkeypatch):
         kv_connector="MooncakeConnector",
         kv_role="kv_consumer",
     )
-    kv_cache_config = make_hybrid_gdn_kv_cache_config(
-        aphrodite_config.cache_config.block_size
-    )
+    kv_cache_config = make_hybrid_gdn_kv_cache_config(aphrodite_config.cache_config.block_size)
 
     with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
         connector = MooncakeConnector(
@@ -188,9 +178,7 @@ def test_register_kv_caches_deduplicates_shared_backing_memory(monkeypatch):
         gdn_conv_state = backing[:3]
         gdn_ssm_state = torch.empty((3, 4), dtype=torch.float16)
 
-        with patch.object(
-            worker.engine, "batch_register_memory", return_value=0
-        ) as batch_register_memory:
+        with patch.object(worker.engine, "batch_register_memory", return_value=0) as batch_register_memory:
             worker.register_kv_caches(
                 {
                     "model.layers.0.self_attn": fa_cache,
@@ -218,9 +206,7 @@ def test_hybrid_gdn_transfer_params_preserve_group_identity(monkeypatch):
         kv_connector="MooncakeConnector",
         kv_role="kv_producer",
     )
-    kv_cache_config = make_hybrid_gdn_kv_cache_config(
-        aphrodite_config.cache_config.block_size
-    )
+    kv_cache_config = make_hybrid_gdn_kv_cache_config(aphrodite_config.cache_config.block_size)
 
     with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
         connector = MooncakeConnector(
@@ -306,9 +292,7 @@ def test_hybrid_gdn_transfer_params_preserve_group_identity(monkeypatch):
             ),
         ]
 
-        src_ptrs, dst_ptrs, lengths, err_reqs, err_msg = asyncio.run(
-            build_transfer_params()
-        )
+        src_ptrs, dst_ptrs, lengths, err_reqs, err_msg = asyncio.run(build_transfer_params())
 
         assert err_reqs == []
         assert err_msg is None
@@ -347,9 +331,7 @@ def test_hybrid_gdn_splits_fa_regions_but_keeps_gdn_state_whole(
         kv_connector="MooncakeConnector",
         kv_role="kv_producer",
     )
-    kv_cache_config = make_hybrid_gdn_kv_cache_config(
-        aphrodite_config.cache_config.block_size
-    )
+    kv_cache_config = make_hybrid_gdn_kv_cache_config(aphrodite_config.cache_config.block_size)
 
     with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
         connector = MooncakeConnector(
@@ -372,10 +354,7 @@ def test_hybrid_gdn_splits_fa_regions_but_keeps_gdn_state_whole(
             group_indices=[0, 1],
         )
 
-        assert [
-            (region.group_index, region.base_addr, region.kv_block_len)
-            for region in regions
-        ] == [
+        assert [(region.group_index, region.base_addr, region.kv_block_len) for region in regions] == [
             (0, 0x1000, 0x40),
             (0, 0x1040, 0x40),
             (1, 0x2000, 0x100),

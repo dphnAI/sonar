@@ -46,8 +46,7 @@ def register_chat_template_fallback_path(
 ) -> None:
     if model_type in _MODEL_TYPE_TO_CHAT_TEMPLATE_FALLBACK:
         logger.warning(
-            "Model type %s already has a chat template registered. "
-            "It will be overwritten by the new chat template %s.",
+            "Model type %s already has a chat template registered. It will be overwritten by the new chat template %s.",
             model_type,
             chat_template,
         )

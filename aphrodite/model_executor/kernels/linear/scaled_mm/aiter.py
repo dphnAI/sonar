@@ -30,9 +30,7 @@ logger = init_logger(__name__)
 
 class AiterInt8ScaledMMLinearKernel(CutlassInt8ScaledMMLinearKernel):
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if not current_platform.is_rocm():
             return False, "Requires ROCm."
 
@@ -81,14 +79,10 @@ class AiterInt8ScaledMMLinearKernel(CutlassInt8ScaledMMLinearKernel):
         # * dynamic, i_s is None and x_s computed from x.
         # * static, i_s is scalar and x_s is i_s.
         symmetric = azp_adj is None
-        assert symmetric, (
-            "AiterInt8ScaledMMLinearKernel only supports symmetric quantization."
-        )
+        assert symmetric, "AiterInt8ScaledMMLinearKernel only supports symmetric quantization."
         x_q, x_s, x_zp = ops.scaled_int8_quant(x, i_s, i_zp, symmetric=symmetric)
 
-        assert x_zp is None, (
-            "AiterInt8ScaledMMLinearKernel only supports symmetric quantization."
-        )
+        assert x_zp is None, "AiterInt8ScaledMMLinearKernel only supports symmetric quantization."
         out_dtype = x.dtype
 
         assert w_q.shape[0] % 16 == 0 and w_q.shape[1] % 16 == 0
@@ -109,9 +103,7 @@ class AiterInt8ScaledMMLinearKernel(CutlassInt8ScaledMMLinearKernel):
         # For now, it only supports:
         # - per-tensor-per-tensor a8w8 scaled GEMM, and
         # - per-token-per-channel a8w8 scaled GEMM
-        assert (per_tensor_scale_a and per_tensor_scale_b) or (
-            per_token_scale_a and per_channel_scale_b
-        ), (
+        assert (per_tensor_scale_a and per_tensor_scale_b) or (per_token_scale_a and per_channel_scale_b), (
             "Currently only support per-tensor-per-tensor GEMM "
             " and per-token-per-channel GEMM through AITER"
             " w8a8 scaled gemm. `AiterInt8ScaledMMLinearKernel` "
@@ -127,9 +119,7 @@ class AiterInt8ScaledMMLinearKernel(CutlassInt8ScaledMMLinearKernel):
 
 class AiterPreshuffledPerTokenFp8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if not current_platform.is_rocm():
             return False, "requires ROCm."
         if not rocm_aiter_ops.is_linear_fp8_enabled():
@@ -168,8 +158,7 @@ class AiterPreshuffledPerTokenFp8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         if not (N % 16 == 0 and K % 16 == 0):
             return (
                 False,
-                f"requires N and K dimensions divisible by 16, received "
-                f"N={N} and K={K}.",
+                f"requires N and K dimensions divisible by 16, received N={N} and K={K}.",
             )
 
         # Aiter's shuffled per-token Gemm performs better than torch only when its
@@ -177,8 +166,7 @@ class AiterPreshuffledPerTokenFp8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         if not rocm_aiter_ops.is_shuffled_per_token_w8a8_gemm_tuned(N, K, fp8_dtype):
             return (
                 False,
-                f"requires a tuned configuration for N: {N} and K: {K} "
-                f"and fp8 dtype {fp8_dtype}.",
+                f"requires a tuned configuration for N: {N} and K: {K} and fp8 dtype {fp8_dtype}.",
             )
 
         return True, None
@@ -207,16 +195,12 @@ class AiterPreshuffledPerTokenFp8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         bias: torch.Tensor | None,
         output_shape: list,
     ) -> torch.Tensor:
-        return rocm_aiter_ops.preshuffled_per_token_w8a8_gemm(
-            A, B, As, Bs, bias, out_dtype
-        )
+        return rocm_aiter_ops.preshuffled_per_token_w8a8_gemm(A, B, As, Bs, bias, out_dtype)
 
 
 class AiterHipbMMPerTokenFp8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if not current_platform.is_rocm():
             return False, "requires ROCm."
 
@@ -259,8 +243,7 @@ class AiterHipbMMPerTokenFp8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         if not (N >= 16 and N % 16 == 0 and K % 16 == 0):
             return (
                 False,
-                "requires N >= 16 and both N and K divisible by 16, "
-                f"received N={N} and K={K}.",
+                f"requires N >= 16 and both N and K divisible by 16, received N={N} and K={K}.",
             )
 
         return True, None
@@ -300,19 +283,13 @@ class AiterHipbMMPerTokenFp8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         output_shape: list,
     ) -> torch.Tensor:
         output_shape[-1] = B.shape[1]
-        return rocm_aiter_ops.hipb_mm_fp8(A, B, As, Bs, bias, out_dtype).view(
-            *output_shape
-        )
+        return rocm_aiter_ops.hipb_mm_fp8(A, B, As, Bs, bias, out_dtype).view(*output_shape)
 
 
 class AiterPerTokenFp8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
-        return AiterPreshuffledPerTokenFp8ScaledMMLinearKernel.is_supported(
-            compute_capability
-        )
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
+        return AiterPreshuffledPerTokenFp8ScaledMMLinearKernel.is_supported(compute_capability)
 
     @classmethod
     def can_implement(cls, c: FP8ScaledMMLinearLayerConfig) -> tuple[bool, str | None]:
@@ -336,8 +313,7 @@ class AiterPerTokenFp8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         if not rocm_aiter_ops.is_per_token_w8a8_gemm_tuned(N, K, fp8_dtype):
             return (
                 False,
-                f"requires a tuned configuration for N: {N} and K: {K} "
-                f"and fp8 dtype {fp8_dtype}.",
+                f"requires a tuned configuration for N: {N} and K: {K} and fp8 dtype {fp8_dtype}.",
             )
         return True, None
 
@@ -370,10 +346,7 @@ class AiterFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
         super().__init__(config)
         n, k = config.weight_shape
 
-        self.use_triton = (
-            not current_platform.is_fp8_fnuz()
-            and rocm_aiter_ops.is_triton_gemm_w8a8_tuned(n, k)
-        )
+        self.use_triton = not current_platform.is_fp8_fnuz() and rocm_aiter_ops.is_triton_gemm_w8a8_tuned(n, k)
 
     @classmethod
     def is_supported(cls, compute_capability=None):
@@ -393,8 +366,7 @@ class AiterFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
         if act_quant_desc.group_shape != GroupShape(1, 128):
             return (
                 False,
-                "Supports only dynamic per token group activation "
-                "quantization with group_shape=(1,128).",
+                "Supports only dynamic per token group activation quantization with group_shape=(1,128).",
             )
         return True, None
 
@@ -426,6 +398,4 @@ class AiterFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
         else:
             gemm_a8w8_blockscale_op = rocm_aiter_ops.gemm_a8w8_blockscale
 
-        return gemm_a8w8_blockscale_op(
-            A, B, As, Bs, list(self.weight_group_shape), output_dtype=out_dtype
-        )
+        return gemm_a8w8_blockscale_op(A, B, As, Bs, list(self.weight_group_shape), output_dtype=out_dtype)

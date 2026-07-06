@@ -93,11 +93,7 @@ def test_patch_applied_in_current_environment():
 
     from aphrodite.utils.torch_utils import is_torch_equal_or_newer
 
-    should_be_patched = is_torch_equal_or_newer(
-        "2.10.0"
-    ) and not is_torch_equal_or_newer("2.11.0")
+    should_be_patched = is_torch_equal_or_newer("2.10.0") and not is_torch_equal_or_newer("2.11.0")
 
-    assert getattr(FxGraphCachePickler, "_aphrodite_fxgraph_dumps_patched", False) == (
-        should_be_patched
-    )
+    assert getattr(FxGraphCachePickler, "_aphrodite_fxgraph_dumps_patched", False) == (should_be_patched)
     assert hasattr(FxGraphCachePickler.dumps, "_aphrodite_patched") == should_be_patched

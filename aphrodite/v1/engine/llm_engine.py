@@ -11,7 +11,7 @@ import torch.nn as nn
 from typing_extensions import TypeVar
 
 import aphrodite.envs as envs
-from aphrodite.config import ParallelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ParallelConfig
 from aphrodite.distributed import stateless_destroy_torch_distributed_process_group
 from aphrodite.distributed.parallel_state import get_dp_group
 from aphrodite.engine.arg_utils import EngineArgs
@@ -72,17 +72,10 @@ class LLMEngine:
         parallel_config = aphrodite_config.parallel_config
         executor_backend = parallel_config.distributed_executor_backend
 
-        self.external_launcher_dp = (
-            parallel_config.data_parallel_size > 1
-            and executor_backend == "external_launcher"
-        )
+        self.external_launcher_dp = parallel_config.data_parallel_size > 1 and executor_backend == "external_launcher"
         # important: init dp group before init the engine_core
         # In the decoupled engine case this is handled in EngineCoreProc.
-        if (
-            not multiprocess_mode
-            and parallel_config.data_parallel_size > 1
-            and not self.external_launcher_dp
-        ):
+        if not multiprocess_mode and parallel_config.data_parallel_size > 1 and not self.external_launcher_dp:
             self.dp_group = parallel_config.stateless_init_dp_group()
         else:
             self.dp_group = None
@@ -128,9 +121,7 @@ class LLMEngine:
             # bytecode hooks pinning it (frees GPU memory on engine deletion).
             model = self._get_driver_model_for_cleanup()
             if model is not None:
-                self._finalizer = weakref.finalize(
-                    self, LLMEngine._cleanup_instance_caches, model
-                )
+                self._finalizer = weakref.finalize(self, LLMEngine._cleanup_instance_caches, model)
 
         if self.external_launcher_dp:
             # If we use DP in external launcher mode, we reuse the
@@ -195,9 +186,7 @@ class LLMEngine:
         return self.has_unfinished_requests_dp(has_unfinished)
 
     def has_unfinished_requests_dp(self, has_unfinished: bool) -> bool:
-        aggregated_has_unfinished = ParallelConfig.has_unfinished_dp(
-            self.dp_group, has_unfinished
-        )
+        aggregated_has_unfinished = ParallelConfig.has_unfinished_dp(self.dp_group, has_unfinished)
         if not has_unfinished and aggregated_has_unfinished:
             self.should_execute_dummy_batch = True
         return aggregated_has_unfinished
@@ -285,9 +274,7 @@ class LLMEngine:
             child_request.sampling_params = child_params
 
             # Make a new RequestState and queue.
-            self.output_processor.add_request(
-                child_request, prompt_text, parent_req, idx
-            )
+            self.output_processor.add_request(child_request, prompt_text, parent_req, idx)
             # Add the request to EngineCore.
             self.engine_core.add_request(child_request)
 
@@ -319,11 +306,7 @@ class LLMEngine:
 
         # 4) Record stats
         with record_function_or_nullcontext("llm_engine step: record_stats"):
-            if (
-                self.logger_manager is not None
-                and outputs.scheduler_stats is not None
-                and len(outputs.outputs) > 0
-            ):
+            if self.logger_manager is not None and outputs.scheduler_stats is not None and len(outputs.outputs) > 0:
                 self.logger_manager.record(
                     scheduler_stats=outputs.scheduler_stats,
                     iteration_stats=iteration_stats,
@@ -343,12 +326,8 @@ class LLMEngine:
         self.renderer.clear_mm_cache()
         self.engine_core.reset_mm_cache()
 
-    def reset_prefix_cache(
-        self, reset_running_requests: bool = False, reset_connector: bool = False
-    ) -> bool:
-        return self.engine_core.reset_prefix_cache(
-            reset_running_requests, reset_connector
-        )
+    def reset_prefix_cache(self, reset_running_requests: bool = False, reset_connector: bool = False) -> bool:
+        return self.engine_core.reset_prefix_cache(reset_running_requests, reset_connector)
 
     def reset_encoder_cache(self) -> None:
         """Reset the encoder cache to invalidate all cached encoder outputs.

@@ -127,12 +127,7 @@ class ScoreTextRequest(ScoringRequestMixin):
         return self.text_2
 
 
-ScoreRequest: TypeAlias = (
-    ScoreQueriesDocumentsRequest
-    | ScoreQueriesItemsRequest
-    | ScoreDataRequest
-    | ScoreTextRequest
-)
+ScoreRequest: TypeAlias = ScoreQueriesDocumentsRequest | ScoreQueriesItemsRequest | ScoreDataRequest | ScoreTextRequest
 
 
 class RerankRequest(ScoringRequestMixin):

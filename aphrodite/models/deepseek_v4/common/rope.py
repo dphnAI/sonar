@@ -15,14 +15,10 @@ def build_deepseek_v4_rope(
     compress_ratio: int,
 ) -> RotaryEmbedding:
     rope_parameters = config.rope_parameters
-    rope_parameters["rope_theta"] = (
-        config.compress_rope_theta if compress_ratio > 1 else config.rope_theta
-    )
+    rope_parameters["rope_theta"] = config.compress_rope_theta if compress_ratio > 1 else config.rope_theta
     if rope_parameters["rope_type"] != "default":
         rope_parameters["rope_type"] = (
-            "deepseek_yarn"
-            if rope_parameters.get("apply_yarn_scaling", True)
-            else "deepseek_llama_scaling"
+            "deepseek_yarn" if rope_parameters.get("apply_yarn_scaling", True) else "deepseek_llama_scaling"
         )
     rope_parameters["mscale"] = 0  # Disable mscale
     rope_parameters["mscale_all_dim"] = 0  # Disable mscale

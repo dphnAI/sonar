@@ -150,12 +150,8 @@ class Mxfp8EmulationTritonExperts(Mxfp8TritonExpertsBase):
             w1_bf16 = w1.to(hidden_states.dtype)
             w2_bf16 = w2.to(hidden_states.dtype)
         else:
-            w1_bf16 = dequant_mxfp8_to_bf16(w1, self.w1_scale_val).to(
-                hidden_states.dtype
-            )
-            w2_bf16 = dequant_mxfp8_to_bf16(w2, self.w2_scale_val).to(
-                hidden_states.dtype
-            )
+            w1_bf16 = dequant_mxfp8_to_bf16(w1, self.w1_scale_val).to(hidden_states.dtype)
+            w2_bf16 = dequant_mxfp8_to_bf16(w2, self.w2_scale_val).to(hidden_states.dtype)
 
         super().apply(
             output=output,

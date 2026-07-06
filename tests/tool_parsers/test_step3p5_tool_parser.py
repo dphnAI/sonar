@@ -69,19 +69,13 @@ def sample_tools():
     ]
 
 
-def assert_tool_calls(
-    actual_tool_calls: list[ToolCall], expected_tool_calls: list[ToolCall]
-):
+def assert_tool_calls(actual_tool_calls: list[ToolCall], expected_tool_calls: list[ToolCall]):
     assert len(actual_tool_calls) == len(expected_tool_calls)
 
-    for actual_tool_call, expected_tool_call in zip(
-        actual_tool_calls, expected_tool_calls
-    ):
+    for actual_tool_call, expected_tool_call in zip(actual_tool_calls, expected_tool_calls):
         assert actual_tool_call.type == "function"
         assert actual_tool_call.function.name == expected_tool_call.function.name
-        assert json.loads(actual_tool_call.function.arguments) == json.loads(
-            expected_tool_call.function.arguments
-        )
+        assert json.loads(actual_tool_call.function.arguments) == json.loads(expected_tool_call.function.arguments)
 
 
 def stream_delta_message_generator(
@@ -101,16 +95,14 @@ def stream_delta_message_generator(
         previous_token_ids = all_token_ids[:i]
         current_token_ids = all_token_ids[: i + 1]
 
-        (new_tokens, delta_text, new_prefix_offset, new_read_offset) = (
-            detokenize_incrementally(
-                tokenizer=step3p5_tokenizer,
-                all_input_ids=current_token_ids,
-                prev_tokens=previous_tokens,
-                prefix_offset=prefix_offset,
-                read_offset=read_offset,
-                skip_special_tokens=False,
-                spaces_between_special_tokens=True,
-            )
+        (new_tokens, delta_text, new_prefix_offset, new_read_offset) = detokenize_incrementally(
+            tokenizer=step3p5_tokenizer,
+            all_input_ids=current_token_ids,
+            prev_tokens=previous_tokens,
+            prefix_offset=prefix_offset,
+            read_offset=read_offset,
+            skip_special_tokens=False,
+            spaces_between_special_tokens=True,
         )
 
         current_text = previous_text + delta_text
@@ -128,9 +120,7 @@ def stream_delta_message_generator(
             yield delta_message
 
         previous_text = current_text
-        previous_tokens = (
-            previous_tokens + new_tokens if previous_tokens else new_tokens
-        )
+        previous_tokens = previous_tokens + new_tokens if previous_tokens else new_tokens
         prefix_offset = new_prefix_offset
         read_offset = new_read_offset
 
@@ -167,9 +157,7 @@ def stream_delta_message_generator_from_chunks(
 
 def test_extract_tool_calls_no_tools(step3p5_tool_parser):
     model_output = "This is a test response without any tool calls"
-    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(
-        model_output, request=None
-    )  # type: ignore[arg-type]
+    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(model_output, request=None)  # type: ignore[arg-type]
     assert not extracted_tool_calls.tools_called
     assert extracted_tool_calls.tool_calls == []
     assert extracted_tool_calls.content == model_output
@@ -203,9 +191,7 @@ fahrenheit
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Dallas", "state": "TX", "unit": "fahrenheit"}),
                     )
                 )
             ],
@@ -229,9 +215,7 @@ fahrenheit
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Dallas", "state": "TX", "unit": "fahrenheit"}),
                     )
                 )
             ],
@@ -299,17 +283,13 @@ fahrenheit
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Dallas", "state": "TX", "unit": "fahrenheit"}),
                     )
                 ),
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Orlando", "state": "FL", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Orlando", "state": "FL", "unit": "fahrenheit"}),
                     )
                 ),
             ],
@@ -355,9 +335,7 @@ def test_extract_tool_calls(
     expected_content,
 ):
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=sample_tools)
-    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(
-        model_output, request=request
-    )
+    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(model_output, request=request)
     assert extracted_tool_calls.tools_called
 
     assert_tool_calls(extracted_tool_calls.tool_calls, expected_tool_calls)
@@ -377,9 +355,7 @@ TX
 </function>"""
 
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=sample_tools)
-    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(
-        model_output, request=request
-    )
+    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(model_output, request=request)
 
     assert extracted_tool_calls.tools_called
     assert len(extracted_tool_calls.tool_calls) == 1
@@ -469,9 +445,7 @@ fahrenheit
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Dallas", "state": "TX", "unit": "fahrenheit"}),
                     )
                 )
             ],
@@ -495,9 +469,7 @@ fahrenheit
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Dallas", "state": "TX", "unit": "fahrenheit"}),
                     )
                 )
             ],
@@ -565,17 +537,13 @@ celsius
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
-                        ),
+                        arguments=json.dumps({"city": "Dallas", "state": "TX", "unit": "fahrenheit"}),
                     )
                 ),
                 ToolCall(
                     function=FunctionCall(
                         name="get_current_weather",
-                        arguments=json.dumps(
-                            {"city": "Orlando", "state": "FL", "unit": "celsius"}
-                        ),
+                        arguments=json.dumps({"city": "Orlando", "state": "FL", "unit": "celsius"}),
                     )
                 ),
             ],
@@ -628,9 +596,7 @@ def test_extract_tool_calls_streaming(
     other_content = ""
     tool_states = {}  # Track state per tool index
 
-    for delta_message in stream_delta_message_generator(
-        step3p5_tool_parser, step3p5_tokenizer, model_output, request
-    ):
+    for delta_message in stream_delta_message_generator(step3p5_tool_parser, step3p5_tokenizer, model_output, request):
         # role should never be streamed from tool parser
         assert not delta_message.role
 
@@ -689,9 +655,7 @@ def test_extract_tool_calls_streaming(
         assert actual_args == expected_args
 
 
-def test_extract_tool_calls_missing_closing_parameter_tag(
-    step3p5_tool_parser, sample_tools
-):
+def test_extract_tool_calls_missing_closing_parameter_tag(step3p5_tool_parser, sample_tools):
     """Test handling of missing closing </parameter> tag"""
     # Using get_current_weather from sample_tools but with malformed XML
     model_output = """Let me check the weather for you:
@@ -709,9 +673,7 @@ fahrenheit
 </tool_call>"""
 
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=sample_tools)
-    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(
-        model_output, request=request
-    )
+    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(model_output, request=request)
 
     # The parser should handle the malformed XML gracefully
     assert extracted_tool_calls.tools_called
@@ -731,9 +693,7 @@ fahrenheit
     assert "Let me check the weather for you:" in extracted_tool_calls.content
 
 
-def test_extract_tool_calls_streaming_missing_closing_tag(
-    step3p5_tool_parser, step3p5_tokenizer, sample_tools
-):
+def test_extract_tool_calls_streaming_missing_closing_tag(step3p5_tool_parser, step3p5_tokenizer, sample_tools):
     """Test streaming with missing closing </parameter> tag"""
     # Using get_current_weather from sample_tools but with malformed XML
     model_output = """Let me check the weather for you:
@@ -755,9 +715,7 @@ fahrenheit
     other_content = ""
     tool_states = {}
 
-    for delta_message in stream_delta_message_generator(
-        step3p5_tool_parser, step3p5_tokenizer, model_output, request
-    ):
+    for delta_message in stream_delta_message_generator(step3p5_tool_parser, step3p5_tokenizer, model_output, request):
         if delta_message.content:
             other_content += delta_message.content
 
@@ -805,9 +763,7 @@ fahrenheit
     assert args["unit"] == "fahrenheit"
 
 
-def test_extract_tool_calls_streaming_incremental(
-    step3p5_tool_parser, step3p5_tokenizer, sample_tools
-):
+def test_extract_tool_calls_streaming_incremental(step3p5_tool_parser, step3p5_tokenizer, sample_tools):
     """Test that streaming is truly incremental"""
     model_output = """I'll check the weather.<tool_call>
 <function=get_current_weather>
@@ -823,9 +779,7 @@ TX
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=sample_tools)
 
     chunks = []
-    for delta_message in stream_delta_message_generator(
-        step3p5_tool_parser, step3p5_tokenizer, model_output, request
-    ):
+    for delta_message in stream_delta_message_generator(step3p5_tool_parser, step3p5_tokenizer, model_output, request):
         chunks.append(delta_message)
 
     # Should have multiple chunks
@@ -935,9 +889,7 @@ rectangle
     other_content = ""
     tool_states = {}
 
-    for delta_message in stream_delta_message_generator(
-        step3p5_tool_parser, step3p5_tokenizer, model_output, request
-    ):
+    for delta_message in stream_delta_message_generator(step3p5_tool_parser, step3p5_tokenizer, model_output, request):
         if delta_message.content:
             other_content += delta_message.content
 
@@ -998,17 +950,11 @@ rectangle
 
     # Verify that tool call tags are NOT in the content
     # We should not see complete tool call structures in content
-    assert "<function=get_current_weather>" not in other_content, (
-        "First tool call should not be in content"
-    )
-    assert "<function=calculate_area>" not in other_content, (
-        "Second tool call should not be in content"
-    )
+    assert "<function=get_current_weather>" not in other_content, "First tool call should not be in content"
+    assert "<function=calculate_area>" not in other_content, "Second tool call should not be in content"
 
 
-def test_extract_tool_calls_non_streaming_mixed_content_and_multiple_tool_calls(
-    step3p5_tool_parser, sample_tools
-):
+def test_extract_tool_calls_non_streaming_mixed_content_and_multiple_tool_calls(step3p5_tool_parser, sample_tools):
     """Test non-streaming extraction with mixed content and multiple tool calls.
 
     Scenario: Model outputs "hello" + complete tool call + "hi" + complete tool call.
@@ -1038,15 +984,11 @@ rectangle
 
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=sample_tools)
 
-    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(
-        model_output, request=request
-    )
+    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(model_output, request=request)
 
     # Should have exactly two complete tool calls
     assert extracted_tool_calls.tools_called
-    assert len(extracted_tool_calls.tool_calls) == 2, (
-        "Should have exactly two complete tool calls"
-    )
+    assert len(extracted_tool_calls.tool_calls) == 2, "Should have exactly two complete tool calls"
 
     # Verify the first tool call (index=0)
     assert extracted_tool_calls.tool_calls[0].function.name == "get_current_weather"
@@ -1078,9 +1020,7 @@ rectangle
     assert "<function=get_current_weather>" not in extracted_tool_calls.content, (
         "First tool call should not be in content"
     )
-    assert "<function=calculate_area>" not in extracted_tool_calls.content, (
-        "Second tool call should not be in content"
-    )
+    assert "<function=calculate_area>" not in extracted_tool_calls.content, "Second tool call should not be in content"
 
 
 def test_extract_tool_calls_streaming_full_input_mixed_content_and_multiple_tool_calls(
@@ -1134,9 +1074,7 @@ rectangle
     previous_token_ids: list[int] = []
 
     # Decode all tokens to get the full text
-    current_text = step3p5_tokenizer.decode(
-        current_token_ids, skip_special_tokens=False
-    )
+    current_text = step3p5_tokenizer.decode(current_token_ids, skip_special_tokens=False)
     previous_text = ""
     delta_text = current_text
 
@@ -1206,12 +1144,8 @@ rectangle
     assert hi_index > hello_index, "'hi' should come after 'hello'"
 
     # Verify that tool call tags are NOT in the content
-    assert "<function=get_current_weather>" not in other_content, (
-        "First tool call should not be in content"
-    )
-    assert "<function=calculate_area>" not in other_content, (
-        "Second tool call should not be in content"
-    )
+    assert "<function=get_current_weather>" not in other_content, "First tool call should not be in content"
+    assert "<function=calculate_area>" not in other_content, "Second tool call should not be in content"
 
 
 def test_extract_tool_calls_streaming_multiple_tool_calls_no_content_between(
@@ -1250,9 +1184,7 @@ rectangle
     other_content = ""
     tool_states = {}
 
-    for delta_message in stream_delta_message_generator(
-        step3p5_tool_parser, step3p5_tokenizer, model_output, request
-    ):
+    for delta_message in stream_delta_message_generator(step3p5_tool_parser, step3p5_tokenizer, model_output, request):
         if delta_message.content:
             other_content += delta_message.content
 
@@ -1304,17 +1236,11 @@ rectangle
     assert "hello" in other_content, "Should contain 'hello' as content"
 
     # Verify that tool call tags are NOT in the content
-    assert "<function=get_current_weather>" not in other_content, (
-        "First tool call should not be in content"
-    )
-    assert "<function=calculate_area>" not in other_content, (
-        "Second tool call should not be in content"
-    )
+    assert "<function=get_current_weather>" not in other_content, "First tool call should not be in content"
+    assert "<function=calculate_area>" not in other_content, "Second tool call should not be in content"
 
 
-def test_extract_tool_calls_streaming_multi_token_chunk_boundary(
-    step3p5_tool_parser, step3p5_tokenizer, sample_tools
-):
+def test_extract_tool_calls_streaming_multi_token_chunk_boundary(step3p5_tool_parser, step3p5_tokenizer, sample_tools):
     """Ensure fallback doesn't close a new tool_call when boundary is in one chunk."""
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=sample_tools)
     delta_text_chunks = [
@@ -1363,9 +1289,7 @@ rectangle""",
     assert tool_states[1]["name"] == "calculate_area"
 
 
-def test_extract_tool_calls_non_streaming_multiple_tool_calls_no_content_between(
-    step3p5_tool_parser, sample_tools
-):
+def test_extract_tool_calls_non_streaming_multiple_tool_calls_no_content_between(step3p5_tool_parser, sample_tools):
     """Test non-streaming extraction with tool calls and no content between them.
 
     Scenario: Model outputs "hello" + tool call + tool call.
@@ -1396,15 +1320,11 @@ rectangle
 
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=sample_tools)
 
-    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(
-        model_output, request=request
-    )
+    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(model_output, request=request)
 
     # Should have exactly two complete tool calls
     assert extracted_tool_calls.tools_called
-    assert len(extracted_tool_calls.tool_calls) == 2, (
-        "Should have exactly two complete tool calls"
-    )
+    assert len(extracted_tool_calls.tool_calls) == 2, "Should have exactly two complete tool calls"
 
     # Verify the first tool call (index=0)
     assert extracted_tool_calls.tool_calls[0].function.name == "get_current_weather"
@@ -1428,9 +1348,7 @@ rectangle
     assert "<function=get_current_weather>" not in extracted_tool_calls.content, (
         "First tool call should not be in content"
     )
-    assert "<function=calculate_area>" not in extracted_tool_calls.content, (
-        "Second tool call should not be in content"
-    )
+    assert "<function=calculate_area>" not in extracted_tool_calls.content, "Second tool call should not be in content"
 
 
 def _accumulate_tool_states(delta_messages):
@@ -1462,9 +1380,7 @@ def _accumulate_tool_states(delta_messages):
     return content, tool_states
 
 
-def test_streaming_mtp_variable_chunks(
-    step3p5_tool_parser, step3p5_tokenizer, sample_tools
-):
+def test_streaming_mtp_variable_chunks(step3p5_tool_parser, step3p5_tokenizer, sample_tools):
     """Regression: MTP variable-size chunks spanning param boundaries (PR #33690)."""
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=sample_tools)
 
@@ -1476,9 +1392,7 @@ def test_streaming_mtp_variable_chunks(
     ]
 
     _, tool_states = _accumulate_tool_states(
-        stream_delta_message_generator_from_chunks(
-            step3p5_tool_parser, step3p5_tokenizer, delta_text_chunks, request
-        )
+        stream_delta_message_generator_from_chunks(step3p5_tool_parser, step3p5_tokenizer, delta_text_chunks, request)
     )
 
     assert len(tool_states) == 1
@@ -1494,9 +1408,7 @@ def test_streaming_mtp_variable_chunks(
     assert args["unit"] == "fahrenheit"
 
 
-def test_streaming_multi_token_per_step(
-    step3p5_tool_parser, step3p5_tokenizer, sample_tools
-):
+def test_streaming_multi_token_per_step(step3p5_tool_parser, step3p5_tokenizer, sample_tools):
     """Regression: MTP large chunks spanning multiple tool calls (PR #33690)."""
     model_output = """<tool_call>
 <function=get_current_weather>
@@ -1529,11 +1441,7 @@ celsius
 
     # MTP-style large chunks
     mtp_chunks = [
-        (
-            "<tool_call>\n<function=get_current_weather>\n"
-            "<parameter=city>\nDallas\n</parameter>\n"
-            "<parameter=state>\nTX"
-        ),
+        ("<tool_call>\n<function=get_current_weather>\n<parameter=city>\nDallas\n</parameter>\n<parameter=state>\nTX"),
         (
             "\n</parameter>\n<parameter=unit>\nfahrenheit\n</parameter>\n"
             "</function>\n</tool_call>\n"
@@ -1546,17 +1454,13 @@ celsius
     ]
 
     _, mtp_tool_states = _accumulate_tool_states(
-        stream_delta_message_generator_from_chunks(
-            step3p5_tool_parser, step3p5_tokenizer, mtp_chunks, request
-        )
+        stream_delta_message_generator_from_chunks(step3p5_tool_parser, step3p5_tokenizer, mtp_chunks, request)
     )
 
     # Token-by-token streaming (reference)
     step3p5_tool_parser_ref = Step3p5ToolParser(step3p5_tokenizer)
     _, ref_tool_states = _accumulate_tool_states(
-        stream_delta_message_generator(
-            step3p5_tool_parser_ref, step3p5_tokenizer, model_output, request
-        )
+        stream_delta_message_generator(step3p5_tool_parser_ref, step3p5_tokenizer, model_output, request)
     )
 
     assert len(mtp_tool_states) == 2

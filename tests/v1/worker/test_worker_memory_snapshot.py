@@ -82,9 +82,7 @@ def worker_process(
         # Apply minimal patches to track operation order
         init_patch = patch(
             "aphrodite.v1.worker.gpu_worker.init_worker_distributed_environment",
-            side_effect=make_operation_tracker(
-                "init_distributed", original_init_worker
-            ),
+            side_effect=make_operation_tracker("init_distributed", original_init_worker),
         )
         memory_patch = patch.object(
             MemorySnapshot,

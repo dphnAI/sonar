@@ -47,9 +47,7 @@ class LMFormatEnforcerGrammar(StructuredOutputGrammar):
     def accept_tokens(self, request_id: str, tokens: list[int]) -> bool:
         original_len = len(self.current_tokens_prefix)
         for token in tokens:
-            if not self.token_enforcer.get_allowed_tokens(
-                self.current_tokens_prefix
-            ).is_token_allowed(token):
+            if not self.token_enforcer.get_allowed_tokens(self.current_tokens_prefix).is_token_allowed(token):
                 # Rollback partial updates to ensure atomicity.
                 del self.current_tokens_prefix[original_len:]
                 return False
@@ -60,9 +58,9 @@ class LMFormatEnforcerGrammar(StructuredOutputGrammar):
         for prefix_length in range(len(tokens)):
             prefix = tokens[:prefix_length]
             next_token = tokens[prefix_length]
-            if not self.token_enforcer.get_allowed_tokens(
-                self.current_tokens_prefix + prefix
-            ).is_token_allowed(next_token):
+            if not self.token_enforcer.get_allowed_tokens(self.current_tokens_prefix + prefix).is_token_allowed(
+                next_token
+            ):
                 break
         else:
             return tokens
@@ -73,16 +71,13 @@ class LMFormatEnforcerGrammar(StructuredOutputGrammar):
         self.current_tokens_prefix = self.current_tokens_prefix[:-num_tokens]
 
     def fill_bitmask(self, bitmask: torch.Tensor, batch_index: int) -> None:
-        allowed_tokens = self.token_enforcer.get_allowed_tokens(
-            self.current_tokens_prefix
-        )
+        allowed_tokens = self.token_enforcer.get_allowed_tokens(self.current_tokens_prefix)
         bitmask[batch_index] = allowed_tokens.allowed_tokens
 
     def is_terminated(self) -> bool:
         # We are considered terminated if the prefix ends with eos_token_id
         return_value = (
-            len(self.current_tokens_prefix) > 0
-            and self.current_tokens_prefix[-1] == self.token_enforcer.eos_token_id
+            len(self.current_tokens_prefix) > 0 and self.current_tokens_prefix[-1] == self.token_enforcer.eos_token_id
         )
         return return_value
 
@@ -93,13 +88,9 @@ class LMFormatEnforcerGrammar(StructuredOutputGrammar):
 @dataclass
 class LMFormatEnforcerBackend(StructuredOutputBackend):
     def __post_init__(self):
-        self.tokenizer_data = _cached_build_aphrodite_token_enforcer_tokenizer_data(
-            self.tokenizer, self.vocab_size
-        )
+        self.tokenizer_data = _cached_build_aphrodite_token_enforcer_tokenizer_data(self.tokenizer, self.vocab_size)
 
-    def compile_grammar(
-        self, request_type: StructuredOutputOptions, grammar_spec: str
-    ) -> StructuredOutputGrammar:
+    def compile_grammar(self, request_type: StructuredOutputOptions, grammar_spec: str) -> StructuredOutputGrammar:
         character_level_parser: lmformatenforcer.CharacterLevelParser
         if request_type == StructuredOutputOptions.JSON:
             spec_dict = json.loads(grammar_spec)
@@ -114,9 +105,7 @@ class LMFormatEnforcerBackend(StructuredOutputBackend):
                 [lmformatenforcer.StringParser(choice) for choice in choices]
             )
         else:
-            raise ValueError(
-                f"Invalid request type for LM Format Enforcer backend({request_type!s})"
-            )
+            raise ValueError(f"Invalid request type for LM Format Enforcer backend({request_type!s})")
         max_rollback_tokens = (
             self.aphrodite_config.speculative_config.num_speculative_tokens
             if self.aphrodite_config.speculative_config is not None
@@ -124,9 +113,7 @@ class LMFormatEnforcerBackend(StructuredOutputBackend):
         )
 
         if max_rollback_tokens > 0:
-            raise ValueError(
-                "LM Format Enforcer backend does not support speculative tokens"
-            )
+            raise ValueError("LM Format Enforcer backend does not support speculative tokens")
 
         token_enforcer = lmformatenforcer.TokenEnforcer(
             tokenizer_data=self.tokenizer_data,
@@ -165,14 +152,9 @@ def validate_structured_output_request_lm_format_enforcer(params: SamplingParams
             try:
                 json.dumps(so_params.json)
             except Exception as e:
-                raise ValueError(
-                    f"Error serializing structured outputs jsonschema: {e}"
-                ) from e
+                raise ValueError(f"Error serializing structured outputs jsonschema: {e}") from e
         return
     elif so_params.choice:
         return
     elif so_params.grammar:
-        raise ValueError(
-            "LM Format Enforcer structured outputs backend "
-            "does not support grammar specifications"
-        )
+        raise ValueError("LM Format Enforcer structured outputs backend does not support grammar specifications")

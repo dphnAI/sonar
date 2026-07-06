@@ -26,9 +26,9 @@ from aphrodite.v1.request import Request
 
 from .utils import (
     EOS_TOKEN_ID,
+    create_aphrodite_config,
     create_model_runner_output,
     create_scheduler,
-    create_aphrodite_config,
 )
 
 
@@ -49,9 +49,7 @@ class DecodeBenchTestRunner:
         )
 
         self.aphrodite_config = aphrodite_config
-        self.scheduler: Scheduler = create_scheduler(
-            aphrodite_config, num_blocks=num_gpu_blocks
-        )
+        self.scheduler: Scheduler = create_scheduler(aphrodite_config, num_blocks=num_gpu_blocks)
 
         # Create worker-side connector
         self.worker_connector = DecodeBenchConnector(
@@ -66,9 +64,7 @@ class DecodeBenchTestRunner:
         num_heads = 4
         head_dim = 64
         self.kv_caches = {
-            f"layer_{i}": torch.zeros(
-                num_gpu_blocks, 2, num_heads, block_size, head_dim
-            )
+            f"layer_{i}": torch.zeros(num_gpu_blocks, 2, num_heads, block_size, head_dim)
             for i in range(2)  # 2 layers for testing
         }
 
@@ -84,9 +80,7 @@ class DecodeBenchTestRunner:
         init_none_hash(sha256)
         self._block_hasher = get_request_block_hasher(block_size, sha256)
 
-        self._dummy_ctx: ForwardContext = ForwardContext(
-            no_compile_layers={}, attn_metadata={}, slot_mapping={}
-        )
+        self._dummy_ctx: ForwardContext = ForwardContext(no_compile_layers={}, attn_metadata={}, slot_mapping={})
 
     def new_request(self, token_ids: list[int]) -> Request:
         """Create a new request with given token IDs."""

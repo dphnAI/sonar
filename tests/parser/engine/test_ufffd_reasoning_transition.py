@@ -15,18 +15,18 @@ from __future__ import annotations
 
 import pytest
 
-from tests.parser.engine.replay_harness import (
-    CHUNK_SIZES,
-    MockTokenizer,
-    collect_output,
-    replay_streaming,
-)
 from aphrodite.parser.abstract_parser import DelegatingParser
 from aphrodite.parser.engine.registered_adapters import (
     Glm47MoeParserReasoningAdapter,
     Glm47MoeParserToolAdapter,
     Qwen3ParserReasoningAdapter,
     Qwen3ParserToolAdapter,
+)
+from tests.parser.engine.replay_harness import (
+    CHUNK_SIZES,
+    MockTokenizer,
+    collect_output,
+    replay_streaming,
 )
 
 
@@ -138,9 +138,7 @@ class TestUfffdReasoningTransition:
         )
         output = collect_output(deltas)
 
-        assert "�" not in output.content, (
-            f"U+FFFD leaked into content: {output.content!r}"
-        )
+        assert "�" not in output.content, f"U+FFFD leaked into content: {output.content!r}"
         assert output.content == EXPECTED_CONTENT
         assert output.reasoning == EXPECTED_REASONING
 
@@ -174,8 +172,6 @@ class TestUfffdReasoningTransition:
         )
         output = collect_output(deltas)
 
-        assert "�" not in output.content, (
-            f"U+FFFD leaked into content: {output.content!r}"
-        )
+        assert "�" not in output.content, f"U+FFFD leaked into content: {output.content!r}"
         assert output.content == "삼성전자"
         assert output.reasoning == "Reasoning."

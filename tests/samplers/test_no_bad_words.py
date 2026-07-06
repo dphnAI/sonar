@@ -44,9 +44,7 @@ class TestOneTokenBadWord:
         self.tokenizer = AutoTokenizer.from_pretrained(self.MODEL)
 
         self.num_prompt_tokens = len(self._encode(self.PROMPT))
-        self.target_token_id = self._encode(
-            self.TARGET_TOKEN, add_special_tokens=False
-        )[0]
+        self.target_token_id = self._encode(self.TARGET_TOKEN, add_special_tokens=False)[0]
 
     def test_one_token_bad_word(self, aphrodite_runner):
         with aphrodite_runner(self.MODEL) as llm:
@@ -78,20 +76,12 @@ class TestTwoTokenBadWord:
     NEIGHBOUR_TOKEN2 = "older"
 
     def setup_method(self, method):
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.MODEL, add_prefix_space=True
-        )
+        self.tokenizer = AutoTokenizer.from_pretrained(self.MODEL, add_prefix_space=True)
 
         self.num_prompt_tokens = len(self._encode(self.PROMPT))
-        self.target_token_id1 = self._encode(
-            self.TARGET_TOKEN1, add_special_tokens=False
-        )[0]
-        self.target_token_id2 = self._encode(
-            self.TARGET_TOKEN2, add_special_tokens=False
-        )[0]
-        self.neighbour_token_id2 = self._encode(
-            self.NEIGHBOUR_TOKEN2, add_special_tokens=False
-        )[0]
+        self.target_token_id1 = self._encode(self.TARGET_TOKEN1, add_special_tokens=False)[0]
+        self.target_token_id2 = self._encode(self.TARGET_TOKEN2, add_special_tokens=False)[0]
+        self.neighbour_token_id2 = self._encode(self.NEIGHBOUR_TOKEN2, add_special_tokens=False)[0]
 
     def test_two_token_bad_word(self, aphrodite_runner):
         with aphrodite_runner(self.MODEL, dtype="half") as llm:
@@ -108,17 +98,13 @@ class TestTwoTokenBadWord:
             assert output_token_ids[0] == self.target_token_id1
             assert self.target_token_id2 not in output_token_ids
 
-            output_token_ids = self._generate(
-                llm, bad_words=[f"{self.TARGET_TOKEN1} {self.TARGET_TOKEN2}"]
-            )
+            output_token_ids = self._generate(llm, bad_words=[f"{self.TARGET_TOKEN1} {self.TARGET_TOKEN2}"])
             assert output_token_ids[0] == self.target_token_id1
             assert output_token_ids[:2] != [
                 self.target_token_id1,
                 self.target_token_id2,
             ]
-            assert not self._contains(
-                output_token_ids, [self.target_token_id1, self.target_token_id2]
-            )
+            assert not self._contains(output_token_ids, [self.target_token_id1, self.target_token_id2])
             # Model dependent behaviour
             assert output_token_ids[:2] == [
                 self.target_token_id1,
@@ -137,19 +123,13 @@ class TestTwoTokenBadWord:
                 self.target_token_id1,
                 self.target_token_id2,
             ]
-            assert not self._contains(
-                output_token_ids, [self.target_token_id1, self.target_token_id2]
-            )
+            assert not self._contains(output_token_ids, [self.target_token_id1, self.target_token_id2])
             assert output_token_ids[:2] != [
                 self.target_token_id1,
                 self.neighbour_token_id2,
             ]
-            assert not self._contains(
-                output_token_ids, [self.target_token_id1, self.neighbour_token_id2]
-            )
-            assert (self.target_token_id2 in output_token_ids) or (
-                self.neighbour_token_id2 in output_token_ids
-            )
+            assert not self._contains(output_token_ids, [self.target_token_id1, self.neighbour_token_id2])
+            assert (self.target_token_id2 in output_token_ids) or (self.neighbour_token_id2 in output_token_ids)
 
     def _generate(self, llm: LLM, bad_words: list[str] | None = None) -> list[int]:
         return _generate(

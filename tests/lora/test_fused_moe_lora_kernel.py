@@ -6,7 +6,6 @@ import random
 import pytest
 import torch
 
-from tests.utils import ensure_current_aphrodite_config, multi_gpu_test
 from aphrodite import _custom_ops as ops
 from aphrodite.distributed import (
     init_distributed_environment,
@@ -21,6 +20,7 @@ from aphrodite.lora.ops.triton_ops import fused_moe_lora
 from aphrodite.platforms import current_platform
 from aphrodite.utils.network_utils import get_open_port
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.utils import ensure_current_aphrodite_config, multi_gpu_test
 
 
 @pytest.fixture(autouse=True)
@@ -115,9 +115,7 @@ def sample_data(
     num_experts: int,
     top_k_num: int,
 ):
-    topk_ids, topk_weights = assign_experts_to_tokens(
-        num_tokens, num_experts, top_k_num
-    )
+    topk_ids, topk_weights = assign_experts_to_tokens(num_tokens, num_experts, top_k_num)
     token_lora_mapping = assign_loras_to_tokens(num_tokens, num_sequences, max_loras)
     active_lora_ids = torch.full((max_loras + 1,), -1, dtype=torch.int32)
     lora_ids = torch.unique(token_lora_mapping, sorted=True)
@@ -244,9 +242,7 @@ def use_torch(
             expert_ids = topk_ids[i]
             lora_a = lora_a_stacked[slice_id][lora_idx][expert_ids]
             lora_b = lora_b_stacked[slice_id][lora_idx][expert_ids]
-            tensors = [
-                hidden_states[i] @ lora_a[x].T @ lora_b[x].T for x in range(top_k_num)
-            ]
+            tensors = [hidden_states[i] @ lora_a[x].T @ lora_b[x].T for x in range(top_k_num)]
             slice_tensors.append(torch.stack(tensors, dim=0))
 
         outputs.append(torch.concat(slice_tensors, dim=-1))
@@ -955,15 +951,9 @@ def _build_one_shot_inputs(
         token_lora_mapping = torch.empty((0,), dtype=torch.int32)
         lora_ids = torch.full((max_loras + 1,), -1, dtype=torch.int32)
 
-    lora_a_stacked = [
-        torch.rand((max_loras, num_experts, max_lora_rank, K), dtype=dtype)
-        for _ in range(num_slices)
-    ]
+    lora_a_stacked = [torch.rand((max_loras, num_experts, max_lora_rank, K), dtype=dtype) for _ in range(num_slices)]
     lora_b_stacked = [
-        torch.rand(
-            (max_loras, num_experts, N // num_slices, max_lora_rank), dtype=dtype
-        )
-        for _ in range(num_slices)
+        torch.rand((max_loras, num_experts, N // num_slices, max_lora_rank), dtype=dtype) for _ in range(num_slices)
     ]
     hidden_states = torch.rand((max(num_tokens, 0), K), dtype=dtype)
     return (
@@ -1070,9 +1060,7 @@ def test_fused_moe_lora_kernel_one_shot_early_exit(trigger, device):
         lora_a_stacked,
         lora_b_stacked,
         hidden_states,
-    ) = _build_one_shot_inputs(
-        num_tokens, top_k, E, max_loras, R, K, N, num_slices, block_size, dtype
-    )
+    ) = _build_one_shot_inputs(num_tokens, top_k, E, max_loras, R, K, N, num_slices, block_size, dtype)
 
     adapter_enabled = torch.ones(max_loras + 1, dtype=torch.int32)
     num_active_loras = torch.tensor([max_loras + 1], dtype=torch.int32, device="cpu")

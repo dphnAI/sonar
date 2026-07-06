@@ -67,19 +67,14 @@ def generate_and_test(
         PROMPT_TEMPLATE.format(
             context="Which poll resource provided the most number of candidate information?"  # noqa: E501
         ),
-        PROMPT_TEMPLATE.format(
-            context="Return the poll resource associated with the most candidates."
-        ),
+        PROMPT_TEMPLATE.format(context="Return the poll resource associated with the most candidates."),
     ]
 
     lora_request = None
     if isinstance(lora_id, int):
         lora_request = LoRARequest(str(lora_id), lora_id, lora_path)
     elif isinstance(lora_id, list):
-        lora_request = [
-            LoRARequest(str(i), i, lora_path) if i is not None else None
-            for i in lora_id
-        ]
+        lora_request = [LoRARequest(str(i), i, lora_path) if i is not None else None for i in lora_id]
 
     sampling_params = aphrodite.SamplingParams(temperature=0, max_tokens=64)
     outputs = llm.generate(prompts, sampling_params, lora_request=lora_request)
@@ -94,11 +89,7 @@ def generate_and_test(
     for i in range(len(EXPECTED_LORA_OUTPUT)):
         req_lora_id = lora_id[i] if isinstance(lora_id, list) else lora_id
         generated_text = generated_texts[i]
-        expected_output = (
-            EXPECTED_LORA_OUTPUT[i]
-            if req_lora_id is not None
-            else EXPECTED_BASE_MODEL_OUTPUT[i]
-        )
+        expected_output = EXPECTED_LORA_OUTPUT[i] if req_lora_id is not None else EXPECTED_BASE_MODEL_OUTPUT[i]
 
         if compare_lower:
             generated_text = generated_text.lower()
@@ -111,9 +102,7 @@ def generate_and_test(
         )
 
 
-@pytest.mark.skipif(
-    current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests"
-)
+@pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 def test_olmoe_lora(olmoe_lora_files, maybe_enable_lora_dual_stream):
     # We enable enforce_eager=True here to reduce VRAM usage for lora-test CI,
     # Otherwise, the lora-test will fail due to CUDA OOM.
@@ -145,9 +134,7 @@ def test_olmoe_lora_mixed(olmoe_lora_files):
     generate_and_test(llm, olmoe_lora_files, lora_id=[1, None, 3, None])
 
 
-def test_olmoe_lora_mixed_random(
-    olmoe_lora_files, tmp_path, maybe_enable_lora_dual_stream
-):
+def test_olmoe_lora_mixed_random(olmoe_lora_files, tmp_path, maybe_enable_lora_dual_stream):
     # Create a dummy LoRA with random weights based on the real one
     random_lora_path = tmp_path / "random_lora"
     shutil.copytree(olmoe_lora_files, random_lora_path)
@@ -182,9 +169,7 @@ def test_olmoe_lora_mixed_random(
     assert outputs[0].outputs[0].text.strip().startswith(EXPECTED_LORA_OUTPUT[0])
 
 
-@pytest.mark.skipif(
-    current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests"
-)
+@pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 @pytest.mark.parametrize("fully_sharded_loras", [False, True])
 @multi_gpu_test(num_gpus=2)
 def test_olmoe_lora_tp2(olmoe_lora_files, fully_sharded_loras):
@@ -218,9 +203,5 @@ def test_olmoe_lora_tp4(olmoe_lora_files, fully_sharded_loras):
         tensor_parallel_size=4,
         fully_sharded_loras=fully_sharded_loras,
     )
-    generate_and_test(
-        llm, olmoe_lora_files, lora_id=1, compare_lower=fully_sharded_loras
-    )
-    generate_and_test(
-        llm, olmoe_lora_files, lora_id=2, compare_lower=fully_sharded_loras
-    )
+    generate_and_test(llm, olmoe_lora_files, lora_id=1, compare_lower=fully_sharded_loras)
+    generate_and_test(llm, olmoe_lora_files, lora_id=2, compare_lower=fully_sharded_loras)

@@ -7,10 +7,10 @@ import pytest
 import requests
 from transformers import AutoProcessor
 
-from tests.utils import APHRODITE_PATH, RemoteOpenAIServer
 from aphrodite.entrypoints.pooling.embed.protocol import EmbeddingResponse
 from aphrodite.multimodal.media import MediaWithBytes
 from aphrodite.multimodal.utils import encode_image_url, fetch_image
+from tests.utils import APHRODITE_PATH, RemoteOpenAIServer
 
 MODEL_NAME = "TIGER-Lab/VLM2Vec-Full"
 MAXIMUM_IMAGES = 2
@@ -129,10 +129,7 @@ def test_chat_image_base64_request(server: RemoteOpenAIServer, model_name: str):
 
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
 def test_chat_image_with_media_io_kwargs(server: RemoteOpenAIServer, model_name: str):
-    rgba_image_url = (
-        "https://aphrodite-public-assets.s3.us-west-2.amazonaws.com"
-        "/vision_model_images/RGBA_comp.png"
-    )
+    rgba_image_url = "https://aphrodite-public-assets.s3.us-west-2.amazonaws.com/vision_model_images/RGBA_comp.png"
     messages = [
         {
             "role": "user",
@@ -161,9 +158,7 @@ def test_chat_image_with_media_io_kwargs(server: RemoteOpenAIServer, model_name:
 
 
 def get_hf_prompt_tokens(model_name, content, image_url):
-    processor = AutoProcessor.from_pretrained(
-        model_name, trust_remote_code=True, num_crops=4
-    )
+    processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True, num_crops=4)
 
     placeholder = "<|image_1|> "
     prompt = f"{placeholder}{content}"
@@ -179,9 +174,7 @@ def get_hf_prompt_tokens(model_name, content, image_url):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
 @pytest.mark.parametrize("image_url", TEST_IMAGE_ASSETS, indirect=True)
-async def test_image_embedding(
-    server: RemoteOpenAIServer, model_name: str, image_url: str
-):
+async def test_image_embedding(server: RemoteOpenAIServer, model_name: str, image_url: str):
     content_text = "Represent the given image."
     messages = [
         {

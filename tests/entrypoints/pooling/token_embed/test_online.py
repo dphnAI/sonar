@@ -5,8 +5,8 @@
 import pytest
 import requests
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.entrypoints.pooling.pooling.protocol import PoolingResponse
+from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "intfloat/multilingual-e5-small"
 DTYPE = "bfloat16"
@@ -74,9 +74,7 @@ async def test_pooling_token_embed(server: RemoteOpenAIServer, model_name: str):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
 @pytest.mark.parametrize("task", ["embed", "classify", "token_classify", "plugin"])
-async def test_pooling_not_supported(
-    server: RemoteOpenAIServer, model_name: str, task: str
-):
+async def test_pooling_not_supported(server: RemoteOpenAIServer, model_name: str, task: str):
     response = requests.post(
         server.url_for("pooling"),
         json={

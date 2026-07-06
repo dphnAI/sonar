@@ -23,7 +23,6 @@ if not has_helion():
 import helion
 import helion.language as hl
 
-from tests.kernels.helion.helpers import dummy_kernel_registry
 from aphrodite.kernels.helion.case_key import CaseKey
 from aphrodite.kernels.helion.config_manager import ConfigManager
 from aphrodite.kernels.helion.register import (
@@ -35,6 +34,7 @@ from aphrodite.kernels.helion.register import (
     register_kernel,
     validate_helion_settings,
 )
+from tests.kernels.helion.helpers import dummy_kernel_registry
 
 if _HOP_AVAILABLE:
     from helion._compat import supports_torch_compile_fusion
@@ -198,9 +198,7 @@ class TestConfiguredHelionKernel:
 
     def test_init_raises_without_picker(self, sample_kernel, sample_configs):
         """Test that __init__ raises when no picker registered."""
-        configs: dict[CaseKey, helion.Config] = {
-            CaseKey.default(): sample_configs[CaseKey.default()]
-        }
+        configs: dict[CaseKey, helion.Config] = {CaseKey.default(): sample_configs[CaseKey.default()]}
         mock_config_manager = Mock(spec=ConfigManager)
         mock_config_manager.get_platform_configs = Mock(return_value=configs)
 
@@ -222,9 +220,7 @@ class TestConfiguredHelionKernel:
                 helion_settings=None,
             )
 
-    def test_config_selector_validates_picker_result(
-        self, sample_kernel, sample_configs
-    ):
+    def test_config_selector_validates_picker_result(self, sample_kernel, sample_configs):
         """Test that config selector validates picker returns valid key."""
 
         def invalid_picker(args, config_keys):
@@ -240,14 +236,10 @@ class TestConfiguredHelionKernel:
         key_computer = kernel._create_key_computer()
         selector = kernel._create_config_selector(key_computer)
 
-        with pytest.raises(
-            ValueError, match="Config picker returned invalid config key"
-        ):
+        with pytest.raises(ValueError, match="Config picker returned invalid config key"):
             selector((torch.randn(32, 4096),))
 
-    def test_config_selector_handles_none_from_picker(
-        self, sample_kernel, sample_configs
-    ):
+    def test_config_selector_handles_none_from_picker(self, sample_kernel, sample_configs):
         """Test that config selector falls back to 'default' on None."""
 
         def none_picker(args, config_keys):
@@ -266,9 +258,7 @@ class TestConfiguredHelionKernel:
         result = selector((torch.randn(32, 4096),))
         assert result is kernel.configs[CaseKey.default()]
 
-    def test_create_decorated_kernel_passes_helion_settings(
-        self, sample_kernel, sample_configs
-    ):
+    def test_create_decorated_kernel_passes_helion_settings(self, sample_kernel, sample_configs):
         """Test that _create_decorated_kernel passes helion_settings."""
 
         def default_picker(args, config_keys):
@@ -307,9 +297,7 @@ class TestConfiguredHelionKernel:
             # static_shapes is always forced to False by Aphrodite
             assert call_kwargs["static_shapes"] is False
 
-    def test_key_and_config_selector_use_same_logic(
-        self, sample_kernel, sample_configs
-    ):
+    def test_key_and_config_selector_use_same_logic(self, sample_kernel, sample_configs):
         """Test that key and config_selector produce identical results."""
 
         def tracking_picker(args, config_keys):
@@ -373,9 +361,7 @@ class TestHelionKernelWrapper:
             return None
 
         mock_config_manager = Mock(spec=ConfigManager)
-        mock_config_manager.get_platform_configs = Mock(
-            return_value={}
-        )  # Empty configs
+        mock_config_manager.get_platform_configs = Mock(return_value={})  # Empty configs
 
         with (
             patch(
@@ -546,9 +532,7 @@ class TestHelionKernelWrapper:
 
         assert wrapper._disabled is True
 
-        with patch(
-            "aphrodite.kernels.helion.register.create_helion_decorated_kernel"
-        ) as mock_create:
+        with patch("aphrodite.kernels.helion.register.create_helion_decorated_kernel") as mock_create:
             mock_autotune_kernel = Mock()
             mock_autotune_kernel.autotune.return_value = mock_config
             mock_create.return_value = mock_autotune_kernel
@@ -594,17 +578,13 @@ class TestHelionKernelWrapper:
             result2 = wrapper.get_configured_op()
             assert result1 is result2
 
-    @pytest.mark.skipif(
-        not _HOP_AVAILABLE, reason="HOP path only used when HOP available"
-    )
+    @pytest.mark.skipif(not _HOP_AVAILABLE, reason="HOP path only used when HOP available")
     def test_init_eagerly_initializes_hop_path(self):
         """Test that register_kernel eagerly builds the configured kernel
         on the HOP path (no custom op registration needed)."""
         from aphrodite.kernels.helion.utils import get_canonical_gpu_name
 
-        configs: dict[CaseKey, helion.Config] = {
-            CaseKey.default(): helion.Config(block_sizes=[4, 4])
-        }
+        configs: dict[CaseKey, helion.Config] = {CaseKey.default(): helion.Config(block_sizes=[4, 4])}
         with (
             dummy_kernel_registry(configs=configs) as register,
             patch(
@@ -629,9 +609,7 @@ class TestHelionKernelWrapper:
             expected = x + y
             assert torch.allclose(result, expected)
 
-    @pytest.mark.skipif(
-        _HOP_AVAILABLE, reason="CustomOp path not used when HOP available"
-    )
+    @pytest.mark.skipif(_HOP_AVAILABLE, reason="CustomOp path not used when HOP available")
     def test_init_eagerly_initializes(self):
         """Test that register_kernel eagerly loads configs and detects GPU
         during construction so __call__ needs no further initialization."""
@@ -653,12 +631,8 @@ class TestHelionKernelWrapper:
             assert wrapper._configured_kernel is not None
             assert hasattr(torch.ops.aphrodite_helion, wrapper.op_name)
 
-    @pytest.mark.skipif(
-        _HOP_AVAILABLE, reason="CustomOp path not used when HOP available"
-    )
-    def test_get_or_register_custom_op_returns_cached_op(
-        self, sample_kernel, sample_configs
-    ):
+    @pytest.mark.skipif(_HOP_AVAILABLE, reason="CustomOp path not used when HOP available")
+    def test_get_or_register_custom_op_returns_cached_op(self, sample_kernel, sample_configs):
         def fake_impl(*args, **kwargs):
             return torch.zeros_like(args[0])
 
@@ -696,12 +670,8 @@ class TestHelionKernelWrapper:
             result = wrapper._get_or_register_custom_op()
             assert result is existing_op
 
-    @pytest.mark.skipif(
-        _HOP_AVAILABLE, reason="CustomOp path not used when HOP available"
-    )
-    def test_get_or_register_custom_op_registers_new_op(
-        self, sample_kernel, sample_configs
-    ):
+    @pytest.mark.skipif(_HOP_AVAILABLE, reason="CustomOp path not used when HOP available")
+    def test_get_or_register_custom_op_registers_new_op(self, sample_kernel, sample_configs):
         def fake_impl(*args, **kwargs):
             return torch.zeros_like(args[0])
 
@@ -790,9 +760,7 @@ class TestKernelRegistry:
     def test_get_kernel_by_name_returns_kernel(self):
         """Test get_kernel_by_name returns registered kernel."""
         with dummy_kernel_registry() as register:
-            wrapper = register("test_kernel", config_picker=lambda args, keys: None)(
-                _add_kernel
-            )
+            wrapper = register("test_kernel", config_picker=lambda args, keys: None)(_add_kernel)
 
         from aphrodite.kernels.helion.register import _REGISTERED_KERNELS
 
@@ -824,9 +792,7 @@ class TestKernelRegistry:
     def test_register_kernel_creates_wrapper(self):
         """Test register_kernel creates HelionKernelWrapper."""
         with dummy_kernel_registry() as register:
-            result = register("test_name", config_picker=lambda args, keys: None)(
-                _add_kernel
-            )
+            result = register("test_name", config_picker=lambda args, keys: None)(_add_kernel)
 
         assert isinstance(result, HelionKernelWrapper)
         assert result.op_name == "test_name"
@@ -842,9 +808,7 @@ class TestKernelRegistry:
     def test_register_kernel_registers_in_global_registry(self):
         """Test register_kernel adds wrapper to global registry."""
         with dummy_kernel_registry() as register:
-            wrapper = register("test_kernel", config_picker=lambda args, keys: None)(
-                _add_kernel
-            )
+            wrapper = register("test_kernel", config_picker=lambda args, keys: None)(_add_kernel)
 
         registered_kernels = get_registered_kernels()
         assert "test_kernel" in registered_kernels
@@ -881,14 +845,10 @@ class TestKernelRegistry:
     def test_register_kernel_raises_on_duplicate_registration(self):
         """Test register_kernel raises error on duplicate names."""
         with dummy_kernel_registry() as register:
-            register("duplicate_name", config_picker=lambda args, keys: None)(
-                _add_kernel
-            )
+            register("duplicate_name", config_picker=lambda args, keys: None)(_add_kernel)
 
             with pytest.raises(ValueError, match="already registered"):
-                register("duplicate_name", config_picker=lambda args, keys: None)(
-                    _add_kernel
-                )
+                register("duplicate_name", config_picker=lambda args, keys: None)(_add_kernel)
 
     def test_register_kernel_rejects_autotuner_fn_in_settings(self):
         """Test register_kernel rejects conflicting autotuner_fn."""
@@ -963,9 +923,7 @@ class TestTorchCompileHOP:
     def test_compiled_graph_contains_helion_hop(self):
         """Verify torch.compile on a HelionKernelWrapper emits a
         helion_kernel_wrapper_mutation HOP node in the FX graph."""
-        configs: dict[CaseKey, helion.Config] = {
-            CaseKey.default(): helion.Config(block_sizes=[4, 4])
-        }
+        configs: dict[CaseKey, helion.Config] = {CaseKey.default(): helion.Config(block_sizes=[4, 4])}
 
         with dummy_kernel_registry(configs=configs) as register:
             add_helion_kernel = register(
@@ -997,8 +955,7 @@ class TestTorchCompileHOP:
         hop_nodes = [
             node
             for node in captured_graph.graph.nodes
-            if node.op == "call_function"
-            and node.target is helion_kernel_wrapper_mutation
+            if node.op == "call_function" and node.target is helion_kernel_wrapper_mutation
         ]
         assert len(hop_nodes) > 0, (
             "Expected helion_kernel_wrapper_mutation HOP node in compiled graph, "
@@ -1021,17 +978,13 @@ class TestTorchCompileHOP:
     def test_inductor_backend_compiles_helion_hop(self):
         """Test torch.compile with inductor backend and Helion fusion enabled."""
 
-        configs: dict[CaseKey, helion.Config] = {
-            CaseKey.default(): helion.Config(block_sizes=[4, 4])
-        }
+        configs: dict[CaseKey, helion.Config] = {CaseKey.default(): helion.Config(block_sizes=[4, 4])}
 
         with dummy_kernel_registry(configs=configs) as register:
             add_helion_kernel = register(
                 op_name="test_inductor_add_kernel",
                 config_picker=lambda args, keys: None,
-                helion_settings=helion.Settings(
-                    torch_compile_fusion=True, static_shapes=False
-                ),
+                helion_settings=helion.Settings(torch_compile_fusion=True, static_shapes=False),
             )(_add_kernel)
 
         def f(x, y):

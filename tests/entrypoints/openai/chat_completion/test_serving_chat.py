@@ -11,12 +11,6 @@ import pytest
 import pytest_asyncio
 from openai import OpenAI
 
-from tests.entrypoints.openai.utils import (
-    accumulate_streaming_response,
-    verify_chat_response,
-    verify_harmony_messages,
-)
-from tests.utils import RemoteOpenAIServer
 from aphrodite._aiter_ops import is_aiter_found_and_supported
 from aphrodite.config import MultiModalConfig
 from aphrodite.entrypoints.openai.chat_completion.protocol import (
@@ -50,6 +44,12 @@ from aphrodite.tokenizers import get_tokenizer
 from aphrodite.tokenizers.mistral import MistralTokenizer
 from aphrodite.tokenizers.registry import cached_tokenizer_from_config
 from aphrodite.v1.engine.async_llm import AsyncLLM
+from tests.entrypoints.openai.utils import (
+    accumulate_streaming_response,
+    verify_chat_response,
+    verify_harmony_messages,
+)
+from tests.utils import RemoteOpenAIServer
 
 GPT_OSS_MODEL_NAME = "openai/gpt-oss-20b"
 GPT_OSS_SPECULATOR_NAME = "RedHatAI/gpt-oss-20b-speculator.eagle3"
@@ -119,15 +119,10 @@ def gptoss_server(default_server_args: list[str]):
 
 @pytest.fixture(scope="class")
 def gptoss_speculative_server(default_server_args: list[str]):
-    attention_backend = (
-        "TRITON_ATTN"
-        if not is_aiter_found_and_supported()
-        else "ROCM_AITER_UNIFIED_ATTN"
-    )
+    attention_backend = "TRITON_ATTN" if not is_aiter_found_and_supported() else "ROCM_AITER_UNIFIED_ATTN"
     server_args = default_server_args + [
         "--speculative-config",
-        f'{{"model": "{GPT_OSS_SPECULATOR_NAME}", '
-        f'"method": "eagle3", "num_speculative_tokens": 3}}',
+        f'{{"model": "{GPT_OSS_SPECULATOR_NAME}", "method": "eagle3", "num_speculative_tokens": 3}}',
         f"--attention-backend={attention_backend}",
     ]
     # gpt-oss requires AITER unified attention on ROCm
@@ -136,9 +131,7 @@ def gptoss_speculative_server(default_server_args: list[str]):
     env_dict = None
     if is_aiter_found_and_supported():
         env_dict = {"APHRODITE_ROCM_USE_AITER": "1"}
-    with RemoteOpenAIServer(
-        GPT_OSS_MODEL_NAME, server_args, env_dict=env_dict, max_wait_seconds=480
-    ) as remote_server:
+    with RemoteOpenAIServer(GPT_OSS_MODEL_NAME, server_args, env_dict=env_dict, max_wait_seconds=480) as remote_server:
         yield remote_server
 
 
@@ -156,9 +149,7 @@ async def gptoss_speculative_client(gptoss_speculative_server):
 
 class TestGPTOSSChat:
     @pytest.mark.asyncio
-    async def test_gpt_oss_chat_tool_call_streaming(
-        self, gptoss_client: OpenAI, with_tool_parser: bool
-    ):
+    async def test_gpt_oss_chat_tool_call_streaming(self, gptoss_client: OpenAI, with_tool_parser: bool):
         tools = [
             {
                 "type": "function",
@@ -214,9 +205,7 @@ class TestGPTOSSChat:
             assert len(content_buf) > 0
 
     @pytest.mark.asyncio
-    async def test_gpt_oss_multi_turn_chat(
-        self, gptoss_client: OpenAI, with_tool_parser: bool
-    ):
+    async def test_gpt_oss_multi_turn_chat(self, gptoss_client: OpenAI, with_tool_parser: bool):
         if not with_tool_parser:
             pytest.skip("skip non-tool for multi-turn tests")
         tools = [
@@ -264,9 +253,7 @@ class TestGPTOSSChat:
         assert not first_msg.content
 
         messages.append({"role": "assistant", "content": args1})
-        messages.append(
-            {"role": "user", "content": "Now convert to celsius and return JSON only"}
-        )
+        messages.append({"role": "user", "content": "Now convert to celsius and return JSON only"})
 
         second = await gptoss_client.chat.completions.create(
             model=GPT_OSS_MODEL_NAME,
@@ -280,9 +267,7 @@ class TestGPTOSSChat:
         )
 
     @pytest.mark.asyncio
-    async def test_gpt_oss_tool_message_array_content(
-        self, gptoss_client: OpenAI, with_tool_parser: bool
-    ):
+    async def test_gpt_oss_tool_message_array_content(self, gptoss_client: OpenAI, with_tool_parser: bool):
         """Test that tool messages support both string and array content formats."""
         if not with_tool_parser:
             pytest.skip("skip non-tool for array content tests")
@@ -352,9 +337,7 @@ class TestGPTOSSChat:
             },
             {
                 "role": "tool",
-                "content": [
-                    {"type": "text", "text": "f2e897a7-2705-4337-8193-2a8f57b81618"}
-                ],
+                "content": [{"type": "text", "text": "f2e897a7-2705-4337-8193-2a8f57b81618"}],
             },
         ]
 
@@ -412,10 +395,7 @@ class TestGPTOSSChat:
         exclude_tools_when_tool_choice_none: bool,
     ):
         if not (with_tool_parser and exclude_tools_when_tool_choice_none):
-            pytest.skip(
-                "skip tool_choice tests when non-tool or "
-                "--exclude-tools-when-tool-choice-none not set"
-            )
+            pytest.skip("skip tool_choice tests when non-tool or --exclude-tools-when-tool-choice-none not set")
 
         tools = [
             {
@@ -567,9 +547,7 @@ def _build_renderer(model_config: MockModelConfig):
     )
 
 
-def _build_online_renderer(
-    engine, model_registry: OpenAIModelRegistry
-) -> OnlineRenderer:
+def _build_online_renderer(engine, model_registry: OpenAIModelRegistry) -> OnlineRenderer:
     return OnlineRenderer(
         model_config=engine.model_config,
         renderer=engine.renderer,
@@ -1007,9 +985,7 @@ async def test_serving_chat_mistral_token_ids_prompt_too_long_is_rejected():
     mock_renderer.render_messages_async = AsyncMock(
         return_value=(
             [],
-            TokensPrompt(
-                prompt_token_ids=list(range(mock_engine.model_config.max_model_len))
-            ),
+            TokensPrompt(prompt_token_ids=list(range(mock_engine.model_config.max_model_len))),
         )
     )
     mock_engine.renderer = mock_renderer
@@ -1224,9 +1200,7 @@ async def _render_chat_prompt_token_ids(
     _, engine_inputs = result
     assert len(engine_inputs) == 1
 
-    prompt_token_ids = serving_chat._extract_prompt_components(
-        engine_inputs[0]
-    ).token_ids
+    prompt_token_ids = serving_chat._extract_prompt_components(engine_inputs[0]).token_ids
     assert prompt_token_ids is not None
     return prompt_token_ids
 
@@ -1332,21 +1306,13 @@ class TestServingChatWithHarmony:
         async def result_generator():
             if stream:
                 for token_id in harmony_token_ids:
-                    yield self.mock_request_output_from_req_and_token_ids(
-                        req, [token_id]
-                    )
-                yield self.mock_request_output_from_req_and_token_ids(
-                    req, [], finished=True
-                )
+                    yield self.mock_request_output_from_req_and_token_ids(req, [token_id])
+                yield self.mock_request_output_from_req_and_token_ids(req, [], finished=True)
             else:
-                yield self.mock_request_output_from_req_and_token_ids(
-                    req, harmony_token_ids, finished=True
-                )
+                yield self.mock_request_output_from_req_and_token_ids(req, harmony_token_ids, finished=True)
 
         generator_func = (
-            serving_chat.chat_completion_stream_generator
-            if stream
-            else serving_chat.chat_completion_full_generator
+            serving_chat.chat_completion_stream_generator if stream else serving_chat.chat_completion_full_generator
         )
 
         chat_template_kwargs = serving_chat._effective_chat_template_kwargs(req)
@@ -1383,9 +1349,7 @@ class TestServingChatWithHarmony:
         return await result
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "include_reasoning", [True, False], ids=["with_reasoning", "no_reasoning"]
-    )
+    @pytest.mark.parametrize("include_reasoning", [True, False], ids=["with_reasoning", "no_reasoning"])
     async def test_simple_chat(self, serving_chat, stream, include_reasoning):
         messages = [{"role": "user", "content": "what is 1+1?"}]
 
@@ -1411,9 +1375,7 @@ class TestServingChatWithHarmony:
             f"<|channel|>analysis<|message|>{reasoning_str}<|end|>"
             f"<|start|>assistant<|channel|>final<|message|>{final_str}<|end|>"
         )
-        response = await self.generate_response_from_harmony_str(
-            serving_chat, req, response_str, stream=stream
-        )
+        response = await self.generate_response_from_harmony_str(serving_chat, req, response_str, stream=stream)
         verify_chat_response(
             response,
             content=final_str,
@@ -1426,9 +1388,7 @@ class TestServingChatWithHarmony:
 
         # Test the Harmony messages for the second turn's input
         req_2 = ChatCompletionRequest(model=MODEL_NAME, messages=messages)
-        input_messages_2, _ = serving_chat.online_renderer._make_request_with_harmony(
-            req_2
-        )
+        input_messages_2, _ = serving_chat.online_renderer._make_request_with_harmony(req_2)
         expected_input_messages_2 = [
             {"role": "system"},
             {"role": "user"},
@@ -1440,9 +1400,7 @@ class TestServingChatWithHarmony:
                     "channel": "analysis",
                 }
             )
-        expected_input_messages_2.append(
-            {"role": "assistant", "channel": "final", "content": final_str}
-        )
+        expected_input_messages_2.append({"role": "assistant", "channel": "final", "content": final_str})
         verify_harmony_messages(
             input_messages_2,
             expected_input_messages_2,
@@ -1478,9 +1436,7 @@ class TestServingChatWithHarmony:
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "What's the weather?"},
         ]
-        req = ChatCompletionRequest(
-            model=MODEL_NAME, messages=messages, tools=weather_tools
-        )
+        req = ChatCompletionRequest(model=MODEL_NAME, messages=messages, tools=weather_tools)
         input_messages, _ = serving_chat.online_renderer._make_request_with_harmony(req)
         verify_harmony_messages(
             input_messages,
@@ -1496,9 +1452,7 @@ class TestServingChatWithHarmony:
         )
 
     @pytest.mark.asyncio
-    async def test_tool_call_response_with_content(
-        self, serving_chat, stream, weather_tools, weather_messages_start
-    ):
+    async def test_tool_call_response_with_content(self, serving_chat, stream, weather_tools, weather_messages_start):
         tools = weather_tools
         messages = list(weather_messages_start)
 
@@ -1522,9 +1476,7 @@ class TestServingChatWithHarmony:
             "<|start|>assistant to=functions.get_weather<|channel|>commentary"
             f"<|constrain|>json<|message|>{tool_args_str}<|call|>"
         )
-        response = await self.generate_response_from_harmony_str(
-            serving_chat, req, response_str, stream=stream
-        )
+        response = await self.generate_response_from_harmony_str(serving_chat, req, response_str, stream=stream)
         verify_chat_response(
             response,
             content=commentary_str,
@@ -1548,9 +1500,7 @@ class TestServingChatWithHarmony:
 
         # Test the Harmony messages for the second turn's input
         req_2 = ChatCompletionRequest(model=MODEL_NAME, messages=messages, tools=tools)
-        input_messages_2, _ = serving_chat.online_renderer._make_request_with_harmony(
-            req_2
-        )
+        input_messages_2, _ = serving_chat.online_renderer._make_request_with_harmony(req_2)
         verify_harmony_messages(
             input_messages_2,
             [
@@ -1579,9 +1529,7 @@ class TestServingChatWithHarmony:
         )
 
     @pytest.mark.asyncio
-    async def test_multi_turn_tools_and_reasoning(
-        self, serving_chat, stream, weather_tools, weather_messages_start
-    ):
+    async def test_multi_turn_tools_and_reasoning(self, serving_chat, stream, weather_tools, weather_messages_start):
         tools = weather_tools
         messages = list(weather_messages_start)
 
@@ -1605,9 +1553,7 @@ class TestServingChatWithHarmony:
             "<|start|>assistant to=functions.get_weather<|channel|>commentary"
             f"<|constrain|>json<|message|>{paris_tool_args_str}<|call|>"
         )
-        response = await self.generate_response_from_harmony_str(
-            serving_chat, req, response_str, stream=stream
-        )
+        response = await self.generate_response_from_harmony_str(serving_chat, req, response_str, stream=stream)
         verify_chat_response(
             response,
             reasoning=reasoning_str,
@@ -1631,9 +1577,7 @@ class TestServingChatWithHarmony:
 
         # Test the Harmony messages for the second turn's input
         req_2 = ChatCompletionRequest(model=MODEL_NAME, messages=messages, tools=tools)
-        input_messages_2, _ = serving_chat.online_renderer._make_request_with_harmony(
-            req_2
-        )
+        input_messages_2, _ = serving_chat.online_renderer._make_request_with_harmony(req_2)
         verify_harmony_messages(
             input_messages_2,
             [
@@ -1663,9 +1607,7 @@ class TestServingChatWithHarmony:
         # Test the Chat Completion response for the second turn's output
         paris_weather_str = "The weather in Paris today is 20 degrees Celsius."
         response_str = f"<|channel|>final<|message|>{paris_weather_str}<|end|>"
-        response_2 = await self.generate_response_from_harmony_str(
-            serving_chat, req_2, response_str, stream=stream
-        )
+        response_2 = await self.generate_response_from_harmony_str(serving_chat, req_2, response_str, stream=stream)
         verify_chat_response(response_2, content=paris_weather_str)
 
         # Add the output messages from the second turn as input to the third turn
@@ -1682,9 +1624,7 @@ class TestServingChatWithHarmony:
 
         # Test the Harmony messages for the third turn's input
         req_3 = ChatCompletionRequest(model=MODEL_NAME, messages=messages, tools=tools)
-        input_messages_3, _ = serving_chat.online_renderer._make_request_with_harmony(
-            req_3
-        )
+        input_messages_3, _ = serving_chat.online_renderer._make_request_with_harmony(req_3)
         verify_harmony_messages(
             input_messages_3,
             [
@@ -1726,9 +1666,7 @@ class TestServingChatWithHarmony:
             "<|start|>assistant to=functions.get_weather<|channel|>commentary"
             f"<|constrain|>json<|message|>{boston_tool_args_str}<|call|>"
         )
-        response_3 = await self.generate_response_from_harmony_str(
-            serving_chat, req, response_str, stream=stream
-        )
+        response_3 = await self.generate_response_from_harmony_str(serving_chat, req, response_str, stream=stream)
         verify_chat_response(
             response_3,
             reasoning=reasoning_str,
@@ -1752,9 +1690,7 @@ class TestServingChatWithHarmony:
 
         # Test the Harmony messages for the fourth turn's input
         req_4 = ChatCompletionRequest(model=MODEL_NAME, messages=messages, tools=tools)
-        input_messages_4, _ = serving_chat.online_renderer._make_request_with_harmony(
-            req_4
-        )
+        input_messages_4, _ = serving_chat.online_renderer._make_request_with_harmony(req_4)
         verify_harmony_messages(
             input_messages_4,
             [
@@ -2010,11 +1946,7 @@ async def test_streaming_n_gt1_independent_tool_parsers():
         tool_choice="auto",
     )
 
-    tool_call_text = (
-        "<tool_call>\n"
-        '{"name": "get_weather", "arguments": {"city": "Tokyo"}}\n'
-        "</tool_call>"
-    )
+    tool_call_text = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Tokyo"}}\n</tool_call>'
     all_token_ids = tokenizer.encode(tool_call_text, add_special_tokens=False)
 
     # Compute proper delta text for each token so that concatenated deltas
@@ -2098,9 +2030,7 @@ async def test_streaming_n_gt1_independent_tool_parsers():
     # Both choices must independently produce the correct tool call.
     for choice_idx in range(num_choices):
         deltas = tc_deltas_by_choice[choice_idx]
-        assert len(deltas) > 0, (
-            f"Choice {choice_idx}: expected tool-call deltas but got none"
-        )
+        assert len(deltas) > 0, f"Choice {choice_idx}: expected tool-call deltas but got none"
 
         name = None
         args_buf = ""
@@ -2111,19 +2041,12 @@ async def test_streaming_n_gt1_independent_tool_parsers():
             if fn.get("arguments"):
                 args_buf += fn["arguments"]
 
-        assert name == "get_weather", (
-            f"Choice {choice_idx}: expected 'get_weather', got {name!r}"
-        )
+        assert name == "get_weather", f"Choice {choice_idx}: expected 'get_weather', got {name!r}"
         parsed_args = json.loads(args_buf)
-        assert parsed_args == {"city": "Tokyo"}, (
-            f"Choice {choice_idx}: expected {{'city': 'Tokyo'}}, got {parsed_args}"
-        )
+        assert parsed_args == {"city": "Tokyo"}, f"Choice {choice_idx}: expected {{'city': 'Tokyo'}}, got {parsed_args}"
 
         reasons = finish_reasons_by_choice[choice_idx]
-        assert len(reasons) == 1, (
-            f"Choice {choice_idx}: expected exactly 1 finish_reason, got {reasons}"
-        )
+        assert len(reasons) == 1, f"Choice {choice_idx}: expected exactly 1 finish_reason, got {reasons}"
         assert reasons[0] == "tool_calls", (
-            f"Choice {choice_idx}: expected finish_reason='tool_calls', "
-            f"got '{reasons[0]}'"
+            f"Choice {choice_idx}: expected finish_reason='tool_calls', got '{reasons[0]}'"
         )

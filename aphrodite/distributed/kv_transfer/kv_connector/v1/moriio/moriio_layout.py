@@ -34,21 +34,14 @@ def build_layer_to_spec(kv_cache_config: KVCacheConfig) -> dict[str, KVCacheSpec
         group_spec = group.kv_cache_spec
         if isinstance(group_spec, UniformTypeKVCacheSpecs):
             layer_to_spec.update(
-                {
-                    layer_name: group_spec.kv_cache_specs[layer_name]
-                    for layer_name in group.layer_names
-                }
+                {layer_name: group_spec.kv_cache_specs[layer_name] for layer_name in group.layer_names}
             )
         else:
-            layer_to_spec.update(
-                {layer_name: group_spec for layer_name in group.layer_names}
-            )
+            layer_to_spec.update({layer_name: group_spec for layer_name in group.layer_names})
     return layer_to_spec
 
 
-def is_mla_cache_layer(
-    layer_to_spec: Mapping[str, KVCacheSpec], layer_name: str
-) -> bool:
+def is_mla_cache_layer(layer_to_spec: Mapping[str, KVCacheSpec], layer_name: str) -> bool:
     try:
         spec = layer_to_spec[layer_name]
     except KeyError as e:
@@ -60,27 +53,20 @@ def _spec_dim_matches(value: int, expected: int | None) -> bool:
     return expected is None or value == expected
 
 
-def _kernel_layout_matches(
-    spec: KVCacheSpec, kernel_block_size: int, num_kv_heads: int, head_dim: int
-) -> bool:
+def _kernel_layout_matches(spec: KVCacheSpec, kernel_block_size: int, num_kv_heads: int, head_dim: int) -> bool:
     if kernel_block_size <= 0 or spec.block_size % kernel_block_size != 0:
         return False
-    return _spec_dim_matches(
-        num_kv_heads, getattr(spec, "num_kv_heads", None)
-    ) and _spec_dim_matches(head_dim, getattr(spec, "head_size", None))
+    return _spec_dim_matches(num_kv_heads, getattr(spec, "num_kv_heads", None)) and _spec_dim_matches(
+        head_dim, getattr(spec, "head_size", None)
+    )
 
 
-def _select_kernel_block_layout(
-    layer_name: str, shape: torch.Size, spec: KVCacheSpec
-) -> tuple[int, int, int]:
+def _select_kernel_block_layout(layer_name: str, shape: torch.Size, spec: KVCacheSpec) -> tuple[int, int, int]:
     axis2_matches = _kernel_layout_matches(spec, shape[2], shape[3], shape[4])
     axis3_matches = _kernel_layout_matches(spec, shape[3], shape[2], shape[4])
 
     if axis2_matches and axis3_matches and shape[2] != shape[3]:
-        raise ValueError(
-            f"Ambiguous MoRIIO kernel-block K/V cache shape for layer "
-            f"{layer_name}: {tuple(shape)}"
-        )
+        raise ValueError(f"Ambiguous MoRIIO kernel-block K/V cache shape for layer {layer_name}: {tuple(shape)}")
     if axis2_matches:
         return shape[2], shape[3], shape[4]
     if axis3_matches:
@@ -130,9 +116,7 @@ def get_layer_transfer_geometry(
             num_kv_heads, block_size, head_dim = shape[2:]
         else:
             kernel_num_blocks = num_blocks
-            kernel_block_size, num_kv_heads, head_dim = _select_kernel_block_layout(
-                layer_name, shape, spec
-            )
+            kernel_block_size, num_kv_heads, head_dim = _select_kernel_block_layout(layer_name, shape, spec)
             kernel_blocks_per_block = spec.block_size // kernel_block_size
             if kernel_num_blocks % kernel_blocks_per_block != 0:
                 raise ValueError(
@@ -151,9 +135,7 @@ def get_layer_transfer_geometry(
             slot_size_bytes=slot_size_bytes,
             block_stride=stride[1] * kernel_blocks_per_block,
             local_kv_stride=stride[0],
-            remote_kv_stride=(
-                stride[1] * kernel_blocks_per_block * (remote_num_blocks or num_blocks)
-            ),
+            remote_kv_stride=(stride[1] * kernel_blocks_per_block * (remote_num_blocks or num_blocks)),
             transfers_per_block=2,
             regions_per_block=1,
             split_kv_regions=True,
@@ -181,9 +163,7 @@ def get_layer_transfer_geometry(
             num_kv_heads, block_size, head_dim = shape[2:]
         else:
             kernel_num_blocks = num_blocks
-            kernel_block_size, _, _ = _select_kernel_block_layout(
-                layer_name, shape, spec
-            )
+            kernel_block_size, _, _ = _select_kernel_block_layout(layer_name, shape, spec)
             kernel_blocks_per_block = spec.block_size // kernel_block_size
             if kernel_num_blocks % kernel_blocks_per_block != 0:
                 raise ValueError(
@@ -224,10 +204,7 @@ def get_layer_transfer_geometry(
         )
 
     cache_kind = "MLA" if is_mla_cache else "K/V"
-    raise ValueError(
-        f"Unsupported MoRIIO {cache_kind} cache shape for layer "
-        f"{layer_name}: {tuple(shape)}"
-    )
+    raise ValueError(f"Unsupported MoRIIO {cache_kind} cache shape for layer {layer_name}: {tuple(shape)}")
 
 
 def iter_layer_registration_regions(
@@ -255,11 +232,7 @@ def merge_contiguous_offsets(
     rows = sorted(zip(offsets_local, offsets_remote, sizes), key=lambda row: row[0])
     merged: list[list[int]] = []
     for local, remote, size in rows:
-        if (
-            merged
-            and local == merged[-1][0] + merged[-1][2]
-            and remote == merged[-1][1] + merged[-1][2]
-        ):
+        if merged and local == merged[-1][0] + merged[-1][2] and remote == merged[-1][1] + merged[-1][2]:
             merged[-1][2] += size
         else:
             merged.append([local, remote, size])
@@ -287,9 +260,7 @@ def compute_block_transfer_offsets(
             "local_block_ids and remote_block_ids must have the same length: "
             f"{len(local_block_ids)} != {len(remote_block_ids)}"
         )
-    geometry = get_layer_transfer_geometry(
-        layer_name, kv_cache, layer_to_spec, remote_num_blocks
-    )
+    geometry = get_layer_transfer_geometry(layer_name, kv_cache, layer_to_spec, remote_num_blocks)
     element_size = kv_cache.element_size()
     transfer_size_byte = geometry.block_len
     per_block = geometry.transfers_per_block
@@ -306,12 +277,8 @@ def compute_block_transfer_offsets(
         if per_block == 2:
             assert geometry.local_kv_stride is not None
             assert geometry.remote_kv_stride is not None
-            offset_local[w] = element_size * (
-                geometry.local_kv_stride + lb * geometry.block_stride
-            )
-            offset_remote[w] = element_size * (
-                geometry.remote_kv_stride + rb * geometry.block_stride
-            )
+            offset_local[w] = element_size * (geometry.local_kv_stride + lb * geometry.block_stride)
+            offset_remote[w] = element_size * (geometry.remote_kv_stride + rb * geometry.block_stride)
             w += 1
 
     return merge_fn(offset_local, offset_remote, sizes)

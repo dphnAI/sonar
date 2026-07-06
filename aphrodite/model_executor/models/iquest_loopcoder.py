@@ -25,7 +25,7 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed import get_tensor_model_parallel_world_size
 from aphrodite.model_executor.layers.attention import Attention
 from aphrodite.model_executor.layers.layernorm import RMSNorm
@@ -134,9 +134,7 @@ class LoopCoderAttention(nn.Module):
             base_layer_idx = extract_layer_index(prefix)
             unique_layer_idx = loop_idx * total_layers + base_layer_idx
 
-            unique_prefix = prefix.replace(
-                f"layers.{base_layer_idx}", f"layers.{unique_layer_idx}"
-            )
+            unique_prefix = prefix.replace(f"layers.{base_layer_idx}", f"layers.{unique_layer_idx}")
 
             if loop_idx == 0:
                 loop_cache_config = cache_config
@@ -218,9 +216,7 @@ class LoopCoderDecoderLayer(nn.Module):
     ) -> None:
         super().__init__()
         self.hidden_size = config.hidden_size
-        dual_chunk_attention_config = getattr(
-            config, "dual_chunk_attention_config", None
-        )
+        dual_chunk_attention_config = getattr(config, "dual_chunk_attention_config", None)
         self.layer_idx = layer_idx
         if getattr(config, "is_causal", True):
             attn_type = AttentionType.DECODER
@@ -248,9 +244,7 @@ class LoopCoderDecoderLayer(nn.Module):
             prefix=f"{prefix}.mlp",
         )
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -324,9 +318,7 @@ class LoopGateProjection(nn.Module):
         """
         num_heads, num_tokens, head_dim = query.shape
 
-        assert num_heads == self.num_heads, (
-            f"Expected {self.num_heads} heads, got {num_heads}"
-        )
+        assert num_heads == self.num_heads, f"Expected {self.num_heads} heads, got {num_heads}"
 
         query_flat = query.reshape(-1, head_dim)
 
@@ -338,9 +330,7 @@ class LoopGateProjection(nn.Module):
 
         # Extract diagonal: each head h's query should use output column h
         # gate_logits[h, :, h] gives the output for head h at each token
-        gate_logits = torch.diagonal(
-            gate_logits, dim1=0, dim2=2
-        )  # [num_tokens, num_heads]
+        gate_logits = torch.diagonal(gate_logits, dim1=0, dim2=2)  # [num_tokens, num_heads]
         gate_logits = gate_logits.transpose(0, 1)  # [num_heads, num_tokens]
         gate_logits = gate_logits.unsqueeze(-1)  # [num_heads, num_tokens, 1]
 
@@ -350,9 +340,7 @@ class LoopGateProjection(nn.Module):
         # Expand and reshape to match q shape: [num_tokens, num_heads * head_dim]
         gate = gate.transpose(0, 1)  # [num_tokens, num_heads, 1]
         gate = gate.expand(-1, -1, head_dim)  # [num_tokens, num_heads, head_dim]
-        gate = gate.reshape(
-            num_tokens, num_heads * head_dim
-        )  # [num_tokens, num_heads * head_dim]
+        gate = gate.reshape(num_tokens, num_heads * head_dim)  # [num_tokens, num_heads * head_dim]
 
         return gate
 
@@ -380,9 +368,7 @@ class IQuestLoopCoderModel(nn.Module):
         quant_config = aphrodite_config.quant_config
 
         # TODO (@robertgshaw2): see if this can be moved out
-        if cache_config.sliding_window is not None and hasattr(
-            config, "max_window_layers"
-        ):
+        if cache_config.sliding_window is not None and hasattr(config, "max_window_layers"):
             assert config.max_window_layers == config.num_hidden_layers, (
                 "Sliding window for some but all layers is not supported. "
                 "This model uses sliding window but `max_window_layers` = {} "
@@ -449,15 +435,11 @@ class IQuestLoopCoderModel(nn.Module):
             hidden_states = self.embed_input_ids(input_ids)
 
         for loop_idx in range(self.loop_num):
-            for layer_idx, layer in enumerate(
-                self.layers[self.start_layer : self.end_layer]
-            ):
+            for layer_idx, layer in enumerate(self.layers[self.start_layer : self.end_layer]):
                 # Get the actual layer index (accounting for pipeline parallelism)
                 actual_layer_idx = self.start_layer + layer_idx
                 # Get gate_proj for this layer (only for loop_idx > 0)
-                gate_proj = (
-                    self.gate_projections[actual_layer_idx] if loop_idx > 0 else None
-                )
+                gate_proj = self.gate_projections[actual_layer_idx] if loop_idx > 0 else None
                 hidden_states = layer(positions, hidden_states, loop_idx, gate_proj)
         hidden_states = self.norm(hidden_states)
         return hidden_states
@@ -508,9 +490,7 @@ class IQuestLoopCoderModel(nn.Module):
 
                     if aphrodite_name in params_dict:
                         param = params_dict[aphrodite_name]
-                        weight_loader = getattr(
-                            param, "weight_loader", default_weight_loader
-                        )
+                        weight_loader = getattr(param, "weight_loader", default_weight_loader)
                         weight_loader(param, loaded_weight)
                         loaded_params.add(aphrodite_name)
                         continue
@@ -537,9 +517,7 @@ class IQuestLoopCoderForCausalLM(nn.Module):
         self.config = config
 
         self.quant_config = quant_config
-        self.model = IQuestLoopCoderModel(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = IQuestLoopCoderModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
 
         if config.tie_word_embeddings:
             self.lm_head = self.model.embed_tokens
@@ -563,9 +541,7 @@ class IQuestLoopCoderForCausalLM(nn.Module):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
         return hidden_states
 
     def compute_logits(

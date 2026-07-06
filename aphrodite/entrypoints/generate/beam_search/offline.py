@@ -91,10 +91,7 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
         lora_requests = self._lora_request_to_seq(lora_request, len(engine_inputs))
 
         if use_tqdm and concurrency_limit is not None:
-            logger.warning(
-                "Progress bar is not supported when using concurrency_limit. "
-                "Disabling progress bar."
-            )
+            logger.warning("Progress bar is not supported when using concurrency_limit. Disabling progress bar.")
             use_tqdm = False
 
         if concurrency_limit is None:
@@ -108,9 +105,7 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
                 structured_output_backend,
                 structured_output_key,
                 structured_output_bitmask,
-            ) = self._init_beam_search_structured_output(
-                params.structured_outputs, tokenizer
-            )
+            ) = self._init_beam_search_structured_output(params.structured_outputs, tokenizer)
 
         # generate 2 * beam_width candidates at each step
         # following the huggingface transformers implementation
@@ -125,9 +120,7 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
 
         for lora_req, prompt in zip(lora_requests, engine_inputs):
             if prompt["type"] == "embeds":
-                raise NotImplementedError(
-                    "Embedding prompt not supported for beam search"
-                )
+                raise NotImplementedError("Embedding prompt not supported for beam search")
 
             instances.append(
                 BeamSearchInstance(
@@ -139,9 +132,7 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
 
         try:
             for prompt_start in range(0, len(instances), concurrency_limit):
-                instances_batch = instances[
-                    prompt_start : prompt_start + concurrency_limit
-                ]
+                instances_batch = instances[prompt_start : prompt_start + concurrency_limit]
 
                 token_iter = range(max_tokens)
                 if use_tqdm:
@@ -178,9 +169,7 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
         outputs = []
         for instance in instances:
             instance.completed.extend(instance.beams)
-            sorted_completed = sorted(
-                instance.completed, key=sort_beams_key, reverse=True
-            )
+            sorted_completed = sorted(instance.completed, key=sort_beams_key, reverse=True)
             best_beams = sorted_completed[:beam_width]
 
             for beam in best_beams:
@@ -206,22 +195,15 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
 
         Returns True if all beams are exhausted and search should stop.
         """
-        all_beams: list[BeamSearchSequence] = list(
-            sum((instance.beams for instance in instances_batch), [])
-        )
-        pos = [0] + list(
-            itertools.accumulate(len(instance.beams) for instance in instances_batch)
-        )
+        all_beams: list[BeamSearchSequence] = list(sum((instance.beams for instance in instances_batch), []))
+        pos = [0] + list(itertools.accumulate(len(instance.beams) for instance in instances_batch))
         instance_start_and_end: list[tuple[int, int]] = list(zip(pos[:-1], pos[1:]))
 
         if len(all_beams) == 0:
             return True
 
         if structured_output_backend is not None:
-            assert (
-                structured_output_key is not None
-                and structured_output_bitmask is not None
-            )
+            assert structured_output_key is not None and structured_output_bitmask is not None
             beam_entries = self._build_beam_sampling_params(
                 all_beams,
                 base_sampling_params,
@@ -229,9 +211,7 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
                 structured_output_key,
                 structured_output_bitmask,
             )
-            active_indices = [
-                i for i, entry in enumerate(beam_entries) if entry is not None
-            ]
+            active_indices = [i for i, entry in enumerate(beam_entries) if entry is not None]
             for i, entry in enumerate(beam_entries):
                 if entry is None:
                     beam = all_beams[i]
@@ -333,10 +313,7 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
         aphrodite_config = self.llm_engine.aphrodite_config
         so_config = aphrodite_config.structured_outputs_config
         if so_config is None:
-            raise ValueError(
-                "structured_outputs_config is required for beam search "
-                "with structured outputs"
-            )
+            raise ValueError("structured_outputs_config is required for beam search with structured outputs")
 
         # Resolve the backend name from engine config if not already set.
         if not structured_outputs._backend:
@@ -441,11 +418,7 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
                 logprobs=base_params.logprobs,
                 max_tokens=1,
                 temperature=base_params.temperature,
-                allowed_token_ids=(
-                    allowed_ids
-                    if len(allowed_ids) <= _MAX_NUM_ALLOWED_TOKEN_IDS
-                    else None
-                ),
+                allowed_token_ids=(allowed_ids if len(allowed_ids) <= _MAX_NUM_ALLOWED_TOKEN_IDS else None),
                 skip_clone=True,
             )
             result.append((beam_params, allowed_ids))

@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import torch
 
-from aphrodite.config import ModelConfig, ParallelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig, ParallelConfig
 from aphrodite.multimodal import MULTIMODAL_REGISTRY
 from aphrodite.multimodal.cache import (
     BaseMultiModalProcessorCache,
@@ -58,9 +58,7 @@ def _dummy_item(
     *,
     rng: np.random.RandomState | None = None,
 ):
-    return MultiModalKwargsItem(
-        {key: _dummy_elem(size, rng=rng) for key, size in size_by_key.items()}
-    )
+    return MultiModalKwargsItem({key: _dummy_elem(size, rng=rng) for key, size in size_by_key.items()})
 
 
 def _dummy_items(
@@ -69,10 +67,7 @@ def _dummy_items(
     rng: np.random.RandomState | None = None,
 ):
     return MultiModalKwargsItems(
-        {
-            modality: [_dummy_item(size_by_key, rng=rng)]
-            for modality, size_by_key in size_by_key_modality.items()
-        }
+        {modality: [_dummy_item(size_by_key, rng=rng)] for modality, size_by_key in size_by_key_modality.items()}
     )
 
 
@@ -139,13 +134,8 @@ def _compare_caches(
     item_size_gb = int(cache_size_gb / item_capacity)
 
     rng = np.random.RandomState(seed)
-    all_items = [
-        _dummy_item({"key": item_size_gb}, rng=rng)
-        for _ in range(int(item_capacity / hit_rate))
-    ]
-    all_hashes = [
-        MultiModalHasher.hash_kwargs(item=item.get_data()) for item in all_items
-    ]
+    all_items = [_dummy_item({"key": item_size_gb}, rng=rng) for _ in range(int(item_capacity / hit_rate))]
+    all_hashes = [MultiModalHasher.hash_kwargs(item=item.get_data()) for item in all_items]
 
     prompt_update = PromptInsertion("dummy", "target", "insertion").resolve(0)
 
@@ -241,16 +231,10 @@ def _run_test_cache_eviction_lru(
         "image_B",
         "image_C",
     ]
-    request1_items = {
-        h: MultiModalKwargsItem.dummy(nbytes=2 * base_item_size)
-        for h in request1_hashes
-    }
+    request1_items = {h: MultiModalKwargsItem.dummy(nbytes=2 * base_item_size) for h in request1_hashes}
 
     request2_hashes = ["image_D", "image_E", "image_A", "image_C"]
-    request2_items = {
-        h: MultiModalKwargsItem.dummy(nbytes=1 * base_item_size)
-        for h in request2_hashes
-    }
+    request2_items = {h: MultiModalKwargsItem.dummy(nbytes=1 * base_item_size) for h in request2_hashes}
 
     ##########################
     # STEP 1: Request 1 send
@@ -352,26 +336,18 @@ def _run_test_cache_eviction_shm(
     base_item_size: int,
 ):
     request1_hashes = ["image_A", "image_B", "image_C"]
-    request1_items = {
-        h: MultiModalKwargsItem.dummy(5 * base_item_size) for h in request1_hashes
-    }
+    request1_items = {h: MultiModalKwargsItem.dummy(5 * base_item_size) for h in request1_hashes}
     request1_items_p0_result = []
 
     request2_hashes = ["image_G", "image_A"]
     request2_items = {
-        h: MultiModalKwargsItem.dummy(
-            (5 if h in request1_hashes else 2) * base_item_size
-        )
-        for h in request2_hashes
+        h: MultiModalKwargsItem.dummy((5 if h in request1_hashes else 2) * base_item_size) for h in request2_hashes
     }
     request2_items_p0_result = []
 
     request3_hashes = ["image_G", "image_H", "image_I", "image_B"]
     request3_items = {
-        h: MultiModalKwargsItem.dummy(
-            (5 if h in request1_hashes else 2) * base_item_size
-        )
-        for h in request3_hashes
+        h: MultiModalKwargsItem.dummy((5 if h in request1_hashes else 2) * base_item_size) for h in request3_hashes
     }
     request3_items_p0_result = []
 

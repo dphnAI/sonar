@@ -63,9 +63,7 @@ async def generate(request: GenerateRequest, raw_request: Request):
     generator = await handler.serve_tokens(request, raw_request)
 
     if isinstance(generator, ErrorResponse):
-        return JSONResponse(
-            content=generator.model_dump(), status_code=generator.error.code
-        )
+        return JSONResponse(content=generator.model_dump(), status_code=generator.error.code)
 
     elif isinstance(generator, GenerateResponse):
         return JSONResponse(content=generator.model_dump())

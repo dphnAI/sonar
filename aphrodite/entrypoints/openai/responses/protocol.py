@@ -127,9 +127,7 @@ class ResponseRawMessageAndToken(OpenAIBaseModel):
     type: Literal["raw_message_tokens"] = "raw_message_tokens"
 
 
-ResponseInputOutputMessage: TypeAlias = (
-    list[ChatCompletionMessageParam] | list[ResponseRawMessageAndToken]
-)
+ResponseInputOutputMessage: TypeAlias = list[ChatCompletionMessageParam] | list[ResponseRawMessageAndToken]
 ResponseInputOutputItem: TypeAlias = ResponseInputItemParam | ResponseOutputItem
 
 
@@ -180,8 +178,7 @@ class ResponsesRequest(OpenAIBaseModel):
         ge=-2.0,
         le=2.0,
         description=(
-            "The presence penalty that was used to penalize new tokens based on "
-            "whether they appear in the text so far."
+            "The presence penalty that was used to penalize new tokens based on whether they appear in the text so far."
         ),
     )
     frequency_penalty: float | None = Field(
@@ -189,8 +186,7 @@ class ResponsesRequest(OpenAIBaseModel):
         ge=-2.0,
         le=2.0,
         description=(
-            "The frequency penalty that was used to penalize new tokens based on "
-            "their frequency in the text so far."
+            "The frequency penalty that was used to penalize new tokens based on their frequency in the text so far."
         ),
     )
     prompt_cache_key: str | None = Field(
@@ -268,8 +264,7 @@ class ResponsesRequest(OpenAIBaseModel):
     aphrodite_xargs: dict[str, str | int | float | list[str | int | float]] | None = Field(
         default=None,
         description=(
-            "Additional request parameters with (list of) string or "
-            "numeric values, used by custom extensions."
+            "Additional request parameters with (list of) string or numeric values, used by custom extensions."
         ),
     )
     kv_transfer_params: dict[str, Any] | None = Field(
@@ -279,8 +274,7 @@ class ResponsesRequest(OpenAIBaseModel):
     chat_template_kwargs: dict[str, Any] | None = Field(
         default=None,
         description=(
-            "Additional keyword args to pass to the chat template renderer. "
-            "Will be accessible by the template."
+            "Additional keyword args to pass to the chat template renderer. Will be accessible by the template."
         ),
     )
     # --8<-- [end:responses-extra-params]
@@ -351,17 +345,11 @@ class ResponsesRequest(OpenAIBaseModel):
 
         default_sampling_params = default_sampling_params or {}
         if (temperature := self.temperature) is None:
-            temperature = default_sampling_params.get(
-                "temperature", self._DEFAULT_SAMPLING_PARAMS["temperature"]
-            )
+            temperature = default_sampling_params.get("temperature", self._DEFAULT_SAMPLING_PARAMS["temperature"])
         if (top_p := self.top_p) is None:
-            top_p = default_sampling_params.get(
-                "top_p", self._DEFAULT_SAMPLING_PARAMS["top_p"]
-            )
+            top_p = default_sampling_params.get("top_p", self._DEFAULT_SAMPLING_PARAMS["top_p"])
         if (top_k := self.top_k) is None:
-            top_k = default_sampling_params.get(
-                "top_k", self._DEFAULT_SAMPLING_PARAMS["top_k"]
-            )
+            top_k = default_sampling_params.get("top_k", self._DEFAULT_SAMPLING_PARAMS["top_k"])
 
         if (repetition_penalty := self.repetition_penalty) is None:
             repetition_penalty = default_sampling_params.get("repetition_penalty", 1.0)
@@ -383,10 +371,7 @@ class ResponsesRequest(OpenAIBaseModel):
                     parameter="structured_outputs",
                 )
             response_format = self.text.format
-            if (
-                response_format.type == "json_schema"
-                and response_format.schema_ is not None
-            ):
+            if response_format.type == "json_schema" and response_format.schema_ is not None:
                 structured_outputs = StructuredOutputsParams(
                     json=response_format.schema_  # type: ignore[call-arg]
                     # --follow-imports skip hides the class definition but also hides
@@ -413,9 +398,7 @@ class ResponsesRequest(OpenAIBaseModel):
             repetition_penalty=repetition_penalty,
             seed=self.seed,
             ignore_eos=self.ignore_eos,
-            output_kind=(
-                RequestOutputKind.DELTA if self.stream else RequestOutputKind.FINAL_ONLY
-            ),
+            output_kind=(RequestOutputKind.DELTA if self.stream else RequestOutputKind.FINAL_ONLY),
             structured_outputs=structured_outputs,
             logit_bias=self.logit_bias,
             extra_args=extra_args,
@@ -428,10 +411,7 @@ class ResponsesRequest(OpenAIBaseModel):
         """Check if the request includes output logprobs."""
         if self.include is None:
             return False
-        return (
-            isinstance(self.include, list)
-            and "message.output_text.logprobs" in self.include
-        )
+        return isinstance(self.include, list) and "message.output_text.logprobs" in self.include
 
     @model_validator(mode="before")
     @classmethod
@@ -449,17 +429,13 @@ class ResponsesRequest(OpenAIBaseModel):
     @classmethod
     def validate_prompt(cls, data):
         if data.get("prompt") is not None:
-            raise APHRODITEValidationError(
-                "prompt template is not supported", parameter="prompt"
-            )
+            raise APHRODITEValidationError("prompt template is not supported", parameter="prompt")
         return data
 
     @model_validator(mode="before")
     @classmethod
     def check_cache_salt_support(cls, data):
-        if data.get("cache_salt") is not None and (
-            not isinstance(data["cache_salt"], str) or not data["cache_salt"]
-        ):
+        if data.get("cache_salt") is not None and (not isinstance(data["cache_salt"], str) or not data["cache_salt"]):
             raise APHRODITEValidationError(
                 "Parameter 'cache_salt' must be a non-empty string if provided.",
                 parameter="cache_salt",
@@ -507,8 +483,7 @@ class ResponsesRequest(OpenAIBaseModel):
                     processed_input.append(ResponseFunctionToolCall(**item))
                 except ValidationError:
                     logger.debug(
-                        "Failed to parse function_call to ResponseFunctionToolCall, "
-                        "leaving for Pydantic validation"
+                        "Failed to parse function_call to ResponseFunctionToolCall, leaving for Pydantic validation"
                     )
                     processed_input.append(item)
 
@@ -518,10 +493,7 @@ class ResponsesRequest(OpenAIBaseModel):
                 try:
                     processed_input.append(ResponseReasoningItem(**item))
                 except ValidationError:
-                    logger.debug(
-                        "Failed to parse reasoning to ResponseReasoningItem, "
-                        "leaving for Pydantic validation"
-                    )
+                    logger.debug("Failed to parse reasoning to ResponseReasoningItem, leaving for Pydantic validation")
                     processed_input.append(item)
 
             elif item_type == "message" and item.get("role") == "assistant":
@@ -541,11 +513,7 @@ class ResponsesRequest(OpenAIBaseModel):
                 # ResponseOutputText requires annotations
                 new_content = []
                 for c in content:
-                    if (
-                        isinstance(c, dict)
-                        and c.get("type") == "output_text"
-                        and "annotations" not in c
-                    ):
+                    if isinstance(c, dict) and c.get("type") == "output_text" and "annotations" not in c:
                         c = {**c, "annotations": []}
                     new_content.append(c)
                 item["content"] = new_content
@@ -553,8 +521,7 @@ class ResponsesRequest(OpenAIBaseModel):
                     processed_input.append(ResponseOutputMessage(**item))
                 except ValidationError:
                     logger.debug(
-                        "Failed to parse assistant message to ResponseOutputMessage, "
-                        "leaving for Pydantic validation"
+                        "Failed to parse assistant message to ResponseOutputMessage, leaving for Pydantic validation"
                     )
                     processed_input.append(original_item)
 
@@ -573,9 +540,7 @@ class ResponsesRequest(OpenAIBaseModel):
         tools = data.get("tools")
         tool_choice = data.get("tool_choice", "auto")
         has_tools = tools is not None and len(tools) > 0
-        is_named_tool_choice = (
-            isinstance(tool_choice, dict) and tool_choice.get("type") == "function"
-        )
+        is_named_tool_choice = isinstance(tool_choice, dict) and tool_choice.get("type") == "function"
 
         if not has_tools:
             if tool_choice in ("auto", "none"):
@@ -592,10 +557,7 @@ class ResponsesRequest(OpenAIBaseModel):
                 )
         elif is_named_tool_choice and tools is not None:
             tool_name = tool_choice.get("name")
-            tool_names = {
-                t.get("name") if isinstance(t, dict) else getattr(t, "name", None)
-                for t in tools
-            }
+            tool_names = {t.get("name") if isinstance(t, dict) else getattr(t, "name", None) for t in tools}
             if not tool_name or tool_name not in tool_names:
                 raise APHRODITEValidationError(
                     "Tool choice 'function' not found in 'tools' parameter.",
@@ -639,8 +601,7 @@ class ResponsesResponse(OpenAIBaseModel):
         ge=-2.0,
         le=2.0,
         description=(
-            "The presence penalty that was used to penalize new tokens based on "
-            "whether they appear in the text so far."
+            "The presence penalty that was used to penalize new tokens based on whether they appear in the text so far."
         ),
     )
     frequency_penalty: float | None = Field(
@@ -648,15 +609,12 @@ class ResponsesResponse(OpenAIBaseModel):
         ge=-2.0,
         le=2.0,
         description=(
-            "The frequency penalty that was used to penalize new tokens based on "
-            "their frequency in the text so far."
+            "The frequency penalty that was used to penalize new tokens based on their frequency in the text so far."
         ),
     )
 
     # Aphrodite-specific fields that are not in OpenAI spec
-    kv_transfer_params: dict[str, Any] | None = Field(
-        default=None, description="KVTransfer parameters."
-    )
+    kv_transfer_params: dict[str, Any] | None = Field(default=None, description="KVTransfer parameters.")
 
     # --8<-- [start:responses-response-extra-params]
     # These are populated when enable_response_messages is set to True
@@ -664,15 +622,11 @@ class ResponsesResponse(OpenAIBaseModel):
     # see serialize_input_messages and serialize_output_messages
     input_messages: ResponseInputOutputMessage | None = Field(
         default=None,
-        description=(
-            "If enable_response_messages, we can show raw token input to model."
-        ),
+        description=("If enable_response_messages, we can show raw token input to model."),
     )
     output_messages: ResponseInputOutputMessage | None = Field(
         default=None,
-        description=(
-            "If enable_response_messages, we can show raw token output of model."
-        ),
+        description=("If enable_response_messages, we can show raw token output of model."),
     )
     # --8<-- [end:responses-response-extra-params]
 

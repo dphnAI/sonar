@@ -125,15 +125,11 @@ def test_triton_unified_attn_diffkv_vs_fa(
     key_cache = kv_cache[..., :head_size_qk]
     value_cache = kv_cache[..., head_size_qk:]
 
-    cu_query_lens = torch.tensor([0] + query_lens, dtype=torch.int32).cumsum(
-        dim=0, dtype=torch.int32
-    )
+    cu_query_lens = torch.tensor([0] + query_lens, dtype=torch.int32).cumsum(dim=0, dtype=torch.int32)
     kv_lens_t = torch.tensor(kv_lens, dtype=torch.int32)
 
     max_num_blocks_per_seq = (max_kv_len + block_size - 1) // block_size
-    block_tables = torch.randint(
-        0, NUM_BLOCKS, (num_seqs, max_num_blocks_per_seq), dtype=torch.int32
-    )
+    block_tables = torch.randint(0, NUM_BLOCKS, (num_seqs, max_num_blocks_per_seq), dtype=torch.int32)
 
     # ---- FlashAttention DiffKV (ground truth) ---------------------------
     # Mirror the backend: fix degenerate strides on size-1 dims so FA's
@@ -159,9 +155,7 @@ def test_triton_unified_attn_diffkv_vs_fa(
     )
 
     # ---- Triton DiffKV --------------------------------------------------
-    segm_output, segm_max, segm_expsum = _alloc_segm_buffers(
-        seq_threshold_3D, num_query_heads, head_size_v
-    )
+    segm_output, segm_max, segm_expsum = _alloc_segm_buffers(seq_threshold_3D, num_query_heads, head_size_v)
     triton_out = torch.empty(sum(query_lens), num_query_heads, head_size_v, dtype=dtype)
     unified_attention_diffkv(
         q=query,

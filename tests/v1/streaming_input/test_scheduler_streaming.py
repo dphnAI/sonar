@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import torch
 
-from aphrodite.config import DeviceConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, DeviceConfig
 from aphrodite.multimodal.inputs import (
     MultiModalFeatureSpec,
     MultiModalKwargsItem,
@@ -39,9 +39,7 @@ class DummyRequest(Request):
         super().__init__(
             request_id=request_id,
             prompt_token_ids=prompt_token_ids if prompt_token_ids is not None else [],
-            sampling_params=SamplingParams(
-                stop_token_ids=[STOP_TOKEN], max_tokens=max_tokens
-            ),
+            sampling_params=SamplingParams(stop_token_ids=[STOP_TOKEN], max_tokens=max_tokens),
             pooling_params=None,
             mm_features=mm_features,
             resumable=resumable,
@@ -64,9 +62,7 @@ def create_scheduler() -> Scheduler:
         kv_cache_groups=[
             KVCacheGroupSpec(
                 ["layer"],
-                FullAttentionSpec(
-                    block_size=16, num_kv_heads=1, head_size=1, dtype=torch.float32
-                ),
+                FullAttentionSpec(block_size=16, num_kv_heads=1, head_size=1, dtype=torch.float32),
             )
         ],
     )
@@ -377,13 +373,8 @@ class TestStreamingScheduler(unittest.TestCase):
         assert len(scheduler_output_cycle1.scheduled_new_reqs) == 1
         new_req_data_cycle1 = scheduler_output_cycle1.scheduled_new_reqs[0]
         assert new_req_data_cycle1.prompt_token_ids == [1, 2, 3]
-        assert (
-            scheduler_output_cycle1.num_scheduled_tokens[session.request_id] == 3
-        )  # [1, 2, 3]
-        assert (
-            session.request_id
-            not in scheduler_output_cycle1.scheduled_cached_reqs.req_ids
-        )
+        assert scheduler_output_cycle1.num_scheduled_tokens[session.request_id] == 3  # [1, 2, 3]
+        assert session.request_id not in scheduler_output_cycle1.scheduled_cached_reqs.req_ids
 
         # Step 3: Simulate model runner caching the prompt_token_ids
         # This simulates gpu_model_runner.py:706-720 CachedRequestState creation
@@ -391,9 +382,7 @@ class TestStreamingScheduler(unittest.TestCase):
         # CachedRequestState
         cached_state_cycle1 = {
             "req_id": session.request_id,
-            "prompt_token_ids": list(
-                new_req_data_cycle1.prompt_token_ids
-            ),  # Explicit copy
+            "prompt_token_ids": list(new_req_data_cycle1.prompt_token_ids),  # Explicit copy
             "output_token_ids": [],
             "num_computed_tokens": 0,
         }
@@ -414,9 +403,7 @@ class TestStreamingScheduler(unittest.TestCase):
             pooler_output=[],
         )
         session.num_computed_tokens = len(session.prompt_token_ids)
-        eco_dict_cycle1 = scheduler.update_from_output(
-            scheduler_output_cycle1, mro_cycle1
-        )
+        eco_dict_cycle1 = scheduler.update_from_output(scheduler_output_cycle1, mro_cycle1)
 
         # Step 6: Verify request state after Cycle 1
         eco_cycle1 = eco_dict_cycle1[session.client_index].outputs[0]
@@ -426,9 +413,7 @@ class TestStreamingScheduler(unittest.TestCase):
         assert session._all_token_ids == [1, 2, 3, 10]  # Mutation happened here
 
         # CRITICAL ASSERTION: Cached prompt_token_ids must NOT have changed
-        assert (
-            cached_state_cycle1["prompt_token_ids"] == original_cached_prompt_cycle1
-        ), (
+        assert cached_state_cycle1["prompt_token_ids"] == original_cached_prompt_cycle1, (
             f"ALIASING BUG DETECTED in Cycle 1! "
             f"cached_state['prompt_token_ids'] was mutated from "
             f"{original_cached_prompt_cycle1} to "
@@ -449,18 +434,12 @@ class TestStreamingScheduler(unittest.TestCase):
 
         # Verify request is NOT in scheduled_new_reqs (already cached)
         assert not scheduler_output_cycle2.scheduled_new_reqs
-        assert (
-            session.request_id in scheduler_output_cycle2.scheduled_cached_reqs.req_ids
-        )
-        assert (
-            scheduler_output_cycle2.num_scheduled_tokens[session.request_id] == 1
-        )  # Only the output token [10]
+        assert session.request_id in scheduler_output_cycle2.scheduled_cached_reqs.req_ids
+        assert scheduler_output_cycle2.num_scheduled_tokens[session.request_id] == 1  # Only the output token [10]
 
         # Step 8: Calculate num_tokens like gpu_model_runner.py:1284 does
         # This is where the bug would manifest!
-        num_tokens_cycle2 = len(cached_state_cycle1["prompt_token_ids"]) + len(
-            cached_state_cycle1["output_token_ids"]
-        )
+        num_tokens_cycle2 = len(cached_state_cycle1["prompt_token_ids"]) + len(cached_state_cycle1["output_token_ids"])
 
         # CRITICAL ASSERTION: num_tokens must be correct (3 prompt + 1 output = 4)
         # Without .copy(), cached_state["prompt_token_ids"] would be [1,2,3,10]
@@ -488,9 +467,7 @@ class TestStreamingScheduler(unittest.TestCase):
             prompt_logprobs_dict={session.request_id: None},
             pooler_output=[],
         )
-        eco_dict_cycle2 = scheduler.update_from_output(
-            scheduler_output_cycle2, mro_cycle2
-        )
+        eco_dict_cycle2 = scheduler.update_from_output(scheduler_output_cycle2, mro_cycle2)
 
         # Step 11: Verify request transitioned to WAITING_FOR_STREAMING_REQ
         eco_cycle2 = eco_dict_cycle2[session.client_index].outputs[0]
@@ -528,13 +505,8 @@ class TestStreamingScheduler(unittest.TestCase):
 
         # Verify scheduler created NewRequestData with merged prompt_token_ids
         assert len(scheduler_output_cycle3.scheduled_new_reqs) == 1
-        assert (
-            scheduler_output_cycle3.scheduled_new_reqs[0].prompt_token_ids
-            == session.prompt_token_ids
-        )
-        assert (
-            scheduler_output_cycle3.num_scheduled_tokens[session.request_id] == 2
-        )  # Only new tokens [4, 5]
+        assert scheduler_output_cycle3.scheduled_new_reqs[0].prompt_token_ids == session.prompt_token_ids
+        assert scheduler_output_cycle3.num_scheduled_tokens[session.request_id] == 2  # Only new tokens [4, 5]
         # Computed output tokens are kept (become part of prompt), only the
         # final uncomputed sampled token (STOP_TOKEN) is discarded
         assert session._all_token_ids == [1, 2, 3, 10, 4, 5]
@@ -547,9 +519,7 @@ class TestStreamingScheduler(unittest.TestCase):
         new_req_data_cycle3 = scheduler_output_cycle3.scheduled_new_reqs[0]
         cached_state_cycle3 = {
             "req_id": session.request_id,
-            "prompt_token_ids": list(
-                new_req_data_cycle3.prompt_token_ids
-            ),  # Explicit copy
+            "prompt_token_ids": list(new_req_data_cycle3.prompt_token_ids),  # Explicit copy
             "output_token_ids": [],
             "num_computed_tokens": session.num_computed_tokens,
         }
@@ -569,7 +539,6 @@ class TestStreamingScheduler(unittest.TestCase):
         )
 
         # Both cached states must be independent of each other
-        assert (
-            cached_state_cycle1["prompt_token_ids"]
-            is not cached_state_cycle3["prompt_token_ids"]
-        ), "Cached states from different cycles should be independent objects."
+        assert cached_state_cycle1["prompt_token_ids"] is not cached_state_cycle3["prompt_token_ids"], (
+            "Cached states from different cycles should be independent objects."
+        )

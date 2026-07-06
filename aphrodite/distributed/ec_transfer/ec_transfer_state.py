@@ -33,13 +33,8 @@ def ensure_ec_transfer_initialized(aphrodite_config: "AphroditeConfig") -> None:
     if aphrodite_config.ec_transfer_config is None:
         return
 
-    if (
-        aphrodite_config.ec_transfer_config.is_ec_transfer_instance
-        and _EC_CONNECTOR_AGENT is None
-    ):
-        _EC_CONNECTOR_AGENT = ECConnectorFactory.create_connector(
-            config=aphrodite_config, role=ECConnectorRole.WORKER
-        )
+    if aphrodite_config.ec_transfer_config.is_ec_transfer_instance and _EC_CONNECTOR_AGENT is None:
+        _EC_CONNECTOR_AGENT = ECConnectorFactory.create_connector(config=aphrodite_config, role=ECConnectorRole.WORKER)
 
 
 def ensure_ec_transfer_shutdown() -> None:

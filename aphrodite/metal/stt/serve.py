@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Serve-boundary helpers for Speech-to-Text requests."""
 
 from __future__ import annotations

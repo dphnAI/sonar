@@ -143,9 +143,7 @@ class ModelState(ABC):
         )
 
     @abstractmethod
-    def prepare_inputs(
-        self, input_batch: InputBatch, req_states: RequestState
-    ) -> dict[str, Any]:
+    def prepare_inputs(self, input_batch: InputBatch, req_states: RequestState) -> dict[str, Any]:
         raise NotImplementedError
 
     @abstractmethod

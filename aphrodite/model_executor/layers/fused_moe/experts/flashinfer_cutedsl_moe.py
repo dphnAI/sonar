@@ -43,14 +43,10 @@ class FlashInferCuteDSLExperts(mk.FusedMoEExpertsModular):
             moe_config=moe_config,
             quant_config=quant_config,
         )
-        assert quant_config.quant_dtype == "nvfp4", (
-            "Only nvfp4 quantization is currently supported."
-        )
+        assert quant_config.quant_dtype == "nvfp4", "Only nvfp4 quantization is currently supported."
         self.out_dtype = moe_config.in_dtype
         self.hidden_dim = moe_config.hidden_dim
-        self.intermediate_size_per_partition = (
-            moe_config.intermediate_size_per_partition
-        )
+        self.intermediate_size_per_partition = moe_config.intermediate_size_per_partition
         self.topk = moe_config.experts_per_token
         self.local_num_experts = moe_config.num_local_experts
         self.global_num_experts = moe_config.num_experts
@@ -68,11 +64,7 @@ class FlashInferCuteDSLExperts(mk.FusedMoEExpertsModular):
     @staticmethod
     def _supports_current_device() -> bool:
         p = current_platform
-        return (
-            p.is_cuda()
-            and p.is_device_capability_family(100)
-            and has_flashinfer_cutedsl_moe_nvfp4()
-        )
+        return p.is_cuda() and p.is_device_capability_family(100) and has_flashinfer_cutedsl_moe_nvfp4()
 
     @staticmethod
     def _supports_no_act_and_mul() -> bool:

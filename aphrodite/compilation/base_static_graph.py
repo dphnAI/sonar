@@ -4,7 +4,7 @@
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from aphrodite.config import CUDAGraphMode, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CUDAGraphMode
 
 
 class AbstractStaticGraphWrapper(Protocol):

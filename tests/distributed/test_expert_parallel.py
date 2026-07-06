@@ -49,12 +49,8 @@ class EPTestSettings:
                 ParallelSetup(tp_size=tp_base, eager_mode=False, chunked_prefill=False),
                 ParallelSetup(tp_size=tp_base, eager_mode=False, chunked_prefill=True),
                 ParallelSetup(tp_size=tp_base, eager_mode=True, chunked_prefill=False),
-                ParallelSetup(
-                    tp_size=2 * tp_base, eager_mode=False, chunked_prefill=True
-                ),
-                ParallelSetup(
-                    tp_size=2 * tp_base, eager_mode=True, chunked_prefill=False
-                ),
+                ParallelSetup(tp_size=2 * tp_base, eager_mode=False, chunked_prefill=True),
+                ParallelSetup(tp_size=2 * tp_base, eager_mode=True, chunked_prefill=False),
             ],
             distributed_backends=["mp", "ray"],
             runner=runner,
@@ -205,11 +201,7 @@ def _compare_tp(
 
 @pytest.mark.parametrize(
     ("model_name", "parallel_setup", "distributed_backend", "runner", "test_options"),
-    [
-        params
-        for model_name, settings in TEST_MODELS.items()
-        for params in settings.iter_params(model_name)
-    ],
+    [params for model_name, settings in TEST_MODELS.items() for params in settings.iter_params(model_name)],
 )
 @create_new_process_for_each_test()
 def test_ep(

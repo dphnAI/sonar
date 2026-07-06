@@ -23,7 +23,7 @@ import torch
 from torch import nn
 from transformers import BatchFeature
 
-from aphrodite.config import ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig
 from aphrodite.config.multimodal import BaseDummyOptions
 from aphrodite.config.speech_to_text import SpeechToTextConfig
 from aphrodite.distributed import get_tensor_model_parallel_world_size
@@ -102,10 +102,7 @@ class FireRedLIDPositionalEmbedding(nn.Module):
         assert d_model % 2 == 0
         pe = torch.zeros(max_len, d_model, requires_grad=False)
         position = torch.arange(0, max_len).unsqueeze(1).float()
-        div_term = torch.exp(
-            torch.arange(0, d_model, 2).float()
-            * -(torch.log(torch.tensor(10000.0)).item() / d_model)
-        )
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * -(torch.log(torch.tensor(10000.0)).item() / d_model))
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
         self.register_buffer("pe", pe, persistent=False)
@@ -364,11 +361,7 @@ class FireRedLIDModel(nn.Module):
         positions: torch.Tensor,
         encoder_outputs: list[torch.Tensor] | None = None,
     ) -> torch.Tensor:
-        enc_states = (
-            torch.cat(encoder_outputs, dim=0)
-            if encoder_outputs and len(encoder_outputs) > 0
-            else None
-        )
+        enc_states = torch.cat(encoder_outputs, dim=0) if encoder_outputs and len(encoder_outputs) > 0 else None
         decoder_outputs = self.decoder(
             input_ids=input_ids,
             positions=positions,
@@ -440,9 +433,7 @@ class FireRedLIDDummyInputsBuilder(BaseDummyInputsBuilder[FireRedLIDProcessingIn
         }
 
 
-class FireRedLIDMultiModalProcessor(
-    EncDecMultiModalProcessor[FireRedLIDProcessingInfo]
-):
+class FireRedLIDMultiModalProcessor(EncDecMultiModalProcessor[FireRedLIDProcessingInfo]):
     def create_encoder_prompt(
         self,
         prompt: str | list[int],
@@ -574,9 +565,7 @@ _FIREREDLID_SUPPORTED_LANGUAGES: Mapping[str, str] = {
     info=FireRedLIDProcessingInfo,
     dummy_inputs=FireRedLIDDummyInputsBuilder,
 )
-class FireRedLIDForConditionalGeneration(
-    nn.Module, SupportsTranscription, SupportsMultiModal
-):
+class FireRedLIDForConditionalGeneration(nn.Module, SupportsTranscription, SupportsMultiModal):
     # -- SupportsTranscription protocol attributes --
     supports_transcription_only = True
     supported_languages = _FIREREDLID_SUPPORTED_LANGUAGES
@@ -654,9 +643,7 @@ class FireRedLIDForConditionalGeneration(
         # normalise both speech and speech_lengths here.
         if isinstance(speech, (list, tuple)):
             # Each element: [Ti, feat_dim]  (or [1, Ti, feat_dim])
-            tensors = [
-                s.squeeze(0) if s.dim() == 3 and s.size(0) == 1 else s for s in speech
-            ]
+            tensors = [s.squeeze(0) if s.dim() == 3 and s.size(0) == 1 else s for s in speech]
             device = tensors[0].device
             dtype = tensors[0].dtype
             feat_dim = tensors[0].shape[-1]
@@ -680,9 +667,7 @@ class FireRedLIDForConditionalGeneration(
             if speech.dim() == 2:
                 speech = speech.unsqueeze(0)
 
-        speech_lengths = torch.as_tensor(
-            speech_lengths, dtype=torch.int32, device=speech.device
-        )
+        speech_lengths = torch.as_tensor(speech_lengths, dtype=torch.int32, device=speech.device)
 
         enc_output, enc_lengths = self.model.get_encoder_outputs(
             speech=speech,
@@ -691,10 +676,7 @@ class FireRedLIDForConditionalGeneration(
 
         # Aphrodite expects one 2D tensor per multimodal item. Slice each batch entry
         # by the true encoder length so cross-attention never sees padded frames.
-        return tuple(
-            enc_output[i, : max(0, int(enc_lengths[i].item()))]
-            for i in range(enc_output.size(0))
-        )
+        return tuple(enc_output[i, : max(0, int(enc_lengths[i].item()))] for i in range(enc_output.size(0)))
 
     def embed_input_ids(
         self,
@@ -705,9 +687,7 @@ class FireRedLIDForConditionalGeneration(
     ) -> torch.Tensor:
         return self.model.decoder.embed_input_ids(input_ids)
 
-    def _parse_and_validate_audio_input(
-        self, **kwargs: object
-    ) -> FireRedLIDAudioInputs:
+    def _parse_and_validate_audio_input(self, **kwargs: object) -> FireRedLIDAudioInputs:
         input_features = kwargs.pop("input_features", None)
         speech_lengths = kwargs.pop("speech_lengths", None)
         fake_token_lengths = kwargs.pop("fake_token_lengths", None)

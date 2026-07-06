@@ -64,21 +64,15 @@ def test_beam_search_single_input(
 
     example_prompts = example_prompts[:1]
     with hf_runner(model, dtype=dtype) as hf_model:
-        hf_outputs = hf_model.generate_beam_search(
-            example_prompts, beam_width, max_tokens
-        )
+        hf_outputs = hf_model.generate_beam_search(example_prompts, beam_width, max_tokens)
 
     with aphrodite_runner(model, dtype=dtype, **EXTRA_ENGINE_KWARGS) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_beam_search(
-            example_prompts, beam_width, max_tokens
-        )
+        aphrodite_outputs = aphrodite_model.generate_beam_search(example_prompts, beam_width, max_tokens)
 
     for i in range(len(example_prompts)):
         hf_output_ids, hf_output_texts = hf_outputs[i]
         aphrodite_output_ids, aphrodite_output_texts = aphrodite_outputs[i]
-        for j, (hf_text, aphrodite_text) in enumerate(
-            zip(hf_output_texts, aphrodite_output_texts)
-        ):
+        for j, (hf_text, aphrodite_text) in enumerate(zip(hf_output_texts, aphrodite_output_texts)):
             print(f">>>{j}-th hf output:")
             print(hf_text)
             print(f">>>{j}-th aphrodite output:")
@@ -144,10 +138,7 @@ def test_beam_search_with_concurrency_limit(
         assert len(output_ids_with_limit) == len(output_ids_without_limit)
         for j in range(len(output_ids_with_limit)):
             if output_ids_with_limit[j] != output_ids_without_limit[j]:
-                print(
-                    f"Test{i} output{j}:\n+limit: {output_ids_with_limit}\n"
-                    f"-limit: {output_ids_without_limit}"
-                )
+                print(f"Test{i} output{j}:\n+limit: {output_ids_with_limit}\n-limit: {output_ids_without_limit}")
                 correct = False
     assert correct
 
@@ -201,9 +192,7 @@ def test_beam_search_passes_multimodal_data(
         hf_output_ids, hf_output_texts = hf_outputs[i]
         aphrodite_output_ids, aphrodite_output_texts = aphrodite_outputs[i]
 
-        for j, (hf_text, aphrodite_text) in enumerate(
-            zip(hf_output_texts, aphrodite_output_texts)
-        ):
+        for j, (hf_text, aphrodite_text) in enumerate(zip(hf_output_texts, aphrodite_output_texts)):
             print(f">>>{j}-th hf output [NOTE: special tokens are filtered]:")
             print(hf_text)
             print(f">>>{j}-th aphrodite output:")

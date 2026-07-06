@@ -13,8 +13,6 @@ import dataclasses
 
 import pytest
 
-from tests.parser.engine.conftest import make_mock_tokenizer
-from tests.parser.engine.streaming_helpers import simulate_reasoning_streaming
 from aphrodite.parser.abstract_parser import DelegatingParser
 from aphrodite.parser.engine.parser_engine_config import ParserState
 from aphrodite.parser.engine.registered_adapters import (
@@ -22,6 +20,8 @@ from aphrodite.parser.engine.registered_adapters import (
     Qwen3ParserToolAdapter,
 )
 from aphrodite.parser.qwen3 import Qwen3Parser, qwen3_config
+from tests.parser.engine.conftest import make_mock_tokenizer
+from tests.parser.engine.streaming_helpers import simulate_reasoning_streaming
 
 _THINK_START_ID = 50
 _THINK_END_ID = 51
@@ -80,9 +80,7 @@ class TestNonStreaming:
         assert content is None
 
     def test_multiline_reasoning(self, parser):
-        text = (
-            "<think>Step 1: parse.\nStep 2: compute.\nStep 3: output.</think>Result: 7."
-        )
+        text = "<think>Step 1: parse.\nStep 2: compute.\nStep 3: output.</think>Result: 7."
         reasoning, content = parser.extract_reasoning(text, None)
         assert "Step 1" in reasoning
         assert "Step 3" in reasoning
@@ -178,24 +176,18 @@ class TestIsReasoningEnd:
 
     def test_paired_tool_call_not_end(self, parser):
         """Paired <tool_call>...</tool_call> (from template) is NOT end."""
-        assert not parser.is_reasoning_end(
-            [_THINK_START_ID, 1, _TOOL_CALL_ID, 2, _TOOL_CALL_END_ID]
-        )
+        assert not parser.is_reasoning_end([_THINK_START_ID, 1, _TOOL_CALL_ID, 2, _TOOL_CALL_END_ID])
 
     def test_tool_call_after_think_end(self, parser):
         """<tool_call> after </think> — already ended."""
-        assert parser.is_reasoning_end(
-            [_THINK_START_ID, 1, _THINK_END_ID, _TOOL_CALL_ID]
-        )
+        assert parser.is_reasoning_end([_THINK_START_ID, 1, _THINK_END_ID, _TOOL_CALL_ID])
 
     def test_empty_ids(self, parser):
         assert not parser.is_reasoning_end([])
 
 
 class TestDelegatingPromptDetection:
-    def test_prompt_tool_example_does_not_skip_streaming_reasoning(
-        self, mock_tokenizer, mock_request
-    ):
+    def test_prompt_tool_example_does_not_skip_streaming_reasoning(self, mock_tokenizer, mock_request):
         parser = _Qwen3DelegatingParser(mock_tokenizer)
         prompt_ids = [_TOOL_CALL_ID, _TEXT_ID, _THINK_START_ID]
 

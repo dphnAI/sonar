@@ -5,9 +5,9 @@ import json
 import pytest
 import requests
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.entrypoints.pooling.classify.protocol import ClassificationResponse
 from aphrodite.multimodal.utils import encode_image_url, fetch_image
+from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "muziyongshixin/Qwen2.5-VL-7B-for-VideoCls"
 MAXIMUM_VIDEOS = 1
@@ -31,9 +31,7 @@ def server():
         json.dumps({"video": MAXIMUM_VIDEOS}),
     ]
 
-    with RemoteOpenAIServer(
-        MODEL_NAME, args, override_hf_configs=HF_OVERRIDES
-    ) as remote_server:
+    with RemoteOpenAIServer(MODEL_NAME, args, override_hf_configs=HF_OVERRIDES) as remote_server:
         yield remote_server
 
 

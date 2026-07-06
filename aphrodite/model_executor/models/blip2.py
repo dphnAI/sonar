@@ -13,7 +13,7 @@ from transformers import (
     apply_chunking_to_forward,
 )
 
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.config.multimodal import BaseDummyOptions
 from aphrodite.inputs import MultiModalDataDict
 from aphrodite.model_executor.layers.activation import get_act_fn
@@ -109,13 +109,9 @@ class Blip2QFormerMultiHeadAttention(nn.Module):
         self.key = nn.Linear(kv_hidden_size, self.all_head_size)
         self.value = nn.Linear(kv_hidden_size, self.all_head_size)
 
-        self.position_embedding_type = getattr(
-            config, "position_embedding_type", "absolute"
-        )
+        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         if self.position_embedding_type != "absolute":
-            raise NotImplementedError(
-                f"Unsupported position_embedding_type: {self.position_embedding_type}"
-            )
+            raise NotImplementedError(f"Unsupported position_embedding_type: {self.position_embedding_type}")
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
@@ -151,9 +147,7 @@ class Blip2QFormerMultiHeadAttention(nn.Module):
         context_layer = torch.matmul(attention_probs_dropped, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        context_layer = context_layer.view(
-            *context_layer.size()[:-2], self.all_head_size
-        )
+        context_layer = context_layer.view(*context_layer.size()[:-2], self.all_head_size)
 
         return context_layer
 
@@ -280,9 +274,7 @@ class Blip2QFormerLayer(nn.Module):
         else:
             self.has_cross_attention = False
 
-        self.intermediate_query = Blip2QFormerIntermediate(
-            config, prefix=f"{prefix}.intermediate_query"
-        )
+        self.intermediate_query = Blip2QFormerIntermediate(config, prefix=f"{prefix}.intermediate_query")
         self.output_query = Blip2QFormerOutput(config, prefix=f"{prefix}.output_query")
 
     def forward(
@@ -523,9 +515,7 @@ class Blip2MultiModalProcessor(BaseMultiModalProcessor[Blip2ProcessingInfo]):
     info=Blip2ProcessingInfo,
     dummy_inputs=Blip2DummyInputsBuilder,
 )
-class Blip2ForConditionalGeneration(
-    nn.Module, SupportsLoRA, SupportsMultiModal, SupportsPP, SupportsQuant
-):
+class Blip2ForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMultiModal, SupportsPP, SupportsQuant):
     @classmethod
     def get_placeholder_str(cls, modality: str, i: int) -> str | None:
         if modality.startswith("image"):
@@ -552,11 +542,7 @@ class Blip2ForConditionalGeneration(
 
         with self._mark_tower_model(aphrodite_config, "image"):
             self.vision_model = BlipVisionModel(vision_config, quant_config)
-            self.query_tokens = nn.Parameter(
-                torch.zeros(
-                    1, config.num_query_tokens, config.qformer_config.hidden_size
-                )
-            )
+            self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
             self.qformer = Blip2QFormerModel(
                 config.qformer_config,
                 cache_config=cache_config,
@@ -576,13 +562,9 @@ class Blip2ForConditionalGeneration(
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> Blip2ImageInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> Blip2ImageInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         image_embeds = kwargs.pop("image_embeds", None)
 
@@ -605,9 +587,7 @@ class Blip2ForConditionalGeneration(
 
         raise AssertionError("This line should be unreachable.")
 
-    def _image_pixels_to_features(
-        self, vision_model: BlipVisionModel, pixel_values: torch.Tensor
-    ) -> torch.Tensor:
+    def _image_pixels_to_features(self, vision_model: BlipVisionModel, pixel_values: torch.Tensor) -> torch.Tensor:
         # NOTE: we skip the step to select the vision feature layer since
         # this is already done inside the vision tower
         image_features = vision_model(pixel_values)
@@ -711,8 +691,7 @@ class Blip2ForConditionalGeneration(
         if num_image_tokens <= 0:
             return 0
         assert num_image_tokens % self.config.num_query_tokens == 0, (
-            "The number of image tokens must be a multiple of "
-            "the number of query tokens."
+            "The number of image tokens must be a multiple of the number of query tokens."
         )
         num_images = num_image_tokens / self.config.num_query_tokens
         return num_images * self._vision_tokens_per_image
@@ -724,8 +703,7 @@ class Blip2ForConditionalGeneration(
         if num_vision_tokens <= 0:
             return 0
         assert num_vision_tokens % self._vision_tokens_per_image == 0, (
-            "The number of vision tokens must be a multiple of "
-            "the number of tokens per image."
+            "The number of vision tokens must be a multiple of the number of tokens per image."
         )
         num_images = num_vision_tokens / self._vision_tokens_per_image
         return num_images * self.config.num_query_tokens

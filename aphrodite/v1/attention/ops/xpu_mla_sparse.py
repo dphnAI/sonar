@@ -56,22 +56,14 @@ def _bf16_mla_sparse_kernel(
 
     off_q = cur_q * stride_q_token + cur_head[:, None] * stride_q_head + offs_d[None, :]
     mask_dmodel = offs_d < BLOCK_DMODEL
-    q = tl.load(
-        q_buffer + off_q, mask=(mask_h[:, None]) & (mask_dmodel[None, :]), other=0.0
-    )
+    q = tl.load(q_buffer + off_q, mask=(mask_h[:, None]) & (mask_dmodel[None, :]), other=0.0)
 
     if BLOCK_DPE > 0:
         offs_dpe = BLOCK_DMODEL + tl.arange(0, BLOCK_DPE)
-        off_qpe = (
-            cur_q * stride_q_token
-            + cur_head[:, None] * stride_q_head
-            + offs_dpe[None, :]
-        )
+        off_qpe = cur_q * stride_q_token + cur_head[:, None] * stride_q_head + offs_dpe[None, :]
         # assume dim_qk == BLOCK_DMODEL + BLOCK_DPE
         mask_dpe = offs_dpe < dim_qk
-        qpe = tl.load(
-            q_buffer + off_qpe, mask=(mask_h[:, None]) & (mask_dpe[None, :]), other=0.0
-        )
+        qpe = tl.load(q_buffer + off_qpe, mask=(mask_h[:, None]) & (mask_dpe[None, :]), other=0.0)
 
     e_max = tl.zeros([BLOCK_H], dtype=tl.float32) - float("inf")
     e_sum = tl.zeros([BLOCK_H], dtype=tl.float32)
@@ -81,37 +73,22 @@ def _bf16_mla_sparse_kernel(
         offs_indice = start_indice + tl.arange(0, BLOCK_N)
         mask_indice = offs_indice < index_topk
         indices = tl.load(
-            indices_ptr
-            + (
-                cur_q * stride_indices_token
-                + cur_kv_head_id * stride_indices_head
-                + offs_indice
-            ),
+            indices_ptr + (cur_q * stride_indices_token + cur_kv_head_id * stride_indices_head + offs_indice),
             mask=mask_indice,
             other=-1,
         )
 
         mask_kv = (indices >= 0) & (indices < seq_kv)
         mask_kv_d = mask_dmodel
-        offs_k = (
-            indices[None, :] * stride_k_token
-            + cur_kv_head_id * stride_k_head
-            + offs_d[:, None]
-        )
+        offs_k = indices[None, :] * stride_k_token + cur_kv_head_id * stride_k_head + offs_d[:, None]
 
         # q_nope @ k_nope
-        k = tl.load(
-            k_buffer + offs_k, mask=(mask_kv[None, :]) & (mask_kv_d[:, None]), other=0.0
-        )
+        k = tl.load(k_buffer + offs_k, mask=(mask_kv[None, :]) & (mask_kv_d[:, None]), other=0.0)
         qk = tl.dot(q, k.to(q.dtype))
 
         if BLOCK_DPE > 0:
             # q_rope @ k_rope
-            offs_kpe = (
-                indices[None, :] * stride_k_token
-                + cur_kv_head_id * stride_k_head
-                + offs_dpe[:, None]
-            )
+            offs_kpe = indices[None, :] * stride_k_token + cur_kv_head_id * stride_k_head + offs_dpe[:, None]
             mask_k_dpe = offs_dpe < dim_qk
             kpe = tl.load(
                 k_buffer + offs_kpe,
@@ -126,14 +103,8 @@ def _bf16_mla_sparse_kernel(
 
         # load v
         mask_v_d = offs_dv < dim_v
-        offs_v = (
-            indices[:, None] * stride_v_token
-            + cur_kv_head_id * stride_v_head
-            + offs_dv[None, :]
-        )
-        v = tl.load(
-            v_buffer + offs_v, mask=(mask_kv[:, None]) & (mask_v_d[None, :]), other=0.0
-        )
+        offs_v = indices[:, None] * stride_v_token + cur_kv_head_id * stride_v_head + offs_dv[None, :]
+        v = tl.load(v_buffer + offs_v, mask=(mask_kv[:, None]) & (mask_v_d[None, :]), other=0.0)
 
         # online softmax
         n_e_max = tl.maximum(tl.max(qk, 1), e_max)
@@ -156,11 +127,7 @@ def _bf16_mla_sparse_kernel(
     lse = max_logits + tl.log2(e_sum) * LOGE2
 
     # write output
-    offs_o = (
-        cur_q * stride_out_token
-        + cur_head[:, None] * stride_out_head
-        + offs_dv[None, :]
-    )
+    offs_o = cur_q * stride_out_token + cur_head[:, None] * stride_out_head + offs_dv[None, :]
     mask_out_d = offs_dv < dim_v
     tl.store(
         out_ptr + offs_o,
@@ -207,9 +174,7 @@ def triton_bf16_mla_sparse_interface(
     BLOCK_DV = 512
     assert d_v == BLOCK_DV, "only support d_v = 512"
 
-    assert dim_qk == BLOCK_DMODEL + BLOCK_DPE, (
-        "dim_qk does not match BLOCK_DMODEL + BLOCK_DPE"
-    )
+    assert dim_qk == BLOCK_DMODEL + BLOCK_DPE, "dim_qk does not match BLOCK_DMODEL + BLOCK_DPE"
     assert num_heads_kv == 1, "only support kv head = 1 for now"
     assert index_topk % BLOCK_N == 0, "index_topk must be multiple of BLOCK_N"
 
@@ -222,12 +187,8 @@ def triton_bf16_mla_sparse_interface(
     )
 
     out = torch.zeros((num_tokens, num_heads_q, d_v), dtype=q.dtype, device=q.device)
-    softmax_lse = torch.zeros(
-        (num_tokens, num_heads_q), dtype=torch.float32, device=q.device
-    )
-    max_logits = torch.zeros(
-        (num_tokens, num_heads_q), dtype=torch.float32, device=q.device
-    )
+    softmax_lse = torch.zeros((num_tokens, num_heads_q), dtype=torch.float32, device=q.device)
+    max_logits = torch.zeros((num_tokens, num_heads_q), dtype=torch.float32, device=q.device)
 
     k = kv
     v = kv[..., :d_v]

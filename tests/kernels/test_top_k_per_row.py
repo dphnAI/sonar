@@ -53,29 +53,15 @@ def _run_topk_backend(
             top_k,
         )
     elif backend == "persistent_topk":
-        workspace = torch.empty(
-            RADIX_TOPK_WORKSPACE_SIZE, dtype=torch.uint8, device="cuda"
-        )
-        torch.ops._C.persistent_topk(
-            logits, lengths, indices, workspace, top_k, max_seq_len
-        )
+        workspace = torch.empty(RADIX_TOPK_WORKSPACE_SIZE, dtype=torch.uint8, device="cuda")
+        torch.ops._C.persistent_topk(logits, lengths, indices, workspace, top_k, max_seq_len)
     elif backend == "cooperative_topk":
         if indices.shape[0] > 32:
-            pytest.skip(
-                "cooperative_topk supports <=32 rows; "
-                "persistent_topk covers larger batches"
-            )
+            pytest.skip("cooperative_topk supports <=32 rows; persistent_topk covers larger batches")
         if logits.stride(0) % 4 != 0:
-            pytest.skip(
-                "cooperative_topk requires row stride divisible by 4; "
-                "persistent_topk covers unaligned strides"
-            )
-        workspace = torch.empty(
-            RADIX_TOPK_WORKSPACE_SIZE, dtype=torch.uint8, device="cuda"
-        )
-        torch.ops._C.cooperative_topk(
-            logits, lengths, indices, workspace, top_k, max_seq_len
-        )
+            pytest.skip("cooperative_topk requires row stride divisible by 4; persistent_topk covers unaligned strides")
+        workspace = torch.empty(RADIX_TOPK_WORKSPACE_SIZE, dtype=torch.uint8, device="cuda")
+        torch.ops._C.cooperative_topk(logits, lengths, indices, workspace, top_k, max_seq_len)
     else:
         raise ValueError(f"Unknown top-k backend: {backend}")
 
@@ -93,9 +79,7 @@ def create_random_logits(
     np.random.seed(seed)
     # Generate logits with some structure to make testing more meaningful
     if data_generation == "random":
-        logits = torch.randn(
-            row_starts.shape[0], max(row_ends), dtype=dtype, device="cuda"
-        )
+        logits = torch.randn(row_starts.shape[0], max(row_ends), dtype=dtype, device="cuda")
     elif data_generation == "10LSBits":
         top_22_bits_mask = 0xFFFFFC00
         last_10_bits_mask = 0x000003FF
@@ -109,9 +93,7 @@ def create_random_logits(
             device="cuda",
         )
         # Combine: fixed top 22 bits with random last 10 bits
-        logits_bits = (fixed_top_22_bits & top_22_bits_mask) | (
-            random_bottom_bits & last_10_bits_mask
-        )
+        logits_bits = (fixed_top_22_bits & top_22_bits_mask) | (random_bottom_bits & last_10_bits_mask)
         logits = logits_bits.view(dtype)
 
     if clean_logits:
@@ -120,9 +102,7 @@ def create_random_logits(
     return logits
 
 
-def create_row_boundaries(
-    seq_len: int, vocab_size: int
-) -> tuple[torch.Tensor, torch.Tensor]:
+def create_row_boundaries(seq_len: int, vocab_size: int) -> tuple[torch.Tensor, torch.Tensor]:
     """Create row start and end indices for testing."""
     row_starts = torch.zeros(seq_len, dtype=torch.int32, device="cuda")
     row_ends = torch.arange(1, seq_len + 1, device="cuda", dtype=torch.int32)
@@ -214,9 +194,9 @@ def validate_topk_against_reference(
         idx = logits[i, :row_end].topk(k_i, dim=-1)[1]
         torch_indices[i, :k_i] = idx
 
-    assert compare_top_k_results(
-        logits, cuda_indices, torch_indices, row_starts, row_ends, top_k
-    ), f"{kernel_name} results don't match torch.topk"
+    assert compare_top_k_results(logits, cuda_indices, torch_indices, row_starts, row_ends, top_k), (
+        f"{kernel_name} results don't match torch.topk"
+    )
 
 
 @pytest.mark.parametrize("num_rows", NUM_ROWS)
@@ -238,9 +218,7 @@ def test_top_k_per_row(
     # Create test data
     vocab_size = 20000
     row_starts, row_ends = create_row_boundaries(num_rows, vocab_size)
-    logits = create_random_logits(
-        row_starts, row_ends, torch.float32, 42, clean_logits, "random"
-    )
+    logits = create_random_logits(row_starts, row_ends, torch.float32, 42, clean_logits, "random")
 
     # Create output tensors
     indices = torch.empty((num_rows, top_k), dtype=torch.int32, device="cuda")
@@ -266,9 +244,9 @@ def test_top_k_per_row(
         torch_indices[i, :k_i] = idx
 
     # Compare results
-    assert compare_top_k_results(
-        logits, indices, torch_indices, row_starts, row_ends, top_k
-    ), "CUDA top_k_per_row_prefill results don't match torch.topk"
+    assert compare_top_k_results(logits, indices, torch_indices, row_starts, row_ends, top_k), (
+        "CUDA top_k_per_row_prefill results don't match torch.topk"
+    )
 
 
 def _run_top_k_per_row_decode_test(
@@ -297,9 +275,7 @@ def _run_top_k_per_row_decode_test(
     row_indices = torch.arange(num_rows, device="cuda") // next_n
     next_n_offset = torch.arange(num_rows, device="cuda") % next_n
     row_ends = seq_lens[row_indices] - next_n + next_n_offset + 1
-    logits = create_random_logits(
-        row_starts, row_ends, torch.float32, 42, clean_logits, data_generation
-    )
+    logits = create_random_logits(row_starts, row_ends, torch.float32, 42, clean_logits, data_generation)
 
     # Create output tensors
     indices = torch.empty((num_rows, top_k), dtype=torch.int32, device="cuda")
@@ -327,9 +303,9 @@ def _run_top_k_per_row_decode_test(
         torch_indices[i, :k_i] = idx
 
     # Compare results
-    assert compare_top_k_results(
-        logits, indices, torch_indices, row_starts, row_ends, top_k
-    ), "CUDA top_k_per_row_decode results don't match torch.topk"
+    assert compare_top_k_results(logits, indices, torch_indices, row_starts, row_ends, top_k), (
+        "CUDA top_k_per_row_decode results don't match torch.topk"
+    )
 
 
 @pytest.mark.parametrize("top_k", TOP_K_VALUES)
@@ -351,9 +327,7 @@ def test_top_k_per_row_decode(
     """
     set_random_seed(0)
     vocab_size = 20000
-    _run_top_k_per_row_decode_test(
-        top_k, batch_size, next_n, vocab_size, clean_logits, data_generation
-    )
+    _run_top_k_per_row_decode_test(top_k, batch_size, next_n, vocab_size, clean_logits, data_generation)
 
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="This test requires CUDA")
@@ -369,9 +343,7 @@ def test_top_k_per_row_decode_large_vocab_size(clean_logits: bool) -> None:
     next_n = 2
     vocab_size = 300000
     data_generation = "random"
-    _run_top_k_per_row_decode_test(
-        top_k, batch_size, next_n, vocab_size, clean_logits, data_generation
-    )
+    _run_top_k_per_row_decode_test(top_k, batch_size, next_n, vocab_size, clean_logits, data_generation)
 
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="This test requires CUDA")
@@ -422,9 +394,7 @@ def test_deepseek_workspace_topk(
     next_n_offset = torch.arange(num_rows, device="cuda") % next_n
     row_ends = seq_lens[row_indices] - next_n + next_n_offset + 1
 
-    logits = create_random_logits(
-        row_starts, row_ends, torch.float32, 42, clean_logits, "random"
-    )
+    logits = create_random_logits(row_starts, row_ends, torch.float32, 42, clean_logits, "random")
 
     indices = torch.empty((num_rows, top_k), dtype=torch.int32, device="cuda")
 
@@ -437,9 +407,7 @@ def test_deepseek_workspace_topk(
     max_seq_len = int(seq_lens.max().item())
     _run_topk_backend(backend, logits, lengths, indices, top_k, max_seq_len, next_n)
 
-    validate_topk_against_reference(
-        logits, indices, row_starts, row_ends, top_k, f"{backend} ({test_id})"
-    )
+    validate_topk_against_reference(logits, indices, row_starts, row_ends, top_k, f"{backend} ({test_id})")
 
 
 def run_large_context_topk_test(
@@ -475,18 +443,14 @@ def run_large_context_topk_test(
         # Each row gets its own ascending sequence based on its length
         logits = torch.empty(num_rows, max_len, dtype=torch.float32, device="cuda")
         for i, length in enumerate(seq_lens):
-            logits[i, :length] = torch.arange(
-                length, dtype=torch.float32, device="cuda"
-            )
+            logits[i, :length] = torch.arange(length, dtype=torch.float32, device="cuda")
             if length < max_len:
                 logits[i, length:] = float("-inf")
     elif data_type == "sorted_desc":
         # Each row gets its own descending sequence based on its length
         logits = torch.empty(num_rows, max_len, dtype=torch.float32, device="cuda")
         for i, length in enumerate(seq_lens):
-            logits[i, :length] = torch.arange(
-                length, 0, -1, dtype=torch.float32, device="cuda"
-            )
+            logits[i, :length] = torch.arange(length, 0, -1, dtype=torch.float32, device="cuda")
             if length < max_len:
                 logits[i, length:] = float("-inf")
     elif data_type == "all_same":
@@ -503,9 +467,7 @@ def run_large_context_topk_test(
     elif data_type == "small_differences":
         # Very small differences to test float precision
         base = torch.randn(num_rows, max_len, dtype=torch.float32, device="cuda")
-        noise = (
-            torch.randn(num_rows, max_len, dtype=torch.float32, device="cuda") * 1e-6
-        )
+        noise = torch.randn(num_rows, max_len, dtype=torch.float32, device="cuda") * 1e-6
         logits = base + noise
         for i, length in enumerate(seq_lens):
             if length < max_len:
@@ -561,9 +523,7 @@ def run_large_context_topk_test(
 
         # Check that min CUDA value >= max of values NOT in top-k
         if k_i < length:
-            non_topk_indices = torch.tensor(
-                list(set(range(length)) - cuda_set), dtype=torch.int32
-            )
+            non_topk_indices = torch.tensor(list(set(range(length)) - cuda_set), dtype=torch.int32)
             if len(non_topk_indices) > 0:
                 non_topk_vals = logits[i, non_topk_indices].cpu()
                 min_cuda_val = cuda_vals.min()
@@ -813,9 +773,7 @@ def test_cooperative_topk_512_tie_workspace_is_per_row() -> None:
     num_rows = 2
     stride = 65536
     lengths = torch.tensor([40960, 65536], dtype=torch.int32, device="cuda")
-    logits = torch.full(
-        (num_rows, stride), float("-inf"), dtype=torch.float32, device="cuda"
-    )
+    logits = torch.full((num_rows, stride), float("-inf"), dtype=torch.float32, device="cuda")
 
     # Row 0 must never select these low indices: many better row-0 ties exist.
     logits[0, :2048] = -10.0
@@ -831,8 +789,7 @@ def test_cooperative_topk_512_tie_workspace_is_per_row() -> None:
 
     row0 = indices[0].cpu()
     assert torch.all(row0 >= 2048), (
-        "cooperative_topk TopK=512 selected row-0 low-score indices, likely "
-        "from overlapping tie_ws rows"
+        "cooperative_topk TopK=512 selected row-0 low-score indices, likely from overlapping tie_ws rows"
     )
 
 
@@ -965,6 +922,5 @@ def test_workspace_topk_padded_stride(top_k: int, backend: str) -> None:
             expected_vals = logits[i, expected].cpu().sort(descending=True)[0]
             actual_vals = logits[i, actual].cpu().sort(descending=True)[0]
             assert torch.allclose(expected_vals, actual_vals, rtol=1e-4, atol=1e-4), (
-                f"Row {i}: {backend} with padded stride doesn't match. "
-                f"seq_len={sl}, stride={padded_stride}"
+                f"Row {i}: {backend} with padded stride doesn't match. seq_len={sl}, stride={padded_stride}"
             )

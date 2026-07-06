@@ -19,9 +19,7 @@ def assumes(obj, attr, is_callable=False, is_instance_of=None):
     import inspect
     from dataclasses import is_dataclass
 
-    assumption_msg = (
-        f"LMCache connector currently assumes that {obj} has a(n) {attr} attribute"
-    )
+    assumption_msg = f"LMCache connector currently assumes that {obj} has a(n) {attr} attribute"
     if hasattr(obj, attr):
         attr_value = getattr(obj, attr)
     elif is_dataclass(obj) and attr in getattr(obj, "__dataclass_fields__", {}):
@@ -43,9 +41,7 @@ def assumes(obj, attr, is_callable=False, is_instance_of=None):
             assert fget is not None, f"Property {obj}.{attr} has no fget"
             sig = inspect.signature(fget)
             ret_anno = sig.return_annotation
-            assert ret_anno is not inspect._empty, (
-                f"Property {obj}.{attr} has no return annotation"
-            )
+            assert ret_anno is not inspect._empty, f"Property {obj}.{attr} has no return annotation"
             assert ret_anno == is_instance_of, assumption_msg
         else:
             if isinstance(attr_value, type):
@@ -54,9 +50,7 @@ def assumes(obj, attr, is_callable=False, is_instance_of=None):
                 assert isinstance(attr_value, is_instance_of), assumption_msg
 
 
-@pytest.mark.skipif(
-    current_platform.is_rocm(), reason="Requires libcudart.so, not available on ROCm"
-)
+@pytest.mark.skipif(current_platform.is_rocm(), reason="Requires libcudart.so, not available on ROCm")
 def test_multimodal_interface():
     # protect against interface changes
     from aphrodite.multimodal.inputs import PlaceholderRange
@@ -65,9 +59,7 @@ def test_multimodal_interface():
     assumes(PlaceholderRange, "length")
 
 
-@pytest.mark.skipif(
-    current_platform.is_rocm(), reason="Requires libcudart.so, not available on ROCm"
-)
+@pytest.mark.skipif(current_platform.is_rocm(), reason="Requires libcudart.so, not available on ROCm")
 def test_config_interface():
     # protect against interface changes
     from aphrodite.config import AphroditeConfig
@@ -132,9 +124,7 @@ def test_config_interface():
     )
 
 
-@pytest.mark.skipif(
-    current_platform.is_rocm(), reason="Requires libcudart.so, not available on ROCm"
-)
+@pytest.mark.skipif(current_platform.is_rocm(), reason="Requires libcudart.so, not available on ROCm")
 def test_request_interface():
     # protect against interface changes
     from types import NoneType
@@ -187,9 +177,7 @@ def test_sampling_params_interface():
         "lmcache.tag.user": "example_user_1",
         "lmcache.ttl": 60,
     }
-    sampling_params = SamplingParams(
-        extra_args={"kv_transfer_params": kv_transfer_params}
-    )
+    sampling_params = SamplingParams(extra_args={"kv_transfer_params": kv_transfer_params})
     assert sampling_params.extra_args["kv_transfer_params"] == kv_transfer_params
 
 

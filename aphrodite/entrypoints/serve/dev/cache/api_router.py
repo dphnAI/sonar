@@ -37,9 +37,7 @@ async def reset_prefix_cache(
     """
     logger.info("Resetting prefix cache...")
 
-    await engine_client(raw_request).reset_prefix_cache(
-        reset_running_requests, reset_external
-    )
+    await engine_client(raw_request).reset_prefix_cache(reset_running_requests, reset_external)
     return Response(status_code=200)
 
 

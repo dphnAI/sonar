@@ -28,7 +28,7 @@ from torch import nn
 from transformers import GPT2Config
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed.parallel_state import (
     get_pp_group,
     get_tensor_model_parallel_world_size,
@@ -158,9 +158,7 @@ class GPT2Block(nn.Module):
         inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.attn = GPT2Attention(
-            config, cache_config, quant_config, prefix=f"{prefix}.attn"
-        )
+        self.attn = GPT2Attention(config, cache_config, quant_config, prefix=f"{prefix}.attn")
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.mlp = GPT2MLP(inner_dim, config, quant_config, prefix=f"{prefix}.mlp")
 
@@ -209,9 +207,7 @@ class GPT2Model(nn.Module):
             prefix=f"{prefix}.h",
         )
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
-        self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
-            ["hidden_states"], config.n_embd
-        )
+        self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(["hidden_states"], config.n_embd)
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.wte(input_ids)
@@ -276,9 +272,7 @@ class GPT2LMHeadModel(nn.Module, SupportsPP):
         quant_config = aphrodite_config.quant_config
         self.config = config
         self.quant_config = quant_config
-        self.transformer = GPT2Model(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "transformer")
-        )
+        self.transformer = GPT2Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "transformer"))
         self.lm_head = ParallelLMHead(
             self.config.vocab_size,
             self.config.hidden_size,
@@ -289,9 +283,7 @@ class GPT2LMHeadModel(nn.Module, SupportsPP):
             self.lm_head = self.lm_head.tie_weights(self.transformer.wte)
 
         self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.make_empty_intermediate_tensors = (
-            self.transformer.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.transformer.make_empty_intermediate_tensors
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.transformer.embed_input_ids(input_ids)
@@ -303,9 +295,7 @@ class GPT2LMHeadModel(nn.Module, SupportsPP):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.transformer(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.transformer(input_ids, positions, intermediate_tensors, inputs_embeds)
         return hidden_states
 
     def compute_logits(
@@ -338,9 +328,7 @@ class GPT2ForSequenceClassification(nn.Module, SupportsCrossEncoding):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
         config = aphrodite_config.model_config.hf_config
-        self.transformer = GPT2Model(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "transformer")
-        )
+        self.transformer = GPT2Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "transformer"))
         self.score = nn.Linear(
             config.n_embd,
             config.num_labels,
@@ -381,10 +369,6 @@ def _add_transformer_prefix(
     weights: Iterable[tuple[str, torch.Tensor]],
 ) -> Iterable[tuple[str, torch.Tensor]]:
     for name, tensor in weights:
-        if (
-            not name.startswith("transformer.")
-            and not name.startswith("lm_head.")
-            and not name.startswith("score.")
-        ):
+        if not name.startswith("transformer.") and not name.startswith("lm_head.") and not name.startswith("score."):
             name = "transformer." + name
         yield name, tensor

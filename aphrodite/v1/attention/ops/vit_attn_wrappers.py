@@ -46,9 +46,7 @@ def flash_attn_maxseqlen_wrapper(
 
     q_len = q.size(1)
     if cu_seqlens is None:
-        cu_seqlens = torch.arange(
-            0, (batch_size + 1) * q_len, step=q_len, dtype=torch.int32, device=q.device
-        )
+        cu_seqlens = torch.arange(0, (batch_size + 1) * q_len, step=q_len, dtype=torch.int32, device=q.device)
     max_seqlen = q_len if max_seqlen is None else max_seqlen.item()
 
     q, k, v = (einops.rearrange(x, "b s ... -> (b s) ...") for x in [q, k, v])
@@ -127,9 +125,7 @@ def triton_attn_wrapper(
 
     q_len = q.size(1)
     if cu_seqlens is None:
-        cu_seqlens = torch.arange(
-            0, (batch_size + 1) * q_len, step=q_len, dtype=torch.int32, device=q.device
-        )
+        cu_seqlens = torch.arange(0, (batch_size + 1) * q_len, step=q_len, dtype=torch.int32, device=q.device)
     max_seqlen = q_len if max_seqlen is None else max_seqlen.item()
 
     q, k, v = (einops.rearrange(x, "b s ... -> (b s) ...") for x in [q, k, v])
@@ -203,9 +199,7 @@ def apply_sdpa(
     (batch_size x seq_len x num_heads x head_size)
     """
     q, k, v = (einops.rearrange(x, "b s h d -> b h s d") for x in [q, k, v])
-    output = F.scaled_dot_product_attention(
-        q, k, v, dropout_p=0.0, scale=scale, enable_gqa=enable_gqa
-    )
+    output = F.scaled_dot_product_attention(q, k, v, dropout_p=0.0, scale=scale, enable_gqa=enable_gqa)
     output = einops.rearrange(output, "b h s d -> b s h d ")
     return output
 
@@ -269,9 +263,7 @@ def vit_torch_sdpa_wrapper(
     cu_seqlens: torch.Tensor | None = None,
     enable_gqa: bool = False,
 ) -> torch.Tensor:
-    return torch.ops.aphrodite.torch_sdpa_wrapper(
-        q, k, v, scale, cu_seqlens, enable_gqa=enable_gqa
-    )
+    return torch.ops.aphrodite.torch_sdpa_wrapper(q, k, v, scale, cu_seqlens, enable_gqa=enable_gqa)
 
 
 def flashinfer_wrapper(

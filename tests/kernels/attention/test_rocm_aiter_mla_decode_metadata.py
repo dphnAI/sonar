@@ -75,15 +75,15 @@ def _build_decode_metadata():
     args/kwargs the builder passed to ``get_mla_metadata_v1``, so the golden can
     be recomputed from the identical inputs.
     """
-    from tests.v1.attention.utils import (
-        BatchSpec,
-        create_common_attn_metadata,
-        create_aphrodite_config,
-    )
     from aphrodite.config.aphrodite import set_current_aphrodite_config
     from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
     from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
     from aphrodite.v1.worker.workspace import init_workspace_manager
+    from tests.v1.attention.utils import (
+        BatchSpec,
+        create_aphrodite_config,
+        create_common_attn_metadata,
+    )
 
     device = torch.device("cuda:0")
 
@@ -112,8 +112,8 @@ def _build_decode_metadata():
     # The builder reads layer.prefill_backend from static_forward_context; a
     # stub with the attribute is enough for metadata construction.
     layer_name = "placeholder"
-    aphrodite_config.compilation_config.static_forward_context[layer_name] = (
-        types.SimpleNamespace(prefill_backend=torch.empty((1,)))
+    aphrodite_config.compilation_config.static_forward_context[layer_name] = types.SimpleNamespace(
+        prefill_backend=torch.empty((1,))
     )
 
     init_workspace_manager(device)
@@ -127,9 +127,7 @@ def _build_decode_metadata():
 
     with set_current_aphrodite_config(aphrodite_config):
         builder = builder_cls(spec, [layer_name], aphrodite_config, device)
-        common_attn_metadata = create_common_attn_metadata(
-            batch_spec, PAGE_SIZE, device, arange_block_indices=True
-        )
+        common_attn_metadata = create_common_attn_metadata(batch_spec, PAGE_SIZE, device, arange_block_indices=True)
 
         import aiter
 
@@ -192,8 +190,7 @@ def test_persistent_decode_metadata_matches_fp8_golden():
     mismatched = [
         name
         for name in _CONTENT_METADATA_FIELDS
-        if getattr(metadata, name).shape != golden[name].shape
-        or not torch.equal(getattr(metadata, name), golden[name])
+        if getattr(metadata, name).shape != golden[name].shape or not torch.equal(getattr(metadata, name), golden[name])
     ]
     assert not mismatched, (
         "AITER MLA persistent decode metadata does not match the fp8/bf16 "

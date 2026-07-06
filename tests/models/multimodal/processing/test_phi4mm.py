@@ -58,7 +58,5 @@ def test_processor_override(
     )
 
     # Ensure we have the right number of placeholders per num_crops size
-    img_tok_count = processed_inputs["prompt_token_ids"].count(
-        _IMAGE_PLACEHOLDER_TOKEN_ID
-    )
+    img_tok_count = processed_inputs["prompt_token_ids"].count(_IMAGE_PLACEHOLDER_TOKEN_ID)
     assert img_tok_count == expected_toks_per_img * num_imgs

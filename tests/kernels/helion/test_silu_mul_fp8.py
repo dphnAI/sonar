@@ -100,9 +100,7 @@ class TestSiluMulFp8ConfigPicker:
             CaseKey({"intermediate": 5120, "numtokens": 256}),
         ]
 
-        input_tensor = torch.randn(
-            32, 2 * intermediate_size, dtype=torch.bfloat16, device="cuda"
-        )
+        input_tensor = torch.randn(32, 2 * intermediate_size, dtype=torch.bfloat16, device="cuda")
         scale = torch.tensor([0.5], dtype=torch.float32, device="cuda")
         args = (input_tensor, scale)
 
@@ -185,9 +183,7 @@ class TestSiluMulFp8Correctness:
         batch_size, input_size = 32, 8192
         intermediate_size = input_size // 2
 
-        input_tensor = torch.randn(
-            batch_size, input_size, dtype=torch.bfloat16, device="cuda"
-        )
+        input_tensor = torch.randn(batch_size, input_size, dtype=torch.bfloat16, device="cuda")
         scale = torch.tensor([0.5], dtype=torch.float32, device="cuda")
 
         output = silu_mul_fp8(input_tensor, scale)
@@ -200,9 +196,7 @@ class TestSiluMulFp8Correctness:
         skip_if_platform_unsupported()
         batch_size, input_size = 16, 4096
 
-        input_tensor = torch.randn(
-            batch_size, input_size, dtype=torch.bfloat16, device="cuda"
-        )
+        input_tensor = torch.randn(batch_size, input_size, dtype=torch.bfloat16, device="cuda")
 
         scales = [0.1, 0.5, 1.0, 2.0, 10.0]
 
@@ -248,9 +242,7 @@ class TestSiluMulFp8Correctness:
         ref_f32 = reference_output.to(torch.float32)
         helion_f32 = helion_output.to(torch.float32)
 
-        torch.testing.assert_close(
-            helion_f32, ref_f32, atol=0.05, rtol=0.05, msg=f"Mismatch for shape={shape}"
-        )
+        torch.testing.assert_close(helion_f32, ref_f32, atol=0.05, rtol=0.05, msg=f"Mismatch for shape={shape}")
 
 
 def silu_mul_fp8_pytorch(input: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
@@ -278,9 +270,7 @@ class TestSiluMulFp8PytorchReference:
     def test_silu_mul_fp8_vs_pytorch(self, batch_size, intermediate_size, dtype):
         skip_if_platform_unsupported()
 
-        input_tensor = torch.randn(
-            batch_size, 2 * intermediate_size, dtype=dtype, device="cuda"
-        )
+        input_tensor = torch.randn(batch_size, 2 * intermediate_size, dtype=dtype, device="cuda")
         scale = torch.tensor([0.5], dtype=torch.float32, device="cuda")
 
         pytorch_output = silu_mul_fp8_pytorch(input_tensor, scale)
@@ -298,10 +288,7 @@ class TestSiluMulFp8PytorchReference:
             pytorch_f32,
             atol=0.05,
             rtol=0.05,
-            msg=(
-                f"Mismatch at batch={batch_size}, size={intermediate_size}, "
-                f"dtype={dtype}"
-            ),
+            msg=(f"Mismatch at batch={batch_size}, size={intermediate_size}, dtype={dtype}"),
         )
 
     @pytest.mark.parametrize(

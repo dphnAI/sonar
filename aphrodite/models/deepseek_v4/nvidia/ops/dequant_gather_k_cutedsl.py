@@ -184,12 +184,7 @@ class DequantGatherKCacheKernel:
 
         # Start prefetch.
         for i in cutlass.range_constexpr(self.num_stages - 1):
-            next_pos = (
-                start_pos
-                + worker_id * self.num_warps
-                + warp_id
-                + i * num_workers * self.num_warps
-            )
+            next_pos = start_pos + worker_id * self.num_warps + warp_id + i * num_workers * self.num_warps
             if next_pos < seq_len:
                 self.load_g2s(
                     k_data_slice,
@@ -255,9 +250,7 @@ class DequantGatherKCacheKernel:
             # chunk_id * 8 // group_size.
             scale0_u32 = Uint32(s_kscale[lane_id * 8 // self.group_size, compute_stage])
             scale0_bf16x2 = (scale0_u32 << Uint32(23)) | (scale0_u32 << Uint32(7))
-            scale1_u32 = Uint32(
-                s_kscale[(lane_id + 32) * 8 // self.group_size, compute_stage]
-            )
+            scale1_u32 = Uint32(s_kscale[(lane_id + 32) * 8 // self.group_size, compute_stage])
             scale1_bf16x2 = (scale1_u32 << Uint32(23)) | (scale1_u32 << Uint32(7))
 
             # cvt.rn.scaled::n2::ue8m0.bf16x2.e4m3x2 requires PTX 9.2

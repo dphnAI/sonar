@@ -37,9 +37,7 @@ class TestTensors:
         topk_ids = topk_ids.to(dtype=torch.int64)
         return TestTensors(topk_ids=topk_ids)
 
-    def with_ep_rank(
-        self, ep_rank: int, num_global_experts: int, num_local_experts: int, device: str
-    ):
+    def with_ep_rank(self, ep_rank: int, num_global_experts: int, num_local_experts: int, device: str):
         # make an expert map
         expert_map = torch.empty((num_global_experts), device=device, dtype=torch.int32)
         expert_map.fill_(-1)
@@ -74,9 +72,7 @@ def do_test_compute_expert_num_tokens(
 ):
     assert num_topk <= num_experts
 
-    tt = TestTensors.make(
-        num_tokens, num_topk, num_experts, topk_ids_dtype=topk_ids_dtype, device="cpu"
-    )
+    tt = TestTensors.make(num_tokens, num_topk, num_experts, topk_ids_dtype=topk_ids_dtype, device="cpu")
 
     num_global_experts = num_experts
     assert num_global_experts % ep_size == 0
@@ -84,9 +80,7 @@ def do_test_compute_expert_num_tokens(
     for ep_rank in range(ep_size):
         tt_rank = tt.with_ep_rank(ep_rank, num_global_experts, num_local_experts, "cpu")
 
-        ref_expert_num_tokens = torch.zeros(
-            (num_local_experts), device="cpu", dtype=torch.int32
-        )
+        ref_expert_num_tokens = torch.zeros((num_local_experts), device="cpu", dtype=torch.int32)
         ref_impl(tt_rank, ref_expert_num_tokens)
         ref_expert_num_tokens = ref_expert_num_tokens.to("cuda")
 
@@ -98,16 +92,10 @@ def do_test_compute_expert_num_tokens(
 
         # Test without expert map
         topk_ids = tt_rank.expert_map[tt_rank.topk_ids].to(topk_ids_dtype)
-        triton_expert_num_tokens_wo_emap = count_expert_num_tokens(
-            topk_ids, num_local_experts, expert_map=None
-        )
+        triton_expert_num_tokens_wo_emap = count_expert_num_tokens(topk_ids, num_local_experts, expert_map=None)
 
-        torch.testing.assert_close(
-            ref_expert_num_tokens, triton_expert_num_tokens_w_emap, atol=0, rtol=0
-        )
-        torch.testing.assert_close(
-            ref_expert_num_tokens, triton_expert_num_tokens_wo_emap, atol=0, rtol=0
-        )
+        torch.testing.assert_close(ref_expert_num_tokens, triton_expert_num_tokens_w_emap, atol=0, rtol=0)
+        torch.testing.assert_close(ref_expert_num_tokens, triton_expert_num_tokens_wo_emap, atol=0, rtol=0)
 
 
 @pytest.mark.parametrize("num_tokens", [1, 4, 8, 11, 127, 128, 3333, 7317])
@@ -122,18 +110,14 @@ def test_compute_expert_num_tokens(
     ep_size: int,
     topk_ids_dtype: torch.dtype,
 ):
-    do_test_compute_expert_num_tokens(
-        num_tokens, num_topk, num_experts, ep_size, topk_ids_dtype
-    )
+    do_test_compute_expert_num_tokens(num_tokens, num_topk, num_experts, ep_size, topk_ids_dtype)
 
 
 @pytest.mark.parametrize("numel", list(range(1, 8192, 111)))
 @pytest.mark.parametrize("num_experts", [32])
 @pytest.mark.parametrize("ep_size", [2])
 @pytest.mark.parametrize("topk_ids_dtype", [torch.int64])
-def test_compute_expert_num_tokens_from_numel(
-    numel: int, num_experts: int, ep_size: int, topk_ids_dtype: torch.dtype
-):
+def test_compute_expert_num_tokens_from_numel(numel: int, num_experts: int, ep_size: int, topk_ids_dtype: torch.dtype):
     do_test_compute_expert_num_tokens(
         num_tokens=numel,
         num_topk=1,

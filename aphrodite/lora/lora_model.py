@@ -80,9 +80,7 @@ class LoRAModel:
         """
         self.id = lora_model_id
 
-        assert lora_model_id > 0, (
-            f"a valid lora id should be greater than 0, got {self.id}"
-        )
+        assert lora_model_id > 0, f"a valid lora id should be greater than 0, got {self.id}"
         self.rank = rank
         self.loras: dict[str, LoRALayerWeights] = loras
         self.is_3d_lora_weight = is_3d_lora_weight
@@ -108,10 +106,7 @@ class LoRAModel:
     @staticmethod
     def _should_skip_module(module_name: str, skip_prefixes: list[str]) -> bool:
         """Check if a module should be skipped based on skip prefixes"""
-        for prefix in skip_prefixes:
-            if f".{prefix}" in module_name or module_name.startswith(prefix):
-                return True
-        return False
+        return any(f".{prefix}" in module_name or module_name.startswith(prefix) for prefix in skip_prefixes)
 
     @classmethod
     def from_lora_tensors(
@@ -134,13 +129,9 @@ class LoRAModel:
             # Skip modules based on model-defined prefixes (e.g., MTP layers)
             if skip_prefixes and cls._should_skip_module(tensor_name, skip_prefixes):
                 continue
-            module_name, is_lora_a = parse_fine_tuned_lora_name(
-                tensor_name, weights_mapper
-            )
+            module_name, is_lora_a = parse_fine_tuned_lora_name(tensor_name, weights_mapper)
             if module_name not in loras:
-                loras[module_name] = LoRALayerWeights.from_config(
-                    module_name, peft_helper
-                )
+                loras[module_name] = LoRALayerWeights.from_config(module_name, peft_helper)
 
             if is_lora_a:
                 if (
@@ -218,9 +209,7 @@ class LoRAModel:
                 if "base_layer" in lora_module:
                     continue
                 # Skip modules based on model-defined prefixes
-                if skip_prefixes and cls._should_skip_module(
-                    lora_module, skip_prefixes
-                ):
+                if skip_prefixes and cls._should_skip_module(lora_module, skip_prefixes):
                     continue
                 module_name, _ = parse_fine_tuned_lora_name(lora_module, weights_mapper)
                 # Case for expert lora weights
@@ -270,28 +259,18 @@ class LoRAModel:
                 # Load tensors if there are only expected modules.
                 check_unexpected_modules(f)
                 for module in f.keys():  # noqa
-                    if moe_ep_spec is not None and _is_remote_expert_key(
-                        module, moe_ep_spec
-                    ):
+                    if moe_ep_spec is not None and _is_remote_expert_key(module, moe_ep_spec):
                         continue
                     tensors[module] = f.get_tensor(module)
         elif os.path.isfile(lora_bin_file_path) or os.path.isfile(lora_pt_file_path):
-            lora_file_path = (
-                lora_bin_file_path
-                if os.path.isfile(lora_bin_file_path)
-                else lora_pt_file_path
-            )
+            lora_file_path = lora_bin_file_path if os.path.isfile(lora_bin_file_path) else lora_pt_file_path
             tensors = torch.load(lora_file_path, map_location=device, weights_only=True)
             check_unexpected_modules(tensors)
             if moe_ep_spec is not None:
                 # `.bin`/`.pt` adapters can't be lazy-loaded, but pruning
                 # the dict here still frees the non-local expert tensors
                 # before the dtype cast / pin_memory work that follows.
-                tensors = {
-                    k: v
-                    for k, v in tensors.items()
-                    if not _is_remote_expert_key(k, moe_ep_spec)
-                }
+                tensors = {k: v for k, v in tensors.items() if not _is_remote_expert_key(k, moe_ep_spec)}
         else:
             raise ValueError(f"{lora_dir} doesn't contain tensors")
 

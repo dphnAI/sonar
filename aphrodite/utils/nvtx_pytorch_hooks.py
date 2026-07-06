@@ -61,9 +61,7 @@ def process_layer_params(module_obj):
         convtranspose_params["groups"] = module_obj.groups
         convtranspose_params["padding_mode"] = module_obj.padding_mode
         param_info = convtranspose_params
-    elif isinstance(
-        module_obj, (torch.nn.MaxPool1d, torch.nn.MaxPool2d, torch.nn.MaxPool3d)
-    ):
+    elif isinstance(module_obj, (torch.nn.MaxPool1d, torch.nn.MaxPool2d, torch.nn.MaxPool3d)):
 
         def _handle_int_or_tuple(parameter):
             if isinstance(parameter, tuple):
@@ -77,9 +75,7 @@ def process_layer_params(module_obj):
         pooling_params["padding"] = _handle_int_or_tuple(module_obj.padding)
         pooling_params["dilation"] = _handle_int_or_tuple(module_obj.dilation)
         param_info = pooling_params
-    elif isinstance(
-        module_obj, (torch.nn.AvgPool1d, torch.nn.AvgPool2d, torch.nn.AvgPool3d)
-    ):
+    elif isinstance(module_obj, (torch.nn.AvgPool1d, torch.nn.AvgPool2d, torch.nn.AvgPool3d)):
         pooling_params = {}
         pooling_params["filter_dim"] = [
             module_obj.kernel_size,
@@ -135,9 +131,7 @@ def process_layer_params(module_obj):
     return param_info
 
 
-def construct_marker_dict_and_push(
-    module_name, module_obj, in_tensor, kwargs=None, out_tensor=None
-):
+def construct_marker_dict_and_push(module_name, module_obj, in_tensor, kwargs=None, out_tensor=None):
     marker_dict = {}
     marker_dict["Module"] = module_name
 
@@ -241,9 +235,7 @@ class PytHooks:
         """
         nvtx.range_pop()
         module_name = self.module_to_name_map.get(module_obj, "unknown")
-        construct_marker_dict_and_push(
-            module_name, module_obj, in_tensor=None, kwargs=None, out_tensor=out_tensor
-        )
+        construct_marker_dict_and_push(module_name, module_obj, in_tensor=None, kwargs=None, out_tensor=out_tensor)
         nvtx.range_pop()
         return
 
@@ -252,9 +244,7 @@ class PytHooks:
         This function is called before the module executes.
         """
         module_name = self.module_to_name_map.get(module_obj, "unknown")
-        construct_marker_dict_and_push(
-            module_name, module_obj, in_tensor=in_tensor, kwargs=kwargs, out_tensor=None
-        )
+        construct_marker_dict_and_push(module_name, module_obj, in_tensor=in_tensor, kwargs=kwargs, out_tensor=None)
         return
 
     def register_hooks(self, network_model, module_prefix="top"):

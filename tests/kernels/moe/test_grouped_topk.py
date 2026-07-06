@@ -10,8 +10,8 @@ import torch
 
 import aphrodite.envs as envs
 from aphrodite.config import (
-    CompilationConfig,
     AphroditeConfig,
+    CompilationConfig,
     get_cached_compilation_config,
     set_current_aphrodite_config,
 )
@@ -23,9 +23,7 @@ from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import set_random_seed
 
 
-@pytest.mark.skipif(
-    not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform."
-)
+@pytest.mark.skipif(not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform.")
 @pytest.mark.parametrize("n_token", [1, 33, 64])
 @pytest.mark.parametrize("n_hidden", [1024, 2048])
 @pytest.mark.parametrize(
@@ -57,9 +55,7 @@ def test_grouped_topk(
     input_dtype: torch.dtype,
     bias_dtype: torch.dtype,
 ):
-    aphrodite_config = AphroditeConfig(
-        compilation_config=CompilationConfig(custom_ops=["all", "+grouped_topk"])
-    )
+    aphrodite_config = AphroditeConfig(compilation_config=CompilationConfig(custom_ops=["all", "+grouped_topk"]))
     get_cached_compilation_config.cache_clear()
 
     set_random_seed(0)
@@ -97,7 +93,5 @@ def test_grouped_topk(
             e_score_correction_bias=e_score_correction_bias,
         )
 
-        torch.testing.assert_close(
-            baseline_topk_weights, test_topk_weights, atol=2e-2, rtol=0
-        )
+        torch.testing.assert_close(baseline_topk_weights, test_topk_weights, atol=2e-2, rtol=0)
         torch.testing.assert_close(baseline_topk_ids, test_topk_ids, atol=0, rtol=0)

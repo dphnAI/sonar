@@ -140,9 +140,7 @@ class VisualTokenizer(torch.nn.Module):
         tokens = torch.softmax(logits, dim=-1, dtype=torch.float32).to(logits.dtype)
         return tokens
 
-    def encode(
-        self, pixel_values: torch.Tensor, grid_thws: torch.Tensor
-    ) -> torch.Tensor:
+    def encode(self, pixel_values: torch.Tensor, grid_thws: torch.Tensor) -> torch.Tensor:
         features = self.vit(pixel_values, grid_thws)
         # refer to qwen2.5-vl patchmerger
         seq_len, _ = features.shape
@@ -150,9 +148,7 @@ class VisualTokenizer(torch.nn.Module):
 
         return features
 
-    def forward(
-        self, pixel_values: torch.Tensor, grid_thws: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, grid_thws: torch.Tensor) -> torch.Tensor:
         features = self.encode(pixel_values, grid_thws)
         logits = self.head(features)
         tokens = self.tokenize(logits)
@@ -218,9 +214,7 @@ class Ovis2_5ProcessingInfo(BaseProcessingInfo):
 
     def get_max_image_tokens(self) -> int:
         target_width, target_height = self.get_image_size_with_most_features()
-        return self.get_num_image_tokens(
-            image_width=target_width, image_height=target_height
-        )
+        return self.get_num_image_tokens(image_width=target_width, image_height=target_height)
 
     def _get_max_video_frames(self, max_tokens: int) -> int:
         target_width, target_height = self.get_image_size_with_most_features()
@@ -290,9 +284,7 @@ class Ovis2_5DummyInputsBuilder(BaseDummyInputsBuilder[Ovis2_5ProcessingInfo]):
         num_videos = mm_counts.get("video", 0)
 
         target_width, target_height = self.info.get_image_size_with_most_features()
-        target_num_frames = self.info.get_num_frames_with_most_features(
-            seq_len, mm_counts
-        )
+        target_num_frames = self.info.get_num_frames_with_most_features(seq_len, mm_counts)
 
         image_overrides = mm_options.get("image")
         video_overrides = mm_options.get("video")
@@ -355,23 +347,15 @@ class Ovis2_5MultiModalProcessor(BaseMultiModalProcessor[Ovis2_5ProcessingInfo])
 
         if "videos" in mm_data:
             visual_indicators = [
-                hf_processor.construct_visual_indicators((1, 1, 1), True)
-                for grid in processed_outputs["video_grids"]
+                hf_processor.construct_visual_indicators((1, 1, 1), True) for grid in processed_outputs["video_grids"]
             ]
-            indicator_tokens = [
-                self.visual_indicators_to_visual_tokens(indicator)
-                for indicator in visual_indicators
-            ]
+            indicator_tokens = [self.visual_indicators_to_visual_tokens(indicator) for indicator in visual_indicators]
             processed_outputs["video_indicator_tokens"] = torch.tensor(indicator_tokens)
         if "images" in mm_data:
             visual_indicators = [
-                hf_processor.construct_visual_indicators((1, 1, 1), False)
-                for grid in processed_outputs["grids"]
+                hf_processor.construct_visual_indicators((1, 1, 1), False) for grid in processed_outputs["grids"]
             ]
-            indicator_tokens = [
-                self.visual_indicators_to_visual_tokens(indicator)
-                for indicator in visual_indicators
-            ]
+            indicator_tokens = [self.visual_indicators_to_visual_tokens(indicator) for indicator in visual_indicators]
 
             processed_outputs["indicator_tokens"] = torch.tensor(indicator_tokens)
         return processed_outputs
@@ -471,13 +455,9 @@ class Ovis2_5(nn.Module, SupportsMultiModal, SupportsPP):
 
         self.image_pad_token_id: int = IMAGE_PAD_TOKEN_ID
 
-        self.make_empty_intermediate_tensors = (
-            self.get_language_model().make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.get_language_model().make_empty_intermediate_tensors
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> Ovis2_5ImagePatchInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> Ovis2_5ImagePatchInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         indicator_tokens = kwargs.pop("indicator_tokens", None)
         grids = kwargs.pop("grids", None)
@@ -486,32 +466,22 @@ class Ovis2_5(nn.Module, SupportsMultiModal, SupportsPP):
 
         if pixel_values is not None and indicator_tokens is not None:
             if not isinstance(pixel_values, (torch.Tensor, list)):
-                raise ValueError(
-                    f"Incorrect type of pixel values. Got type: {type(pixel_values)}"
-                )
+                raise ValueError(f"Incorrect type of pixel values. Got type: {type(pixel_values)}")
 
             if not isinstance(indicator_tokens, (torch.Tensor, list)):
-                raise ValueError(
-                    "Incorrect type of indicator_tokens. "
-                    f"Got type: {type(indicator_tokens)}"
-                )
+                raise ValueError(f"Incorrect type of indicator_tokens. Got type: {type(indicator_tokens)}")
 
             return Ovis2_5ImagePatchInputs(
                 type="image_patches",
                 flat_data=flatten_bn(pixel_values, concat=True),
-                patches_per_item=[
-                    x.shape[0] // (self.config.vit_config.hidden_stride**2)
-                    for x in pixel_values
-                ],
+                patches_per_item=[x.shape[0] // (self.config.vit_config.hidden_stride**2) for x in pixel_values],
                 indicator_tokens=flatten_bn(indicator_tokens, concat=True),
                 grids=flatten_bn(grids, concat=True),
             )
 
         raise AssertionError("This line should be unreachable.")
 
-    def _parse_and_validate_video_input(
-        self, **kwargs: object
-    ) -> Ovis2_5VideoPatchInputs | None:
+    def _parse_and_validate_video_input(self, **kwargs: object) -> Ovis2_5VideoPatchInputs | None:
         pixel_values = kwargs.pop("video_pixel_values", None)
         indicator_tokens = kwargs.pop("video_indicator_tokens", None)
         grids = kwargs.pop("video_grids", None)
@@ -520,23 +490,15 @@ class Ovis2_5(nn.Module, SupportsMultiModal, SupportsPP):
 
         if pixel_values is not None and indicator_tokens is not None:
             if not isinstance(pixel_values, (torch.Tensor, list)):
-                raise ValueError(
-                    f"Incorrect type of pixel values. Got type: {type(pixel_values)}"
-                )
+                raise ValueError(f"Incorrect type of pixel values. Got type: {type(pixel_values)}")
 
             if not isinstance(indicator_tokens, (torch.Tensor, list)):
-                raise ValueError(
-                    "Incorrect type of indicator_tokens. "
-                    f"Got type: {type(indicator_tokens)}"
-                )
+                raise ValueError(f"Incorrect type of indicator_tokens. Got type: {type(indicator_tokens)}")
 
             return Ovis2_5VideoPatchInputs(
                 type="video_patches",
                 flat_data=flatten_bn(pixel_values, concat=True),
-                patches_per_item=[
-                    x.shape[0] // (self.config.vit_config.hidden_stride**2)
-                    for x in pixel_values
-                ],
+                patches_per_item=[x.shape[0] // (self.config.vit_config.hidden_stride**2) for x in pixel_values],
                 indicator_tokens=flatten_bn(indicator_tokens, concat=True),
                 grids=flatten_bn(grids, concat=True),
             )
@@ -551,14 +513,10 @@ class Ovis2_5(nn.Module, SupportsMultiModal, SupportsPP):
         indicator_tokens = visual_input["indicator_tokens"]
         grid_thws = visual_input["grids"]
 
-        indicator_per_image = list(
-            map(lambda x: 2 if x > 1 else x + 2, patches_per_image)
-        )
+        indicator_per_image = list(map(lambda x: 2 if x > 1 else x + 2, patches_per_image))
 
         target_dtype = self.visual_tokenizer.dtype
-        visual_tokens = self.visual_tokenizer(
-            image_patches_flat.to(target_dtype), grid_thws
-        )
+        visual_tokens = self.visual_tokenizer(image_patches_flat.to(target_dtype), grid_thws)
 
         visual_embeds = self.vte(visual_tokens)  # 1:1 numeric eq.
         indicator_embeds = self.vte(indicator_tokens)
@@ -567,15 +525,11 @@ class Ovis2_5(nn.Module, SupportsMultiModal, SupportsPP):
         indicator_embeds_per_image = indicator_embeds.split(indicator_per_image)
 
         vision_embeddings = []
-        for indicator, visual in zip(
-            indicator_embeds_per_image, visual_embeds_per_image
-        ):
+        for indicator, visual in zip(indicator_embeds_per_image, visual_embeds_per_image):
             vision_embeddings_per_image = []
             visual = visual.unsqueeze(0)
             for i in range(visual.shape[0]):
-                vision_embeddings_per_image.append(
-                    torch.cat([indicator[i : i + 1], visual[i]], dim=0)
-                )
+                vision_embeddings_per_image.append(torch.cat([indicator[i : i + 1], visual[i]], dim=0))
             vision_embeddings_per_image.append(indicator[i + 1 :])
             vision_embeddings.append(torch.cat(vision_embeddings_per_image, dim=0))
         return tuple(vision_embeddings)
@@ -586,14 +540,10 @@ class Ovis2_5(nn.Module, SupportsMultiModal, SupportsPP):
         # Preserve the order of modalities if there are multiple of them
         # from the order of kwargs.
         for input_key in kwargs:
-            if (
-                input_key in ("pixel_values", "indicator_tokens", "grids")
-                and "images" not in modalities
-            ):
+            if input_key in ("pixel_values", "indicator_tokens", "grids") and "images" not in modalities:
                 modalities["images"] = self._parse_and_validate_image_input(**kwargs)
             if (
-                input_key
-                in ("video_pixel_values", "video_indicator_tokens", "video_grids")
+                input_key in ("video_pixel_values", "video_indicator_tokens", "video_grids")
                 and "videos" not in modalities
             ):
                 modalities["videos"] = self._parse_and_validate_video_input(**kwargs)

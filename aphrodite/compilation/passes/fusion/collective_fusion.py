@@ -21,13 +21,13 @@ from aphrodite.logger import init_logger
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import direct_register_custom_op
 
-from ..inductor_pass import enable_fake_mode
 from ..aphrodite_inductor_pass import (
     AphroditeFusionPatternMatcherPass,
     AphroditeInductorPass,
     AphroditePatternMatcherPass,
     AphroditePatternReplacement,
 )
+from ..inductor_pass import enable_fake_mode
 
 FP8_DTYPE = current_platform.fp8_dtype()
 
@@ -51,15 +51,9 @@ def _flashinfer_scaled_mm_out(
     from aphrodite.utils.flashinfer import flashinfer_scaled_fp8_mm_out
 
     assert bias is None, "FlashInfer symm_mem adapter does not support bias"
-    assert scale_result is None, (
-        "FlashInfer symm_mem adapter does not support result scaling"
-    )
-    assert not use_fast_accum, (
-        "FlashInfer symm_mem adapter does not support use_fast_accum"
-    )
-    assert A.ndim == 2 and B.ndim == 2 and out.ndim == 2, (
-        "FlashInfer symm_mem adapter expects 2D inputs and output"
-    )
+    assert scale_result is None, "FlashInfer symm_mem adapter does not support result scaling"
+    assert not use_fast_accum, "FlashInfer symm_mem adapter does not support use_fast_accum"
+    assert A.ndim == 2 and B.ndim == 2 and out.ndim == 2, "FlashInfer symm_mem adapter expects 2D inputs and output"
     assert scale_a.numel() == 1 and scale_b.numel() == 1, (
         "FlashInfer symm_mem adapter only supports tensor-wise FP8 scales"
     )
@@ -88,9 +82,7 @@ def _flashinfer_fp4_mm_out(
 ) -> None:
     from aphrodite.utils.flashinfer import flashinfer_scaled_fp4_mm_out
 
-    assert A.ndim == 2 and B.ndim == 2 and out.ndim == 2, (
-        "FlashInfer FP4 symm_mem adapter expects 2D inputs and output"
-    )
+    assert A.ndim == 2 and B.ndim == 2 and out.ndim == 2, "FlashInfer FP4 symm_mem adapter expects 2D inputs and output"
     flashinfer_scaled_fp4_mm_out(
         A,
         B,
@@ -147,9 +139,7 @@ def fused_flashinfer_scaled_matmul_reduce_scatter(
     assert A_scale.numel() == 1 and B_scale.numel() == 1, (
         "FlashInfer symm_mem adapter only supports tensor-wise FP8 scales"
     )
-    assert A.shape[0] % world_size == 0, (
-        "FlashInfer symm_mem adapter expects M divisible by world size"
-    )
+    assert A.shape[0] % world_size == 0, "FlashInfer symm_mem adapter expects M divisible by world size"
 
     kwargs = {
         "scale_b": B_scale,
@@ -202,9 +192,7 @@ def fused_all_gather_flashinfer_scaled_matmul(
     group_name: str,
     out_dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
-    assert gather_dim == 0, (
-        "FlashInfer symm_mem adapter currently only supports gather_dim=0"
-    )
+    assert gather_dim == 0, "FlashInfer symm_mem adapter currently only supports gather_dim=0"
     _, outputs = torch.distributed._symmetric_memory._fused_all_gather_matmul_impl(
         mm_out_op=_flashinfer_scaled_mm_out,
         A_shard=A_shard,
@@ -264,9 +252,7 @@ def fused_all_gather_flashinfer_fp4_matmul(
     use_8x4_sf_layout: bool = False,
     backend: str = "cutlass",
 ) -> torch.Tensor:
-    assert gather_dim == 0, (
-        "FlashInfer FP4 symm_mem adapter currently only supports gather_dim=0"
-    )
+    assert gather_dim == 0, "FlashInfer FP4 symm_mem adapter currently only supports gather_dim=0"
     assert A_shard.ndim == 2 and A_scale_shard.ndim == 2 and B.ndim == 2, (
         "FlashInfer FP4 symm_mem adapter expects 2D inputs"
     )
@@ -366,9 +352,7 @@ class GEMMReduceScatterPattern(BasePattern):
 
             return gemm_rs
 
-        pm.register_replacement(
-            pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass
-        )
+        pm.register_replacement(pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass)
 
 
 class AllGatherGEMMPattern(BasePattern):
@@ -401,19 +385,13 @@ class AllGatherGEMMPattern(BasePattern):
             )
             return mm_outputs
 
-        pm.register_replacement(
-            pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass
-        )
+        pm.register_replacement(pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass)
 
 
 class ScaledMMReduceScatterPattern(BasePattern):
     def get_inputs(self) -> list[torch.Tensor]:
         input = torch.empty([16, 16], device=self.device, dtype=FP8_DTYPE)
-        mm_weight = (
-            torch.empty([16, 16], device=self.device, dtype=FP8_DTYPE)
-            .contiguous()
-            .transpose(0, 1)
-        )
+        mm_weight = torch.empty([16, 16], device=self.device, dtype=FP8_DTYPE).contiguous().transpose(0, 1)
         scale_a = torch.empty([16, 1], device=self.device, dtype=torch.float32)
         scale_b = torch.empty([1, 16], device=self.device, dtype=torch.float32)
         return [input, mm_weight, scale_a, scale_b]
@@ -469,19 +447,13 @@ class ScaledMMReduceScatterPattern(BasePattern):
 
             return gemm_rs
 
-        pm.register_replacement(
-            pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass
-        )
+        pm.register_replacement(pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass)
 
 
 class AllGatherScaledMMPattern(BasePattern):
     def get_inputs(self) -> list[torch.Tensor]:
         x = torch.empty([8, 16], device=self.device, dtype=FP8_DTYPE)
-        weight = (
-            torch.empty([16, 16], device=self.device, dtype=FP8_DTYPE)
-            .contiguous()
-            .transpose(0, 1)
-        )
+        weight = torch.empty([16, 16], device=self.device, dtype=FP8_DTYPE).contiguous().transpose(0, 1)
 
         s1 = x.shape[0] * self.tp_size
 
@@ -531,19 +503,13 @@ class AllGatherScaledMMPattern(BasePattern):
             )
             return mm_outputs
 
-        pm.register_replacement(
-            pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass
-        )
+        pm.register_replacement(pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass)
 
 
 class CutlassScaledMMReduceScatterPattern(BasePattern):
     def get_inputs(self) -> list[torch.Tensor]:
         input = torch.empty([16, 16], device=self.device, dtype=FP8_DTYPE)
-        mm_weight = (
-            torch.empty([16, 16], device=self.device, dtype=FP8_DTYPE)
-            .contiguous()
-            .transpose(0, 1)
-        )
+        mm_weight = torch.empty([16, 16], device=self.device, dtype=FP8_DTYPE).contiguous().transpose(0, 1)
         scale_a = torch.empty([16, 1], device=self.device, dtype=torch.float32)
         scale_b = torch.empty([1, 16], device=self.device, dtype=torch.float32)
 
@@ -604,19 +570,13 @@ class CutlassScaledMMReduceScatterPattern(BasePattern):
 
             return gemm_rs
 
-        pm.register_replacement(
-            pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass
-        )
+        pm.register_replacement(pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass)
 
 
 class AllGatherCutlassScaledMMPattern(BasePattern):
     def get_inputs(self) -> list[torch.Tensor]:
         x = torch.empty([8, 16], device=self.device, dtype=FP8_DTYPE)
-        weight = (
-            torch.empty([16, 16], device=self.device, dtype=FP8_DTYPE)
-            .contiguous()
-            .transpose(0, 1)
-        )
+        weight = torch.empty([16, 16], device=self.device, dtype=FP8_DTYPE).contiguous().transpose(0, 1)
 
         s1 = x.shape[0] * self.tp_size
 
@@ -672,21 +632,13 @@ class AllGatherCutlassScaledMMPattern(BasePattern):
             )
             return mm_outputs
 
-        pm.register_replacement(
-            pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass
-        )
+        pm.register_replacement(pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass)
 
 
-class FlashInferBMMFP8ReduceScatterPattern(
-    BasePattern, AphroditePatternReplacement[..., torch.Tensor]
-):
+class FlashInferBMMFP8ReduceScatterPattern(BasePattern, AphroditePatternReplacement[..., torch.Tensor]):
     def get_inputs(self) -> list[torch.Tensor]:
         a_2d = torch.empty([16, 16], device=self.device, dtype=FP8_DTYPE)
-        b_2d = (
-            torch.empty([16, 16], device=self.device, dtype=FP8_DTYPE)
-            .contiguous()
-            .transpose(0, 1)
-        )
+        b_2d = torch.empty([16, 16], device=self.device, dtype=FP8_DTYPE).contiguous().transpose(0, 1)
         a_scale = torch.empty([1], device=self.device, dtype=torch.float32)
         b_scale = torch.empty([1], device=self.device, dtype=torch.float32)
         return [a_2d, b_2d, a_scale, b_scale]
@@ -741,16 +693,10 @@ class FlashInferBMMFP8ReduceScatterPattern(
         return _replacement
 
 
-class FlashInferAllGatherBMMFP8Pattern(
-    BasePattern, AphroditePatternReplacement[..., torch.Tensor]
-):
+class FlashInferAllGatherBMMFP8Pattern(BasePattern, AphroditePatternReplacement[..., torch.Tensor]):
     def get_inputs(self) -> list[torch.Tensor]:
         a_shard_2d = torch.empty([8, 16], device=self.device, dtype=FP8_DTYPE)
-        b_2d = (
-            torch.empty([16, 16], device=self.device, dtype=FP8_DTYPE)
-            .contiguous()
-            .transpose(0, 1)
-        )
+        b_2d = torch.empty([16, 16], device=self.device, dtype=FP8_DTYPE).contiguous().transpose(0, 1)
         a_scale = torch.empty([1], device=self.device, dtype=torch.float32)
         b_scale = torch.empty([1], device=self.device, dtype=torch.float32)
         return [a_shard_2d, b_2d, a_scale, b_scale]
@@ -802,9 +748,7 @@ class FlashInferAllGatherBMMFP8Pattern(
         return _replacement
 
 
-class FlashInferAllGatherFP4Pattern(
-    BasePattern, AphroditePatternReplacement[..., torch.Tensor]
-):
+class FlashInferAllGatherFP4Pattern(BasePattern, AphroditePatternReplacement[..., torch.Tensor]):
     def __init__(
         self,
         dtype: torch.dtype,
@@ -911,28 +855,16 @@ class AsyncTPPass(AphroditeFusionPatternMatcherPass):
         # `scaled_mm` or `cutlass_scaled_mm` with per-token (row-wise) scaling
         # only supports bfloat16 as the output dtype.
         if self.model_dtype == torch.bfloat16:
-            ScaledMMReduceScatterPattern(self.model_dtype, self.device).register(
-                self.pm_pass
-            )
-            AllGatherScaledMMPattern(self.model_dtype, self.device).register(
-                self.pm_pass
-            )
+            ScaledMMReduceScatterPattern(self.model_dtype, self.device).register(self.pm_pass)
+            AllGatherScaledMMPattern(self.model_dtype, self.device).register(self.pm_pass)
             if hasattr(torch.ops._C, "cutlass_scaled_mm"):
-                CutlassScaledMMReduceScatterPattern(
-                    self.model_dtype, self.device
-                ).register(self.pm_pass)
-                AllGatherCutlassScaledMMPattern(self.model_dtype, self.device).register(
-                    self.pm_pass
-                )
+                CutlassScaledMMReduceScatterPattern(self.model_dtype, self.device).register(self.pm_pass)
+                AllGatherCutlassScaledMMPattern(self.model_dtype, self.device).register(self.pm_pass)
             with suppress(ImportError):
                 import aphrodite.utils.flashinfer  # noqa: F401
             if hasattr(torch.ops.aphrodite, "bmm_fp8"):
-                self.register(
-                    FlashInferAllGatherBMMFP8Pattern(self.model_dtype, self.device)
-                )
-                self.register(
-                    FlashInferBMMFP8ReduceScatterPattern(self.model_dtype, self.device)
-                )
+                self.register(FlashInferAllGatherBMMFP8Pattern(self.model_dtype, self.device))
+                self.register(FlashInferBMMFP8ReduceScatterPattern(self.model_dtype, self.device))
             if hasattr(torch.ops.aphrodite, "flashinfer_mm_fp4"):
                 for backend in ("cutlass", "cudnn"):
                     for a_scale_view in ("float8_uint8", "uint8"):
@@ -976,10 +908,9 @@ class AsyncTPPass(AphroditeFusionPatternMatcherPass):
     def is_applicable_for_range(self, compile_range: Range) -> bool:
         # This pass is applied on top of the sequence parallelism pass,
         # which is only supported in fullgraph compilation mode.
-        assert (
-            self.compilation_config.use_inductor_graph_partition
-            or not self.compilation_config.splitting_ops
-        ), "AsyncTPPass requires full-graph compilation"
+        assert self.compilation_config.use_inductor_graph_partition or not self.compilation_config.splitting_ops, (
+            "AsyncTPPass requires full-graph compilation"
+        )
         return True
 
     @AphroditeInductorPass.time_and_log

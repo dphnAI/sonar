@@ -37,10 +37,7 @@ class UnlimitedOCRProcessor(DeepseekOCRProcessor):
     ):
         if len(images) > 1 and cropping:
             logger.warning_once(
-                "Unlimited-OCR: crop mode is not supported for multi-image "
-                "input. Falling back to cropping=False."
+                "Unlimited-OCR: crop mode is not supported for multi-image input. Falling back to cropping=False."
             )
             cropping = False
-        return super().tokenize_with_images(
-            conversation, images, bos=bos, eos=eos, cropping=cropping
-        )
+        return super().tokenize_with_images(conversation, images, bos=bos, eos=eos, cropping=cropping)

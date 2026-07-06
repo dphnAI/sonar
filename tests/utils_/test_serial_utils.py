@@ -3,7 +3,6 @@
 import pytest
 import torch
 
-from tests.models.utils import check_embeddings_close
 from aphrodite.utils.serial_utils import (
     EMBED_DTYPES,
     ENDIANNESS,
@@ -14,14 +13,13 @@ from aphrodite.utils.serial_utils import (
     binary2tensor,
     tensor2binary,
 )
+from tests.models.utils import check_embeddings_close
 
 FLOAT_EMBED_DTYPES = tuple(EMBED_DTYPES.keys())
 INTEGER_EMBED_DTYPES = tuple(MM_METADATA_DTYPES.keys())
 
 
-def _build_integer_tensor(
-    embed_dtype: MmMetadataDType, shape: tuple[int, ...]
-) -> torch.Tensor:
+def _build_integer_tensor(embed_dtype: MmMetadataDType, shape: tuple[int, ...]) -> torch.Tensor:
     torch_dtype = MM_METADATA_DTYPES[embed_dtype].torch_dtype
 
     if torch_dtype is torch.bool:
@@ -44,9 +42,7 @@ def test_encode_and_decode_floats(embed_dtype: EmbedDType, endianness: Endiannes
         tensor = torch.rand(2, 3, 5, 7, 11, 13, device="cpu", dtype=torch.float32)
         shape = tensor.shape
         binary = tensor2binary(tensor, embed_dtype, endianness)
-        new_tensor = binary2tensor(binary, shape, embed_dtype, endianness).to(
-            torch.float32
-        )
+        new_tensor = binary2tensor(binary, shape, embed_dtype, endianness).to(torch.float32)
 
         if embed_dtype in ["float32", "float16"]:
             torch.testing.assert_close(tensor, new_tensor, atol=0.001, rtol=0.001)
@@ -67,9 +63,7 @@ def test_encode_and_decode_floats(embed_dtype: EmbedDType, endianness: Endiannes
 @pytest.mark.parametrize("endianness", ENDIANNESS)
 @pytest.mark.parametrize("embed_dtype", INTEGER_EMBED_DTYPES)
 @torch.inference_mode()
-def test_encode_and_decode_integers(
-    embed_dtype: MmMetadataDType, endianness: Endianness
-):
+def test_encode_and_decode_integers(embed_dtype: MmMetadataDType, endianness: Endianness):
     shape = (2, 3, 5, 7, 11, 13)
 
     for i in range(10):

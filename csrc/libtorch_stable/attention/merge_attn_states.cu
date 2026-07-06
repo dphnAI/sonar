@@ -70,10 +70,10 @@ __global__ void merge_attn_states_kernel(
         output_t o_out_pack[pack_size];
 #pragma unroll
         for (uint i = 0; i < pack_size; ++i) {
-          const float val =
-              aphrodite::to_float(reinterpret_cast<const scalar_t*>(&s_out_pack)[i]);
-          o_out_pack[i] =
-              aphrodite::scaled_fp8_conversion<true, output_t>(val, fp8_scale_inv);
+          const float val = aphrodite::to_float(
+              reinterpret_cast<const scalar_t*>(&s_out_pack)[i]);
+          o_out_pack[i] = aphrodite::scaled_fp8_conversion<true, output_t>(
+              val, fp8_scale_inv);
         }
         reinterpret_cast<output_pack_t*>(
             output_head_ptr)[pack_offset / pack_size] =
@@ -117,10 +117,10 @@ __global__ void merge_attn_states_kernel(
         output_t o_out_pack[pack_size];
 #pragma unroll
         for (uint i = 0; i < pack_size; ++i) {
-          const float val =
-              aphrodite::to_float(reinterpret_cast<const scalar_t*>(&p_out_pack)[i]);
-          o_out_pack[i] =
-              aphrodite::scaled_fp8_conversion<true, output_t>(val, fp8_scale_inv);
+          const float val = aphrodite::to_float(
+              reinterpret_cast<const scalar_t*>(&p_out_pack)[i]);
+          o_out_pack[i] = aphrodite::scaled_fp8_conversion<true, output_t>(
+              val, fp8_scale_inv);
         }
         reinterpret_cast<output_pack_t*>(
             output_head_ptr)[pack_offset / pack_size] =
@@ -155,10 +155,10 @@ __global__ void merge_attn_states_kernel(
     float o_out_f[pack_size];
 #pragma unroll
     for (uint i = 0; i < pack_size; ++i) {
-      const float p_out_f =
-          aphrodite::to_float(reinterpret_cast<const scalar_t*>(&p_out_pack)[i]);
-      const float s_out_f =
-          aphrodite::to_float(reinterpret_cast<const scalar_t*>(&s_out_pack)[i]);
+      const float p_out_f = aphrodite::to_float(
+          reinterpret_cast<const scalar_t*>(&p_out_pack)[i]);
+      const float s_out_f = aphrodite::to_float(
+          reinterpret_cast<const scalar_t*>(&s_out_pack)[i]);
       o_out_f[i] = p_out_f * p_scale + (s_out_f * s_scale);
     }
 
@@ -178,7 +178,7 @@ __global__ void merge_attn_states_kernel(
 #pragma unroll
       for (uint i = 0; i < pack_size; ++i) {
         aphrodite::from_float(reinterpret_cast<scalar_t*>(&o_out_pack)[i],
-                         o_out_f[i]);
+                              o_out_f[i]);
       }
       reinterpret_cast<output_pack_t*>(
           output_head_ptr)[pack_offset / pack_size] = o_out_pack;
@@ -212,8 +212,8 @@ __global__ void merge_attn_states_kernel(
 #define LAUNCH_MERGE_ATTN_STATES(scalar_t, output_t, NUM_THREADS,           \
                                  USE_FP8_OUTPUT)                            \
   {                                                                         \
-    aphrodite::merge_attn_states_kernel<scalar_t, output_t, NUM_THREADS,         \
-                                   USE_FP8_OUTPUT>                          \
+    aphrodite::merge_attn_states_kernel<scalar_t, output_t, NUM_THREADS,    \
+                                        USE_FP8_OUTPUT>                     \
         <<<grid, block, 0, stream>>>(                                       \
             reinterpret_cast<output_t*>(output.data_ptr()), output_lse_ptr, \
             reinterpret_cast<scalar_t*>(prefix_output.data_ptr()),          \

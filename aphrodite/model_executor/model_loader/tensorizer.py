@@ -21,7 +21,7 @@ from torch.utils._python_dispatch import TorchDispatchMode
 from transformers import PretrainedConfig
 
 import aphrodite.envs as envs
-from aphrodite.config import ModelConfig, ParallelConfig, AphroditeConfig, set_current_aphrodite_config
+from aphrodite.config import AphroditeConfig, ModelConfig, ParallelConfig, set_current_aphrodite_config
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.vocab_parallel_embedding import VocabParallelEmbedding
 from aphrodite.platforms import current_platform
@@ -226,10 +226,7 @@ class TensorizerConfig(MutableMapping):
 
     def __post_init__(self):
         # check if the configuration is for a sharded Aphrodite model
-        self._is_sharded = (
-            isinstance(self.tensorizer_uri, str)
-            and re.search(r"%0\dd", self.tensorizer_uri) is not None
-        )
+        self._is_sharded = isinstance(self.tensorizer_uri, str) and re.search(r"%0\dd", self.tensorizer_uri) is not None
 
         if self.tensorizer_dir and self.lora_dir:
             raise ValueError(
@@ -292,12 +289,7 @@ class TensorizerConfig(MutableMapping):
 
         tc_dict = {}
         for k, v in raw_tc_dict.items():
-            if (
-                k not in blacklisted
-                and k not in tc_dict
-                and not k.startswith("_")
-                and v is not None
-            ):
+            if k not in blacklisted and k not in tc_dict and not k.startswith("_") and v is not None:
                 tc_dict[k] = v
 
         return tc_dict
@@ -319,8 +311,7 @@ class TensorizerConfig(MutableMapping):
     def verify_with_model_config(self, model_config: "ModelConfig") -> None:
         if model_config.quantization is not None and self.tensorizer_uri is not None:
             logger.warning(
-                "Loading a model using Tensorizer with quantization on Aphrodite"
-                " is unstable and may lead to errors."
+                "Loading a model using Tensorizer with quantization on Aphrodite is unstable and may lead to errors."
             )
 
     def open_stream(self, tensorizer_args: "TensorizerArgs | None" = None):
@@ -369,12 +360,8 @@ class TensorizerArgs:
         for k, v in tensorizer_config.items():
             setattr(self, k, v)
         self.file_obj = tensorizer_config.tensorizer_uri
-        self.s3_access_key_id = (
-            tensorizer_config.s3_access_key_id or envs.S3_ACCESS_KEY_ID
-        )
-        self.s3_secret_access_key = (
-            tensorizer_config.s3_secret_access_key or envs.S3_SECRET_ACCESS_KEY
-        )
+        self.s3_access_key_id = tensorizer_config.s3_access_key_id or envs.S3_ACCESS_KEY_ID
+        self.s3_secret_access_key = tensorizer_config.s3_secret_access_key or envs.S3_SECRET_ACCESS_KEY
         self.s3_endpoint = tensorizer_config.s3_endpoint or envs.S3_ENDPOINT_URL
 
         self.stream_kwargs = {
@@ -424,8 +411,7 @@ class TensorizerArgs:
         group.add_argument(
             "--tensorizer-uri",
             type=str,
-            help="Path to serialized model tensors. Can be a local file path,"
-            " or an HTTP(S) or S3 URI.",
+            help="Path to serialized model tensors. Can be a local file path, or an HTTP(S) or S3 URI.",
         )
         group.add_argument(
             "--verify-hash",
@@ -454,8 +440,7 @@ class TensorizerArgs:
             "--s3-access-key-id",
             type=str,
             default=None,
-            help="The access key for the S3 bucket. Can also be set via the "
-            "S3_ACCESS_KEY_ID environment variable.",
+            help="The access key for the S3 bucket. Can also be set via the S3_ACCESS_KEY_ID environment variable.",
         )
         group.add_argument(
             "--s3-secret-access-key",
@@ -468,8 +453,7 @@ class TensorizerArgs:
             "--s3-endpoint",
             type=str,
             default=None,
-            help="The endpoint for the S3 bucket. Can also be set via the "
-            "S3_ENDPOINT_URL environment variable.",
+            help="The endpoint for the S3 bucket. Can also be set via the S3_ENDPOINT_URL environment variable.",
         )
 
         return parser
@@ -477,9 +461,7 @@ class TensorizerArgs:
     @classmethod
     def from_cli_args(cls, args: argparse.Namespace) -> "TensorizerArgs":
         attrs = [attr.name for attr in dataclasses.fields(cls)]
-        tensorizer_args = cls(
-            **{attr: getattr(args, attr) for attr in attrs if hasattr(args, attr)}
-        )
+        tensorizer_args = cls(**{attr: getattr(args, attr) for attr in attrs if hasattr(args, attr)})
         return tensorizer_args
 
 
@@ -499,10 +481,7 @@ def _resize_lora_embeddings(model: nn.Module):
     """Modify LoRA embedding layers to use bigger tensors
     to allow for adapter added tokens."""
     for child in model.modules():
-        if (
-            isinstance(child, VocabParallelEmbedding)
-            and child.weight.shape[0] < child.num_embeddings_per_partition
-        ):
+        if isinstance(child, VocabParallelEmbedding) and child.weight.shape[0] < child.num_embeddings_per_partition:
             new_weight = torch.empty(
                 child.num_embeddings_per_partition,
                 child.embedding_dim,
@@ -514,9 +493,7 @@ def _resize_lora_embeddings(model: nn.Module):
             child.weight.data = new_weight
 
 
-def init_tensorizer_model(
-    tensorizer_config: TensorizerConfig, aphrodite_config: AphroditeConfig
-) -> nn.Module:
+def init_tensorizer_model(tensorizer_config: TensorizerConfig, aphrodite_config: AphroditeConfig) -> nn.Module:
     assert tensorizer_config.hf_config is not None
     model_args = tensorizer_config.hf_config
     model_args.dtype = tensorizer_config.dtype
@@ -526,9 +503,7 @@ def init_tensorizer_model(
         return tensorizer_config.model_class(aphrodite_config=aphrodite_config)
 
 
-def deserialize_tensorizer_model(
-    model: nn.Module, tensorizer_config: TensorizerConfig
-) -> None:
+def deserialize_tensorizer_model(model: nn.Module, tensorizer_config: TensorizerConfig) -> None:
     tensorizer_args = tensorizer_config._construct_tensorizer_args()
     if not is_valid_deserialization_uri(tensorizer_config.tensorizer_uri):
         raise ValueError(
@@ -542,9 +517,7 @@ def deserialize_tensorizer_model(
     device_index = torch.accelerator.current_device_index()
     device_type = current_platform.device_type
     with (
-        open_stream(
-            tensorizer_config.tensorizer_uri, mode="rb", **tensorizer_args.stream_kwargs
-        ) as stream,
+        open_stream(tensorizer_config.tensorizer_uri, mode="rb", **tensorizer_args.stream_kwargs) as stream,
         TensorDeserializer(
             stream,
             dtype=tensorizer_config.dtype,
@@ -560,9 +533,7 @@ def deserialize_tensorizer_model(
     per_second = convert_bytes(deserializer.total_tensor_bytes / duration)
     after_mem = get_mem_usage()
     deserializer.close()
-    logger.info(
-        "Deserialized %s in %0.2fs, %s/s", total_bytes_str, end - start, per_second
-    )
+    logger.info("Deserialized %s in %0.2fs, %s/s", total_bytes_str, end - start, per_second)
     logger.info("Memory usage before: %s", before_mem)
     logger.info("Memory usage after: %s", after_mem)
 
@@ -619,13 +590,10 @@ def is_aphrodite_tensorized(tensorizer_config: "TensorizerConfig") -> bool:
     return ".aphrodite_tensorized_marker" in deserializer
 
 
-def serialize_extra_artifacts(
-    tensorizer_args: TensorizerArgs, served_model_name: str | list[str] | None
-) -> None:
+def serialize_extra_artifacts(tensorizer_args: TensorizerArgs, served_model_name: str | list[str] | None) -> None:
     if not isinstance(served_model_name, str):
         raise ValueError(
-            f"served_model_name must be a str for serialize_extra_artifacts, "
-            f"not {type(served_model_name)}."
+            f"served_model_name must be a str for serialize_extra_artifacts, not {type(served_model_name)}."
         )
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -681,9 +649,7 @@ def serialize_aphrodite_model(
 
         output_file = output_file % get_tensor_model_parallel_rank()
 
-    with open_stream(
-        output_file, mode="wb+", **tensorizer_args.stream_kwargs
-    ) as stream:
+    with open_stream(output_file, mode="wb+", **tensorizer_args.stream_kwargs) as stream:
         serializer = TensorSerializer(
             stream,
             encryption=encryption_params,
@@ -713,10 +679,7 @@ def tensorize_aphrodite_model(
     tensorizer_config.verify_with_parallel_config(engine_config.parallel_config)
 
     # generate the encryption key before creating the engine to support sharding
-    if (
-        generate_keyfile
-        and (keyfile := tensorizer_config.encryption_keyfile) is not None
-    ):
+    if generate_keyfile and (keyfile := tensorizer_config.encryption_keyfile) is not None:
         encryption_params = EncryptionParams.random()
         with open_stream(
             keyfile,
@@ -765,10 +728,7 @@ def tensorize_lora_adapter(lora_path: str, tensorizer_config: TensorizerConfig):
     elif tensor_path.endswith(".bin"):
         tensors = torch.load(tensor_path, weights_only=True)
     else:
-        raise ValueError(
-            f"Unsupported adapter model file: {tensor_path}. "
-            f"Must be a .safetensors or .bin file."
-        )
+        raise ValueError(f"Unsupported adapter model file: {tensor_path}. Must be a .safetensors or .bin file.")
 
     with open(config_path) as f:
         config = json.load(f)

@@ -20,10 +20,10 @@ from aphrodite.v1.core.sched.scheduler import Scheduler
 from aphrodite.v1.request import FinishReason, Request, RequestStatus
 
 from .utils import (
+    create_aphrodite_config,
     create_model_runner_output,
     create_request,
     create_scheduler,
-    create_aphrodite_config,
 )
 
 pytestmark = pytest.mark.cpu_test
@@ -73,9 +73,7 @@ def test_sync_recompute_blocks_not_freed_for_running_requests(
     invalid_block_idx = 50
 
     num_prompt_tokens = num_prompt_blocks * recompute_scheduler.block_size
-    num_external_computed_tokens = (
-        num_external_computed_blocks * recompute_scheduler.block_size
-    )
+    num_external_computed_tokens = num_external_computed_blocks * recompute_scheduler.block_size
 
     request = create_request(num_tokens=num_prompt_tokens)
     recompute_scheduler.add_request(request=request)
@@ -86,8 +84,8 @@ def test_sync_recompute_blocks_not_freed_for_running_requests(
 
     # mock connector indicating sync load
     recompute_scheduler.connector = Mock()
-    recompute_scheduler.connector.get_num_new_matched_tokens.side_effect = (
-        _make_get_num_new_matched_tokens(req_num_new_matched_tokens, False)
+    recompute_scheduler.connector.get_num_new_matched_tokens.side_effect = _make_get_num_new_matched_tokens(
+        req_num_new_matched_tokens, False
     )
     recompute_scheduler.connector.request_finished.return_value = (False, None)
     recompute_scheduler.connector.take_events.return_value = ()
@@ -112,22 +110,17 @@ def test_sync_recompute_blocks_not_freed_for_running_requests(
         use_eos=False,  # not finished - should continue running
     )
 
-    outputs = recompute_scheduler.update_from_output(
-        scheduler_output, model_runner_output
-    )
+    outputs = recompute_scheduler.update_from_output(scheduler_output, model_runner_output)
 
     # critical assertions for recompute case:
 
     # 1. request should still be RUNNING (not finished, not aborted)
-    assert request.status == RequestStatus.RUNNING, (
-        f"Request should remain RUNNING for recompute, got {request.status}"
-    )
+    assert request.status == RequestStatus.RUNNING, f"Request should remain RUNNING for recompute, got {request.status}"
 
     # 2. num_computed_tokens should be truncated to first invalid block
     expected_truncated_tokens = invalid_block_idx * recompute_scheduler.block_size
     assert request.num_computed_tokens == expected_truncated_tokens, (
-        f"num_computed_tokens should be truncated to {expected_truncated_tokens}, "
-        f"got {request.num_computed_tokens}"
+        f"num_computed_tokens should be truncated to {expected_truncated_tokens}, got {request.num_computed_tokens}"
     )
     assert request.num_computed_tokens < original_num_computed_tokens, (
         "num_computed_tokens should be reduced after invalid block detection"
@@ -140,43 +133,30 @@ def test_sync_recompute_blocks_not_freed_for_running_requests(
     ], "No output should be generated for recompute requests"
 
     # 4. request should still be in running queue
-    assert request in recompute_scheduler.running, (
-        "Request should remain in running queue for recomputation"
-    )
+    assert request in recompute_scheduler.running, "Request should remain in running queue for recomputation"
 
     # 5. request should still be in scheduler.requests (not deleted)
-    assert request.request_id in recompute_scheduler.requests, (
-        "Request should not be deleted from scheduler.requests"
-    )
+    assert request.request_id in recompute_scheduler.requests, "Request should not be deleted from scheduler.requests"
 
     # 6. blocks should NOT be freed - verify blocks are still allocated
     try:
-        allocated_blocks = recompute_scheduler.kv_cache_manager.get_block_ids(
-            request.request_id
-        )
+        allocated_blocks = recompute_scheduler.kv_cache_manager.get_block_ids(request.request_id)
         assert allocated_blocks is not None
-        assert len(allocated_blocks[0]) > 0, (
-            "Blocks should still be allocated for recomputation"
-        )
+        assert len(allocated_blocks[0]) > 0, "Blocks should still be allocated for recomputation"
     except KeyError:
-        pytest.fail(
-            "Blocks were freed incorrectly! Running requests need their blocks "
-            "to recompute invalid portions."
-        )
+        pytest.fail("Blocks were freed incorrectly! Running requests need their blocks to recompute invalid portions.")
 
     # 7. verify request can be rescheduled in next step
     scheduler_output_2 = recompute_scheduler.schedule()
 
     # request should appear in the new schedule to recompute invalid blocks
-    scheduled_req_ids = [
-        req.request_id for req in scheduler_output_2.scheduled_new_reqs
-    ]
+    scheduled_req_ids = [req.request_id for req in scheduler_output_2.scheduled_new_reqs]
     if scheduler_output_2.num_scheduled_tokens:
         scheduled_req_ids.extend(scheduler_output_2.num_scheduled_tokens.keys())
 
-    assert (
-        request.request_id in scheduled_req_ids or len(recompute_scheduler.running) > 0
-    ), "Request should be reschedulable for recomputation"
+    assert request.request_id in scheduled_req_ids or len(recompute_scheduler.running) > 0, (
+        "Request should be reschedulable for recomputation"
+    )
 
 
 def test_sync_fail_invalid_blocks_evicted(fail_scheduler: Scheduler):
@@ -197,9 +177,7 @@ def test_sync_fail_invalid_blocks_evicted(fail_scheduler: Scheduler):
     invalid_block_idx = 50
 
     num_prompt_tokens = num_prompt_blocks * fail_scheduler.block_size
-    num_external_computed_tokens = (
-        num_external_computed_blocks * fail_scheduler.block_size
-    )
+    num_external_computed_tokens = num_external_computed_blocks * fail_scheduler.block_size
 
     request = create_request(num_tokens=num_prompt_tokens)
     fail_scheduler.add_request(request=request)
@@ -210,8 +188,8 @@ def test_sync_fail_invalid_blocks_evicted(fail_scheduler: Scheduler):
 
     # mock connector indicating sync load
     fail_scheduler.connector = Mock()
-    fail_scheduler.connector.get_num_new_matched_tokens.side_effect = (
-        _make_get_num_new_matched_tokens(req_num_new_matched_tokens, False)
+    fail_scheduler.connector.get_num_new_matched_tokens.side_effect = _make_get_num_new_matched_tokens(
+        req_num_new_matched_tokens, False
     )
     fail_scheduler.connector.request_finished.return_value = (False, None)
     fail_scheduler.connector.take_events.return_value = ()
@@ -315,9 +293,7 @@ def test_async_recompute_blocks_not_cached_when_invalid(
     invalid_block_idx = 50
 
     num_prompt_tokens = num_prompt_blocks * recompute_scheduler.block_size
-    num_external_computed_tokens = (
-        num_external_computed_blocks * recompute_scheduler.block_size
-    )
+    num_external_computed_tokens = num_external_computed_blocks * recompute_scheduler.block_size
 
     request = create_request(num_tokens=num_prompt_tokens)
     recompute_scheduler.add_request(request=request)
@@ -328,8 +304,8 @@ def test_async_recompute_blocks_not_cached_when_invalid(
 
     # mock connector indicating async load
     recompute_scheduler.connector = Mock()
-    recompute_scheduler.connector.get_num_new_matched_tokens.side_effect = (
-        _make_get_num_new_matched_tokens(req_num_new_matched_tokens, True)
+    recompute_scheduler.connector.get_num_new_matched_tokens.side_effect = _make_get_num_new_matched_tokens(
+        req_num_new_matched_tokens, True
     )
     recompute_scheduler.connector.request_finished.return_value = (False, None)
     recompute_scheduler.connector.take_events.return_value = ()
@@ -342,9 +318,7 @@ def test_async_recompute_blocks_not_cached_when_invalid(
     assert request.num_computed_tokens == num_external_computed_tokens
 
     # get the allocated block IDs
-    (req_block_ids,) = recompute_scheduler.kv_cache_manager.get_block_ids(
-        request.request_id
-    )
+    (req_block_ids,) = recompute_scheduler.kv_cache_manager.get_block_ids(request.request_id)
     invalid_block_id = req_block_ids[invalid_block_idx]
     invalid_block_ids = {invalid_block_id}
 
@@ -352,9 +326,7 @@ def test_async_recompute_blocks_not_cached_when_invalid(
     block = recompute_scheduler.kv_cache_manager.block_pool.blocks[invalid_block_id]
 
     # verify block has no hash before invalid blocks are reported
-    assert block.block_hash is None, (
-        "Async loading blocks should not be cached yet (no hash)"
-    )
+    assert block.block_hash is None, "Async loading blocks should not be cached yet (no hash)"
 
     # report invalid blocks (transfer not finished yet)
     model_runner_output = create_model_runner_output(
@@ -372,12 +344,8 @@ def test_async_recompute_blocks_not_cached_when_invalid(
         evict_blocks_calls.append(set(block_ids))
         return original_evict_blocks(block_ids)
 
-    with patch.object(
-        recompute_scheduler.kv_cache_manager, "evict_blocks", evict_blocks_spy
-    ):
-        outputs = recompute_scheduler.update_from_output(
-            scheduler_output, model_runner_output
-        )
+    with patch.object(recompute_scheduler.kv_cache_manager, "evict_blocks", evict_blocks_spy):
+        outputs = recompute_scheduler.update_from_output(scheduler_output, model_runner_output)
 
     # verify evict_blocks was NOT called (async blocks excluded from eviction)
     assert len(evict_blocks_calls) == 0, (
@@ -442,17 +410,14 @@ def test_async_recompute_blocks_not_cached_when_invalid(
         cache_blocks_calls.append((req.request_id, num_tokens))
         return original_cache_blocks(req, num_tokens)
 
-    with patch.object(
-        recompute_scheduler.kv_cache_manager, "cache_blocks", cache_blocks_spy
-    ):
+    with patch.object(recompute_scheduler.kv_cache_manager, "cache_blocks", cache_blocks_spy):
         # call schedule() again - this triggers _update_waiting_for_remote_kv()
         # which should call cache_blocks with the truncated value
         recompute_scheduler.schedule()
 
     # verify cache_blocks was called with the truncated value
     assert len(cache_blocks_calls) == 1, (
-        f"cache_blocks should be called exactly once, "
-        f"got {len(cache_blocks_calls)} calls"
+        f"cache_blocks should be called exactly once, got {len(cache_blocks_calls)} calls"
     )
     cached_req_id, cached_num_tokens = cache_blocks_calls[0]
     assert cached_req_id == request.request_id
@@ -468,8 +433,7 @@ def test_async_recompute_blocks_not_cached_when_invalid(
     # num_computed_tokens should be >= expected_valid_tokens because the scheduler
     # will schedule additional new tokens (up to max_num_batched_tokens) for the request
     assert request.num_computed_tokens >= expected_valid_tokens, (
-        f"num_computed_tokens should be at least {expected_valid_tokens}, "
-        f"got {request.num_computed_tokens}"
+        f"num_computed_tokens should be at least {expected_valid_tokens}, got {request.num_computed_tokens}"
     )
 
     # request should no longer be in the failed/finished receiving sets

@@ -57,9 +57,7 @@ def solve_lloyd_max(
     centroids = [lo + (hi - lo) * (i + 0.5) / n_levels for i in range(n_levels)]
 
     for _ in range(max_iter):
-        boundaries = [
-            (centroids[i] + centroids[i + 1]) / 2.0 for i in range(n_levels - 1)
-        ]
+        boundaries = [(centroids[i] + centroids[i + 1]) / 2.0 for i in range(n_levels - 1)]
         edges = [lo * 3] + boundaries + [hi * 3]
         new_centroids = []
         for i in range(n_levels):

@@ -21,9 +21,7 @@ T = TypeVar("T")
 
 
 class MinPLogitsProcessor(LogitsProcessor):
-    def __init__(
-        self, aphrodite_config: "AphroditeConfig", device: torch.device, is_pin_memory: bool
-    ):
+    def __init__(self, aphrodite_config: "AphroditeConfig", device: torch.device, is_pin_memory: bool):
         max_num_reqs = aphrodite_config.scheduler_config.max_num_seqs
         self.min_p_count: int = 0
 
@@ -36,9 +34,7 @@ class MinPLogitsProcessor(LogitsProcessor):
 
         if self.use_double_tensor:
             # Pre-allocated device tensor
-            self.min_p_device: torch.Tensor = torch.empty(
-                (max_num_reqs,), dtype=torch.float32, device=device
-            )
+            self.min_p_device: torch.Tensor = torch.empty((max_num_reqs,), dtype=torch.float32, device=device)
         else:
             self.min_p_device = self.min_p_cpu_tensor
         # Current slice of the device tensor
@@ -133,9 +129,7 @@ class LogitBiasLogitsProcessor(LogitsProcessor):
         return False
 
     def update_state(self, batch_update: BatchUpdate | None):
-        needs_update = process_dict_updates(
-            self.biases, batch_update, lambda params, _, __: params.logit_bias or None
-        )
+        needs_update = process_dict_updates(self.biases, batch_update, lambda params, _, __: params.logit_bias or None)
 
         # Update tensors if needed.
         if needs_update:
@@ -163,9 +157,7 @@ class LogitBiasLogitsProcessor(LogitsProcessor):
 
 
 class MinTokensLogitsProcessor(LogitsProcessor):
-    def __init__(
-        self, aphrodite_config: "AphroditeConfig", device: torch.device, is_pin_memory: bool
-    ):
+    def __init__(self, aphrodite_config: "AphroditeConfig", device: torch.device, is_pin_memory: bool):
         # index -> (min_toks, output_token_ids, stop_token_ids)
         self.device = device
         self.min_toks: dict[int, tuple[int, Sequence[int], set[int]]] = {}
@@ -176,9 +168,7 @@ class MinTokensLogitsProcessor(LogitsProcessor):
             self._device_tensor([], torch.int32),
         )
 
-        self.neg_inf_tensor = torch.tensor(
-            -float("inf"), dtype=torch.float32, device=self.device
-        )
+        self.neg_inf_tensor = torch.tensor(-float("inf"), dtype=torch.float32, device=self.device)
 
     def is_argmax_invariant(self) -> bool:
         """By censoring stop tokens, min-tokens can change the outcome
@@ -195,15 +185,11 @@ class MinTokensLogitsProcessor(LogitsProcessor):
         return min_tokens, output_tok_ids, params.all_stop_token_ids
 
     def update_state(self, batch_update: BatchUpdate | None):
-        needs_update = process_dict_updates(
-            self.min_toks, batch_update, self.add_request
-        )
+        needs_update = process_dict_updates(self.min_toks, batch_update, self.add_request)
         if self.min_toks:
             # Check for any requests that have attained their min tokens.
             to_remove = tuple(
-                index
-                for index, (min_toks, out_tok_ids, _) in self.min_toks.items()
-                if len(out_tok_ids) >= min_toks
+                index for index, (min_toks, out_tok_ids, _) in self.min_toks.items() if len(out_tok_ids) >= min_toks
             )
             if to_remove:
                 needs_update = True

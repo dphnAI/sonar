@@ -66,21 +66,14 @@ def reference(x: torch.Tensor, use_ue8m0: bool) -> tuple[torch.Tensor, torch.Ten
     return reference_quant(ref_act_out, use_ue8m0)
 
 
-def reference_with_clamp(
-    x: torch.Tensor, use_ue8m0: bool, clamp_limit: float
-) -> tuple[torch.Tensor, torch.Tensor]:
+def reference_with_clamp(x: torch.Tensor, use_ue8m0: bool, clamp_limit: float) -> tuple[torch.Tensor, torch.Tensor]:
     """Pre-clamp inputs (gate from above, up symmetric) at the input dtype to
     match the C++ compute() template, then run the standard silu_and_mul +
     quant reference."""
     N_2 = x.size(1) // 2
     dtype = x.dtype
     gate = x[..., :N_2].to(torch.float32).clamp(max=clamp_limit).to(dtype)
-    up = (
-        x[..., N_2:]
-        .to(torch.float32)
-        .clamp(min=-clamp_limit, max=clamp_limit)
-        .to(dtype)
-    )
+    up = x[..., N_2:].to(torch.float32).clamp(min=-clamp_limit, max=clamp_limit).to(dtype)
     return reference(torch.cat([gate, up], dim=-1), use_ue8m0)
 
 
@@ -98,9 +91,7 @@ def test_silu_mul_fp8_quant_deep_gemm(T: int, N: int):
     use_ue8m0 = is_deep_gemm_e8m0_used()
 
     # Test
-    output, output_scales = silu_mul_per_token_group_quant_fp8_colmajor(
-        input, use_ue8m0=use_ue8m0
-    )
+    output, output_scales = silu_mul_per_token_group_quant_fp8_colmajor(input, use_ue8m0=use_ue8m0)
 
     # Reference
     ref_output, ref_output_scales = reference(input, use_ue8m0)

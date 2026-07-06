@@ -1,24 +1,28 @@
-// Prefill/ragged fp8 MQA indexer logits on sm89 (Ada), over a contiguous gathered kv buffer.
+// Prefill/ragged fp8 MQA indexer logits on sm89 (Ada), over a contiguous
+// gathered kv buffer.
 //
-// logits[m, n] = sum_h w[m, h] * relu((q[m, h, :] . kv[n, :]) * kv_scale[n]),  n in [ks_m, ke_m)
+// logits[m, n] = sum_h w[m, h] * relu((q[m, h, :] . kv[n, :]) * kv_scale[n]),
+// n in [ks_m, ke_m)
 //
-// q [M, H, 128] e4m3 (H = 32 or 64 indexer heads, templated); kv [N, 128] e4m3, the
-// contiguous post-gather buffer from cp_gather_indexer_k_quant_cache; kv_scales [N] fp32;
-// weights [M, H] fp32; per-row windows cu_seqlen_ks/ke [M] i32, clamped to [0, N].
-// logits [M, N] fp32 is written only inside [ks, ke); the caller owns the fill value outside
-// the window (pass a zeroed buffer for fill=0), avoiding O(M*N) pre-fill traffic.
+// q [M, H, 128] e4m3 (H = 32 or 64 indexer heads, templated); kv [N, 128] e4m3,
+// the contiguous post-gather buffer from cp_gather_indexer_k_quant_cache;
+// kv_scales [N] fp32; weights [M, H] fp32; per-row windows cu_seqlen_ks/ke [M]
+// i32, clamped to [0, N]. logits [M, N] fp32 is written only inside [ks, ke);
+// the caller owns the fill value outside the window (pass a zeroed buffer for
+// fill=0), avoiding O(M*N) pre-fill traffic.
 //
-// Grid is (x=M, y=ceil(N/CTA_KEYS)) with x fastest, so concurrently resident CTAs work the
-// same CTA_KEYS-wide K band and each K page is pulled from DRAM once and served to every
-// query row out of L2. A 128-thread / 4-warp CTA covers one query token's H heads x CTA_KEYS
-// keys, pipelined in 64-key pages through a cp.async ring (3 pages in flight, one barrier per
-// page; pages are issued right after the barrier into the stage retired two iterations ago,
-// and the page store is deferred one iteration via double-buffered partials so it overlaps
-// the next page's mma work). B fragments via ldmatrix.x4 for LSU issue relief; mma m16n8k32
-// e4m3 with fp32 accumulate, then scale, relu, per-head weight, fixed-order reduction.
-// Deterministic (no float atomics, fixed reduction order) and CUDA-graph safe (static grid
-// per (M, N) shape, windows read on device, empty-window CTAs exit after the two window
-// loads).
+// Grid is (x=M, y=ceil(N/CTA_KEYS)) with x fastest, so concurrently resident
+// CTAs work the same CTA_KEYS-wide K band and each K page is pulled from DRAM
+// once and served to every query row out of L2. A 128-thread / 4-warp CTA
+// covers one query token's H heads x CTA_KEYS keys, pipelined in 64-key pages
+// through a cp.async ring (3 pages in flight, one barrier per page; pages are
+// issued right after the barrier into the stage retired two iterations ago, and
+// the page store is deferred one iteration via double-buffered partials so it
+// overlaps the next page's mma work). B fragments via ldmatrix.x4 for LSU issue
+// relief; mma m16n8k32 e4m3 with fp32 accumulate, then scale, relu, per-head
+// weight, fixed-order reduction. Deterministic (no float atomics, fixed
+// reduction order) and CUDA-graph safe (static grid per (M, N) shape, windows
+// read on device, empty-window CTAs exit after the two window loads).
 
 // clang-format off
 

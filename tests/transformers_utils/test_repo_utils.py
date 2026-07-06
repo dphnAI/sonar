@@ -26,9 +26,7 @@ from aphrodite.transformers_utils.repo_utils import (
         ),
     ],
 )
-def test_list_filtered_repo_files(
-    allow_patterns: list[str], expected_relative_files: list[str]
-):
+def test_list_filtered_repo_files(allow_patterns: list[str], expected_relative_files: list[str]):
     with tempfile.TemporaryDirectory() as tmp_dir:
         # Prep folder and files
         path_tmp_dir = Path(tmp_dir)
@@ -42,22 +40,14 @@ def test_list_filtered_repo_files(
         (subfolder / "incorrect_sub.txt").touch()
 
         def _glob_path() -> list[str]:
-            return [
-                str(file.relative_to(path_tmp_dir))
-                for file in path_tmp_dir.glob("**/*")
-                if file.is_file()
-            ]
+            return [str(file.relative_to(path_tmp_dir)) for file in path_tmp_dir.glob("**/*") if file.is_file()]
 
         # Patch list_repo_files called by fn
         with patch(
             "aphrodite.transformers_utils.repo_utils.list_repo_files",
             MagicMock(return_value=_glob_path()),
         ) as mock_list_repo_files:
-            out_files = sorted(
-                list_filtered_repo_files(
-                    tmp_dir, allow_patterns, "revision", "model", "token"
-                )
-            )
+            out_files = sorted(list_filtered_repo_files(tmp_dir, allow_patterns, "revision", "model", "token"))
         assert out_files == sorted(expected_relative_files)
         assert mock_list_repo_files.call_count == 1
         assert mock_list_repo_files.call_args_list[0] == call(
@@ -92,22 +82,14 @@ def test_one_filtered_repo_files(allow_patterns: list[str], expected_bool: bool)
         (subfolder / "correct.txt").touch()
 
         def _glob_path() -> list[str]:
-            return [
-                str(file.relative_to(path_tmp_dir))
-                for file in path_tmp_dir.glob("**/*")
-                if file.is_file()
-            ]
+            return [str(file.relative_to(path_tmp_dir)) for file in path_tmp_dir.glob("**/*") if file.is_file()]
 
         # Patch list_repo_files called by fn
         with patch(
             "aphrodite.transformers_utils.repo_utils.list_repo_files",
             MagicMock(return_value=_glob_path()),
         ) as mock_list_repo_files:
-            assert (
-                any_pattern_in_repo_files(
-                    tmp_dir, allow_patterns, "revision", "model", "token"
-                )
-            ) is expected_bool
+            assert (any_pattern_in_repo_files(tmp_dir, allow_patterns, "revision", "model", "token")) is expected_bool
         assert mock_list_repo_files.call_count == 1
         assert mock_list_repo_files.call_args_list[0] == call(
             repo_id=tmp_dir,
@@ -126,9 +108,7 @@ def test_one_filtered_repo_files(allow_patterns: list[str], expected_bool: bool)
         (None, True),
     ],
 )
-def test_get_hf_file_to_dict_honors_no_exist_marker(
-    cache_result: object, should_download: bool
-):
+def test_get_hf_file_to_dict_honors_no_exist_marker(cache_result: object, should_download: bool):
     with (
         patch(
             "aphrodite.transformers_utils.repo_utils.try_to_load_from_cache",
@@ -163,21 +143,14 @@ def test_is_mistral_model_repo(files: list[str], expected_bool: bool):
             (path_tmp_dir / file).touch()
 
         def _glob_path() -> list[str]:
-            return [
-                str(file.relative_to(path_tmp_dir))
-                for file in path_tmp_dir.glob("**/*")
-                if file.is_file()
-            ]
+            return [str(file.relative_to(path_tmp_dir)) for file in path_tmp_dir.glob("**/*") if file.is_file()]
 
         # Patch list_repo_files called by fn
         with patch(
             "aphrodite.transformers_utils.repo_utils.list_repo_files",
             MagicMock(return_value=_glob_path()),
         ) as mock_list_repo_files:
-            assert (
-                is_mistral_model_repo(tmp_dir, "revision", "model", "token")
-                is expected_bool
-            )
+            assert is_mistral_model_repo(tmp_dir, "revision", "model", "token") is expected_bool
         assert mock_list_repo_files.call_count == 1
         assert mock_list_repo_files.call_args_list[0] == call(
             repo_id=tmp_dir,

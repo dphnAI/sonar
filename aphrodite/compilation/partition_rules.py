@@ -58,14 +58,10 @@ def inductor_partition_rule_context(
 
     # Save current state before registering
 
-    saved_splitting_ops: list[str] = list(
-        torch._inductor.config.custom_should_partition_ops
-    )
+    saved_splitting_ops: list[str] = list(torch._inductor.config.custom_should_partition_ops)
     torch._inductor.config.custom_should_partition_ops = splitting_ops
 
-    logger.debug(
-        "Registered inductor partition rules for %d operators", len(splitting_ops)
-    )
+    logger.debug("Registered inductor partition rules for %d operators", len(splitting_ops))
 
     try:
         yield

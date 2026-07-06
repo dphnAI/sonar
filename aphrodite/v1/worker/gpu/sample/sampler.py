@@ -53,9 +53,7 @@ class Sampler:
         self.num_speculative_tokens = num_speculative_tokens
         self.use_flashinfer = flashinfer_sampler_supported()
 
-    def add_request(
-        self, req_idx: int, prompt_len: int, sampling_params: SamplingParams
-    ) -> None:
+    def add_request(self, req_idx: int, prompt_len: int, sampling_params: SamplingParams) -> None:
         self.sampling_states.add_request(req_idx, sampling_params)
         self.penalties_state.add_request(req_idx, sampling_params)
         self.logit_bias_state.add_request(req_idx, prompt_len, sampling_params)
@@ -86,9 +84,7 @@ class Sampler:
         num_nans = get_num_nans(logits) if self.compute_nans else None
 
         max_num_logprobs = self.sampling_states.max_num_logprobs(idx_mapping_np)
-        max_per_req_token_ids = self.logprob_token_ids_state.max_num_token_ids(
-            idx_mapping_np
-        )
+        max_per_req_token_ids = self.logprob_token_ids_state.max_num_token_ids(idx_mapping_np)
         return_logprobs = max_num_logprobs != NO_LOGPROBS or max_per_req_token_ids > 0
 
         sampled, processed_logits = self.sample(
@@ -157,9 +153,7 @@ class Sampler:
         logits = torch.empty_like(logits, dtype=torch.float32).copy_(logits)
 
         # Apply logit bias (e.g., allowed_token_ids, min_tokens) in place.
-        self.logit_bias_state.apply_logit_bias(
-            logits, expanded_idx_mapping, idx_mapping_np, pos
-        )
+        self.logit_bias_state.apply_logit_bias(logits, expanded_idx_mapping, idx_mapping_np, pos)
 
         # Apply penalties in place.
         self.penalties_state.apply_penalties(
@@ -180,9 +174,7 @@ class Sampler:
         )
 
         # Apply temperature in place.
-        self.sampling_states.apply_temperature(
-            logits, expanded_idx_mapping, idx_mapping_np
-        )
+        self.sampling_states.apply_temperature(logits, expanded_idx_mapping, idx_mapping_np)
 
         # Apply min_p in place.
         self.sampling_states.apply_min_p(logits, expanded_idx_mapping, idx_mapping_np)
@@ -191,9 +183,7 @@ class Sampler:
             return logits
 
         # Apply top_k and/or top_p. This might or might not return a new tensor.
-        return self.sampling_states.apply_top_k_top_p(
-            logits, expanded_idx_mapping, idx_mapping_np
-        )
+        return self.sampling_states.apply_top_k_top_p(logits, expanded_idx_mapping, idx_mapping_np)
 
     def sample(
         self,
@@ -214,9 +204,7 @@ class Sampler:
             expanded_local_pos,
             skip_top_k_top_p=True,
         )
-        top_k, top_p = self.sampling_states.get_top_k_top_p(
-            expanded_idx_mapping, idx_mapping_np
-        )
+        top_k, top_p = self.sampling_states.get_top_k_top_p(expanded_idx_mapping, idx_mapping_np)
         use_flashinfer = self.use_flashinfer and not (
             # Don't use FI sampler if no requests use top_k/top_p, if there are
             # any greedy requests or per-request seeds, or if post-processed

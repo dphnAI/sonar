@@ -9,10 +9,10 @@ import pytest_asyncio
 from huggingface_hub import snapshot_download
 from typing_extensions import TypedDict
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.tool_parsers.abstract_tool_parser import ToolParser
 from aphrodite.tool_parsers.granite4_tool_parser import Granite4ToolParser
 from aphrodite.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
+from tests.utils import RemoteOpenAIServer
 
 LORA_MODEL = "minpeter/LoRA-Llama-3.2-1B-tool-aphrodite-ci"
 
@@ -114,8 +114,7 @@ PRODUCT_TOOLS = [
         "type": "function",
         "function": {
             "name": "get_product_info",
-            "description": "Get detailed information of a product based on its "
-            "product ID.",
+            "description": "Get detailed information of a product based on its product ID.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -139,16 +138,13 @@ MESSAGES = [{"role": "user", "content": "What's the weather like in Boston?"}]
 PRODUCT_MESSAGES = [
     {
         "role": "user",
-        "content": "Hi! Do you have any detailed information about the product id "
-        "7355608 and inserted true?",
+        "content": "Hi! Do you have any detailed information about the product id 7355608 and inserted true?",
     }
 ]
 
 
 @pytest.mark.asyncio
-async def test_non_streaming_tool_call(
-    client: openai.AsyncOpenAI, server_config: ServerConfig
-):
+async def test_non_streaming_tool_call(client: openai.AsyncOpenAI, server_config: ServerConfig):
     """Test tool call in non-streaming mode."""
 
     response = await client.chat.completions.create(
@@ -179,9 +175,7 @@ async def test_non_streaming_tool_call(
 
 
 @pytest.mark.asyncio
-async def test_streaming_tool_call(
-    client: openai.AsyncOpenAI, server_config: ServerConfig
-):
+async def test_streaming_tool_call(client: openai.AsyncOpenAI, server_config: ServerConfig):
     """Test tool call in streaming mode."""
 
     stream = await client.chat.completions.create(
@@ -226,9 +220,7 @@ async def test_streaming_tool_call(
 
 
 @pytest.mark.asyncio
-async def test_non_streaming_product_tool_call(
-    client: openai.AsyncOpenAI, server_config: ServerConfig
-):
+async def test_non_streaming_product_tool_call(client: openai.AsyncOpenAI, server_config: ServerConfig):
     """Test tool call integer and boolean parameters in non-streaming mode."""
 
     response = await client.chat.completions.create(
@@ -268,9 +260,7 @@ async def test_non_streaming_product_tool_call(
 
 
 @pytest.mark.asyncio
-async def test_streaming_product_tool_call(
-    client: openai.AsyncOpenAI, server_config: ServerConfig
-):
+async def test_streaming_product_tool_call(client: openai.AsyncOpenAI, server_config: ServerConfig):
     """Test tool call integer and boolean parameters in streaming mode."""
 
     stream = await client.chat.completions.create(

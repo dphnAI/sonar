@@ -14,16 +14,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    ChatCompletionRequest,
+)
+from aphrodite.parser.nemotron_v3 import NemotronV3Parser
 from tests.parser.engine.conftest import make_mock_tokenizer
 from tests.parser.engine.streaming_helpers import (
     collect_function_name,
     collect_tool_arguments,
     simulate_tool_streaming,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import (
-    ChatCompletionRequest,
-)
-from aphrodite.parser.nemotron_v3 import NemotronV3Parser
 
 _THINK_START_ID = 50
 _THINK_END_ID = 51
@@ -113,13 +113,7 @@ class TestNemotronSwap:
 
 class TestNonStreamingToolCalls:
     def test_single_tool_call(self, parser):
-        text = (
-            "<tool_call>\n"
-            "<function=get_weather>\n"
-            "<parameter=city>Tokyo</parameter>\n"
-            "</function>\n"
-            "</tool_call>"
-        )
+        text = "<tool_call>\n<function=get_weather>\n<parameter=city>Tokyo</parameter>\n</function>\n</tool_call>"
         request = _make_request()
         result = parser.extract_tool_calls(text, request)
         assert result.tools_called is True
@@ -228,11 +222,7 @@ class TestParseDeltaTokenIdFiltering:
         )
 
         parser.parse_delta(
-            delta_text=(
-                "\n<function=get_weather>\n"
-                "<parameter=city>Tokyo</parameter>\n"
-                "</function>\n"
-            ),
+            delta_text=("\n<function=get_weather>\n<parameter=city>Tokyo</parameter>\n</function>\n"),
             delta_token_ids=[_TEXT_ID] * 5,
             request=request,
             finished=False,

@@ -276,8 +276,10 @@ __global__ void fusedQKNormRopeKernel(
 
           dim_idx = (dim_idx * 2) % rotary_dim;
           int half_dim = dim_idx / 2;
-          float cos_val = CacheConverter::convert(APHRODITE_LDG(cos_ptr + half_dim));
-          float sin_val = CacheConverter::convert(APHRODITE_LDG(sin_ptr + half_dim));
+          float cos_val =
+              CacheConverter::convert(APHRODITE_LDG(cos_ptr + half_dim));
+          float sin_val =
+              CacheConverter::convert(APHRODITE_LDG(sin_ptr + half_dim));
 
           elements[i] = elements[i] * cos_val + elements2[i] * sin_val;
         }

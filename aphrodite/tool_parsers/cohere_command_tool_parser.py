@@ -90,9 +90,7 @@ class BaseCohereCommandToolParser(ToolParser):
                     "function": DeltaFunctionCall(**function_kwargs),
                 }
                 if name is not None:
-                    tool_call_id = tc.id or self._pending_streaming_tool_call_ids.pop(
-                        tc.index, None
-                    )
+                    tool_call_id = tc.id or self._pending_streaming_tool_call_ids.pop(tc.index, None)
                     if tool_call_id is not None:
                         tool_call_kwargs["id"] = tool_call_id
                     tool_call_kwargs["type"] = "function"

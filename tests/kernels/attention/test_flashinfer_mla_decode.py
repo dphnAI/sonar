@@ -82,9 +82,7 @@ def test_flashinfer_mla_decode(dtype: torch.dtype, bs: int, block_size: int):
     block_id = 0
     for i in range(bs):
         num_blocks_needed = blocks_per_seq[i]
-        block_tables[i, :num_blocks_needed] = all_block_ids[
-            block_id : block_id + num_blocks_needed
-        ]
+        block_tables[i, :num_blocks_needed] = all_block_ids[block_id : block_id + num_blocks_needed]
         block_id += num_blocks_needed
 
     kv_cache = torch.randn(block_tables.numel(), block_size, qk_head_dim).to(dtype)

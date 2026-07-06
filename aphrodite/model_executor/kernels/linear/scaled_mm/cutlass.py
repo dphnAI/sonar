@@ -32,9 +32,7 @@ from .ScaledMMLinearKernel import (
 
 class CutlassInt8ScaledMMLinearKernel(Int8ScaledMMLinearKernel):
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if not current_platform.is_cuda():
             return False, "requires CUDA."
         return True, None
@@ -90,15 +88,11 @@ class CutlassInt8ScaledMMLinearKernel(Int8ScaledMMLinearKernel):
                 range_min = (input_scale * (int8_traits.min - azps)).min()
 
                 scale = (range_max - range_min) / (int8_traits.max - int8_traits.min)
-                replace_parameter(
-                    layer, i_s_name, torch.nn.Parameter(scale, requires_grad=False)
-                )
+                replace_parameter(layer, i_s_name, torch.nn.Parameter(scale, requires_grad=False))
 
                 # AZP loaded as int8 but used as int32
                 azp = (int8_traits.min - range_min / scale).to(dtype=torch.int32)
-                replace_parameter(
-                    layer, i_zp_name, torch.nn.Parameter(azp, requires_grad=False)
-                )
+                replace_parameter(layer, i_zp_name, torch.nn.Parameter(azp, requires_grad=False))
 
         # azp_adj is the AZP adjustment term, used to account for weights.
         # It does not depend on scales or azp, so it is the same for
@@ -130,9 +124,7 @@ class CutlassInt8ScaledMMLinearKernel(Int8ScaledMMLinearKernel):
         # * dynamic, i_s is None and x_s computed from x.
         # * static, i_s is scalar and x_s is i_s.
         symmetric = azp_adj is None
-        x_q, x_s, x_zp = ops.scaled_int8_quant(
-            x.contiguous(), i_s, i_zp, symmetric=symmetric
-        )
+        x_q, x_s, x_zp = ops.scaled_int8_quant(x.contiguous(), i_s, i_zp, symmetric=symmetric)
 
         if x_zp is not None:
             # Currently, static is always per-tensor and dynamic is per-token
@@ -148,22 +140,16 @@ class CutlassInt8ScaledMMLinearKernel(Int8ScaledMMLinearKernel):
                 azp=azp,
                 bias=bias,
             )
-        return ops.cutlass_scaled_mm(
-            x_q, w_q, scale_a=x_s, scale_b=w_s, out_dtype=x.dtype, bias=bias
-        )
+        return ops.cutlass_scaled_mm(x_q, w_q, scale_a=x_s, scale_b=w_s, out_dtype=x.dtype, bias=bias)
 
 
 class CutlassFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
-    def __init__(
-        self, c: FP8ScaledMMLinearLayerConfig, layer_param_names: Sequence[str]
-    ) -> None:
+    def __init__(self, c: FP8ScaledMMLinearLayerConfig, layer_param_names: Sequence[str]) -> None:
         self.logical_output_size: int | None = None
         super().__init__(c, layer_param_names)
 
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if not current_platform.is_cuda():
             return False, "requires CUDA."
         return True, None
@@ -180,9 +166,7 @@ class CutlassFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         return None
 
     @staticmethod
-    def _pad_to_alignment(
-        x: torch.Tensor, dim: int, alignment: int, value: float = 0.0
-    ) -> torch.Tensor:
+    def _pad_to_alignment(x: torch.Tensor, dim: int, alignment: int, value: float = 0.0) -> torch.Tensor:
         """Pad tensor ``x`` along ``dim`` to the next multiple of
         ``alignment``."""
         remainder = x.shape[dim] % alignment
@@ -229,9 +213,9 @@ class CutlassFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         weight_scale = getattr(layer, weight_scale_name, None)
         if weight_scale is not None and pad_n > 0 and weight_scale.numel() > 1:
             flat_scale = weight_scale.reshape(-1)
-            padded_scale = self._pad_to_alignment(
-                flat_scale, dim=0, alignment=16, value=1.0
-            ).view(-1, *weight_scale.shape[1:])
+            padded_scale = self._pad_to_alignment(flat_scale, dim=0, alignment=16, value=1.0).view(
+                -1, *weight_scale.shape[1:]
+            )
             replace_parameter(layer, weight_scale_name, padded_scale.data)
             set_weight_attrs(
                 getattr(layer, weight_name),
@@ -262,9 +246,7 @@ class CutlassFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
         if pad_n > 0 and bias is not None:
             bias = self._pad_to_alignment(bias, dim=0, alignment=16)
 
-        output = ops.cutlass_scaled_mm(
-            A, B, out_dtype=out_dtype, scale_a=As, scale_b=Bs, bias=bias
-        )
+        output = ops.cutlass_scaled_mm(A, B, out_dtype=out_dtype, scale_a=As, scale_b=Bs, bias=bias)
 
         if pad_n > 0:
             output = output[..., :output_size].contiguous()
@@ -289,8 +271,7 @@ class CutlassFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
         if not CUTLASS_BLOCK_FP8_SUPPORTED:
             return (
                 False,
-                "The device compute capability of"
-                f"{compute_capability} is not supported.",
+                f"The device compute capability of{compute_capability} is not supported.",
             )
         return True, None
 
@@ -304,8 +285,7 @@ class CutlassFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
         if act_quant_desc.group_shape != GroupShape(1, 128):
             return (
                 False,
-                "Supports only dynamic per token group activation "
-                "quantization with group_shape=(1,128).",
+                "Supports only dynamic per token group activation quantization with group_shape=(1,128).",
             )
         return True, None
 

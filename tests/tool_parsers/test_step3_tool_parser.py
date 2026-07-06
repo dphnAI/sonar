@@ -4,11 +4,11 @@
 
 import pytest
 
+from aphrodite.tokenizers import TokenizerLike, get_tokenizer
 from tests.tool_parsers.common_tests import (
     ToolParserTestConfig,
     ToolParserTests,
 )
-from aphrodite.tokenizers import TokenizerLike, get_tokenizer
 
 
 class TestStep3ToolParser(ToolParserTests):
@@ -73,14 +73,8 @@ class TestStep3ToolParser(ToolParserTests):
                 "</steptml:invoke><｜tool_call_end｜><｜tool_calls_end｜>"
             ),
             malformed_input_outputs=[
-                (
-                    "<｜tool_calls_begin｜><｜tool_call_begin｜>"
-                    '<steptml:invoke name="func">'
-                ),
-                (
-                    '<｜tool_call_begin｜><steptml:invoke name="func">'
-                    "</steptml:invoke><｜tool_call_end｜>"
-                ),
+                ('<｜tool_calls_begin｜><｜tool_call_begin｜><steptml:invoke name="func">'),
+                ('<｜tool_call_begin｜><steptml:invoke name="func"></steptml:invoke><｜tool_call_end｜>'),
             ],
             # Expected results
             single_tool_call_expected_name="get_weather",
@@ -89,9 +83,7 @@ class TestStep3ToolParser(ToolParserTests):
             parallel_tool_calls_names=["get_weather", "get_time"],
             # xfail markers
             xfail_nonstreaming={
-                "test_single_tool_call_simple_args": (
-                    "Step3 parser non-streaming has bugs"
-                ),
+                "test_single_tool_call_simple_args": ("Step3 parser non-streaming has bugs"),
                 "test_parallel_tool_calls": ("Step3 parser non-streaming has bugs"),
                 "test_various_data_types": "Step3 parser non-streaming has bugs",
                 "test_empty_arguments": "Step3 parser non-streaming has bugs",
@@ -99,13 +91,9 @@ class TestStep3ToolParser(ToolParserTests):
                 "test_escaped_strings": "Step3 parser non-streaming has bugs",
             },
             xfail_streaming={
-                "test_parallel_tool_calls": (
-                    "Step3 parser has significant bugs in both streaming "
-                    "and non-streaming"
-                ),
+                "test_parallel_tool_calls": ("Step3 parser has significant bugs in both streaming and non-streaming"),
                 "test_streaming_reconstruction": (
-                    "Step3 parser non-streaming has bugs, so streaming "
-                    "doesn't match non-streaming"
+                    "Step3 parser non-streaming has bugs, so streaming doesn't match non-streaming"
                 ),
             },
             supports_typed_arguments=False,

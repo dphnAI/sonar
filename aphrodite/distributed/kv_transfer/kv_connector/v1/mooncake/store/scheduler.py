@@ -60,9 +60,7 @@ class MooncakeStoreScheduler:
         self.client = LookupKeyClient(aphrodite_config)
 
         # Align with the engine's own scheduler_block_size and hash_block_size.
-        self._block_size, self._hash_block_size = resolve_kv_cache_block_sizes(
-            kv_cache_config, aphrodite_config
-        )
+        self._block_size, self._hash_block_size = resolve_kv_cache_block_sizes(kv_cache_config, aphrodite_config)
 
         # Per-request state
         self.load_specs: dict[str, LoadSpec] = {}  # to be loaded
@@ -162,9 +160,7 @@ class MooncakeStoreScheduler:
 
         self.load_specs[request.request_id].can_load = True
 
-    def build_connector_meta(
-        self, scheduler_output: SchedulerOutput
-    ) -> KVConnectorMetadata:
+    def build_connector_meta(self, scheduler_output: SchedulerOutput) -> KVConnectorMetadata:
         """Build connector metadata for this scheduler step."""
         force_skip_save = self.kv_role == "kv_consumer"
 
@@ -190,10 +186,7 @@ class MooncakeStoreScheduler:
         # Handle new requests
         for request in scheduler_output.scheduled_new_reqs:
             load_spec = self.load_specs.pop(request.req_id, None)
-            num_tokens_to_compute = (
-                request.num_computed_tokens
-                + scheduler_output.num_scheduled_tokens[request.req_id]
-            )
+            num_tokens_to_compute = request.num_computed_tokens + scheduler_output.num_scheduled_tokens[request.req_id]
             assert request.req_id in self._unfinished_requests
             request_tuple = self._unfinished_requests.get(request.req_id)
             request_real = request_tuple[0]  # type: ignore[index]
@@ -216,9 +209,7 @@ class MooncakeStoreScheduler:
             )
             self._request_trackers[request.req_id] = request_tracker
 
-            last_chunk_tokens_num = (
-                len(prefill_tokens) // self._block_size * self._block_size
-            )
+            last_chunk_tokens_num = len(prefill_tokens) // self._block_size * self._block_size
 
             req_meta = ReqMeta.from_request_tracker(
                 request_tracker,
@@ -250,8 +241,7 @@ class MooncakeStoreScheduler:
                     request_tuple = self._unfinished_requests.get(req_id)
                     request_real = request_tuple[0]  # type: ignore[index]
                     num_tokens_to_compute = (
-                        request_real.num_computed_tokens
-                        + scheduler_output.num_scheduled_tokens[req_id]
+                        request_real.num_computed_tokens + scheduler_output.num_scheduled_tokens[req_id]
                     )
                     # On resume, the request re-prefills prompt + previously
                     # generated tokens (all_token_ids).
@@ -266,18 +256,14 @@ class MooncakeStoreScheduler:
                     )
                     self._request_trackers[req_id] = request_tracker
 
-                    last_chunk_tokens_num = (
-                        len(prefill_tokens) // self._block_size * self._block_size
-                    )
+                    last_chunk_tokens_num = len(prefill_tokens) // self._block_size * self._block_size
                     req_meta = ReqMeta.from_request_tracker(
                         request_tracker,
                         self._block_size,
                         load_spec=load_spec,
                         skip_save=force_skip_save,
                         block_hashes=request_real.block_hashes,
-                        is_last_chunk=(
-                            request_tracker.token_len >= last_chunk_tokens_num
-                        ),
+                        is_last_chunk=(request_tracker.token_len >= last_chunk_tokens_num),
                     )
                 else:
                     # Decode/chunked request
@@ -292,9 +278,7 @@ class MooncakeStoreScheduler:
                         ]
                         request_tracker.token_len += len(new_token_ids)
                     else:
-                        raise ValueError(
-                            f"Request {req_id} is not in _unfinished_requests"
-                        )
+                        raise ValueError(f"Request {req_id} is not in _unfinished_requests")
                     num_computed_token = cached_reqs.num_computed_tokens[i]
                     # Use the tracker's snapshot of the prefill range so resumed
                     # requests keep saving past the original prompt boundary.
@@ -303,18 +287,14 @@ class MooncakeStoreScheduler:
                         continue
                     request_tracker.update(new_block_ids)
 
-                    last_chunk_tokens_num = (
-                        prefill_end // self._block_size * self._block_size
-                    )
+                    last_chunk_tokens_num = prefill_end // self._block_size * self._block_size
                     req_meta = ReqMeta.from_request_tracker(
                         request_tracker,
                         self._block_size,
                         load_spec=None,
                         skip_save=force_skip_save,
                         block_hashes=unfinished_req.block_hashes,
-                        is_last_chunk=(
-                            request_tracker.token_len >= last_chunk_tokens_num
-                        ),
+                        is_last_chunk=(request_tracker.token_len >= last_chunk_tokens_num),
                     )
 
                 if req_meta is not None:

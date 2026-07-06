@@ -41,12 +41,8 @@ class MockModelConfig:
     def __init__(self, hf_config, dtype):
         self.hf_config = hf_config
         self.hf_text_config = get_hf_text_config(hf_config)
-        convertor_cls = MODEL_ARCH_CONFIG_CONVERTORS.get(
-            self.hf_config.model_type, ModelArchConfigConvertorBase
-        )
-        self.model_arch_config = convertor_cls(
-            self.hf_config, self.hf_text_config
-        ).convert()
+        convertor_cls = MODEL_ARCH_CONFIG_CONVERTORS.get(self.hf_config.model_type, ModelArchConfigConvertorBase)
+        self.model_arch_config = convertor_cls(self.hf_config, self.hf_text_config).convert()
         self.dtype = dtype
         self.is_attention_free = False
 
@@ -54,8 +50,7 @@ class MockModelConfig:
         # 1. Check if ModelConfig actually has this attribute
         if not hasattr(ModelConfig, name):
             raise AttributeError(
-                f"'{type(self).__name__}' object has no attribute '{name}' "
-                f"and neither does 'ModelConfig'."
+                f"'{type(self).__name__}' object has no attribute '{name}' and neither does 'ModelConfig'."
             )
 
         # 2. Fetch the attribute from the ModelConfig CLASS
@@ -238,9 +233,7 @@ def test_moe_layer_freq_parser():
     result = parser_chain.parse(aphrodite_config)
 
     # Layers >= 6 and divisible by 3: 6, 9, 12, 15, 18, 21, 24, 27
-    expected_moe_layers = len(
-        [layer for layer in range(30) if layer >= 6 and layer % 3 == 0]
-    )
+    expected_moe_layers = len([layer for layer in range(30) if layer >= 6 and layer % 3 == 0])
     assert expected_moe_layers == 8
     assert result.num_moe_layers == expected_moe_layers
 
@@ -272,9 +265,7 @@ def test_attention_metrics_scaling():
     double_layers_aphrodite_config = create_mock_aphrodite_config(double_layers_hf_config)
     double_layers_metrics = AttentionMetrics.from_aphrodite_config(double_layers_aphrodite_config)
 
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=100, context_len=512, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
     # FLOPS should double when layers double
     base_flops = base_metrics.get_num_flops(ctx)
@@ -312,9 +303,7 @@ def test_attention_metrics_grouped_query():
     mha_metrics = AttentionMetrics.from_aphrodite_config(mha_config)
     gqa_metrics = AttentionMetrics.from_aphrodite_config(gqa_config)
 
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=1, context_len=1024, is_prefill=False
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=1, context_len=1024, is_prefill=False)
 
     # GQA should have less KV cache reads since fewer KV heads
     mha_read = mha_metrics.get_read_bytes(ctx)
@@ -341,9 +330,7 @@ def test_ffn_metrics_scaling():
     larger_ffn_aphrodite_config = create_mock_aphrodite_config(larger_ffn_hf_config)
     larger_ffn_metrics = FfnMetrics.from_aphrodite_config(larger_ffn_aphrodite_config)
 
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=100, context_len=512, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
     # FLOPS should double when intermediate size doubles
     base_flops = base_metrics.get_num_flops(ctx)
@@ -374,9 +361,7 @@ def test_moe_metrics_vs_dense():
     dense_metrics = FfnMetrics.from_aphrodite_config(dense_config)
     moe_metrics = FfnMetrics.from_aphrodite_config(moe_config)
 
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=100, context_len=512, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
     # MoE should have different compute/memory characteristics
     dense_flops = dense_metrics.get_num_flops(ctx)
@@ -403,9 +388,7 @@ def test_unembed_metrics_scaling():
     small_vocab_metrics = UnembedMetrics.from_aphrodite_config(small_vocab_config)
     large_vocab_metrics = UnembedMetrics.from_aphrodite_config(large_vocab_config)
 
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=100, context_len=512, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
     # FLOPS should double when vocab size doubles
     small_flops = small_vocab_metrics.get_num_flops(ctx)
@@ -425,12 +408,8 @@ def test_prefill_vs_decode_differences():
 
     metrics = AttentionMetrics.from_aphrodite_config(config)
 
-    prefill_ctx = ExecutionContext.from_single_request(
-        num_tokens=512, context_len=512, is_prefill=True
-    )
-    decode_ctx = ExecutionContext.from_single_request(
-        num_tokens=1, context_len=512, is_prefill=False
-    )
+    prefill_ctx = ExecutionContext.from_single_request(num_tokens=512, context_len=512, is_prefill=True)
+    decode_ctx = ExecutionContext.from_single_request(num_tokens=1, context_len=512, is_prefill=False)
 
     prefill_read = metrics.get_read_bytes(prefill_ctx)
     decode_read = metrics.get_read_bytes(decode_ctx)
@@ -450,9 +429,7 @@ def test_model_metrics_aggregation():
     config = create_mock_aphrodite_config(hf_config)
 
     model_metrics = ModelMetrics(config)
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=100, context_len=512, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
     # Should have metrics for attention, ffn, and unembed
     total_flops = model_metrics.get_num_flops(ctx)
@@ -502,9 +479,7 @@ def test_moe_expert_activation_proportional_scaling():
     double_metrics = FfnMetrics.from_aphrodite_config(double_aphrodite_config)
     triple_metrics = FfnMetrics.from_aphrodite_config(triple_aphrodite_config)
 
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=100, context_len=512, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
     # Get total metrics - the key insight is that differences should be proportional
     base_flops = base_metrics.get_num_flops(ctx)
@@ -548,9 +523,7 @@ def test_quantization_config_parser_fp8():
         def get_name(self):
             return "fp8"
 
-    hf_config = Qwen3Config(
-        hidden_size=2048, num_attention_heads=16, num_hidden_layers=1
-    )
+    hf_config = Qwen3Config(hidden_size=2048, num_attention_heads=16, num_hidden_layers=1)
     aphrodite_config = create_mock_aphrodite_config(hf_config, quant_config=MockQuantConfig())
 
     attn_result = AttentionMetrics.get_parser().parse(aphrodite_config)
@@ -567,9 +540,7 @@ def test_quantization_config_parser_mxfp4():
         def get_name(self):
             return "mxfp4"
 
-    hf_config = Qwen3Config(
-        hidden_size=2048, intermediate_size=8192, num_hidden_layers=1
-    )
+    hf_config = Qwen3Config(hidden_size=2048, intermediate_size=8192, num_hidden_layers=1)
     aphrodite_config = create_mock_aphrodite_config(hf_config, quant_config=MockQuantConfig())
 
     ffn_result = FfnMetrics.get_parser().parse(aphrodite_config)
@@ -592,9 +563,7 @@ def test_attention_per_gpu_with_tensor_parallelism():
     aphrodite_config = create_mock_aphrodite_config(hf_config, tensor_parallel_size=4)
     metrics = AttentionMetrics.from_aphrodite_config(aphrodite_config)
 
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=128, context_len=1024, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=128, context_len=1024, is_prefill=True)
 
     # Get global and per-gpu metrics
     global_flops = metrics.get_num_flops(ctx, per_gpu=False)
@@ -626,9 +595,7 @@ def test_attention_per_gpu_with_pipeline_parallelism():
     aphrodite_config = create_mock_aphrodite_config(hf_config, pipeline_parallel_size=4)
     metrics = AttentionMetrics.from_aphrodite_config(aphrodite_config)
 
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=100, context_len=512, is_prefill=False
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=False)
 
     # Get global and per-gpu metrics
     global_flops = metrics.get_num_flops(ctx, per_gpu=False)
@@ -661,9 +628,7 @@ def test_ffn_per_gpu_with_tensor_parallelism():
     # ffn_tp_size should be dp_size * tp_size = 8 (when EP not enabled)
     assert metrics.ffn_tp_size == 8
 
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=128, context_len=2048, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=128, context_len=2048, is_prefill=True)
 
     # Get global and per-gpu metrics
     global_flops = metrics.get_num_flops(ctx, per_gpu=False)
@@ -685,9 +650,7 @@ def test_ffn_per_gpu_with_pipeline_parallelism():
     aphrodite_config = create_mock_aphrodite_config(hf_config, pipeline_parallel_size=6)
     metrics = FfnMetrics.from_aphrodite_config(aphrodite_config)
 
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=100, context_len=512, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
     # Get global and per-gpu metrics
     global_flops = metrics.get_num_flops(ctx, per_gpu=False)
@@ -724,9 +687,7 @@ def test_moe_per_gpu_with_expert_parallelism():
     assert metrics.ffn_ep_size == 8
     assert metrics.ffn_tp_size == 1
 
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=100, context_len=512, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
     # Get per-gpu metrics
     per_gpu_read_breakdown = metrics.get_read_bytes_breakdown(ctx, per_gpu=True)
@@ -781,18 +742,14 @@ def test_moe_per_gpu_expert_activation_accounting():
     # Each GPU: T*E = 10*1 = 10 activations
     # Experts per GPU: 64/8 = 8
     # So num_activated_experts should be min(10, 8) = 8
-    small_ctx = ExecutionContext.from_single_request(
-        num_tokens=10, context_len=512, is_prefill=True
-    )
+    small_ctx = ExecutionContext.from_single_request(num_tokens=10, context_len=512, is_prefill=True)
     small_read = metrics.get_read_bytes_breakdown(small_ctx, per_gpu=True)
 
     # Large batch: T=1000, E_per_gpu=1
     # Each GPU: T*E = 1000*1 = 1000 activations
     # Experts per GPU: 8
     # So num_activated_experts should be min(1000, 8) = 8 (all experts activated)
-    large_ctx = ExecutionContext.from_single_request(
-        num_tokens=1000, context_len=512, is_prefill=True
-    )
+    large_ctx = ExecutionContext.from_single_request(num_tokens=1000, context_len=512, is_prefill=True)
     large_read = metrics.get_read_bytes_breakdown(large_ctx, per_gpu=True)
 
     # Weight reads should be similar (both activate all 8 experts per GPU)
@@ -821,9 +778,7 @@ def test_unembed_per_gpu_with_tensor_parallelism():
     aphrodite_config = create_mock_aphrodite_config(hf_config, tensor_parallel_size=8)
     metrics = UnembedMetrics.from_aphrodite_config(aphrodite_config)
 
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=100, context_len=512, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
     # Get global and per-gpu metrics
     global_flops = metrics.get_num_flops(ctx, per_gpu=False)
@@ -861,9 +816,7 @@ def test_model_metrics_per_gpu_aggregation():
     )
 
     model_metrics = ModelMetrics(aphrodite_config)
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=100, context_len=512, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
     # Get breakdowns for both modes
     per_gpu_breakdown = model_metrics.get_num_flops_breakdown(ctx, per_gpu=True)
@@ -897,9 +850,7 @@ def test_attention_per_gpu_heads_not_evenly_divisible():
     aphrodite_config = create_mock_aphrodite_config(hf_config, tensor_parallel_size=4)
     metrics = AttentionMetrics.from_aphrodite_config(aphrodite_config)
 
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=64, context_len=256, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=64, context_len=256, is_prefill=True)
 
     # Should not crash and should handle max(1, ...) correctly
     per_gpu_flops = metrics.get_num_flops(ctx, per_gpu=True)
@@ -932,14 +883,10 @@ def test_quantization_config_parser_int4_methods(quant_method):
     aphrodite_config = create_mock_aphrodite_config(hf_config, quant_config=MockQuantConfig())
 
     attn_result = AttentionMetrics.get_parser().parse(aphrodite_config)
-    assert attn_result.weight_byte_size == 0.5, (
-        f"Expected 0.5 for {quant_method}, got {attn_result.weight_byte_size}"
-    )
+    assert attn_result.weight_byte_size == 0.5, f"Expected 0.5 for {quant_method}, got {attn_result.weight_byte_size}"
 
     ffn_result = FfnMetrics.get_parser().parse(aphrodite_config)
-    assert ffn_result.weight_byte_size == 0.5, (
-        f"Expected 0.5 for {quant_method}, got {ffn_result.weight_byte_size}"
-    )
+    assert ffn_result.weight_byte_size == 0.5, f"Expected 0.5 for {quant_method}, got {ffn_result.weight_byte_size}"
 
 
 # FP8 / INT8 quantization methods (weight_byte_size == 1)
@@ -963,14 +910,10 @@ def test_quantization_config_parser_fp8_methods(quant_method):
     aphrodite_config = create_mock_aphrodite_config(hf_config, quant_config=MockQuantConfig())
 
     attn_result = AttentionMetrics.get_parser().parse(aphrodite_config)
-    assert attn_result.weight_byte_size == 1, (
-        f"Expected 1 for {quant_method}, got {attn_result.weight_byte_size}"
-    )
+    assert attn_result.weight_byte_size == 1, f"Expected 1 for {quant_method}, got {attn_result.weight_byte_size}"
 
     ffn_result = FfnMetrics.get_parser().parse(aphrodite_config)
-    assert ffn_result.weight_byte_size == 1, (
-        f"Expected 1 for {quant_method}, got {ffn_result.weight_byte_size}"
-    )
+    assert ffn_result.weight_byte_size == 1, f"Expected 1 for {quant_method}, got {ffn_result.weight_byte_size}"
 
 
 def test_quantization_config_parser_unknown_method():
@@ -1012,9 +955,7 @@ def test_quantized_model_metrics_aggregation():
     aphrodite_config = create_mock_aphrodite_config(hf_config, quant_config=MockQuantConfig())
 
     model_metrics = ModelMetrics(aphrodite_config)
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=100, context_len=512, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
     # Should not crash and should produce valid metrics
     total_flops = model_metrics.get_num_flops(ctx)
@@ -1069,9 +1010,7 @@ def test_mla_attention_metrics_decode():
     metrics = MLAAttentionMetrics.from_aphrodite_config(aphrodite_config)
 
     # Single decode token with 1024 context
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=1, context_len=1024, is_prefill=False
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=1, context_len=1024, is_prefill=False)
 
     write_breakdown = metrics.get_write_bytes_breakdown(ctx, per_gpu=False)
 
@@ -1102,9 +1041,7 @@ def test_mla_attention_metrics_prefill():
     aphrodite_config = create_mock_aphrodite_config(hf_config)
     metrics = MLAAttentionMetrics.from_aphrodite_config(aphrodite_config)
 
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=2048, context_len=2048, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=2048, context_len=2048, is_prefill=True)
 
     flops_breakdown = metrics.get_num_flops_breakdown(ctx, per_gpu=False)
 
@@ -1158,9 +1095,7 @@ def test_mla_kv_cache_vs_standard_attention():
     standard_metrics = AttentionMetrics.from_aphrodite_config(standard_aphrodite_config)
 
     # Compare KV cache write for 100 tokens
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=100, context_len=100, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=100, is_prefill=True)
 
     mla_write = mla_metrics.get_write_bytes_breakdown(ctx, per_gpu=False)
     standard_write = standard_metrics.get_write_bytes_breakdown(ctx, per_gpu=False)
@@ -1196,9 +1131,7 @@ def test_mla_per_gpu_with_tensor_parallelism():
     aphrodite_config = create_mock_aphrodite_config(hf_config, tensor_parallel_size=8)
     metrics = MLAAttentionMetrics.from_aphrodite_config(aphrodite_config)
 
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=64, context_len=1024, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=64, context_len=1024, is_prefill=True)
 
     global_flops = metrics.get_num_flops(ctx, per_gpu=False)
     per_gpu_flops = metrics.get_num_flops(ctx, per_gpu=True)
@@ -1226,9 +1159,7 @@ def test_mla_per_gpu_with_pipeline_parallelism():
     aphrodite_config = create_mock_aphrodite_config(hf_config, pipeline_parallel_size=4)
     metrics = MLAAttentionMetrics.from_aphrodite_config(aphrodite_config)
 
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=1, context_len=512, is_prefill=False
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=1, context_len=512, is_prefill=False)
 
     global_flops = metrics.get_num_flops(ctx, per_gpu=False)
     per_gpu_flops = metrics.get_num_flops(ctx, per_gpu=True)
@@ -1263,9 +1194,7 @@ def test_mla_model_metrics_excludes_standard_attention():
     assert "unembed" in component_types
 
     # Breakdowns should work end-to-end
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=100, context_len=512, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
     total_flops = model_metrics.get_num_flops(ctx)
     breakdown = model_metrics.get_num_flops_breakdown(ctx)
     assert total_flops == sum(breakdown.values())
@@ -1292,9 +1221,7 @@ def test_standard_attention_still_works_for_non_mla():
     assert "attn" in component_types
     assert "mla_attn" not in component_types
 
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=100, context_len=512, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
     total_flops = model_metrics.get_num_flops(ctx)
     assert total_flops > 0
 
@@ -1328,9 +1255,7 @@ def test_mla_attention_scaling_with_layers():
     base_metrics = MLAAttentionMetrics.from_aphrodite_config(base_aphrodite)
     double_metrics = MLAAttentionMetrics.from_aphrodite_config(double_aphrodite)
 
-    ctx = ExecutionContext.from_single_request(
-        num_tokens=100, context_len=512, is_prefill=True
-    )
+    ctx = ExecutionContext.from_single_request(num_tokens=100, context_len=512, is_prefill=True)
 
     # All metrics should double with double layers
     assert double_metrics.get_num_flops(ctx) == 2 * base_metrics.get_num_flops(ctx)

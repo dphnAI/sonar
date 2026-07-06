@@ -14,9 +14,7 @@ if TYPE_CHECKING:
 _T = TypeVar("_T")
 _U = TypeVar("_U")
 
-JSONTree: TypeAlias = (
-    dict[str, "JSONTree[_T]"] | list["JSONTree[_T]"] | tuple["JSONTree[_T]", ...] | _T
-)
+JSONTree: TypeAlias = dict[str, "JSONTree[_T]"] | list["JSONTree[_T]"] | tuple["JSONTree[_T]", ...] | _T
 """A nested JSON structure where the leaves need not be JSON-serializable."""
 
 _JSONTree: TypeAlias = (

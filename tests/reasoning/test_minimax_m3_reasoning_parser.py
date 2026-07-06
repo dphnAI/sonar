@@ -46,9 +46,7 @@ class MiniMaxM3Tokenizer:
     ) -> list[int]:
         return [self._add_token(token) for token in self.tokenize(text)]
 
-    def decode(
-        self, ids: Sequence[int] | int, skip_special_tokens: bool = False
-    ) -> str:
+    def decode(self, ids: Sequence[int] | int, skip_special_tokens: bool = False) -> str:
         if isinstance(ids, int):
             ids = [ids]
         return "".join(self._id_to_token[token_id] for token_id in ids)
@@ -131,9 +129,7 @@ def run_streaming(
             current_token_ids=current_token_ids,
             delta_token_ids=delta_token_ids,
         )
-        reasoning_end_states.append(
-            parser.is_reasoning_end_streaming(current_token_ids, delta_token_ids)
-        )
+        reasoning_end_states.append(parser.is_reasoning_end_streaming(current_token_ids, delta_token_ids))
 
         if delta is not None:
             if delta.reasoning is not None:
@@ -161,9 +157,7 @@ def test_nonstreaming_extracts_explicit_reasoning_block():
     parser, _ = make_parser()
     request = ChatCompletionRequest(messages=[], model="test-model")
 
-    reasoning, content = parser.extract_reasoning(
-        "<mm:think>plan</mm:think>answer", request
-    )
+    reasoning, content = parser.extract_reasoning("<mm:think>plan</mm:think>answer", request)
 
     assert reasoning == "plan"
     assert content == "answer"
@@ -366,9 +360,7 @@ def test_streaming_split_end_marker_content_ids_are_stripped():
 
 def test_streaming_split_marker_tokens_enabled_mode():
     tokenizer = RuntimeSplitMiniMaxM3Tokenizer()
-    parser = MiniMaxM3ReasoningParser(
-        tokenizer, chat_template_kwargs={"thinking_mode": "enabled"}
-    )
+    parser = MiniMaxM3ReasoningParser(tokenizer, chat_template_kwargs={"thinking_mode": "enabled"})
 
     reasoning, content, end_states = run_streaming(
         parser,
@@ -414,9 +406,7 @@ def test_streaming_split_leading_end_marker_text_across_deltas():
 def test_token_id_helpers_with_split_marker_tokens():
     tokenizer = SplitMiniMaxM3Tokenizer()
     parser = MiniMaxM3ReasoningParser(tokenizer)
-    output_ids = tokenizer.encode(
-        "<mm:think>abc</mm:think>def", add_special_tokens=False
-    )
+    output_ids = tokenizer.encode("<mm:think>abc</mm:think>def", add_special_tokens=False)
     open_reasoning_ids = tokenizer.encode("<mm:think>abc", add_special_tokens=False)
     content_ids = tokenizer.encode("plain", add_special_tokens=False)
 
@@ -431,9 +421,7 @@ def test_token_id_helpers_with_split_marker_tokens():
 
 def test_token_id_helpers():
     parser, tokenizer = make_parser()
-    output_ids = tokenizer.encode(
-        "<mm:think>abc</mm:think>def", add_special_tokens=False
-    )
+    output_ids = tokenizer.encode("<mm:think>abc</mm:think>def", add_special_tokens=False)
     open_reasoning_ids = tokenizer.encode("<mm:think>abc", add_special_tokens=False)
     content_ids = tokenizer.encode("plain", add_special_tokens=False)
 
@@ -456,6 +444,4 @@ def test_token_id_helpers_enabled_mode():
     assert tokenizer.decode(parser.extract_content_ids(output_ids)) == "def"
     assert parser.extract_content_ids(open_reasoning_ids) == []
     assert parser.count_reasoning_tokens(output_ids) == len(tokenizer.encode("abc"))
-    assert parser.count_reasoning_tokens(open_reasoning_ids) == len(
-        tokenizer.encode("abc")
-    )
+    assert parser.count_reasoning_tokens(open_reasoning_ids) == len(tokenizer.encode("abc"))

@@ -137,14 +137,8 @@ async def init_generate_state(
         enable_log_outputs=args.enable_log_outputs,
         enable_log_deltas=args.enable_log_deltas,
     )
-    state.openai_serving_chat = (
-        OpenAIServingChat(**_chat_kwargs) if "generate" in supported_tasks else None
-    )
-    state.openai_serving_chat_batch = (
-        OpenAIServingChatBatch(**_chat_kwargs)
-        if "generate" in supported_tasks
-        else None
-    )
+    state.openai_serving_chat = OpenAIServingChat(**_chat_kwargs) if "generate" in supported_tasks else None
+    state.openai_serving_chat_batch = OpenAIServingChatBatch(**_chat_kwargs) if "generate" in supported_tasks else None
     if state.openai_serving_chat is not None:
         state.openai_serving_chat.warmup()
     state.openai_serving_completion = (

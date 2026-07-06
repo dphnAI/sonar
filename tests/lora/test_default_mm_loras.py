@@ -13,7 +13,7 @@ from huggingface_hub import snapshot_download
 from aphrodite.lora.request import LoRARequest
 from aphrodite.platforms import current_platform
 
-from ..conftest import AudioTestAssets, AphroditeRunner
+from ..conftest import AphroditeRunner, AudioTestAssets
 from ..utils import create_new_process_for_each_test
 
 MODEL_PATH = snapshot_download("microsoft/Phi-4-multimodal-instruct")
@@ -42,9 +42,7 @@ APHRODITE_RUNNER_BASE_KWARGS = {
 }
 
 
-def run_test(
-    aphrodite_runner, audio_assets, monkeypatch, lora_request, expected_suffix, **kwargs
-):
+def run_test(aphrodite_runner, audio_assets, monkeypatch, lora_request, expected_suffix, **kwargs):
     monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
 
     inputs = [([AUDIO_PROMPT], [audio_assets[0].audio_and_sample_rate[0]])]
@@ -83,9 +81,7 @@ def test_active_default_mm_lora(
     )
 
 
-@pytest.mark.skipif(
-    current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests"
-)
+@pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 @create_new_process_for_each_test()
 def test_inactive_default_mm_lora(
     aphrodite_runner: type[AphroditeRunner],
@@ -104,9 +100,7 @@ def test_inactive_default_mm_lora(
     )
 
 
-@pytest.mark.skipif(
-    current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests"
-)
+@pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 @create_new_process_for_each_test()
 def test_default_mm_lora_succeeds_with_redundant_lora_request(
     aphrodite_runner: type[AphroditeRunner],
@@ -124,9 +118,7 @@ def test_default_mm_lora_succeeds_with_redundant_lora_request(
     )
 
 
-@pytest.mark.skipif(
-    current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests"
-)
+@pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 @create_new_process_for_each_test()
 def test_default_mm_lora_fails_with_overridden_lora_request(
     aphrodite_runner: type[AphroditeRunner],

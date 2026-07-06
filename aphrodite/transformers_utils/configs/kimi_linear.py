@@ -56,9 +56,7 @@ class KimiLinearConfig(PretrainedConfig):
         self.model_type = model_type
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.head_dim = (
-            head_dim if head_dim is not None else hidden_size // num_attention_heads
-        )
+        self.head_dim = head_dim if head_dim is not None else hidden_size // num_attention_heads
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -142,7 +140,4 @@ class KimiLinearConfig(PretrainedConfig):
         )
 
     def is_kda_layer(self, layer_idx: int):
-        return (
-            self.linear_attn_config is not None
-            and (layer_idx + 1) in self.linear_attn_config["kda_layers"]
-        )
+        return self.linear_attn_config is not None and (layer_idx + 1) in self.linear_attn_config["kda_layers"]

@@ -6,6 +6,8 @@ from aphrodite.platforms import current_platform
 
 from ..utils import compare_two_settings, create_new_process_for_each_test
 
+ATTN_BACKENDS: list[str | None] = [None] if current_platform.is_rocm() else ["FLASH_ATTN"]
+
 
 @pytest.mark.parametrize(
     "PP_SIZE, MODEL_NAME",
@@ -15,7 +17,7 @@ from ..utils import compare_two_settings, create_new_process_for_each_test
 )
 @pytest.mark.parametrize(
     "ATTN_BACKEND",
-    [None] if current_platform.is_rocm() else ["FLASH_ATTN"],
+    ATTN_BACKENDS,
 )
 @create_new_process_for_each_test()
 def test_pp_cudagraph(

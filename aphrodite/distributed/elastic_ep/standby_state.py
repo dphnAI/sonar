@@ -42,12 +42,7 @@ def create_standby_groups(
     enable_eplb: bool = True,
     backend: str | None = None,
 ) -> None:
-    global \
-        _STANDBY_WORLD, \
-        _STANDBY_WORLD_NODE_COUNT, \
-        _STANDBY_DP, \
-        _STANDBY_EP, \
-        _STANDBY_EPLB
+    global _STANDBY_WORLD, _STANDBY_WORLD_NODE_COUNT, _STANDBY_DP, _STANDBY_EP, _STANDBY_EPLB
 
     from aphrodite.distributed.utils import get_cached_tcp_store_client
 
@@ -72,22 +67,14 @@ def create_standby_groups(
     tp_size = get_tp_group().world_size
     pp_size = get_pp_group().world_size
 
-    all_ranks = torch.arange(new_world_size_across_dp).reshape(
-        -1, new_dp_size, pp_size, tp_size
-    )
+    all_ranks = torch.arange(new_world_size_across_dp).reshape(-1, new_dp_size, pp_size, tp_size)
     standby_dp_ranks = all_ranks.transpose(1, 3).reshape(-1, new_dp_size).unbind(0)
     standby_dp_ranks = [x.tolist() for x in standby_dp_ranks]
-    _STANDBY_DP = _init_stateless_group(
-        standby_dp_ranks, "dp", master_ip, backend, coord_store=coord_store
-    )
+    _STANDBY_DP = _init_stateless_group(standby_dp_ranks, "dp", master_ip, backend, coord_store=coord_store)
 
-    standby_ep_ranks = (
-        all_ranks.transpose(1, 2).reshape(-1, new_dp_size * tp_size).unbind(0)
-    )
+    standby_ep_ranks = all_ranks.transpose(1, 2).reshape(-1, new_dp_size * tp_size).unbind(0)
     standby_ep_ranks = [x.tolist() for x in standby_ep_ranks]
-    _STANDBY_EP = _init_stateless_group(
-        standby_ep_ranks, "ep", master_ip, backend, coord_store=coord_store
-    )
+    _STANDBY_EP = _init_stateless_group(standby_ep_ranks, "ep", master_ip, backend, coord_store=coord_store)
 
     if enable_eplb:
         _STANDBY_EPLB = _init_stateless_group(
@@ -101,12 +88,7 @@ def create_standby_groups(
 
 def pop_standby_groups() -> dict:
     """Return all standby groups and clear the standby state."""
-    global \
-        _STANDBY_WORLD, \
-        _STANDBY_WORLD_NODE_COUNT, \
-        _STANDBY_DP, \
-        _STANDBY_EP, \
-        _STANDBY_EPLB
+    global _STANDBY_WORLD, _STANDBY_WORLD_NODE_COUNT, _STANDBY_DP, _STANDBY_EP, _STANDBY_EPLB
 
     result = dict(
         world=_STANDBY_WORLD,

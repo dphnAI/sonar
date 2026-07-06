@@ -25,9 +25,7 @@ def test_fastsafetensors_model_loader(monkeypatch, queue_size):
     monkeypatch.setenv("APHRODITE_FASTSAFETENSORS_QUEUE_SIZE", str(queue_size))
     with tempfile.TemporaryDirectory() as tmpdir:
         huggingface_hub.constants.HF_HUB_OFFLINE = False
-        download_weights_from_hf(
-            "openai-community/gpt2", allow_patterns=["*.safetensors"], cache_dir=tmpdir
-        )
+        download_weights_from_hf("openai-community/gpt2", allow_patterns=["*.safetensors"], cache_dir=tmpdir)
         safetensors = glob.glob(f"{tmpdir}/**/*.safetensors", recursive=True)
         assert len(safetensors) > 0
 

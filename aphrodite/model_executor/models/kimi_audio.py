@@ -12,7 +12,7 @@ import torch.nn as nn
 from transformers import BatchFeature
 from transformers import WhisperConfig as HFWhisperConfig
 
-from aphrodite.config import ModelConfig, SpeechToTextConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
 from aphrodite.config.multimodal import BaseDummyOptions
 from aphrodite.config.speech_to_text import SpeechToTextParams
 from aphrodite.inputs import PromptType, TokensPrompt
@@ -66,9 +66,7 @@ def _get_feat_extract_output_lengths(input_lengths: torch.Tensor) -> torch.Tenso
     """
     input_lengths_leave = input_lengths % 100
     feat_lengths = (input_lengths_leave - 1) // 2 + 1
-    output_lengths = (
-        ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // 100) * 13
-    )
+    output_lengths = ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // 100) * 13
     return output_lengths
 
 
@@ -88,9 +86,7 @@ class KimiAudioWhisperEncoder(WhisperEncoder):
         },
     )
 
-    def __init__(
-        self, *, aphrodite_config: AphroditeConfig, prefix: str = "", init_in_fp32: bool = False
-    ):
+    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", init_in_fp32: bool = False):
         # Load Whisper config from subfolder (authoritative source)
         # Kimi-Audio stores Whisper config in whisper-large-v3/config.json
         model_path = aphrodite_config.model_config.model
@@ -134,9 +130,7 @@ class KimiAudioProcessingInfo(BaseProcessingInfo):
         )
 
     def get_feature_extractor(self, **kwargs: object):
-        return cached_feature_extractor_from_config(
-            self.ctx.model_config, subfolder=KIMIA_WHISPER_SUBFOLDER
-        )
+        return cached_feature_extractor_from_config(self.ctx.model_config, subfolder=KIMIA_WHISPER_SUBFOLDER)
 
     def get_supported_mm_limits(self) -> Mapping[str, int | None]:
         return {"audio": 1}
@@ -164,14 +158,10 @@ class KimiAudioDummyInputsBuilder(BaseDummyInputsBuilder[KimiAudioProcessingInfo
             return {}
 
         feature_extractor = self.info.get_feature_extractor()
-        target_audio_length = (
-            min(feature_extractor.chunk_length, 30) * feature_extractor.sampling_rate
-        )
+        target_audio_length = min(feature_extractor.chunk_length, 30) * feature_extractor.sampling_rate
 
         return {
-            "audio": self._get_dummy_audios(
-                length=target_audio_length, num_audios=num_audios
-            ),
+            "audio": self._get_dummy_audios(length=target_audio_length, num_audios=num_audios),
         }
 
     def get_dummy_processor_inputs(
@@ -279,19 +269,13 @@ class KimiAudioMultiModalProcessor(BaseMultiModalProcessor[KimiAudioProcessingIn
         feature_attention_mask = out_mm_data.get("feature_attention_mask")
 
         if feature_attention_mask is not None:
-            audio_output_lens = _get_feat_extract_output_lengths(
-                feature_attention_mask.sum(-1)
-            )
+            audio_output_lens = _get_feat_extract_output_lengths(feature_attention_mask.sum(-1))
             audio_output_lengths = audio_output_lens.tolist()
         else:
             audio_output_lengths = []
 
         def get_replacement_kimiaudio(item_idx: int):
-            num_features = (
-                audio_output_lengths[item_idx]
-                if item_idx < len(audio_output_lengths)
-                else 376
-            )
+            num_features = audio_output_lengths[item_idx] if item_idx < len(audio_output_lengths) else 376
             if num_features == 0:
                 num_features = 376  # Default Kimi-Audio sequence length
             # Return the placeholder token ID repeated num_features times
@@ -361,8 +345,7 @@ class KimiAudioForConditionalGeneration(
 
     # Kimi-Audio supports a subset of Whisper's supported languages
     supported_languages: ClassVar[Mapping[str, str]] = {
-        k: ISO639_1_SUPPORTED_LANGS[k]
-        for k in ["zh", "en", "ja", "ko", "de", "fr", "es", "it", "pt", "ru", "ar"]
+        k: ISO639_1_SUPPORTED_LANGS[k] for k in ["zh", "en", "ja", "ko", "de", "fr", "es", "it", "pt", "ru", "ar"]
     }
     supports_transcription: ClassVar[Literal[True]] = True
 
@@ -422,28 +405,20 @@ class KimiAudioForConditionalGeneration(
 
         with self._mark_language_model(aphrodite_config):
             self.language_model = init_aphrodite_registered_model(
-                aphrodite_config=aphrodite_config.with_hf_config(
-                    self.config, architectures=["Qwen2ForCausalLM"]
-                ),
+                aphrodite_config=aphrodite_config.with_hf_config(self.config, architectures=["Qwen2ForCausalLM"]),
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
-    def _parse_and_validate_audio_input(
-        self, **kwargs: object
-    ) -> dict[str, torch.Tensor] | None:
+    def _parse_and_validate_audio_input(self, **kwargs: object) -> dict[str, torch.Tensor] | None:
         whisper_input_features = kwargs.pop("whisper_input_features", None)
         if whisper_input_features is None:
             return None
 
         return {"whisper_input_features": whisper_input_features}
 
-    def _process_audio_input(
-        self, audio_input: dict[str, torch.Tensor]
-    ) -> torch.Tensor:
+    def _process_audio_input(self, audio_input: dict[str, torch.Tensor]) -> torch.Tensor:
         input_features = audio_input["whisper_input_features"]
 
         # KimiAudioWhisperEncoder expects list of tensors
@@ -540,9 +515,7 @@ class KimiAudioForConditionalGeneration(
         inputs_embeds[actual_mm_mask] = used_audio_embeds.to(dtype=inputs_embeds.dtype)
 
         # Apply Kimi-Audio's unique fusion formula: (text + audio) × √2
-        inputs_embeds[actual_mm_mask] = (
-            inputs_embeds[actual_mm_mask] + text_at_mm_positions
-        ) * (2**0.5)
+        inputs_embeds[actual_mm_mask] = (inputs_embeds[actual_mm_mask] + text_at_mm_positions) * (2**0.5)
 
         return inputs_embeds
 
@@ -590,9 +563,7 @@ class KimiAudioForConditionalGeneration(
         return loaded
 
     @classmethod
-    def get_speech_to_text_config(
-        cls, model_config: ModelConfig, task_type: str
-    ) -> SpeechToTextConfig:
+    def get_speech_to_text_config(cls, model_config: ModelConfig, task_type: str) -> SpeechToTextConfig:
         """Get speech-to-text config with custom processor."""
         # Load feature extractor for config values
         feature_extractor = cached_feature_extractor_from_config(
@@ -622,21 +593,13 @@ class KimiAudioForConditionalGeneration(
 
         if task_type not in ("transcribe", "translate"):
             raise ValueError(
-                f"Unsupported task_type '{task_type}'. "
-                "Supported task types are 'transcribe' and 'translate'."
+                f"Unsupported task_type '{task_type}'. Supported task types are 'transcribe' and 'translate'."
             )
 
         # Incorporate request_prompt as context/instruction if provided
-        user_content = (
-            f"{request_prompt}\n{cls.AUDIO_PLACEHOLDER}"
-            if request_prompt
-            else cls.AUDIO_PLACEHOLDER
-        )
+        user_content = f"{request_prompt}\n{cls.AUDIO_PLACEHOLDER}" if request_prompt else cls.AUDIO_PLACEHOLDER
 
-        prompt = (
-            f"<|im_kimia_user_msg_start|>{user_content}"
-            f"<|im_msg_end|><|im_kimia_assistant_msg_start|>"
-        )
+        prompt = f"<|im_kimia_user_msg_start|>{user_content}<|im_msg_end|><|im_kimia_assistant_msg_start|>"
 
         prompt_token_ids = tokenizer.encode(prompt)
 

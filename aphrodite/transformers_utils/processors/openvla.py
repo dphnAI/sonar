@@ -22,15 +22,10 @@ def to_rgb_image(image: Any) -> Image.Image:
     if isinstance(image, torch.Tensor):
         image = image.detach().cpu().numpy()
     if not isinstance(image, np.ndarray):
-        raise TypeError(
-            "OpenVLA image input must be a PIL image, numpy array, or torch tensor; "
-            f"got {type(image)}"
-        )
+        raise TypeError(f"OpenVLA image input must be a PIL image, numpy array, or torch tensor; got {type(image)}")
 
     if image.ndim != 3:
-        raise ValueError(
-            f"OpenVLA image input must have 3 dimensions, got shape {image.shape}"
-        )
+        raise ValueError(f"OpenVLA image input must have 3 dimensions, got shape {image.shape}")
 
     if image.shape[0] in (1, 3):
         image = np.moveaxis(image, 0, -1)
@@ -38,9 +33,7 @@ def to_rgb_image(image: Any) -> Image.Image:
     if image.shape[-1] == 1:
         image = np.repeat(image, 3, axis=-1)
     elif image.shape[-1] != 3:
-        raise ValueError(
-            f"OpenVLA image input must have 1 or 3 channels, got shape {image.shape}"
-        )
+        raise ValueError(f"OpenVLA image input must have 1 or 3 channels, got shape {image.shape}")
 
     if image.dtype != np.uint8:
         image = image.astype(np.float32)
@@ -82,10 +75,7 @@ class OpenVLAImageProcessor:
             return {}
 
         pixel_values = torch.stack(
-            [
-                preprocess_openvla_image(image, image_size=self.image_size)
-                for image in images
-            ],
+            [preprocess_openvla_image(image, image_size=self.image_size) for image in images],
             dim=0,
         )
         return {"pixel_values": pixel_values}

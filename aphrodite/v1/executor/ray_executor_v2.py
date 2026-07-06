@@ -127,14 +127,9 @@ class RayWorkerProc(WorkerProc):
         node_id = ray.get_runtime_context().get_node_id()
         device_key = current_platform.ray_device_key
         if not device_key:
-            raise RuntimeError(
-                f"current platform {current_platform.device_name} does not support ray."
-            )
+            raise RuntimeError(f"current platform {current_platform.device_name} does not support ray.")
         physical_gpu_ids = ray.get_runtime_context().get_accelerator_ids()[device_key]
-        return node_id, [
-            current_platform.device_control_id_to_physical_device_id(str(x))
-            for x in physical_gpu_ids
-        ]
+        return node_id, [current_platform.device_control_id_to_physical_device_id(str(x)) for x in physical_gpu_ids]
 
     def initialize_worker(
         self,
@@ -159,9 +154,7 @@ class RayWorkerProc(WorkerProc):
         if assigned_physical_gpu_ids is not None:
             aphrodite_config = self._init_kwargs["aphrodite_config"]
             assert isinstance(aphrodite_config, AphroditeConfig)
-            aphrodite_config.parallel_config.assigned_physical_gpu_ids = (
-                assigned_physical_gpu_ids
-            )
+            aphrodite_config.parallel_config.assigned_physical_gpu_ids = assigned_physical_gpu_ids
 
         self.local_rank = local_rank
         super().__init__(
@@ -169,17 +162,13 @@ class RayWorkerProc(WorkerProc):
             **self._init_kwargs,
         )
 
-    def _init_message_queues(
-        self, input_shm_handle: Handle, aphrodite_config: AphroditeConfig
-    ) -> None:
+    def _init_message_queues(self, input_shm_handle: Handle, aphrodite_config: AphroditeConfig) -> None:
         """
         Workers on the same node as the executor use shared memory for
         both the broadcast (input) MQ and the response MQ. Workers on
         different nodes use TCP (n_local_reader=0).
         """
-        self.rpc_broadcast_mq = MessageQueue.create_from_handle(
-            input_shm_handle, self.worker.rank
-        )
+        self.rpc_broadcast_mq = MessageQueue.create_from_handle(input_shm_handle, self.worker.rank)
 
         n_local = 1 if self._is_driver_node else 0
         # Use ray.util.get_node_ip_address() to get Ray's internal IP.
@@ -371,9 +360,7 @@ class RayExecutorV2(MultiprocExecutor):
                 placement_group_bundle_index=bundle["bundle_id_idx"],
             )
 
-            actor_name = build_actor_name(
-                instance_id, bundle["rank"], tp_size, pp_size, pcp_size
-            )
+            actor_name = build_actor_name(instance_id, bundle["rank"], tp_size, pp_size, pcp_size)
 
             actor = (
                 ray.remote(RayWorkerProc)
@@ -406,17 +393,12 @@ class RayExecutorV2(MultiprocExecutor):
         # Step 6: Discover physical GPU IDs assigned to each worker via Ray
         # runtime context.
         worker_node_and_physical_gpu_ids = ray.get(
-            [
-                h.actor.get_node_and_physical_gpu_ids.remote()
-                for h in self.ray_worker_handles
-            ]
+            [h.actor.get_node_and_physical_gpu_ids.remote() for h in self.ray_worker_handles]
         )
 
         node_workers: dict[str, list[int]] = defaultdict(list)
         node_physical_gpu_ids: dict[str, list[int]] = defaultdict(list)
-        for i, (node_id, physical_gpu_ids) in enumerate(
-            worker_node_and_physical_gpu_ids
-        ):
+        for i, (node_id, physical_gpu_ids) in enumerate(worker_node_and_physical_gpu_ids):
             node_workers[node_id].append(i)
             node_physical_gpu_ids[node_id].extend(physical_gpu_ids)
         for node_id, physical_gpu_ids in node_physical_gpu_ids.items():
@@ -442,23 +424,17 @@ class RayExecutorV2(MultiprocExecutor):
         # is per-node, so only do this when all workers share one node.
         if len(node_physical_gpu_ids) == 1:
             node_id_0 = worker_node_and_physical_gpu_ids[0][0]
-            self.aphrodite_config.parallel_config.assigned_physical_gpu_ids = sorted(
-                node_physical_gpu_ids[node_id_0]
-            )
+            self.aphrodite_config.parallel_config.assigned_physical_gpu_ids = sorted(node_physical_gpu_ids[node_id_0])
         ray.get(init_worker_refs)
 
         # Step 8: Collect response MQ handles
-        init_results = ray.get(
-            [h.actor.wait_for_init.remote() for h in self.ray_worker_handles]
-        )
+        init_results = ray.get([h.actor.wait_for_init.remote() for h in self.ray_worker_handles])
 
         self.response_mqs: list[MessageQueue] = []
         for i, result in enumerate(init_results):
             if result["status"] != RayWorkerProc.READY_STR:
                 raise RuntimeError(f"Worker {i} failed to initialize: {result}")
-            self.response_mqs.append(
-                MessageQueue.create_from_handle(result["handle"], 0)
-            )
+            self.response_mqs.append(MessageQueue.create_from_handle(result["handle"], 0))
 
         # Step 9: Start run() before wait_until_ready() to avoid
         # deadlock — workers send subscriptions inside run().
@@ -483,9 +459,7 @@ class RayExecutorV2(MultiprocExecutor):
             raise RuntimeError("Ray workers have not started successfully.")
 
         self_ref = weakref.ref(self)
-        ref_to_rank = {
-            h.run_ref: h.rank for h in self.ray_worker_handles if h.run_ref is not None
-        }
+        ref_to_rank = {h.run_ref: h.rank for h in self.ray_worker_handles if h.run_ref is not None}
 
         def _should_stop() -> bool:
             executor = self_ref()
@@ -499,9 +473,7 @@ class RayExecutorV2(MultiprocExecutor):
                 try:
                     done, _ = ray.wait(run_refs, num_returns=1, timeout=5.0)
                 except Exception:
-                    logger.exception(
-                        "RayWorkerMonitor: unexpected error, exiting monitor thread"
-                    )
+                    logger.exception("RayWorkerMonitor: unexpected error, exiting monitor thread")
                     return
                 if not done or _should_stop():
                     continue
@@ -522,9 +494,7 @@ class RayExecutorV2(MultiprocExecutor):
                     callback()
                 return
 
-        t = threading.Thread(
-            target=monitor_workers, daemon=True, name="RayWorkerMonitor"
-        )
+        t = threading.Thread(target=monitor_workers, daemon=True, name="RayWorkerMonitor")
         t.start()
         self._monitor_thread = t
 
@@ -538,11 +508,7 @@ class RayExecutorV2(MultiprocExecutor):
         to return anyway.
         """
         monitor = getattr(self, "_monitor_thread", None)
-        if (
-            monitor is not None
-            and monitor.is_alive()
-            and threading.current_thread() is not monitor
-        ):
+        if monitor is not None and monitor.is_alive() and threading.current_thread() is not monitor:
             monitor.join(timeout=10)
 
     def shutdown(self) -> None:

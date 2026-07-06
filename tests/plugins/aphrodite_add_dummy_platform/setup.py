@@ -11,8 +11,6 @@ setup(
         "aphrodite.platform_plugins": [
             "dummy_platform_plugin = aphrodite_add_dummy_platform:dummy_platform_plugin"  # noqa
         ],
-        "aphrodite.general_plugins": [
-            "dummy_custom_ops = aphrodite_add_dummy_platform:register_ops"
-        ],
+        "aphrodite.general_plugins": ["dummy_custom_ops = aphrodite_add_dummy_platform:register_ops"],
     },
 )

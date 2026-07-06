@@ -51,9 +51,7 @@ class RequestLogger:
                     prompt_token_ids = prompt_token_ids[:max_log_len]
 
             logger.debug(
-                "Request %s details: prompt: %r, "
-                "prompt_token_ids: %s, "
-                "prompt_embeds shape: %s.",
+                "Request %s details: prompt: %r, prompt_token_ids: %s, prompt_embeds shape: %s.",
                 request_id,
                 prompt,
                 prompt_token_ids,
@@ -90,8 +88,7 @@ class RequestLogger:
             stream_info = " (streaming delta)" if delta else " (streaming complete)"
 
         logger.info(
-            "Generated response %s%s: output: %r, "
-            "output_token_ids: %s, finish_reason: %s",
+            "Generated response %s%s: output: %r, output_token_ids: %s, finish_reason: %s",
             request_id,
             stream_info,
             outputs,

@@ -61,9 +61,7 @@ def create_lora_capture_hook(
     def hook(num_active_loras: int, num_reqs: int, num_tokens: int) -> None:
         num_scheduled = np.full(num_reqs, num_tokens // num_reqs, dtype=np.int32)
         num_scheduled[-1] += num_tokens % num_reqs
-        with runner.maybe_select_dummy_loras(
-            lora_config, num_scheduled, num_active_loras=num_active_loras
-        ):
+        with runner.maybe_select_dummy_loras(lora_config, num_scheduled, num_active_loras=num_active_loras):
             pass
 
     return hook
@@ -76,9 +74,7 @@ class LoraState:
         # req_id -> lora_request
         self.lora_requests: dict[str, LoRARequest] = {}
 
-    def add_request(
-        self, req_id: str, req_index: int, lora_request: LoRARequest | None
-    ) -> None:
+    def add_request(self, req_id: str, req_index: int, lora_request: LoRARequest | None) -> None:
         if lora_request is not None:
             self.lora_requests[req_id] = lora_request
             self.lora_ids[req_index] = lora_request.lora_int_id

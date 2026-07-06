@@ -170,8 +170,7 @@ def prepare_fp8_layer_for_marlin(
             # tensor-wise quantization with logical_widths ->
             #    channel-wise quantization
             assert sum(logical_widths) == part_size_n, (
-                f"Sum of logical_widths ({sum(logical_widths)}) must be equal "
-                f"to part_size_n ({part_size_n})"
+                f"Sum of logical_widths ({sum(logical_widths)}) must be equal to part_size_n ({part_size_n})"
             )
             lw_tensor = scales.new_tensor(logical_widths, dtype=torch.int64)
             scales = scales.view(1, -1).repeat_interleave(lw_tensor, dim=1)
@@ -198,12 +197,8 @@ def prepare_fp8_layer_for_marlin(
         # size_n may not divisible by block_size[0]
         scales = scales[:, :part_size_n]
 
-    scales = marlin_pad_scales(
-        scales, part_size_n, part_size_k, padded_n, padded_k, group_size
-    )
-    marlin_scales = marlin_permute_scales(
-        s=scales, size_k=padded_k, size_n=padded_n, group_size=group_size
-    )
+    scales = marlin_pad_scales(scales, part_size_n, part_size_k, padded_n, padded_k, group_size)
+    marlin_scales = marlin_permute_scales(s=scales, size_k=padded_k, size_n=padded_n, group_size=group_size)
     if input_dtype != torch.float8_e4m3fn:
         marlin_scales = fp8_fused_exponent_bias_into_scales(marlin_scales)
     if hasattr(layer, "weight_scale"):
@@ -356,9 +351,7 @@ def prepare_fp8_moe_layer_for_marlin(
                 size_k = padded_n
 
         for i in range(e):
-            marlin_scales = marlin_permute_scales(
-                s=scales[i], size_k=size_k, size_n=size_n, group_size=group_size
-            )
+            marlin_scales = marlin_permute_scales(s=scales[i], size_k=size_k, size_n=size_n, group_size=group_size)
             tensor_list.append(marlin_scales)
 
         scales = torch.cat([x.unsqueeze(0) for x in tensor_list], 0)
@@ -372,9 +365,7 @@ def prepare_fp8_moe_layer_for_marlin(
     return w13_weight, w2_weight, w13_weight_scale, w2_weight_scale
 
 
-def pack_fp8_to_int32(
-    fp8_tensor: torch.Tensor, size_k_first: bool = True
-) -> torch.Tensor:
+def pack_fp8_to_int32(fp8_tensor: torch.Tensor, size_k_first: bool = True) -> torch.Tensor:
     """
     Repack FP8 weights to gptq format (packed int32 elements)
     """
@@ -392,9 +383,7 @@ def pack_fp8_to_int32(
 def mxfp8_marlin_process_scales(marlin_scales: torch.Tensor) -> torch.Tensor:
     """Reorder scales for e8m0 kernel layout and convert to float8_e8m0fnu."""
     # fit the layout of fp8 dequantization
-    marlin_scales = marlin_scales.view(-1, 4)[:, [0, 2, 1, 3]].view(
-        marlin_scales.size(0), -1
-    )
+    marlin_scales = marlin_scales.view(-1, 4)[:, [0, 2, 1, 3]].view(marlin_scales.size(0), -1)
     marlin_scales = marlin_scales.to(torch.float8_e8m0fnu)
     return marlin_scales
 
@@ -488,9 +477,7 @@ def prepare_mxfp8_layer_for_marlin(layer: torch.nn.Module) -> None:
     scales = scales.contiguous()
     scales = scales.view(torch.float8_e8m0fnu).to(param_dtype)
     scales = scales.T.contiguous()
-    scales = marlin_pad_scales(
-        scales, part_size_n, part_size_k, padded_n, padded_k, group_size
-    )
+    scales = marlin_pad_scales(scales, part_size_n, part_size_k, padded_n, padded_k, group_size)
 
     # Permute scales to Marlin layout
     marlin_scales = marlin_permute_scales(

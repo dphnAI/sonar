@@ -91,21 +91,17 @@ class MiniMaxM3IndexerMSAMetadataBuilder(MiniMaxM3IndexerMetadataBuilder):
         block_table = common_attn_metadata.block_table_tensor
         query_start_loc = common_attn_metadata.query_start_loc
 
-        num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
-            split_decodes_and_prefills(
-                common_attn_metadata,
-                decode_threshold=self.reorder_batch_threshold,
-                require_uniform=True,
-            )
+        num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = split_decodes_and_prefills(
+            common_attn_metadata,
+            decode_threshold=self.reorder_batch_threshold,
+            require_uniform=True,
         )
         assert num_decodes + num_prefills == num_reqs
         assert num_decode_tokens + num_prefill_tokens == num_tokens
 
         # Context (prefix) lengths into the stable cudagraph buffer.
         context_lens = self.context_len_buffer[:num_reqs]
-        context_lens.copy_(
-            common_attn_metadata.compute_num_computed_tokens(), non_blocking=True
-        )
+        context_lens.copy_(common_attn_metadata.compute_num_computed_tokens(), non_blocking=True)
 
         decode: MiniMaxM3IndexerDecodeMetadata | None = None
         if num_decodes > 0:
@@ -113,9 +109,7 @@ class MiniMaxM3IndexerMSAMetadataBuilder(MiniMaxM3IndexerMetadataBuilder):
             query_lens_cpu = qsl_cpu[1 : num_decodes + 1] - qsl_cpu[:num_decodes]
             decode_query_len = int(query_lens_cpu[0].item())
             assert decode_query_len > 0
-            assert torch.all(
-                (query_lens_cpu == decode_query_len) | (query_lens_cpu == 0)
-            )
+            assert torch.all((query_lens_cpu == decode_query_len) | (query_lens_cpu == 0))
             decode = MiniMaxM3IndexerDecodeMetadata(
                 seq_lens=seq_lens[:num_decodes],
                 block_table=block_table[:num_decodes],
@@ -152,9 +146,7 @@ class MiniMaxM3IndexerMSAMetadataBuilder(MiniMaxM3IndexerMetadataBuilder):
             valid = cols[None, :] < nvp[lo:hi].to(block_table.device)[:, None]
             prefill = MiniMaxM3IndexerMSAPrefillMetadata(
                 plan=plan,
-                cu_seqlens_q=(query_start_loc[lo : hi + 1] - query_start_loc[lo]).to(
-                    torch.int32
-                ),
+                cu_seqlens_q=(query_start_loc[lo : hi + 1] - query_start_loc[lo]).to(torch.int32),
                 prefix_lens=context_lens[lo:hi],
                 max_query_len=int(side_qo.max()),
                 page_table=block_table[lo:hi][valid].to(torch.int32),
@@ -191,9 +183,7 @@ class MiniMaxM3IndexerMSAImpl(MiniMaxM3IndexerImpl):
 
         num_tokens = md.num_actual_tokens
         nd = md.num_decode_tokens
-        index_q = index_query[:num_tokens].view(
-            -1, self.num_index_heads, self.index_head_dim
-        )
+        index_q = index_query[:num_tokens].view(-1, self.num_index_heads, self.index_head_dim)
         kv = self.index_cache.kv_cache
         # Both sides write into the single shared persistent topk_indices_buffer:
         # decode at [:, :nd], prefill at [:, nd:] (each kernel writes [:, :total_q]).

@@ -77,9 +77,7 @@ test_consistent_across_ranks(llm.llm_engine.aphrodite_config.cache_config.num_gp
 
 # make sure we can access the model parameters from the calling process
 # of the `LLM` instance.
-params = list(
-    llm.llm_engine.model_executor.driver_worker.worker.model_runner.model.parameters()
-)
+params = list(llm.llm_engine.model_executor.driver_worker.worker.model_runner.model.parameters())
 test_consistent_across_ranks(len(params))
 
 # all ranks should have the same outputs

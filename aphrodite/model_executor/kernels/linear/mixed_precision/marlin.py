@@ -46,8 +46,7 @@ class MarlinLinearKernel(MPLinearKernel):
         if c.weight_type not in quant_types:
             return (
                 False,
-                f"Quant type ({c.weight_type}) not supported by"
-                f"  Marlin, supported types are: {quant_types}",
+                f"Quant type ({c.weight_type}) not supported by  Marlin, supported types are: {quant_types}",
             )
 
         if c.group_size not in MARLIN_SUPPORTED_GROUP_SIZES:
@@ -91,15 +90,11 @@ class MarlinLinearKernel(MPLinearKernel):
         is_a_8bit = c.act_type is not None and c.act_type.itemsize == 1
 
         if is_a_8bit:
-            assert c.weight_type == scalar_types.uint4b8, (
-                "W8A8 is not supported by marlin kernel."
-            )
+            assert c.weight_type == scalar_types.uint4b8, "W8A8 is not supported by marlin kernel."
 
         if c.act_type == torch.float8_e4m3fn:
             ops.marlin_int4_fp8_preprocess(getattr(layer, self.w_q_name), inplace=True)
-            getattr(layer, self.w_s_name).data = (
-                getattr(layer, self.w_s_name).data * 512
-            )
+            getattr(layer, self.w_s_name).data = getattr(layer, self.w_s_name).data * 512
 
         row_parallel = c.partition_weight_shape[0] != c.full_weight_shape[0]
         self.is_k_full = marlin_is_k_full(c.has_g_idx, row_parallel)
@@ -125,9 +120,7 @@ class MarlinLinearKernel(MPLinearKernel):
             assert isinstance(x, BaseAphroditeParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1, packed_dim=0)
             x.data = ops.gptq_marlin_repack(
-                marlin_pad_qweight(
-                    x.data.contiguous(), size_n, size_k, padded_n, padded_k
-                ),
+                marlin_pad_qweight(x.data.contiguous(), size_n, size_k, padded_n, padded_k),
                 perm=layer.g_idx_sort_indices,
                 size_k=padded_k,
                 size_n=padded_n,
@@ -170,9 +163,7 @@ class MarlinLinearKernel(MPLinearKernel):
             return x
 
         if c.has_g_idx:
-            g_idx, g_idx_sort_indices = marlin_sort_g_idx(
-                getattr(layer, self.w_gidx_name)
-            )
+            g_idx, g_idx_sort_indices = marlin_sort_g_idx(getattr(layer, self.w_gidx_name))
             self._transform_param(layer, self.w_gidx_name, lambda _: g_idx)
             layer.g_idx_sort_indices = g_idx_sort_indices
         else:
@@ -211,9 +202,7 @@ class MarlinLinearKernel(MPLinearKernel):
         self._transform_param(layer, self.w_s_name, transform_w_s)
 
         if hasattr(layer, "bias") and layer.bias is not None:
-            layer.bias.data = marlin_permute_bias(
-                marlin_pad_dim(layer.bias, size_n, padded_n)
-            )
+            layer.bias.data = marlin_permute_bias(marlin_pad_dim(layer.bias, size_n, padded_n))
 
     def apply_weights(
         self,

@@ -5,9 +5,6 @@ import copy
 import pytest
 import torch._dynamo
 
-from tests.compile.backend import LazyInitPass, TestBackend
-from tests.utils import TestFP8Layer, flat_product
-from tests.v1.attention.utils import BatchSpec, create_common_attn_metadata
 from aphrodite._custom_ops import cutlass_scaled_fp4_mm, scaled_fp4_quant
 from aphrodite.compilation.passes.fusion.matcher_utils import QUANT_OPS
 from aphrodite.compilation.passes.fusion.mla_attn_quant_fusion import (
@@ -18,6 +15,7 @@ from aphrodite.compilation.passes.fx_utils import find_op_nodes
 from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
 from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
 from aphrodite.config import (
+    AphroditeConfig,
     AttentionConfig,
     CacheConfig,
     CompilationConfig,
@@ -25,7 +23,6 @@ from aphrodite.config import (
     ModelConfig,
     PassConfig,
     SchedulerConfig,
-    AphroditeConfig,
     set_current_aphrodite_config,
 )
 from aphrodite.forward_context import get_forward_context, set_forward_context
@@ -48,6 +45,9 @@ from aphrodite.platforms import current_platform
 from aphrodite.v1.attention.backend import AttentionMetadata
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
+from tests.compile.backend import LazyInitPass, TestBackend
+from tests.utils import TestFP8Layer, flat_product
+from tests.v1.attention.utils import BatchSpec, create_common_attn_metadata
 
 FP8_DTYPE = current_platform.fp8_dtype()
 FP4_DTYPE = torch.uint8
@@ -152,29 +152,21 @@ class MLAAttentionQuantPatternModel(torch.nn.Module):
 
         # MLA KV cache is 3D: (num_blocks, block_size, head_size)
         attn_backend = self.mla_attn.attn_backend
-        kv_cache_shape = attn_backend.get_kv_cache_shape(
-            num_blocks, self.block_size, 1, self.head_size
-        )
+        kv_cache_shape = attn_backend.get_kv_cache_shape(num_blocks, self.block_size, 1, self.head_size)
         try:
             kv_cache_stride_order = attn_backend.get_kv_cache_stride_order()
         except (AttributeError, NotImplementedError):
             kv_cache_stride_order = tuple(range(len(kv_cache_shape)))
 
         ordered_shape = tuple(kv_cache_shape[i] for i in kv_cache_stride_order)
-        inv_order = [
-            kv_cache_stride_order.index(i) for i in range(len(kv_cache_stride_order))
-        ]
+        inv_order = [kv_cache_stride_order.index(i) for i in range(len(kv_cache_stride_order))]
 
-        raw_tensor = torch.zeros(
-            ordered_shape, dtype=self.kv_cache_dtype, device=self.device
-        )
+        raw_tensor = torch.zeros(ordered_shape, dtype=self.kv_cache_dtype, device=self.device)
         kv_cache = raw_tensor.permute(*inv_order)
 
         self.mla_attn.kv_cache = kv_cache
 
-        self.attn_metadata = self.builder.build(
-            common_prefix_len=0, common_attn_metadata=common_attn_metadata
-        )
+        self.attn_metadata = self.builder.build(common_prefix_len=0, common_attn_metadata=common_attn_metadata)
 
         return self.attn_metadata
 
@@ -246,9 +238,9 @@ class TestMLAAttentionNvfp4QuantPatternModel(MLAAttentionQuantPatternModel):
                     dtype=FP4_DTYPE,
                     device=self.device,
                 ),
-                "wscale_swizzled": torch.randn(
-                    self.output_dim, self.output_dim // 16
-                ).to(dtype=FP8_DTYPE, device=self.device),
+                "wscale_swizzled": torch.randn(self.output_dim, self.output_dim // 16).to(
+                    dtype=FP8_DTYPE, device=self.device
+                ),
                 "wscale": torch.tensor([500], dtype=torch.float32, device=self.device),
                 "scale": torch.tensor([0.002], dtype=torch.float32, device=self.device),
             },
@@ -267,9 +259,7 @@ class TestMLAAttentionNvfp4QuantPatternModel(MLAAttentionQuantPatternModel):
             k_pe,
             output_shape=(q.shape[0], self.output_dim),
         )
-        quant_output, output_block_scale = scaled_fp4_quant(
-            attn_output, 1 / self.w["scale"]
-        )
+        quant_output, output_block_scale = scaled_fp4_quant(attn_output, 1 / self.w["scale"])
         return cutlass_scaled_fp4_mm(
             a=quant_output,
             b=self.w["weight"],
@@ -292,9 +282,7 @@ class TestMLAAttentionFp8GroupQuantPatternModel(MLAAttentionQuantPatternModel):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        weight_quant_key = create_fp8_quant_key(
-            static=True, group_shape=GroupShape(128, 128)
-        )
+        weight_quant_key = create_fp8_quant_key(static=True, group_shape=GroupShape(128, 128))
         device = kwargs.get("device", torch.device("cuda:0"))
 
         # Subclass to set weight_block_size before process_weights_after_loading
@@ -402,9 +390,7 @@ if current_platform.is_cuda():
     )
     + list(flat_product(BACKENDS_MLA_FP4, PATTERN_TEST_MODELS_MLA_FP4, [""])),
 )
-@pytest.mark.skipif(
-    not current_platform.is_cuda_alike(), reason="Only test ROCm or CUDA"
-)
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="Only test ROCm or CUDA")
 @pytest.mark.skipif(not current_platform.supports_fp8(), reason="Need FP8")
 def test_mla_attention_quant_pattern(
     num_heads: int,
@@ -423,10 +409,7 @@ def test_mla_attention_quant_pattern(
     use_fresh_inductor_cache,
 ):
     """Test MLA AttentionQuantPattern fusion pass"""
-    if (
-        model_class is TestMLAAttentionNvfp4QuantPatternModel
-        and not is_nvfp4_supported()
-    ):
+    if model_class is TestMLAAttentionNvfp4QuantPatternModel and not is_nvfp4_supported():
         pytest.skip("NVFP4 is not supported on this GPU (requires SM 100+).")
 
     monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", "1")
@@ -495,9 +478,7 @@ def test_mla_attention_quant_pattern(
         result_unfused = compiled_unfused(q, kv_c_normed, k_pe)
 
     # Run model with attn fusion enabled
-    aphrodite_config.compilation_config.pass_config = PassConfig(
-        fuse_attn_quant=True, eliminate_noops=True
-    )
+    aphrodite_config.compilation_config.pass_config = PassConfig(fuse_attn_quant=True, eliminate_noops=True)
     with (
         set_current_aphrodite_config(aphrodite_config),
         set_forward_context(attn_metadata=None, aphrodite_config=aphrodite_config),
@@ -528,9 +509,7 @@ def test_mla_attention_quant_pattern(
         # HACK: See https://github.com/vllm-project/vllm/issues/31044
         result_fused_0 = model_fused(q, kv_c_normed, k_pe)  # noqa: F841
 
-        compiled_fused = torch.compile(
-            model_fused, backend=test_backend, fullgraph=True
-        )
+        compiled_fused = torch.compile(model_fused, backend=test_backend, fullgraph=True)
 
         result_fused = compiled_fused(q, kv_c_normed, k_pe)
 
@@ -541,17 +520,11 @@ def test_mla_attention_quant_pattern(
         for key, layer in aphrodite_config.compilation_config.static_forward_context.items()
         if isinstance(layer, MLAAttention)
     ]
-    assert sum(attn_fusion_supported) == len(attn_fusion_supported), (
-        "All MLA layers should support attention fusion"
-    )
+    assert sum(attn_fusion_supported) == len(attn_fusion_supported), "All MLA layers should support attention fusion"
 
     # Check quantization ops in the graph
     is_per_group = quant_key.scale.group_shape.is_per_group()
-    quant_op = (
-        torch.ops.aten.reciprocal
-        if "-quant_fp8" in custom_ops_list
-        else QUANT_OPS[quant_key]
-    )
+    quant_op = torch.ops.aten.reciprocal if "-quant_fp8" in custom_ops_list else QUANT_OPS[quant_key]
     test_backend.check_before_ops([quant_op], fully_replaced=is_per_group)
 
     assert attn_pass.pass_.matched_count == sum(attn_fusion_supported)

@@ -8,11 +8,11 @@ import pytest
 import pytest_asyncio
 from transformers import AutoProcessor
 
-from tests.entrypoints.multimodal.conftest import TEST_IMAGE_ASSETS
-from tests.utils import ROCM_ENV_OVERRIDES, ROCM_EXTRA_ARGS, RemoteOpenAIServer
 from aphrodite.multimodal.media import MediaWithBytes
 from aphrodite.multimodal.utils import encode_image_url, fetch_image
 from aphrodite.platforms import current_platform
+from tests.entrypoints.multimodal.conftest import TEST_IMAGE_ASSETS
+from tests.utils import ROCM_ENV_OVERRIDES, ROCM_EXTRA_ARGS, RemoteOpenAIServer
 
 MODEL_NAME = "microsoft/Phi-3.5-vision-instruct"
 MAXIMUM_IMAGES = 2
@@ -40,9 +40,7 @@ def check_output_matches_terms(content: str, term_groups: list[list[str]]) -> bo
     All term groups must be satisfied.
     """
     content_lower = content.lower()
-    return all(
-        any(term.lower() in content_lower for term in group) for group in term_groups
-    )
+    return all(any(term.lower() in content_lower for term in group) for group in term_groups)
 
 
 def assert_non_empty_content(chat_completion, *, context: str = "") -> str:
@@ -61,9 +59,7 @@ def assert_non_empty_content(chat_completion, *, context: str = "") -> str:
         f"full message={choice.message!r}, "
         f"usage={chat_completion.usage!r}"
     )
-    assert isinstance(content, str), (
-        f"{prefix}Expected str content, got {type(content).__name__}: {content!r}"
-    )
+    assert isinstance(content, str), f"{prefix}Expected str content, got {type(content).__name__}: {content!r}"
     assert len(content) > 0, (
         f"{prefix}Expected non-empty content but got empty string. "
         f"finish_reason={choice.finish_reason!r}, "
@@ -132,19 +128,14 @@ def dummy_messages_from_image_url(
         {
             "role": "user",
             "content": [
-                *(
-                    {"type": "image_url", "image_url": {"url": image_url}}
-                    for image_url in image_urls
-                ),
+                *({"type": "image_url", "image_url": {"url": image_url}} for image_url in image_urls),
                 {"type": "text", "text": content_text},
             ],
         }
     ]
 
 
-def describe_image_messages(
-    image_url: str, *, extra_image_fields: dict | None = None
-) -> list[dict]:
+def describe_image_messages(image_url: str, *, extra_image_fields: dict | None = None) -> list[dict]:
     """Build the system + user messages used by the completions-with-image
     family of tests. *extra_image_fields* is merged into the top-level
     image content block (for uuid / bad-key tests)."""
@@ -188,9 +179,7 @@ async def complete_and_check(
 
 
 def get_hf_prompt_tokens(model_name, content, image_url):
-    processor = AutoProcessor.from_pretrained(
-        model_name, trust_remote_code=True, num_crops=4
-    )
+    processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True, num_crops=4)
 
     placeholder = "<|image_1|>\n"
     messages = [
@@ -205,9 +194,7 @@ def get_hf_prompt_tokens(model_name, content, image_url):
         image = image.media
     images = [image]
 
-    prompt = processor.tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
-    )
+    prompt = processor.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     inputs = processor(prompt, images, return_tensors="pt")
 
     return inputs.input_ids.shape[1]
@@ -216,9 +203,7 @@ def get_hf_prompt_tokens(model_name, content, image_url):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
 @pytest.mark.parametrize("image_url", TEST_IMAGE_ASSETS, indirect=True)
-async def test_single_chat_session_image(
-    client: openai.AsyncOpenAI, model_name: str, image_url: str
-):
+async def test_single_chat_session_image(client: openai.AsyncOpenAI, model_name: str, image_url: str):
     content_text = "What's in this image?"
     messages = dummy_messages_from_image_url(image_url, content_text)
 
@@ -231,9 +216,7 @@ async def test_single_chat_session_image(
         temperature=0.0,
         top_logprobs=5,
     )
-    assert len(chat_completion.choices) == 1, (
-        f"Expected 1 choice, got {len(chat_completion.choices)}"
-    )
+    assert len(chat_completion.choices) == 1, f"Expected 1 choice, got {len(chat_completion.choices)}"
 
     choice = chat_completion.choices[0]
     assert choice.finish_reason == "length", (
@@ -256,9 +239,7 @@ async def test_single_chat_session_image(
     assert message.content is not None and len(message.content) >= 10, (
         f"Expected content with >=10 chars, got {message.content!r}"
     )
-    assert message.role == "assistant", (
-        f"Expected role='assistant', got {message.role!r}"
-    )
+    assert message.role == "assistant", f"Expected role='assistant', got {message.role!r}"
 
     messages.append({"role": "assistant", "content": message.content})
 
@@ -276,9 +257,7 @@ async def test_single_chat_session_image(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
 @pytest.mark.parametrize("image_url", TEST_IMAGE_ASSETS, indirect=True)
-async def test_error_on_invalid_image_url_type(
-    client: openai.AsyncOpenAI, model_name: str, image_url: str
-):
+async def test_error_on_invalid_image_url_type(client: openai.AsyncOpenAI, model_name: str, image_url: str):
     content_text = "What's in this image?"
     messages = [
         {
@@ -303,9 +282,7 @@ async def test_error_on_invalid_image_url_type(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
 @pytest.mark.parametrize("image_url", TEST_IMAGE_ASSETS, indirect=True)
-async def test_single_chat_session_image_beamsearch(
-    client: openai.AsyncOpenAI, model_name: str, image_url: str
-):
+async def test_single_chat_session_image_beamsearch(client: openai.AsyncOpenAI, model_name: str, image_url: str):
     content_text = "What's in this image?"
     messages = dummy_messages_from_image_url(image_url, content_text)
 
@@ -318,15 +295,12 @@ async def test_single_chat_session_image_beamsearch(
         top_logprobs=5,
         extra_body=dict(use_beam_search=True),
     )
-    assert len(chat_completion.choices) == 2, (
-        f"Expected 2 beam search choices, got {len(chat_completion.choices)}"
-    )
+    assert len(chat_completion.choices) == 2, f"Expected 2 beam search choices, got {len(chat_completion.choices)}"
 
     content_0 = chat_completion.choices[0].message.content
     content_1 = chat_completion.choices[1].message.content
     assert content_0 != content_1, (
-        f"Beam search should produce different outputs for {image_url}, "
-        f"but both returned: {content_0!r}"
+        f"Beam search should produce different outputs for {image_url}, but both returned: {content_0!r}"
     )
 
 
@@ -357,14 +331,11 @@ async def test_single_chat_session_image_base64encoded(
         temperature=0.0,
         top_logprobs=5,
     )
-    assert len(chat_completion.choices) == 1, (
-        f"Expected 1 choice, got {len(chat_completion.choices)}"
-    )
+    assert len(chat_completion.choices) == 1, f"Expected 1 choice, got {len(chat_completion.choices)}"
 
     choice = chat_completion.choices[0]
     assert choice.finish_reason == "length", (
-        f"Expected finish_reason='length', got {choice.finish_reason!r}. "
-        f"content={choice.message.content!r}"
+        f"Expected finish_reason='length', got {choice.finish_reason!r}. content={choice.message.content!r}"
     )
 
     hf_prompt_tokens = get_hf_prompt_tokens(model_name, content_text, image_url)
@@ -381,9 +352,7 @@ async def test_single_chat_session_image_base64encoded(
     assert message.content is not None and len(message.content) >= 10, (
         f"Expected content with >=10 chars, got {message.content!r}"
     )
-    assert message.role == "assistant", (
-        f"Expected role='assistant', got {message.role!r}"
-    )
+    assert message.role == "assistant", f"Expected role='assistant', got {message.role!r}"
 
     messages.append({"role": "assistant", "content": message.content})
 
@@ -423,8 +392,7 @@ async def test_single_chat_session_image_base64encoded_beamsearch(
         extra_body=dict(use_beam_search=True),
     )
     assert len(chat_completion.choices) == 2, (
-        f"Expected 2 beam search choices for image {image_idx} "
-        f"({raw_image_url}), got {len(chat_completion.choices)}"
+        f"Expected 2 beam search choices for image {image_idx} ({raw_image_url}), got {len(chat_completion.choices)}"
     )
 
     # Verify beam search produces two different non-empty outputs
@@ -433,8 +401,7 @@ async def test_single_chat_session_image_base64encoded_beamsearch(
 
     # Emit beam search outputs for debugging
     print(
-        f"Beam search outputs for image {image_idx} ({raw_image_url}): "
-        f"Output 0: {content_0!r}, Output 1: {content_1!r}"
+        f"Beam search outputs for image {image_idx} ({raw_image_url}): Output 0: {content_0!r}, Output 1: {content_1!r}"
     )
 
     assert content_0, (
@@ -447,8 +414,7 @@ async def test_single_chat_session_image_base64encoded_beamsearch(
         f"finish_reason={chat_completion.choices[1].finish_reason!r}"
     )
     assert content_0 != content_1, (
-        f"Beam search produced identical outputs for image {image_idx} "
-        f"({raw_image_url}): {content_0!r}"
+        f"Beam search produced identical outputs for image {image_idx} ({raw_image_url}): {content_0!r}"
     )
 
     # Verify each output contains the required terms for this image
@@ -464,9 +430,7 @@ async def test_single_chat_session_image_base64encoded_beamsearch(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
 @pytest.mark.parametrize("image_url", TEST_IMAGE_ASSETS, indirect=True)
-async def test_chat_streaming_image(
-    client: openai.AsyncOpenAI, model_name: str, image_url: str
-):
+async def test_chat_streaming_image(client: openai.AsyncOpenAI, model_name: str, image_url: str):
     messages = dummy_messages_from_image_url(image_url)
 
     # test single completion
@@ -492,18 +456,13 @@ async def test_chat_streaming_image(
     async for chunk in stream:
         delta = chunk.choices[0].delta
         if delta.role:
-            assert delta.role == "assistant", (
-                f"Expected role='assistant' in stream delta, got {delta.role!r}"
-            )
+            assert delta.role == "assistant", f"Expected role='assistant' in stream delta, got {delta.role!r}"
         if delta.content:
             chunks.append(delta.content)
         if chunk.choices[0].finish_reason is not None:
             finish_reason_count += 1
     # finish reason should only return in last block
-    assert finish_reason_count == 1, (
-        f"Expected exactly 1 finish_reason across stream chunks, "
-        f"got {finish_reason_count}"
-    )
+    assert finish_reason_count == 1, f"Expected exactly 1 finish_reason across stream chunks, got {finish_reason_count}"
     assert chunk.choices[0].finish_reason == stop_reason, (
         f"Stream finish_reason={chunk.choices[0].finish_reason!r} "
         f"doesn't match non-stream finish_reason={stop_reason!r}"
@@ -524,9 +483,7 @@ async def test_chat_streaming_image(
     [TEST_IMAGE_ASSETS[:i] for i in range(2, len(TEST_IMAGE_ASSETS))],
     indirect=True,
 )
-async def test_multi_image_input(
-    client: openai.AsyncOpenAI, model_name: str, image_urls: list[str]
-):
+async def test_multi_image_input(client: openai.AsyncOpenAI, model_name: str, image_urls: list[str]):
     messages = dummy_messages_from_image_url(image_urls)
 
     if len(image_urls) > MAXIMUM_IMAGES:
@@ -546,8 +503,7 @@ async def test_multi_image_input(
             temperature=0.0,
         )
         assert completion.choices[0].text is not None, (
-            "Server failed to produce output after rejecting over-limit "
-            "multi-image request"
+            "Server failed to produce output after rejecting over-limit multi-image request"
         )
     else:
         await complete_and_check(

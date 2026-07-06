@@ -19,9 +19,7 @@ from aphrodite.platforms import current_platform
 from aphrodite.scalar_type import ScalarType, scalar_types
 from aphrodite.utils.torch_utils import set_random_seed
 
-IS_SUPPORTED_BY_GPU = (
-    current_platform.is_cuda() and current_platform.get_device_capability()[0] >= 9
-)
+IS_SUPPORTED_BY_GPU = current_platform.is_cuda() and current_platform.get_device_capability()[0] >= 9
 
 
 def to_fp8(tensor: torch.Tensor) -> torch.Tensor:
@@ -45,15 +43,10 @@ def cutlass_quantize(
     """
     assert wtype.is_integer(), "TODO: support floating point weights"
 
-    w_ref, w_q, w_s, w_zp = quantize_weights(
-        w, wtype, group_size=group_size, zero_points=zero_points
-    )
+    w_ref, w_q, w_s, w_zp = quantize_weights(w, wtype, group_size=group_size, zero_points=zero_points)
 
     # Since scales are later cast to fp8, recompute w_ref in atype here.
-    w_ref = (
-        w_q.to(torch.float32)
-        * w_s.to(atype).to(torch.float32).repeat_interleave(group_size, dim=0)
-    ).to(atype)
+    w_ref = (w_q.to(torch.float32) * w_s.to(atype).to(torch.float32).repeat_interleave(group_size, dim=0)).to(atype)
 
     # Bit mask prevents sign extension of int4 when packing.
     w_q = pack_rows(w_q & 0x0F, wtype.size_bits, *w_q.shape)
@@ -63,9 +56,7 @@ def cutlass_quantize(
     return w_ref, w_q, w_s.to(atype), w_zp
 
 
-def cutlass_preprocess(
-    w_q_experts: list[torch.Tensor], w_s_experts: list[torch.Tensor]
-):
+def cutlass_preprocess(w_q_experts: list[torch.Tensor], w_s_experts: list[torch.Tensor]):
     """
     Reorder/encode expert weights and pack scales.
 
@@ -75,9 +66,7 @@ def cutlass_preprocess(
         packed_layout: Layout/stride metadata for grouped GEMM.
     """
     w_s_packed = ops.cutlass_pack_scale_fp8(torch.stack(w_s_experts))
-    w_q_packed, packed_layout = ops.cutlass_encode_and_reorder_int4b_grouped(
-        torch.stack(w_q_experts)
-    )  # expects dim 3
+    w_q_packed, packed_layout = ops.cutlass_encode_and_reorder_int4b_grouped(torch.stack(w_q_experts))  # expects dim 3
     return w_q_packed, w_s_packed, packed_layout
 
 
@@ -156,9 +145,7 @@ def make_moe_test_setup(
 
     # Channel/token scales.
     per_tok_scales = torch.randn((M_full, 1), dtype=torch.float32, device=device)
-    per_chan_scales = torch.randn(
-        (num_experts, N, 1), dtype=torch.float32, device=device
-    )
+    per_chan_scales = torch.randn((num_experts, N, 1), dtype=torch.float32, device=device)
 
     # Expert weights and scales.
     wtype = scalar_types.int4
@@ -166,18 +153,14 @@ def make_moe_test_setup(
     w_refs, w_qs, w_ss = [], [], []
     for _ in range(num_experts):
         b = to_fp8(torch.randn((K, N), device=device))
-        w_ref, w_q, w_s, _ = cutlass_quantize(
-            atype, b.to(torch.float16), wtype, stype, GROUP_SIZE, zero_points=False
-        )
+        w_ref, w_q, w_s, _ = cutlass_quantize(atype, b.to(torch.float16), wtype, stype, GROUP_SIZE, zero_points=False)
         w_refs.append(w_ref)
         w_qs.append(w_q)
         w_ss.append(w_s)
 
     w_q_packed, w_s_packed, packed_layout = cutlass_preprocess(w_qs, w_ss)
 
-    problem_sizes = torch.tensor(
-        [[N, M, K] for M in Ms], dtype=torch.int32, device=device
-    )
+    problem_sizes = torch.tensor([[N, M, K] for M in Ms], dtype=torch.int32, device=device)
 
     expert_offsets = torch.cat(
         [
@@ -188,9 +171,7 @@ def make_moe_test_setup(
 
     # B strides and group scale strides.
     b_strides = packed_layout
-    group_scale_strides = torch.zeros(
-        (num_experts, 2), dtype=torch.int64, device=device
-    )
+    group_scale_strides = torch.zeros((num_experts, 2), dtype=torch.int64, device=device)
     group_scale_strides[:, 0] = N
 
     return MoETestSetup(
@@ -250,9 +231,7 @@ def compute_moe_reference_output(setup: MoETestSetup) -> torch.Tensor:
 def test_cutlass_w4a8_moe_mm_end_to_end(shape, random_zero):
     num_experts, N, K = shape
     set_random_seed(42)
-    setup = make_moe_test_setup(
-        num_experts=num_experts, K=K, N=N, max_blocks=64, random_zero=random_zero
-    )
+    setup = make_moe_test_setup(num_experts=num_experts, K=K, N=N, max_blocks=64, random_zero=random_zero)
 
     ops.cutlass_w4a8_moe_mm(
         setup.out,

@@ -209,11 +209,7 @@ class HummingExpertsBase(mk.FusedMoEExpertsModular):
     @staticmethod
     def _supports_current_device() -> bool:
         platform = current_platform
-        return (
-            has_humming()
-            and platform.is_cuda()
-            and platform.has_device_capability((7, 5))
-        )
+        return has_humming() and platform.is_cuda() and platform.has_device_capability((7, 5))
 
     @staticmethod
     def _supports_no_act_and_mul() -> bool:
@@ -351,8 +347,7 @@ class HummingExpertsBase(mk.FusedMoEExpertsModular):
                 last_dim = meta["shape"][-1]
                 if last_dim % 2 != 0:
                     raise ValueError(
-                        f"Int4 packing requires last dimension to be even, "
-                        f"got {last_dim} for buffer '{key}'"
+                        f"Int4 packing requires last dimension to be even, got {last_dim} for buffer '{key}'"
                     )
                 meta["shape"] = meta["shape"][:-1] + (last_dim // 2,)
 
@@ -466,10 +461,7 @@ class HummingExpertsBase(mk.FusedMoEExpertsModular):
             if preferred_gemm_type is not None:
                 supported = preferred_gemm_type.lower() == gemm_type
                 if not supported:
-                    reason = (
-                        f"preferred gemm type {preferred_gemm_type} != "
-                        f"supported gemm type {gemm_type}"
-                    )
+                    reason = f"preferred gemm type {preferred_gemm_type} != supported gemm type {gemm_type}"
 
         return supported, reason
 

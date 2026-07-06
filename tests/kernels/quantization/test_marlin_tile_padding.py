@@ -56,9 +56,7 @@ ALIGNED_SHAPES = [(64, 128), (128, 64), (256, 256), (4608, 4096)]
 
 
 def _is_tile_aligned(size_n: int, size_k: int) -> bool:
-    return (size_n % 64 == 0 and size_k % 128 == 0) or (
-        size_n % 128 == 0 and size_k % 64 == 0
-    )
+    return (size_n % 64 == 0 and size_k % 128 == 0) or (size_n % 128 == 0 and size_k % 64 == 0)
 
 
 @pytest.mark.parametrize("shape", ODD_SHAPES + ALIGNED_SHAPES)
@@ -73,9 +71,7 @@ def test_marlin_padded_nk(shape, group_size):
         assert padded_k % group_size == 0
 
     # Aligned shapes must pass through unchanged (zero hot-path cost).
-    if _is_tile_aligned(size_n, size_k) and (
-        group_size <= 0 or size_k % group_size == 0
-    ):
+    if _is_tile_aligned(size_n, size_k) and (group_size <= 0 or size_k % group_size == 0):
         assert (padded_n, padded_k) == (size_n, size_k)
 
     # Minimal: no valid shape with a smaller padded area exists.
@@ -141,11 +137,7 @@ def test_marlin_moe_padded_intermediate(intermediate, group_size):
 
     # Minimal: no smaller valid intermediate exists.
     for cand in range(intermediate, padded):
-        if (
-            (2 * cand) % 128 == 0
-            and cand % 64 == 0
-            and (group_size <= 0 or cand % group_size == 0)
-        ):
+        if (2 * cand) % 128 == 0 and cand % 64 == 0 and (group_size <= 0 or cand % group_size == 0):
             pytest.fail(f"{cand} beats {padded}")
 
     # Already-tile-aligned sizes pass through unchanged (zero hot-path cost).
@@ -187,9 +179,7 @@ def test_marlin_moe_pad_helpers_shapes():
 
 
 def _gpu_marlin_unsupported() -> bool:
-    return not (
-        current_platform.is_cuda() and current_platform.has_device_capability(80)
-    )
+    return not (current_platform.is_cuda() and current_platform.has_device_capability(80))
 
 
 @pytest.mark.skipif(
@@ -210,9 +200,7 @@ def test_fp8_marlin_padded_round_trip(shape, use_bias):
     scale = weight.abs().max() / 448
     weight_fp8 = (weight / scale).to(torch.float8_e4m3fn)
     layer.weight = torch.nn.Parameter(weight_fp8, requires_grad=False)
-    layer.weight_scale = torch.nn.Parameter(
-        scale.to(torch.float32), requires_grad=False
-    )
+    layer.weight_scale = torch.nn.Parameter(scale.to(torch.float32), requires_grad=False)
     bias = None
     if use_bias:
         bias = torch.randn(size_n, dtype=dtype, device="cuda")
@@ -262,18 +250,12 @@ def test_nvfp4_marlin_padded_round_trip(shape):
     layer.input_size_per_partition = size_k
     layer.params_dtype = dtype
 
-    packed = torch.randint(
-        0, 256, (size_n, size_k // 2), dtype=torch.uint8, device="cuda"
-    )
-    scales = (torch.rand(size_n, size_k // group_size, device="cuda") + 0.25).to(
-        torch.float8_e4m3fn
-    )
+    packed = torch.randint(0, 256, (size_n, size_k // 2), dtype=torch.uint8, device="cuda")
+    scales = (torch.rand(size_n, size_k // group_size, device="cuda") + 0.25).to(torch.float8_e4m3fn)
     global_scale = torch.tensor([0.002], dtype=torch.float32, device="cuda")
 
     ref_weight = (
-        _dequant_fp4(packed, dtype)
-        * scales.to(dtype).repeat_interleave(group_size, 1)
-        * global_scale.to(dtype)
+        _dequant_fp4(packed, dtype) * scales.to(dtype).repeat_interleave(group_size, 1) * global_scale.to(dtype)
     )
 
     layer.weight = torch.nn.Parameter(packed, requires_grad=False)
@@ -319,9 +301,7 @@ def test_gptq_marlin_padded_round_trip(shape, group_size):
     device = torch.device("cuda")
 
     weight = torch.randn(size_k, size_n, dtype=dtype, device=device) / size_k**0.5
-    w_ref, q_w, s, _, _ = gptq_quantize_weights(
-        weight, quant_type, group_size, act_order=False
-    )
+    w_ref, q_w, s, _, _ = gptq_quantize_weights(weight, quant_type, group_size, act_order=False)
     qweight = gptq_pack(q_w, quant_type.size_bits, size_k, size_n)
 
     padded_n, padded_k = marlin_padded_nk(size_n, size_k, group_size)
@@ -334,9 +314,7 @@ def test_gptq_marlin_padded_round_trip(shape, group_size):
         num_bits=quant_type.size_bits,
     )
     s = marlin_pad_scales(s, size_n, size_k, padded_n, padded_k, group_size)
-    marlin_s = marlin_permute_scales(
-        s, size_k=padded_k, size_n=padded_n, group_size=group_size
-    )
+    marlin_s = marlin_permute_scales(s, size_k=padded_k, size_n=padded_n, group_size=group_size)
 
     x = torch.randn(8, size_k, dtype=dtype, device=device)
     output = apply_gptq_marlin_linear(
@@ -381,15 +359,11 @@ def test_fp8_block_marlin_padded_round_trip(shape):
     padded = torch.zeros(n_blocks * block, size_k, dtype=dtype, device="cuda")
     padded[:size_n] = weight
     scales = padded.view(n_blocks, block, k_blocks, block).abs().amax(dim=(1, 3)) / 448
-    scales_expanded = scales.repeat_interleave(block, 0)[:size_n].repeat_interleave(
-        block, 1
-    )
+    scales_expanded = scales.repeat_interleave(block, 0)[:size_n].repeat_interleave(block, 1)
     weight_fp8 = (weight / scales_expanded).to(torch.float8_e4m3fn)
 
     layer.weight = torch.nn.Parameter(weight_fp8, requires_grad=False)
-    layer.weight_scale_inv = torch.nn.Parameter(
-        scales.to(torch.float32), requires_grad=False
-    )
+    layer.weight_scale_inv = torch.nn.Parameter(scales.to(torch.float32), requires_grad=False)
 
     prepare_fp8_layer_for_marlin(layer, size_k_first=False)
 
@@ -425,16 +399,10 @@ def test_mxfp8_marlin_padded_round_trip(shape):
     layer.output_size_per_partition = size_n
     layer.input_size_per_partition = size_k
 
-    weight_fp8 = (torch.randn(size_n, size_k, dtype=dtype, device="cuda") / 4).to(
-        torch.float8_e4m3fn
-    )
+    weight_fp8 = (torch.randn(size_n, size_k, dtype=dtype, device="cuda") / 4).to(torch.float8_e4m3fn)
     # e8m0 exponents around 1.0 (127): scales in [2^-6, 2^0]
-    scales = torch.randint(
-        121, 128, (size_n, size_k // group_size), dtype=torch.uint8, device="cuda"
-    )
-    ref_weight = weight_fp8.to(dtype) * (
-        2.0 ** (scales.to(dtype) - 127)
-    ).repeat_interleave(group_size, 1)
+    scales = torch.randint(121, 128, (size_n, size_k // group_size), dtype=torch.uint8, device="cuda")
+    ref_weight = weight_fp8.to(dtype) * (2.0 ** (scales.to(dtype) - 127)).repeat_interleave(group_size, 1)
 
     layer.weight = torch.nn.Parameter(weight_fp8, requires_grad=False)
     layer.weight_scale = torch.nn.Parameter(scales, requires_grad=False)
@@ -471,9 +439,7 @@ def test_awq_zp_marlin_padded_round_trip(shape):
     device = torch.device("cuda")
 
     weight = torch.randn(size_k, size_n, dtype=dtype, device=device) / size_k**0.5
-    w_ref, q_w, s, zp = quantize_weights(
-        weight, quant_type, group_size, zero_points=True
-    )
+    w_ref, q_w, s, zp = quantize_weights(weight, quant_type, group_size, zero_points=True)
     qweight = gptq_pack(q_w, quant_type.size_bits, size_k, size_n)
 
     padded_n, padded_k = marlin_padded_nk(size_n, size_k, group_size)
@@ -486,9 +452,7 @@ def test_awq_zp_marlin_padded_round_trip(shape):
         num_bits=quant_type.size_bits,
     )
     s = marlin_pad_scales(s, size_n, size_k, padded_n, padded_k, group_size)
-    marlin_s = marlin_permute_scales(
-        s, size_k=padded_k, size_n=padded_n, group_size=group_size
-    )
+    marlin_s = marlin_permute_scales(s, size_k=padded_k, size_n=padded_n, group_size=group_size)
     zp = marlin_pad_scales(zp, size_n, size_k, padded_n, padded_k, group_size)
     marlin_zp = marlin_zero_points(
         zp,
@@ -553,7 +517,6 @@ def test_gptq_marlin_moe_padded_round_trip(shape, group_size):
     dequantized reference. Symmetric int4's quantized zero decodes to -8, so the
     padded region only stays out of the output via the zero-padded scales.
     """
-    from tests.kernels.utils import torch_experts
     from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
     from aphrodite.model_executor.layers.fused_moe import fused_topk
     from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
@@ -567,6 +530,7 @@ def test_gptq_marlin_moe_padded_round_trip(shape, group_size):
         marlin_moe_padded_intermediate,
         marlin_moe_permute_scales,
     )
+    from tests.kernels.utils import torch_experts
 
     n, k, e = shape
     topk, m = 2, 33
@@ -585,9 +549,7 @@ def test_gptq_marlin_moe_padded_round_trip(shape, group_size):
 
     def quant(w, size_k, size_n):
         # w is (size_n, size_k); gptq expects (size_k, size_n).
-        ref, q_w, s, _, _ = gptq_quantize_weights(
-            w.T, quant_type, group_size, act_order=False
-        )
+        ref, q_w, s, _, _ = gptq_quantize_weights(w.T, quant_type, group_size, act_order=False)
         return ref, gptq_pack(q_w, bits, size_k, size_n), s
 
     w13_qw, w13_s, w13_ref = [], [], []
@@ -620,13 +582,9 @@ def test_gptq_marlin_moe_padded_round_trip(shape, group_size):
     marlin_w13 = ops.gptq_marlin_moe_repack(
         w13_qweight, sort_idx, w13_qweight.shape[1] * pack, w13_qweight.shape[2], bits
     )
-    marlin_w2 = ops.gptq_marlin_moe_repack(
-        w2_qweight, sort_idx, w2_qweight.shape[1] * pack, w2_qweight.shape[2], bits
-    )
+    marlin_w2 = ops.gptq_marlin_moe_repack(w2_qweight, sort_idx, w2_qweight.shape[1] * pack, w2_qweight.shape[2], bits)
     group_or_pack = group_size if group_size != -1 else pack
-    marlin_w13_s = marlin_moe_permute_scales(
-        s=w13_scales, size_k=n, size_n=w13_scales.shape[2], group_size=group_size
-    )
+    marlin_w13_s = marlin_moe_permute_scales(s=w13_scales, size_k=n, size_n=w13_scales.shape[2], group_size=group_size)
     marlin_w2_s = marlin_moe_permute_scales(
         s=w2_scales,
         size_k=w2_scales.shape[1] * group_or_pack,
@@ -677,9 +635,7 @@ def test_check_moe_marlin_supports_layer_padding():
         layer = SimpleNamespace()
         layer.hidden_size = hidden
         layer.apply_router_weight_on_input = False
-        layer.moe_config = SimpleNamespace(
-            intermediate_size_per_partition_unpadded=intermediate
-        )
+        layer.moe_config = SimpleNamespace(intermediate_size_per_partition_unpadded=intermediate)
         return layer
 
     # group=32 with intermediate % 64 != 0: rejected strictly, accepted w/ padding
@@ -707,7 +663,6 @@ def test_check_moe_marlin_supports_layer_padding():
 def test_fp8_marlin_moe_padded_round_trip(shape, quant):
     """FP8 weight-only MoE: pad a tile-misaligned intermediate and check the
     real prepare + fused_marlin_moe against the dequantized reference."""
-    from tests.kernels.utils import torch_experts
     from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
     from aphrodite.model_executor.layers.fused_moe import fused_topk
     from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
@@ -720,6 +675,7 @@ def test_fp8_marlin_moe_padded_round_trip(shape, quant):
     from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
         prepare_fp8_moe_layer_for_marlin,
     )
+    from tests.kernels.utils import torch_experts
 
     n, k, e = shape
     topk, m = 2, 33
@@ -793,7 +749,6 @@ def test_fp8_marlin_moe_padded_round_trip(shape, quant):
 def test_mxfp8_marlin_moe_padded_round_trip(shape):
     """MXFP8 weight-only MoE round-trip at a tile-misaligned intermediate, with
     unit e8m0 scales so the reference is the exact fp8 dequant."""
-    from tests.kernels.utils import torch_experts
     from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
     from aphrodite.model_executor.layers.fused_moe import fused_topk
     from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
@@ -806,6 +761,7 @@ def test_mxfp8_marlin_moe_padded_round_trip(shape):
     from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
         prepare_mxfp8_moe_layer_for_marlin,
     )
+    from tests.kernels.utils import torch_experts
 
     n, k, e = shape
     topk, m, gs, e8m0_one = 2, 33, 32, 127
@@ -820,18 +776,12 @@ def test_mxfp8_marlin_moe_padded_round_trip(shape):
     w2_weight = torch.randn((e, k, n), device=device, dtype=dtype) / n**0.5
     w13_weight = w13_weight.clamp(-448, 448).to(fp8)
     w2_weight = w2_weight.clamp(-448, 448).to(fp8)
-    w13_scale = torch.full(
-        (e, 2 * n, k // gs), e8m0_one, dtype=torch.uint8, device=device
-    )
+    w13_scale = torch.full((e, 2 * n, k // gs), e8m0_one, dtype=torch.uint8, device=device)
     w2_scale = torch.full((e, k, n // gs), e8m0_one, dtype=torch.uint8, device=device)
 
-    layer = SimpleNamespace(
-        num_experts=e, hidden_size=k, intermediate_size_per_partition=n
-    )
+    layer = SimpleNamespace(num_experts=e, hidden_size=k, intermediate_size_per_partition=n)
     with set_current_aphrodite_config(AphroditeConfig()):
-        pw13, pw2, ps13, ps2 = prepare_mxfp8_moe_layer_for_marlin(
-            layer, w13_weight, w2_weight, w13_scale, w2_scale
-        )
+        pw13, pw2, ps13, ps2 = prepare_mxfp8_moe_layer_for_marlin(layer, w13_weight, w2_weight, w13_scale, w2_scale)
     assert marlin_moe_intermediate_size(pw13, pw2) == padded_n
 
     score = torch.randn((m, e), device=device, dtype=dtype)

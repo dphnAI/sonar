@@ -11,9 +11,9 @@ import pytest_asyncio
 import requests
 from fastapi import Request
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.v1.engine.exceptions import EngineDeadError
 from aphrodite.version import __version__ as APHRODITE_VERSION
+from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "Qwen/Qwen3-0.6B"
 
@@ -179,9 +179,7 @@ async def test_server_load(server: RemoteOpenAIServer):
         )
 
     # Start the completion request in a background thread.
-    completion_future = asyncio.create_task(
-        asyncio.to_thread(make_long_completion_request)
-    )
+    completion_future = asyncio.create_task(asyncio.to_thread(make_long_completion_request))
 
     # Give a short delay to ensure the request has started.
     await asyncio.sleep(0.1)

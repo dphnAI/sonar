@@ -39,10 +39,7 @@ def _validate_prefix_cache_retention_interval(
     # Retention sparsifies sliding-window and Mamba (linear-attention)
     # checkpoints; full-attention and chunked-local groups cache densely and
     # ignore it (their hit granularity must stay fine).
-    if not any(
-        isinstance(g.kv_cache_spec, (SlidingWindowSpec, MambaSpec))
-        for g in kv_cache_config.kv_cache_groups
-    ):
+    if not any(isinstance(g.kv_cache_spec, (SlidingWindowSpec, MambaSpec)) for g in kv_cache_config.kv_cache_groups):
         raise ValueError(
             "APHRODITE_PREFIX_CACHE_RETENTION_INTERVAL is set but this model has "
             "no sliding-window or Mamba KV cache group, so retention has no "
@@ -83,8 +80,7 @@ class KVCacheCoordinator(ABC):
         # The scheduling granularity (LCM of all group block sizes), must be a multiple
         # of the hash_block_size and the block size of each group.
         assert scheduler_block_size % hash_block_size == 0 and all(
-            scheduler_block_size % g.kv_cache_spec.block_size == 0
-            for g in kv_cache_config.kv_cache_groups
+            scheduler_block_size % g.kv_cache_spec.block_size == 0 for g in kv_cache_config.kv_cache_groups
         )
         self.scheduler_block_size = scheduler_block_size
 
@@ -97,9 +93,7 @@ class KVCacheCoordinator(ABC):
         )
 
         # KV cache group indices that get the EAGLE last-block drop.
-        self.eagle_group_ids: set[int] = {
-            i for i, g in enumerate(kv_cache_config.kv_cache_groups) if g.is_eagle_group
-        }
+        self.eagle_group_ids: set[int] = {i for i, g in enumerate(kv_cache_config.kv_cache_groups) if g.is_eagle_group}
         # Conservatively fall back to flag all groups when no group is flagged.
         if use_eagle and not self.eagle_group_ids:
             self.eagle_group_ids = set(range(len(kv_cache_config.kv_cache_groups)))
@@ -123,9 +117,7 @@ class KVCacheCoordinator(ABC):
         # (``scheduler_block_size``) to land on real cache-hit boundaries.
         # 0 = keep only the latest replay boundary; None = dense;
         self.retention_interval = envs.APHRODITE_PREFIX_CACHE_RETENTION_INTERVAL
-        _validate_prefix_cache_retention_interval(
-            self.retention_interval, self.scheduler_block_size, kv_cache_config
-        )
+        _validate_prefix_cache_retention_interval(self.retention_interval, self.scheduler_block_size, kv_cache_config)
 
     def get_num_blocks_to_allocate(
         self,
@@ -204,10 +196,7 @@ class KVCacheCoordinator(ABC):
         """
         # A running request is already tracked in num_cached_block and won't
         # have new prefix-cache hits, so this is a no-op for it.
-        if any(
-            request_id in manager.num_cached_block
-            for manager in self.single_type_managers
-        ):
+        if any(request_id in manager.num_cached_block for manager in self.single_type_managers):
             assert all(len(blocks) == 0 for blocks in new_computed_blocks)
             return
 
@@ -257,9 +246,7 @@ class KVCacheCoordinator(ABC):
         return tuple(
             manager.allocate_new_blocks(
                 request_id,
-                num_encoder_tokens
-                if isinstance(manager, CrossAttentionManager)
-                else num_tokens,
+                num_encoder_tokens if isinstance(manager, CrossAttentionManager) else num_tokens,
                 num_tokens_main_model,
             )
             for manager in self.single_type_managers
@@ -323,10 +310,7 @@ class KVCacheCoordinator(ABC):
         Returns:
             list[int]: The number of common prefix blocks for each kv cache group.
         """
-        return [
-            manager.get_num_common_prefix_blocks(running_request_id)
-            for manager in self.single_type_managers
-        ]
+        return [manager.get_num_common_prefix_blocks(running_request_id) for manager in self.single_type_managers]
 
     def remove_skipped_blocks(
         self,
@@ -347,18 +331,13 @@ class KVCacheCoordinator(ABC):
                 manager types ignore it.
         """
         for manager in self.single_type_managers:
-            manager.remove_skipped_blocks(
-                request_id, total_computed_tokens, num_prompt_tokens
-            )
+            manager.remove_skipped_blocks(request_id, total_computed_tokens, num_prompt_tokens)
 
     def get_blocks(self, request_id: str) -> tuple[list[KVCacheBlock], ...]:
         """
         Get the blocks for the request.
         """
-        return tuple(
-            manager.req_to_blocks.get(request_id) or []
-            for manager in self.single_type_managers
-        )
+        return tuple(manager.req_to_blocks.get(request_id) or [] for manager in self.single_type_managers)
 
     @abstractmethod
     def find_longest_cache_hit(
@@ -418,9 +397,7 @@ class KVCacheCoordinatorNoPrefixCache(KVCacheCoordinator):
         block_hashes: list[BlockHash],
         max_cache_hit_length: int,
     ) -> tuple[tuple[list[KVCacheBlock], ...], int]:
-        blocks: tuple[list[KVCacheBlock], ...] = tuple(
-            [] for _ in range(self.num_single_type_manager)
-        )
+        blocks: tuple[list[KVCacheBlock], ...] = tuple([] for _ in range(self.num_single_type_manager))
         return blocks, 0
 
 
@@ -549,10 +526,9 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
         # different KV cache groups have different block sizes, the actual block size
         # can be a multiple of hash_block_size.
         self.hash_block_size = hash_block_size
-        assert all(
-            g.kv_cache_spec.block_size % hash_block_size == 0
-            for g in kv_cache_config.kv_cache_groups
-        ), "block_size must be divisible by hash_block_size"
+        assert all(g.kv_cache_spec.block_size % hash_block_size == 0 for g in kv_cache_config.kv_cache_groups), (
+            "block_size must be divisible by hash_block_size"
+        )
         assert dcp_world_size == 1, "DCP not support hybrid attn now."
         assert pcp_world_size == 1, "PCP not support hybrid attn now."
         self.verify_and_split_kv_cache_groups()
@@ -571,27 +547,19 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
             # Try to find an existing group with the same spec
             for idx, group in enumerate(self.attention_groups):
                 if group.spec == spec:
-                    assert manager_cls is group.manager_cls, (
-                        "Expected same manager class for identical KV cache specs."
-                    )
+                    assert manager_cls is group.manager_cls, "Expected same manager class for identical KV cache specs."
                     group.group_ids.append(i)
                     if use_eagle and not group.use_eagle:
                         self.attention_groups[idx] = group._replace(use_eagle=True)
                     break
             else:
-                self.attention_groups.append(
-                    SpecGroup(spec, [i], manager_cls, use_eagle)
-                )
+                self.attention_groups.append(SpecGroup(spec, [i], manager_cls, use_eagle))
 
-        assert len(self.attention_groups) > 1, (
-            "HybridKVCacheCoordinator requires at least two attention groups."
-        )
+        assert len(self.attention_groups) > 1, "HybridKVCacheCoordinator requires at least two attention groups."
 
         # Put full attention first: its efficient left-to-right scan provides
         # a tighter initial bound, reducing work for subsequent groups.
-        self.attention_groups.sort(
-            key=lambda g: not isinstance(g.spec, FullAttentionSpec)
-        )
+        self.attention_groups.sort(key=lambda g: not isinstance(g.spec, FullAttentionSpec))
 
         # Propagate the eagle bit to each manager (default to ``use_eagle=False``).
         for group in self.attention_groups:
@@ -605,9 +573,7 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
         # Within an aligned region, SWA groups may only consult a subset of blocks
         # per ``scheduler_block_size``-segment so the unused blocks also stay
         # out of the prefix-cache hash map.
-        aligned_num_computed_tokens = (
-            num_computed_tokens // self.scheduler_block_size * self.scheduler_block_size
-        )
+        aligned_num_computed_tokens = num_computed_tokens // self.scheduler_block_size * self.scheduler_block_size
         for manager in self.single_type_managers:
             num_tokens_to_cache = aligned_num_computed_tokens
             # EAGLE groups match one block past each aligned boundary and drop
@@ -653,9 +619,7 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
         def _get_block_hashes(kv_cache_spec: KVCacheSpec) -> BlockHashList:
             if kv_cache_spec.block_size == self.hash_block_size:
                 return block_hashes
-            return BlockHashListWithBlockSize(
-                block_hashes, self.hash_block_size, kv_cache_spec.block_size
-            )
+            return BlockHashListWithBlockSize(block_hashes, self.hash_block_size, kv_cache_spec.block_size)
 
         num_groups = len(self.kv_cache_config.kv_cache_groups)
         hit_length = max_cache_hit_length
@@ -676,17 +640,13 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
         while True:
             curr_hit_length = hit_length
 
-            for idx, (spec, group_ids, manager_cls, use_eagle) in enumerate(
-                self.attention_groups
-            ):
+            for idx, (spec, group_ids, manager_cls, use_eagle) in enumerate(self.attention_groups):
                 cached_blocks = hit_blocks_by_group[group_ids[0]]
                 if isinstance(spec, FullAttentionSpec) and cached_blocks is not None:
                     # Full attention is downward-closed: we only need to look
                     # up cached blocks once; on subsequent iterations just trim
                     # to the (reduced) current hit length.
-                    curr_hit_length = (
-                        curr_hit_length // spec.block_size * spec.block_size
-                    )
+                    curr_hit_length = curr_hit_length // spec.block_size * spec.block_size
                     continue
 
                 drop_eagle_block = use_eagle and idx not in eagle_verified
@@ -694,9 +654,7 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
                 _max_length = curr_hit_length
                 if drop_eagle_block:
                     # Eagle needs to match one more block and then pop the last.
-                    _max_length = min(
-                        curr_hit_length + spec.block_size, max_cache_hit_length
-                    )
+                    _max_length = min(curr_hit_length + spec.block_size, max_cache_hit_length)
                 hit_blocks = manager_cls.find_longest_cache_hit(
                     block_hashes=_get_block_hashes(spec),
                     max_length=_max_length,
@@ -735,9 +693,7 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
         # Uncached shared prefix detection: If any attn. group cached a longer prefix
         # than the current prefix, it is an uncached common prefix across requests:
         self.num_uncached_common_prefix_tokens = longest_hit_length - hit_length
-        return tuple(
-            blocks if blocks is not None else [] for blocks in hit_blocks_by_group
-        ), hit_length
+        return tuple(blocks if blocks is not None else [] for blocks in hit_blocks_by_group), hit_length
 
     def find_longest_cache_hit_per_group(
         self,
@@ -753,9 +709,7 @@ class HybridKVCacheCoordinator(KVCacheCoordinator):
         def _get_block_hashes(kv_cache_spec: KVCacheSpec) -> BlockHashList:
             if kv_cache_spec.block_size == self.hash_block_size:
                 return block_hashes
-            return BlockHashListWithBlockSize(
-                block_hashes, self.hash_block_size, kv_cache_spec.block_size
-            )
+            return BlockHashListWithBlockSize(block_hashes, self.hash_block_size, kv_cache_spec.block_size)
 
         num_groups = len(self.kv_cache_config.kv_cache_groups)
         hit_blocks: list[list[KVCacheBlock]] = [[] for _ in range(num_groups)]

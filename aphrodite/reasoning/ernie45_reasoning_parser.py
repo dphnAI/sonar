@@ -41,8 +41,7 @@ class Ernie45ReasoningParser(BaseThinkingReasoningParser):
 
         if not self.model_tokenizer:
             raise ValueError(
-                "The model tokenizer must be passed to the ReasoningParser "
-                "constructor during construction."
+                "The model tokenizer must be passed to the ReasoningParser constructor during construction."
             )
 
         self.response_start_token_id = self.vocab.get(self.response_start_token)
@@ -122,10 +121,7 @@ class Ernie45ReasoningParser(BaseThinkingReasoningParser):
             ):
                 content = content.lstrip("\n")
             # remove \n after </think>\n
-            if (
-                len(previous_token_ids) > 1
-                and previous_token_ids[-2] == self.end_token_id
-            ) and (
+            if (len(previous_token_ids) > 1 and previous_token_ids[-2] == self.end_token_id) and (
                 len(delta_token_ids) > 0 and delta_token_ids[0] == self.newline_token_id
             ):
                 content = content.lstrip("\n")

@@ -124,17 +124,9 @@ class OfflineInferenceMixin:
         renderer = self.renderer
         model_config = self.model_config
 
-        parsed_prompts = [
-            parse_model_prompt(model_config, prompt) for prompt in prompts
-        ]
-        tok_params = renderer.default_cmpl_tok_params.with_kwargs(
-            **(tokenization_kwargs or {})
-        )
-        prompt_extras = (
-            None
-            if mm_processor_kwargs is None
-            else {"mm_processor_kwargs": mm_processor_kwargs}
-        )
+        parsed_prompts = [parse_model_prompt(model_config, prompt) for prompt in prompts]
+        tok_params = renderer.default_cmpl_tok_params.with_kwargs(**(tokenization_kwargs or {}))
+        prompt_extras = None if mm_processor_kwargs is None else {"mm_processor_kwargs": mm_processor_kwargs}
 
         return renderer.render_cmpl(
             parsed_prompts,
@@ -187,22 +179,13 @@ class OfflineInferenceMixin:
                     add_generation_prompt=add_generation_prompt,
                     continue_final_message=continue_final_message,
                     tools=tools,
-                    tokenize=(
-                        is_mistral_tokenizer(renderer.tokenizer)
-                        or self.model_config.enable_prompt_embeds
-                    ),
+                    tokenize=(is_mistral_tokenizer(renderer.tokenizer) or self.model_config.enable_prompt_embeds),
                 ),
             ),
             mm_processor_kwargs=mm_processor_kwargs,
         )
-        tok_params = renderer.default_chat_tok_params.with_kwargs(
-            **(tokenization_kwargs or {})
-        )
-        prompt_extras = (
-            None
-            if mm_processor_kwargs is None
-            else {"mm_processor_kwargs": mm_processor_kwargs}
-        )
+        tok_params = renderer.default_chat_tok_params.with_kwargs(**(tokenization_kwargs or {}))
+        prompt_extras = None if mm_processor_kwargs is None else {"mm_processor_kwargs": mm_processor_kwargs}
 
         _, engine_inputs = renderer.render_chat(
             conversations,
@@ -247,8 +230,7 @@ class OfflineInferenceMixin:
         if isinstance(params, Sequence):
             if len(params) != num_requests:
                 raise ValueError(
-                    f"The lengths of prompts ({num_requests}) "
-                    f"and params ({len(params)}) must be the same."
+                    f"The lengths of prompts ({num_requests}) and params ({len(params)}) must be the same."
                 )
 
             return params
@@ -263,8 +245,7 @@ class OfflineInferenceMixin:
         if isinstance(lora_request, Sequence):
             if len(lora_request) != num_requests:
                 raise ValueError(
-                    f"The lengths of prompts ({num_requests}) "
-                    f"and lora_request ({len(lora_request)}) must be the same."
+                    f"The lengths of prompts ({num_requests}) and lora_request ({len(lora_request)}) must be the same."
                 )
 
             return lora_request
@@ -279,8 +260,7 @@ class OfflineInferenceMixin:
         if priority is not None:
             if len(priority) != num_requests:
                 raise ValueError(
-                    f"The lengths of prompts ({num_requests}) "
-                    f"and priority ({len(priority)}) must be the same."
+                    f"The lengths of prompts ({num_requests}) and priority ({len(priority)}) must be the same."
                 )
 
             return priority
@@ -290,9 +270,7 @@ class OfflineInferenceMixin:
     def _add_completion_requests(
         self,
         prompts: PromptType | Sequence[PromptType],
-        params: SamplingParams
-        | PoolingParams
-        | Sequence[SamplingParams | PoolingParams],
+        params: SamplingParams | PoolingParams | Sequence[SamplingParams | PoolingParams],
         *,
         use_tqdm: bool | Callable[..., tqdm] = True,
         lora_request: Sequence[LoRARequest] | LoRARequest | None = None,
@@ -326,9 +304,7 @@ class OfflineInferenceMixin:
     def _run_completion(
         self,
         prompts: PromptType | Sequence[PromptType],
-        params: SamplingParams
-        | PoolingParams
-        | Sequence[SamplingParams | PoolingParams],
+        params: SamplingParams | PoolingParams | Sequence[SamplingParams | PoolingParams],
         output_type: type[_O],
         *,
         use_tqdm: bool | Callable[..., tqdm] = True,
@@ -350,11 +326,8 @@ class OfflineInferenceMixin:
 
     def _run_chat(
         self,
-        messages: list[ChatCompletionMessageParam]
-        | Sequence[list[ChatCompletionMessageParam]],
-        params: SamplingParams
-        | PoolingParams
-        | Sequence[SamplingParams | PoolingParams],
+        messages: list[ChatCompletionMessageParam] | Sequence[list[ChatCompletionMessageParam]],
+        params: SamplingParams | PoolingParams | Sequence[SamplingParams | PoolingParams],
         output_type: type[_O],
         *,
         use_tqdm: bool | Callable[..., tqdm] = True,
@@ -386,11 +359,8 @@ class OfflineInferenceMixin:
 
     def _add_chat_requests(
         self,
-        messages: list[ChatCompletionMessageParam]
-        | Sequence[list[ChatCompletionMessageParam]],
-        params: SamplingParams
-        | PoolingParams
-        | Sequence[SamplingParams | PoolingParams],
+        messages: list[ChatCompletionMessageParam] | Sequence[list[ChatCompletionMessageParam]],
+        params: SamplingParams | PoolingParams | Sequence[SamplingParams | PoolingParams],
         *,
         use_tqdm: bool | Callable[..., tqdm] = True,
         lora_request: Sequence[LoRARequest] | LoRARequest | None = None,
@@ -414,9 +384,7 @@ class OfflineInferenceMixin:
         # <|channel>, <|tool_call>, <|"|>), automatically set
         # skip_special_tokens=False so these tokens are preserved in
         # output.text for downstream parsing.
-        needs_parsing = (
-            chat_template_kwargs and chat_template_kwargs.get("enable_thinking")
-        ) or tools
+        needs_parsing = (chat_template_kwargs and chat_template_kwargs.get("enable_thinking")) or tools
         if needs_parsing:
             self._adjust_params_for_parsing(seq_params)
 
@@ -444,9 +412,7 @@ class OfflineInferenceMixin:
             priorities=seq_priority,
         )
 
-    def _adjust_params_for_parsing(
-        self, params: Sequence[SamplingParams | PoolingParams]
-    ) -> None:
+    def _adjust_params_for_parsing(self, params: Sequence[SamplingParams | PoolingParams]) -> None:
         """Set ``skip_special_tokens=False`` when the model encodes
         structured output syntax as special tokens.
 
@@ -481,11 +447,7 @@ class OfflineInferenceMixin:
                 "<tool_call|>",  # tool call delimiters
                 '<|"|>',  # string quoting in tool args
             )
-            needs_special = any(
-                vocab.get(tok) in special_ids
-                for tok in structured_tokens
-                if tok in vocab
-            )
+            needs_special = any(vocab.get(tok) in special_ids for tok in structured_tokens if tok in vocab)
             if needs_special:
                 for sp in params:
                     if isinstance(sp, SamplingParams) and sp.skip_special_tokens:
@@ -604,14 +566,9 @@ class OfflineInferenceMixin:
                             assert output.prompt_token_ids is not None
                             total_in_toks += len(output.prompt_token_ids) * n
                             in_spd = total_in_toks / pbar.format_dict["elapsed"]
-                            total_out_toks += sum(
-                                len(stp.token_ids) for stp in output.outputs
-                            )
+                            total_out_toks += sum(len(stp.token_ids) for stp in output.outputs)
                             out_spd = total_out_toks / pbar.format_dict["elapsed"]
-                            pbar.postfix = (
-                                f"est. speed input: {in_spd:.2f} toks/s, "
-                                f"output: {out_spd:.2f} toks/s"
-                            )
+                            pbar.postfix = f"est. speed input: {in_spd:.2f} toks/s, output: {out_spd:.2f} toks/s"
                             pbar.update(n)
                         else:
                             pbar.update(1)

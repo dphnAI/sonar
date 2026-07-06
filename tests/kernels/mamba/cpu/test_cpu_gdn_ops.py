@@ -106,8 +106,7 @@ def ref_gated_delta_rule(
             k_seq = k_seq.repeat_interleave(repeat_factor, dim=2)
 
         q_seq, k_seq, v_seq, beta_seq, g_seq = [
-            x.transpose(1, 2).contiguous().to(torch.float32)
-            for x in (q_seq, k_seq, v_seq, beta_seq, g_seq)
+            x.transpose(1, 2).contiguous().to(torch.float32) for x in (q_seq, k_seq, v_seq, beta_seq, g_seq)
         ]
 
         batch_size, num_heads, seq_len, head_dim = q_seq.shape
@@ -154,9 +153,7 @@ def gdn_inputs(
     k = tensor_cache(q_numel, torch.bfloat16).view(q_shape)
 
     v_shape = (1, num_tokens, num_v_heads, v_head_dim)
-    v = tensor_cache(num_tokens * num_v_heads * v_head_dim, torch.bfloat16).view(
-        v_shape
-    )
+    v = tensor_cache(num_tokens * num_v_heads * v_head_dim, torch.bfloat16).view(v_shape)
 
     gate_shape = (num_tokens, num_v_heads)
     gate_numel = num_tokens * num_v_heads
@@ -185,9 +182,7 @@ def test_fused_gdn_gating_cpu(
     g, beta = ops.fused_gdn_gating_cpu(A_log, a, b, dt_bias)
 
     torch.testing.assert_close(g, g_ref.unsqueeze(0), atol=1e-4, rtol=1e-4)
-    torch.testing.assert_close(
-        beta.float(), beta_ref.unsqueeze(0).float(), atol=5e-3, rtol=5e-3
-    )
+    torch.testing.assert_close(beta.float(), beta_ref.unsqueeze(0).float(), atol=5e-3, rtol=5e-3)
 
 
 # decode path
@@ -210,9 +205,7 @@ def test_fused_sigmoid_gating_delta_rule_update_cpu(
     state_indices = torch.arange(batch_size, dtype=torch.int32)
     cu_seqlens = torch.arange(batch_size + 1, dtype=torch.int32)
     state_shape = (batch_size, num_v_heads, head_dim, v_head_dim)
-    state = tensor_cache(
-        batch_size * num_v_heads * head_dim * v_head_dim, torch.float32
-    ).view(state_shape)
+    state = tensor_cache(batch_size * num_v_heads * head_dim * v_head_dim, torch.float32).view(state_shape)
     state_ref = state[state_indices].transpose(-1, -2).contiguous()
 
     out_ref, final_state_ref = ref_gated_delta_rule(
@@ -271,13 +264,11 @@ def test_chunk_gated_delta_rule_cpu(
     )
     _, num_v_heads = num_heads
     head_dim, v_head_dim = head_dims
-    cu_seqlens = torch.tensor(
-        [0, *torch.tensor(seq_lens).cumsum(0).tolist()], dtype=torch.int32
-    )
+    cu_seqlens = torch.tensor([0, *torch.tensor(seq_lens).cumsum(0).tolist()], dtype=torch.int32)
     initial_state_shape = (len(seq_lens), num_v_heads, head_dim, v_head_dim)
-    initial_state = tensor_cache(
-        len(seq_lens) * num_v_heads * head_dim * v_head_dim, torch.float32
-    ).view(initial_state_shape)
+    initial_state = tensor_cache(len(seq_lens) * num_v_heads * head_dim * v_head_dim, torch.float32).view(
+        initial_state_shape
+    )
     initial_state_ref = initial_state.transpose(-1, -2).contiguous()
 
     out_ref, final_state_ref = ref_gated_delta_rule(
@@ -407,12 +398,8 @@ def test_chunk_gated_delta_rule_cpu_two_call_split(
 
 
 def _conv_inputs(total_tokens: int):
-    x = tensor_cache(total_tokens * CONV_DIM, torch.bfloat16).view(
-        total_tokens, CONV_DIM
-    )
-    weight = tensor_cache(CONV_DIM * CONV_KERNEL, torch.bfloat16).view(
-        CONV_DIM, CONV_KERNEL
-    )
+    x = tensor_cache(total_tokens * CONV_DIM, torch.bfloat16).view(total_tokens, CONV_DIM)
+    weight = tensor_cache(CONV_DIM * CONV_KERNEL, torch.bfloat16).view(CONV_DIM, CONV_KERNEL)
     bias = tensor_cache(CONV_DIM, torch.bfloat16)
     return x, weight, bias
 

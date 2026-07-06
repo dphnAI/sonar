@@ -109,11 +109,7 @@ def _rocm_device_count_stateless(cuda_visible_devices: str | None = None) -> int
         return 0
     # ROCm uses amdsmi instead of nvml for stateless device count
     # This requires a sufficiently modern version of Torch 2.4.0
-    raw_count = (
-        torch.cuda._device_count_amdsmi()
-        if (hasattr(torch.cuda, "_device_count_amdsmi"))
-        else -1
-    )
+    raw_count = torch.cuda._device_count_amdsmi() if (hasattr(torch.cuda, "_device_count_amdsmi")) else -1
     r = torch._C._cuda_getDeviceCount() if raw_count < 0 else raw_count
     return r
 
@@ -400,8 +396,7 @@ def flash_attn_triton_available() -> bool:
             return False
         if os.environ.get("FLASH_ATTENTION_TRITON_AMD_ENABLE") != "TRUE":
             logger.info_once(
-                "Set FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE to enable "
-                "Flash Attention Triton backend on RDNA."
+                "Set FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE to enable Flash Attention Triton backend on RDNA."
             )
             return False
         return True
@@ -573,21 +568,16 @@ class RocmPlatform(Platform):
         )
         reasons_str = (
             "{"
-            + ", ".join(
-                f"{backend.name}: [{', '.join(reasons)}]"
-                for backend, reasons in invalid_reasons.items()
-            )
+            + ", ".join(f"{backend.name}: [{', '.join(reasons)}]" for backend, reasons in invalid_reasons.items())
             + "}"
         )
         config_str = attn_selector_config.__repr__()
         logger.debug_once(
-            f"Some attention backends are not valid for {cls.device_name} with "
-            f"{config_str}. Reasons: {reasons_str}."
+            f"Some attention backends are not valid for {cls.device_name} with {config_str}. Reasons: {reasons_str}."
         )
         if len(valid_backends_priorities) == 0:
             raise ValueError(
-                f"No valid attention backend found for {cls.device_name} "
-                f"with {config_str}. Reasons: {reasons_str}."
+                f"No valid attention backend found for {cls.device_name} with {config_str}. Reasons: {reasons_str}."
             )
 
         # We have found some valid backends. Select the one with the
@@ -598,14 +588,11 @@ class RocmPlatform(Platform):
         )
         selected_index = sorted_indices[0]
         selected_backend = valid_backends_priorities[selected_index][0]
-        valid_str = (
-            "[" + ", ".join(f"'{b[0].name}'" for b in valid_backends_priorities) + "]"
-        )
+        valid_str = "[" + ", ".join(f"'{b[0].name}'" for b in valid_backends_priorities) + "]"
         if invalid_reasons:
             rejected_str = ", ".join(b.name for b in invalid_reasons)
             logger.info(
-                "Found incompatible backend(s) [%s] with %s. "
-                "Overriding with %s out of potential backends: %s.",
+                "Found incompatible backend(s) [%s] with %s. Overriding with %s out of potential backends: %s.",
                 rejected_str,
                 attn_selector_config.attn_type,
                 selected_backend.name,
@@ -652,23 +639,13 @@ class RocmPlatform(Platform):
             logger.info_once("Using AITER Flash Attention backend for ViT model.")
             return AttentionBackendEnum.ROCM_AITER_FA
 
-        if (
-            on_gfx9()
-            and find_spec("flash_attn") is not None
-            and (dtype == torch.float16 or dtype == torch.bfloat16)
-        ):
+        if on_gfx9() and find_spec("flash_attn") is not None and (dtype == torch.float16 or dtype == torch.bfloat16):
             logger.info_once("Using Flash Attention backend for ViT model.")
             return AttentionBackendEnum.FLASH_ATTN
 
         # RDNA3/RDNA4 (gfx11xx/gfx12xx): Use Flash Attention Triton backend
-        if (
-            on_gfx1x()
-            and flash_attn_triton_available()
-            and (dtype == torch.float16 or dtype == torch.bfloat16)
-        ):
-            logger.info_once(
-                "Using Flash Attention (Triton backend) for ViT model on RDNA."
-            )
+        if on_gfx1x() and flash_attn_triton_available() and (dtype == torch.float16 or dtype == torch.bfloat16):
+            logger.info_once("Using Flash Attention (Triton backend) for ViT model on RDNA.")
             return AttentionBackendEnum.FLASH_ATTN
 
         logger.info_once("Using Torch SDPA backend for ViT model.")
@@ -760,8 +737,7 @@ class RocmPlatform(Platform):
         except Exception as e:
             logger.debug("Failed to get total memory via amdsmi: %s", e)
             logger.warning_once(
-                "Failed to get total memory via amdsmi, falling back to "
-                "torch.cuda. This will initialize CUDA."
+                "Failed to get total memory via amdsmi, falling back to torch.cuda. This will initialize CUDA."
             )
         return torch.cuda.get_device_properties(device_id).total_memory
 
@@ -827,9 +803,7 @@ class RocmPlatform(Platform):
     @classmethod
     def verify_model_arch(cls, model_arch: str) -> None:
         if model_arch in _ROCM_UNSUPPORTED_MODELS:
-            raise ValueError(
-                f"Model architecture '{model_arch}' is not supported by ROCm for now."
-            )
+            raise ValueError(f"Model architecture '{model_arch}' is not supported by ROCm for now.")
 
         if model_arch in _ROCM_PARTIALLY_SUPPORTED_MODELS:
             msg = _ROCM_PARTIALLY_SUPPORTED_MODELS[model_arch]
@@ -854,18 +828,14 @@ class RocmPlatform(Platform):
         return "aphrodite.lora.punica_wrapper.punica_gpu.PunicaWrapperGPU"
 
     @classmethod
-    def get_current_memory_usage(
-        cls, device: torch.types.Device | None = None
-    ) -> float:
+    def get_current_memory_usage(cls, device: torch.types.Device | None = None) -> float:
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats(device)
         return torch.cuda.max_memory_allocated(device)
 
     @classmethod
     def get_device_communicator_cls(cls) -> str:
-        return (
-            "aphrodite.distributed.device_communicators.cuda_communicator.CudaCommunicator"  # noqa
-        )
+        return "aphrodite.distributed.device_communicators.cuda_communicator.CudaCommunicator"  # noqa
 
     @classmethod
     def supports_mx(cls) -> bool:
@@ -924,9 +894,7 @@ class RocmPlatform(Platform):
         backend_options = ProcessGroupNCCL.Options()
         backend_options._timeout = timeout
 
-        backend_class = ProcessGroupNCCL(
-            prefix_store, group_rank, group_size, backend_options
-        )
+        backend_class = ProcessGroupNCCL(prefix_store, group_rank, group_size, backend_options)
         backend_type = ProcessGroup.BackendType.NCCL
         device = torch.device("cuda")
         pg._set_default_backend(backend_type)
@@ -1001,9 +969,7 @@ class RocmPlatform(Platform):
         return True
 
     @classmethod
-    def get_default_ir_op_priority(
-        cls, aphrodite_config: "AphroditeConfig"
-    ) -> "IrOpPriorityConfig":
+    def get_default_ir_op_priority(cls, aphrodite_config: "AphroditeConfig") -> "IrOpPriorityConfig":
         from aphrodite.config.compilation import CompilationMode, CUDAGraphMode
         from aphrodite.config.kernel import IrOpPriorityConfig
 
@@ -1025,9 +991,7 @@ class RocmPlatform(Platform):
         else:
             rms_norm = default
 
-        return IrOpPriorityConfig.with_default(
-            default, rms_norm=rms_norm, fused_add_rms_norm=rms_norm
-        )
+        return IrOpPriorityConfig.with_default(default, rms_norm=rms_norm, fused_add_rms_norm=rms_norm)
 
     @classmethod
     @with_amdsmi_context
@@ -1039,13 +1003,10 @@ class RocmPlatform(Platform):
             for device_id in range(cls.device_count()):
                 physical_device_id = cls.device_id_to_physical_device_id(device_id)
                 try:
-                    numa_node = amdsmi_topo_get_numa_node_number(
-                        handles[physical_device_id]
-                    )
+                    numa_node = amdsmi_topo_get_numa_node_number(handles[physical_device_id])
                 except AmdSmiException as e:
                     logger.warning(
-                        "Could not detect NUMA node for GPU %d, "
-                        "disabling automatic NUMA binding: %s",
+                        "Could not detect NUMA node for GPU %d, disabling automatic NUMA binding: %s",
                         device_id,
                         e,
                     )

@@ -18,8 +18,8 @@ import torch
 import yaml
 from packaging import version
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.platforms import current_platform
+from tests.utils import RemoteOpenAIServer
 
 from .gsm8k_eval import evaluate_gsm8k
 
@@ -57,9 +57,7 @@ def run_gsm8k_eval(eval_config: dict, server_url: str) -> dict:
     # Run GSM8K evaluation
     request_timeout_seconds = eval_config.get("request_timeout_seconds", 600)
     if current_platform.is_rocm():
-        request_timeout_seconds = eval_config.get(
-            "rocm_request_timeout_seconds", request_timeout_seconds
-        )
+        request_timeout_seconds = eval_config.get("rocm_request_timeout_seconds", request_timeout_seconds)
 
     results = evaluate_gsm8k(
         num_questions=eval_config["num_questions"],
@@ -79,19 +77,10 @@ def test_gsm8k_correctness(config_filename):
     """Test GSM8K correctness for a given model configuration."""
     eval_config = yaml.safe_load(config_filename.read_text(encoding="utf-8"))
 
-    if (
-        not current_platform.is_cuda()
-        and "Qwen3-30B-A3B-MXFP4A16" in eval_config["model_name"]
-    ):
-        pytest.skip(
-            "Skipping Qwen3-30B-A3B-MXFP4A16 on non-CUDA platforms. "
-            "Marlin kernels are not supported."
-        )
+    if not current_platform.is_cuda() and "Qwen3-30B-A3B-MXFP4A16" in eval_config["model_name"]:
+        pytest.skip("Skipping Qwen3-30B-A3B-MXFP4A16 on non-CUDA platforms. Marlin kernels are not supported.")
 
-    if (
-        not current_platform.is_cuda()
-        and "gemma-4-E4B-it-qat-mobile-ct" in eval_config["model_name"]
-    ):
+    if not current_platform.is_cuda() and "gemma-4-E4B-it-qat-mobile-ct" in eval_config["model_name"]:
         pytest.skip(
             "Skipping gemma-4-E4B-it-qat-mobile-ct on non-CUDA platforms. "
             "Its W2A16 (uint2b2) scheme has no kernel outside CUDA."
@@ -115,10 +104,7 @@ def test_gsm8k_correctness(config_filename):
                 "The quantization scheme is not supported on non-GFX950 platforms."
             )
         if not QUARK_MXFP4_TORCH_COMPATIBLE:
-            pytest.skip(
-                "Skipping Qwen3.5-35B-A3B-MXFP4: amd-quark >= 0.12 is required "
-                "on torch >= 2.11."
-            )
+            pytest.skip("Skipping Qwen3.5-35B-A3B-MXFP4: amd-quark >= 0.12 is required on torch >= 2.11.")
     # Parse server arguments from config (use shlex to handle quoted strings)
     server_args_str = eval_config.get("server_args", "")
     server_args = shlex.split(server_args_str) if server_args_str else []
@@ -131,9 +117,7 @@ def test_gsm8k_correctness(config_filename):
         ]
     )
 
-    startup_max_wait_seconds = eval_config.get(
-        "startup_max_wait_seconds", DEFAULT_STARTUP_MAX_WAIT_SECONDS
-    )
+    startup_max_wait_seconds = eval_config.get("startup_max_wait_seconds", DEFAULT_STARTUP_MAX_WAIT_SECONDS)
     env_dict = dict(eval_config.get("env") or {})
     env_dict["APHRODITE_ENGINE_READY_TIMEOUT_S"] = str(int(startup_max_wait_seconds))
 
@@ -143,9 +127,7 @@ def test_gsm8k_correctness(config_filename):
     print(f"Number of few-shot examples: {eval_config['num_fewshot']}")
     request_timeout_seconds = eval_config.get("request_timeout_seconds", 600)
     if current_platform.is_rocm():
-        request_timeout_seconds = eval_config.get(
-            "rocm_request_timeout_seconds", request_timeout_seconds
-        )
+        request_timeout_seconds = eval_config.get("rocm_request_timeout_seconds", request_timeout_seconds)
     print(f"Request timeout: {request_timeout_seconds}s")
     print(f"Startup max wait: {startup_max_wait_seconds}s")
     print(f"Server args: {' '.join(server_args)}")

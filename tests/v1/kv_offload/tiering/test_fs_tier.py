@@ -117,9 +117,7 @@ def lookup_and_wait(
     return [tier.lookup(k, ctx) for k in keys]
 
 
-def _page_aligned_zero_tensor(
-    num_blocks: int, block_elements: int, dtype: torch.dtype = _DTYPE
-) -> torch.Tensor:
+def _page_aligned_zero_tensor(num_blocks: int, block_elements: int, dtype: torch.dtype = _DTYPE) -> torch.Tensor:
     page_size = mmap.PAGESIZE
     dtype_num_bytes = torch.tensor([], dtype=dtype).element_size()
 
@@ -135,9 +133,7 @@ def _page_aligned_zero_tensor(
     return t.view(dtype).view(num_blocks, block_elements)
 
 
-def _page_aligned_rand_tensor(
-    num_blocks: int, block_elements: int, dtype: torch.dtype = _DTYPE
-) -> torch.Tensor:
+def _page_aligned_rand_tensor(num_blocks: int, block_elements: int, dtype: torch.dtype = _DTYPE) -> torch.Tensor:
     rand_tensor = _page_aligned_zero_tensor(num_blocks, block_elements)
     rand_tensor[:] = torch.rand(num_blocks, block_elements, dtype=dtype)
     return rand_tensor
@@ -257,9 +253,7 @@ def test_multi_block_job_partial_failure(fs_tier):
     assert all(r.success for r in drain(tier))
 
     # Load all three — key(99) was never stored
-    tier.submit_load(
-        make_job(2, [key(10), key(11), key(99)], [0, 1, 2], is_promotion=True)
-    )
+    tier.submit_load(make_job(2, [key(10), key(11), key(99)], [0, 1, 2], is_promotion=True))
     results = drain(tier)
 
     assert len(results) == 1
@@ -310,9 +304,7 @@ def test_store_load_data_integrity(fs_tier):
     assert all(r.success for r in results)
 
     for i, bid in enumerate(load_ids):
-        assert torch.allclose(tensor[bid], expected[i]), (
-            f"Block {bid} data mismatch after store+load"
-        )
+        assert torch.allclose(tensor[bid], expected[i]), f"Block {bid} data mismatch after store+load"
 
 
 def test_wait_idle_blocks_until_tasks_complete():

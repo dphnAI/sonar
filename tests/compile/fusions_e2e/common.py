@@ -84,25 +84,13 @@ INDUCTOR_GRAPH_PARTITION = [
 ]
 
 FUSION_LOG_PATTERNS: dict[str, re.Pattern] = {
-    "aiter_rms_quant_fusion": re.compile(
-        r"RocmAiterRMSNormQuantFusionPass Replaced (\d+) patterns"
-    ),
+    "aiter_rms_quant_fusion": re.compile(r"RocmAiterRMSNormQuantFusionPass Replaced (\d+) patterns"),
     "rms_quant_fusion": re.compile(r"rms_quant_fusion.py:\d+] Replaced (\d+) patterns"),
     "act_quant_fusion": re.compile(r"act_quant_fusion.py:\d+] Replaced (\d+) patterns"),
-    "norm_rope_fusion": re.compile(
-        r"qk_norm_rope_fusion.py:\d+] Fused QK Norm\+RoPE on (\d+) sites"
-    ),
-    "attn_quant_fusion": re.compile(
-        r"attn_quant_fusion.py:\d+] Fused quant onto (\d+) attention nodes"
-    ),
-    "ar_rms_fusion": re.compile(
-        r"allreduce_rms_fusion.py:\d+] Replaced (\d+) patterns"
-    ),
-    "aiter_ar_rms_fusion": re.compile(
-        r"RocmAiterAllReduceFusionPass Replaced (\d+) patterns"
-    ),
-    "sequence_parallel": re.compile(
-        r"sequence_parallelism.py:\d+] Replaced (\d+) patterns"
-    ),
+    "norm_rope_fusion": re.compile(r"qk_norm_rope_fusion.py:\d+] Fused QK Norm\+RoPE on (\d+) sites"),
+    "attn_quant_fusion": re.compile(r"attn_quant_fusion.py:\d+] Fused quant onto (\d+) attention nodes"),
+    "ar_rms_fusion": re.compile(r"allreduce_rms_fusion.py:\d+] Replaced (\d+) patterns"),
+    "aiter_ar_rms_fusion": re.compile(r"RocmAiterAllReduceFusionPass Replaced (\d+) patterns"),
+    "sequence_parallel": re.compile(r"sequence_parallelism.py:\d+] Replaced (\d+) patterns"),
     "async_tp": re.compile(r"collective_fusion.py:\d+] Replaced (\d+) patterns"),
 }

@@ -57,9 +57,7 @@ def encoder_process(
 
         if torch.cuda.is_available():
             device = f"{DEVICE_TYPE}:0"
-            tensor = torch.randn(
-                *tensor_data["shape"], dtype=tensor_data["dtype"], device=device
-            )
+            tensor = torch.randn(*tensor_data["shape"], dtype=tensor_data["dtype"], device=device)
         else:
             # Fall back to CPU for testing
             device = "cpu"
@@ -85,9 +83,7 @@ def encoder_process(
 
         ready_event.set()
         retrieval_done.set()
-        result_queue.put(
-            {"success": False, "error": str(e), "traceback": traceback.format_exc()}
-        )
+        result_queue.put({"success": False, "error": str(e), "traceback": traceback.format_exc()})
 
 
 def decoder_process(
@@ -121,9 +117,7 @@ def decoder_process(
         import traceback
 
         retrieval_done.set()
-        result_queue.put(
-            {"success": False, "error": str(e), "traceback": traceback.format_exc()}
-        )
+        result_queue.put({"success": False, "error": str(e), "traceback": traceback.format_exc()})
     else:
         retrieval_done.set()
 
@@ -174,12 +168,10 @@ def test_cuda_tensor_queue_basic():
 
     # Verify results
     assert encoder_result["success"], (
-        f"Encoder failed: {encoder_result.get('error')}\n"
-        f"{encoder_result.get('traceback', '')}"
+        f"Encoder failed: {encoder_result.get('error')}\n{encoder_result.get('traceback', '')}"
     )
     assert decoder_result["success"], (
-        f"Decoder failed: {decoder_result.get('error')}\n"
-        f"{decoder_result.get('traceback', '')}"
+        f"Decoder failed: {decoder_result.get('error')}\n{decoder_result.get('traceback', '')}"
     )
     assert decoder_result["matches_expected"], "Tensor shape mismatch"
     assert "cuda" in decoder_result["device"], "Tensor not on CUDA device"
@@ -344,9 +336,7 @@ def test_multiple_api_servers_to_engine():
 
     # Verify all servers succeeded
     for result in results:
-        assert result["success"], (
-            f"Server {result['server_id']} failed: {result.get('error')}"
-        )
+        assert result["success"], f"Server {result['server_id']} failed: {result.get('error')}"
 
     # Verify all tensors are in queue
     received_tensors = []
@@ -360,9 +350,7 @@ def test_multiple_api_servers_to_engine():
     tensor_by_sender = {sid: t for sid, t in received_tensors}
     for server_id in range(num_api_servers):
         expected_id = f"server_{server_id}"
-        assert expected_id in tensor_by_sender, (
-            f"Missing tensor from server {server_id}"
-        )
+        assert expected_id in tensor_by_sender, f"Missing tensor from server {server_id}"
         expected_tensor = torch.ones(server_id + 1, server_id + 2) * server_id
         assert torch.allclose(tensor_by_sender[expected_id], expected_tensor)
 
@@ -410,9 +398,7 @@ def mixed_tensor_encoder_process(
         import traceback
 
         ready_event.set()
-        result_queue.put(
-            {"success": False, "error": str(e), "traceback": traceback.format_exc()}
-        )
+        result_queue.put({"success": False, "error": str(e), "traceback": traceback.format_exc()})
 
 
 def mixed_tensor_decoder_process(
@@ -444,9 +430,7 @@ def mixed_tensor_decoder_process(
         import traceback
 
         retrieval_done.set()  # Signal even on failure
-        result_queue.put(
-            {"success": False, "error": str(e), "traceback": traceback.format_exc()}
-        )
+        result_queue.put({"success": False, "error": str(e), "traceback": traceback.format_exc()})
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
@@ -480,19 +464,15 @@ def test_mixed_cpu_cuda_tensors():
 
     # Verify encoder succeeded
     assert encoder_result["success"], (
-        f"Encoder failed: {encoder_result.get('error')}\n"
-        f"{encoder_result.get('traceback', '')}"
+        f"Encoder failed: {encoder_result.get('error')}\n{encoder_result.get('traceback', '')}"
     )
 
     # Verify decoder succeeded and got CUDA tensor
     assert decoder_result["success"], (
-        f"Decoder failed: {decoder_result.get('error')}\n"
-        f"{decoder_result.get('traceback', '')}"
+        f"Decoder failed: {decoder_result.get('error')}\n{decoder_result.get('traceback', '')}"
     )
     assert decoder_result["is_cuda"], "Retrieved tensor is not on CUDA"
-    assert decoder_result["shape"] == (4, 5), (
-        f"Unexpected shape: {decoder_result['shape']}"
-    )
+    assert decoder_result["shape"] == (4, 5), f"Unexpected shape: {decoder_result['shape']}"
 
 
 def cpu_tensor_ipc_encoder_process(
@@ -533,9 +513,7 @@ def cpu_tensor_ipc_encoder_process(
         import traceback
 
         ready_event.set()
-        result_queue.put(
-            {"success": False, "error": str(e), "traceback": traceback.format_exc()}
-        )
+        result_queue.put({"success": False, "error": str(e), "traceback": traceback.format_exc()})
 
 
 def cpu_tensor_ipc_decoder_process(
@@ -571,9 +549,7 @@ def cpu_tensor_ipc_decoder_process(
         import traceback
 
         retrieval_done.set()  # Signal even on failure
-        result_queue.put(
-            {"success": False, "error": str(e), "traceback": traceback.format_exc()}
-        )
+        result_queue.put({"success": False, "error": str(e), "traceback": traceback.format_exc()})
 
 
 def test_cpu_tensor_ipc():
@@ -621,12 +597,10 @@ def test_cpu_tensor_ipc():
 
     # Verify results
     assert encoder_result["success"], (
-        f"Encoder failed: {encoder_result.get('error')}\n"
-        f"{encoder_result.get('traceback', '')}"
+        f"Encoder failed: {encoder_result.get('error')}\n{encoder_result.get('traceback', '')}"
     )
     assert decoder_result["success"], (
-        f"Decoder failed: {decoder_result.get('error')}\n"
-        f"{decoder_result.get('traceback', '')}"
+        f"Decoder failed: {decoder_result.get('error')}\n{decoder_result.get('traceback', '')}"
     )
     assert decoder_result["matches_expected"], "Tensor shape mismatch"
     assert decoder_result["is_cpu"], "Tensor not on CPU device"
@@ -657,9 +631,7 @@ def test_ipc_disabled_mode():
         cuda_tensor = torch.randn(4, 5, device=f"{DEVICE_TYPE}:0")
         encoded_cuda = encoder.encode({"cuda_tensor": cuda_tensor})
         assert len(encoded_cuda) > 0
-        assert tensor_queues[0].empty(), (
-            "Tensor queue should be empty for CUDA tensor when IPC is disabled"
-        )
+        assert tensor_queues[0].empty(), "Tensor queue should be empty for CUDA tensor when IPC is disabled"
 
 
 @dataclass
@@ -693,9 +665,7 @@ def concurrent_sender_process(
             # Each sender creates uniquely-shaped tensors so we can
             # verify correct routing on the receiver side.
             t1 = torch.full((sender_index + 1, 3), float(msg_idx), dtype=torch.float32)
-            t2 = torch.full(
-                (2, sender_index + 2), float(msg_idx + 100), dtype=torch.float64
-            )
+            t2 = torch.full((2, sender_index + 2), float(msg_idx + 100), dtype=torch.float64)
             msg = MultiTensorMessage(
                 t1=t1,
                 t2=t2,
@@ -771,10 +741,7 @@ def test_concurrent_senders_single_receiver():
     for _ in range(num_senders):
         send_results.append(result_queue.get(timeout=15.0))
     for r in send_results:
-        assert r["success"], (
-            f"Sender {r['sender_index']} failed: {r.get('error')}\n"
-            f"{r.get('traceback', '')}"
-        )
+        assert r["success"], f"Sender {r['sender_index']} failed: {r.get('error')}\n{r.get('traceback', '')}"
 
     # Now decode all messages from the main process using a single receiver
     receiver = TensorIpcReceiver(tensor_queue)
@@ -799,15 +766,12 @@ def test_concurrent_senders_single_receiver():
         sender_idx = int(parts[1])
         by_sender.setdefault(sender_idx, []).append(msg)
 
-    assert len(by_sender) == num_senders, (
-        f"Expected {num_senders} senders, got {len(by_sender)}"
-    )
+    assert len(by_sender) == num_senders, f"Expected {num_senders} senders, got {len(by_sender)}"
 
     for sender_idx in range(num_senders):
         msgs = sorted(by_sender[sender_idx], key=lambda m: m.sender_label)
         assert len(msgs) == num_messages_per_sender, (
-            f"Sender {sender_idx}: expected {num_messages_per_sender} "
-            f"messages, got {len(msgs)}"
+            f"Sender {sender_idx}: expected {num_messages_per_sender} messages, got {len(msgs)}"
         )
         for msg_idx, msg in enumerate(msgs):
             assert msg.sender_label == f"sender_{sender_idx}_msg_{msg_idx}"
@@ -845,34 +809,24 @@ def test_concurrent_senders_interleaved_buffer():
         ("B", 1, 1, b_t1),
         ("A", 1, 1, a_t1),
     ]:
-        tensor_queue.put(
-            TensorIpcData(sender_id=sid, message_id=mid, tensor_id=tid, tensor=t)
-        )
+        tensor_queue.put(TensorIpcData(sender_id=sid, message_id=mid, tensor_id=tid, tensor=t))
 
     receiver = TensorIpcReceiver(tensor_queue)
 
     # Request A_t1 first — receiver must drain and buffer B_t0, A_t0, B_t1
-    result = receiver(
-        "float32", a_t1.shape, {"sender_id": "A", "message_id": 1, "tensor_id": 1}
-    )
+    result = receiver("float32", a_t1.shape, {"sender_id": "A", "message_id": 1, "tensor_id": 1})
     assert torch.equal(result, a_t1)
 
     # Now request B_t0 from buffer
-    result = receiver(
-        "float32", b_t0.shape, {"sender_id": "B", "message_id": 1, "tensor_id": 0}
-    )
+    result = receiver("float32", b_t0.shape, {"sender_id": "B", "message_id": 1, "tensor_id": 0})
     assert torch.equal(result, b_t0)
 
     # Request A_t0 from buffer
-    result = receiver(
-        "float32", a_t0.shape, {"sender_id": "A", "message_id": 1, "tensor_id": 0}
-    )
+    result = receiver("float32", a_t0.shape, {"sender_id": "A", "message_id": 1, "tensor_id": 0})
     assert torch.equal(result, a_t0)
 
     # Request B_t1 from buffer
-    result = receiver(
-        "float64", b_t1.shape, {"sender_id": "B", "message_id": 1, "tensor_id": 1}
-    )
+    result = receiver("float64", b_t1.shape, {"sender_id": "B", "message_id": 1, "tensor_id": 1})
     assert torch.equal(result, b_t1)
 
     # All buffers should be drained
@@ -933,9 +887,7 @@ def test_tensor_cleanup_after_decode():
     }
 
     # Receive the tensor - this should retrieve it from the queue
-    decoded_tensor = receiver(
-        str(tensor.dtype).removeprefix("torch."), tensor.shape, handle
-    )
+    decoded_tensor = receiver(str(tensor.dtype).removeprefix("torch."), tensor.shape, handle)
 
     # Verify the tensor was decoded
     assert decoded_tensor.shape == tensor.shape, "Decoded tensor should match shape"

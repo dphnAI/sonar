@@ -36,9 +36,9 @@ def _feature(identifier: str, offset: int, length: int) -> MultiModalFeatureSpec
 
 def _gather(features, cached, *, num_scheduled, shift, num_computed=0):
     encoder_cache = {
-        f.identifier: torch.arange(
-            f.mm_position.length * HIDDEN, dtype=torch.float32
-        ).reshape(f.mm_position.length, HIDDEN)
+        f.identifier: torch.arange(f.mm_position.length * HIDDEN, dtype=torch.float32).reshape(
+            f.mm_position.length, HIDDEN
+        )
         for f in cached
     }
     req_state = SimpleNamespace(num_computed_tokens=num_computed, mm_features=features)
@@ -53,9 +53,7 @@ def _gather(features, cached, *, num_scheduled, shift, num_computed=0):
         total_num_scheduled_tokens=num_scheduled,
         num_scheduled_tokens={"req0": num_scheduled},
     )
-    return GPUModelRunner._gather_mm_embeddings(
-        runner, scheduler_output, shift_computed_tokens=shift
-    )
+    return GPUModelRunner._gather_mm_embeddings(runner, scheduler_output, shift_computed_tokens=shift)
 
 
 def test_draft_shift_uses_boundary_feature_when_cached():

@@ -16,9 +16,7 @@ class XPUMxFp8LinearKernel(Mxfp8LinearKernel):
     """MXFP8 W8A8 GEMM on XPU."""
 
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if not current_platform.is_xpu():
             return False, "XPUMxFp8 only support on XPU"
         return True, None

@@ -22,9 +22,7 @@ FLASHINFER_ATTN = pytest.param(
     ),
 )
 
-TRITON_ATTN = pytest.param(
-    AttentionBackendCase(backend=AttentionBackendEnum.TRITON_ATTN), id="TRITON_ATTN"
-)
+TRITON_ATTN = pytest.param(AttentionBackendCase(backend=AttentionBackendEnum.TRITON_ATTN), id="TRITON_ATTN")
 
 ROCM_ATTN = pytest.param(
     AttentionBackendCase(backend=AttentionBackendEnum.ROCM_ATTN),
@@ -217,9 +215,5 @@ gpt_oss_20b = ModelFusionInfo(
         sequence_parallel=n_layers * 2 + 1,
         async_tp=n_layers * 2,
     ),
-    model_kwargs=(
-        {"quantization_config": {"moe": {"activation": "mxfp8"}}}
-        if is_blackwell()
-        else {}
-    ),
+    model_kwargs=({"quantization_config": {"moe": {"activation": "mxfp8"}}} if is_blackwell() else {}),
 )

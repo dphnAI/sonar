@@ -29,9 +29,7 @@ def build_transform(input_size: int):
     return T.Compose(
         [
             T.Lambda(lambda img: convert_image_mode(img, "RGB")),
-            T.Resize(
-                (input_size, input_size), interpolation=T.InterpolationMode.BICUBIC
-            ),
+            T.Resize((input_size, input_size), interpolation=T.InterpolationMode.BICUBIC),
             T.ToTensor(),
             T.Normalize(mean=MEAN, std=STD),
         ]
@@ -391,11 +389,7 @@ class InternVLProcessor(ProcessorMixin):
         self.start_image_token_id = tokenizer.convert_tokens_to_ids(start_image_token)
         self.end_image_token_id = tokenizer.convert_tokens_to_ids(end_image_token)
         self.ctx_image_token_id = tokenizer.convert_tokens_to_ids(ctx_image_token)
-        self.ctx_video_token_id = (
-            None
-            if ctx_video_token is None
-            else tokenizer.convert_tokens_to_ids(ctx_video_token)
-        )
+        self.ctx_video_token_id = None if ctx_video_token is None else tokenizer.convert_tokens_to_ids(ctx_video_token)
 
     def resolve_target_ratios(
         self,
@@ -454,13 +448,9 @@ class InternVLProcessor(ProcessorMixin):
         assert self.ctx_video_token is not None
 
         repl_features = self.ctx_video_token * self.image_seq_length
-        repl_features_with_sep = (
-            self.start_image_token + repl_features + self.end_image_token
-        )
+        repl_features_with_sep = self.start_image_token + repl_features + self.end_image_token
         # num_patches is equal to num_frames
-        repl_full = "".join(
-            [f"Frame{i + 1}: {repl_features_with_sep}" for i in range(num_patches)]
-        )
+        repl_full = "".join([f"Frame{i + 1}: {repl_features_with_sep}" for i in range(num_patches)])
 
         return PromptUpdateDetails.select_text(repl_full, self.ctx_video_token)
 

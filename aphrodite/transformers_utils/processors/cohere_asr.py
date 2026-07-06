@@ -85,17 +85,14 @@ class FilterbankFeatures(nn.Module):
             or n_window_stride <= 0
         ):
             raise ValueError(
-                f"{self} got an invalid value for either n_window_size or "
-                f"n_window_stride. Both must be positive ints."
+                f"{self} got an invalid value for either n_window_size or n_window_stride. Both must be positive ints."
             )
 
         self.sample_rate = sample_rate
         self.win_length = n_window_size
         self.hop_length = n_window_stride
         self.n_fft = n_fft or 2 ** math.ceil(math.log2(self.win_length))
-        self.stft_pad_amount = (
-            (self.n_fft - self.hop_length) // 2 if exact_pad else None
-        )
+        self.stft_pad_amount = (self.n_fft - self.hop_length) // 2 if exact_pad else None
         self.exact_pad = exact_pad
         self.sample_rate = sample_rate
         self.max_duration = max_duration
@@ -110,9 +107,7 @@ class FilterbankFeatures(nn.Module):
             "none": None,
         }
         window_fn = torch_windows.get(window)
-        window_tensor = (
-            window_fn(self.win_length, periodic=False) if window_fn else None
-        )
+        window_tensor = window_fn(self.win_length, periodic=False) if window_fn else None
         self.register_buffer("window", window_tensor)
 
         self.normalize = normalize
@@ -141,9 +136,7 @@ class FilterbankFeatures(nn.Module):
         self.register_buffer("fb", filterbanks)
 
         # Calculate maximum sequence length
-        max_length = self.get_seq_len(
-            torch.tensor(max_duration * sample_rate, dtype=torch.float)
-        )
+        max_length = self.get_seq_len(torch.tensor(max_duration * sample_rate, dtype=torch.float))
         max_pad = pad_to - (max_length % pad_to) if pad_to > 0 else 0
         self.max_length = max_length + max_pad
         self.pad_value = pad_value
@@ -213,14 +206,8 @@ class FilterbankFeatures(nn.Module):
 
     def get_seq_len(self, seq_len):
         # Assuming that center is True is stft_pad_amount = 0
-        pad_amount = (
-            self.stft_pad_amount * 2
-            if self.stft_pad_amount is not None
-            else self.n_fft // 2 * 2
-        )
-        seq_len = torch.floor_divide(
-            (seq_len + pad_amount - self.n_fft), self.hop_length
-        )
+        pad_amount = self.stft_pad_amount * 2 if self.stft_pad_amount is not None else self.n_fft // 2 * 2
+        seq_len = torch.floor_divide((seq_len + pad_amount - self.n_fft), self.hop_length)
         return seq_len.to(dtype=torch.long)
 
     @property
@@ -261,11 +248,7 @@ class FilterbankFeatures(nn.Module):
             #         "has enough samples for a single feature (ex. at least "
             #         "`hop_length` for Mel Spectrograms)."
             #     )
-            time_steps = (
-                torch.arange(max_time, device=x.device)
-                .unsqueeze(0)
-                .expand(batch_size, max_time)
-            )
+            time_steps = torch.arange(max_time, device=x.device).unsqueeze(0).expand(batch_size, max_time)
             valid_mask = time_steps < seq_len.unsqueeze(1)
             x_mean_numerator = torch.where(valid_mask.unsqueeze(1), x, 0.0).sum(axis=2)
             x_mean_denominator = valid_mask.sum(axis=1)
@@ -274,15 +257,12 @@ class FilterbankFeatures(nn.Module):
             # Subtract 1 in the denominator to correct for the bias.
             x_std = torch.sqrt(
                 torch.sum(
-                    torch.where(valid_mask.unsqueeze(1), x - x_mean.unsqueeze(2), 0.0)
-                    ** 2,
+                    torch.where(valid_mask.unsqueeze(1), x - x_mean.unsqueeze(2), 0.0) ** 2,
                     axis=2,
                 )
                 / (x_mean_denominator.unsqueeze(1) - 1.0)
             )
-            x_std = x_std.masked_fill(
-                x_std.isnan(), 0.0
-            )  # edge case: only 1 frame in denominator
+            x_std = x_std.masked_fill(x_std.isnan(), 0.0)  # edge case: only 1 frame in denominator
             # make sure x_std is not zero
             x_std += CONSTANT
             return (x - x_mean.unsqueeze(2)) / x_std.unsqueeze(2), x_mean, x_std
@@ -331,9 +311,7 @@ class FilterbankFeatures(nn.Module):
 
         # fix for seq_len = 0 for streaming; if size was 0, it is always padded
         # to 1, and normalizer fails
-        seq_len = torch.where(
-            seq_len == 0, torch.zeros_like(seq_len_unfixed), seq_len_unfixed
-        )
+        seq_len = torch.where(seq_len == 0, torch.zeros_like(seq_len_unfixed), seq_len_unfixed)
 
         if self.stft_pad_amount is not None:
             x = torch.nn.functional.pad(
@@ -342,18 +320,12 @@ class FilterbankFeatures(nn.Module):
 
         # use dither for inference as well
         if self.dither > 0:
-            x += self.dither * torch.randn(
-                x.shape, dtype=x.dtype, device=x.device, generator=self.generator
-            )
+            x += self.dither * torch.randn(x.shape, dtype=x.dtype, device=x.device, generator=self.generator)
 
         # do preemphasis
         if self.preemph is not None:
-            timemask = torch.arange(x.shape[1], device=x.device).unsqueeze(
-                0
-            ) < seq_len_time.unsqueeze(1)
-            x = torch.cat(
-                (x[:, 0].unsqueeze(1), x[:, 1:] - self.preemph * x[:, :-1]), dim=1
-            )
+            timemask = torch.arange(x.shape[1], device=x.device).unsqueeze(0) < seq_len_time.unsqueeze(1)
+            x = torch.cat((x[:, 0].unsqueeze(1), x[:, 1:] - self.preemph * x[:, :-1]), dim=1)
 
             x = x.masked_fill(~timemask, 0.0)
 
@@ -401,16 +373,12 @@ class FilterbankFeatures(nn.Module):
         max_len = x.size(-1)
         mask = torch.arange(max_len, device=x.device)
         mask = mask.repeat(x.size(0), 1) >= seq_len.unsqueeze(1)
-        x = x.masked_fill(
-            mask.unsqueeze(1).type(torch.bool).to(device=x.device), self.pad_value
-        )
+        x = x.masked_fill(mask.unsqueeze(1).type(torch.bool).to(device=x.device), self.pad_value)
 
         del mask
         pad_to = self.pad_to
         if pad_to == "max":
-            x = nn.functional.pad(
-                x, (0, self.max_length - x.size(-1)), value=self.pad_value
-            )
+            x = nn.functional.pad(x, (0, self.max_length - x.size(-1)), value=self.pad_value)
         elif pad_to > 0:
             pad_amt = x.size(-1) % pad_to
             if pad_amt != 0:
@@ -527,9 +495,7 @@ class CohereASRFeatureExtractor(SequenceFeatureExtractor):
         with torch.no_grad():
             input_features, length = self.filterbank(audio_tensor, seq_len)
 
-        result = BatchFeature(
-            {"input_features": input_features.cpu(), "length": length.cpu()}
-        )
+        result = BatchFeature({"input_features": input_features.cpu(), "length": length.cpu()})
         if return_tensors is not None:
             result = result.convert_to_tensors(return_tensors)
         return result

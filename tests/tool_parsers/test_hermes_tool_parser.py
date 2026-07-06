@@ -103,9 +103,7 @@ def test_hermes_parser_streaming_failure_case_bug_19056(
             delta_messages.append(delta)
 
     assert delta_messages[0].tool_calls[0].function.name == "final_answer"
-    tool_call_args = "".join(
-        delta.tool_calls[0].function.arguments or "" for delta in delta_messages
-    )
+    tool_call_args = "".join(delta.tool_calls[0].function.arguments or "" for delta in delta_messages)
     assert tool_call_args == '{"trigger": true}'
 
 
@@ -141,11 +139,7 @@ def test_hermes_parser_streaming(
     print(delta_messages)
     assert delta_messages[0].tool_calls[0].function.name == "get_current_temperature"
     # load to normalize whitespace
-    tool_call_args = json.loads(
-        "".join(
-            delta.tool_calls[0].function.arguments or "" for delta in delta_messages
-        )
-    )
+    tool_call_args = json.loads("".join(delta.tool_calls[0].function.arguments or "" for delta in delta_messages))
     assert tool_call_args == {
         "location": "San Francisco, California, United States",
         "unit": "celsius",
@@ -200,9 +194,7 @@ def test_hermes_streaming_tool_call_with_stream_interval(
         "</tool_call>"
     )
     parser = Hermes2ProToolParser(qwen_tokenizer)
-    deltas = _simulate_streaming(
-        qwen_tokenizer, parser, any_chat_request, text, stream_interval
-    )
+    deltas = _simulate_streaming(qwen_tokenizer, parser, any_chat_request, text, stream_interval)
 
     # Flatten all DeltaToolCalls across all deltas.
     tool_deltas = [tc for d in deltas if d.tool_calls for tc in d.tool_calls]
@@ -224,15 +216,9 @@ def test_hermes_streaming_content_then_tool_call_with_stream_interval(
     stream_interval: int,
 ) -> None:
     """Content before a tool call must be fully streamed, then tool call."""
-    text = (
-        "Sure, let me check the weather."
-        '<tool_call>{"name": "get_weather", '
-        '"arguments": {"city": "NYC"}}</tool_call>'
-    )
+    text = 'Sure, let me check the weather.<tool_call>{"name": "get_weather", "arguments": {"city": "NYC"}}</tool_call>'
     parser = Hermes2ProToolParser(qwen_tokenizer)
-    deltas = _simulate_streaming(
-        qwen_tokenizer, parser, any_chat_request, text, stream_interval
-    )
+    deltas = _simulate_streaming(qwen_tokenizer, parser, any_chat_request, text, stream_interval)
 
     content_deltas = [d for d in deltas if d.content]
     tool_deltas = [d for d in deltas if d.tool_calls]
@@ -260,9 +246,7 @@ def test_hermes_streaming_multiple_tool_calls_with_stream_interval(
         '<tool_call>{"name": "search", "arguments": {"q": "dogs"}}</tool_call>'
     )
     parser = Hermes2ProToolParser(qwen_tokenizer)
-    deltas = _simulate_streaming(
-        qwen_tokenizer, parser, any_chat_request, text, stream_interval
-    )
+    deltas = _simulate_streaming(qwen_tokenizer, parser, any_chat_request, text, stream_interval)
 
     # Flatten all DeltaToolCalls across all deltas.
     all_tool_calls = [tc for d in deltas if d.tool_calls for tc in d.tool_calls]
@@ -287,15 +271,9 @@ def test_hermes_streaming_boolean_args_with_stream_interval(
     stream_interval: int,
 ) -> None:
     """Regression test for bug #19056 with stream_interval > 1."""
-    text = (
-        "<tool_call>\n"
-        '{"name": "final_answer", "arguments": {"trigger": true}}\n'
-        "</tool_call>"
-    )
+    text = '<tool_call>\n{"name": "final_answer", "arguments": {"trigger": true}}\n</tool_call>'
     parser = Hermes2ProToolParser(qwen_tokenizer)
-    deltas = _simulate_streaming(
-        qwen_tokenizer, parser, any_chat_request, text, stream_interval
-    )
+    deltas = _simulate_streaming(qwen_tokenizer, parser, any_chat_request, text, stream_interval)
 
     tool_calls = [tc for d in deltas if d.tool_calls for tc in d.tool_calls]
     assert tool_calls[0].function.name == "final_answer"
@@ -312,9 +290,7 @@ def test_hermes_streaming_just_forward_text_with_stream_interval(
     """Plain text with no tool calls must be fully forwarded."""
     text = "This is plain text with no tool calling involved."
     parser = Hermes2ProToolParser(qwen_tokenizer)
-    deltas = _simulate_streaming(
-        qwen_tokenizer, parser, any_chat_request, text, stream_interval
-    )
+    deltas = _simulate_streaming(qwen_tokenizer, parser, any_chat_request, text, stream_interval)
 
     for d in deltas:
         assert not d.tool_calls

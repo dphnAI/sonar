@@ -64,9 +64,7 @@ class AiterSharedRoutedFusedMoERouter(BaseRouter):
         *,
         input_ids: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        assert hidden_states.size(0) == router_logits.size(0), (
-            "Number of tokens mismatch"
-        )
+        assert hidden_states.size(0) == router_logits.size(0), "Number of tokens mismatch"
 
         from aphrodite.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
             aiter_topK_meta_data,
@@ -76,9 +74,7 @@ class AiterSharedRoutedFusedMoERouter(BaseRouter):
         topk = self.top_k
         num_fse = self.num_fused_shared_experts
 
-        token_expert_indices = torch.empty(
-            M, topk, dtype=torch.int32, device=hidden_states.device
-        )
+        token_expert_indices = torch.empty(M, topk, dtype=torch.int32, device=hidden_states.device)
 
         if rocm_aiter_ops.fuse_sigmoid_in_kernel(aiter_topK_meta_data):
             total_topk_weights, total_topk_ids = aiter_topK_meta_data  # type: ignore[misc]
@@ -100,9 +96,7 @@ class AiterSharedRoutedFusedMoERouter(BaseRouter):
         routing_logits = router_logits[:, :-num_fse]
         shared_logits = router_logits[:, -num_fse:]
 
-        topk_weights = torch.empty(
-            M, topk, dtype=torch.float32, device=hidden_states.device
-        )
+        topk_weights = torch.empty(M, topk, dtype=torch.float32, device=hidden_states.device)
         topk_ids = torch.empty(
             M,
             topk,
@@ -110,9 +104,7 @@ class AiterSharedRoutedFusedMoERouter(BaseRouter):
             device=hidden_states.device,
         )
 
-        topk_func = dispatch_topk_softmax_func(
-            use_rocm_aiter=rocm_aiter_ops.is_fused_moe_enabled()
-        )
+        topk_func = dispatch_topk_softmax_func(use_rocm_aiter=rocm_aiter_ops.is_fused_moe_enabled())
         topk_weights, topk_ids = topk_func(
             topk_weights,
             topk_ids,

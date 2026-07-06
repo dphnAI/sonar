@@ -76,14 +76,10 @@ class ClsToken(nn.Module):
             if num_registers:
                 self.num_registers = num_registers
             elif register_multiple:
-                self.num_registers = register_multiple - (
-                    num_tokens % register_multiple
-                )
+                self.num_registers = register_multiple - (num_tokens % register_multiple)
 
             scale = ndim**-0.5
-            self.token = nn.Parameter(
-                torch.randn(num_tokens + self.num_registers, ndim) * scale
-            )
+            self.token = nn.Parameter(torch.randn(num_tokens + self.num_registers, ndim) * scale)
 
         else:
             self.token = None
@@ -137,9 +133,7 @@ class ViTPatchGenerator(nn.Module):
         if isinstance(max_input_dims, int):
             max_input_dims = (max_input_dims, max_input_dims)
 
-        max_input_dims = tuple(
-            int(math.ceil(d / patch_size) * patch_size) for d in max_input_dims
-        )
+        max_input_dims = tuple(int(math.ceil(d / patch_size) * patch_size) for d in max_input_dims)
 
         self.cpe_mode = max_input_dims != input_dims
         self.pos_dropout = pos_dropout
@@ -159,15 +153,12 @@ class ViTPatchGenerator(nn.Module):
         self.max_input_dims = max_input_dims
 
         self.im_to_patches = Im2Patches(patch_size)
-        self.embedder = ViTPatchLinear(
-            patch_size, embed_dim, bias=patch_bias, **factory
-        )
+        self.embedder = ViTPatchLinear(patch_size, embed_dim, bias=patch_bias, **factory)
 
         if temporal_patch_size > 1:
             if not separate_video_embedder:
                 raise NotImplementedError(
-                    "Only separate_video_embedder=True is supported for"
-                    " temporal compression (temporal_patch_size > 1)"
+                    "Only separate_video_embedder=True is supported for temporal compression (temporal_patch_size > 1)"
                 )
             self.video_embedder = ViTPatchLinear(
                 patch_size,
@@ -179,9 +170,7 @@ class ViTPatchGenerator(nn.Module):
 
         if abs_pos:
             scale = embed_dim**-0.5
-            self.pos_embed = nn.Parameter(
-                torch.randn(1, self.num_patches, embed_dim, **factory) * scale
-            )
+            self.pos_embed = nn.Parameter(torch.randn(1, self.num_patches, embed_dim, **factory) * scale)
 
         self.cls_token = ClsToken(
             embed_dim,
@@ -191,18 +180,12 @@ class ViTPatchGenerator(nn.Module):
             num_registers=num_registers,
         )
 
-        self.patch_normalizer = (
-            nn.LayerNorm(embed_dim) if normalize_patches else nn.Identity()
-        )
+        self.patch_normalizer = nn.LayerNorm(embed_dim) if normalize_patches else nn.Identity()
 
-    def forward(
-        self, x: torch.Tensor, imgs_sizes: list[tuple[int, int]] | None = None
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, imgs_sizes: list[tuple[int, int]] | None = None) -> torch.Tensor:
         if imgs_sizes is not None:
             patches = self.embedder(x)
-            patches, pos_enc = self.apply_pos_enc_dynamic(
-                patches, imgs_sizes=imgs_sizes
-            )
+            patches, pos_enc = self.apply_pos_enc_dynamic(patches, imgs_sizes=imgs_sizes)
             patches = self.cls_token_dynamic(patches, imgs_sizes=imgs_sizes)
         else:
             patches = self.embed_patches(x)
@@ -292,9 +275,7 @@ class ViTPatchGenerator(nn.Module):
         full_pos_enc = torch.cat(pos_enc_list, dim=1) if pos_enc_list else None
         return patches, full_pos_enc
 
-    def cls_token_dynamic(
-        self, patches: torch.Tensor, imgs_sizes: list[tuple[int, int]]
-    ) -> torch.Tensor:
+    def cls_token_dynamic(self, patches: torch.Tensor, imgs_sizes: list[tuple[int, int]]) -> torch.Tensor:
         if not self.cls_token.enabled:
             return patches
 
@@ -302,9 +283,7 @@ class ViTPatchGenerator(nn.Module):
         current_length = 0
 
         for seq_len in calc_seq_lens(imgs_sizes, self.patch_size):
-            class_token = self.cls_token.token.unsqueeze(0).expand(
-                patches.shape[0], -1, -1
-            )
+            class_token = self.cls_token.token.unsqueeze(0).expand(patches.shape[0], -1, -1)
             out.append(class_token)
             out.append(patches[:, current_length : current_length + seq_len, :])
             current_length += seq_len
@@ -335,13 +314,9 @@ class ViTPatchGenerator(nn.Module):
         if src_embed.shape != targ_embed.shape:
             src_size = int(math.sqrt(src_embed.shape[1]))
 
-            assert src_size**2 == src_embed.shape[1], (
-                "Unable to interpolate non-square embedding"
-            )
+            assert src_size**2 == src_embed.shape[1], "Unable to interpolate non-square embedding"
 
-            src_embed = rearrange(
-                src_embed, "b (h w) c -> b c h w", h=src_size, w=src_size
-            )
+            src_embed = rearrange(src_embed, "b (h w) c -> b c h w", h=src_size, w=src_size)
             src_embed = F.interpolate(
                 src_embed,
                 size=(self.num_rows, self.num_cols),
@@ -352,15 +327,11 @@ class ViTPatchGenerator(nn.Module):
             src_embed = rearrange(src_embed, "b c h w -> b (h w) c")
         targ_embed.data.copy_(src_embed)
 
-    def _load_projection(
-        self, src_proj_weight: torch.Tensor, targ_proj_weight: torch.Tensor
-    ):
+    def _load_projection(self, src_proj_weight: torch.Tensor, targ_proj_weight: torch.Tensor):
         if src_proj_weight.shape != targ_proj_weight.shape:
             src_patch_size = int(math.sqrt(src_proj_weight.shape[1] // 3))
 
-            assert (src_patch_size**2) * 3 == src_proj_weight.shape[1], (
-                "Unable to interpolate non-square patch size"
-            )
+            assert (src_patch_size**2) * 3 == src_proj_weight.shape[1], "Unable to interpolate non-square patch size"
 
             src_proj_weight = rearrange(
                 src_proj_weight,
@@ -396,12 +367,7 @@ class ViTPatchGenerator(nn.Module):
         pos_enc = self.get_pos_enc(patches.shape[0], patch_idxs, input_size)
 
         if self.training and self.pos_dropout > 0:
-            keeps = (
-                torch.rand(
-                    patches.shape[0], 1, 1, dtype=pos_enc.dtype, device=pos_enc.device
-                )
-                > self.pos_dropout
-            )
+            keeps = torch.rand(patches.shape[0], 1, 1, dtype=pos_enc.dtype, device=pos_enc.device) > self.pos_dropout
             pos_enc_drop = torch.where(keeps, pos_enc, 0)
         else:
             pos_enc_drop = pos_enc
@@ -426,18 +392,14 @@ class ViTPatchGenerator(nn.Module):
 
         exp_patch_idxs = patch_idxs.unsqueeze(-1).expand(-1, -1, pos_embed.shape[-1])
 
-        pos_embed = torch.gather(
-            pos_embed.expand(patch_idxs.shape[0], -1, -1), dim=1, index=exp_patch_idxs
-        )
+        pos_embed = torch.gather(pos_embed.expand(patch_idxs.shape[0], -1, -1), dim=1, index=exp_patch_idxs)
         return pos_embed
 
     def _get_pos_embeddings(self, batch_size: int, input_dims: tuple[int, int]):
         if (self.num_rows, self.num_cols) == input_dims:
             return self.pos_embed
 
-        pos_embed = self.pos_embed.reshape(1, self.num_rows, self.num_cols, -1).permute(
-            0, 3, 1, 2
-        )
+        pos_embed = self.pos_embed.reshape(1, self.num_rows, self.num_cols, -1).permute(0, 3, 1, 2)
 
         def window_select(pos_embed):
             if input_dims[0] < pos_embed.shape[-2]:
@@ -460,9 +422,9 @@ class ViTPatchGenerator(nn.Module):
             pos_embed = window_select(pos_embed)
 
         if pos_embed.shape[-2:] != input_dims:
-            pos_embed = F.interpolate(
-                pos_embed.float(), size=input_dims, align_corners=False, mode="bilinear"
-            ).to(pos_embed.dtype)
+            pos_embed = F.interpolate(pos_embed.float(), size=input_dims, align_corners=False, mode="bilinear").to(
+                pos_embed.dtype
+            )
 
         pos_embed = pos_embed.flatten(2).permute(0, 2, 1)
 
@@ -502,9 +464,7 @@ class ViTPatchLinear(nn.Linear):
         temporal_patch_size: int = 1,
         **factory,
     ):
-        super().__init__(
-            3 * temporal_patch_size * (patch_size**2), embed_dim, bias=bias, **factory
-        )
+        super().__init__(3 * temporal_patch_size * (patch_size**2), embed_dim, bias=bias, **factory)
         self.patch_size = patch_size
         self.temporal_patch_size = temporal_patch_size
 
@@ -516,9 +476,7 @@ class MaskMetadata:
 
 
 class RadioParallelAttention(InternParallelAttention):
-    def forward(
-        self, x: torch.Tensor, mask_meta: MaskMetadata | None = None
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, mask_meta: MaskMetadata | None = None) -> torch.Tensor:
         qkv, _ = self.qkv(x)
         q, k, v = qkv.chunk(3, dim=-1)
 
@@ -543,10 +501,7 @@ class RadioVisionEncoderLayer(InternVisionEncoderLayer):
         hidden_states: torch.Tensor,
         mask_meta: MaskMetadata | None = None,
     ):
-        hidden_states = (
-            hidden_states
-            + self.attn(self.norm1(hidden_states), mask_meta=mask_meta) * self.ls1
-        )
+        hidden_states = hidden_states + self.attn(self.norm1(hidden_states), mask_meta=mask_meta) * self.ls1
 
         hidden_states = hidden_states + self.mlp(self.norm2(hidden_states)) * self.ls2
 
@@ -588,9 +543,7 @@ class RadioInternVisionModel(nn.Module):
         self.img_size, self.grid_size, self.num_patches = self._init_img_size(
             to_2tuple(config.patch_size), config.image_size
         )
-        max_img_size = int(
-            round(config.cpe_max_size / config.patch_size) * config.patch_size
-        )
+        max_img_size = int(round(config.cpe_max_size / config.patch_size) * config.patch_size)
         self.temporal_patch_size = config.video_temporal_patch_size
         unique_teachers = set(t["name"] for t in config.teachers)
         self.patch_generator = ViTPatchGenerator(
@@ -624,9 +577,7 @@ class RadioInternVisionModel(nn.Module):
     def get_input_embeddings(self):
         return self.embeddings
 
-    def inter_image_mask_metadata(
-        self, imgs_sizes: list[tuple[int, int]], device: torch.device
-    ) -> MaskMetadata:
+    def inter_image_mask_metadata(self, imgs_sizes: list[tuple[int, int]], device: torch.device) -> MaskMetadata:
         """Build mask metadata from image pixel sizes. Adds num_skip to each
         sequence length (cls/register tokens) to match patch generator output."""
         patch_size = self.patch_generator.patch_size
@@ -636,16 +587,12 @@ class RadioInternVisionModel(nn.Module):
         adjusted = [s + num_skip for s in seq_lens]
         return self._inter_image_mask_metadata_from_seq_lens(adjusted, device=device)
 
-    def _inter_image_mask_metadata_from_seq_lens(
-        self, seq_lens: list[int], device: torch.device
-    ) -> MaskMetadata:
+    def _inter_image_mask_metadata_from_seq_lens(self, seq_lens: list[int], device: torch.device) -> MaskMetadata:
         """Build mask metadata from actual sequence lengths (already including
         cls/register tokens, i.e. patch_count + num_skip per item).
         Use inter_image_mask_metadata() when you only have imgs_sizes."""
         assert len(seq_lens) > 0
-        cu_seqlens = torch.tensor(
-            list(accumulate(seq_lens, initial=0)), dtype=torch.int32, device=device
-        )
+        cu_seqlens = torch.tensor(list(accumulate(seq_lens, initial=0)), dtype=torch.int32, device=device)
         # Keep max_seqlen on CPU to avoid .item() sync
         # See: https://github.com/vllm-project/vllm/blob/20b6b01/aphrodite/v1/attention/ops/vit_attn_wrappers.py#L48
         max_seqlen = torch.tensor(max(seq_lens), dtype=torch.int32)
@@ -677,17 +624,13 @@ class RadioInternVisionModel(nn.Module):
             hidden_states = self.patch_generator(x, imgs_sizes=imgs_sizes)
             if imgs_sizes is not None and len(imgs_sizes) > 1:
                 # Dynamic resolution w/ > 1 image, create attn mask
-                mask_meta = self.inter_image_mask_metadata(
-                    imgs_sizes, device=hidden_states.device
-                )
+                mask_meta = self.inter_image_mask_metadata(imgs_sizes, device=hidden_states.device)
 
         encoder_outputs = self.encoder(inputs_embeds=hidden_states, mask_meta=mask_meta)
 
         # Unpack back to original batch shape if we packed for video
         if packed_batch_size is not None:
-            encoder_outputs = encoder_outputs.reshape(
-                packed_batch_size, seq_per_tubelet, -1
-            )
+            encoder_outputs = encoder_outputs.reshape(packed_batch_size, seq_per_tubelet, -1)
 
         return encoder_outputs
 
@@ -719,9 +662,7 @@ class RadioModel(nn.Module):
 
         summary_idxs = None
         if config.teachers:
-            summary_idxs = torch.tensor(
-                [i for i, t in enumerate(config.teachers) if t.get("use_summary", True)]
-            )
+            summary_idxs = torch.tensor([i for i, t in enumerate(config.teachers) if t.get("use_summary", True)])
             if summary_idxs.numel() > 0:
                 self.register_buffer("summary_idxs", summary_idxs)
         self.summary_idxs = summary_idxs
@@ -805,9 +746,7 @@ class RadioModel(nn.Module):
             summaries = []
             current_pos = 0
             for num_patches in calc_seq_lens(imgs_sizes, patch_size):
-                patches = y[
-                    :, current_pos + num_skip : current_pos + num_skip + num_patches, :
-                ]
+                patches = y[:, current_pos + num_skip : current_pos + num_skip + num_patches, :]
                 all_patches.append(patches)
                 summary = y[:, current_pos : current_pos + num_cls_tokens, :]
                 summaries.append(summary)

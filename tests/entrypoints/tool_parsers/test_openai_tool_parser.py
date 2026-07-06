@@ -49,9 +49,7 @@ TOOLS = [
                 "properties": {
                     "expression": {
                         "type": "string",
-                        "description": (
-                            "Arithmetic expression to evaluate, e.g. '123 + 456'."
-                        ),
+                        "description": ("Arithmetic expression to evaluate, e.g. '123 + 456'."),
                     }
                 },
                 "required": ["expression"],
@@ -81,13 +79,9 @@ TOOLS = [
 # ==========================================================
 # Message Examples
 # ==========================================================
-MESSAGES_CALC = [
-    {"role": "user", "content": "Calculate 123 + 456 using the calculator."}
-]
+MESSAGES_CALC = [{"role": "user", "content": "Calculate 123 + 456 using the calculator."}]
 
-MESSAGES_GET_TIME = [
-    {"role": "user", "content": "What is the current time in New York?"}
-]
+MESSAGES_GET_TIME = [{"role": "user", "content": "What is the current time in New York?"}]
 
 MESSAGES_MULTIPLE_CALLS = [
     {
@@ -109,8 +103,7 @@ MESSAGES_MULTIPLE_CALLS = [
 MESSAGES_INVALID_CALL = [
     {
         "role": "user",
-        "content": "Can you help with something, "
-        "but don’t actually perform any calculation?",
+        "content": "Can you help with something, but don’t actually perform any calculation?",
     }
 ]
 
@@ -183,9 +176,7 @@ async def test_calculator_tool_call_and_argument_accuracy(client: openai.AsyncOp
 
     raw_args = calc_call.function.arguments
     assert raw_args, "Calculator arguments missing"
-    assert "123" in raw_args and "456" in raw_args, (
-        f"Expected values not in raw arguments: {raw_args}"
-    )
+    assert "123" in raw_args and "456" in raw_args, f"Expected values not in raw arguments: {raw_args}"
 
     try:
         parsed_args = json.loads(raw_args)
@@ -197,8 +188,7 @@ async def test_calculator_tool_call_and_argument_accuracy(client: openai.AsyncOp
     similarity = fuzz.ratio(actual_expr, expected_expr)
 
     assert similarity > 90, (
-        f"Expression mismatch: expected '{expected_expr}' "
-        f"got '{actual_expr}' (similarity={similarity}%)"
+        f"Expression mismatch: expected '{expected_expr}' got '{actual_expr}' (similarity={similarity}%)"
     )
 
 
@@ -245,12 +235,8 @@ async def test_streaming_multiple_tools(client: openai.AsyncOpenAI):
     reasoning, arguments, function_names = extract_reasoning_and_calls(chunks)
 
     try:
-        assert FUNC_CALC in function_names, (
-            f"Calculator tool missing — found {function_names}"
-        )
-        assert FUNC_TIME in function_names, (
-            f"Time tool missing — found {function_names}"
-        )
+        assert FUNC_CALC in function_names, f"Calculator tool missing — found {function_names}"
+        assert FUNC_TIME in function_names, f"Time tool missing — found {function_names}"
         assert len(reasoning) > 0, "Expected reasoning content in streamed response"
     except AssertionError as e:
         print(f"ERROR: {e}")
@@ -276,9 +262,7 @@ async def test_invalid_tool_call(client: openai.AsyncOpenAI):
     assert hasattr(message, "content"), "Expected 'content' field in message"
 
     tool_calls = getattr(message, "tool_calls", [])
-    assert not tool_calls, (
-        f"Model unexpectedly attempted a tool call on invalid input: {tool_calls}"
-    )
+    assert not tool_calls, f"Model unexpectedly attempted a tool call on invalid input: {tool_calls}"
 
 
 @pytest.mark.asyncio
@@ -297,9 +281,7 @@ async def test_tool_call_with_temperature(client: openai.AsyncOpenAI):
 
     message = response.choices[0].message
     assert message is not None, "Expected non-empty message in response"
-    assert message.tool_calls or message.content, (
-        "Response missing both text and tool calls"
-    )
+    assert message.tool_calls or message.content, "Response missing both text and tool calls"
 
     print(f"\nTool calls: {message.tool_calls}")
     print(f"Text: {message.content}")
@@ -325,11 +307,7 @@ async def test_tool_response_schema_accuracy(client: openai.AsyncOpenAI):
         schema: dict[str, object] | None = None
         for tool_entry in TOOLS:
             function_def = tool_entry.get("function")
-            if (
-                function_def
-                and isinstance(function_def, dict)
-                and function_def.get("name") == func_name
-            ):
+            if function_def and isinstance(function_def, dict) and function_def.get("name") == func_name:
                 schema = function_def.get("parameters")
                 break
 
@@ -354,6 +332,4 @@ async def test_semantic_consistency_with_temperature(client: openai.AsyncOpenAI)
 
     # Compare fuzzy similarity between low- and mid-temperature outputs
     low_mid_sim = fuzz.ratio(responses[0], responses[1])
-    assert low_mid_sim > 60, (
-        f"Semantic drift too large between T=0.0 and T=0.5 ({low_mid_sim}%)"
-    )
+    assert low_mid_sim > 60, f"Semantic drift too large between T=0.0 and T=0.5 ({low_mid_sim}%)"

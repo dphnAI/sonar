@@ -59,34 +59,22 @@ class INCConfig(QuantizationConfig):
     ) -> None:
         super().__init__()
         if weight_bits not in self.SUPPORTED_BITS:
-            raise ValueError(
-                f"Unsupported weight_bits: {weight_bits}, "
-                f"currently only support {self.SUPPORTED_BITS}."
-            )
+            raise ValueError(f"Unsupported weight_bits: {weight_bits}, currently only support {self.SUPPORTED_BITS}.")
         if data_type not in self.SUPPORTED_DTYPES:
-            raise ValueError(
-                f"Unsupported data_type: {data_type},"
-                f" currently only support  {self.SUPPORTED_DTYPES}."
-            )
+            raise ValueError(f"Unsupported data_type: {data_type}, currently only support  {self.SUPPORTED_DTYPES}.")
         if packing_format not in self.SUPPORTED_FORMATS:
             raise ValueError(
-                f"Unsupported packing_format: {packing_format}, "
-                f"currently only support {self.SUPPORTED_FORMATS}."
+                f"Unsupported packing_format: {packing_format}, currently only support {self.SUPPORTED_FORMATS}."
             )
         if backend not in self.SUPPORTED_BACKENDS:
-            raise ValueError(
-                f"Unsupported backend: {backend},  "
-                f"currently only support {self.SUPPORTED_BACKENDS}."
-            )
+            raise ValueError(f"Unsupported backend: {backend},  currently only support {self.SUPPORTED_BACKENDS}.")
 
         self.weight_bits = weight_bits
         self.group_size = group_size
         self.sym = sym
         self.packing_format = packing_format
         self.block_name_to_quantize = (
-            block_name_to_quantize.split(",")
-            if isinstance(block_name_to_quantize, str)
-            else block_name_to_quantize
+            block_name_to_quantize.split(",") if isinstance(block_name_to_quantize, str) else block_name_to_quantize
         )
         self.extra_config = extra_config
         self.data_type = data_type
@@ -95,10 +83,7 @@ class INCConfig(QuantizationConfig):
         self.config_parser = INCConfigParser(self)
 
     def __repr__(self) -> str:
-        return (
-            f"INCConfig(weight_bits={self.weight_bits}, "
-            f"group_size={self.group_size}, sym={self.sym})"
-        )
+        return f"INCConfig(weight_bits={self.weight_bits}, group_size={self.group_size}, sym={self.sym})"
 
     @classmethod
     def get_name(cls) -> QuantizationMethods:
@@ -122,9 +107,7 @@ class INCConfig(QuantizationConfig):
             weight_bits=cls.get_from_keys(config, ["bits"]),
             group_size=cls.get_from_keys(config, ["group_size"]),
             sym=cls.get_from_keys(config, ["sym"]),
-            packing_format=cls.get_from_keys_or(
-                config, ["packing_format"], "auto_round:auto_gptq"
-            ),
+            packing_format=cls.get_from_keys_or(config, ["packing_format"], "auto_round:auto_gptq"),
             block_name_to_quantize=cls.get_from_keys_or(
                 config, ["block_name_to_quantize", "to_quant_block_names"], None
             ),
@@ -138,9 +121,7 @@ class INCConfig(QuantizationConfig):
 
     def apply_aphrodite_mapper(self, hf_to_aphrodite_mapper: "WeightsMapper"):
         if self.block_name_to_quantize is not None:
-            self.block_name_to_quantize = hf_to_aphrodite_mapper.apply_list(
-                self.block_name_to_quantize
-            )
+            self.block_name_to_quantize = hf_to_aphrodite_mapper.apply_list(self.block_name_to_quantize)
         if self.extra_config is not None:
             self.extra_config = hf_to_aphrodite_mapper.apply_dict(self.extra_config)
 
@@ -150,9 +131,9 @@ class INCConfig(QuantizationConfig):
         # Match original: check model.-prefixed names for unquantized layers
         if prefix and self.extra_config:
             for layer_name in self.extra_config:
-                if (
-                    layer_name == prefix or layer_name == f"model.{prefix}"
-                ) and self.extra_config[layer_name].get("bits", 16) >= 16:
+                if (layer_name == prefix or layer_name == f"model.{prefix}") and self.extra_config[layer_name].get(
+                    "bits", 16
+                ) >= 16:
                     if isinstance(layer, RoutedExperts):
                         return UnquantizedFusedMoEMethod(layer.moe_config)
                     return UnquantizedLinearMethod()
@@ -182,9 +163,7 @@ class INCConfig(QuantizationConfig):
         return None
 
     @classmethod
-    def override_quantization_method(
-        cls, hf_quant_cfg, user_quant, hf_config=None
-    ) -> "QuantizationMethods | None":
+    def override_quantization_method(cls, hf_quant_cfg, user_quant, hf_config=None) -> "QuantizationMethods | None":
         """Override the `auto-round` method to `inc`."""
         is_auto_round_format = hf_quant_cfg.get("quant_method", None) == "auto-round"
         if is_auto_round_format:

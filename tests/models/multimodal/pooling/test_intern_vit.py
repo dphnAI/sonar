@@ -13,8 +13,7 @@ from aphrodite.utils.torch_utils import STR_DTYPE_TO_TORCH_DTYPE
 from ....conftest import ImageTestAssets
 
 pytestmark = pytest.mark.skip(
-    reason="InternVisionModel's custom code is incompatible with "
-    "transformers v5 (missing all_tied_weights_keys)"
+    reason="InternVisionModel's custom code is incompatible with transformers v5 (missing all_tied_weights_keys)"
 )
 
 # we use snapshot_download to prevent conflicts between
@@ -36,22 +35,14 @@ def run_intern_vit_test(
 
     img_processor = CLIPImageProcessor.from_pretrained(model)
     images = [asset.pil_image for asset in image_assets]
-    pixel_values = [
-        img_processor(images, return_tensors="pt").pixel_values.to(torch_dtype)
-        for images in images
-    ]
+    pixel_values = [img_processor(images, return_tensors="pt").pixel_values.to(torch_dtype) for images in images]
 
     config = AutoConfig.from_pretrained(model, trust_remote_code=True)
     if not getattr(config, "norm_type", None):
         config.norm_type = "rms_norm"
 
-    hf_model = AutoModel.from_pretrained(
-        model, dtype=torch_dtype, trust_remote_code=True
-    ).to(DEVICE_TYPE)
-    hf_outputs_per_image = [
-        hf_model(pixel_value.to(DEVICE_TYPE)).last_hidden_state
-        for pixel_value in pixel_values
-    ]
+    hf_model = AutoModel.from_pretrained(model, dtype=torch_dtype, trust_remote_code=True).to(DEVICE_TYPE)
+    hf_outputs_per_image = [hf_model(pixel_value.to(DEVICE_TYPE)).last_hidden_state for pixel_value in pixel_values]
 
     from aphrodite.model_executor.models.intern_vit import InternVisionModel
 
@@ -63,8 +54,7 @@ def run_intern_vit_test(
 
     aphrodite_model = aphrodite_model.to(DEVICE_TYPE, torch_dtype)
     aphrodite_outputs_per_image = [
-        aphrodite_model(pixel_values=pixel_value.to(DEVICE_TYPE))
-        for pixel_value in pixel_values
+        aphrodite_model(pixel_values=pixel_value.to(DEVICE_TYPE)) for pixel_value in pixel_values
     ]
     del aphrodite_model
     cleanup_dist_env_and_memory()
@@ -82,9 +72,7 @@ def run_intern_vit_test(
     ],
 )
 @pytest.mark.parametrize("dtype", ["half"])
-def test_models(
-    default_aphrodite_config, dist_init, image_assets, model_id, dtype: str
-) -> None:
+def test_models(default_aphrodite_config, dist_init, image_assets, model_id, dtype: str) -> None:
     run_intern_vit_test(
         image_assets,
         model_id,

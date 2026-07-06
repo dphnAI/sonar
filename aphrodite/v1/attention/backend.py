@@ -167,9 +167,7 @@ class AttentionBackend(ABC):
     def supports_kv_cache_dtype(cls, kv_cache_dtype: "CacheDType | None") -> bool:
         if kv_cache_dtype is None:
             return True
-        return (not cls.supported_kv_cache_dtypes) or (
-            kv_cache_dtype in cls.supported_kv_cache_dtypes
-        )
+        return (not cls.supported_kv_cache_dtypes) or (kv_cache_dtype in cls.supported_kv_cache_dtypes)
 
     @classmethod
     def supports_block_size(cls, block_size: int | None) -> bool:
@@ -215,12 +213,8 @@ class AttentionBackend(ABC):
             stride order.
         """
         try:
-            kv_cache_stride_order = cls.get_kv_cache_stride_order(
-                include_num_layers_dimension=False
-            )
-            layered_kv_cache_stride_order = cls.get_kv_cache_stride_order(
-                include_num_layers_dimension=True
-            )
+            kv_cache_stride_order = cls.get_kv_cache_stride_order(include_num_layers_dimension=False)
+            layered_kv_cache_stride_order = cls.get_kv_cache_stride_order(include_num_layers_dimension=True)
         except (AttributeError, NotImplementedError):
             return False
 
@@ -332,9 +326,7 @@ class AttentionBackend(ABC):
         if not cls.supports_block_size(block_size):
             invalid_reasons.append("block_size not supported")
         if use_mm_prefix and not cls.supports_mm_prefix():
-            invalid_reasons.append(
-                "partial multimodal token full attention not supported"
-            )
+            invalid_reasons.append("partial multimodal token full attention not supported")
         if use_mla != cls.is_mla():
             if use_mla:
                 invalid_reasons.append("MLA not supported")
@@ -502,9 +494,7 @@ class CommonAttentionMetadata:
     )
     def num_computed_tokens_cpu(self) -> torch.Tensor:
         if self._num_computed_tokens_cpu is None:
-            query_seq_lens = (
-                self.query_start_loc_cpu[1:] - self.query_start_loc_cpu[:-1]
-            )
+            query_seq_lens = self.query_start_loc_cpu[1:] - self.query_start_loc_cpu[:-1]
             self._num_computed_tokens_cpu = self.seq_lens_cpu - query_seq_lens
         return self._num_computed_tokens_cpu
 
@@ -516,17 +506,13 @@ class CommonAttentionMetadata:
         return self._num_computed_tokens_cache
 
     # TODO(lucas): remove once we have FULL-CG spec-decode support
-    def unpadded(
-        self, num_actual_tokens: int, num_actual_reqs: int
-    ) -> "CommonAttentionMetadata":
+    def unpadded(self, num_actual_tokens: int, num_actual_reqs: int) -> "CommonAttentionMetadata":
         maybe_slice_reqs = lambda x: x[:num_actual_reqs] if x is not None else None
         return CommonAttentionMetadata(
             query_start_loc=self.query_start_loc[: num_actual_reqs + 1],
             query_start_loc_cpu=self.query_start_loc_cpu[: num_actual_reqs + 1],
             seq_lens=self.seq_lens[:num_actual_reqs],
-            _seq_lens_cpu=self._seq_lens_cpu[:num_actual_reqs]
-            if self._seq_lens_cpu is not None
-            else None,
+            _seq_lens_cpu=self._seq_lens_cpu[:num_actual_reqs] if self._seq_lens_cpu is not None else None,
             _num_computed_tokens_cpu=self._num_computed_tokens_cpu[:num_actual_reqs]
             if self._num_computed_tokens_cpu is not None
             else None,
@@ -536,9 +522,7 @@ class CommonAttentionMetadata:
             max_seq_len=self.max_seq_len,
             block_table_tensor=self.block_table_tensor[:num_actual_reqs],
             slot_mapping=self.slot_mapping[:num_actual_tokens],
-            causal=self.causal[:num_actual_reqs]
-            if isinstance(self.causal, torch.Tensor)
-            else self.causal,
+            causal=self.causal[:num_actual_reqs] if isinstance(self.causal, torch.Tensor) else self.causal,
             logits_indices_padded=self.logits_indices_padded,
             num_logits_indices=self.num_logits_indices,
             seq_lens_cpu_upper_bound=maybe_slice_reqs(self.seq_lens_cpu_upper_bound),
@@ -617,24 +601,16 @@ class AttentionMetadataBuilder(ABC, Generic[M]):
             # the reorder_batch_threshold based on the number of speculative
             # tokens from the config.
             speculative_config = self.aphrodite_config.speculative_config
-            if (
-                speculative_config is not None
-                and speculative_config.num_speculative_tokens is not None
-            ):
+            if speculative_config is not None and speculative_config.num_speculative_tokens is not None:
                 max_num_queries_for_spec = (
-                    1
-                    + (2 if speculative_config.parallel_drafting else 1)
-                    * speculative_config.num_speculative_tokens
+                    1 + (2 if speculative_config.parallel_drafting else 1) * speculative_config.num_speculative_tokens
                 )
                 self.reorder_batch_threshold = max(
                     self.reorder_batch_threshold,
                     max_num_queries_for_spec,
                 )
 
-        if (
-            self.aphrodite_config.parallel_config.decode_context_parallel_size > 1
-            and not supports_dcp_with_varlen
-        ):
+        if self.aphrodite_config.parallel_config.decode_context_parallel_size > 1 and not supports_dcp_with_varlen:
             self.reorder_batch_threshold = 1
 
     @abstractmethod
@@ -672,17 +648,13 @@ class AttentionMetadataBuilder(ABC, Generic[M]):
         """
         raise NotImplementedError
 
-    def build_for_cudagraph_capture(
-        self, common_attn_metadata: CommonAttentionMetadata
-    ) -> M:
+    def build_for_cudagraph_capture(self, common_attn_metadata: CommonAttentionMetadata) -> M:
         """
         Build attention metadata for CUDA graph capture. Uses build by default.
         Subclasses that override this method should call self.build or
         super().build_for_cudagraph_capture.
         """
-        return self.build(
-            common_prefix_len=0, common_attn_metadata=common_attn_metadata
-        )
+        return self.build(common_prefix_len=0, common_attn_metadata=common_attn_metadata)
 
     def build_for_drafting(
         self,
@@ -820,9 +792,7 @@ class AttentionImplBase(ABC, Generic[T]):
         self.total_cp_world_size = self.pcp_world_size * self.dcp_world_size
         self.total_cp_rank = self.pcp_rank * self.dcp_world_size + self.dcp_rank
 
-        self.need_to_return_lse_for_decode = (
-            self.dcp_world_size > 1 and self.can_return_lse_for_decode
-        )
+        self.need_to_return_lse_for_decode = self.dcp_world_size > 1 and self.can_return_lse_for_decode
         return self
 
     def process_weights_after_loading(self, act_dtype: torch.dtype):
@@ -1093,9 +1063,7 @@ def subclass_attention_backend(
     """
     name: str = name_prefix + attention_backend_cls.__name__  # type: ignore
 
-    return type(
-        name, (attention_backend_cls,), {"get_builder_cls": lambda: builder_cls}
-    )
+    return type(name, (attention_backend_cls,), {"get_builder_cls": lambda: builder_cls})
 
 
 def subclass_attention_backend_with_overrides(

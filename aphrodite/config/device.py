@@ -68,10 +68,7 @@ class DeviceConfig:
         # Some platforms require processing inputs on CPU.
         from aphrodite.platforms import current_platform
 
-        if (
-            current_platform.uses_host_device_handling()
-            and self.device_type == current_platform.device_type
-        ):
+        if current_platform.uses_host_device_handling() and self.device_type == current_platform.device_type:
             self.device = None
         elif self.device_type == "metal":
             # Metal is an MLX-backed platform, but Aphrodite tensors still flow

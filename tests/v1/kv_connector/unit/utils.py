@@ -11,13 +11,13 @@ import torch
 
 from aphrodite import SamplingParams
 from aphrodite.config import (
+    AphroditeConfig,
     AttentionConfig,
     CacheConfig,
     DeviceConfig,
     KVTransferConfig,
     ModelConfig,
     SchedulerConfig,
-    AphroditeConfig,
 )
 from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
 from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
@@ -63,23 +63,9 @@ def assert_scheduler_empty(scheduler: Scheduler):
     assert len(scheduler.encoder_cache_manager.cached) == 0
 
     # KVCache Manager.
-    assert (
-        len(
-            scheduler.kv_cache_manager.coordinator.single_type_managers[0].req_to_blocks
-        )
-        == 0
-    )
-    assert (
-        len(
-            scheduler.kv_cache_manager.coordinator.single_type_managers[
-                0
-            ].num_cached_block
-        )
-        == 0
-    )
-    num_free_blocks = (
-        scheduler.kv_cache_manager.block_pool.free_block_queue.num_free_blocks
-    )
+    assert len(scheduler.kv_cache_manager.coordinator.single_type_managers[0].req_to_blocks) == 0
+    assert len(scheduler.kv_cache_manager.coordinator.single_type_managers[0].num_cached_block) == 0
+    num_free_blocks = scheduler.kv_cache_manager.block_pool.free_block_queue.num_free_blocks
     assert num_free_blocks == (scheduler.kv_cache_manager.block_pool.num_gpu_blocks - 1)
 
     # NOTE(rob): just the ref count on blocks will be 0. The hash
@@ -174,9 +160,7 @@ def create_scheduler(
         )
     aphrodite_config.cache_config.num_gpu_blocks = num_blocks
 
-    scheduler_cls = (
-        AsyncScheduler if aphrodite_config.scheduler_config.async_scheduling else Scheduler
-    )
+    scheduler_cls = AsyncScheduler if aphrodite_config.scheduler_config.async_scheduling else Scheduler
     return scheduler_cls(
         aphrodite_config=aphrodite_config,
         kv_cache_config=kv_cache_config,
@@ -307,10 +291,7 @@ class TestExampleConnector(ExampleConnector):
         self._connector = ExampleConnector(config, role, kv_cache_config)
         self.call_record: dict[str, int] = defaultdict(int)
         # Use a unique temp file per connector
-        self._event_file = (
-            tempfile.gettempdir()
-            + f"/connector_{self.name}-{self.role.name}_events.log"
-        )
+        self._event_file = tempfile.gettempdir() + f"/connector_{self.name}-{self.role.name}_events.log"
         # Start with an empty file
         with open(self._event_file, "w") as _:
             pass
@@ -401,18 +382,12 @@ class MockKVConnector(KVConnectorBase_V1):
     ):
         pass
 
-    def build_connector_meta(
-        self, scheduler_output: SchedulerOutput
-    ) -> KVConnectorMetadata:
+    def build_connector_meta(self, scheduler_output: SchedulerOutput) -> KVConnectorMetadata:
         metadata = MockKVConnectorMetadata()
         cached_reqs = scheduler_output.scheduled_cached_reqs
         for req_id in chain(
             (req.req_id for req in scheduler_output.scheduled_new_reqs),
-            (
-                req_id
-                for req_id in cached_reqs.req_ids
-                if req_id in cached_reqs.resumed_req_ids
-            ),
+            (req_id for req_id in cached_reqs.req_ids if req_id in cached_reqs.resumed_req_ids),
         ):
             metadata.requests.append({"req_id": req_id})
         return metadata
@@ -430,13 +405,9 @@ class MockKVConnector(KVConnectorBase_V1):
         pass
 
 
-KVConnectorFactory.register_connector(
-    "TestExampleConnector", __name__, TestExampleConnector.__name__
-)
+KVConnectorFactory.register_connector("TestExampleConnector", __name__, TestExampleConnector.__name__)
 
-KVConnectorFactory.register_connector(
-    "MockKVConnector", __name__, MockKVConnector.__name__
-)
+KVConnectorFactory.register_connector("MockKVConnector", __name__, MockKVConnector.__name__)
 
 
 def make_kv_cache_config(
@@ -481,9 +452,7 @@ def make_kv_cache_config(
                 ),
             )
         )
-    return KVCacheConfig(
-        num_blocks=num_blocks, kv_cache_tensors=[], kv_cache_groups=kv_cache_groups
-    )
+    return KVCacheConfig(num_blocks=num_blocks, kv_cache_tensors=[], kv_cache_groups=kv_cache_groups)
 
 
 def make_nixl_scheduler(
@@ -574,9 +543,7 @@ def make_nixl_push_scheduler(
     sched._finished_request_blocks = {}
     sched._newly_finished_push_blocks = {}
     sched._push_registration_timeout = (
-        push_registration_timeout
-        if push_registration_timeout is not None
-        else decoder_kv_blocks_ttl
+        push_registration_timeout if push_registration_timeout is not None else decoder_kv_blocks_ttl
     )
 
     # Heartbeat fields touched by base request_finished /

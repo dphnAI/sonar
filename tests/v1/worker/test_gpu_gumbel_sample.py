@@ -36,9 +36,7 @@ Z_TOLERANCE = 10.0
 def _make_heavy_tailed_counts(seed: int = 1234) -> torch.Tensor:
     """Non-negative int64 counts of shape [VOCAB_SIZE]; target prob = counts/N."""
     gen = torch.Generator(device=DEVICE).manual_seed(seed)
-    counts = torch.randint(
-        1, 4, (VOCAB_SIZE,), generator=gen, dtype=torch.int64, device=DEVICE
-    )
+    counts = torch.randint(1, 4, (VOCAB_SIZE,), generator=gen, dtype=torch.int64, device=DEVICE)
     counts[0] = round(math.exp(HEAD_LOG_GAP))  # dominant token
     return counts
 
@@ -83,9 +81,7 @@ def _z_score(observed: int, expected: float, num_trials: int) -> float:
     return (observed - expected) / math.sqrt(num_trials * p * (1 - p))
 
 
-def _sample_histogram(
-    logits_1d: torch.Tensor, num_samples: int, *, chunk: int = 1_000_000
-) -> torch.Tensor:
+def _sample_histogram(logits_1d: torch.Tensor, num_samples: int, *, chunk: int = 1_000_000) -> torch.Tensor:
     """Histogram of `num_samples` draws, accumulated in chunks.
 
     Chunking keeps the kernel's per-sample scratch ([chunk, num_blocks]) bounded
@@ -100,9 +96,7 @@ def _sample_histogram(
         temp = torch.tensor([1.0], dtype=torch.float32, device=DEVICE)
         seed = torch.tensor([0xABCD], dtype=torch.int64, device=DEVICE)
         pos = torch.arange(start, start + size, dtype=torch.int64, device=DEVICE)
-        out = gumbel_sample(
-            logits, idx_mapping, temp, seed, pos, apply_temperature=True
-        )
+        out = gumbel_sample(logits, idx_mapping, temp, seed, pos, apply_temperature=True)
         hist += torch.bincount(out, minlength=vocab_size).double()
     return hist
 
@@ -128,8 +122,7 @@ def test_sampling_matches_target_distribution(use_fp64: bool):
     tail_count = (sampled != 0).sum().item()
     z = _z_score(tail_count, NUM_SAMPLES * tail_prob, NUM_SAMPLES)
     assert abs(z) < Z_TOLERANCE, (
-        f"sampled tail mass {tail_count / NUM_SAMPLES:.3e} != target "
-        f"{tail_prob:.3e} (z={z:.2f})"
+        f"sampled tail mass {tail_count / NUM_SAMPLES:.3e} != target {tail_prob:.3e} (z={z:.2f})"
     )
 
 
@@ -144,9 +137,7 @@ def test_full_vocab_distribution_fidelity():
     multinomial sampling-noise floor, not the kernel.
     """
     gen = torch.Generator(device=DEVICE).manual_seed(2024)
-    counts = torch.randint(
-        500, 1500, (VOCAB_SIZE,), generator=gen, dtype=torch.int64, device=DEVICE
-    )
+    counts = torch.randint(500, 1500, (VOCAB_SIZE,), generator=gen, dtype=torch.int64, device=DEVICE)
     total = counts.sum().item()
     logits = _counts_to_logits(counts)
 
@@ -177,9 +168,7 @@ def test_greedy_temperature_zero_returns_argmax():
     seed = torch.arange(num_reqs, dtype=torch.int64, device=DEVICE)
     pos = torch.arange(num_reqs, dtype=torch.int64, device=DEVICE)
 
-    sampled = gumbel_sample(
-        logits, idx_mapping, temp, seed, pos, apply_temperature=True
-    )
+    sampled = gumbel_sample(logits, idx_mapping, temp, seed, pos, apply_temperature=True)
     assert torch.equal(sampled, logits.argmax(dim=-1))
 
 
@@ -209,9 +198,7 @@ def test_single_nonzero_token_is_always_sampled():
 def test_vocab_size_not_multiple_of_block(vocab_size: int):
     """Per-block tail masking for non-block-aligned vocab; all bins measurable."""
     gen = torch.Generator(device=DEVICE).manual_seed(vocab_size)
-    counts = torch.randint(
-        20, 200, (vocab_size,), generator=gen, dtype=torch.int64, device=DEVICE
-    )
+    counts = torch.randint(20, 200, (vocab_size,), generator=gen, dtype=torch.int64, device=DEVICE)
     total = counts.sum().item()
     logits = _counts_to_logits(counts)
     num_samples = max(40 * vocab_size, 50_000)

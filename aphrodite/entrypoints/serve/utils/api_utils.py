@@ -42,9 +42,9 @@ async def listen_for_disconnect(request: Request) -> None:
             # If load tracking is enabled *and* the counter exists, decrement
             # it. Combines the previous nested checks into a single condition
             # to satisfy the linter rule.
-            if getattr(
-                request.app.state, "enable_server_load_tracking", False
-            ) and hasattr(request.app.state, "server_load_metrics"):
+            if getattr(request.app.state, "enable_server_load_tracking", False) and hasattr(
+                request.app.state, "server_load_metrics"
+            ):
                 request.app.state.server_load_metrics -= 1
             break
 
@@ -81,9 +81,7 @@ def with_cancellation(handler_func):
         handler_task = asyncio.create_task(handler_func(*args, **kwargs))
         cancellation_task = asyncio.create_task(listen_for_disconnect(request))
 
-        done, pending = await asyncio.wait(
-            [handler_task, cancellation_task], return_when=asyncio.FIRST_COMPLETED
-        )
+        done, pending = await asyncio.wait([handler_task, cancellation_task], return_when=asyncio.FIRST_COMPLETED)
         for task in pending:
             task.cancel()
 
@@ -104,9 +102,7 @@ def load_aware_call(func):
         raw_request = kwargs.get("raw_request", args[1] if len(args) > 1 else None)
 
         if raw_request is None:
-            raise ValueError(
-                "raw_request required when server load tracking is enabled"
-            )
+            raise ValueError("raw_request required when server load tracking is enabled")
 
         if not getattr(raw_request.app.state, "enable_server_load_tracking", False):
             return await func(*args, **kwargs)
@@ -182,17 +178,10 @@ def get_max_tokens(
             max_model_len if limit == -1 else limit,
         )
     if max_model_len < input_length:
-        raise ValueError(
-            f"Input length ({input_length}) exceeds model's maximum "
-            f"context length ({max_model_len})."
-        )
+        raise ValueError(f"Input length ({input_length}) exceeds model's maximum context length ({max_model_len}).")
     model_max_tokens = max_model_len - input_length
     platform_max_tokens = current_platform.get_max_output_tokens(input_length)
-    fallback_max_tokens = (
-        max_tokens
-        if max_tokens is not None
-        else default_sampling_params.get("max_tokens")
-    )
+    fallback_max_tokens = max_tokens if max_tokens is not None else default_sampling_params.get("max_tokens")
 
     return min(
         val
@@ -229,9 +218,7 @@ def get_non_default_args(args: Namespace | EngineArgs) -> dict[str, Any]:
         if default_args.model != EngineArgs.model:
             non_default_args["model"] = default_args.model
     else:
-        raise TypeError(
-            "Unsupported argument type. Must be Namespace or EngineArgs instance."
-        )
+        raise TypeError("Unsupported argument type. Must be Namespace or EngineArgs instance.")
 
     return non_default_args
 
@@ -240,10 +227,7 @@ def _jsonify_arg_value(value: Any) -> Any:
     if value is None or isinstance(value, bool | int | float | str):
         return value
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
-        return {
-            key: _jsonify_arg_value(val)
-            for key, val in dataclasses.asdict(value).items()
-        }
+        return {key: _jsonify_arg_value(val) for key, val in dataclasses.asdict(value).items()}
     if isinstance(value, dict):
         return {str(key): _jsonify_arg_value(val) for key, val in value.items()}
     if isinstance(value, tuple | list):
@@ -273,16 +257,12 @@ def log_non_default_args(args: Namespace | EngineArgs):
     logger.info("non-default args: %s", non_default_args)
 
 
-def should_include_usage(
-    stream_options: StreamOptions | None, enable_force_include_usage: bool
-) -> tuple[bool, bool]:
+def should_include_usage(stream_options: StreamOptions | None, enable_force_include_usage: bool) -> tuple[bool, bool]:
     if enable_force_include_usage:
         return True, True
     if stream_options:
         include_usage = bool(stream_options.include_usage)
-        include_continuous_usage = include_usage and bool(
-            stream_options.continuous_usage_stats
-        )
+        include_continuous_usage = include_usage and bool(stream_options.continuous_usage_stats)
     else:
         include_usage, include_continuous_usage = False, False
     return include_usage, include_continuous_usage
@@ -341,6 +321,4 @@ async def validate_json_request(raw_request: Request):
     content_type = raw_request.headers.get("content-type", "").lower()
     media_type = content_type.split(";", maxsplit=1)[0]
     if media_type != "application/json":
-        raise RequestValidationError(
-            errors=["Unsupported Media Type: Only 'application/json' is allowed"]
-        )
+        raise RequestValidationError(errors=["Unsupported Media Type: Only 'application/json' is allowed"])

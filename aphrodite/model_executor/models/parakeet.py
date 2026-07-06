@@ -63,12 +63,8 @@ class ProjectedParakeet(nn.Module):
         self.projection = ParakeetProjection(self.config)
         self.projection = self.projection.to(dtype)
 
-    def forward(
-        self, input_features: torch.Tensor, attention_mask: torch.Tensor | None = None
-    ) -> torch.Tensor:
-        outputs = self.encoder(
-            input_features=input_features, attention_mask=attention_mask
-        )
+    def forward(self, input_features: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
+        outputs = self.encoder(input_features=input_features, attention_mask=attention_mask)
         outputs = outputs.last_hidden_state
         outputs = outputs.to(dtype=torch.bfloat16)
         outputs = self.projection(outputs)
@@ -139,12 +135,8 @@ class ParakeetExtractor:
     def __init__(self, config: PretrainedConfig) -> None:
         self.config = ExtractorConfig.from_hf_config(config)
         """`config` is named *exactly* for `._get_subsampling_output_length` below"""
-        self._clip_target_samples = int(
-            round(self.config.clip_duration_s * self.config.sampling_rate)
-        )
-        self._tail_min_samples = int(
-            round(self.config.clip_min_duration_s * self.config.sampling_rate)
-        )
+        self._clip_target_samples = int(round(self.config.clip_duration_s * self.config.sampling_rate))
+        self._tail_min_samples = int(round(self.config.clip_min_duration_s * self.config.sampling_rate))
 
     @staticmethod
     @cache
@@ -153,9 +145,7 @@ class ParakeetExtractor:
 
     @staticmethod
     @cache
-    def _get_mel_filters(
-        feature_size: int, sampling_rate: int, n_fft: int, device: str
-    ) -> torch.Tensor:
+    def _get_mel_filters(feature_size: int, sampling_rate: int, n_fft: int, device: str) -> torch.Tensor:
         filter_bank = mel_filter_bank(
             num_frequency_bins=n_fft // 2 + 1,
             num_mel_filters=feature_size,
@@ -181,32 +171,25 @@ class ParakeetExtractor:
             return_complex=True,
             pad_mode="constant",
         )
-        mel_filters = self._get_mel_filters(
-            cfg.feature_size, cfg.sampling_rate, cfg.n_fft, device
-        )
+        mel_filters = self._get_mel_filters(cfg.feature_size, cfg.sampling_rate, cfg.n_fft, device)
         return self._apply_mel_filters(stft, mel_filters)
 
     @torch.compile(dynamic=True)
-    def _apply_mel_filters(
-        self, stft_output: torch.Tensor, mel_filters: torch.Tensor
-    ) -> torch.Tensor:
+    def _apply_mel_filters(self, stft_output: torch.Tensor, mel_filters: torch.Tensor) -> torch.Tensor:
         magnitudes = stft_output.real.square() + stft_output.imag.square()
         mel_spec = mel_filters @ magnitudes
         mel_spec = torch.log(mel_spec + LOG_ZERO_GUARD_VALUE)
         return mel_spec.permute(0, 2, 1)
 
     @torch.compile(dynamic=True)
-    def _apply_preemphasis(
-        self, input_features: torch.Tensor, audio_lengths: torch.Tensor
-    ) -> torch.Tensor:
-        timemask = torch.arange(
-            input_features.shape[1], device=input_features.device
-        ).unsqueeze(0) < audio_lengths.unsqueeze(1)
+    def _apply_preemphasis(self, input_features: torch.Tensor, audio_lengths: torch.Tensor) -> torch.Tensor:
+        timemask = torch.arange(input_features.shape[1], device=input_features.device).unsqueeze(
+            0
+        ) < audio_lengths.unsqueeze(1)
         input_features = torch.cat(
             [
                 input_features[:, :1],
-                input_features[:, 1:]
-                - self.config.preemphasis * input_features[:, :-1],
+                input_features[:, 1:] - self.config.preemphasis * input_features[:, :-1],
             ],
             dim=1,
         )
@@ -222,22 +205,17 @@ class ParakeetExtractor:
             self.config.hop_length,
         )
         attention_mask = (
-            torch.arange(mel_features.shape[1], device=mel_features.device)[None, :]
-            < features_lengths[:, None]
+            torch.arange(mel_features.shape[1], device=mel_features.device)[None, :] < features_lengths[:, None]
         )
         mask = attention_mask.unsqueeze(-1)
         lengths = attention_mask.sum(dim=1)
         mel_features_masked = mel_features * mask
         mean = (mel_features_masked.sum(dim=1) / lengths.unsqueeze(-1)).unsqueeze(1)
-        variance = ((mel_features_masked - mean) ** 2 * mask).sum(dim=1) / (
-            lengths - 1
-        ).unsqueeze(-1)
+        variance = ((mel_features_masked - mean) ** 2 * mask).sum(dim=1) / (lengths - 1).unsqueeze(-1)
         std = torch.sqrt(variance).unsqueeze(1)
         return (mel_features - mean) / (std + EPSILON) * mask, attention_mask
 
-    def _pad_raw_speech(
-        self, raw_speech: list[torch.Tensor], max_len: int, device: str
-    ) -> torch.Tensor:
+    def _pad_raw_speech(self, raw_speech: list[torch.Tensor], max_len: int, device: str) -> torch.Tensor:
         output = torch.full(
             (len(raw_speech), max_len),
             self.config.padding_value,
@@ -289,10 +267,7 @@ class ParakeetExtractor:
         *,
         device: str = "cpu",
     ) -> dict[str, Any]:
-        raw_speech = [
-            torch.as_tensor(speech, device=device, dtype=torch.float32)
-            for speech in raw_speech
-        ]
+        raw_speech = [torch.as_tensor(speech, device=device, dtype=torch.float32) for speech in raw_speech]
 
         for i, speech in enumerate(raw_speech):
             if len(speech.shape) > 1:
@@ -311,17 +286,13 @@ class ParakeetExtractor:
             audio_num_clips.append(len(clips))
         raw_speech = audio_clips
 
-        audio_lengths = torch.tensor(
-            [len(speech) for speech in raw_speech], dtype=torch.long, device=device
-        )
+        audio_lengths = torch.tensor([len(speech) for speech in raw_speech], dtype=torch.long, device=device)
 
         max_length = max(len(speech) for speech in raw_speech)
         input_features = self._pad_raw_speech(raw_speech, max_length, device)
         input_features = self._apply_preemphasis(input_features, audio_lengths)
         input_features = self._torch_extract_fbank_features(input_features, device)
-        input_features, attention_mask = self._normalize_mel_features(
-            input_features, audio_lengths
-        )
+        input_features, attention_mask = self._normalize_mel_features(input_features, audio_lengths)
 
         return {
             "input_audio_features": input_features,

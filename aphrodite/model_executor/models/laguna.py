@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig, get_current_aphrodite_config
+from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
 from aphrodite.distributed import (
     get_ep_group,
     get_pp_group,
@@ -106,9 +106,7 @@ class LagunaMLP(nn.Module):
             prefix=f"{prefix}.down_proj",
         )
         if hidden_act != "silu":
-            raise ValueError(
-                f"Unsupported activation: {hidden_act}. Only silu is supported."
-            )
+            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu is supported.")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         gate, _ = self.gate_proj(x)
@@ -145,14 +143,11 @@ class LagunaMoE(nn.Module):
 
         self.n_routed_experts = config.num_experts
         self.n_shared_experts = 1 if config.shared_expert_intermediate_size > 0 else 0
-        self.routed_scaling_factor = float(
-            getattr(config, "moe_routed_scaling_factor", 1.0)
-        )
+        self.routed_scaling_factor = float(getattr(config, "moe_routed_scaling_factor", 1.0))
 
         if self.tp_size > config.num_experts:
             raise ValueError(
-                f"Tensor parallel size {self.tp_size} is greater than "
-                f"the number of experts {config.num_experts}."
+                f"Tensor parallel size {self.tp_size} is greater than the number of experts {config.num_experts}."
             )
 
         # Load balancing settings.
@@ -160,18 +155,14 @@ class LagunaMoE(nn.Module):
         eplb_config = aphrodite_config.parallel_config.eplb_config
         self.enable_eplb = enable_eplb
         eplb_config.num_redundant_experts = (
-            eplb_config.num_redundant_experts
-            if eplb_config.num_redundant_experts is not None
-            else 0
+            eplb_config.num_redundant_experts if eplb_config.num_redundant_experts is not None else 0
         )
         self.n_redundant_experts = eplb_config.num_redundant_experts
         self.n_logical_experts = self.n_routed_experts
         self.n_physical_experts = self.n_logical_experts + self.n_redundant_experts
         self.n_local_physical_experts = self.n_physical_experts // self.ep_size
         self.physical_expert_start = self.ep_rank * self.n_local_physical_experts
-        self.physical_expert_end = (
-            self.physical_expert_start + self.n_local_physical_experts
-        )
+        self.physical_expert_end = self.physical_expert_start + self.n_local_physical_experts
 
         # Router gate
         self.gate = ReplicatedLinear(
@@ -335,11 +326,7 @@ class LagunaAttention(nn.Module):
             # ``True``) means per-element gating with output size num_heads ×
             # head_dim.
             gate_per_head = self.gating is True or self.gating == "per-head"
-            g_out = (
-                self.total_num_heads
-                if gate_per_head
-                else self.total_num_heads * self.head_dim
-            )
+            g_out = self.total_num_heads if gate_per_head else self.total_num_heads * self.head_dim
             self.g_proj = ColumnParallelLinear(
                 hidden_size,
                 g_out,
@@ -355,9 +342,7 @@ class LagunaAttention(nn.Module):
         # Attention sinks (learnable per-head bias for SWA layers)
         sinks = None
         if attention_sink:
-            self.sink = torch.nn.Parameter(
-                torch.empty(self.total_num_heads // tp_size, requires_grad=False)
-            )
+            self.sink = torch.nn.Parameter(torch.empty(self.total_num_heads // tp_size, requires_grad=False))
             sinks = self.sink
 
         # Resolve rope params per-layer-type. ``config.rope_parameters`` is
@@ -365,9 +350,7 @@ class LagunaAttention(nn.Module):
         # (v5 Laguna-XS schema). The v5 form is unhashable as-is and would
         # crash `get_rope`'s cache lookup, so always pull out the layer's
         # sub-dict before forwarding.
-        layer_type = (
-            layer_types[layer_idx] if layer_types is not None else "full_attention"
-        )
+        layer_type = layer_types[layer_idx] if layer_types is not None else "full_attention"
         is_sliding = layer_type == "sliding_attention"
 
         top_rope = getattr(config, "rope_parameters", None) or {}
@@ -381,11 +364,7 @@ class LagunaAttention(nn.Module):
         # for SWA layers. Prefer it when present; otherwise the nested
         # rope dict above already supplies the correct sub-config.
         swa_rope = getattr(config, "swa_rope_parameters", None)
-        if (
-            is_sliding
-            and swa_rope is None
-            and not any(isinstance(v, dict) for v in top_rope.values())
-        ):
+        if is_sliding and swa_rope is None and not any(isinstance(v, dict) for v in top_rope.values()):
             logger.warning_once(
                 "Laguna config has sliding_attention layers but neither "
                 "`swa_rope_parameters` nor a nested per-layer-type "
@@ -453,8 +432,7 @@ class LagunaAttention(nn.Module):
                 # gate: [..., num_heads]; broadcast across head_dim
                 attn_shape = attn_output.shape
                 attn_output = (
-                    attn_output.view(*attn_shape[:-1], self.num_heads, self.head_dim)
-                    * gate.unsqueeze(-1)
+                    attn_output.view(*attn_shape[:-1], self.num_heads, self.head_dim) * gate.unsqueeze(-1)
                 ).view(attn_shape)
             else:
                 attn_output = attn_output * gate
@@ -481,22 +459,14 @@ class LagunaDecoderLayer(nn.Module):
 
         # Determine if this layer uses sliding window attention
         layer_types = getattr(config, "layer_types", None)
-        is_sliding = (
-            layer_types is not None and layer_types[layer_idx] == "sliding_attention"
-        )
+        is_sliding = layer_types is not None and layer_types[layer_idx] == "sliding_attention"
 
         # Enable attention sinks on SWA layers when configured
-        attention_sink = is_sliding and getattr(
-            config, "swa_attention_sink_enabled", False
-        )
+        attention_sink = is_sliding and getattr(config, "swa_attention_sink_enabled", False)
 
         # Optional per-layer override of head count (Laguna-XS).
         per_layer_heads = getattr(config, "num_attention_heads_per_layer", None)
-        layer_num_heads = (
-            per_layer_heads[layer_idx]
-            if per_layer_heads is not None
-            else config.num_attention_heads
-        )
+        layer_num_heads = per_layer_heads[layer_idx] if per_layer_heads is not None else config.num_attention_heads
 
         self.self_attn = LagunaAttention(
             config=config,
@@ -510,17 +480,11 @@ class LagunaDecoderLayer(nn.Module):
             prefix=f"{prefix}.self_attn",
             attention_sink=attention_sink,
             layer_idx=layer_idx,
-            attention_prefix=(
-                f"{attention_prefix}.self_attn"
-                if attention_prefix is not None
-                else None
-            ),
+            attention_prefix=(f"{attention_prefix}.self_attn" if attention_prefix is not None else None),
         )
 
         # Check if this layer uses MoE or dense MLP (matches Qwen2/Qwen3 convention)
-        mlp_only_layers = (
-            [] if not hasattr(config, "mlp_only_layers") else config.mlp_only_layers
-        )
+        mlp_only_layers = [] if not hasattr(config, "mlp_only_layers") else config.mlp_only_layers
         self.is_moe_layer = (
             (layer_idx not in mlp_only_layers)
             and (config.num_experts > 0)
@@ -544,9 +508,7 @@ class LagunaDecoderLayer(nn.Module):
             )
 
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -599,9 +561,7 @@ class LagunaModel(nn.Module, EagleModelMixin):
 
         self.vocab_size = config.vocab_size
 
-        if get_pp_group().is_first_rank or (
-            config.tie_word_embeddings and get_pp_group().is_last_rank
-        ):
+        if get_pp_group().is_first_rank or (config.tie_word_embeddings and get_pp_group().is_last_rank):
             self.embed_tokens = VocabParallelEmbedding(
                 config.vocab_size,
                 config.hidden_size,
@@ -653,22 +613,16 @@ class LagunaModel(nn.Module, EagleModelMixin):
             hidden_states = intermediate_tensors["hidden_states"]
             residual = intermediate_tensors["residual"]
 
-        aux_hidden_states = self._maybe_add_hidden_state(
-            [], self.start_layer, hidden_states, residual
-        )
+        aux_hidden_states = self._maybe_add_hidden_state([], self.start_layer, hidden_states, residual)
         for layer_idx, layer in enumerate(
             islice(self.layers, self.start_layer, self.end_layer),
             start=self.start_layer,
         ):
             hidden_states, residual = layer(positions, hidden_states, residual)
-            self._maybe_add_hidden_state(
-                aux_hidden_states, layer_idx + 1, hidden_states, residual
-            )
+            self._maybe_add_hidden_state(aux_hidden_states, layer_idx + 1, hidden_states, residual)
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
 
         hidden_states, _ = self.norm(hidden_states, residual)
         if len(aux_hidden_states) > 0:
@@ -729,9 +683,7 @@ class LagunaModel(nn.Module, EagleModelMixin):
                 if param is not None:
                     layer_heads_per_rank = param.shape[0]
                     layer_head_start = tp_rank * layer_heads_per_rank
-                    narrow_weight = loaded_weight.narrow(
-                        0, layer_head_start, layer_heads_per_rank
-                    )
+                    narrow_weight = loaded_weight.narrow(0, layer_head_start, layer_heads_per_rank)
                     param.data.copy_(narrow_weight)
                     loaded_params.add(name)
                 continue
@@ -782,19 +734,14 @@ class LagunaModel(nn.Module, EagleModelMixin):
 
                     if is_pp_missing_parameter(name_mapped, self):
                         continue
-                    if (
-                        name_mapped.endswith(ignore_suffixes)
-                        and name_mapped not in params_dict
-                    ):
+                    if name_mapped.endswith(ignore_suffixes) and name_mapped not in params_dict:
                         continue
                     if name_mapped not in params_dict:
                         continue
 
                     param = params_dict[name_mapped]
                     # Use return_success to handle expert parallelism correctly
-                    weight_loader = typing.cast(
-                        Callable[..., bool], param.weight_loader
-                    )
+                    weight_loader = typing.cast(Callable[..., bool], param.weight_loader)
                     success = weight_loader(
                         param,
                         loaded_weight,
@@ -829,9 +776,7 @@ class LagunaModel(nn.Module, EagleModelMixin):
                         continue
 
                     param = params_dict[name]
-                    weight_loader = getattr(
-                        param, "weight_loader", default_weight_loader
-                    )
+                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
                     weight_loader(param, loaded_weight)
                     loaded_params.add(name)
 
@@ -852,9 +797,7 @@ class LagunaForCausalLM(nn.Module, SupportsPP, SupportsLoRA, SupportsEagle3):
         self.config = config
         self.quant_config = quant_config
 
-        self.model = LagunaModel(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = LagunaModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
 
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
@@ -869,9 +812,7 @@ class LagunaForCausalLM(nn.Module, SupportsPP, SupportsLoRA, SupportsEagle3):
             self.lm_head = PPMissingLayer()
 
         self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -883,9 +824,7 @@ class LagunaForCausalLM(nn.Module, SupportsPP, SupportsLoRA, SupportsEagle3):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
         return hidden_states
 
     def compute_logits(self, hidden_states: torch.Tensor) -> torch.Tensor | None:

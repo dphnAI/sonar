@@ -95,12 +95,8 @@ def supported_schema():
 def test_unsupported_json_features_by_type(schema_type, request):
     schemas = request.getfixturevalue(schema_type)
     for schema in schemas:
-        assert has_xgrammar_unsupported_json_features(schema), (
-            f"Schema should be unsupported: {schema}"
-        )
+        assert has_xgrammar_unsupported_json_features(schema), f"Schema should be unsupported: {schema}"
 
 
 def test_supported_json_features(supported_schema):
-    assert not has_xgrammar_unsupported_json_features(supported_schema), (
-        "Schema should be supported"
-    )
+    assert not has_xgrammar_unsupported_json_features(supported_schema), "Schema should be supported"
