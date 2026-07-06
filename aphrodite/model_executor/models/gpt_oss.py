@@ -186,7 +186,7 @@ class MLPBlock(torch.nn.Module):
         quant_config = aphrodite_config.quant_config
         parallel_config = aphrodite_config.parallel_config
 
-        self.is_sequence_parallel = parallel_config.use_sequence_parallel_moe
+        self.is_sequence_parallel = parallel_config.use_sequence_parallel_moe and aphrodite_config.lora_config is None
 
         self.layer_idx = layer_idx
         self.num_experts = config.num_local_experts
