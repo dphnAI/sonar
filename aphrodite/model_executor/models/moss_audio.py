@@ -785,6 +785,10 @@ class MossQwen3ForCausalLM(Qwen3ForCausalLM):
     ) -> IntermediateTensors:
         intermediate_tensors = self.model.make_empty_intermediate_tensors(batch_size, dtype, device)
         for layer_idx in self.deepstack_inject_layer_indices:
+            # Non-first PP ranks only receive DeepStack payloads for layers
+            # at or after their local start layer.
+            if layer_idx < self.model.start_layer:
+                continue
             intermediate_tensors[f"deepstack_input_embeds_{layer_idx}"] = torch.zeros(
                 (batch_size, self.config.hidden_size),
                 dtype=dtype,
