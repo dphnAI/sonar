@@ -17,7 +17,6 @@ from aphrodite.compilation.decorators import support_torch_compile
 from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
 from aphrodite.config.speech_to_text import SpeechToTextParams
 from aphrodite.engine.protocol import StreamingInput
-from aphrodite.envs import APHRODITE_ENGINE_ITERATION_TIMEOUT_S
 from aphrodite.inputs import PromptType, TokensPrompt
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.models.interfaces import MultiModalEmbeddings, SupportsRealtime
@@ -248,13 +247,11 @@ class VoxtralRealtimeGeneration(VoxtralForConditionalGeneration, SupportsRealtim
             await buffer.append_audio(right_pad.audio_array)
             await buffer.append_audio(None)  # signal end
 
-        # Feed output tokens back into buffer in background
+        # Feed output tokens back into the buffer. Idle waits are normal here;
+        # request cleanup still cancels this task through the finally block.
         async def feed_tokens():
             while True:
-                all_outputs = await asyncio.wait_for(
-                    input_stream.get(),
-                    timeout=APHRODITE_ENGINE_ITERATION_TIMEOUT_S,
-                )
+                all_outputs = await input_stream.get()
                 await buffer.append_tokens(all_outputs[-1:])
 
         audio_task = asyncio.create_task(feed_audio())
