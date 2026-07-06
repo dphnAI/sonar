@@ -36,6 +36,7 @@ from aphrodite.v1.attention.backend import (
 )
 from aphrodite.v1.attention.backends.mla.sparse_utils import (
     triton_convert_req_index_to_global_index,
+    triton_filter_and_convert_dcp_index,
 )
 from aphrodite.v1.kv_cache_interface import AttentionSpec
 from aphrodite.v1.worker.workspace import current_workspace_manager
@@ -125,9 +126,6 @@ class Sm89MLASparseBackend(AttentionBackend):
 
         aphrodite_config = get_current_aphrodite_config_or_none()
         if aphrodite_config is not None and aphrodite_config.model_config is not None:
-            if aphrodite_config.parallel_config.decode_context_parallel_size > 1:
-                return "SM89 MLA Sparse does not support DCP for now"
-
             hf_config = aphrodite_config.model_config.hf_config
             if not hasattr(hf_config, "index_topk"):
                 return "SM89 MLA Sparse requires model with index_topk"
@@ -162,6 +160,7 @@ class Sm89MLASparseMetadata(AttentionMetadata):
     req_id_per_token: torch.Tensor
     block_size: int = 64
     topk_tokens: int = 2048
+    cp_kv_cache_interleave_size: int = 1
 
 
 class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadata]):
@@ -217,10 +216,17 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
             req_id_per_token=self.req_id_per_token_buffer[:num_tokens],
             block_size=self.kv_cache_spec.block_size,
             topk_tokens=self.topk_tokens,
+            cp_kv_cache_interleave_size=(
+                self.aphrodite_config.parallel_config.cp_kv_cache_interleave_size
+            ),
         )
 
 
 class Sm89MLASparseImpl(SparseMLAAttentionImpl[Sm89MLASparseMetadata]):
+    # The kernel emits a natural-log LSE (lse_base_on_e default), which the
+    # DCP cross-rank softmax combine consumes.
+    can_return_lse_for_decode: bool = True
+
     def __init__(
         self,
         num_heads: int,
@@ -286,22 +292,42 @@ class Sm89MLASparseImpl(SparseMLAAttentionImpl[Sm89MLASparseMetadata]):
 
         assert self.topk_indices_buffer is not None
         topk_indices = self.topk_indices_buffer[:num_actual_toks]
-        # Per-request token indices -> physical cache slots. -1 padding stays
-        # -1; the kernel zero-outputs fully masked rows, so no valid-count
-        # side channel is needed.
-        topk_indices = triton_convert_req_index_to_global_index(
-            attn_metadata.req_id_per_token,
-            attn_metadata.block_table,
-            topk_indices,
-            BLOCK_SIZE=attn_metadata.block_size,
-            NUM_TOPK_TOKENS=topk_indices.shape[1],
-        )
+        if self.dcp_world_size > 1:
+            # Keep only the slots this DCP rank owns, mapped to local physical
+            # cache slots; non-owned entries become -1. The kernel masks
+            # interior -1s natively, so no compaction or valid-count side
+            # channel is needed.
+            topk_indices = triton_filter_and_convert_dcp_index(
+                attn_metadata.req_id_per_token,
+                attn_metadata.block_table,
+                topk_indices,
+                dcp_size=self.dcp_world_size,
+                dcp_rank=self.dcp_rank,
+                cp_kv_cache_interleave_size=attn_metadata.cp_kv_cache_interleave_size,
+                BLOCK_SIZE=attn_metadata.block_size,
+                NUM_TOPK_TOKENS=topk_indices.shape[1],
+                compact_valid_to_front=False,
+            )
+        else:
+            # Per-request token indices -> physical cache slots. -1 padding
+            # stays -1; the kernel zero-outputs fully masked rows, so no
+            # valid-count side channel is needed.
+            topk_indices = triton_convert_req_index_to_global_index(
+                attn_metadata.req_id_per_token,
+                attn_metadata.block_table,
+                topk_indices,
+                BLOCK_SIZE=attn_metadata.block_size,
+                NUM_TOPK_TOKENS=topk_indices.shape[1],
+            )
 
         # The kernel addresses the cache as raw per-token rows ([slots, 656]).
         kv_pool = kv_c_and_k_pe_cache.view(torch.uint8)
         kv_pool = kv_pool.view(-1, kv_pool.shape[-1])
 
-        attn_out = q.new_empty((num_actual_toks, self.num_heads, self.kv_lora_rank))
-        lse = q.new_empty((num_actual_toks, self.num_heads), dtype=torch.float32)
+        # Under DCP the caller all-gathers q across the group in the head dim,
+        # so q carries num_heads * dcp_world_size heads; size outputs from q.
+        num_heads = q.shape[1]
+        attn_out = q.new_empty((num_actual_toks, num_heads, self.kv_lora_rank))
+        lse = q.new_empty((num_actual_toks, num_heads), dtype=torch.float32)
         ops.sm89_sparse_mla_fwd(q, kv_pool, topk_indices, attn_out, lse, self.softmax_scale)
-        return attn_out, None
+        return attn_out, lse if self.need_to_return_lse_for_decode else None
