@@ -346,6 +346,38 @@ void cooperative_topk(const torch::stable::Tensor& logits,
                       int64_t max_seq_len);
 #endif
 
+#ifdef APHRODITE_ENABLE_SM89_DSA
+// sm89 DeepSeek sparse attention kernels; impls are registered in
+// csrc/libtorch_stable/attention/sm89_dsa/.
+void sm89_fp8_paged_mqa_logits(const torch::stable::Tensor& q,
+                               const torch::stable::Tensor& pool,
+                               const torch::stable::Tensor& weights,
+                               const torch::stable::Tensor& seq_lens,
+                               const torch::stable::Tensor& block_table,
+                               const torch::stable::Tensor& sched,
+                               torch::stable::Tensor& logits,
+                               bool clean_logits);
+
+void sm89_paged_mqa_logits_metadata(const torch::stable::Tensor& seq_lens,
+                                    torch::stable::Tensor& sched,
+                                    int64_t next_n);
+
+void sm89_fp8_mqa_logits(const torch::stable::Tensor& q,
+                         const torch::stable::Tensor& kv,
+                         const torch::stable::Tensor& kv_scales,
+                         const torch::stable::Tensor& weights,
+                         const torch::stable::Tensor& cu_seqlen_ks,
+                         const torch::stable::Tensor& cu_seqlen_ke,
+                         torch::stable::Tensor& logits);
+
+void sm89_sparse_mla_fwd(const torch::stable::Tensor& q,
+                         const torch::stable::Tensor& pool,
+                         const torch::stable::Tensor& indices,
+                         torch::stable::Tensor& out, torch::stable::Tensor& lse,
+                         double sm_scale,
+                         std::optional<torch::stable::Tensor> topk_lens);
+#endif
+
 void selective_scan_fwd(
     const torch::stable::Tensor& u, const torch::stable::Tensor& delta,
     const torch::stable::Tensor& A, const torch::stable::Tensor& B,

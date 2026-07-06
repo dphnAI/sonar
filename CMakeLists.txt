@@ -547,6 +547,23 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
         CUDA_ARCHS "${COOPERATIVE_TOPK_ARCHS}")
     endif()
 
+    # sm89 DeepSeek sparse attention (DSA) kernels; fp8 e4m3 mma codegen for
+    # sm_89 requires CUDA 12.4+.
+    if(${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 12.4)
+      cuda_archs_loose_intersection(DSA_SM89_ARCHS "8.9+PTX" "${CUDA_ARCHS}")
+    endif()
+    if(DSA_SM89_ARCHS)
+      set(SM89_DSA_SRC
+        "csrc/libtorch_stable/attention/sm89_dsa/sm89_fp8_paged_mqa_logits.cu"
+        "csrc/libtorch_stable/attention/sm89_dsa/sm89_fp8_mqa_logits.cu"
+        "csrc/libtorch_stable/attention/sm89_dsa/sm89_sparse_mla_fwd.cu")
+      list(APPEND APHRODITE_STABLE_EXT_SRC ${SM89_DSA_SRC})
+      set_gencode_flags_for_srcs(
+        SRCS "${SM89_DSA_SRC}"
+        CUDA_ARCHS "${DSA_SM89_ARCHS}")
+      message(STATUS "Building sm89 DSA kernels for archs: ${DSA_SM89_ARCHS}")
+    endif()
+
     # Only build Marlin kernels if we are building for at least some compatible archs.
     # Keep building Marlin for 9.0 as there are some group sizes and shapes that
     # are not supported by Machete yet.
@@ -1163,6 +1180,10 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
     if(COOPERATIVE_TOPK_ARCHS)
       target_compile_definitions(_C_stable_libtorch PRIVATE
         APHRODITE_ENABLE_COOPERATIVE_TOPK=1)
+    endif()
+    if(DSA_SM89_ARCHS)
+      target_compile_definitions(_C_stable_libtorch PRIVATE
+        APHRODITE_ENABLE_SM89_DSA=1)
     endif()
     # Needed by CUTLASS kernels
     target_compile_definitions(_C_stable_libtorch PRIVATE

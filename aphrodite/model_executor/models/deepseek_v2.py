@@ -895,6 +895,23 @@ class DeepSeekV2FusedQkvAProjLinear(MergedColumnParallelLinear):
             return super().forward(input_)
 
 
+def is_skip_topk_layer(config, layer_id: int) -> bool:
+    """Whether a backbone sparse layer skips top-k index computation.
+
+    Skip layers (IndexCache, index_topk_freq > 1 or an explicit
+    index_topk_pattern) build no indexer and reuse the top-k indices the last
+    full-indexer layer left in the shared buffer.
+    """
+    index_topk_freq = getattr(config, "index_topk_freq", 1)
+    index_topk_pattern = getattr(config, "index_topk_pattern", None)
+    index_skip_topk_offset = getattr(config, "index_skip_topk_offset", 2)
+    if index_topk_pattern is None:
+        return max(layer_id - index_skip_topk_offset + 1, 0) % index_topk_freq != 0
+    if 0 <= layer_id < len(index_topk_pattern):
+        return index_topk_pattern[layer_id] == "S"
+    return False
+
+
 class DeepseekV2MLAAttention(nn.Module):
     """
     Main reference: DeepseekV2 paper, and FlashInfer Implementation
@@ -1020,15 +1037,8 @@ class DeepseekV2MLAAttention(nn.Module):
         _skip_topk = False
         is_mtp_layer = False
         if self.is_v32:
-            _index_topk_freq = getattr(config, "index_topk_freq", 1)
-            _index_topk_pattern = getattr(config, "index_topk_pattern", None)
-            _index_skip_topk_offset = getattr(config, "index_skip_topk_offset", 2)
             layer_id = extract_layer_index(prefix)
-
-            if _index_topk_pattern is None:
-                _skip_topk = max(layer_id - _index_skip_topk_offset + 1, 0) % _index_topk_freq != 0
-            elif 0 <= layer_id < len(_index_topk_pattern):
-                _skip_topk = _index_topk_pattern[layer_id] == "S"
+            _skip_topk = is_skip_topk_layer(config, layer_id)
 
             # The skip pattern only governs backbone layers. MTP/nextn
             # layers (layer_id >= num_hidden_layers) always build a full
@@ -1300,6 +1310,19 @@ class DeepseekV2Model(nn.Module):
             ),
             prefix=f"{prefix}.layers",
         )
+        # A skip-topk layer reuses the indices the previous full-indexer layer
+        # wrote into this rank's topk_indices_buffer. If a pipeline stage
+        # starts with a skip layer, no layer on the rank has written the
+        # buffer yet and attention would read uninitialized indices.
+        if self.is_v32 and is_skip_topk_layer(config, self.start_layer):
+            raise ValueError(
+                f"Pipeline stage starting at layer {self.start_layer} begins "
+                "with a skip-topk sparse layer, which would read top-k indices "
+                "no layer on this rank has produced. Adjust the pipeline "
+                "partition so every stage starts with a full-indexer layer "
+                "(align stage boundaries with index_topk_freq / "
+                "index_topk_pattern)."
+            )
 
         if get_pp_group().is_last_rank:
             self.norm = RMSNorm(self.hidden_size, eps=config.rms_norm_eps)

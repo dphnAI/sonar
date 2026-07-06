@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 from enum import IntEnum
+from functools import cache
 from typing import TYPE_CHECKING, Literal
 
 import torch
@@ -3055,6 +3056,83 @@ def top_k_per_row_decode(
         stride1,
         topk_tokens,
     )
+
+
+@cache
+def supports_sm89_dsa() -> bool:
+    """Whether the sm89 DeepSeek sparse attention ops were compiled into _C."""
+    return hasattr(torch.ops._C, "sm89_sparse_mla_fwd")
+
+
+def sm89_fp8_paged_mqa_logits(
+    q: torch.Tensor,
+    kv_cache_pool: torch.Tensor,
+    weights: torch.Tensor,
+    seq_lens: torch.Tensor,
+    block_table: torch.Tensor,
+    sched: torch.Tensor,
+    logits: torch.Tensor,
+    clean_logits: bool,
+) -> None:
+    """Paged fp8 MQA indexer logits for decode on sm89 (block size 64).
+
+    q is [B, next_n, 64, 128] fp8 e4m3 viewed as uint8; kv_cache_pool [pool_pages, 8448]
+    uint8 (per page, 8192B fp8 keys + 256B fp32 per-token scales); weights [B*next_n, 64]
+    fp32; sched [(P+1), 2] int32 built by sm89_paged_mqa_logits_metadata; logits
+    [B*next_n, max_model_len] fp32, written for columns [0, seq_len) per row. With
+    clean_logits, the tail columns of each row's last partial page are set to -inf.
+    """
+    torch.ops._C.sm89_fp8_paged_mqa_logits(
+        q, kv_cache_pool, weights, seq_lens, block_table, sched, logits, clean_logits
+    )
+
+
+def sm89_paged_mqa_logits_metadata(seq_lens: torch.Tensor, sched: torch.Tensor, next_n: int) -> None:
+    """Build the [(P+1), 2] int32 (request, page) partition table for sm89_fp8_paged_mqa_logits."""
+    torch.ops._C.sm89_paged_mqa_logits_metadata(seq_lens, sched, next_n)
+
+
+def sm89_fp8_mqa_logits(
+    q: torch.Tensor,
+    kv: torch.Tensor,
+    kv_scales: torch.Tensor,
+    weights: torch.Tensor,
+    cu_seqlen_ks: torch.Tensor,
+    cu_seqlen_ke: torch.Tensor,
+    logits: torch.Tensor,
+) -> None:
+    """Prefill/ragged fp8 MQA indexer logits on sm89 over a contiguous gathered kv buffer.
+
+    q is [M, 64, 128] fp8 e4m3 viewed as uint8; kv [N, 128] fp8 e4m3 viewed as uint8;
+    kv_scales [N] fp32; weights [M, 64] fp32; cu_seqlen_ks/cu_seqlen_ke [M] int32
+    per-row key windows (clamped to [0, N]); logits [M, N] fp32, written only in the
+    [ks, ke) window of each row (the caller owns the fill value outside the window).
+    """
+    torch.ops._C.sm89_fp8_mqa_logits(q, kv, kv_scales, weights, cu_seqlen_ks, cu_seqlen_ke, logits)
+
+
+def sm89_sparse_mla_fwd(
+    q: torch.Tensor,
+    kv_cache_pool: torch.Tensor,
+    indices: torch.Tensor,
+    out: torch.Tensor,
+    lse: torch.Tensor,
+    sm_scale: float,
+    topk_lens: torch.Tensor | None = None,
+) -> None:
+    """Sparse MLA forward on sm89, gathering directly from an fp8_ds_mla pool by slot.
+
+    q is [T, h, 576] bf16; kv_cache_pool [S, 656] uint8 (fp8_ds_mla rows); indices
+    [T, topk] int32 physical slots, -1 padded; out [T, h, 512] bf16; lse [T, h] fp32.
+    Rows whose indices are all -1 produce zero output and -inf LSE.
+
+    topk_lens is an optional [T] int32 of per-token valid counts. It requires index
+    rows to be front-compacted (valid slots first, then -1); the kernel then stops
+    after the last valid slot instead of scanning all topk columns, with output
+    identical to topk_lens=None. DCP passes its per-rank counts here
+    (~topk/dcp_world_size valid).
+    """
+    torch.ops._C.sm89_sparse_mla_fwd(q, kv_cache_pool, indices, out, lse, sm_scale, topk_lens)
 
 
 def cp_gather_indexer_k_quant_cache(

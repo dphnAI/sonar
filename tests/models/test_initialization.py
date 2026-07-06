@@ -114,16 +114,24 @@ def can_initialize(
                 "(see #41376)"
             )
 
+    use_sm89_dsa = False
     if model_arch in ["DeepseekV32ForCausalLM", "GlmMoeDsaForCausalLM"]:
         from aphrodite.platforms import current_platform
 
         capability = current_platform.get_device_capability()
         if capability and capability.major < 9:
-            pytest.skip(
-                f"DeepseekV32 requires Hopper (9.0+) or Blackwell (10.0+) "
-                f"for FLASHMLA_SPARSE backend. Current device has compute "
-                f"capability {capability.major}.{capability.minor}"
-            )
+            from aphrodite import _custom_ops as ops
+
+            if capability == (8, 9) and ops.supports_sm89_dsa():
+                # SM89_MLA_SPARSE only serves the fp8_ds_mla cache layout.
+                use_sm89_dsa = True
+            else:
+                pytest.skip(
+                    f"DeepseekV32 requires Hopper (9.0+), Blackwell (10.0+) "
+                    f"or Ada (8.9 with sm89 DSA kernels) for a sparse MLA "
+                    f"backend. Current device has compute capability "
+                    f"{capability.major}.{capability.minor}"
+                )
 
     with (
         patch.object(V1EngineCore, "_initialize_kv_caches", _initialize_kv_caches_v1),
@@ -144,6 +152,8 @@ def can_initialize(
         kwargs = {}
         if not model_info.enable_prefix_caching:
             kwargs["enable_prefix_caching"] = False
+        if use_sm89_dsa:
+            kwargs["kv_cache_dtype"] = "fp8_ds_mla"
 
         LLM(
             model_info.default,

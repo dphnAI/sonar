@@ -184,6 +184,16 @@ class AttentionSpec(KVCacheSpec):
             return self.page_size_padded
         return real_page_size
 
+    def kernel_cache_dtype_str(self, cache_dtype: str) -> str:
+        """KV cache dtype string for the backend's layout queries
+        (``get_kv_cache_shape`` etc.).
+
+        Layers whose spec is unquantized must report "auto" even when the
+        global *cache_dtype* is quantized (e.g. KV-quant skip layers), so the
+        backend derives the unquantized layout for them.
+        """
+        return "auto" if self.kv_quant_mode == KVQuantMode.NONE else cache_dtype
+
     @property
     def real_page_size_bytes(self) -> int:
         if self.kv_quant_mode.is_nvfp4:
@@ -375,6 +385,15 @@ class MLAAttentionSpec(FullAttentionSpec):
     @property
     def storage_block_size(self) -> int:
         return self.block_size // self.compress_ratio
+
+    def kernel_cache_dtype_str(self, cache_dtype: str) -> str:
+        # MLA specs keep kv_quant_mode at NONE and record the layout-defining
+        # dtype in cache_dtype_str (which also sizes the page in
+        # real_page_size_bytes). Use it for the kernel layout queries so the
+        # reshape always matches the allocation (e.g. fp8_ds_mla's 656B rows).
+        if self.cache_dtype_str is not None:
+            return self.cache_dtype_str
+        return super().kernel_cache_dtype_str(cache_dtype)
 
     @property
     def real_page_size_bytes(self) -> int:
@@ -602,6 +621,13 @@ class SlidingWindowMLASpec(SlidingWindowSpec):
     @property
     def storage_block_size(self) -> int:
         return self.block_size // self.compress_ratio
+
+    def kernel_cache_dtype_str(self, cache_dtype: str) -> str:
+        # Same contract as MLAAttentionSpec; cache_dtype_str defines the
+        # stored layout (e.g. DeepseekV4's 584B fp8_ds_mla rows).
+        if self.cache_dtype_str is not None:
+            return self.cache_dtype_str
+        return super().kernel_cache_dtype_str(cache_dtype)
 
     @property
     def real_page_size_bytes(self) -> int:

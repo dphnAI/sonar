@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any
 
 import torch
-from aphrodite.quantization.utils.fp8_utils import (
+from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
     _w8a8_triton_block_scaled_mm,
 )
 from tqdm import tqdm
@@ -131,7 +131,21 @@ def get_configs_compute_bound():
     return configs
 
 
-def get_weight_shapes(tp_size):
+def get_weight_shapes(tp_size, model="deepseek-v3"):
+    if model == "glm-5.2":
+        # GLM-5.2 (GlmMoeDsaForCausalLM, hidden_size=6144) dense block-fp8
+        # (N, K) shapes, already sharded for TP8. `tp_size` is ignored here.
+        return [
+            (2048, 2048),
+            (2624, 6144),
+            (3072, 6144),
+            (4096, 2048),
+            (6144, 1536),
+            (6144, 2048),
+            (512, 6144),
+            (6144, 256),
+            (128, 6144),
+        ]
     # NOTE(HandH1998): The weight shapes only works for DeepSeek-V3.
     # Modify them, if you tune for another different model.
     # cannot TP
@@ -350,7 +364,7 @@ def main(args):
         batch_sizes = [args.batch_size]
         num_gpus = 1  # If only one batch size, use only one GPU
 
-    weight_shapes = get_weight_shapes(args.tp_size)
+    weight_shapes = get_weight_shapes(args.tp_size, args.model)
 
     batches_per_gpu = distribute_batch_sizes(batch_sizes, num_gpus)
 
@@ -383,6 +397,13 @@ Then copy to modeling/layers/quantization/utils/configs
     )
 
     parser.add_argument("--tp-size", "-tp", type=int, default=8)
+    parser.add_argument(
+        "--model",
+        type=str,
+        choices=["deepseek-v3", "glm-5.2"],
+        default="deepseek-v3",
+        help="Which model's dense weight shapes to tune. glm-5.2 shapes are pre-sharded for TP8.",
+    )
     parser.add_argument("--input-type", type=str, choices=["fp8"], default="fp8")
     parser.add_argument(
         "--out-dtype",

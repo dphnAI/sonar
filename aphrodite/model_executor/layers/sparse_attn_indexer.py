@@ -24,6 +24,7 @@ from aphrodite.utils.deep_gemm import (
     has_deep_gemm,
 )
 from aphrodite.utils.import_utils import has_cutedsl
+from aphrodite.utils.math_utils import round_up
 from aphrodite.utils.torch_utils import (
     LayerNameType,
     _encode_layer_name,
@@ -32,6 +33,9 @@ from aphrodite.utils.torch_utils import (
 )
 from aphrodite.v1.attention.backends.mla.indexer import (
     DeepseekV32IndexerMetadata,
+)
+from aphrodite.v1.attention.backends.mla.sm89_mla_sparse import (
+    use_sm89_dsa as _use_sm89_dsa,
 )
 from aphrodite.v1.attention.ops.common import pack_seq_triton, unpack_seq_triton
 from aphrodite.v1.worker.workspace import current_workspace_manager
@@ -313,6 +317,7 @@ def sparse_attn_indexer(
     dcp_world_size: int = 1,
     cp_kv_cache_interleave_size: int = 1,
     skip_topk_buffer_clear: bool = False,
+    dcp_local_prefill_shadow_rows: int = 0,
 ) -> torch.Tensor:
     # careful! this will be None in dummy run
     attn_metadata = get_forward_context().attn_metadata
@@ -325,11 +330,25 @@ def sparse_attn_indexer(
         values_spec, scales_spec = _gather_workspace_shapes(
             total_seq_lens, head_dim, fp8_dtype, use_fp4_cache
         )
-        current_workspace_manager().get_simultaneous(
+        profile_specs = [
             values_spec,
             scales_spec,
             ((RADIX_TOPK_WORKSPACE_SIZE,), torch.uint8),
-        )
+        ]
+        if dcp_local_prefill_shadow_rows > 0:
+            # sm89 DCP local-prefill shadow K cache, one quantized row + scale
+            # per prefill token, sized for the worst case (max batched tokens
+            # plus one page of alignment padding per request).
+            profile_specs.append(
+                (
+                    (
+                        dcp_local_prefill_shadow_rows,
+                        head_dim + head_dim // quant_block_size * 4,
+                    ),
+                    torch.uint8,
+                )
+            )
+        current_workspace_manager().get_simultaneous(*profile_specs)
 
         # Dummy allocation to simulate for peak logits tensor memory during inference.
         # FP8 elements so elements == bytes
@@ -408,10 +427,48 @@ def sparse_attn_indexer(
         values_spec, scales_spec = _gather_workspace_shapes(
             total_seq_lens, head_dim, fp8_dtype, use_fp4_cache
         )
-        k_quant_full, k_scale_full = workspace_manager.get_simultaneous(
-            values_spec,
-            scales_spec,
-        )
+        local_prefill = getattr(prefill_metadata, "dcp_local_prefill", False)
+        gather_src_cache = kv_cache
+        if local_prefill:
+            # sm89 DCP local-prefill (fresh prompts). The real indexer cache
+            # holds only this rank's 1/dcp KV shard, but k carries the full
+            # fresh prompts (activations are replicated across the DCP group).
+            # Quantize them into a per-forward shadow cache with the same
+            # paged layout and kernel as the real cache write; the chunk
+            # block tables built by the metadata builder index into it. The
+            # subsequent top-k then runs over the full prompt on every rank
+            # and the cross-rank merge is skipped below.
+            assert not use_fp4_cache, "local prefill requires the FP8 indexer cache"
+            assert k is not None and scale_fmt is not None
+            assert prefill_metadata.shadow_slot_mapping is not None
+            shadow_spec = (
+                (
+                    prefill_metadata.shadow_num_pages,
+                    kv_cache.shape[1],
+                    kv_cache.shape[2],
+                ),
+                torch.uint8,
+            )
+            k_quant_full, k_scale_full, shadow_kv_cache = (
+                workspace_manager.get_simultaneous(
+                    values_spec,
+                    scales_spec,
+                    shadow_spec,
+                )
+            )
+            ops.indexer_k_quant_and_cache(
+                k[num_decode_tokens:num_tokens],
+                shadow_kv_cache,
+                prefill_metadata.shadow_slot_mapping,
+                quant_block_size,
+                scale_fmt,
+            )
+            gather_src_cache = shadow_kv_cache
+        else:
+            k_quant_full, k_scale_full = workspace_manager.get_simultaneous(
+                values_spec,
+                scales_spec,
+            )
         for chunk in prefill_metadata.chunks:
             cu_seqlen_ks = chunk.cu_seqlen_ks
             cu_seqlen_ke = chunk.cu_seqlen_ke
@@ -420,7 +477,7 @@ def sparse_attn_indexer(
             k_scale = k_scale_full[: chunk.max_local_total_seq_lens]
             if not chunk.skip_kv_gather and chunk.local_total_seq_lens > 0:
                 ops.cp_gather_indexer_k_quant_cache(
-                    kv_cache,
+                    gather_src_cache,
                     k_quant,
                     k_scale,
                     chunk.block_table,
@@ -462,6 +519,28 @@ def sparse_attn_indexer(
                         cu_seqlen_ks,
                         cu_seqlen_ke,
                     )
+                elif _use_sm89_dsa():
+                    # Must be checked before the deep_gemm branch; deep_gemm may
+                    # be pip-installed on sm89 even though its kernels cannot
+                    # run there. FP4 Q never reaches here (SM100-only).
+                    assert q_scale_slice is None
+                    # The kernel writes only inside each row's [ks, ke) window;
+                    # top_k_per_row_prefill reads the same window, so the rest
+                    # of the buffer may stay uninitialized.
+                    logits = torch.empty(
+                        (q_slice.shape[0], k_quant.shape[0]),
+                        dtype=torch.float32,
+                        device=q_slice.device,
+                    )
+                    ops.sm89_fp8_mqa_logits(
+                        q_slice_cast.view(torch.uint8),
+                        k_quant_cast.view(torch.uint8),
+                        k_scale_cast,
+                        weights[chunk.token_start : chunk.token_end],
+                        cu_seqlen_ks,
+                        cu_seqlen_ke,
+                        logits,
+                    )
                 else:
                     logits = fp8_fp4_mqa_logits(
                         (q_slice_cast, q_scale_slice),
@@ -483,20 +562,30 @@ def sparse_attn_indexer(
                     topk_tokens,
                 )
 
-            _merge_dcp_topk_global(
-                logits,
-                topk_indices,
-                topk_tokens,
-                dcp_rank,
-                dcp_world_size,
-                cp_kv_cache_interleave_size,
-                row_starts=chunk.cu_seqlen_ks,
-            )
+            # Local prefill selected top-k over the full prompt on every rank
+            # (identical, replicated inputs), so the indices are already
+            # global per-request positions; no cross-rank merge needed.
+            if not local_prefill:
+                _merge_dcp_topk_global(
+                    logits,
+                    topk_indices,
+                    topk_tokens,
+                    dcp_rank,
+                    dcp_world_size,
+                    cp_kv_cache_interleave_size,
+                    row_starts=chunk.cu_seqlen_ks,
+                )
 
     if has_decode:
         decode_metadata = attn_metadata_narrowed.decode
         assert decode_metadata is not None
-        kv_cache = kv_cache_as_quant_view(kv_cache, head_dim, use_fp4_cache)
+        if _use_sm89_dsa():
+            # The sm89 kernel consumes whole pages ([num_pages, page_bytes],
+            # each page holds block_size fp8 key rows then block_size fp32
+            # scales) rather than the per-token quant view deep_gemm uses.
+            kv_cache = kv_cache.view(torch.uint8).view(kv_cache.shape[0], -1)
+        else:
+            kv_cache = kv_cache_as_quant_view(kv_cache, head_dim, use_fp4_cache)
         decode_lens = decode_metadata.decode_lens
         if decode_metadata.requires_padding:
             # pad in edge case where we have short chunked prefill length <
@@ -557,6 +646,30 @@ def sparse_attn_indexer(
                 decode_metadata.block_table,
                 decode_metadata.schedule_metadata,
                 max_model_len,
+            )
+        elif _use_sm89_dsa():
+            # Must be checked before the deep_gemm branch; deep_gemm may be
+            # pip-installed on sm89 even though its kernels cannot run there.
+            # schedule_metadata is the (P+1, 2) partition table built by
+            # sm89_paged_mqa_logits_metadata in the indexer metadata builder.
+            assert padded_q_scale is None
+            # Each row is written for columns [0, seq_len); the topk kernels
+            # below read the same range, so clean_logits is unnecessary (this
+            # mirrors clean_logits=False on the deep_gemm path).
+            logits = torch.empty(
+                (num_padded_tokens, max_model_len),
+                dtype=torch.float32,
+                device=padded_q_quant_cast.device,
+            )
+            ops.sm89_fp8_paged_mqa_logits(
+                padded_q_quant_cast.view(torch.uint8),
+                kv_cache,
+                weights[:num_padded_tokens],
+                seq_lens,
+                decode_metadata.block_table,
+                decode_metadata.schedule_metadata,
+                logits,
+                False,
             )
         else:
             logits = fp8_fp4_paged_mqa_logits(
@@ -668,6 +781,7 @@ def sparse_attn_indexer_fake(
     dcp_world_size: int = 1,
     cp_kv_cache_interleave_size: int = 1,
     skip_topk_buffer_clear: bool = False,
+    dcp_local_prefill_shadow_rows: int = 0,
 ) -> torch.Tensor:
     return topk_indices_buffer
 
@@ -725,7 +839,18 @@ class SparseAttnIndexer(CustomOp):
         self.dcp_world_size = parallel_config.decode_context_parallel_size
         self.dcp_rank = get_dcp_group().rank_in_group if self.dcp_world_size > 1 else 0
         self.cp_kv_cache_interleave_size = parallel_config.cp_kv_cache_interleave_size
-        if current_platform.is_cuda() and not has_deep_gemm():
+        # Worst-case row count for the sm89 DCP local-prefill shadow K cache
+        # (see sparse_attn_indexer), every prefill token plus up to one
+        # 64-token page of alignment padding per request. Used only to
+        # reserve workspace during the profiling run; 0 disables it.
+        self.dcp_local_prefill_shadow_rows = 0
+        if self.dcp_world_size > 1 and _use_sm89_dsa():
+            scheduler_config = get_current_aphrodite_config().scheduler_config
+            self.dcp_local_prefill_shadow_rows = (
+                round_up(scheduler_config.max_num_batched_tokens, 64)
+                + 64 * scheduler_config.max_num_seqs
+            )
+        if current_platform.is_cuda() and not has_deep_gemm() and not _use_sm89_dsa():
             raise RuntimeError(
                 "Sparse Attention Indexer CUDA op requires DeepGEMM support in "
                 "the current Aphrodite environment."
@@ -781,6 +906,7 @@ class SparseAttnIndexer(CustomOp):
             self.dcp_rank,
             self.dcp_world_size,
             self.cp_kv_cache_interleave_size,
+            dcp_local_prefill_shadow_rows=self.dcp_local_prefill_shadow_rows,
         )
 
     def forward_xpu(

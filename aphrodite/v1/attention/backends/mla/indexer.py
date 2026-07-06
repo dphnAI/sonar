@@ -2,9 +2,11 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from dataclasses import dataclass
 
+import numpy as np
 import torch
 
 import aphrodite.envs as envs
+from aphrodite import _custom_ops as ops
 from aphrodite.config import AphroditeConfig
 from aphrodite.distributed import get_dcp_group
 from aphrodite.logger import init_logger
@@ -16,6 +18,7 @@ from aphrodite.utils.deep_gemm import (
 )
 from aphrodite.utils.math_utils import cdiv
 from aphrodite.utils.platform_utils import num_compute_units
+from aphrodite.utils.torch_utils import np_to_pinned_tensor
 from aphrodite.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
@@ -24,6 +27,7 @@ from aphrodite.v1.attention.backend import (
     MultipleOf,
 )
 from aphrodite.v1.attention.backends.mla.compressor_utils import get_compressed_slot_mapping
+from aphrodite.v1.attention.backends.mla.sm89_mla_sparse import use_sm89_dsa
 from aphrodite.v1.attention.backends.utils import (
     get_dcp_local_seq_lens,
     split_decodes_and_prefills,
@@ -189,6 +193,16 @@ class DeepseekV32IndexerPrefillChunkMetadata:
 @dataclass
 class DeepseekV32IndexerPrefillMetadata:
     chunks: list[DeepseekV32IndexerPrefillChunkMetadata]
+    # sm89 DCP local-prefill mode (fresh prompts only). Chunk metadata was
+    # built with global (dcp=1) row bounds, chunk.block_table points into a
+    # per-forward shadow K cache quantized locally from this batch's k, and
+    # the cross-rank top-k merge is skipped. See Sm89LocalPrefillMetadata.
+    dcp_local_prefill: bool = False
+    # int64 [num_prefill_tokens] block-aligned identity slots for writing the
+    # prefill tokens' quantized K into the shadow cache.
+    shadow_slot_mapping: torch.Tensor | None = None
+    # Number of (block_size-token) pages in the shadow cache.
+    shadow_num_pages: int = 0
 
 
 @dataclass
@@ -304,6 +318,13 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
 
         sm_count = num_compute_units(self.device.index)
         self.num_sms = sm_count
+        self.use_sm89_dsa = use_sm89_dsa()
+        if self.use_sm89_dsa:
+            # The sm89 paged-logits kernel runs a fixed persistent-CTA grid
+            # (2 CTAs/SM x 128 SMs) and derives its partition count P from the
+            # (P+1, 2) scheduler table, so size the buffer for P=256 instead of
+            # the SM count.
+            self.num_sms = 256
 
         self.offsets_buffer = torch.arange(
             next_n, device=self.device, dtype=torch.int32
@@ -363,6 +384,9 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
                 f"(compress_ratio={self.compress_ratio})."
             )
 
+        if self.dcp_world_size > 1 and self.use_sm89_dsa:
+            self._warmup_dcp_kernels()
+
         # Pre-allocate buffers for CUDA graph compatibility when
         if self.compress_ratio > 1:
             # compress_ratio > 1 (DeepseekV4)
@@ -378,6 +402,152 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
                 dtype=torch.int32,
                 device=self.device,
             )
+
+    def _warmup_dcp_kernels(self) -> None:
+        """Pre-compile the JIT kernels used by the DCP indexer prefill paths.
+
+        The startup profile/capture dummy runs never reach the real indexer
+        branches (no attention metadata), so the first real prefill would
+        otherwise pay the Triton compiles (and the first continuation-chunk
+        prefill the multi-second CuteDSL top-k merge compile), serialized
+        across pipeline stages. Warmed with 1-request/1-token dummies; the
+        compile keys never include the token count, so one launch per variant
+        covers every batch shape.
+        """
+        from aphrodite.utils.import_utils import has_cutedsl
+
+        try:
+            device = self.device
+            qsl_cpu = torch.tensor([0, 1], dtype=torch.int32)
+            qsl = qsl_cpu.to(device)
+            ones_cpu = torch.ones(1, dtype=torch.int32)
+            ones = ones_cpu.to(device)
+            bt = torch.zeros((1, 1), dtype=torch.int32, device=device)
+            # One launch compiles the chunk-metadata kernel for all shapes
+            # (its per-shape scalars are do_not_specialize) and both the
+            # local-prefill (dcp=1) and continuation (dcp=world) launches.
+            build_prefill_chunk_metadata(
+                0,
+                1,
+                qsl,
+                qsl_cpu,
+                ones,
+                ones,
+                ones_cpu,
+                bt,
+                self.compress_ratio,
+                dcp_rank=self.dcp_rank,
+                dcp_world_size=self.dcp_world_size,
+                cp_kv_cache_interleave_size=self.cp_kv_cache_interleave_size,
+            )
+
+            # Cross-rank top-k merge (continuation-chunk prefill and decode).
+            index_topk = getattr(
+                self.aphrodite_config.model_config.hf_config, "index_topk", None
+            )
+            if has_cutedsl() and index_topk in (512, 1024, 2048):
+                from aphrodite.model_executor.kernels.attention.dsa.dcp_indexer_cutedsl import (
+                    StableTopKFromGatheredCandidatesKernel,
+                    pack_dcp_topk_candidates_cutedsl,
+                )
+
+                logits = torch.zeros((1, 1), dtype=torch.float32, device=device)
+                topk_idx = torch.full(
+                    (1, index_topk), -1, dtype=torch.int32, device=device
+                )
+                packed = torch.empty(
+                    (1, index_topk, 2), dtype=torch.float32, device=device
+                )
+                row_starts = torch.zeros(1, dtype=torch.int32, device=device)
+                # Prefill merge passes row_starts, decode merge does not
+                # (HAS_ROW_STARTS is part of the compile key); warm both.
+                for rs in (row_starts, None):
+                    pack_dcp_topk_candidates_cutedsl(
+                        logits,
+                        topk_idx,
+                        packed,
+                        self.dcp_rank,
+                        self.dcp_world_size,
+                        self.cp_kv_cache_interleave_size,
+                        rs,
+                    )
+                # Keyed on (topk, num_candidates) with a symbolic row count,
+                # so one compile covers every batch. This is the seconds-scale
+                # CuteDSL compile.
+                StableTopKFromGatheredCandidatesKernel.compile(
+                    index_topk, self.dcp_world_size * index_topk
+                )
+        except Exception:
+            logger.warning(
+                "DCP indexer kernel warmup failed; kernels will be "
+                "JIT-compiled on first use instead.",
+                exc_info=True,
+            )
+
+    def _use_dcp_local_prefill(
+        self,
+        num_decodes: int,
+        num_prefills: int,
+        seq_lens_cpu: torch.Tensor,
+        prefill_query_lens_cpu: torch.Tensor,
+    ) -> bool:
+        """Whether this batch qualifies for the sm89 DCP local-prefill path.
+
+        Fresh prompts only (context length 0 for every prefill request). The
+        full prompt K is then computable on-rank from the replicated
+        activations, so top-k can be selected over the local full-prompt
+        logits and the cross-rank merge skipped. Continuation chunks fall back
+        to the existing sharded-gather + merge path for the whole batch. The
+        decision uses batch-level CPU metadata identical on all DCP ranks, so
+        collective participation stays aligned. Must mirror the gating in
+        Sm89MLASparseMetadataBuilder._build_local_prefill.
+        """
+        parallel_config = self.aphrodite_config.parallel_config
+        if (
+            not self.use_sm89_dsa
+            or self.dcp_world_size <= 1
+            or parallel_config.prefill_context_parallel_size > 1
+            or self.num_speculative_tokens > 0
+            or num_prefills == 0
+        ):
+            return False
+        prefill_seq_lens = np.asarray(seq_lens_cpu[num_decodes:], dtype=np.int64)
+        prefill_query_lens = np.asarray(prefill_query_lens_cpu, dtype=np.int64)
+        return np.array_equal(prefill_seq_lens, prefill_query_lens)
+
+    def _build_local_prefill_shadow_tensors(
+        self,
+        prefill_query_lens_cpu: torch.Tensor,
+        num_prefill_tokens: int,
+    ) -> tuple[torch.Tensor, torch.Tensor, int]:
+        """Identity block table + block-aligned slots for the shadow K cache.
+
+        Each prefill request gets a contiguous, page-aligned span of the
+        shadow cache (page alignment is required because the paged layout
+        interleaves per-page scale blocks). Returns (identity_block_table
+        [num_prefills, max_pages] int32, slot_mapping [num_prefill_tokens]
+        int64, num_pages).
+        """
+        block = self.kv_cache_spec.block_size
+        lens = np.asarray(prefill_query_lens_cpu, dtype=np.int64)
+        pages_per_req = (lens + block - 1) // block
+        page_starts = np.concatenate(([0], np.cumsum(pages_per_req)))
+        shadow_num_pages = int(page_starts[-1])
+        max_pages = int(pages_per_req.max())
+        ibt = (
+            page_starts[:-1, None] + np.arange(max_pages, dtype=np.int64)[None, :]
+        ).astype(np.int32)
+        token_starts = np.concatenate(([0], np.cumsum(lens)))[:-1]
+        slots = (
+            np.repeat(page_starts[:-1] * block - token_starts, lens)
+            + np.arange(num_prefill_tokens, dtype=np.int64)
+        ).astype(np.int64)
+
+        ibt_gpu = torch.empty(ibt.shape, dtype=torch.int32, device=self.device)
+        ibt_gpu.copy_(np_to_pinned_tensor(ibt), non_blocking=True)
+        slots_gpu = torch.empty(slots.shape, dtype=torch.int64, device=self.device)
+        slots_gpu.copy_(np_to_pinned_tensor(slots), non_blocking=True)
+        return ibt_gpu, slots_gpu, shadow_num_pages
 
     def _dcp_localize_decode_seq_lens(
         self,
@@ -615,6 +785,23 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
                 request_offset=num_decodes,
             )
 
+            # sm89 DCP local-prefill builds chunk metadata with global (dcp=1)
+            # row bounds so top-k runs over each rank's local full-prompt K
+            # (quantized from this batch's replicated k into the shadow cache)
+            # and the cross-rank merge is skipped.
+            local_prefill = self._use_dcp_local_prefill(
+                num_decodes, num_prefills, seq_lens_cpu, prefill_query_lens_cpu
+            )
+            shadow_block_table = None
+            shadow_slot_mapping = None
+            shadow_num_pages = 0
+            if local_prefill:
+                shadow_block_table, shadow_slot_mapping, shadow_num_pages = (
+                    self._build_local_prefill_shadow_tensors(
+                        prefill_query_lens_cpu, num_prefill_tokens
+                    )
+                )
+
             chunks = []
             for req_slice, query_slice in chunk_specs:
                 metadata = build_prefill_chunk_metadata(
@@ -629,14 +816,26 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
                     self.compress_ratio,
                     query_slice=query_slice,
                     skip_kv_gather=query_slice.start > 0,
-                    dcp_rank=self.dcp_rank,
-                    dcp_world_size=self.dcp_world_size,
+                    dcp_rank=0 if local_prefill else self.dcp_rank,
+                    dcp_world_size=1 if local_prefill else self.dcp_world_size,
                     cp_kv_cache_interleave_size=self.cp_kv_cache_interleave_size,
                 )
                 # Skip when total_seq_lens is 0 (i.e., no compressed token).
                 if metadata is not None:
+                    if local_prefill:
+                        assert shadow_block_table is not None
+                        # Gather this chunk's K from the shadow cache instead
+                        # of the (sharded) real cache.
+                        metadata.block_table = shadow_block_table[
+                            req_slice.start - num_decodes : req_slice.stop - num_decodes
+                        ]
                     chunks.append(metadata)
-            prefill_metadata = DeepseekV32IndexerPrefillMetadata(chunks)
+            prefill_metadata = DeepseekV32IndexerPrefillMetadata(
+                chunks,
+                dcp_local_prefill=local_prefill,
+                shadow_slot_mapping=shadow_slot_mapping,
+                shadow_num_pages=shadow_num_pages,
+            )
 
         decode_metadata = None
         if num_decodes > 0:
@@ -723,8 +922,18 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
             if seq_lens.dim() == 1:
                 seq_lens = seq_lens.unsqueeze(-1)
 
+            # Must be checked before the deep_gemm branch; deep_gemm may be
+            # pip-installed on sm89 even though its kernels cannot run there.
+            if self.use_sm89_dsa:
+                # Fills the persistent (P+1, 2) partition table in place, so
+                # the buffer address stays stable across CUDA graph replays.
+                ops.sm89_paged_mqa_logits_metadata(
+                    seq_lens,
+                    self.scheduler_metadata_buffer,
+                    seq_lens.shape[1],
+                )
             # DeepGEMM is required for the paged MQA logits on CUDA devices
-            if current_platform.is_cuda() and has_deep_gemm():
+            elif current_platform.is_cuda() and has_deep_gemm():
                 self.scheduler_metadata_buffer[:] = get_paged_mqa_logits_metadata(
                     seq_lens,
                     self.kv_cache_spec.storage_block_size,
@@ -865,7 +1074,19 @@ def build_prefill_chunk_metadata(
     )
 
 
-@triton.jit
+# The query-slice bounds vary with every batch's chunking (and the DCP
+# scalars are per-rank constants); keep them out of the specialization key so
+# the kernel compiles once instead of re-JITting per {==1, %16==0, other}
+# value bucket as prefill shapes change.
+@triton.jit(
+    do_not_specialize=[
+        "query_slice_start",
+        "query_slice_stop",
+        "DCP_RANK",
+        "DCP_WORLD",
+        "DCP_INTERLEAVE",
+    ]
+)
 def _build_prefill_chunk_metadata_kernel(
     # Inputs
     query_start_loc_ptr,

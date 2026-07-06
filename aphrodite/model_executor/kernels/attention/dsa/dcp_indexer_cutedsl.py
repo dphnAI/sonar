@@ -66,19 +66,34 @@ def pack_dcp_topk_candidates_cutedsl(
     )
 
 
-@triton.jit
+# Strides and num_cols are runtime scalars excluded from specialization.
+# logits_stride0 is the gathered-K row length, which varies with every batch's
+# prompt/context length, so folding it into the compile key (constexpr or
+# divisibility specialization) would re-JIT this kernel per prefill shape.
+@triton.jit(
+    do_not_specialize=[
+        "logits_stride0",
+        "logits_stride1",
+        "topk_stride0",
+        "topk_stride1",
+        "packed_stride0",
+        "packed_stride1",
+        "packed_stride2",
+        "num_cols",
+    ]
+)
 def _pack_dcp_topk_candidates_triton_kernel(
     logits,
     topk_indices,
     packed,
     row_starts,
-    logits_stride0: tl.constexpr,
-    logits_stride1: tl.constexpr,
-    topk_stride0: tl.constexpr,
-    topk_stride1: tl.constexpr,
-    packed_stride0: tl.constexpr,
-    packed_stride1: tl.constexpr,
-    packed_stride2: tl.constexpr,
+    logits_stride0,
+    logits_stride1,
+    topk_stride0,
+    topk_stride1,
+    packed_stride0,
+    packed_stride1,
+    packed_stride2,
     num_cols,
     DCP_RANK: tl.constexpr,
     DCP_WORLD_SIZE: tl.constexpr,

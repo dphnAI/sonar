@@ -149,7 +149,6 @@ from aphrodite.v1.kv_cache_interface import (
     KVCacheConfig,
     KVCacheGroupSpec,
     KVCacheSpec,
-    KVQuantMode,
     MambaSpec,
     SlidingWindowSpec,
     UniformTypeKVCacheSpecs,
@@ -6635,9 +6634,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
                     else:
                         shape_block_size = kernel_block_size
 
-                    layer_cache_dtype_str = (
-                        "auto" if kv_cache_spec.kv_quant_mode == KVQuantMode.NONE else self.cache_config.cache_dtype
-                    )
+                    layer_cache_dtype_str = kv_cache_spec.kernel_cache_dtype_str(self.cache_config.cache_dtype)
                     kv_cache_shape = attn_backend.get_kv_cache_shape(
                         kernel_num_blocks,
                         shape_block_size,
