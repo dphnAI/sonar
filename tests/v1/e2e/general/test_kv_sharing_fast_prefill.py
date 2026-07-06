@@ -44,7 +44,11 @@ def test_prompts():
     return prompts
 
 
-use_fork_for_test = fork_new_process_for_each_test if not current_platform.is_rocm() else lambda x: x
+use_fork_for_test = (
+    fork_new_process_for_each_test
+    if not (current_platform.is_rocm() or current_platform.is_xpu())
+    else lambda x: x
+)
 
 
 @use_fork_for_test
